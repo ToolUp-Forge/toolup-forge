@@ -311,13 +311,13 @@ type ParsedDeliveredPath = {
 module DeliveredPath =
 
     [<Literal>]
-    let private derivedPrefix = "/api/media/hls/"
+    let private DerivedPrefix = "/api/media/hls/"
 
     [<Literal>]
-    let private streamPrefix = "/api/media/stream/"
+    let private StreamPrefix = "/api/media/stream/"
 
     [<Literal>]
-    let private signedPrefix = "/media/signed/"
+    let private SignedPrefix = "/media/signed/"
 
     /// Split a URL into its path and raw query, tolerating an absolute
     /// URL, an origin-relative path, or either with a fragment. A
@@ -406,8 +406,8 @@ module DeliveredPath =
                 else
                     Some raw
 
-            if decoded.StartsWith derivedPrefix then
-                let rest = decoded.Substring(derivedPrefix.Length)
+            if decoded.StartsWith DerivedPrefix then
+                let rest = decoded.Substring(DerivedPrefix.Length)
                 let slashAt = rest.IndexOf '/'
 
                 if slashAt <= 0 then
@@ -424,15 +424,15 @@ module DeliveredPath =
                             Class = DeliveredDerived relativePath
                             SignedToken = None
                         }
-            elif decoded.StartsWith streamPrefix then
-                idOf streamPrefix
+            elif decoded.StartsWith StreamPrefix then
+                idOf StreamPrefix
                 |> Option.map (fun id -> {
                     Media = MediaId id
                     Class = DeliveredOriginal
                     SignedToken = None
                 })
-            elif decoded.StartsWith signedPrefix then
-                idOf signedPrefix
+            elif decoded.StartsWith SignedPrefix then
+                idOf SignedPrefix
                 |> Option.map (fun id -> {
                     Media = MediaId id
                     Class = DeliveredOriginal
