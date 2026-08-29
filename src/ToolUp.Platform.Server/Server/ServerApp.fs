@@ -915,6 +915,19 @@ type ServerApp = {
     /// party reference is an opaque deployment string (GP 9), so absent
     /// a resolver the declared-party leg reaches nobody.
     GrantNotifications: GrantNotification.GrantNotificationSettings option
+    /// Phase 728 — the opt-in model-execution compose leg. `Some` registers
+    /// `IModelRegistry` (and optionally the scorer / executor policy /
+    /// Phase 651 registration observers) into the DI graph; `None` — the
+    /// default — appends no registration at all, so a deployment that does
+    /// not compose the leg is byte-for-byte what it was (GP 13).
+    ///
+    /// Until this existed no forge compose path registered an
+    /// `IModelRegistry`, so a deployment mounting `ModelExecutionApi` had
+    /// to hand-register one and learned that from its first request.
+    /// `ModelExecutionDepsValidator` now names the gap at startup.
+    ///
+    /// Set it with `ServerApp.withModelExecution`.
+    ModelExecutionCompose: ComposeModelExecution.ModelExecutionComposeOptions option
 }
 
 module ServerApp =
@@ -971,6 +984,32 @@ module ServerApp =
         ModuleComponentIds = []
         ModuleGrantPolicies = []
         GrantNotifications = None
+        ModelExecutionCompose = None
+    }
+
+    /// Phase 728 — compose the model-execution leg: register
+    /// `IModelRegistry` (and optionally the `IModelScorer`, the Phase 640
+    /// executor policy, and Phase 651 registration observers) so the
+    /// `ModelExecutionApi` face resolves them instead of refusing with
+    /// `SubstrateDisabled` on the first request.
+    ///
+    /// Absent by default (GP 13) — a composition that never calls this
+    /// appends no registration and is byte-for-byte unchanged.
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = EnabledModelExecutionApi }
+    /// |> ServerApp.withModelExecution ComposeModelExecution.ModelExecutionComposeOptions.defaults
+    /// ```
+    ///
+    /// The defaults build the blob-backed `BlobModelRegistry` over the
+    /// `IDataObjectStore` + `IAuditLog` forge already composed, emitting
+    /// the artifact → dataset-version lineage edge when an `ILineageStore`
+    /// is present. `ModelExecutionComposeOptions.withRegistry` /
+    /// `withScorer` / `withPolicy` / `withObserver` override each leg.
+    let withModelExecution (options: ComposeModelExecution.ModelExecutionComposeOptions) (app: ServerApp) : ServerApp = {
+        app with
+            ModelExecutionCompose = Some options
     }
 
     /// Phase 556 — tune the grant-event notice fan-out: supply the
@@ -2706,6 +2745,24 @@ module ServerApp =
                         s.AddSingleton<GrantNotification.GrantNotificationSettings>(settings))
                 | _ -> withGrantPolicies
 
+            // Phase 728 — the opt-in model-execution leg. `None` (the
+            // default) appends no registration, so a composition that does
+            // not call `withModelExecution` produces byte-for-byte the
+            // pre-728 graph (GP 13). `Some` lands the registry — and
+            // whatever else the options declared — through the same
+            // `ServiceConfig` hook every other leg on this record uses,
+            // which is why `compose`'s positional parameter list is
+            // untouched. It runs before the preflight aggregator, so
+            // `ModelExecutionDepsValidator` sees the registration and stays
+            // silent for a deployment that composed it.
+            let withModelExecutionLeg =
+                match app.ModelExecutionCompose with
+                | None -> withGrantNotificationSettings
+                | Some options ->
+                    appendRegistration withGrantNotificationSettings (fun s ->
+                        ComposeModelExecution.register options s
+                        s)
+
             // Phase 281 — fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
@@ -2728,7 +2785,7 @@ module ServerApp =
             // module-graph rules check exactly what was registered rather
             // than the `ComponentId`-collapsed manifest projection.
             appendRegistration
-                withGrantNotificationSettings
+                withModelExecutionLeg
                 (CompositionValidator.serviceRegistration (compositionManifest app) (compositionReferences app))
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default

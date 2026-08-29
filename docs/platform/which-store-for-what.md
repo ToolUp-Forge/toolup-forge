@@ -109,6 +109,38 @@ retrievable by exactly the declared value. (In-process helpers like
 `ModelSpecRef.ofPayload` are conveniences for callers that *choose* forge's
 hashing rule; nothing server-side applies them to submitted specs.)
 
+## Composing the model registry (Phase 728)
+
+`IDataObjectStore` and `IResultStore` are composed for you; `IDatasetStore` arrives with
+`ServerConfig.Datasets`. **`IModelRegistry` is composed by neither — it needs an explicit opt-in
+leg**, and this section exists because that was previously true and undocumented, so a deployment
+found out from a `SubstrateDisabled "model registry"` refusal on its first request:
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = EnabledModelExecutionApi }
+|> ServerApp.withModelExecution ComposeModelExecution.ModelExecutionComposeOptions.defaults
+```
+
+The defaults register the blob-backed `BlobModelRegistry` over the `IDataObjectStore` + `IAuditLog`
+already composed, emitting the artifact → dataset-version lineage edge below when an `ILineageStore`
+is present. `ModelExecutionComposeOptions.withRegistry` substitutes a companion registry;
+`withObserver` wraps it with Phase 651 registration observers; `withScorer` / `withPolicy` fill the
+scoring leg. Everything is `TryAddSingleton`, so a registry you registered yourself is never
+overridden.
+
+Absent by default (GP 13): a deployment that never calls `withModelExecution` composes exactly what
+it composed before. If it nonetheless mounts the model-execution API, the `model-execution-deps`
+preflight validator warns at startup naming the missing registration — a composition mistake caught
+where it can still be corrected, rather than on the first read. Full recipe:
+[`docs/migrations/728-model-execution-compose-leg.md`](../migrations/728-model-execution-compose-leg.md).
+
+**`IModelScorer` is not part of the default leg**, deliberately. Forge can build a default registry
+because it needs only substrate forge already composes; a default scorer would need a
+`ModelScoreProviderRegistry`, and one with no providers refuses every request in a way that reads as
+a forge defect rather than an unconfigured deployment. Compose your own — through `withScorer` or
+directly — when you use `RequestScore`.
+
 ## Provenance ties them together
 
 Model-artifact registration emits a **lineage edge** (`ILineageStore`, Phase 8a)

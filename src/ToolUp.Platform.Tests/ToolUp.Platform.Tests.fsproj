@@ -396,6 +396,11 @@
         <Compile Include="InProcess\ParquetDatasetCodecTests.fs" />
         <Compile Include="InProcess\ModelFitBatchTests.fs" />
         <Compile Include="InProcess\ModelExecutionApiTests.fs" />
+        <!-- Phase 728 — the opt-in model-execution compose leg. Deliberately
+             builds its own graph from the substrate forge composes rather
+             than reusing the fixture above: proving the fixtures are no
+             longer the only registration path is the acceptance criterion. -->
+        <Compile Include="InProcess\ModelExecutionComposeTests.fs" />
         <Compile Include="InProcess\DatasetAssemblyTests.fs" />
         <Compile Include="InProcess\DatasetRevintageTests.fs" />
         <Compile Include="InProcess\VirtualDatasetTests.fs" />

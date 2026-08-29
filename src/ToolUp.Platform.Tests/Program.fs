@@ -79,6 +79,10 @@ let private registeredTests =
         ModelFitBatchTests.tests
         // Phase 600 — model-execution submitter API (wire surface + typed refusals).
         ModelExecutionApiTests.tests
+        // Phase 728 — the opt-in model-execution compose leg: the registry
+        // composed rather than hand-registered, the byte-parity of composing
+        // nothing, and the startup validator that names the gap.
+        ModelExecutionComposeTests.tests
         IngestionStatusTests.tests
         IngestionRetryTests.tests
         // Phase 14t — embedder retry + dead-letter (classification / backoff / alerts).

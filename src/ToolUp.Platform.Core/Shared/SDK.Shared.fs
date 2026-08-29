@@ -717,7 +717,16 @@ type ModelExecutionApiMode =
     /// `JobScheduler` (submission), `IModelRegistry` (outcomes),
     /// `IDatasetStore` (resolution), and `IModelScorer` (scoring) — each
     /// method reports a typed `SubstrateDisabled` refusal for whichever
-    /// substrate is absent rather than failing at compose time.
+    /// substrate is absent.
+    ///
+    /// **The registry is not wired by default.** Phase 728 added the
+    /// opt-in compose leg that registers one —
+    /// `ServerApp.withModelExecution ModelExecutionComposeOptions.defaults`
+    /// — and a deployment that mounts this surface without it (and without
+    /// hand-registering) is named at startup by the `model-execution-deps`
+    /// preflight validator rather than discovering it on the first
+    /// request. `IModelScorer` stays consumer-supplied by design: forge
+    /// cannot build a default scorer without score providers.
     | EnabledModelExecutionApi
 
 /// Phase 163 — selects the end-user product-telemetry sink (`ITelemetrySink`).
