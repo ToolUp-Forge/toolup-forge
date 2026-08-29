@@ -1986,6 +1986,17 @@ let private registeredTests =
         // undeclared projection being refused with its handler probe at
         // zero invocations.
         FederatedModelExecutionTests.tests
+        // Phase 450 — the external model-fit binding. The end-to-end arm's
+        // stub worker reports `running` forever, so a fit that resolves can
+        // only have been resolved by the completion callback — push is
+        // proved structurally rather than by winning a race. The schema arm
+        // asserts the rendered envelope as literal text, because a
+        // round-trip through this repo's own parser would stay green while
+        // both halves renamed a field together and every worker broke. The
+        // gate arm's load-bearing case is the diagnostic the worker did NOT
+        // report: it must fail its gate closed, with no observation
+        // invented for it.
+        ExternalModelFitTests.tests
         // Phase 602 — certification against the external model-execution
         // conformance corpus. The corpus is canonical over this
         // implementation, not emitted from it, so this family can find a
