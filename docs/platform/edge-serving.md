@@ -309,7 +309,9 @@ origin one, and the two are deliberately never summed anywhere:
 
 - A cache **miss** appears in both — once as the origin wrote the body, once as the edge relayed it.
 - Even for that single response the two counts differ, because a CDN's byte field is typically the
-  whole HTTP response *including headers* while the origin count is body bytes only.
+  whole HTTP response *including headers* while the origin count is body bytes only. Which one your
+  source reports is a declared field rather than an assumption — see
+  [Billing](#billing-partition-on-the-byte-semantics-and-treat-unknown-as-unbillable) below.
 
 So expect them not to reconcile term-by-term; that is the honest result, not a defect. The delivered
 figure is the billable one, the origin figure is the one this process can prove, and both survive for
@@ -320,6 +322,43 @@ Two limits worth planning around: log delivery lags (one platform pushes sub-min
 typically delivers within an hour and may delay entries by up to a day, so a source **declares** its
 own lag and a rollup read sooner is early rather than incomplete), and **nothing backfills** — if the
 log pipeline drops a period, the delivered series is short for that period permanently.
+
+### Billing: partition on the byte semantics, and treat `unknown` as unbillable
+
+The second bullet above — *what a byte count means differs per source* — is not a caveat to remember.
+It is a field. Every log source **declares** what its byte counts mean, exactly as it declares its
+delivery lag, and the declaration travels with each row to the rollup:
+
+```fsharp skip=signature
+type ByteSemantics =
+    | BodyOnly          // the response body, the quantity the origin counts
+    | IncludesHeaders   // the whole HTTP response, headers included
+    | UnknownByteSemantics // the source's documentation does not say
+```
+
+A source cannot decline to answer: there is no default and no `option`. `UnknownByteSemantics` is an
+answer, and it is the right one when your log platform documents its byte field as (say) "bytes
+returned to the client" without saying whether headers are counted — inferring which would be a guess
+recorded as a measurement.
+
+`PlaybackRollup.DeliveredBytesBySemantics` is the resulting **partition**: `(token, bytes)` pairs
+that sum exactly to `DeliveredEgressBytes`, including the `unknown` share and including a token this
+SDK does not recognise. So:
+
+- **Bill on the partition, not on the total.** `DeliveredEgressBytes` is the honest sum of everything
+  delivered, but its *meaning* is a weighted blend of however your sources are configured. Take
+  `PlaybackRollup.bytesForSemantics` for the one definition your contract prices.
+- **Treat `unknown` as unbillable.** `PlaybackRollup.deliveredBytesWithKnownSemantics` is the total
+  less that share. Those bytes were really delivered; nothing knows whether they include response
+  headers, so charging for them charges for an unstated quantity.
+- **A mixed-semantics ingestion is legal and visible.** Two sources with different definitions do not
+  average and do not silently merge — they appear as separate entries. If you would rather they did
+  not, that is a signal to reconfigure a delivery, not a number to correct after the fact.
+- **Rows written before the declaration existed carry none**, and read as `unknown`. That is the
+  honest reading of a row whose source never stated anything.
+
+The same partition is on the metric: `toolup.media.egress.delivered.bytes` carries a `semantics` tag
+beside `outcome`, so a dashboard reading either sink partitions the same way.
 
 ## Checklist for putting a CDN in front of an existing deployment
 
@@ -337,6 +376,9 @@ log pipeline drops a period, the delivered series is short for that period perma
    tells you how long to wait, and an unbounded one means "no promise".
 7. If you meter or bill on egress, wire delivered-egress reconciliation — from the moment the edge
    starts serving, origin egress is no longer the delivered figure. See the section above.
+8. Declare each log source's **byte semantics** honestly, then bill on the partition rather than the
+   total, treating `unknown` as unbillable. A wrong declaration is invisible in every number
+   downstream; `UnknownByteSemantics` is always available and is a smaller error than a guess.
 
 ## See also
 

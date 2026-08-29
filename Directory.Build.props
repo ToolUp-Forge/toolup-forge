@@ -118,6 +118,17 @@
       puts a break. It is deliberately NOT a second bump: 739's raise
       already carries the slot past `v0.22.0`, and a second one here
       would publish a version nobody asked for to say the same thing.
+
+      The same slot ALSO carries Phase 743, on the same reasoning as 741.
+      It adds an abstract member to `IDeliveredLogSource`
+      (`ByteSemantics`), which is breaking for implementors in exactly
+      741's class, and widens three records (`DeliveredBatch`,
+      `DeliveredIngestOutcome`, `PlaybackRollup`) plus `FieldMap` under
+      the operator's 2026-08-04 record-widening dispensation. Deliberately
+      not a third bump: the newest tag is still `v0.22.0`, so 0.23.0 has
+      never been published and 743's surface will ship in the same
+      artefact as 739's and 741's. A version is bumped when the slot has
+      been RELEASED, not once per phase that touches it.
     -->
     <Version>0.23.0</Version>
     <!--

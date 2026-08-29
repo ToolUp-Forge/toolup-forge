@@ -37,7 +37,9 @@ which fields to emit, so there is no preset that would be right for you. Name wh
 open ToolUp.Hosts.DeliveredEgress.FieldMappedParser
 
 let map = {
-    FieldMap.required "<path-field>" "<bytes-field>" "<status-field>" "<timestamp-field>" with
+    // Phase 743: the byte field and what it MEANS are one decision, so
+    // they are adjacent and neither has a default.
+    FieldMap.required "<path-field>" "<bytes-field>" IncludesHeaders "<status-field>" "<timestamp-field>" with
         QueryField = Some "<query-field>"       // omit if your path field includes the query
         OutcomeField = Some "<cache-status-field>"
         RequestIdField = Some "<request-id-field>"  // name it if you have one — see below
@@ -88,16 +90,17 @@ let source =
     CallbackLogSource(
         "my-edge",
         TimeSpan.FromHours 1.0, // YOUR delivery's lag — see below
+        map.ByteSemantics,      // Phase 743: what YOUR byte field means
         fun () -> async {
             let! files = myLogStore.FetchNewFiles()
 
             return
                 Ok(
                     files
-                    |> List.map (fun (name, content) -> {
-                        BatchId = name
-                        Records = (parseDelimited map '\t' None content).Records
-                    })
+                    // `ParseOutput.toBatch` carries the map's declaration
+                    // onto the batch, so the two cannot disagree.
+                    |> List.map (fun (name, content) ->
+                        parseDelimited map '\t' None content |> ParseOutput.toBatch name)
                 )
         }
     )
@@ -133,15 +136,34 @@ compose no job at all.
 is counted in both — once by the origin writing the body, once by the edge relaying it — and even
 for that one response the counts differ, because a CDN's byte field is typically the whole response
 *including headers* while the origin count is body bytes only. The delivered figure is the billable
-one; the origin figure is the one your process can prove. If you need a single number for a bill,
-use `DeliveredEgressBytes`.
+one; the origin figure is the one your process can prove.
+
+**For a bill, take the partition rather than the total (Phase 743).** `DeliveredEgressBytes` is the
+honest sum of everything delivered, but its *meaning* is a blend of however your sources are
+configured — so `PlaybackRollup.DeliveredBytesBySemantics` splits it by what each source declared its
+bytes to mean, in `(token, bytes)` pairs that sum exactly to the total:
+
+```fsharp skip=fragment
+// The one definition your contract prices.
+PlaybackRollup.bytesForSemantics PlaybackTelemetry.SemanticsBodyOnly rollup
+
+// Everything whose meaning was stated at all — the total less the
+// `unknown` share. Those bytes were really delivered, but nothing knows
+// whether they include response headers, so billing them bills for an
+// unstated quantity.
+PlaybackRollup.deliveredBytesWithKnownSemantics rollup
+```
+
+Rows written before 743 carry no declaration and read as `unknown`, which is the honest reading of a
+row whose source never stated anything — so an existing ledger's delivered total is unchanged and
+none of it is billable until new rows arrive with declarations.
 
 New series: ledger kind `media.egress.delivered.bytes`; metrics
-`toolup.media.egress.delivered.bytes` (histogram, tagged `scope` / `class` / `outcome`) and
-`toolup.media.delivered.dropped` (counter, tagged `reason`). Both are declared automatically when
-you compose the media library, so no metric registration is needed. **Watch the drop counter** — a
-drop rate that climbs is how a changed field mapping, a new route, or a catalogue gap announces
-itself.
+`toolup.media.egress.delivered.bytes` (histogram, tagged `scope` / `class` / `outcome` /
+`semantics`) and `toolup.media.delivered.dropped` (counter, tagged `reason`). Both are declared
+automatically when you compose the media library, so no metric registration is needed. **Watch the
+drop counter** — a drop rate that climbs is how a changed field mapping, a new route, or a catalogue
+gap announces itself.
 
 ## Breaking-ish: one widened record
 
@@ -163,11 +185,34 @@ to compile (FS0764):
 ```
 
 Zeroes are the correct values for a deployment that ingests nothing, and are what the fold produces
-for it.
+for it. (That "After" is 742's; Phase 743 adds a fourth field to the same literal — see the table
+below.)
 
 Nothing else changes. `PlaybackRollup.ofUsageRecords` takes the same input and returns the same
 values for every pre-742 ledger; `SignedUrl.verify`, every serving route, and every existing metric
 are untouched.
+
+### Phase 743, in the same 0.23.0 slot: three more required declarations
+
+743 shipped after 742 and before either was released, so a consumer adopting from 0.22.0 meets both
+at once. It widens the same record once more and adds three places where a byte definition must be
+stated. Each is a compile error rather than a silent default, deliberately: a wrong byte definition
+is invisible in every number downstream, and `UnknownByteSemantics` is always an available and
+honest answer.
+
+| Surface | Before | After |
+|---|---|---|
+| `PlaybackRollup` literal | the ten fields above | plus `DeliveredBytesBySemantics = []` |
+| `FieldMap.required` | `path bytes status timestamp` | `path bytes <semantics> status timestamp` |
+| `CallbackLogSource` / `.ofBatches` | `(name, lag, fetch)` | `(name, lag, <semantics>, fetch)` |
+| `DeliveredBatch` literal | `{ BatchId; Records }` | plus `ByteSemantics = …` — or build it with `ParseOutput.toBatch` |
+| `IDeliveredLogSource` implementors | `Name` / `DeliveryLag` / `FetchBatches` | plus `ByteSemantics` |
+| `PlaybackTelemetry.deliveredRecord` | `attribution outcome bytes id at` | `attribution outcome <semantics> bytes id at` |
+
+Only the last two bite anyone who did not take the adapter package: a custom `IDeliveredLogSource`
+answers one more member, and a caller building ledger rows by hand states what its bytes mean. The
+`ByteSemantics` a batch carries is **not** an input to the dedup key, so correcting a declaration
+later re-ingests cleanly and doubles nothing.
 
 ## Rollback
 

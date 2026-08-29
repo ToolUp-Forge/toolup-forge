@@ -5,8 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.Hosts.DeliveredEgress.CallbackLogSource (class)
 ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource (class)
-ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource..ctor(System.String, System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch], System.String]]])
-ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource.ofBatches(System.String, System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch]]]) : ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource
+ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource..ctor(System.String, System.TimeSpan, ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch], System.String]]])
+ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource.ofBatches(System.String, System.TimeSpan, ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch]]]) : ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackLogSource
 ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackScopeResolver (class)
 ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackScopeResolver..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.StorageScope])
 ToolUp.Hosts.DeliveredEgress.CallbackLogSource+CallbackScopeResolver..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.MediaLibrary.MediaId, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]]])
@@ -14,7 +14,8 @@ ToolUp.Hosts.DeliveredEgress.FieldMappedParser (class)
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser.parseDelimited(ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap, System.Char, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String) : ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser.parseJsonLines(ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap, System.String) : ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap (class)
-ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.ByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.BytesField : System.String { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.EdgeOutcomes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.OriginOutcomes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -28,12 +29,15 @@ ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.TimestampFormats : Micro
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap.TimestampSecondField : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMapModule (class)
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMapModule.AbsentToken : System.String (literal)
-ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMapModule.required(System.String, System.String, System.String, System.String) : ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMapModule.required(System.String, System.String, ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics, System.String, System.String) : ToolUp.Hosts.DeliveredEgress.FieldMappedParser+FieldMap
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError (class)
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError..ctor(System.Int32, System.String)
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError.Line : System.Int32 { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError.Reason : System.String { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput (class)
-ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError])
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError], ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics)
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput.ByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput.Errors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Hosts.DeliveredEgress.FieldMappedParser+LineParseError] { get }
 ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord] { get }
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutputModule (class)
+ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutputModule.toBatch(System.String, ToolUp.Hosts.DeliveredEgress.FieldMappedParser+ParseOutput) : ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch

@@ -45,6 +45,11 @@ configuration:
   client. Cache dispositions read `Hit` / `RefreshHit` / `Miss` on one and
   `hit` / `miss` / `expired` / `bypass` / `dynamic` on the other.
 
+Of those, the byte definition is the one that changes the *arithmetic*
+rather than the parsing, so a `FieldMap` **declares** it: naming a byte
+field without saying what it counts is exactly the omission that lets two
+differently-configured sources fold into one number nobody can price.
+
 Once the field names are a parameter, nothing vendor-shaped is left. So
 the vendor-specific part of this integration is a `FieldMap` **value you
 write**, not a package you pick.
@@ -59,7 +64,10 @@ open System
 open ToolUp.Hosts.DeliveredEgress.FieldMappedParser
 
 let map = {
-    FieldMap.required "cs-uri-stem" "sc-bytes" "sc-status" "date" with
+    // `sc-bytes` is documented as the total response INCLUDING headers,
+    // so that is what this map declares. There is no default - see
+    // "Declaring what your bytes mean" below.
+    FieldMap.required "cs-uri-stem" "sc-bytes" IncludesHeaders "sc-status" "date" with
         // This delivery splits the timestamp across two columns and
         // logs the query string separately from the path — the signed
         // URL token lives in the query, so naming it is what makes
@@ -77,7 +85,11 @@ let map = {
 The equivalent for a JSON-lines delivery names its own fields
 (`ClientRequestURI`, `EdgeResponseBytes`, `EdgeResponseStatus`,
 `EdgeStartTimestamp`, `CacheCacheStatus`, `RayID`) and needs no
-`QueryField`, because that URI field already carries the query.
+`QueryField`, because that URI field already carries the query. It
+declares `UnknownByteSemantics`, because `EdgeResponseBytes` is
+documented as the bytes returned to the client and does not say whether
+response headers are counted - and that is the *correct* declaration
+rather than a placeholder for one.
 
 Three notes on the shape:
 
@@ -94,6 +106,32 @@ Three notes on the shape:
   days of attribution on any host that is not on UTC, and would be
   invisible to a developer whose machine is.
 
+## Declaring what your bytes mean
+
+`FieldMap.ByteSemantics` is required, sits next to `BytesField`, and has
+no default:
+
+| Value | When |
+|---|---|
+| `BodyOnly` | your byte field counts the response body |
+| `IncludesHeaders` | it counts the whole HTTP response, headers included |
+| `UnknownByteSemantics` | your platform does not document which |
+
+**You cannot decline, and `UnknownByteSemantics` is a real answer.** It is
+strictly better than a guess: unknown bytes count toward the delivered
+total and toward no semantics-specific figure, so they can never be
+silently billed as a definition nobody checked. A wrong declaration, by
+contrast, is invisible in every number downstream.
+
+The declaration flows through without being restated:
+`ParseOutput.ByteSemantics` echoes the map, `ParseOutput.toBatch` carries
+it onto the batch, the ingestion writes it onto every ledger row, and
+`PlaybackRollup.DeliveredBytesBySemantics` partitions on it. An
+`IDeliveredLogSource` declares its own (beside `DeliveryLag`, portability
+rule 6) and the scheduled job stamps that declaration over the batches it
+fetched - the source is authoritative for its own bytes, so there is one
+answer rather than two that can drift.
+
 ## Wiring it
 
 ```fsharp skip=fragment
@@ -107,15 +145,14 @@ let source =
     CallbackLogSource(
         "my-edge-logs",
         TimeSpan.FromHours 1.0, // the delivery lag YOUR delivery has
+        map.ByteSemantics,      // and what YOUR byte field counts
         fun () -> async {
             let! files = fetchUndeliveredLogFiles ()
 
             return
                 files
-                |> List.map (fun (name, content) -> {
-                    BatchId = name
-                    Records = (parseDelimited map '\t' None content).Records
-                })
+                |> List.map (fun (name, content) ->
+                    parseDelimited map '\t' None content |> ParseOutput.toBatch name)
         }
     )
 
@@ -177,6 +214,16 @@ origin structurally could not see. `EdgeHitRateByBytes` is their ratio —
 by bytes rather than by request, because the question a delivery bill
 poses is about volume, and one large origin pull outweighs a hundred small
 edge hits.
+
+**Bill on `DeliveredBytesBySemantics`, not on the total.** It splits the
+delivered bytes by what each source declared them to mean, in pairs that
+sum exactly to `DeliveredEgressBytes` - so a mixed-semantics ingestion is
+visible rather than blended. `PlaybackRollup.bytesForSemantics` takes the
+one definition your contract prices;
+`PlaybackRollup.deliveredBytesWithKnownSemantics` takes everything whose
+meaning was stated at all, which is the total less the `unknown` share.
+Treat that share as **unbillable**: those bytes were really delivered, but
+nothing knows whether they include response headers.
 
 ## What this package does not do
 

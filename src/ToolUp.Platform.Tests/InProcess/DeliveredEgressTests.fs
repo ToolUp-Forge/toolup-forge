@@ -203,13 +203,60 @@ let private dedupTests =
         // what redelivery produces.
         test "the key is independent of which batch carried the record" {
             let r = record "/api/media/stream/abc" 100L ServedFromEdge (Some "req-1")
-            let batchA = { BatchId = "file-a"; Records = [ r ] }
-            let batchB = { BatchId = "file-b"; Records = [ r ] }
+
+            let batchA = {
+                BatchId = "file-a"
+                Records = [ r ]
+                ByteSemantics = BodyOnly
+            }
+
+            let batchB = {
+                BatchId = "file-b"
+                Records = [ r ]
+                ByteSemantics = BodyOnly
+            }
 
             Expect.equal
                 (dedupKey (List.head batchA.Records))
                 (dedupKey (List.head batchB.Records))
                 "batch id is not an input"
+        }
+
+        // Phase 743. The declaration must NOT reach the dedup key: the
+        // same logged response re-ingested after a source corrected what
+        // it says its bytes mean has to be recognised as the same
+        // response, or the correction double-counts every row it touched.
+        // Asserted through the ingestor rather than on `dedupKey` alone,
+        // because the property that matters is the LEDGER's.
+        test "correcting a source's declaration does not double-count its rows" {
+            let usage = RecordingUsageLog()
+
+            let resolver =
+                CallbackLogSource.CallbackScopeResolver("t", Map.ofList [ "abc", scope "team-1" ])
+
+            let ingestor =
+                DeliveredEgressIngestor(usage, None, None, Some(resolver :> IDeliveredScopeResolver))
+
+            let records = [ record "/api/media/hls/abc/v0/s1.ts" 4096L ServedFromEdge (Some "r1") ]
+
+            ingestor.IngestBatch {
+                BatchId = "file-1"
+                Records = records
+                ByteSemantics = UnknownByteSemantics
+            }
+            |> Async.RunSynchronously
+            |> ignore
+
+            ingestor.IngestBatch {
+                BatchId = "file-1"
+                Records = records
+                ByteSemantics = IncludesHeaders
+            }
+            |> Async.RunSynchronously
+            |> ignore
+
+            Expect.equal (List.length usage.Merged) 1 "one row survives the merge, not two"
+            Expect.equal (usage.Merged |> List.sumBy (fun r -> int64 r.Quantity)) 4096L "bytes are not doubled"
         }
 
         test "a supplied request id alone identifies the record" {
@@ -242,12 +289,29 @@ let private dedupTests =
 
 // ─── 3. Ingestion ─────────────────────────────────────────────────────
 
-let private ingest (ingestor: DeliveredEgressIngestor) (batchId: string) (records: DeliveredRecord list) =
-    ingestor.IngestBatch { BatchId = batchId; Records = records }
+let private ingestAs
+    (semantics: ByteSemantics)
+    (ingestor: DeliveredEgressIngestor)
+    (batchId: string)
+    (records: DeliveredRecord list)
+    =
+    ingestor.IngestBatch {
+        BatchId = batchId
+        Records = records
+        ByteSemantics = semantics
+    }
     |> Async.RunSynchronously
     |> function
         | Ok outcome -> outcome
         | Error e -> failtestf "ingest failed: %s" e
+
+/// The Phase 742 cases predate the byte-semantics declaration and are
+/// indifferent to it, so they ingest under one fixed declaration —
+/// `BodyOnly` rather than `UnknownByteSemantics`, so that a case
+/// asserting a semantics-specific figure cannot pass by accident on the
+/// value the fold falls back to.
+let private ingest (ingestor: DeliveredEgressIngestor) (batchId: string) (records: DeliveredRecord list) =
+    ingestAs BodyOnly ingestor batchId records
 
 let private ingestionTests =
     testList "DeliveredEgressIngestor" [
@@ -602,9 +666,27 @@ let private rollupTests =
 
             let rows = [
                 PlaybackTelemetry.egressRecord attribution 1000L (Guid.NewGuid()) at
-                PlaybackTelemetry.deliveredRecord attribution PlaybackTelemetry.OutcomeEdge 8000L (Guid.NewGuid()) at
-                PlaybackTelemetry.deliveredRecord attribution PlaybackTelemetry.OutcomeOrigin 1100L (Guid.NewGuid()) at
-                PlaybackTelemetry.deliveredRecord attribution PlaybackTelemetry.OutcomeUnknown 900L (Guid.NewGuid()) at
+                PlaybackTelemetry.deliveredRecord
+                    attribution
+                    PlaybackTelemetry.OutcomeEdge
+                    PlaybackTelemetry.SemanticsBodyOnly
+                    8000L
+                    (Guid.NewGuid())
+                    at
+                PlaybackTelemetry.deliveredRecord
+                    attribution
+                    PlaybackTelemetry.OutcomeOrigin
+                    PlaybackTelemetry.SemanticsBodyOnly
+                    1100L
+                    (Guid.NewGuid())
+                    at
+                PlaybackTelemetry.deliveredRecord
+                    attribution
+                    PlaybackTelemetry.OutcomeUnknown
+                    PlaybackTelemetry.SemanticsBodyOnly
+                    900L
+                    (Guid.NewGuid())
+                    at
             ]
 
             let rollup = PlaybackTelemetry.PlaybackRollup.ofUsageRecords rows |> List.exactlyOne
@@ -634,6 +716,7 @@ let private rollupTests =
                     PlaybackTelemetry.deliveredRecord
                         attribution
                         PlaybackTelemetry.OutcomeUnknown
+                        PlaybackTelemetry.SemanticsBodyOnly
                         500L
                         (Guid.NewGuid())
                         at
@@ -682,12 +765,14 @@ let private rollupTests =
                     PlaybackTelemetry.deliveredRecord
                         (attributionFor "team-1")
                         PlaybackTelemetry.OutcomeEdge
+                        PlaybackTelemetry.SemanticsBodyOnly
                         100L
                         (Guid.NewGuid())
                         at
                     PlaybackTelemetry.deliveredRecord
                         (attributionFor "team-2")
                         PlaybackTelemetry.OutcomeEdge
+                        PlaybackTelemetry.SemanticsBodyOnly
                         900L
                         (Guid.NewGuid())
                         at
@@ -706,8 +791,12 @@ let private rollupTests =
 
 /// A field map in the shape a delimited delivery that splits date and
 /// time, and logs the query separately, would need.
+///
+/// Phase 743 — the byte field this shape names is the one documented as
+/// the total response INCLUDING headers, so the map declares
+/// `IncludesHeaders`. This is the same map the package README carries.
 let private delimitedMap = {
-    FieldMap.required "uri-stem" "bytes-sent" "status" "date" with
+    FieldMap.required "uri-stem" "bytes-sent" IncludesHeaders "status" "date" with
         TimestampSecondField = Some "time"
         QueryField = Some "uri-query"
         OutcomeField = Some "result-type"
@@ -716,6 +805,19 @@ let private delimitedMap = {
         EdgeOutcomes = Set.ofList [ "Hit"; "RefreshHit" ]
         OriginOutcomes = Set.ofList [ "Miss" ]
 }
+
+/// The JSON-lines counterpart, in the shape a delivery whose URI field
+/// already carries the query would need.
+///
+/// Phase 743 — this shape's byte field is documented only as the bytes
+/// the edge returned to the client, which does not say whether response
+/// headers are counted. So the map declares `UnknownByteSemantics`, and
+/// that is the CORRECT declaration rather than a placeholder: reading
+/// "returned to the client" as either definition would be exactly the
+/// inference this phase exists to stop. Its bytes therefore count toward
+/// the delivered total and toward no semantics-specific figure.
+let private jsonLinesMap =
+    FieldMap.required "RequestURI" "ResponseBytes" UnknownByteSemantics "ResponseStatus" "StartTimestamp"
 
 let private parserTests =
     testList "FieldMappedParser (ToolUp.Hosts.DeliveredEgress)" [
@@ -822,7 +924,7 @@ let private parserTests =
         // configuration choice rather than a malformation.
         test "JSON lines parse whether values are typed or stringly" {
             let map = {
-                FieldMap.required "RequestURI" "ResponseBytes" "ResponseStatus" "StartTimestamp" with
+                jsonLinesMap with
                     OutcomeField = Some "CacheStatus"
                     RequestIdField = Some "RayID"
                     EdgeOutcomes = Set.ofList [ "hit" ]
@@ -847,7 +949,7 @@ let private parserTests =
         }
 
         test "a non-JSON line is reported and the rest of the file parses" {
-            let map = FieldMap.required "u" "b" "s" "t"
+            let map = FieldMap.required "u" "b" BodyOnly "s" "t"
 
             let content =
                 "{\"u\":\"/api/media/stream/a\",\"b\":1,\"s\":200,\"t\":\"2026-08-28T10:00:00Z\"}\nnot json"
@@ -888,6 +990,7 @@ let private parserTests =
                 CallbackLogSource.CallbackLogSource.ofBatches (
                     "boom",
                     TimeSpan.FromHours 1.0,
+                    BodyOnly,
                     fun () -> async { return failwith "store unreachable" }
                 )
 
@@ -900,11 +1003,366 @@ let private parserTests =
         // surveyed differ by roughly three orders of magnitude here.
         test "a source declares its own delivery lag" {
             let source =
-                CallbackLogSource.CallbackLogSource("s", TimeSpan.FromHours 24.0, fun () -> async { return Ok [] })
+                CallbackLogSource.CallbackLogSource(
+                    "s",
+                    TimeSpan.FromHours 24.0,
+                    IncludesHeaders,
+                    fun () -> async { return Ok [] }
+                )
 
             Expect.equal (source :> IDeliveredLogSource).DeliveryLag (TimeSpan.FromHours 24.0) "declared lag"
         }
     ]
 
+// ─── 6. Phase 743 — byte semantics ────────────────────────────────────
+//
+// What a delivered byte count MEANS is per-deployment configuration, so
+// Phase 743 made it a declaration the source cannot decline. These cases
+// hold the four claims that makes:
+//
+//   * both reference field maps declare, and declare CORRECTLY;
+//   * the declaration reaches the ledger row and the rollup unchanged —
+//     carried, never re-derived;
+//   * a mixed-semantics batch PARTITIONS and the partition sums to the
+//     unchanged total, so nothing is folded or averaged;
+//   * `unknown` counts toward the total and toward no semantics-specific
+//     figure.
+
+let private attributionFor scopeId : PlaybackTelemetry.EgressAttribution = {
+    Media = MediaId "abc"
+    ScopeId = scopeId
+    Class = PlaybackTelemetry.ClassSegment
+}
+
+let private deliveredAt = DateTime(2026, 8, 28, 10, 0, 0, DateTimeKind.Utc)
+
+let private deliveredRow (semantics: string) (bytes: int64) =
+    PlaybackTelemetry.deliveredRecord
+        (attributionFor "team-1")
+        PlaybackTelemetry.OutcomeEdge
+        semantics
+        bytes
+        (Guid.NewGuid())
+        deliveredAt
+
+let private semanticsTests =
+    testList "ByteSemantics (Phase 743)" [
+        // 743.A — the two reference maps. The delimited shape's byte
+        // field is documented as the whole response INCLUDING headers;
+        // the JSON-lines shape's is documented only as the bytes returned
+        // to the client, which does not say, so `UnknownByteSemantics` is
+        // the correct declaration rather than a stand-in for one.
+        test "both reference field maps declare what their bytes mean" {
+            Expect.equal delimitedMap.ByteSemantics IncludesHeaders "the delimited map's documented definition"
+            Expect.equal jsonLinesMap.ByteSemantics UnknownByteSemantics "and the JSON-lines map's absent one"
+        }
+
+        test "a parse echoes its map's declaration, and toBatch carries it" {
+            let content =
+                "#Fields: date time uri-stem status bytes-sent uri-query result-type request-id\n"
+                + "2026-08-28\t10:00:00\t/api/media/stream/abc\t200\t4096\t-\tHit\tr1"
+
+            let output = parseDelimited delimitedMap '\t' None content
+
+            Expect.equal output.ByteSemantics IncludesHeaders "the parse output echoes the map"
+
+            let batch = ParseOutput.toBatch "file-1" output
+            Expect.equal batch.ByteSemantics IncludesHeaders "and the batch takes it from the parse"
+            Expect.equal (List.length batch.Records) 1 "with the records"
+        }
+
+        test "a JSON-lines parse echoes its own map's declaration" {
+            let content =
+                """{"RequestURI":"/api/media/stream/abc","ResponseBytes":1,"ResponseStatus":200,"StartTimestamp":"2026-08-28T10:00:00Z"}"""
+
+            Expect.equal
+                (parseJsonLines jsonLinesMap content).ByteSemantics
+                UnknownByteSemantics
+                "unknown is carried, not silently replaced"
+        }
+
+        // Rule 6, the same shape `DeliveryLag` takes: a source states it,
+        // and there is no default to fall back on.
+        test "a source declares its byte semantics beside its delivery lag" {
+            let source =
+                CallbackLogSource.CallbackLogSource(
+                    "s",
+                    TimeSpan.FromHours 1.0,
+                    IncludesHeaders,
+                    fun () -> async { return Ok [] }
+                )
+                :> IDeliveredLogSource
+
+            Expect.equal source.ByteSemantics IncludesHeaders "declared"
+            Expect.equal source.DeliveryLag (TimeSpan.FromHours 1.0) "beside the lag, not instead of it"
+        }
+
+        // 743.B — the declaration RIDES the record rather than being
+        // re-derived downstream.
+        test "the declaration lands on the ledger row beside the outcome" {
+            let usage = RecordingUsageLog()
+
+            let resolver =
+                CallbackLogSource.CallbackScopeResolver("t", Map.ofList [ "abc", scope "team-1" ])
+
+            let ingestor =
+                DeliveredEgressIngestor(usage, None, None, Some(resolver :> IDeliveredScopeResolver))
+
+            let outcome =
+                ingestAs IncludesHeaders ingestor "b" [
+                    record "/api/media/hls/abc/v0/s1.ts" 4096L ServedFromEdge (Some "r1")
+                ]
+
+            Expect.equal outcome.ByteSemantics IncludesHeaders "echoed on the ingest outcome"
+
+            let row = usage.Rows |> List.exactlyOne
+
+            Expect.equal
+                (row.Metadata.TryFind PlaybackTelemetry.ByteSemanticsKey)
+                (Some PlaybackTelemetry.SemanticsIncludesHeaders)
+                "and recorded on the row"
+
+            Expect.equal
+                (row.Metadata.TryFind PlaybackTelemetry.OutcomeKey)
+                (Some PlaybackTelemetry.OutcomeEdge)
+                "beside the outcome Phase 742 already recorded"
+        }
+
+        test "the metric carries the declaration as a tag" {
+            let usage = RecordingUsageLog()
+            let metrics = RecordingMetricsSink()
+
+            let resolver =
+                CallbackLogSource.CallbackScopeResolver("t", Map.ofList [ "abc", scope "team-1" ])
+
+            let ingestor =
+                DeliveredEgressIngestor(
+                    usage,
+                    Some(metrics :> IMetricsSink),
+                    None,
+                    Some(resolver :> IDeliveredScopeResolver)
+                )
+
+            ingestAs BodyOnly ingestor "b" [ record "/api/media/stream/abc" 10L ServedFromEdge (Some "r1") ]
+            |> ignore
+
+            let tags =
+                metrics.Observations
+                |> List.filter (fun (name, _, _) -> name = PlaybackTelemetry.DeliveredEgressMetric)
+                |> List.map (fun (_, _, tags) -> tags.TryFind "semantics")
+
+            Expect.equal
+                tags
+                [ Some PlaybackTelemetry.SemanticsBodyOnly ]
+                "the delivered histogram is partitionable too"
+        }
+
+        // The SOURCE is authoritative for what its own bytes mean, so a
+        // batch that arrived through it is stamped with its declaration.
+        // Without this, a fetch callback and a source could disagree, and
+        // the disagreement would be invisible.
+        test "the job stamps the source's declaration over the batch's" {
+            let usage = RecordingUsageLog()
+
+            let resolver =
+                CallbackLogSource.CallbackScopeResolver("t", Map.ofList [ "abc", scope "team-1" ])
+
+            let ingestor =
+                DeliveredEgressIngestor(usage, None, None, Some(resolver :> IDeliveredScopeResolver))
+
+            // The callback declares one thing on the batch; the source
+            // declares another about itself.
+            let source =
+                CallbackLogSource.CallbackLogSource.ofBatches (
+                    "s",
+                    TimeSpan.FromHours 1.0,
+                    IncludesHeaders,
+                    fun () -> async {
+                        return [
+                            {
+                                BatchId = "file-1"
+                                Records = [ record "/api/media/stream/abc" 100L ServedFromEdge (Some "r1") ]
+                                ByteSemantics = BodyOnly
+                            }
+                        ]
+                    }
+                )
+
+            let handler = DeliveredEgressJobHandler(ingestor, source) :> IJobHandler
+
+            let jobCtx: JobContext = {
+                JobId = Guid.NewGuid()
+                ScopeId = "team-1"
+                AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
+                Attempt = 1
+                Trigger = Manual
+                TriggerSource = TriggerSource.ScheduledManually "_system"
+                ScheduledAt = DateTime.UtcNow
+                RunningAt = DateTime.UtcNow
+                Payload = ""
+                DeadLetterDestination = None
+            }
+
+            let result = handler.Execute jobCtx |> Async.RunSynchronously
+
+            Expect.equal result Success "the job ran"
+
+            Expect.equal
+                ((usage.Rows |> List.exactlyOne).Metadata.TryFind PlaybackTelemetry.ByteSemanticsKey)
+                (Some PlaybackTelemetry.SemanticsIncludesHeaders)
+                "the source's declaration wins — one answer, not two that can drift"
+        }
+
+        // 743.B/C — the heart of the phase. A batch mixing semantics is
+        // LEGAL and VISIBLE: partitioned, never averaged, never folded.
+        test "a mixed-semantics bucket partitions, and the partition sums to the unchanged total" {
+            let rollup =
+                [
+                    deliveredRow PlaybackTelemetry.SemanticsBodyOnly 1000L
+                    deliveredRow PlaybackTelemetry.SemanticsIncludesHeaders 300L
+                    deliveredRow PlaybackTelemetry.SemanticsIncludesHeaders 200L
+                    deliveredRow PlaybackTelemetry.SemanticsUnknown 500L
+                ]
+                |> PlaybackTelemetry.PlaybackRollup.ofUsageRecords
+                |> List.exactlyOne
+
+            Expect.equal rollup.DeliveredEgressBytes 2000L "the Phase 742 total is unchanged"
+
+            Expect.equal
+                rollup.DeliveredBytesBySemantics
+                [
+                    PlaybackTelemetry.SemanticsBodyOnly, 1000L
+                    PlaybackTelemetry.SemanticsIncludesHeaders, 500L
+                    PlaybackTelemetry.SemanticsUnknown, 500L
+                ]
+                "partitioned in the canonical order, nothing merged"
+
+            Expect.equal
+                (rollup.DeliveredBytesBySemantics |> List.sumBy snd)
+                rollup.DeliveredEgressBytes
+                "the partition is exhaustive — it sums to the total"
+        }
+
+        // The refusable read: `unknown` bytes are real delivered bytes,
+        // and they are excluded from every semantics-specific figure
+        // because nobody stated what they count.
+        test "unknown counts toward the total and toward no specific figure" {
+            let rollup =
+                [
+                    deliveredRow PlaybackTelemetry.SemanticsBodyOnly 400L
+                    deliveredRow PlaybackTelemetry.SemanticsUnknown 600L
+                ]
+                |> PlaybackTelemetry.PlaybackRollup.ofUsageRecords
+                |> List.exactlyOne
+
+            Expect.equal rollup.DeliveredEgressBytes 1000L "every delivered byte is still delivered"
+
+            Expect.equal
+                (PlaybackTelemetry.PlaybackRollup.bytesForSemantics PlaybackTelemetry.SemanticsBodyOnly rollup)
+                400L
+                "only the declared body-only bytes"
+
+            Expect.equal
+                (PlaybackTelemetry.PlaybackRollup.bytesForSemantics PlaybackTelemetry.SemanticsIncludesHeaders rollup)
+                0L
+                "a definition nothing declared reads as zero, not as the total"
+
+            Expect.equal
+                (PlaybackTelemetry.PlaybackRollup.deliveredBytesWithKnownSemantics rollup)
+                400L
+                "the unbillable share is excluded"
+        }
+
+        // A row written before the declaration existed carries no key.
+        // Reading it as unknown — rather than assuming a definition —
+        // keeps the partition exhaustive without fabricating the fact.
+        test "a row with no declaration reads as unknown, and still counts" {
+            let legacyRow = {
+                deliveredRow PlaybackTelemetry.SemanticsBodyOnly 700L with
+                    Metadata =
+                        Map.ofList [
+                            PlaybackTelemetry.MediaIdKey, "abc"
+                            PlaybackTelemetry.ClassKey, PlaybackTelemetry.ClassSegment
+                            PlaybackTelemetry.OutcomeKey, PlaybackTelemetry.OutcomeEdge
+                        ]
+            }
+
+            let rollup =
+                PlaybackTelemetry.PlaybackRollup.ofUsageRecords [ legacyRow ] |> List.exactlyOne
+
+            Expect.equal rollup.DeliveredEgressBytes 700L "counted in the total"
+
+            Expect.equal
+                rollup.DeliveredBytesBySemantics
+                [ PlaybackTelemetry.SemanticsUnknown, 700L ]
+                "and named unknown rather than assigned a definition"
+
+            Expect.equal
+                (PlaybackTelemetry.PlaybackRollup.deliveredBytesWithKnownSemantics rollup)
+                0L
+                "so it is not billable"
+        }
+
+        // A token from a newer source must not vanish from the partition:
+        // a partition that dropped what it did not recognise would report
+        // fewer bytes than were delivered, which is the one direction an
+        // error here must never take.
+        test "an unrecognised declaration still appears, sorted after the known ones" {
+            let foreign = {
+                deliveredRow PlaybackTelemetry.SemanticsBodyOnly 50L with
+                    Metadata =
+                        Map.ofList [
+                            PlaybackTelemetry.MediaIdKey, "abc"
+                            PlaybackTelemetry.ClassKey, PlaybackTelemetry.ClassSegment
+                            PlaybackTelemetry.OutcomeKey, PlaybackTelemetry.OutcomeEdge
+                            PlaybackTelemetry.ByteSemanticsKey, "body-plus-tls-overhead"
+                        ]
+            }
+
+            let rollup =
+                PlaybackTelemetry.PlaybackRollup.ofUsageRecords [
+                    deliveredRow PlaybackTelemetry.SemanticsBodyOnly 10L
+                    foreign
+                ]
+                |> List.exactlyOne
+
+            Expect.equal
+                rollup.DeliveredBytesBySemantics
+                [ PlaybackTelemetry.SemanticsBodyOnly, 10L; "body-plus-tls-overhead", 50L ]
+                "kept, and sorted after the tokens this SDK knows"
+
+            Expect.equal
+                (rollup.DeliveredBytesBySemantics |> List.sumBy snd)
+                rollup.DeliveredEgressBytes
+                "still exhaustive"
+        }
+
+        // GP 11 / the acceptance criterion: a deployment that ingests
+        // nothing reads exactly as it did before this phase.
+        test "a ledger with no delivered rows has an empty partition" {
+            let rollup =
+                [
+                    PlaybackTelemetry.egressRecord (attributionFor "team-1") 4242L (Guid.NewGuid()) deliveredAt
+                ]
+                |> PlaybackTelemetry.PlaybackRollup.ofUsageRecords
+                |> List.exactlyOne
+
+            Expect.equal rollup.OriginEgressBytes 4242L "the origin series is untouched"
+            Expect.isEmpty rollup.DeliveredBytesBySemantics "and there is nothing to partition"
+
+            Expect.equal
+                (PlaybackTelemetry.PlaybackRollup.deliveredBytesWithKnownSemantics rollup)
+                0L
+                "nothing billable either"
+        }
+    ]
+
 let tests =
-    testList "DeliveredEgress (Phase 742)" [ pathTests; dedupTests; ingestionTests; rollupTests; parserTests ]
+    testList "DeliveredEgress (Phase 742)" [
+        pathTests
+        dedupTests
+        ingestionTests
+        rollupTests
+        parserTests
+        semanticsTests
+    ]

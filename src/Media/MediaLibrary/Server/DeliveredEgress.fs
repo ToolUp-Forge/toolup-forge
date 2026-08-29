@@ -42,7 +42,11 @@ open ToolUp.Platform.Usage
 //     sent as the total response INCLUDING headers; the other reports
 //     the bytes returned to the client. Vocabularies for the cache
 //     disposition differ too (`Hit`/`RefreshHit`/`Miss`/`Error` against
-//     `hit`/`miss`/`expired`/`bypass`/`dynamic`).
+//     `hit`/`miss`/`expired`/`bypass`/`dynamic`). Phase 743 turned the
+//     first of those — what a byte count MEANS — from a caveat into a
+//     `ByteSemantics` declaration the source must make, because it is
+//     the one difference that changes the ARITHMETIC rather than the
+//     parsing.
 //
 // So the vendor-shaped half is a FIELD MAPPING, which is data, and the
 // generic half is everything below. `ToolUp.Hosts.DeliveredEgress`
@@ -118,6 +122,53 @@ module DeliveredCacheOutcome =
         | ServedFromOrigin -> PlaybackTelemetry.OutcomeOrigin
         | DeliveredOutcomeUnknown -> PlaybackTelemetry.OutcomeUnknown
 
+/// Phase 743 — what a source's byte count MEANS.
+///
+/// **Why this is a type and not a doc comment.** Phase 742 discovered
+/// that a delivered byte count's definition is per-deployment
+/// configuration — one surveyed edge documents its byte field as the
+/// total response INCLUDING headers, another as the bytes returned to
+/// the client, and neither equals the origin's body-bytes count — and
+/// recorded that in three places of prose. Prose leaves two holes a
+/// billing consumer falls into: `DeliveredEgressBytes` can be read
+/// without ever meeting the caveat, and two sources with different
+/// definitions fold into one number with nothing recording that they
+/// did. Making it a declaration closes both — it is the same move
+/// `DeliveryLag` makes for a fact that also varies per deployment and
+/// also cannot be inferred (portability rule 6).
+///
+/// **A source cannot decline: `UnknownByteSemantics` IS the answer.**
+/// There is no `option` here and no default. A deployment whose log
+/// documentation genuinely does not say has an honest thing to declare,
+/// and the arithmetic treats it as what it is — counted in the delivered
+/// total, excluded from every semantics-specific figure, never quietly
+/// billed as one definition or the other.
+type ByteSemantics =
+    /// The response BODY only — the same quantity Phase 473's origin
+    /// accounting counts. (Still not summable with it: a cache miss is
+    /// counted by both, from two vantage points.)
+    | BodyOnly
+    /// The whole HTTP response, response headers included. Exceeds a
+    /// body-only count of the same bytes by the header size, on every
+    /// single response.
+    | IncludesHeaders
+    /// Not stated. Spelled out rather than left as a bare `Unknown` for
+    /// the reason `DeliveredOutcomeUnknown` is: this module is `open`ed
+    /// by its consumers, and two unrelated unions each contributing an
+    /// `Unknown` case makes the shorter name a coin toss at every use
+    /// site.
+    | UnknownByteSemantics
+
+module ByteSemantics =
+    /// The `PlaybackTelemetry.ByteSemanticsKey` token for a ledger row.
+    let token (semantics: ByteSemantics) : string =
+        match semantics with
+        | BodyOnly -> PlaybackTelemetry.SemanticsBodyOnly
+        | IncludesHeaders -> PlaybackTelemetry.SemanticsIncludesHeaders
+        | UnknownByteSemantics -> PlaybackTelemetry.SemanticsUnknown
+
+    let all: ByteSemantics list = [ BodyOnly; IncludesHeaders; UnknownByteSemantics ]
+
 /// One access-log record, already parsed out of whatever shape the
 /// deployment's edge emits.
 ///
@@ -159,6 +210,22 @@ type DeliveredRecord = {
 type DeliveredBatch = {
     BatchId: string
     Records: DeliveredRecord list
+    /// Phase 743 — what the byte counts in `Records` mean.
+    ///
+    /// **On the BATCH rather than on the record, and required rather than
+    /// optional.** It sits here because a batch is one delivery's worth
+    /// of one source's output, so the declaration is uniform across it
+    /// and repeating it per record would invite rows within one file
+    /// disagreeing about something a file cannot disagree about. It is
+    /// required because `IngestBatch` is public and a PUSH topology calls
+    /// it with no `IDeliveredLogSource` in sight — an optional field
+    /// would let exactly that path decline, which is the path a billing
+    /// integration is most likely to take.
+    ///
+    /// A batch fetched through a source is stamped with that source's
+    /// declaration by `DeliveredEgressJobHandler`, so the two cannot
+    /// drift into disagreeing.
+    ByteSemantics: ByteSemantics
 }
 
 /// Why a record was not attributed. Each is a counted, named outcome —
@@ -194,6 +261,10 @@ module DeliveredDropReason =
 /// changed field mapping or a new route announces itself.
 type DeliveredIngestOutcome = {
     BatchId: string
+    /// Phase 743 — the semantics the ingested batch declared, echoed so a
+    /// caller reading only the outcome can partition its own accounting
+    /// the same way the rollup does.
+    ByteSemantics: ByteSemantics
     /// Records attributed to a `(media, scope)` and written.
     Attributed: int
     /// Delivered bytes across the attributed records.
@@ -477,6 +548,19 @@ type IDeliveredLogSource =
     /// deployment tell those apart.
     abstract DeliveryLag: TimeSpan
 
+    /// Phase 743 — what this source's byte counts MEAN: rule 6 again, for
+    /// a second fact that varies per deployment and cannot be inferred.
+    ///
+    /// The 2026-08-28 survey found the two surveyed edges document their
+    /// byte fields differently — one as the whole response including
+    /// headers, the other as the bytes returned to the client — and
+    /// neither as the body-bytes quantity the origin counts. Which one a
+    /// deployment gets depends on which field it selected in its own log
+    /// delivery, so only the deployment can say, and there is deliberately
+    /// no default: `UnknownByteSemantics` is an available and honest
+    /// answer, and it is a different claim from silence.
+    abstract ByteSemantics: ByteSemantics
+
     /// The batches available now. An empty list is success with nothing
     /// to do; failure is data, so a transient source error becomes a
     /// retryable job outcome rather than an exception.
@@ -572,6 +656,12 @@ type DeliveredEgressIngestor
     /// the returned outcome and into `DeliveredDroppedMetric`. The
     /// `Result` covers only the case where the ledger itself refuses.
     member this.IngestBatch(batch: DeliveredBatch) : Async<Result<DeliveredIngestOutcome, string>> = async {
+        // Phase 743 — the batch's declaration, resolved once and written
+        // onto every row it produces. Deliberately NOT an input to
+        // `dedupKey`: the same logged response re-ingested after a source
+        // corrected its declaration must still dedup as the same response,
+        // or the correction would double-count every row it touched.
+        let semanticsToken = ByteSemantics.token batch.ByteSemantics
         let mutable attributed = 0
         let mutable attributedBytes = 0L
         let mutable edgeServedBytes = 0L
@@ -613,6 +703,7 @@ type DeliveredEgressIngestor
                     PlaybackTelemetry.deliveredRecord
                         attribution
                         outcomeToken
+                        semanticsToken
                         rec'.Bytes
                         (dedupKey rec')
                         rec'.At.UtcDateTime
@@ -627,6 +718,7 @@ type DeliveredEgressIngestor
                             "scope", attribution.ScopeId
                             "class", attribution.Class
                             "outcome", outcomeToken
+                            "semantics", semanticsToken
                         ]
                     ))
 
@@ -639,6 +731,7 @@ type DeliveredEgressIngestor
         return
             Ok {
                 BatchId = batch.BatchId
+                ByteSemantics = batch.ByteSemantics
                 Attributed = attributed
                 AttributedBytes = attributedBytes
                 EdgeServedBytes = edgeServedBytes
@@ -709,7 +802,21 @@ type DeliveredEgressJobHandler(ingestor: DeliveredEgressIngestor, source: IDeliv
             | Error e -> return TransientFailure(sprintf "[DeliveredEgress:%s] fetch failed: %s" source.Name e)
             | Ok [] -> return Success
             | Ok batches ->
-                let! ingested = ingestor.IngestAll batches
+                // Phase 743 — the SOURCE is authoritative for what its own
+                // bytes mean, so every batch it produced is stamped with
+                // its declaration rather than trusting whatever the fetch
+                // callback happened to put on each batch. Two declarations
+                // that could disagree would be worse than one: the batch
+                // field exists for the PUSH path, where there is no source
+                // to ask, and this is what keeps the pull path from
+                // acquiring a second, drifting answer.
+                let! ingested =
+                    batches
+                    |> List.map (fun batch -> {
+                        batch with
+                            ByteSemantics = source.ByteSemantics
+                    })
+                    |> ingestor.IngestAll
 
                 match ingested with
                 | Ok _ -> return Success
@@ -739,7 +846,11 @@ module DeliveredEgressJob =
             (DeliveredEgressJobHandler(ingestor, source))
             trigger
         |> ScheduledJobDeclaration.withTags (
-            Map.ofList [ "source", source.Name; "deliveryLag", string source.DeliveryLag ]
+            Map.ofList [
+                "source", source.Name
+                "deliveryLag", string source.DeliveryLag
+                "byteSemantics", ByteSemantics.token source.ByteSemantics
+            ]
         )
 
     /// `declaration` on the hourly cadence described above.

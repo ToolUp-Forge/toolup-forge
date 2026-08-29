@@ -56,6 +56,19 @@ open ToolUp.Platform.Usage
 // disagree, the delivered figure is the billable one and the origin
 // figure is the one this process can prove — which is why both survive.
 //
+// **Phase 743 types the second half of that caveat.** "Their byte
+// definitions differ" was prose, and prose has two failure modes a
+// billing consumer walks straight into: it can read
+// `DeliveredEgressBytes` without ever meeting the sentence, and two
+// sources with DIFFERENT definitions fold into one number with nothing
+// recording that they did. So the definition is now DECLARED by the
+// source (`ByteSemantics`, the rule-6 shape beside `DeliveryLag`),
+// carried on every ledger row under `ByteSemanticsKey`, and PARTITIONED
+// in the rollup as `DeliveredBytesBySemantics`. The total is unchanged
+// and the partition sums to it; what changed is that a mixed-semantics
+// ingestion is now visible, and an undeclared one is named `unknown`
+// rather than silently counted as either definition.
+//
 // **The two sinks carry different resolutions, on purpose.** The metric
 // series are tagged `scope` + `class` only; the per-MEDIA attribution
 // lives in the usage ledger's `Metadata`. `IMetricsSink` carries a
@@ -191,6 +204,56 @@ let OutcomeOrigin = "origin"
 [<Literal>]
 let OutcomeUnknown = "unknown"
 
+/// Phase 743 — `Metadata` key on a `DeliveredEgressKind` row recording
+/// what the source's byte count MEANS.
+///
+/// **Why a delivered byte count needs its meaning carried with it.**
+/// Phase 742 established that the delivered and origin series are not
+/// summable, partly because a CDN's byte field may count the whole HTTP
+/// response including headers while the origin counts body bytes only.
+/// That was written down as prose in three places, which left two things
+/// a billing-grade read cannot do: meet the caveat at all (nothing forced
+/// a reader of `DeliveredEgressBytes` past it), and separate two sources
+/// with DIFFERENT definitions that had folded into one number. This key
+/// is the caveat made structural — the source declares, the declaration
+/// rides each row, and the rollup partitions on it.
+///
+/// It is deliberately NOT an input to the ingestion's dedup key: the same
+/// logged response re-ingested after its source's declaration was
+/// corrected must still be recognised as the same response, or the
+/// correction would double-count everything it touched.
+[<Literal>]
+let ByteSemanticsKey = "byteSemantics"
+
+/// The source counts the response BODY only — the same quantity Phase
+/// 473's `OriginEgressBytes` counts, so the two are at least measuring
+/// the same thing (they still must not be summed; a cache miss appears
+/// in both).
+[<Literal>]
+let SemanticsBodyOnly = "body-only"
+
+/// The source's byte field counts the whole HTTP response, response
+/// headers included. Larger than the body by the header size on every
+/// response, so it exceeds an origin-side count of the same bytes.
+[<Literal>]
+let SemanticsIncludesHeaders = "includes-headers"
+
+/// The source did not state what its bytes mean — which is an ANSWER,
+/// not an omission: a source cannot decline to declare, and a
+/// deployment whose log documentation does not say is better served
+/// saying so than guessing. Counted in `DeliveredEgressBytes`, and
+/// excluded from every semantics-specific figure, so it can never be
+/// silently billed as one definition or the other.
+[<Literal>]
+let SemanticsUnknown = "unknown"
+
+/// The canonical rendering order for a byte-semantics partition, so two
+/// readers holding the same rows render the same table. A token outside
+/// this list sorts after it, alphabetically — the partition must remain
+/// exhaustive (it has to sum to the delivered total) even for a value
+/// this SDK does not know.
+let byteSemanticsTokens: string list = [ SemanticsBodyOnly; SemanticsIncludesHeaders; SemanticsUnknown ]
+
 /// Metric declarations, wired into `ServerApp.MetricRegistrations` by
 /// `MediaCompose.run` so a media-composing deployment has both series
 /// declared the moment it composes — the `AILatencyMetrics` /
@@ -231,10 +294,12 @@ let registrations: MetricRegistration list = [
             Description =
                 "Bytes an edge DELIVERED to a viewer per logged response, reconciled "
                 + "from the deployment's CDN access logs (tags: scope + class + "
-                + "outcome=edge|origin|unknown). Not summable with the origin-egress "
-                + "series: outcome=origin responses appear in both."
+                + "outcome=edge|origin|unknown + semantics=body-only|includes-headers|"
+                + "unknown). Not summable with the origin-egress series: outcome=origin "
+                + "responses appear in both. PARTITION ON semantics before billing — the "
+                + "tag says what the source's byte count means, and unknown is unbillable."
             Unit = "bytes"
-            Tags = [ "scope"; "class"; "outcome" ]
+            Tags = [ "scope"; "class"; "outcome"; "semantics" ]
         }
     }
     {
@@ -337,9 +402,17 @@ let egressRecord (attribution: EgressAttribution) (bytes: int64) (recordId: Guid
 /// own: the substrate already has the property, and the part worth
 /// owning is the DERIVATION of a stable id — see
 /// `DeliveredEgress.dedupKey`.
+///
+/// Phase 743 — `semantics` is the source's `ByteSemanticsKey` declaration
+/// travelling with the row it qualifies. It is a REQUIRED parameter and
+/// there is no overload without one: a delivered byte count whose meaning
+/// is unrecorded is exactly the row this phase exists to make
+/// unconstructable, and `SemanticsUnknown` is how a source that cannot
+/// say says so.
 let deliveredRecord
     (attribution: EgressAttribution)
     (outcome: string)
+    (semantics: string)
     (bytes: int64)
     (recordId: Guid)
     (timestamp: DateTime)
@@ -356,6 +429,7 @@ let deliveredRecord
                 MediaIdKey, MediaId.value attribution.Media
                 ClassKey, attribution.Class
                 OutcomeKey, outcome
+                ByteSemanticsKey, semantics
             ]
         Timestamp = timestamp
     }
@@ -863,9 +937,68 @@ type PlaybackRollup = {
     /// origin pull outweighs a hundred small edge hits in every way that
     /// matters to a bill.
     EdgeHitRateByBytes: float
+    /// Phase 743 — `DeliveredEgressBytes` PARTITIONED by what each
+    /// source declared its bytes to mean: `(ByteSemanticsKey token,
+    /// bytes)` pairs in `byteSemanticsTokens` order, omitting any token
+    /// with no bytes in this bucket.
+    ///
+    /// **A partition, never an average and never a fold.** The entries
+    /// SUM to `DeliveredEgressBytes` exactly — including the
+    /// `SemanticsUnknown` share and including a token this SDK does not
+    /// recognise — so a mixed-semantics ingestion is VISIBLE here rather
+    /// than silently merged into one number whose meaning depends on
+    /// which source happened to contribute more of it.
+    ///
+    /// **Bill on the partition, not on the total.** A billing-grade read
+    /// takes the entry whose definition it has priced and refuses the
+    /// rest: `SemanticsUnknown` bytes are real bytes that were really
+    /// delivered, but nothing here knows whether they include response
+    /// headers, so charging for them charges for an unstated quantity.
+    /// `deliveredBytesWithKnownSemantics` is that read; `bytesForSemantics`
+    /// is the one for a deployment that prices exactly one definition.
+    ///
+    /// Empty on a deployment that ingests no delivered rows. Rows written
+    /// before this field existed carry no declaration and read as
+    /// `SemanticsUnknown`, which is the honest reading of a row whose
+    /// source never stated anything.
+    DeliveredBytesBySemantics: (string * int64) list
 }
 
 module PlaybackRollup =
+
+    /// The `ByteSemanticsKey` a delivered row declares, or
+    /// `SemanticsUnknown` when it declares none.
+    ///
+    /// A row written before Phase 743 carries no key at all, and reading
+    /// it as unknown rather than assuming one of the two definitions is
+    /// the whole point: the earlier row's source may well have been
+    /// either, and inferring which would fabricate the fact this field
+    /// exists to record.
+    let semanticsOf (record: UsageRecord) : string =
+        match record.Metadata.TryFind ByteSemanticsKey with
+        | Some token when not (String.IsNullOrWhiteSpace token) -> token
+        | _ -> SemanticsUnknown
+
+    /// Delivered bytes in one bucket that were declared under exactly
+    /// `token`. `0L` when nothing in the bucket carried that declaration.
+    let bytesForSemantics (token: string) (rollup: PlaybackRollup) : int64 =
+        rollup.DeliveredBytesBySemantics
+        |> List.tryFind (fst >> (=) token)
+        |> Option.map snd
+        |> Option.defaultValue 0L
+
+    /// Delivered bytes whose meaning the source actually stated — the
+    /// total less the `SemanticsUnknown` share.
+    ///
+    /// **This is the billable read, and it is deliberately not called
+    /// that.** What it knows is that these bytes have a declared
+    /// definition, not that a given deployment's contract prices that
+    /// definition; a deployment billing on body bytes alone still wants
+    /// `bytesForSemantics SemanticsBodyOnly`. What it rules out is the
+    /// one thing no bill should rest on: a quantity nobody defined.
+    let deliveredBytesWithKnownSemantics (rollup: PlaybackRollup) : int64 =
+        rollup.DeliveredBytesBySemantics
+        |> List.sumBy (fun (token, bytes) -> if token = SemanticsUnknown then 0L else bytes)
 
     /// Fold usage records into per-`(media, scope, day)` rollups.
     ///
@@ -942,6 +1075,27 @@ module PlaybackRollup =
             let edgeServed =
                 deliveredBytesWhere (fun r -> r.Metadata.TryFind OutcomeKey = Some OutcomeEdge)
 
+            // Phase 743 — the partition. Grouped by the token the rows
+            // actually carry rather than by the tokens this SDK knows, so
+            // a value from a newer or a hand-written source still appears
+            // and the partition still sums to `delivered`. A partition
+            // that quietly dropped what it did not recognise would report
+            // a bill smaller than the bytes, which is the one direction an
+            // error here must never take.
+            let bySemantics =
+                rs
+                |> List.filter (fun r -> r.ResourceKind = DeliveredEgressKind)
+                |> List.groupBy semanticsOf
+                |> List.map (fun (token, rows) -> token, rows |> List.sumBy (fun r -> int64 r.Quantity))
+                |> List.filter (fun (_, bytes) -> bytes <> 0L)
+                |> List.sortBy (fun (token, _) ->
+                    let index =
+                        byteSemanticsTokens
+                        |> List.tryFindIndex ((=) token)
+                        |> Option.defaultValue byteSemanticsTokens.Length
+
+                    index, token)
+
             {
                 MediaId = media
                 ScopeId = scope
@@ -958,5 +1112,6 @@ module PlaybackRollup =
                         0.0
                     else
                         float edgeServed / float delivered
+                DeliveredBytesBySemantics = bySemantics
             })
         |> List.sortBy (fun r -> r.Day, r.MediaId, r.ScopeId)

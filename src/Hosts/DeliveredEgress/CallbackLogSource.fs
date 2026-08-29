@@ -33,7 +33,22 @@ open ToolUp.MediaLibrary.DeliveredEgress
 /// roughly three orders of magnitude — sub-minute pushes against
 /// typically-within-the-hour deliveries that can lag up to a day — so a
 /// default here would be actively misleading and there is none.
-type CallbackLogSource(name: string, deliveryLag: TimeSpan, fetch: unit -> Async<Result<DeliveredBatch list, string>>) =
+///
+/// `byteSemantics` (Phase 743) is the second declaration of the same
+/// kind and for the same reason: what the source's byte counts MEAN is
+/// per-deployment configuration, only the caller knows which field it
+/// selected, and there is no default because a wrong one would be
+/// invisible in every number downstream. A caller who genuinely does not
+/// know passes `UnknownByteSemantics`, which is an answer rather than a
+/// silence — those bytes then count toward the delivered total and
+/// toward no semantics-specific figure.
+type CallbackLogSource
+    (
+        name: string,
+        deliveryLag: TimeSpan,
+        byteSemantics: ByteSemantics,
+        fetch: unit -> Async<Result<DeliveredBatch list, string>>
+    ) =
 
     /// Convenience for a source whose callback cannot fail in a way the
     /// caller wishes to distinguish — a throw still becomes an `Error`.
@@ -44,10 +59,13 @@ type CallbackLogSource(name: string, deliveryLag: TimeSpan, fetch: unit -> Async
     /// the entirely reasonable `fun () -> async { ... }` that ends in a
     /// `failwith`. An overload a caller cannot invoke without a type
     /// annotation is not a convenience.
-    static member ofBatches(name: string, deliveryLag: TimeSpan, fetch: unit -> Async<DeliveredBatch list>) =
+    static member ofBatches
+        (name: string, deliveryLag: TimeSpan, byteSemantics: ByteSemantics, fetch: unit -> Async<DeliveredBatch list>)
+        =
         CallbackLogSource(
             name,
             deliveryLag,
+            byteSemantics,
             fun () -> async {
                 let! batches = fetch ()
                 return Ok batches
@@ -58,6 +76,8 @@ type CallbackLogSource(name: string, deliveryLag: TimeSpan, fetch: unit -> Async
         member _.Name = name
 
         member _.DeliveryLag = deliveryLag
+
+        member _.ByteSemantics = byteSemantics
 
         /// A throwing callback becomes `Error`, never an escaped
         /// exception. The job handler turns that into a

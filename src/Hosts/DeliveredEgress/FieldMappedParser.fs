@@ -32,6 +32,16 @@ open ToolUp.MediaLibrary.DeliveredEgress
 // and the vocabulary as a `FieldMap`. No vendor name appears in any
 // identifier or string literal here; the README names them, as generic
 // API-shape references, so a reader can build their own map.
+//
+// ─── Phase 743 — and the byte definition is named too ─────────────────
+//
+// Of the three differences above, one changes the ARITHMETIC rather than
+// the parsing: bytes-sent and bytes-returned are different quantities,
+// and folding two sources' counts into one figure without recording
+// which is which produces a number whose meaning depends on the mix. So
+// `FieldMap` carries a required `ByteSemantics`, `ParseOutput` echoes it,
+// and `ParseOutput.toBatch` carries it to the ingestor — the same
+// declared-not-inferred treatment the delivery lag already gets.
 
 /// Which of this deployment's log field names carry the facts a
 /// `DeliveredRecord` needs.
@@ -49,6 +59,28 @@ type FieldMap = {
     QueryField: string option
     /// Field carrying the bytes the edge returned. Required.
     BytesField: string
+    /// Phase 743 — what the values in `BytesField` MEAN. Required, and
+    /// deliberately adjacent to the field it qualifies: naming a byte
+    /// field without saying what it counts is exactly the omission this
+    /// phase removes.
+    ///
+    /// **Why the declaration lives on the map and not on the parser.**
+    /// The two parsers below differ only in their CONTAINER, and a
+    /// container knows nothing about byte definitions — which is the
+    /// whole finding this package was built on. What varies is which
+    /// field the deployment selected, and that is precisely what a
+    /// `FieldMap` records. So the map is where the answer is knowable,
+    /// and making it a required field is what stops a deployment
+    /// declining to answer.
+    ///
+    /// The worked examples in this package's README declare
+    /// `IncludesHeaders` for the delimited delivery (whose byte field is
+    /// documented as the total response *including headers*) and
+    /// `UnknownByteSemantics` for the JSON-lines one (whose field is
+    /// documented only as the bytes returned to the client, which does
+    /// not say whether headers are counted — and inferring it would be
+    /// the guess this type exists to prevent).
+    ByteSemantics: ByteSemantics
     /// Field carrying the HTTP status the edge returned. Required.
     StatusField: string
     /// Field carrying the timestamp. Required.
@@ -93,19 +125,33 @@ module FieldMap =
     /// syntax; there is deliberately no vendor preset, because a preset
     /// would be wrong for any deployment that selected a different field
     /// set — which is every deployment that selected one at all.
-    let required (pathField: string) (bytesField: string) (statusField: string) (timestampField: string) : FieldMap = {
-        PathField = pathField
-        QueryField = None
-        BytesField = bytesField
-        StatusField = statusField
-        TimestampField = timestampField
-        TimestampSecondField = None
-        OutcomeField = None
-        RequestIdField = None
-        TimestampFormats = []
-        EdgeOutcomes = Set.empty
-        OriginOutcomes = Set.empty
-    }
+    ///
+    /// Phase 743 put `byteSemantics` immediately after `bytesField` on
+    /// purpose. The two are one decision: which column you selected, and
+    /// what that column counts. Splitting them across the signature — or
+    /// defaulting the second — would let the pair be answered by halves,
+    /// and the half that goes unanswered is the one a bill rests on.
+    let required
+        (pathField: string)
+        (bytesField: string)
+        (byteSemantics: ByteSemantics)
+        (statusField: string)
+        (timestampField: string)
+        : FieldMap =
+        {
+            PathField = pathField
+            QueryField = None
+            BytesField = bytesField
+            ByteSemantics = byteSemantics
+            StatusField = statusField
+            TimestampField = timestampField
+            TimestampSecondField = None
+            OutcomeField = None
+            RequestIdField = None
+            TimestampFormats = []
+            EdgeOutcomes = Set.empty
+            OriginOutcomes = Set.empty
+        }
 
 /// Why one line could not become a `DeliveredRecord`. Returned rather
 /// than thrown: a malformed line in a million-line file must not abort
@@ -126,7 +172,28 @@ type LineParseError = {
 type ParseOutput = {
     Records: DeliveredRecord list
     Errors: LineParseError list
+    /// Phase 743 — the `FieldMap.ByteSemantics` the records were parsed
+    /// under, echoed here so the caller building a `DeliveredBatch` takes
+    /// the declaration from the parse rather than restating it. Restating
+    /// it is how a map and a batch come to disagree; `ParseOutput.toBatch`
+    /// removes the opportunity entirely.
+    ByteSemantics: ByteSemantics
 }
+
+module ParseOutput =
+
+    /// The `DeliveredBatch` for a parse, carrying the declaration the map
+    /// made. The whole of the wiring between a parser and the ingestor,
+    /// and the reason it exists is that the obvious hand-written
+    /// alternative — `{ BatchId = name; Records = output.Records;
+    /// ByteSemantics = (whatever the author remembers) }` — is one
+    /// keystroke away from attributing a headers-inclusive count to a
+    /// body-only figure.
+    let toBatch (batchId: string) (output: ParseOutput) : DeliveredBatch = {
+        BatchId = batchId
+        Records = output.Records
+        ByteSemantics = output.ByteSemantics
+    }
 
 module private Convert' =
 
@@ -301,6 +368,7 @@ let parseDelimited
     {
         Records = List.ofSeq records
         Errors = List.ofSeq errors
+        ByteSemantics = map.ByteSemantics
     }
 
 /// Parse newline-delimited JSON — one flat JSON object per line.
@@ -361,4 +429,5 @@ let parseJsonLines (map: FieldMap) (content: string) : ParseOutput =
     {
         Records = List.ofSeq records
         Errors = List.ofSeq errors
+        ByteSemantics = map.ByteSemantics
     }

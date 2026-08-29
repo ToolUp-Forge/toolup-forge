@@ -24,9 +24,25 @@ ToolUp.MediaLibrary.DefaultMediaLibrary..ctor(ToolUp.Platform.BlobStorage+IBlobS
 ToolUp.MediaLibrary.DefaultMediaLibrary..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.MediaLibrary.SignedUrl+MediaUrlSigner, ToolUp.MediaLibrary.IMediaDerivation, ToolUp.MediaLibrary.IMediaTranscoder, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.MediaLibrary.MediaLibraryOptions, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.HlsKeyDelivery+MediaHlsKeyStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.MediaLibrary.SignedUrl+IDelegatedUrlSigner])
 ToolUp.MediaLibrary.DeliveredEgress (class)
 ToolUp.MediaLibrary.DeliveredEgress.dedupKey(ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord) : System.Guid
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics (class)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.BodyOnly : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.IncludesHeaders : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.IsBodyOnly : System.Boolean { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.IsIncludesHeaders : System.Boolean { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.IsUnknownByteSemantics : System.Boolean { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.Tag : System.Int32 { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics.UnknownByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics+Tags (class)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics+Tags.BodyOnly : System.Int32 (literal)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics+Tags.IncludesHeaders : System.Int32 (literal)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics+Tags.UnknownByteSemantics : System.Int32 (literal)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemanticsModule (class)
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemanticsModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics] { get }
+ToolUp.MediaLibrary.DeliveredEgress+ByteSemanticsModule.token(ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics) : System.String
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch (class)
-ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord])
+ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord], ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch.BatchId : System.String { get }
+ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch.ByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredRecord] { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredCacheOutcome (class)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredCacheOutcome.DeliveredOutcomeUnknown : ToolUp.MediaLibrary.DeliveredEgress+DeliveredCacheOutcome { get }
@@ -71,10 +87,11 @@ ToolUp.MediaLibrary.DeliveredEgress+DeliveredEgressJobHandler (class)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredEgressJobHandler..ctor(ToolUp.MediaLibrary.DeliveredEgress+DeliveredEgressIngestor, ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredEgressJobHandler.HandlerName : System.String { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome (class)
-ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome..ctor(System.String, System.Int32, System.Int64, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.MediaLibrary.DeliveredEgress+DeliveredDropReason, System.Int32]])
+ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome..ctor(System.String, ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics, System.Int32, System.Int64, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.MediaLibrary.DeliveredEgress+DeliveredDropReason, System.Int32]])
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.Attributed : System.Int32 { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.AttributedBytes : System.Int64 { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.BatchId : System.String { get }
+ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.ByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.Dropped : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.MediaLibrary.DeliveredEgress+DeliveredDropReason, System.Int32]] { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcome.EdgeServedBytes : System.Int64 { get }
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredIngestOutcomeModule (class)
@@ -101,6 +118,7 @@ ToolUp.MediaLibrary.DeliveredEgress+DeliveredTargetClass+Tags (class)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredTargetClass+Tags.DeliveredDerived : System.Int32 (literal)
 ToolUp.MediaLibrary.DeliveredEgress+DeliveredTargetClass+Tags.DeliveredOriginal : System.Int32 (literal)
 ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource (interface)
+ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource.ByteSemantics : ToolUp.MediaLibrary.DeliveredEgress+ByteSemantics { get }
 ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource.DeliveryLag : System.TimeSpan { get }
 ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource.FetchBatches() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.DeliveredEgress+DeliveredBatch], System.String]]
 ToolUp.MediaLibrary.DeliveredEgress+IDeliveredLogSource.Name : System.String { get }
@@ -393,6 +411,7 @@ ToolUp.MediaLibrary.NoopMediaDerivation.create() : ToolUp.MediaLibrary.IMediaDer
 ToolUp.MediaLibrary.NoopMediaTranscoder (class)
 ToolUp.MediaLibrary.NoopMediaTranscoder.create() : ToolUp.MediaLibrary.IMediaTranscoder
 ToolUp.MediaLibrary.PlaybackTelemetry (class)
+ToolUp.MediaLibrary.PlaybackTelemetry.ByteSemanticsKey : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.ClassKey : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.ClassManifest : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.ClassOriginal : System.String (literal)
@@ -417,6 +436,9 @@ ToolUp.MediaLibrary.PlaybackTelemetry.OutcomeUnknown : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.PercentKey : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.PlaybackEventsKind : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.PlaybackEventsMetric : System.String (literal)
+ToolUp.MediaLibrary.PlaybackTelemetry.SemanticsBodyOnly : System.String (literal)
+ToolUp.MediaLibrary.PlaybackTelemetry.SemanticsIncludesHeaders : System.String (literal)
+ToolUp.MediaLibrary.PlaybackTelemetry.SemanticsUnknown : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.SessionKey : System.String (literal)
 ToolUp.MediaLibrary.PlaybackTelemetry.accountFor(Microsoft.AspNetCore.Http.HttpContext, ToolUp.MediaLibrary.MediaId, System.String, System.String) : ToolUp.MediaLibrary.PlaybackTelemetry+EgressAccount
 ToolUp.MediaLibrary.PlaybackTelemetry.beaconHandler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
@@ -424,8 +446,9 @@ ToolUp.MediaLibrary.PlaybackTelemetry.beaconLimiter : ToolUp.MediaLibrary.Playba
 ToolUp.MediaLibrary.PlaybackTelemetry.beaconPartition(Microsoft.AspNetCore.Http.HttpContext) : System.String
 ToolUp.MediaLibrary.PlaybackTelemetry.beaconRateLimit : ToolUp.Platform.RateLimitPolicy { get }
 ToolUp.MediaLibrary.PlaybackTelemetry.beaconRecord(System.String, ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackBeacon, System.Guid, System.DateTime) : ToolUp.Platform.Usage.UsageRecord
+ToolUp.MediaLibrary.PlaybackTelemetry.byteSemanticsTokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.MediaLibrary.PlaybackTelemetry.count(ToolUp.MediaLibrary.PlaybackTelemetry+EgressAccount, System.Int32) : System.Void
-ToolUp.MediaLibrary.PlaybackTelemetry.deliveredRecord(ToolUp.MediaLibrary.PlaybackTelemetry+EgressAttribution, System.String, System.Int64, System.Guid, System.DateTime) : ToolUp.Platform.Usage.UsageRecord
+ToolUp.MediaLibrary.PlaybackTelemetry.deliveredRecord(ToolUp.MediaLibrary.PlaybackTelemetry+EgressAttribution, System.String, System.String, System.Int64, System.Guid, System.DateTime) : ToolUp.Platform.Usage.UsageRecord
 ToolUp.MediaLibrary.PlaybackTelemetry.egressRecord(ToolUp.MediaLibrary.PlaybackTelemetry+EgressAttribution, System.Int64, System.Guid, System.DateTime) : ToolUp.Platform.Usage.UsageRecord
 ToolUp.MediaLibrary.PlaybackTelemetry.flush(ToolUp.MediaLibrary.PlaybackTelemetry+EgressAccount) : System.Void
 ToolUp.MediaLibrary.PlaybackTelemetry.parseBeacon(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.String, ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackEvent, System.String]]
@@ -480,10 +503,11 @@ ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackEvent+Tags.Started : System.Int32 
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackEventModule (class)
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackEventModule.token(ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackEvent) : System.String
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup (class)
-ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.Double, System.Int64, System.Int64, System.Int64, System.Double)
+ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.Double, System.Int64, System.Int64, System.Int64, System.Double, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int64]])
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.CompletionRate : System.Double { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.Completions : System.Int32 { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.Day : System.String { get }
+ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.DeliveredBytesBySemantics : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int64]] { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.DeliveredEgressBytes : System.Int64 { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.EdgeHitRateByBytes : System.Double { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.EdgeServedBytes : System.Int64 { get }
@@ -493,7 +517,10 @@ ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.Plays : System.Int32 { get 
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.ScopeId : System.String { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup.UniqueSessions : System.Int32 { get }
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollupModule (class)
+ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollupModule.bytesForSemantics(System.String, ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup) : System.Int64
+ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollupModule.deliveredBytesWithKnownSemantics(ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup) : System.Int64
 ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollupModule.ofUsageRecords(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Usage.UsageRecord]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollup]
+ToolUp.MediaLibrary.PlaybackTelemetry+PlaybackRollupModule.semanticsOf(ToolUp.Platform.Usage.UsageRecord) : System.String
 ToolUp.MediaLibrary.PosterResult (class)
 ToolUp.MediaLibrary.PosterResult..ctor(System.Byte[], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.MediaLibrary.PosterResult.Bytes : System.Byte[] { get }
