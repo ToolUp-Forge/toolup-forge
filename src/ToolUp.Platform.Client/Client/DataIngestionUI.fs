@@ -296,7 +296,7 @@ let private tokenStatusDetail (msgs: DataIngestionMessages) (status: TokenStatus
             // Descriptor registered but no terminal audit row yet —
             // typically the first minute after Connect, before the
             // scheduled refresh fires.
-            Html.span [ prop.className "text-xs text-gray-500"; prop.text "awaiting first refresh" ]
+            Html.span [ prop.className "text-xs text-gray-500"; prop.text msgs.AwaitingFirstRefresh ]
         | _ -> Html.none
 
     let nextLine =
@@ -525,7 +525,7 @@ let private createCredentialPanel (msgs: DataIngestionMessages) (kind: string) (
                         ]
                         Html.button [
                             prop.className "text-xs text-gray-500 hover:underline"
-                            prop.text "cancel"
+                            prop.text msgs.CancelCreate
                             prop.onClick (fun _ -> dispatch CancelCreate)
                         ]
                     ]
@@ -559,7 +559,7 @@ let private kindSelector (msgs: DataIngestionMessages) (dispatch: Msg -> unit) (
         Html.div [
             prop.className "flex items-center gap-2 flex-wrap"
             prop.children [
-                Html.span [ prop.className "text-sm text-gray-600 mr-1"; prop.text "Add data source:" ]
+                Html.span [ prop.className "text-sm text-gray-600 mr-1"; prop.text msgs.AddDataSource ]
                 for kind in kinds do
                     let isSelected = creating = Some kind
 
@@ -630,7 +630,7 @@ let private sourcesTable
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Id"
+                                                    prop.text msgs.ColumnId
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
@@ -656,7 +656,7 @@ let private sourcesTable
             ]
         ]
 
-let private errorBanner (msg: string) (dispatch: Msg -> unit) =
+let private errorBanner (msgs: DataIngestionMessages) (msg: string) (dispatch: Msg -> unit) =
     Html.div [
         prop.className
             "flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
@@ -664,7 +664,7 @@ let private errorBanner (msg: string) (dispatch: Msg -> unit) =
             Html.span [ prop.text msg ]
             Html.button [
                 prop.className "text-red-700 hover:underline text-xs"
-                prop.text "dismiss"
+                prop.text msgs.DismissError
                 prop.onClick (fun _ -> dispatch DismissError)
             ]
         ]
@@ -698,7 +698,7 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Data sources" ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.SourcesHeading ]
                             Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.OAuthFootnote ]
                         ]
                     ]
@@ -706,12 +706,12 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
                 ]
             ]
             match model.LastError with
-            | Some msg -> Html.div [ prop.className "mb-4"; prop.children [ errorBanner msg dispatch ] ]
+            | Some msg -> Html.div [ prop.className "mb-4"; prop.children [ errorBanner msgs msg dispatch ] ]
             | None -> Html.none
             match model.Sources with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading data sources..." ]
-            | LoadError msg -> errorBanner msg dispatch
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | LoadError msg -> errorBanner msgs msg dispatch
             | Loaded sources -> sourcesTable msgs model dispatch sources
         ]
     ]

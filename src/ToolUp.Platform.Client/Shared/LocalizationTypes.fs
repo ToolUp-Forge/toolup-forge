@@ -275,6 +275,14 @@ type HealthMonitorMessages = {
     NoProbes: string
     NoValidators: string
     ProbesFootnote: string
+    LiveHealthHeading: string
+    Loading: string
+    SchedulerDriftHeading: string
+    SchedulerMissed60m: string
+    SchedulerLastDrift: string
+    SchedulerLastMissAt: string
+    DegradedReason: string
+    DegradedImpact: string
     PreflightHeading: string
     PreflightFootnote: string
     PreflightUnavailable: string
@@ -312,6 +320,7 @@ type DataIngestionMessages = {
     ColumnKind: string
     ColumnTokenStatus: string
     ColumnActions: string
+    ColumnId: string
     NoSourcesYet: string
     NoCredentialUIsRegistered: string
     /// Takes the connector kind with no registered credential UI.
@@ -327,6 +336,12 @@ type DataIngestionMessages = {
     /// Takes the formatted timestamp of the next scheduled refresh.
     NextLabel: string -> string
     OAuthFootnote: string
+    SourcesHeading: string
+    Loading: string
+    AwaitingFirstRefresh: string
+    AddDataSource: string
+    CancelCreate: string
+    DismissError: string
 }
 
 /// The closed set of strings the SDK's own shell and built-in modules

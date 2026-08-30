@@ -266,6 +266,14 @@ module MessageCatalog =
                 "No validators recorded. Either no IConfigValidator was registered at the most recent boot, or ServerConfig.SkipPreflight = true was set for an emergency boot."
             ProbesFootnote =
                 "Each refresh re-runs every registered IHealthCheck in parallel. Probes are deployment-wide — no per-team filter applies."
+            LiveHealthHeading = "Live health"
+            Loading = "Loading..."
+            SchedulerDriftHeading = "Job scheduler tick drift"
+            SchedulerMissed60m = "Missed (60-min)"
+            SchedulerLastDrift = "Last drift"
+            SchedulerLastMissAt = "Last miss at"
+            DegradedReason = "Reason"
+            DegradedImpact = "Impact"
             PreflightHeading = "Preflight (most recent boot)"
             PreflightFootnote =
                 "Snapshot from the most recent startup. Re-fetch to confirm a redeploy passed without a hard reload — validators do not re-run against this view."
@@ -301,6 +309,7 @@ module MessageCatalog =
             ColumnKind = "Kind"
             ColumnTokenStatus = "Token status"
             ColumnActions = "Actions"
+            ColumnId = "Id"
             NoSourcesYet = "No data sources configured yet. Pick a connector to start configuring its credentials:"
             NoCredentialUIsRegistered =
                 "No connector credential UIs are registered. Import a connector companion (e.g. ToolUp.DataSources.Strava or src/DataSources/GoogleAnalytics) and call its register() in Client.fs at module load."
@@ -316,6 +325,12 @@ module MessageCatalog =
             NextLabel = fun at -> $"next {at}"
             OAuthFootnote =
                 "OAuth-based connectors bounce through the upstream consent screen on Connect. Refresh tokens are stored in ISecretStore and never returned to the browser."
+            SourcesHeading = "Data sources"
+            Loading = "Loading data sources..."
+            AwaitingFirstRefresh = "awaiting first refresh"
+            AddDataSource = "Add data source:"
+            CancelCreate = "cancel"
+            DismissError = "dismiss"
         }
     }
 

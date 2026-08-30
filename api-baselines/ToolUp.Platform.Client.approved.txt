@@ -3944,9 +3944,13 @@ ToolUp.Platform.DataIngestionAdminMode+Tags.DefaultDataIngestionAdmin : System.I
 ToolUp.Platform.DataIngestionAdminMode+Tags.ExternalDataIngestionAdmin : System.Int32 (literal)
 ToolUp.Platform.DataIngestionAdminMode+Tags.NoDataIngestionAdmin : System.Int32 (literal)
 ToolUp.Platform.DataIngestionMessages (class)
-ToolUp.Platform.DataIngestionMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String)
+ToolUp.Platform.DataIngestionMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.DataIngestionMessages.AddDataSource : System.String { get }
 ToolUp.Platform.DataIngestionMessages.AtLabel : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.DataIngestionMessages.AwaitingFirstRefresh : System.String { get }
+ToolUp.Platform.DataIngestionMessages.CancelCreate : System.String { get }
 ToolUp.Platform.DataIngestionMessages.ColumnActions : System.String { get }
+ToolUp.Platform.DataIngestionMessages.ColumnId : System.String { get }
 ToolUp.Platform.DataIngestionMessages.ColumnKind : System.String { get }
 ToolUp.Platform.DataIngestionMessages.ColumnName : System.String { get }
 ToolUp.Platform.DataIngestionMessages.ColumnStatus : System.String { get }
@@ -3955,6 +3959,8 @@ ToolUp.Platform.DataIngestionMessages.Connect : System.String { get }
 ToolUp.Platform.DataIngestionMessages.CredentialUIUnregistered : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.DataIngestionMessages.Disconnect : System.String { get }
 ToolUp.Platform.DataIngestionMessages.Disconnecting : System.String { get }
+ToolUp.Platform.DataIngestionMessages.DismissError : System.String { get }
+ToolUp.Platform.DataIngestionMessages.Loading : System.String { get }
 ToolUp.Platform.DataIngestionMessages.NewSourceHeading : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.DataIngestionMessages.NextLabel : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.DataIngestionMessages.NoCredentialUIForKind : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
@@ -3969,6 +3975,7 @@ ToolUp.Platform.DataIngestionMessages.OutcomeTransientError : System.String { ge
 ToolUp.Platform.DataIngestionMessages.Refresh : System.String { get }
 ToolUp.Platform.DataIngestionMessages.Refreshing : System.String { get }
 ToolUp.Platform.DataIngestionMessages.SinceLabel : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.DataIngestionMessages.SourcesHeading : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusConnected : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusNeedsAuthorization : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusNeedsReauthorization : System.String { get }
@@ -4111,7 +4118,7 @@ ToolUp.Platform.HealthMonitorConfig..ctor(System.String, Fable.React.ReactElemen
 ToolUp.Platform.HealthMonitorConfig.Icon : Fable.React.ReactElement { get }
 ToolUp.Platform.HealthMonitorConfig.Name : System.String { get }
 ToolUp.Platform.HealthMonitorMessages (class)
-ToolUp.Platform.HealthMonitorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]])
+ToolUp.Platform.HealthMonitorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]])
 ToolUp.Platform.HealthMonitorMessages.AsOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.HealthMonitorMessages.ColumnElapsed : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.ColumnKind : System.String { get }
@@ -4122,9 +4129,13 @@ ToolUp.Platform.HealthMonitorMessages.ColumnTimeout : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.ColumnValidator : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.DegradedCapabilities : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
 ToolUp.Platform.HealthMonitorMessages.DegradedCapabilitiesHelp : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.DegradedImpact : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.DegradedReason : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.DegradedSince : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.HealthMonitorMessages.GeneratedAt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]] { get }
+ToolUp.Platform.HealthMonitorMessages.LiveHealthHeading : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.LiveHealthTab : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.Loading : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.NoProbes : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.NoValidators : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.PreflightFootnote : System.String { get }
@@ -4136,7 +4147,11 @@ ToolUp.Platform.HealthMonitorMessages.Refetch : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.Refresh : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.Refreshing : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.Remediation : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.SchedulerDriftHeading : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.SchedulerLagHelp : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.SchedulerLastDrift : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.SchedulerLastMissAt : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.SchedulerMissed60m : System.String { get }
 ToolUp.Platform.HealthMonitorMode (class)
 ToolUp.Platform.HealthMonitorMode.DefaultHealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
 ToolUp.Platform.HealthMonitorMode.IsConfiguredHealthMonitor : System.Boolean { get }

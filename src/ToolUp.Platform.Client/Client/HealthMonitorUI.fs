@@ -266,7 +266,7 @@ let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSched
                 Html.div [
                     prop.className "flex items-baseline justify-between mb-1"
                     prop.children [
-                        Html.h3 [ prop.className "text-sm font-semibold"; prop.text "Job scheduler tick drift" ]
+                        Html.h3 [ prop.className "text-sm font-semibold"; prop.text msgs.SchedulerDriftHeading ]
                         let generatedAtLabel = view.GeneratedAt.ToString "u"
 
                         Html.span [
@@ -279,9 +279,9 @@ let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSched
                 Html.div [
                     prop.className "grid grid-cols-3 gap-x-4 gap-y-1"
                     prop.children [
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Missed (60-min)" ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Last drift" ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Last miss at" ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerMissed60m ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastDrift ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastMissAt ]
                         Html.div [
                             prop.className $"text-sm font-mono {countCls}"
                             prop.text (string view.TickMissedCount60Min)
@@ -346,9 +346,15 @@ let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: Deg
                                     Html.dl [
                                         prop.className "grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
                                         prop.children [
-                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Reason" ]
+                                            Html.dt [
+                                                prop.className "text-gray-500 font-medium"
+                                                prop.text msgs.DegradedReason
+                                            ]
                                             Html.dd [ prop.className "text-gray-700"; prop.text d.Reason ]
-                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Impact" ]
+                                            Html.dt [
+                                                prop.className "text-gray-500 font-medium"
+                                                prop.text msgs.DegradedImpact
+                                            ]
                                             Html.dd [ prop.className "text-gray-700"; prop.text d.Impact ]
                                             Html.dt [
                                                 prop.className "text-gray-500 font-medium"
@@ -458,7 +464,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Live health" ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.LiveHealthHeading ]
                             Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ProbesFootnote ]
                         ]
                     ]
@@ -482,7 +488,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
 
             match model.Live with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | LoadError msg -> errorBanner msg
             | Loaded snapshot ->
                 Html.div [
@@ -577,7 +583,7 @@ let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispa
             ]
             match model.Preflight with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | LoadError msg -> errorBanner msg
             | Loaded snapshot ->
                 if not snapshot.HasSnapshot then
