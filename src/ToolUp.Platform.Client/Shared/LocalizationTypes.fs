@@ -289,7 +289,6 @@ type HealthMonitorMessages = {
     DegradedSince: string -> string
     /// Takes the snapshot timestamp and the probe count.
     GeneratedAt: string -> int -> string
-    ModuleBlurb: string
 }
 
 /// The built-in data-ingestion / data-source module (`DataIngestionUI`).
@@ -328,7 +327,6 @@ type DataIngestionMessages = {
     /// Takes the formatted timestamp of the next scheduled refresh.
     NextLabel: string -> string
     OAuthFootnote: string
-    ModuleBlurb: string
 }
 
 /// The closed set of strings the SDK's own shell and built-in modules

@@ -280,8 +280,6 @@ module MessageCatalog =
             AsOf = fun at -> $"as of {at}"
             DegradedSince = fun at -> $"since {at}"
             GeneratedAt = fun at probeCount -> $"Generated at {at} ({probeCount} probes)"
-            ModuleBlurb =
-                "Liveness, readiness and dependency probes for this deployment, plus the startup preflight report."
         }
         DataIngestion = {
             StatusNotConfigured = "Not configured"
@@ -318,8 +316,6 @@ module MessageCatalog =
             NextLabel = fun at -> $"next {at}"
             OAuthFootnote =
                 "OAuth-based connectors bounce through the upstream consent screen on Connect. Refresh tokens are stored in ISecretStore and never returned to the browser."
-            ModuleBlurb =
-                "Connect and manage the external data sources this team ingests from, and see each connection's token status."
         }
     }
 
