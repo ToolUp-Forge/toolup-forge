@@ -242,6 +242,12 @@ module Names =
     let oidcAudience = "TOOLUP_OIDC_AUDIENCE"
 
     [<Literal>]
+    let oidcUserIdClaim = "TOOLUP_OIDC_USER_ID_CLAIM"
+
+    [<Literal>]
+    let oidcTenantIdClaim = "TOOLUP_OIDC_TENANT_ID_CLAIM"
+
+    [<Literal>]
     let sseAuth = "TOOLUP_SSE_AUTH"
 
     [<Literal>]
@@ -937,6 +943,24 @@ let all: ConfigKeyDescriptor list = [
             "Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes)."
         Type = StringKey
         Default = None
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
+        EnvVar = Names.oidcUserIdClaim
+        Description =
+            "Claim name projected onto AuthenticatedUser.UserId in place of `sub`, for IdPs whose `sub` is pairwise-pseudonymous (e.g. `oid` on Microsoft Entra). Unset keeps `sub`. Fail-closed: a token missing the named claim is rejected, never silently mapped back to `sub`."
+        Type = StringKey
+        Default = Some "(unset — `sub`)"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
+        EnvVar = Names.oidcTenantIdClaim
+        Description =
+            "Claim name projected onto AuthenticatedUser.TenantId (e.g. `tid` on Microsoft Entra). Unset leaves TenantId unpopulated. Fail-closed: a token missing the named claim is rejected."
+        Type = StringKey
+        Default = Some "(unset — no TenantId projection)"
         IsSecret = false
         Category = "Auth & identity"
     }
@@ -2619,6 +2643,8 @@ let manifestBindable: Set<string> =
         Names.oauthRefresher
         Names.oidcAudience
         Names.oidcIssuer
+        Names.oidcTenantIdClaim
+        Names.oidcUserIdClaim
         Names.peerRoutePrefixes
         Names.platformKnowledgeBase
         Names.platformSurfaces

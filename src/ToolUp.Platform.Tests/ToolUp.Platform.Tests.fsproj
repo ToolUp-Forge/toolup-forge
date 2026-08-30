@@ -728,6 +728,7 @@
         <Compile Include="InProcess\MinimumViableShapeTests.fs" />
         <Compile Include="InProcess\RedactionAllowlistParityTests.fs" />
         <Compile Include="InProcess\OidcClassifyTokenTests.fs" />
+        <Compile Include="InProcess\GoogleIdentityCompanionTests.fs" />
         <Compile Include="InProcess\OidcDiagnoseTests.fs" />
         <Compile Include="InProcess\OidcTracerTests.fs" />
         <Compile Include="InProcess\OidcStateMachineTests.fs" />
@@ -903,6 +904,7 @@
         <Compile Include="InProcess\RateLimitConfigHelpersTests.fs" />
         <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
         <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
+        <Compile Include="InProcess\OidcClaimMappingAdvisoryValidatorTests.fs" />
         <Compile Include="InProcess\OidcAuthValidatorTimeoutTests.fs" />
         <Compile Include="InProcess\InviteEmailCapabilityValidatorTests.fs" />
         <Compile Include="InProcess\SubjectDowngradeObservabilityTests.fs" />
@@ -2242,6 +2244,12 @@
              verifier + JWKS resolver. WebCrypto-only paths (Fable-only)
              aren't reached in the .NET test runner. -->
         <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" />
+        <!-- Google Identity Services client companion — the credential
+             bridge's decision function and the config projection are pure
+             and .NET-reachable, exactly as OidcClient's
+             `classifyStoredTokenWith` is. The GIS interop itself is
+             Fable-only and is not touched by the .NET runner. -->
+        <ProjectReference Include="..\AuthProviders\GoogleIdentityClient\GoogleIdentityClient.fsproj" />
         <!-- Phase 3d — Entra External ID companion config / claim-mapping unit tests. -->
         <ProjectReference Include="..\AuthProviders\EntraExternalId\EntraExternalId.fsproj" />
         <!-- Phase 747 — Google Workspace IUserDirectory companion, driven

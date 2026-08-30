@@ -4051,6 +4051,12 @@ ToolUp.Platform.GateVerdict.Name : System.String { get }
 ToolUp.Platform.GateVerdict.Observed : System.Double { get }
 ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
+ToolUp.Platform.GoogleIdentityCspValidator (class)
+ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator (class)
+ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.GoogleIdentityServicesCspContributor (class)
+ToolUp.Platform.GoogleIdentityServicesCspContributor..ctor()
+ToolUp.Platform.GoogleIdentityServicesCspContributor.LibraryUrl : System.String { get }
 ToolUp.Platform.GrantAuthorityEntry (class)
 ToolUp.Platform.GrantAuthorityEntry..ctor(System.String, ToolUp.Platform.ComponentId, ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.GrantAuthorityEntry.AuthorityComponent : ToolUp.Platform.ComponentId { get }
@@ -6991,6 +6997,9 @@ ToolUp.Platform.OfflineTolerantValidator.InnerBudget : System.TimeSpan { get }
 ToolUp.Platform.OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator (class)
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator+OidcClaimMappingAdvisoryValidator (class)
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator+OidcClaimMappingAdvisoryValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.OidcConfigCompletenessValidator (class)
 ToolUp.Platform.OidcConfigCompletenessValidator+OidcConfigCompletenessValidator (class)
 ToolUp.Platform.OidcConfigCompletenessValidator+OidcConfigCompletenessValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

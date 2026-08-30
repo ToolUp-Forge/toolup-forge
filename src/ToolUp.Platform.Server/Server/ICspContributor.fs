@@ -159,3 +159,36 @@ type AgGridCdnCspContributor() =
 type BlobWorkerCspContributor() =
     interface ICspContributor with
         member _.RequiredSources = [ WorkerSrc "blob:" ]
+
+/// Google Identity Services (One Tap / branded sign-in button) →
+/// `script-src` / `frame-src` / `connect-src` / `style-src`. The
+/// `ToolUp.AuthProviders.GoogleIdentity.Client` companion loads
+/// Google's `gsi/client` library, which then injects an iframe, calls
+/// back to Google's origin, and installs its own stylesheet — so a
+/// hardened deployment needs all four widened or the button never
+/// renders and the failure is silent from the SDK's side (the browser
+/// blocks the fetch; the script tag simply errors).
+///
+/// Opt-in, NOT auto-registered: the redirect flow
+/// (`OidcPresets.google`) needs none of these origins, so a deployment
+/// that signs in with Google WITHOUT this companion keeps its policy
+/// byte-for-byte unchanged (GP 11). Register with
+/// `ServerApp.withCspContributor (GoogleIdentityServicesCspContributor())`.
+///
+/// Sources are Google's own documented set rather than a bare host.
+/// `script-src` names the exact library path; the other three end in
+/// `/`, which is what makes CSP match by path PREFIX — a source without
+/// the trailing slash matches that exact path only, which is the same
+/// trap `OidcIssuerCspContributor` documents from the other direction.
+type GoogleIdentityServicesCspContributor() =
+    /// The GIS library URL, stated once so the client companion's
+    /// loader and this contributor cannot drift apart silently.
+    static member val LibraryUrl = "https://accounts.google.com/gsi/client" with get
+
+    interface ICspContributor with
+        member _.RequiredSources = [
+            ScriptSrc GoogleIdentityServicesCspContributor.LibraryUrl
+            FrameSrc "https://accounts.google.com/gsi/"
+            ConnectSrc "https://accounts.google.com/gsi/"
+            StyleSrc "https://accounts.google.com/gsi/style"
+        ]

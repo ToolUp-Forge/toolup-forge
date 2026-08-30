@@ -710,6 +710,7 @@
         <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
         <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
         <Compile Include="Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
         <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
         <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
         <!-- Phase 549 — direct-add existence-proof preflight. Anywhere
@@ -759,6 +760,10 @@
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />
+        <!-- GIS CSP preflight — probes the live IServiceCollection for a
+             contributor covering accounts.google.com, so must follow
+             ICspContributor.fs. -->
+        <Compile Include="Server\GoogleIdentityCspValidator.fs" />
         <Compile Include="Server\SecurityHardening.fs" />
         <!-- Phase 156 — SecurityHeadersValidator moved after SecurityHardening:
              its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
