@@ -110,6 +110,7 @@ let generic (issuer: string) (clientId: string) (redirectUri: string) : OidcAppC
     PostLogoutRedirectUri = None
     ValidateIdToken = Some true
     Preset = Some Generic
+    BearerToken = None
 }
 
 /// Workforce Entra ID / Azure AD preset. `tenantId` MUST be a tenant
@@ -133,6 +134,7 @@ let entraWorkforce (tenantId: string) (clientId: string) (redirectUri: string) :
     PostLogoutRedirectUri = None
     ValidateIdToken = None
     Preset = Some EntraWorkforce
+    BearerToken = None
 }
 
 /// Entra External ID (CIAM) preset. Issuer follows the documented
@@ -159,6 +161,7 @@ let entraExternalId (tenantSubdomain: string) (clientId: string) (redirectUri: s
     PostLogoutRedirectUri = None
     ValidateIdToken = Some true
     Preset = Some EntraExternalId
+    BearerToken = None
 }
 
 /// Entra External ID preset with a custom-domain override. Use when
@@ -200,6 +203,7 @@ let auth0 (domain: string) (clientId: string) (redirectUri: string) : OidcAppCon
     PostLogoutRedirectUri = None
     ValidateIdToken = None
     Preset = Some Auth0
+    BearerToken = None
 }
 
 /// Google preset (consumer Google accounts and Workspace). Takes no
@@ -224,14 +228,23 @@ let auth0 (domain: string) (clientId: string) (redirectUri: string) : OidcAppCon
 ///    access is the consumer's decision and consent-re-prompting is
 ///    a user-visible one.
 ///
-/// 2. **Access tokens are always opaque.** Unlike Auth0 — where a
+/// 2. **Access tokens are always opaque, so the preset selects the
+///    id_token as the bearer.** Unlike Auth0 — where a
 ///    dashboard-configured API audience flips the access token to a
 ///    decodable JWT — Google has no such knob, so
-///    `classifyStoredToken` will always see `OpaqueToken` and defer
-///    validity to the server. `PresetKind.expectsDecodableAccessToken
-///    Google` is correspondingly `false`. Server-side bearer
-///    validation of a Google sign-in therefore has to validate the
-///    `id_token`, not the access token.
+///    `PresetKind.expectsDecodableAccessToken Google` is `false` and
+///    no deployment-side action can change it. Sending the access
+///    token as the bearer therefore signs in and then 401s on every
+///    API call, which is why this preset's
+///    `PresetKind.defaultBearerToken` is `IdTokenBearer`: the session
+///    stores and sends the `id_token`, an ordinary RS256 JWT the
+///    unchanged server-side `OidcAuthProvider` validates against
+///    Google's JWKS with `aud` = the client id (which is what
+///    `Audience` already holds). `classifyStoredToken` then reports
+///    `FreshJwt` rather than `OpaqueToken`, and the pre-expiry refresh
+///    timer keys off the id_token's own `exp`. A consumer who wants
+///    the historical behaviour sets `BearerToken = Some
+///    AccessTokenBearer` explicitly.
 ///
 /// `ValidateIdToken` defaults to `Some true` — Google sign-in is a
 /// customer-facing boundary, the same argument that flips the
@@ -245,4 +258,5 @@ let google (clientId: string) (redirectUri: string) : OidcAppConfig = {
     PostLogoutRedirectUri = None
     ValidateIdToken = Some true
     Preset = Some Google
+    BearerToken = None
 }

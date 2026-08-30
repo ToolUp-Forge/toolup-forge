@@ -180,6 +180,15 @@ module GoogleIdentityUIConfig =
     /// hands back IS an id_token and it becomes the bearer — the
     /// deployment's most security-relevant value. The redirect flow's
     /// Google path makes the same choice.
+    ///
+    /// `BearerToken = Some IdTokenBearer` states what this companion
+    /// was already doing. The credential flow has no access token to
+    /// choose between — Google returns an id_token and nothing else —
+    /// so the bridge has always stored the id_token as the bearer.
+    /// Declaring it makes the classifier, the refresh timer and the
+    /// coherence validator reason about this session the same way they
+    /// reason about a redirect-flow Google session, instead of
+    /// inferring an access-token strategy that no code here implements.
     let toOidcUIConfig (config: GoogleIdentityUIConfig) : OidcUIConfig = {
         Issuer = Issuer
         ClientId = config.ClientId
@@ -187,6 +196,7 @@ module GoogleIdentityUIConfig =
         Scopes = projectedScopes
         PostLogoutRedirectUri = config.PostLogoutRedirectUri
         ValidateIdToken = Some true
+        BearerToken = Some IdTokenBearer
     }
 
     /// GIS wire value for a button theme.

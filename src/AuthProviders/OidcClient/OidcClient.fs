@@ -27,7 +27,7 @@ open ToolUp.AuthProviders.Oidc.OidcStateMachine
 //    the current URL is the callback URL. Extracts `code` + `state`
 //    from query string, validates state against the stashed value,
 //    POSTs to the token endpoint with the verifier, and on success
-//    persists access + refresh tokens, clears sessionStorage, and
+//    persists the bearer + refresh tokens, clears sessionStorage, and
 //    navigates the document to the app root (`location.replace` to
 //    `origin + "/"`) so the shell re-boots with the token in place and
 //    off the callback route.
@@ -550,35 +550,56 @@ let handleCallback (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = async 
                         return Error e
                     | Ok() ->
                         walk ValidatingIdToken PersistingTokens
-                        persistTokens tokens.AccessToken tokens.RefreshToken
-                        clearPendingSignIn ()
 
-                        // Stage walk: `PersistingTokens → RebootingToRoot`.
-                        // The reboot is a NAMED EDGE of the state machine,
-                        // not a hidden side-effect at function exit. The
-                        // target MUST be `origin + "/"`, not the current
-                        // pathname: the pathname IS the redirect URI
-                        // (`/auth/callback`), so reloading onto it
-                        // re-satisfies `isCallbackUrl` on remount, the
-                        // shell re-enters `handleCallback` with the
-                        // `?code` already consumed, and the second pass
-                        // fails with `MissingCode`. Landing on `/` makes
-                        // the reboot take the `classifyStoredToken`
-                        // branch instead, see the just-persisted token
-                        // as fresh, and enter `Established`.
-                        //
-                        // A full-document reload is the serialisation
-                        // point for the Elmish init fetches (ListModules,
-                        // perms, flags) — a same-document
-                        // `history.replaceState` leaves them having
-                        // already raced ahead of `persistTokens` with no
-                        // Bearer (401, never retried). `.replace` (not
-                        // `.assign`) keeps the now-stale `?code` URL out
-                        // of session history.
-                        walk PersistingTokens RebootingToRoot
-                        let cleanUrl = Browser.Dom.window.location.origin + "/"
-                        Browser.Dom.window.location.replace cleanUrl
-                        return Ok()
+                        // Which token becomes the session's bearer is
+                        // the deployment's declared strategy, not a
+                        // fixed convention. `None` resolves to
+                        // `AccessTokenBearer`, so a config that says
+                        // nothing persists exactly what it always did.
+                        let bearerKind = OidcUIConfig.resolveBearerToken cfg
+
+                        let bearerChoice =
+                            decideBearerToken bearerKind {
+                                AccessToken = tokens.AccessToken
+                                IdToken = tokens.IdToken
+                            }
+
+                        match bearerChoice with
+                        | Error e ->
+                            clearAll ()
+                            emitErr (readCorrelationId ()) "bearer-selection-failed" (diagnose e)
+                            walk PersistingTokens (Stage.Failed e)
+                            return Error e
+                        | Ok bearer ->
+                            persistTokens bearer tokens.RefreshToken
+                            clearPendingSignIn ()
+
+                            // Stage walk: `PersistingTokens → RebootingToRoot`.
+                            // The reboot is a NAMED EDGE of the state machine,
+                            // not a hidden side-effect at function exit. The
+                            // target MUST be `origin + "/"`, not the current
+                            // pathname: the pathname IS the redirect URI
+                            // (`/auth/callback`), so reloading onto it
+                            // re-satisfies `isCallbackUrl` on remount, the
+                            // shell re-enters `handleCallback` with the
+                            // `?code` already consumed, and the second pass
+                            // fails with `MissingCode`. Landing on `/` makes
+                            // the reboot take the `classifyStoredToken`
+                            // branch instead, see the just-persisted token
+                            // as fresh, and enter `Established`.
+                            //
+                            // A full-document reload is the serialisation
+                            // point for the Elmish init fetches (ListModules,
+                            // perms, flags) — a same-document
+                            // `history.replaceState` leaves them having
+                            // already raced ahead of `persistTokens` with no
+                            // Bearer (401, never retried). `.replace` (not
+                            // `.assign`) keeps the now-stale `?code` URL out
+                            // of session history.
+                            walk PersistingTokens RebootingToRoot
+                            let cleanUrl = Browser.Dom.window.location.origin + "/"
+                            Browser.Dom.window.location.replace cleanUrl
+                            return Ok()
 }
 
 // ─── Phase 3: sign-out ───────────────────────────────────────────────
@@ -671,9 +692,34 @@ let refreshAccessToken (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = as
                         // Some issuers rotate the refresh token on
                         // each refresh; honour it if present.
                         let newRefresh = getStringField json "refresh_token"
-                        persistTokens at newRefresh
-                        emitOk None "refresh-ok" None
-                        return Ok()
+
+                        // The bearer strategy applies to the refresh
+                        // response exactly as it does to the original
+                        // code exchange — the whole point of a refresh
+                        // is to replace the credential the session is
+                        // ACTUALLY sending. A token endpoint reissues
+                        // the id_token on a refresh_token grant when
+                        // the `openid` scope is in play; under
+                        // `IdTokenBearer` an absent one is a hard
+                        // failure rather than a silent swap back to the
+                        // (unvalidatable) access token.
+                        let bearerKind = OidcUIConfig.resolveBearerToken cfg
+
+                        let bearerChoice =
+                            decideBearerToken bearerKind {
+                                AccessToken = at
+                                IdToken = getStringField json "id_token"
+                            }
+
+                        match bearerChoice with
+                        | Error e ->
+                            clearAll ()
+                            emitErr None "refresh-bearer-selection-failed" (diagnose e)
+                            return Error e
+                        | Ok bearer ->
+                            persistTokens bearer newRefresh
+                            emitOk None "refresh-ok" None
+                            return Ok()
             with ex ->
                 let e = NetworkError ex.Message
                 emitErr None "refresh-network-error" (diagnose e)
@@ -685,12 +731,23 @@ let refreshAccessToken (cfg: OidcUIConfig) : Async<Result<unit, AuthError>> = as
 // `refreshAccessToken` above is the mechanism; this is the policy. A
 // single browser timer is armed whenever the shell enters its signed-in
 // state and re-arms itself after every successful refresh, so the
-// access token is renewed at `exp − safetyMargin` instead of waiting
-// for a request to 401. The expiry is read from the access token's own
+// bearer is renewed at `exp − safetyMargin` instead of waiting
+// for a request to 401. The expiry is read from the stored token's own
 // `exp` claim rather than the token endpoint's `expires_in`, so the
 // cold-start path (token restored from a previous session, no
 // `expires_in` in hand) is covered by the same code as the
 // callback / post-refresh paths.
+//
+// Bearer-strategy coherence comes free here, and deliberately so:
+// the store holds exactly ONE bearer slot, and the strategy decides
+// what goes into it. So `scheduleRefresh` reads the expiry of whatever
+// the session is actually sending — the id_token's `exp` under
+// `IdTokenBearer`, the access token's under `AccessTokenBearer` —
+// without a second code path or a second stored expiry to keep in
+// step. Under `IdTokenBearer` against an opaque-access-token provider
+// this is a strict improvement: the previous behaviour could not read
+// an expiry off an opaque token at all and fell back to the fixed
+// `fallbackRefreshSeconds` cadence.
 
 // `atob` declared near the top of the file (id_token nonce reader
 // needs it before the F# compiler reaches this block).
@@ -748,9 +805,16 @@ let private tokenExpiryEpochSeconds (token: string) : float option =
 // extracts the `iss` + `exp` claims from the stored token (if it is a
 // JWT) and reports `StaleJwt` when they don't match the active config;
 // callers refresh-or-clear-and-resignin in response. Opaque (non-JWT)
-// access tokens carry no claims and fall through as `OpaqueToken` —
+// bearers carry no claims and fall through as `OpaqueToken` —
 // the server's auth provider validates them via introspection / JWKS
 // and will 401 a stale opaque token at request time, same as today.
+//
+// The classifier reads the BEARER slot, so it agrees with the bearer
+// strategy by construction rather than by a rule anyone has to keep:
+// a deployment on `IdTokenBearer` stores a JWT, so the same code that
+// reported `OpaqueToken` for a Google access token reports `FreshJwt`
+// for a Google id_token, and the stale-token rescue path becomes
+// reachable for that provider for the first time.
 //
 // The check is local-only: no network round-trip, ~µs per render.
 
