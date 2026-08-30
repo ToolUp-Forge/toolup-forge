@@ -336,6 +336,72 @@ ToolUp.Facts.CoverageTool.DisclosureProbeK : System.Int32 (literal)
 ToolUp.Facts.CoverageTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.CoverageTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.DeclassificationBudget (class)
+ToolUp.Facts.DeclassificationBudget..ctor(System.String, ToolUp.Facts.DeclassificationCharge, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.BudgetEpoch, ToolUp.Platform.WithholdCharge, System.TimeSpan)
+ToolUp.Facts.DeclassificationBudget.Charge : ToolUp.Facts.DeclassificationCharge { get }
+ToolUp.Facts.DeclassificationBudget.Epoch : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Facts.DeclassificationBudget.NoiseMechanism : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.DeclassificationBudget.OperationId : System.String { get }
+ToolUp.Facts.DeclassificationBudget.ReservationTtl : System.TimeSpan { get }
+ToolUp.Facts.DeclassificationBudget.WithholdCharge : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Facts.DeclassificationBudgetConfig (class)
+ToolUp.Facts.DeclassificationBudgetConfig..ctor(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationBudget], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Facts.DeclassificationBudgetConfig.Budgets : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationBudget] { get }
+ToolUp.Facts.DeclassificationBudgetConfig.Ledger : ToolUp.Platform.IPrivacyBudgetLedger { get }
+ToolUp.Facts.DeclassificationBudgetConfig.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Facts.DeclassificationBudgetConfigModule (class)
+ToolUp.Facts.DeclassificationBudgetConfigModule.budgetFor(ToolUp.Facts.DeclassificationBudgetConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudget]
+ToolUp.Facts.DeclassificationBudgetConfigModule.create(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget]) : ToolUp.Facts.DeclassificationBudgetConfig
+ToolUp.Facts.DeclassificationBudgetConfigModule.isEmpty(ToolUp.Facts.DeclassificationBudgetConfig) : System.Boolean
+ToolUp.Facts.DeclassificationBudgetConfigModule.tryCreate(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DeclassificationBudgetConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.DeclassificationBudgetConfigModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Facts.DeclassificationBudgetConfig) : ToolUp.Facts.DeclassificationBudgetConfig
+ToolUp.Facts.DeclassificationBudgetGate (class)
+ToolUp.Facts.DeclassificationBudgetGate.reserve(ToolUp.Facts.DeclassificationBudgetConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DeclassificationBudgetOutcome]
+ToolUp.Facts.DeclassificationBudgetGate.settle(ToolUp.Facts.DeclassificationBudgetConfig, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationHold]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Facts.DeclassificationBudgetModule (class)
+ToolUp.Facts.DeclassificationBudgetModule.ExhaustedPrefix : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetModule.ScopePrefix : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetModule.UnaccountablePrefix : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetModule.UnscopedParty : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetModule.ceilingOf(ToolUp.Facts.DeclassificationBudget) : System.Decimal
+ToolUp.Facts.DeclassificationBudgetModule.chargedEpsilon(System.String, System.String, System.Decimal, System.Decimal) : ToolUp.Facts.DeclassificationBudget
+ToolUp.Facts.DeclassificationBudgetModule.chargedParties(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DeclassificationBudgetModule.countedCrossings(System.String, System.Int32) : ToolUp.Facts.DeclassificationBudget
+ToolUp.Facts.DeclassificationBudgetModule.policyFor(ToolUp.Facts.DeclassificationBudget) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Facts.DeclassificationBudgetModule.scopeFor(ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : ToolUp.Platform.BudgetScope
+ToolUp.Facts.DeclassificationBudgetModule.spendFor(ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : ToolUp.Platform.BudgetSpend
+ToolUp.Facts.DeclassificationBudgetModule.validate(ToolUp.Facts.DeclassificationBudget) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DeclassificationBudgetModule.withEpoch(ToolUp.Platform.BudgetEpoch, ToolUp.Facts.DeclassificationBudget) : ToolUp.Facts.DeclassificationBudget
+ToolUp.Facts.DeclassificationBudgetModule.withReservationTtl(System.TimeSpan, ToolUp.Facts.DeclassificationBudget) : ToolUp.Facts.DeclassificationBudget
+ToolUp.Facts.DeclassificationBudgetModule.withWithholdCharge(ToolUp.Platform.WithholdCharge, ToolUp.Facts.DeclassificationBudget) : ToolUp.Facts.DeclassificationBudget
+ToolUp.Facts.DeclassificationBudgetOutcome (class)
+ToolUp.Facts.DeclassificationBudgetOutcome.IsCrossingsHeld : System.Boolean { get }
+ToolUp.Facts.DeclassificationBudgetOutcome.IsCrossingsRefused : System.Boolean { get }
+ToolUp.Facts.DeclassificationBudgetOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsHeld (class)
+ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsHeld.held : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationHold] { get }
+ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsRefused (class)
+ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsRefused.held : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationHold] { get }
+ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsRefused.policyRef : System.String { get }
+ToolUp.Facts.DeclassificationBudgetOutcome+Tags (class)
+ToolUp.Facts.DeclassificationBudgetOutcome+Tags.CrossingsHeld : System.Int32 (literal)
+ToolUp.Facts.DeclassificationBudgetOutcome+Tags.CrossingsRefused : System.Int32 (literal)
+ToolUp.Facts.DeclassificationCharge (class)
+ToolUp.Facts.DeclassificationCharge.IsChargedEpsilon : System.Boolean { get }
+ToolUp.Facts.DeclassificationCharge.IsCountedCrossings : System.Boolean { get }
+ToolUp.Facts.DeclassificationCharge.Tag : System.Int32 { get }
+ToolUp.Facts.DeclassificationCharge+ChargedEpsilon (class)
+ToolUp.Facts.DeclassificationCharge+ChargedEpsilon.ceiling : System.Decimal { get }
+ToolUp.Facts.DeclassificationCharge+ChargedEpsilon.perCrossing : System.Decimal { get }
+ToolUp.Facts.DeclassificationCharge+CountedCrossings (class)
+ToolUp.Facts.DeclassificationCharge+CountedCrossings.ceiling : System.Int32 { get }
+ToolUp.Facts.DeclassificationCharge+Tags (class)
+ToolUp.Facts.DeclassificationCharge+Tags.ChargedEpsilon : System.Int32 (literal)
+ToolUp.Facts.DeclassificationCharge+Tags.CountedCrossings : System.Int32 (literal)
+ToolUp.Facts.DeclassificationHold (class)
+ToolUp.Facts.DeclassificationHold..ctor(ToolUp.Platform.BudgetSpend, ToolUp.Facts.DeclassificationBudget)
+ToolUp.Facts.DeclassificationHold.Budget : ToolUp.Facts.DeclassificationBudget { get }
+ToolUp.Facts.DeclassificationHold.Spend : ToolUp.Platform.BudgetSpend { get }
 ToolUp.Facts.DisclosureTaint (class)
 ToolUp.Facts.DisclosureTaint.analyze(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
 ToolUp.Facts.DisclosureTaint.buildGraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.FactDerivationGraph
@@ -357,10 +423,11 @@ ToolUp.Facts.FactDerivationGraph..ctor(Microsoft.FSharp.Collections.FSharpMap`2[
 ToolUp.Facts.FactDerivationGraph.Facts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact] { get }
 ToolUp.Facts.FactDerivationGraph.UpstreamOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Facts.FactDisclosureGate (class)
-ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig])
+ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudgetConfig])
 ToolUp.Facts.FactDisclosureGateModule (class)
 ToolUp.Facts.FactDisclosureGateModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createConfigured(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
+ToolUp.Facts.FactDisclosureGateModule.createConfiguredWithBudgets(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudgetConfig], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createWithPolicyResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDisclosureGateModule.createWithTaint(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate
 ToolUp.Facts.FactDraft (class)
@@ -495,6 +562,7 @@ ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoverageNarratives(ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withDeclassificationBudgets(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

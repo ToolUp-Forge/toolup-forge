@@ -1148,6 +1148,10 @@
         <!-- Phase 562 — taint-propagating disclosure + declassification. -->
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
         <Compile Include="InProcess\MultiPartyDisclosureTests.fs" />
+        <!-- Phase 675 - declassification budgets: the cumulative half of
+             the Phase 562/674 declassification story. Compiled beside the
+             conjunction pack it extends. -->
+        <Compile Include="InProcess\DeclassificationBudgetTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->

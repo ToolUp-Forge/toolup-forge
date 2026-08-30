@@ -1525,6 +1525,18 @@
              CompositionDryRun.fs (its slotInterface parser). Pure — nothing
              registers into DI, nothing runs at compose (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionUpgradePlan.fs" />
+        <!-- Phase 675 — the cumulative privacy-budget ledger, MOVED here
+             from the federation companion (it was
+             InterPlatform/Server/PrivacyBudgetLedger.fs, Phase 190). Two
+             tiers now meter against it — the clean-room gate and the
+             grounding tier's declassification routines — and a second
+             implementation of a privacy control is how a path that
+             enforces slightly less appears, so the seam sits at the layer
+             both already depend on rather than minting a companion ->
+             companion package edge (GP 1). Appended last: it needs
+             IConditionalBlobStorage (Core) and the FableConverters set
+             (Server/Remoting/Json/), and nothing above it needs it. -->
+        <Compile Include="Server\PrivacyBudgetLedger.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
