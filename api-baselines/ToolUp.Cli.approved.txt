@@ -3,6 +3,62 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Cli.Commands.Tenants (class)
+ToolUp.Cli.Commands.Tenants.EndpointEnvVar : System.String (literal)
+ToolUp.Cli.Commands.Tenants.TokenEnvVar : System.String (literal)
+ToolUp.Cli.Commands.Tenants.WireActor : System.String (literal)
+ToolUp.Cli.Commands.Tenants.arrayField(System.Text.Json.JsonElement, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Text.Json.JsonElement]
+ToolUp.Cli.Commands.Tenants.boolField(System.Text.Json.JsonElement, System.String) : System.Boolean
+ToolUp.Cli.Commands.Tenants.call(ToolUp.Cli.Commands.Tenants+Transport, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Text.Json.JsonElement, System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]]) : System.Int32
+ToolUp.Cli.Commands.Tenants.defaultOptions : ToolUp.Cli.Commands.Tenants+Options { get }
+ToolUp.Cli.Commands.Tenants.field(System.Text.Json.JsonElement, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Text.Json.JsonElement]
+ToolUp.Cli.Commands.Tenants.httpTransport(ToolUp.Cli.Commands.Tenants+AdminEndpoint) : ToolUp.Cli.Commands.Tenants+Transport
+ToolUp.Cli.Commands.Tenants.intField(System.Text.Json.JsonElement, System.String) : System.Int32
+ToolUp.Cli.Commands.Tenants.listCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.Commands.Tenants.listHelp : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants.offboardCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.Commands.Tenants.offboardHelp : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants.parse(ToolUp.Cli.Commands.Tenants+Options, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.Commands.Tenants+Options, System.String]
+ToolUp.Cli.Commands.Tenants.previewCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.Commands.Tenants.previewHelp : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants.renderExportThenSummary(System.Text.Json.JsonElement) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]
+ToolUp.Cli.Commands.Tenants.renderPreview(System.Text.Json.JsonElement) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]
+ToolUp.Cli.Commands.Tenants.renderSummary(System.Text.Json.JsonElement) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]
+ToolUp.Cli.Commands.Tenants.renderTable(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Cli.Commands.Tenants.renderTeams(System.Text.Json.JsonElement) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]
+ToolUp.Cli.Commands.Tenants.resolveEndpoint(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.Commands.Tenants+AdminEndpoint, System.String]
+ToolUp.Cli.Commands.Tenants.resultPayload(System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[System.Text.Json.JsonElement, System.String]
+ToolUp.Cli.Commands.Tenants.runList(ToolUp.Cli.Commands.Tenants+Transport) : System.Int32
+ToolUp.Cli.Commands.Tenants.runOffboard(ToolUp.Cli.Commands.Tenants+Transport, System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Int32
+ToolUp.Cli.Commands.Tenants.runPreview(ToolUp.Cli.Commands.Tenants+Transport, System.String) : System.Int32
+ToolUp.Cli.Commands.Tenants.stringField(System.Text.Json.JsonElement, System.String) : System.String
+ToolUp.Cli.Commands.Tenants.teamRoute(System.String) : System.String
+ToolUp.Cli.Commands.Tenants.tenantRoute(System.String) : System.String
+ToolUp.Cli.Commands.Tenants.usageError(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : System.Int32
+ToolUp.Cli.Commands.Tenants+AdminEndpoint (class)
+ToolUp.Cli.Commands.Tenants+AdminEndpoint..ctor(System.String, System.String)
+ToolUp.Cli.Commands.Tenants+AdminEndpoint.BaseUrl : System.String { get }
+ToolUp.Cli.Commands.Tenants+AdminEndpoint.Token : System.String { get }
+ToolUp.Cli.Commands.Tenants+Options (class)
+ToolUp.Cli.Commands.Tenants+Options..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.Cli.Commands.Tenants+Options.Endpoint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants+Options.ExportFirst : System.Boolean { get }
+ToolUp.Cli.Commands.Tenants+Options.Reason : System.String { get }
+ToolUp.Cli.Commands.Tenants+Options.ScopeId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants+Options.TeamLess : System.Boolean { get }
+ToolUp.Cli.Commands.Tenants+Options.Token : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.Commands.Tenants+Transport (class)
+ToolUp.Cli.Commands.Tenants+Transport..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]])
+ToolUp.Cli.Commands.Tenants+Transport.Post : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]] { get }
+ToolUp.Cli.Commands.Users (class)
+ToolUp.Cli.Commands.Users.listCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.Commands.Users.listHelp : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.Commands.Users.offboardCommand : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.Commands.Users.offboardHelp : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.Commands.Users.renderPrincipals(System.Boolean, System.Text.Json.JsonElement) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32]
+ToolUp.Cli.Commands.Users.runList(ToolUp.Cli.Commands.Tenants+Transport, System.Boolean) : System.Int32
+ToolUp.Cli.Commands.Users.runOffboardUser(ToolUp.Cli.Commands.Tenants+Transport, System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Int32
+ToolUp.Cli.Commands.Users.userScope(System.String) : System.String
 ToolUp.Cli.Dispatch (class)
 ToolUp.Cli.Dispatch.ExitOk : System.Int32 (literal)
 ToolUp.Cli.Dispatch.ExitRuntimeError : System.Int32 (literal)
