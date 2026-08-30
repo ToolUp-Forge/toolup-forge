@@ -449,6 +449,11 @@ module Names =
     [<Literal>]
     let teamCreationPolicy = "TOOLUP_TEAM_CREATION_POLICY"
 
+    // --- Phase 549: direct-add membership existence proof ---
+    [<Literal>]
+    let requireDirectoryProofForDirectAdd =
+        "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD"
+
     [<Literal>]
     let rateLimitStore = "TOOLUP_RATE_LIMIT_STORE"
 
@@ -1720,6 +1725,15 @@ let all: ConfigKeyDescriptor list = [
         Category = "Auth & identity"
     }
     {
+        EnvVar = Names.requireDirectoryProofForDirectAdd
+        Description =
+            "Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory)."
+        Type = EnumKey [ "enabled"; "disabled" ]
+        Default = Some "disabled"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
         EnvVar = Names.entraExternalIdTenant
         Description = "Entra External ID tenant name."
         Type = StringKey
@@ -2618,6 +2632,7 @@ let manifestBindable: Set<string> =
         Names.rateLimitWindowSeconds
         Names.rateLimiter
         Names.replicaCount
+        Names.requireDirectoryProofForDirectAdd
         Names.requireHttps
         Names.resultStore
         Names.secretStore

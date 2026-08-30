@@ -114,6 +114,51 @@ type TeamCreationPolicy =
     /// product surface.
     | AnyAuthenticatedUser
 
+/// Phase 549 — whether the **direct-add** membership paths demand an
+/// existence proof for the principal id they are handed.
+///
+/// Phase 131 established (and documented at the `createTeamCore` seam)
+/// that membership rows are **admin-asserted, not identity proof**:
+/// `TeamApi.AddTeamMember` and `TeamApi.CreateTeamWithOwner` take a
+/// caller-supplied principal id, sanitise it at the store seam, and
+/// write the row. A typo'd or guessed id therefore mints a permanent
+/// ghost member no one can ever sign in as, and `GetTeamMembers` reports
+/// it indistinguishably from a real one.
+///
+/// A deployment that wires an `IUserDirectory` companion already holds
+/// the substrate needed to check — this knob is what makes the SDK ask.
+///
+/// The **invite-by-email path is deliberately out of scope**: a pending
+/// invite is keyed by email and only becomes a membership row when the
+/// invitee signs in and consumes it, so the sign-in *is* the existence
+/// proof. Only the raw-id direct-add paths gain the gate.
+///
+/// Lives beside `TeamCreationPolicy` for the same reason that DU does:
+/// it is the second admission gate on team membership, and siting the
+/// pair together keeps one reader's search in one file.
+type DirectAddIdentityProof =
+    /// Default — byte-for-byte the pre-549 behaviour (GP 11). The
+    /// supplied id is sanitised at the store seam and written; no
+    /// directory lookup is performed, and a deployment with no
+    /// `IUserDirectory` composed is unaffected (GP 13).
+    | NoIdentityProof
+    /// Resolve the supplied principal id against the composed
+    /// `IUserDirectory` before writing a membership row; refuse ids the
+    /// directory does not recognise, naming the id and the requirement.
+    ///
+    /// **Fail-closed on misconfiguration.** Selecting this mode with no
+    /// `IUserDirectory` composed is refused at startup preflight by the
+    /// `direct-add-identity-proof` validator rather than degrading to a
+    /// silent pass-through at request time — a proof requirement that
+    /// quietly proves nothing is worse than no requirement at all. A
+    /// substrate failure at request time (lost credential, provider 5xx)
+    /// likewise refuses the add rather than admitting it unproven.
+    ///
+    /// The caller's OWN id is exempt: it arrives from the validated
+    /// access token, so `CreateTeam` (caller becomes Owner) and a
+    /// `CreateTeamWithOwner` naming the caller need no second proof.
+    | RequireDirectoryProof
+
 // ─── Platform API contracts ───────────────────────────────────────
 //
 // Originally a single `PlatformApi` record carrying 14 methods across
@@ -180,7 +225,10 @@ type CreateTeamRequest = {
     /// to the user id (server-side substrate has no precondition on
     /// the IdP having seen them — the pending-invite substrate is
     /// the recommended path when the recipient is identified by
-    /// email only).
+    /// email only). Phase 549 — a deployment that sets
+    /// `ServerConfig.DirectAddIdentityProof = RequireDirectoryProof`
+    /// opts INTO a precondition: the id must resolve against the
+    /// composed `IUserDirectory` before the team is minted.
     [<PiiSafe>]
     InitialOwnerUserId: string
 }
