@@ -9,6 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ConnectorSupport.fs" />
+    <!-- Phase 10d — file acquisition + type-probe inference shared by the
+         Csv / Excel / Parquet connectors. Still BCL-only. -->
+    <Compile Include="LocalFileSupport.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

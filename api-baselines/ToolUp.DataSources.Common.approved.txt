@@ -25,6 +25,22 @@ ToolUp.DataSources.Common.Csv.toBytes(System.Collections.Generic.IEnumerable`1[S
 ToolUp.DataSources.Common.Errors (class)
 ToolUp.DataSources.Common.Errors.classify(System.String, System.Exception) : ToolUp.Platform.IngestionError
 ToolUp.DataSources.Common.Errors.guard`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Files (class)
+ToolUp.DataSources.Common.Files.blobName(ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : System.String
+ToolUp.DataSources.Common.Files.download(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Files.exists(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Files.listTables(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Files.normaliseExtension(System.String) : System.String
+ToolUp.DataSources.Common.Files.normalisePrefix(System.String) : System.String
+ToolUp.DataSources.Common.Files.readSettings(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Files+FileSourceSettings, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.Files.requireTableName(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.Files.tableOf(ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.DataSources.Common.Files+FileSourceSettings (class)
+ToolUp.DataSources.Common.Files+FileSourceSettings..ctor(System.String, System.String, System.String, System.Int32)
+ToolUp.DataSources.Common.Files+FileSourceSettings.Container : System.String { get }
+ToolUp.DataSources.Common.Files+FileSourceSettings.Extension : System.String { get }
+ToolUp.DataSources.Common.Files+FileSourceSettings.Prefix : System.String { get }
+ToolUp.DataSources.Common.Files+FileSourceSettings.SampleRows : System.Int32 { get }
 ToolUp.DataSources.Common.SqlIdentifier (class)
 ToolUp.DataSources.Common.SqlIdentifier.isSafe(System.String) : System.Boolean
 ToolUp.DataSources.Common.SqlIdentifier.quoteLiteral(System.String) : System.String
@@ -35,3 +51,7 @@ ToolUp.DataSources.Common.TypeMap.classify(Microsoft.FSharp.Core.FSharpFunc`2[Sy
 ToolUp.DataSources.Common.TypeMap.column(System.String, System.String, System.Boolean) : ToolUp.Platform.ColumnInfo
 ToolUp.DataSources.Common.TypeMap.normalise(System.String) : System.String
 ToolUp.DataSources.Common.TypeMap.schema(System.String, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.ColumnInfo]) : ToolUp.Platform.TableSchema
+ToolUp.DataSources.Common.TypeProbe (class)
+ToolUp.DataSources.Common.TypeProbe.infer(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : DataManagementTypes+ColumnType
+ToolUp.DataSources.Common.TypeProbe.nativeName(DataManagementTypes+ColumnType) : System.String
+ToolUp.DataSources.Common.TypeProbe.schemaOf(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Collections.Generic.IEnumerable`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.Platform.TableSchema

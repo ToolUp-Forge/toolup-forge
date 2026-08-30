@@ -17,6 +17,9 @@ let private registeredTests =
         RedshiftDataSourceTests.tests
         SynapseDataSourceTests.tests
         SnowflakeDataSourceTests.tests
+        CsvDataSourceTests.tests
+        ExcelDataSourceTests.tests
+        ParquetDataSourceTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
