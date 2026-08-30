@@ -30,6 +30,10 @@
     <ItemGroup>
         <Compile Include="Support\TestFakes.fs" />
         <Compile Include="Support\RemoteDataSourceContract.fs" />
+        <!-- Phase 10d — the local-file half: an in-process IBlobStorage and
+             the always-on seven-point contract the file connectors meet. -->
+        <Compile Include="Support\FakeBlobStorage.fs" />
+        <Compile Include="Support\LocalFileDataSourceContract.fs" />
         <Compile Include="Tests\ConnectorSupportTests.fs" />
         <Compile Include="Tests\SqlDataSourceTests.fs" />
         <Compile Include="Tests\BigQueryDataSourceTests.fs" />
@@ -37,6 +41,12 @@
         <Compile Include="Tests\RedshiftDataSourceTests.fs" />
         <Compile Include="Tests\SynapseDataSourceTests.fs" />
         <Compile Include="Tests\SnowflakeDataSourceTests.fs" />
+        <!-- Phase 10d — the local-file connectors. Always-on: fixtures are
+             built in-process and written into an in-memory IBlobStorage, so
+             these need no credential, no filesystem and no network. -->
+        <Compile Include="Tests\CsvDataSourceTests.fs" />
+        <Compile Include="Tests\ExcelDataSourceTests.fs" />
+        <Compile Include="Tests\ParquetDataSourceTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -54,6 +64,9 @@
         <ProjectReference Include="..\DataSources\Redshift\ToolUp.DataSources.Redshift.fsproj" />
         <ProjectReference Include="..\DataSources\Synapse\ToolUp.DataSources.Synapse.fsproj" />
         <ProjectReference Include="..\DataSources\Snowflake\ToolUp.DataSources.Snowflake.fsproj" />
+        <ProjectReference Include="..\DataSources\Csv\ToolUp.DataSources.Csv.fsproj" />
+        <ProjectReference Include="..\DataSources\Excel\ToolUp.DataSources.Excel.fsproj" />
+        <ProjectReference Include="..\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
