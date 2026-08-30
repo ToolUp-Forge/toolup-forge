@@ -69,8 +69,8 @@ let private toolDefinition (name: string) : AIToolDefinition = {
     ResultBudget = DefaultResultBudget
 }
 
-let private configSchema: ModuleConfigSchema = {
-    Fields = [
+let private configSchema: ModuleConfigSchema =
+    ModuleConfigSchema.ofFields [
         {
             Key = "retention-days"
             DisplayName = "Retention (days)"
@@ -80,7 +80,6 @@ let private configSchema: ModuleConfigSchema = {
             DefaultJson = "30"
         }
     ]
-}
 
 let private signal: Metrics.MetricDefinition = {
     Name = "reference.processed_total"

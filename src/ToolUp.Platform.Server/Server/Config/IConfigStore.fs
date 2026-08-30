@@ -20,10 +20,42 @@ namespace ToolUp.Platform
 /// document — the same trust boundary as every other blob-backed
 /// store (`PermissionStore`, `BlobProviderProfile`,
 /// `PersistentEventStore`).
+/// **Phase 10b — the reserved-key contract, binding on every
+/// implementation.** A persisted document may carry keys in the
+/// reserved namespace (`ConfigMigrationMetadata.isReservedKey`; today
+/// `_schema_version`) alongside its module-declared fields. Three rules
+/// follow, and an implementation that breaks any of them silently loses
+/// version provenance:
+///
+///  1. **Round-trip them.** A reserved key written into a document must
+///     come back out of it. `Validate.map` exempts them from the
+///     unknown-key rejection precisely so a schema-validating write can
+///     carry one.
+///  2. **`GetRaw` returns them; every typed path strips them.**
+///     `GetRaw` is the raw persistence surface — the migration
+///     decorator reads the version stamp through it, so an
+///     implementation that filtered there would make schema evolution
+///     structurally impossible to detect. `Get<'T>` and
+///     `GetEffective<'T>` strip before projecting, so no reserved key
+///     ever reaches a module's record.
+///  3. **Never invent one.** The stamp is written by the migration
+///     decorator, and only once a module declares
+///     `ModuleConfigSchema.SchemaVersion > 1`. An implementation that
+///     stamped on its own would make a document look migrated when
+///     nothing had migrated it.
+///
+/// Consumers reach the decorated store through DI; a direct
+/// construction of a raw implementation (tests, tooling) sees rule 2's
+/// raw surface, which is the deliberate seam and not a leak.
 type IConfigStore =
     /// Read the raw persisted JSON-per-field map for a scope/module.
     /// Returns an empty map when no document exists. Used by the
     /// admin UI (which edits the map directly) and by `GetEffective`.
+    ///
+    /// Includes reserved keys — see rule 2 of the reserved-key contract
+    /// above. The DI-registered store is the migration decorator, whose
+    /// `GetRaw` migrates first and then strips, so an admin-UI caller
+    /// never sees one.
     abstract GetRaw: scope: StorageScope * moduleKey: string -> Async<Map<string, string>>
 
     /// Deserialise the persisted document for a scope/module into

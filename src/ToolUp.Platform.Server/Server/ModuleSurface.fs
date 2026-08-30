@@ -255,6 +255,14 @@ module ModuleSurface =
             c (nameof m.DataTypes) ProvidesFacet
             c (nameof m.VectorisationHandlers) ProvidesFacet
             c (nameof m.ConfigSchema) ProvidesFacet
+            // Phase 10b — the module's declared config schema-evolution
+            // steps. `Provides` on the `ConfigSchema` precedent directly
+            // above: a migration chain is part of what the module
+            // declares about its own config surface, not a substrate it
+            // asks the composition for. (What it IMPLIES — an
+            // `IConfigStore` to migrate documents in — is emitted on the
+            // `Needs` side below.)
+            c (nameof m.ConfigMigrations) ProvidesFacet
             c (nameof m.QueryHandlers) ProvidesFacet
             c (nameof m.AITools) ProvidesFacet
             c (nameof m.MetricDefinitions) ProvidesFacet
@@ -304,6 +312,20 @@ module ModuleSurface =
             | Some schema ->
                 schema.Fields
                 |> List.map (fun f -> entry (nameof m.ConfigSchema) "config-field" f.Key f.DisplayName None)
+
+        // Phase 10b — one entry per declared migration step, so a
+        // composition's surface names the version hops a module's config
+        // documents will be carried through rather than only the schema
+        // they land on.
+        let configMigrations =
+            m.ConfigMigrations
+            |> List.map (fun mig ->
+                entry
+                    (nameof m.ConfigMigrations)
+                    "config-migration"
+                    (sprintf "%s:%d->%d" mig.ModuleKey mig.FromVersion mig.ToVersion)
+                    (sprintf "config schema %d -> %d" mig.FromVersion mig.ToVersion)
+                    None)
 
         let queries =
             m.QueryHandlers
@@ -399,6 +421,7 @@ module ModuleSurface =
             dataTypes
             vectorisation
             configFields
+            configMigrations
             queries
             tools
             signals
@@ -434,6 +457,13 @@ module ModuleSurface =
                 "IVectorStore"
             ]
             implied (nameof m.ConfigSchema) m.ConfigSchema.IsSome [ "IConfigStore" ]
+            // Phase 10b — a declared migrator needs somewhere to read and
+            // write the documents it upgrades. Usually redundant with the
+            // line above (a module that versions a schema declares one),
+            // but not always: a deployment may register a migrator for a
+            // reserved `_platform*` key no ServerModule owns a schema for.
+            // `distinctBy` at the end of this list dedupes the common case.
+            implied (nameof m.ConfigMigrations) (not m.ConfigMigrations.IsEmpty) [ "IConfigStore" ]
             implied (nameof m.QueryHandlers) (not m.QueryHandlers.IsEmpty) [ "IModuleQueryBus" ]
             implied (nameof m.AITools) (not m.AITools.IsEmpty) [ "IAIProvider" ]
             implied (nameof m.MetricDefinitions) (not m.MetricDefinitions.IsEmpty) [ "IMetricsSink" ]

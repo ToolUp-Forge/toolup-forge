@@ -129,11 +129,24 @@ module private Validate =
     /// schema. Rejects unknown keys (schema drift protection) and
     /// missing `Required` fields. Returns the normalised map on
     /// success.
+    ///
+    /// Phase 10b — reserved keys (`ConfigMigrationMetadata.isReservedKey`,
+    /// today just `_schema_version`) are exempt from BOTH the
+    /// unknown-key rejection and the per-field validation, and are
+    /// carried through into the normalised result unchanged. Without
+    /// the exemption the version stamp could not be written at all: it
+    /// is a key no schema declares, so the drift guard immediately
+    /// above would reject the very document it is meant to protect.
+    /// They are not, and must never become, module-visible fields —
+    /// every read path strips them before projection.
     let map (schema: ModuleConfigSchema) (values: Map<string, string>) : Result<Map<string, string>, string> =
         let known = schema.Fields |> List.map _.Key |> Set.ofList
 
+        let reserved, declared =
+            values |> Map.partition (fun k _ -> ConfigMigrationMetadata.isReservedKey k)
+
         let unknown =
-            values
+            declared
             |> Map.toList
             |> List.map fst
             |> List.filter (fun k -> not (known.Contains k))
@@ -143,7 +156,7 @@ module private Validate =
         | [] ->
             let missingRequired =
                 schema.Fields
-                |> List.tryFind (fun f -> f.Required && not (Map.containsKey f.Key values))
+                |> List.tryFind (fun f -> f.Required && not (Map.containsKey f.Key declared))
 
             match missingRequired with
             | Some f -> Error $"Field '{f.Key}' is required."
@@ -158,7 +171,7 @@ module private Validate =
                         | Ok normalised -> Ok(Map.add key normalised accMap)
                         | Error msg -> Error msg
 
-                values |> Map.toList |> List.fold folder (Ok Map.empty)
+                declared |> Map.toList |> List.fold folder (Ok reserved)
 
 // ─── Effective-value merge + typed projection ────────────────────
 
@@ -170,7 +183,12 @@ module private Validate =
 /// all-defaults fallback (schema/'T drift after an upgrade) so the
 /// operator symptom "my config didn't stick" has a log line naming
 /// the discarded fields instead of empty logs.
-let private projectToRecord<'T>
+/// Phase 10b — public (was `private`) so the `MigratingConfigStore`
+/// decorator projects the MIGRATED map through exactly this function
+/// rather than re-implementing the defaults overlay and its
+/// fallback-warning behaviour. One projection, one warning shape, one
+/// set of semantics for every `IConfigStore` implementation.
+let projectToRecord<'T>
     (warn: string -> unit)
     (context: string)
     (schema: ModuleConfigSchema)
@@ -232,6 +250,52 @@ let private projectToRecord<'T>
             sb2.ToString()
 
         Json.deserialize<'T> defaultsOnly
+
+/// Phase 10b — the `Get<'T>` projection, factored out of
+/// `BlobConfigStore` so the decorator applies identical semantics to a
+/// migrated map: exact decode of the persisted values into `'T`, with
+/// a decode failure degrading to `None` and a Warn line naming the
+/// fields the caller will not see. Reserved keys are stripped first —
+/// `_schema_version` is substrate bookkeeping and must never reach a
+/// module's record.
+let tryProjectExact<'T>
+    (warn: string -> unit)
+    (scopeContainer: string)
+    (moduleKey: string)
+    (persisted: Map<string, string>)
+    : 'T option =
+    let values = ConfigMigrationMetadata.stripReserved persisted
+
+    if Map.isEmpty values then
+        None
+    else
+        try
+            let json = Json.serialize values
+            Some(Json.deserialize<'T> json)
+        with ex ->
+            warn (
+                sprintf
+                    "[BlobConfigStore] scope=%s moduleKey=%s: persisted config failed to decode into %s (%s) — returning None. The caller will see 'nothing configured' even though %d field(s) are persisted: [%s]."
+                    scopeContainer
+                    moduleKey
+                    typeof<'T>.Name
+                    ex.Message
+                    (Map.count values)
+                    (values |> Map.toList |> List.map fst |> String.concat ", ")
+            )
+
+            None
+
+/// Phase 10b — the `Set<'T>` serialisation step, factored out so the
+/// decorator can stamp the resulting map before handing it to the
+/// inner store's validating `SetRaw`. Behaviour-identical to the code
+/// it replaces inside `BlobConfigStore.Set`.
+let toRawMap<'T> (value: 'T) : Result<Map<string, string>, string> =
+    try
+        let json = Json.serialize value
+        Ok(Json.deserialize<Map<string, string>> json)
+    with ex ->
+        Error $"Config serialisation failed: {ex.Message}"
 
 // ─── Blob layout ─────────────────────────────────────────────────
 
@@ -312,42 +376,27 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
 
         member _.Get<'T>(scope, moduleKey) : Async<'T option> = async {
             let! raw = loadRaw scope moduleKey
-
-            if Map.isEmpty raw then
-                return None
-            else
-                try
-                    let json = Json.serialize raw
-                    return Some(Json.deserialize<'T> json)
-                with ex ->
-                    warn (
-                        sprintf
-                            "[BlobConfigStore] %s: persisted config failed to decode into %s (%s) — returning None. The caller will see 'nothing configured' even though %d field(s) are persisted: [%s]."
-                            (context scope moduleKey)
-                            typeof<'T>.Name
-                            ex.Message
-                            (Map.count raw)
-                            (raw |> Map.toList |> List.map fst |> String.concat ", ")
-                    )
-
-                    return None
+            return tryProjectExact<'T> warn scope.Container moduleKey raw
         }
 
         member _.GetEffective<'T>(scope, moduleKey, schema) : Async<'T> = async {
             let! raw = loadRaw scope moduleKey
-            return projectToRecord<'T> warn (context scope moduleKey) schema raw
+            // Phase 10b — strip the reserved version stamp before the
+            // defaults overlay. `projectToRecord` iterates schema
+            // fields only, so a reserved key could not reach `'T` in
+            // any case; stripping here keeps the two typed read paths
+            // provably identical rather than accidentally so.
+            let values = ConfigMigrationMetadata.stripReserved raw
+            return projectToRecord<'T> warn (context scope moduleKey) schema values
         }
 
         member _.Set<'T>(scope, moduleKey, value: 'T, schema) = async {
-            try
-                let json = Json.serialize value
-                let asMap = Json.deserialize<Map<string, string>> json
-
+            match toRawMap value with
+            | Error msg -> return Error msg
+            | Ok asMap ->
                 match Validate.map schema asMap with
                 | Error msg -> return Error msg
                 | Ok normalised -> return! saveRaw scope moduleKey normalised
-            with ex ->
-                return Error $"Config serialisation failed: {ex.Message}"
         }
 
         member _.SetRaw(scope, moduleKey, values, schema) = async {
