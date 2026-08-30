@@ -52,6 +52,8 @@ let private shippedSecurityClassValidators () : (string * IConfigValidator) list
         (EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(cfg, secretStore ()) :> IConfigValidator)
         "oauth-secret-encryption-mode",
         (OAuthSecretEncryptionModeValidator.OAuthSecretEncryptionModeValidator(cfg, secretStore ()) :> IConfigValidator)
+        "secret-store-at-rest-posture",
+        (SecretStoreAtRestPostureValidator.SecretStoreAtRestPostureValidator(cfg, secretStore ()) :> IConfigValidator)
         "oauth-state-store-instance",
         (OAuthStateStoreInstanceValidator.OAuthStateStoreInstanceValidator(cfg, InMemoryOAuthStateStore())
         :> IConfigValidator)

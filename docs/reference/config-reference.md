@@ -205,6 +205,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_ACCEPT_LOCAL_FALLBACK` | bool | false | no | yes | Acknowledge a cloud-declared blob backend silently falling back to local storage (downgrades the refusal to a warning). |
 | `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge an internet-facing authenticated deployment with no rate limiting. |
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | bool | false | no | yes | Acknowledge the in-memory pending-invite store under a multi-instance deployment (per-replica drift). |
+| `TOOLUP_ACCEPT_PLAINTEXT_SECRETS` | bool | false | no | yes | Acknowledges that the composed secret store does not encrypt at rest. Same acknowledgement as TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE — either spelling lowers the plaintext-secrets refusals to warnings. |
 | `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | bool | false | no | yes | Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning. |
 | `TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge SSE query-param auth fallback in an authenticated mode (leaks the userId in URLs/logs). |
 | `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge relying on SameSite cookies alone (no server-side CSRF token) for cookie auth. |

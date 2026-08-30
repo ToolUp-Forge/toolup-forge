@@ -79,6 +79,11 @@
       "type": [ "boolean", "string" ],
       "default": false
     },
+    "TOOLUP_ACCEPT_PLAINTEXT_SECRETS": {
+      "description": "Acknowledges that the composed secret store does not encrypt at rest. Same acknowledgement as TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE — either spelling lowers the plaintext-secrets refusals to warnings.",
+      "type": [ "boolean", "string" ],
+      "default": false
+    },
     "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE": {
       "description": "Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning.",
       "type": [ "boolean", "string" ],

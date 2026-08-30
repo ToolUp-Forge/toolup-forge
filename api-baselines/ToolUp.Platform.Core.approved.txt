@@ -2622,6 +2622,7 @@ ToolUp.Platform.ConfigKeys+Names.acceptLocalEmbedderAtScale : System.String (lit
 ToolUp.Platform.ConfigKeys+Names.acceptLocalFallback : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptNoRateLimitInAuthMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptPendingInviteStoreMultiInstance : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.acceptPlaintextSecrets : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptPlaintextSecretsInAuthMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptQueryParamSseAuthInAuthMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptSameSiteOnlyCsrfInAuthMode : System.String (literal)
@@ -9611,6 +9612,23 @@ ToolUp.Platform.Secrets+ISecretStore.DeleteSecret(System.String, System.String) 
 ToolUp.Platform.Secrets+ISecretStore.GetSecret(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.Secrets+ISecretStore.ListKeys(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.Secrets+ISecretStore.SetSecret(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Secrets+ISecretStoreAtRestPosture (interface)
+ToolUp.Platform.Secrets+ISecretStoreAtRestPosture.AtRestPosture : ToolUp.Platform.Secrets+SecretAtRestPosture { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture (class)
+ToolUp.Platform.Secrets+SecretAtRestPosture.IsEncryptsAtRest : System.Boolean { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture.IsPlaintextAtRest : System.Boolean { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture.IsUnknownAtRest : System.Boolean { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture.Tag : System.Int32 { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture+EncryptsAtRest (class)
+ToolUp.Platform.Secrets+SecretAtRestPosture+EncryptsAtRest.mechanism : System.String { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture+PlaintextAtRest (class)
+ToolUp.Platform.Secrets+SecretAtRestPosture+PlaintextAtRest.reason : System.String { get }
+ToolUp.Platform.Secrets+SecretAtRestPosture+Tags (class)
+ToolUp.Platform.Secrets+SecretAtRestPosture+Tags.EncryptsAtRest : System.Int32 (literal)
+ToolUp.Platform.Secrets+SecretAtRestPosture+Tags.PlaintextAtRest : System.Int32 (literal)
+ToolUp.Platform.Secrets+SecretAtRestPosture+Tags.UnknownAtRest : System.Int32 (literal)
+ToolUp.Platform.Secrets+SecretAtRestPosture+UnknownAtRest (class)
+ToolUp.Platform.Secrets+SecretAtRestPosture+UnknownAtRest.reason : System.String { get }
 ToolUp.Platform.SectionSummary (class)
 ToolUp.Platform.SectionSummary..ctor(System.Boolean, System.String, ToolUp.Platform.StatusSeverity, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.SectionSummary.Details : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

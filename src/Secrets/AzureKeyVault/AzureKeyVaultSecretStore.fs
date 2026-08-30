@@ -146,6 +146,14 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
     let credential = DefaultAzureCredential() :> Core.TokenCredential
     let client = SecretClient(Uri config.VaultUrl, credential)
 
+    /// Phase 457 — Key Vault protects secrets with service-managed,
+    /// HSM-backed keys; nothing reaches durable media in the clear.
+    /// Declared so the at-rest preflight passes on the composed store's own
+    /// evidence rather than on the `TOOLUP_SECRET_STORE` spelling.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            EncryptsAtRest "Azure Key Vault, service-managed HSM-backed key protection"
+
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
             let name = Naming.secretName scopeId key
