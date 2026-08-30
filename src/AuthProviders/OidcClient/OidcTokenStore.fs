@@ -7,12 +7,21 @@ module ToolUp.AuthProviders.Oidc.OidcTokenStore
 //
 // We keep two tokens in the browser:
 //
-// • Access token — short-lived (typical 15 min – 1 h). Stored via
+// • Bearer token — short-lived (typical 15 min – 1 h). Stored via
 //   `UserSession.setAuthToken` which is in the core SDK because
 //   `UserSession.withRequestHeaders` attaches it to every Fable.Remoting
 //   request. That storage lives in `localStorage` under
 //   `"toolup-auth-token"` — shared state owned by the SDK, not the
 //   OIDC companion.
+//
+//   WHICH token this is — the `access_token` or the `id_token` — is
+//   the deployment's declared `BearerTokenKind`, resolved by
+//   `OidcUIConfig.resolveBearerToken` and applied by the orchestration
+//   in `OidcClient` before it calls `persistTokens`. This module holds
+//   one slot and does not know or care which class of token is in it;
+//   that is what keeps the classifier, the pre-expiry refresh timer and
+//   the outgoing request header agreeing with each other for free
+//   rather than by three separate rules.
 //
 // • Refresh token — longer-lived (typical 30 d – 90 d). Read only by
 //   this companion's refresh logic; core SDK has no knowledge of it.
@@ -102,10 +111,16 @@ let readCorrelationId () : string option =
 // ─── Access + refresh tokens ─────────────────────────────────────────
 
 /// Persist both tokens after a successful token-endpoint exchange.
-/// The access token flows through the core `UserSession` so
+/// The bearer token flows through the core `UserSession` so
 /// Fable.Remoting calls pick it up; the refresh token is ours alone.
-let persistTokens (accessToken: string) (refreshToken: string option) : unit =
-    UserSession.setAuthToken accessToken
+///
+/// `bearerToken` is whichever token the deployment's `BearerTokenKind`
+/// selected — the caller has already decided (see
+/// `OidcStateMachine.decideBearerToken`). Passing the access token
+/// unconditionally is the historical behaviour and remains what a
+/// config with no declared strategy produces.
+let persistTokens (bearerToken: string) (refreshToken: string option) : unit =
+    UserSession.setAuthToken bearerToken
 
     match refreshToken with
     | Some rt -> Browser.Dom.window.localStorage.setItem (refreshTokenKey, rt)
@@ -120,11 +135,18 @@ let getRefreshToken () : string option =
 let hasAccessToken () : bool =
     UserSession.getAuthToken () |> Option.isSome
 
-/// The raw access token, when one is stored. Used by the pre-expiry
-/// refresh timer to read the JWT `exp` claim; the SDK core only exposes
-/// presence (`hasAccessToken`) so this thin accessor keeps the token
-/// read inside the store module rather than reaching into `UserSession`
-/// from the orchestration layer.
+/// The raw bearer token, when one is stored. Used by the pre-expiry
+/// refresh timer to read the JWT `exp` claim, and by
+/// `classifyStoredToken` to read `iss` + `exp`; the SDK core only
+/// exposes presence (`hasAccessToken`) so this thin accessor keeps the
+/// token read inside the store module rather than reaching into
+/// `UserSession` from the orchestration layer.
+///
+/// The name predates the bearer strategy and is kept for source
+/// compatibility. It returns the BEARER — the access token under the
+/// default strategy, the id_token under `IdTokenBearer` — which is the
+/// right value for both of its callers, since each is asking about the
+/// credential the session is actually sending.
 let getAccessToken () : string option = UserSession.getAuthToken ()
 
 /// Clear all OIDC-related session state. Called on sign-out and on

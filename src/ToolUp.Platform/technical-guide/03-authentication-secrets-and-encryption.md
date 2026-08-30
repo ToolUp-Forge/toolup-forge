@@ -93,6 +93,7 @@ let oidcConfig: OidcUIConfig = {
     Scopes = [ "openid"; "profile"; "email" ]
     PostLogoutRedirectUri = Some "https://app.example.com"
     ValidateIdToken = Some true
+    BearerToken = None   // None = send the access token (the default)
 }
 
 let config = {

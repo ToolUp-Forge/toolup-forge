@@ -109,6 +109,62 @@ module PresetKind =
         // provider, not a deployment choice.
         | Google -> false
 
+    /// The bearer strategy the preset selects when the consumer has
+    /// not stated one. `AccessTokenBearer` for every preset but
+    /// `Google`.
+    ///
+    /// **This is deliberately NOT `not (expectsDecodableAccessToken
+    /// kind)`, and the difference is the whole point of the helper.**
+    /// Three presets answer `false` to that question, for three
+    /// different reasons:
+    ///
+    ///   * `Generic` — the SDK has no provider knowledge, so it cannot
+    ///     claim the access token is decodable. The token may well be a
+    ///     perfectly good JWT; the SDK simply does not know. Flipping
+    ///     these deployments to the id_token would change working
+    ///     behaviour on an absence of information.
+    ///   * `Auth0` — opaque *by default*, and fixable by configuration:
+    ///     set an API audience in the Auth0 dashboard and pass it as
+    ///     the `audience` extra parameter, and the access token becomes
+    ///     a decodable JWT addressed to that API. The remedy is a
+    ///     configuration knob, so the SDK must not pre-empt it.
+    ///   * `Google` — opaque *always*, with **no knob that changes
+    ///     it**. There is no dashboard setting, no scope, and no
+    ///     authorize parameter that makes a Google access token
+    ///     decodable. The access-token strategy cannot be made to work
+    ///     here by any deployment-side action, which is what
+    ///     distinguishes this case from the other two and what makes an
+    ///     SDK-chosen default correct rather than presumptuous.
+    ///
+    /// A consumer's explicit `OidcAppConfig.BearerToken` always wins
+    /// over this default — see `OidcAppConfig.resolveBearerToken`.
+    let defaultBearerToken (kind: PresetKind) : BearerTokenKind =
+        match kind with
+        | Generic -> AccessTokenBearer
+        | EntraWorkforce -> AccessTokenBearer
+        | EntraExternalId -> AccessTokenBearer
+        | EntraExternalIdWithDomain _ -> AccessTokenBearer
+        | Auth0 -> AccessTokenBearer
+        | Google -> IdTokenBearer
+
+    /// Whether the preset's access-token opacity is a fixed property of
+    /// the provider rather than a deployment choice. `true` only where
+    /// no configuration — dashboard setting, scope, or authorize
+    /// parameter — can make the access token decodable, so leaving the
+    /// deployment on `AccessTokenBearer` is a guaranteed post-sign-in
+    /// 401 rather than a possible one. Read by the coherence validator
+    /// to decide whether an access-token strategy is worth warning
+    /// about; kept beside `defaultBearerToken` because the two encode
+    /// the same fact for two different consumers.
+    let opaqueAccessTokenIsUnfixable (kind: PresetKind) : bool =
+        match kind with
+        | Generic
+        | EntraWorkforce
+        | EntraExternalId
+        | EntraExternalIdWithDomain _
+        | Auth0 -> false
+        | Google -> true
+
     /// Scopes the preset auto-adds on top of the OIDC-spec minimum
     /// (`openid profile email`). Some entries depend on `clientId`
     /// (workforce-Entra's `api://{clientId}/access_as_user`), so the
@@ -159,7 +215,7 @@ module PresetKind =
           ]
         | Google -> [
             "Refresh tokens require the `access_type=offline` authorize parameter — passed via `beginSignInWithExtras`, NOT an `offline_access` scope, which Google ignores. Pair it with `prompt=consent`: Google issues a refresh token only on the first consent for a given client/user unless consent is re-prompted, so a re-authorising user otherwise silently gets none."
-            "Google access tokens are ALWAYS opaque (never JWTs). Unlike Auth0 there is no dashboard audience knob that flips them to a decodable token, so `classifyStoredToken` always sees `OpaqueToken` and defers validity to the server. Server-side bearer validation must therefore validate the `id_token` rather than the access token."
+            "Google access tokens are ALWAYS opaque (never JWTs). Unlike Auth0 there is no dashboard audience knob that flips them to a decodable token, and no deployment-side action changes it — so this preset defaults `BearerToken` to `IdTokenBearer` and the session sends the `id_token`, an ordinary RS256 JWT the server validates against Google's JWKS with `aud` = the client id. Leaving the deployment on `AccessTokenBearer` signs in successfully and then 401s on every API call."
             "Issuer is the fixed `https://accounts.google.com` — no tenant or domain parameter. Restricting sign-in to a Workspace domain rides the `hd` authorize parameter (another `beginSignInWithExtras` extra) and is a hint, not a guarantee: verify the `hd` claim server-side."
             "ValidateIdToken defaults to `Some true` — consumer Google sign-in is a customer-facing boundary, so id_token signature / iss / aud / exp are re-checked on every callback (same argument as the Entra External ID preset)."
           ]
@@ -216,6 +272,22 @@ type OidcAppConfig = {
     /// hand. The coherence validator (and the auth tracer's
     /// per-provider grouping) keys off this field.
     Preset: PresetKind option
+
+    /// Which token this deployment sends as its HTTP bearer. `None`
+    /// (the default) defers to the preset's own answer via
+    /// `PresetKind.defaultBearerToken`, and to `AccessTokenBearer` when
+    /// there is no preset — so a hand-built config is byte-for-byte
+    /// today's behaviour (GP 11) and a preset the SDK has first-class
+    /// knowledge of picks the strategy that actually works for its
+    /// provider without consumer ceremony.
+    ///
+    /// Set explicitly to override the preset: `Some AccessTokenBearer`
+    /// on a Google config (a deployment that validates Google's opaque
+    /// token by some other means) or `Some IdTokenBearer` on a generic
+    /// config (an IdP the SDK has no preset for whose access tokens are
+    /// opaque) are both honoured verbatim. See
+    /// `OidcAppConfig.resolveBearerToken`.
+    BearerToken: BearerTokenKind option
 }
 
 module OidcAppConfig =
@@ -232,12 +304,35 @@ module OidcAppConfig =
         PostLogoutRedirectUri = None
         ValidateIdToken = None
         Preset = None
+        BearerToken = None
     }
+
+    /// The effective bearer strategy for a config: the consumer's
+    /// explicit choice if they made one, else the preset's default if
+    /// there is a preset, else `AccessTokenBearer`.
+    ///
+    /// The precedence is the load-bearing part. A consumer who states a
+    /// strategy is stating it about their own deployment, and knows
+    /// something the preset cannot — that they front Google behind a
+    /// token-exchange proxy, say. The preset's answer is a default, not
+    /// a policy.
+    let resolveBearerToken (cfg: OidcAppConfig) : BearerTokenKind =
+        match cfg.BearerToken with
+        | Some explicitChoice -> explicitChoice
+        | None ->
+            match cfg.Preset with
+            | Some kind -> PresetKind.defaultBearerToken kind
+            | None -> AccessTokenBearer
 
     /// Project to the client-tier `OidcUIConfig` shape consumed by
     /// `OidcAuthUI.OidcShell` and the `OidcClient` orchestration.
     /// Used internally by the AuthUIProvider wiring; consumers
     /// writing `OidcAppConfig` never call this directly.
+    ///
+    /// The bearer strategy is **resolved** here rather than passed
+    /// through: the client tier reads a decided value, so the
+    /// preset-default rule lives in exactly one place and the browser
+    /// orchestration never has to know what a `PresetKind` is.
     let toClientConfig (cfg: OidcAppConfig) : OidcUIConfig = {
         Issuer = cfg.Issuer
         ClientId = cfg.ClientId
@@ -245,4 +340,5 @@ module OidcAppConfig =
         Scopes = cfg.Scopes
         PostLogoutRedirectUri = cfg.PostLogoutRedirectUri
         ValidateIdToken = cfg.ValidateIdToken
+        BearerToken = Some(resolveBearerToken cfg)
     }

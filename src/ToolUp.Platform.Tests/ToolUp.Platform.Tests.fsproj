@@ -735,6 +735,7 @@
         <Compile Include="InProcess\OidcPresetsTests.fs" />
         <Compile Include="InProcess\OidcCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
+        <Compile Include="InProcess\OidcBearerStrategyTests.fs" />
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <!-- Phase 10f — Google Analytics 4 connector: the IDataSource and

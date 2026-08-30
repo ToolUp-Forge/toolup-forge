@@ -141,6 +141,7 @@ let private mkCfg (issuer: string) (clientId: string) (validate: bool option) : 
     Scopes = [ "openid"; "profile"; "email" ]
     PostLogoutRedirectUri = None
     ValidateIdToken = validate
+    BearerToken = None
 }
 
 let private kid = "phase-3ba-test-key"

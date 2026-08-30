@@ -564,6 +564,44 @@ type ToastCentreMode =
 /// Configuration for the OIDC Authorization Code + PKCE flow, used
 /// when `ClientConfig.AuthUI = OidcAuthUI _`. The OidcClient companion
 /// reads this to orchestrate sign-in against an OIDC-compliant issuer.
+/// Which of the two tokens an OIDC sign-in returns is stored and sent
+/// as the session's HTTP `Authorization: Bearer` credential.
+///
+/// The distinction only matters for identity providers whose **access
+/// tokens are opaque** — not JWTs, carrying no claims the deployment's
+/// server-side validator can verify. Such a token signs in
+/// successfully and then 401s on every subsequent API call, because
+/// `OidcAuthProvider`'s bearer path validates a JWT against the
+/// issuer's JWKS and an opaque string has nothing to validate.
+///
+/// The `id_token` is always a JWT (the OIDC spec requires it), is
+/// signed by the same JWKS key set, carries `iss` = the issuer and
+/// `aud` = the client id, and is therefore validated end-to-end by the
+/// unchanged server-side provider. Selecting it as the bearer is what
+/// makes such a provider work.
+type BearerTokenKind =
+    /// Send the `access_token` as the bearer. The OAuth-conventional
+    /// choice and the SDK default — every deployment that does not
+    /// select a strategy behaves exactly as it did before this option
+    /// existed (GP 11).
+    | AccessTokenBearer
+    /// Send the `id_token` as the bearer. For providers whose access
+    /// tokens are opaque with no configuration that makes them
+    /// decodable — the canonical case being Google, which has no
+    /// dashboard audience knob. The server's `AuthConfig.Audience`
+    /// must be the **client id** under this strategy, because that is
+    /// what an id_token's `aud` claim carries.
+    | IdTokenBearer
+
+module BearerTokenKind =
+    /// Short stable label — used in coherence-validator findings and
+    /// auth-tracer lines. Pinned by tests so the surface can't silently
+    /// rename.
+    let label (kind: BearerTokenKind) : string =
+        match kind with
+        | AccessTokenBearer -> "access-token"
+        | IdTokenBearer -> "id-token"
+
 type OidcUIConfig = {
     /// OIDC issuer URL (base). Used for metadata discovery at
     /// `{issuer}/.well-known/openid-configuration`.
@@ -592,6 +630,15 @@ type OidcUIConfig = {
     /// opt-out (equivalent to `None`). The default flips to `true` in a
     /// coordinated minor bump once consumers have adopted.
     ValidateIdToken: bool option
+    /// Which token the session stores and sends as its bearer. `None`
+    /// (the default) resolves to `AccessTokenBearer` — byte-for-byte
+    /// today's behaviour for every existing deployment (GP 11).
+    ///
+    /// Consumers writing `OidcAppConfig` never set this by hand:
+    /// `OidcAppConfig.toClientConfig` resolves the consumer's own
+    /// setting against the preset's default and projects the answer
+    /// here, so the client tier always receives a fully-decided value.
+    BearerToken: BearerTokenKind option
 }
 
 module OidcUIConfig =
@@ -602,7 +649,14 @@ module OidcUIConfig =
         Scopes = [ "openid"; "profile"; "email" ]
         PostLogoutRedirectUri = None
         ValidateIdToken = None
+        BearerToken = None
     }
+
+    /// Resolve the effective bearer strategy for a client-tier config.
+    /// `None` resolves to `AccessTokenBearer` — the GP 11 guarantee
+    /// stated as code, at the tier where behaviour actually happens.
+    let resolveBearerToken (cfg: OidcUIConfig) : BearerTokenKind =
+        cfg.BearerToken |> Option.defaultValue AccessTokenBearer
 
 /// Configuration for the Clerk sign-in flow, used when
 /// `ClientConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`

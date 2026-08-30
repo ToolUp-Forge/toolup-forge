@@ -35,6 +35,7 @@ let private cfg (issuer: string) : OidcUIConfig = {
     Scopes = [ "openid"; "profile"; "email" ]
     PostLogoutRedirectUri = None
     ValidateIdToken = None
+    BearerToken = None
 }
 
 let private nowSeconds = 1_800_000_000.0 // fixed anchor (~2027); tests roll exp around it.
