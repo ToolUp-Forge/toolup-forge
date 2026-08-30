@@ -2397,6 +2397,12 @@ ToolUp.InterPlatform.TemplateCanonical.templateBytes(ToolUp.InterPlatform.CleanR
 ToolUp.InterPlatform.TemplateCanonical.templateDomain : System.String { get }
 ToolUp.InterPlatform.TemplateCanonical.truncate(System.DateTimeOffset) : System.DateTimeOffset
 ToolUp.InterPlatform.TemplateCanonical.version(ToolUp.InterPlatform.CleanRoomTemplate) : System.String
+ToolUp.InterPlatform.TemplateCountersignature (class)
+ToolUp.InterPlatform.TemplateCountersignature.record(ToolUp.InterPlatform.TemplateApprovalRecord) : ToolUp.Platform.CountersignatureRecord
+ToolUp.InterPlatform.TemplateCountersignature.roster(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.TemplateCountersignature.signer(ToolUp.InterPlatform.ITemplateApprovalSigner) : ToolUp.Platform.ICountersignatureSigner
+ToolUp.InterPlatform.TemplateCountersignature.subject(System.String) : ToolUp.Platform.CountersignatureSubject
+ToolUp.InterPlatform.TemplateCountersignature.subjectKind : System.String (literal)
 ToolUp.InterPlatform.TypeScriptClientGen (class)
 ToolUp.InterPlatform.TypeScriptClientGen.emit(ToolUp.InterPlatform.PeerContractSchema) : System.String
 ToolUp.InterPlatform.TypeScriptClientGen.tsType(ToolUp.InterPlatform.PeerTypeRef) : System.String
