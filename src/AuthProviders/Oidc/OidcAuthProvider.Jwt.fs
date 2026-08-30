@@ -56,6 +56,17 @@ type JwtValidationError =
     | TokenNotYetValid
     | MissingExpiry
     | JwksUnavailable of reason: string
+    /// The deployment configured `AuthConfig.ClaimMapping` to project a
+    /// named claim onto `UserId` / `TenantId`, and the validated token
+    /// does not carry that claim as a usable value — absent, not a JSON
+    /// string, empty, or refused by `IdentitySanitiser`. Fail-closed by
+    /// design: a named claim is an operator assertion that the IdP mints
+    /// it, so falling back to `sub` would silently hand the deployment a
+    /// different identity for the same human. The token itself is
+    /// perfectly valid; only the mapping could not be honoured, which is
+    /// why the message names the claim and the reason rather than
+    /// reporting a signature or expiry problem.
+    | MappedClaimUnusable of claim: string * reason: string
 
 module JwtValidationError =
     let toMessage =
@@ -73,6 +84,8 @@ module JwtValidationError =
         | TokenNotYetValid -> "Token is not yet valid"
         | MissingExpiry -> "Token has no exp claim"
         | JwksUnavailable r -> $"JWKS unavailable: {r}"
+        | MappedClaimUnusable(claim, reason) ->
+            $"AuthConfig.ClaimMapping names the claim '{claim}', but the validated token cannot supply it: {reason}. The token is otherwise valid — signature, issuer, audience and expiry all passed. This is fail-closed by design: naming a claim asserts the IdP mints it, so falling back to `sub` would silently change the identity this deployment sees. Either configure the IdP to emit '{claim}', or remove it from AuthConfig.ClaimMapping."
 
 // ─── JWT parsing ─────────────────────────────────────────────────────
 

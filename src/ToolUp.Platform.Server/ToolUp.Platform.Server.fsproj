@@ -710,6 +710,7 @@
         <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
         <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
         <Compile Include="Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
         <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
         <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
         <!-- Phase 549 — direct-add existence-proof preflight. Anywhere

@@ -548,6 +548,7 @@ let private oidcTests =
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
             PreferOidWhenPresent = None
+            ClaimMapping = None
         }
 
         OidcAuthProvider.fromConfigWith client None config
@@ -567,6 +568,7 @@ let private oidcTests =
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
             PreferOidWhenPresent = None
+            ClaimMapping = None
         }
 
         OidcAuthProvider.fromConfigWith client None config
@@ -632,6 +634,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -666,6 +669,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -896,6 +900,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256; RS384 ]
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -923,6 +928,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS512 ]
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -953,6 +959,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ PS256 ]
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -982,6 +989,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256; ES256 ]
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -1014,6 +1022,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = Some [ RS256 ]
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let p = OidcAuthProvider.fromConfigWith client None config
@@ -1120,6 +1129,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let hardening = {
@@ -1156,6 +1166,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let hardening = {
@@ -1189,6 +1200,7 @@ let private oidcTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let hardening = {
@@ -1242,6 +1254,7 @@ let private oidcMetricsTests =
         ClockSkewSeconds = None
         AcceptedAlgorithms = None
         PreferOidWhenPresent = None
+        ClaimMapping = None
     }
 
     testList "OidcAuthProvider — metrics emission" [
@@ -1377,6 +1390,7 @@ let private oidcMockIssuerContract =
             ClockSkewSeconds = None
             AcceptedAlgorithms = None
             PreferOidWhenPresent = None
+            ClaimMapping = None
         }
 
         let provider = OidcAuthProvider.fromConfigWith (new HttpClient()) None config
@@ -1415,6 +1429,7 @@ let private oidcConstructionTests =
         ClockSkewSeconds = None
         AcceptedAlgorithms = None
         PreferOidWhenPresent = None
+        ClaimMapping = None
     }
 
     testList "OidcAuthProvider construction" [
@@ -1483,6 +1498,24 @@ let private fromEnvTests =
 
     let oidcStub: AuthProvider.OidcAuthBuilder = fun _ _ -> marker
 
+    /// Run `fromEnv` through a builder that captures the `AuthConfig` it
+    /// was handed. Asserting on the CONFIG rather than on the returned
+    /// provider is what lets these cases pin the env-to-config mapping
+    /// without standing up an IdP.
+    let capturedConfig () =
+        let mutable captured: AuthConfig option = None
+
+        let capturing: AuthProvider.OidcAuthBuilder =
+            fun _ config ->
+                captured <- Some config
+                marker
+
+        AuthProvider.fromEnv silentLogger capturing |> ignore
+
+        match captured with
+        | Some config -> config
+        | None -> failtest "the oidc builder was never invoked — fromEnv did not take the oidc branch"
+
     testSequenced (
         testList "AuthProvider.fromEnv" [
             testCase "unset TOOLUP_AUTH_MODE falls back to the dev HeaderAuthProvider"
@@ -1515,6 +1548,96 @@ let private fromEnvTests =
                     Expect.throwsT<InvalidOperationException>
                         (fun () -> AuthProvider.fromEnv silentLogger oidcStub |> ignore)
                         "a typo'd mode must refuse rather than boot in header-trust")
+
+            // ─── Claim-mapping env wiring ────────────────────────────
+
+            testCase "neither claim-mapping variable set leaves ClaimMapping = None"
+            <| fun () ->
+                // GP 11 at the composition root: an existing env-composed
+                // deployment must build the same `AuthConfig` it always
+                // did. `None` (not `Some ClaimMapping.none`) is the
+                // assertion, because only `None` skips the post-validation
+                // payload re-read entirely.
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                        "TOOLUP_OIDC_USER_ID_CLAIM", None
+                        "TOOLUP_OIDC_TENANT_ID_CLAIM", None
+                    ]
+                    (fun () -> Expect.equal (capturedConfig ()).ClaimMapping None "no mapping is configured")
+
+            testCase "TOOLUP_OIDC_USER_ID_CLAIM / _TENANT_ID_CLAIM build the mapping"
+            <| fun () ->
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                        "TOOLUP_OIDC_USER_ID_CLAIM", Some "oid"
+                        "TOOLUP_OIDC_TENANT_ID_CLAIM", Some "tid"
+                    ]
+                    (fun () ->
+                        Expect.equal
+                            (capturedConfig ()).ClaimMapping
+                            (Some {
+                                UserIdClaim = Some "oid"
+                                TenantIdClaim = Some "tid"
+                            })
+                            "both variables reach AuthConfig.ClaimMapping")
+
+            testCase "either claim-mapping variable alone is enough"
+            <| fun () ->
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                        "TOOLUP_OIDC_USER_ID_CLAIM", Some "oid"
+                        "TOOLUP_OIDC_TENANT_ID_CLAIM", None
+                    ]
+                    (fun () ->
+                        Expect.equal
+                            (capturedConfig ()).ClaimMapping
+                            (Some {
+                                UserIdClaim = Some "oid"
+                                TenantIdClaim = None
+                            })
+                            "a UserId-only mapping is a legitimate configuration")
+
+            testCase "a whitespace-only claim variable is treated as unset"
+            <| fun () ->
+                // A claim literally named " " is minted by no IdP, so
+                // honouring it would fail every request closed with a
+                // message about a claim the operator never meant to name.
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                        "TOOLUP_OIDC_USER_ID_CLAIM", Some "   "
+                        "TOOLUP_OIDC_TENANT_ID_CLAIM", None
+                    ]
+                    (fun () ->
+                        Expect.equal
+                            (capturedConfig ()).ClaimMapping
+                            None
+                            "an empty variable does not become a claim name")
+
+            testCase "a claim name is trimmed"
+            <| fun () ->
+                withEnv
+                    [
+                        "TOOLUP_AUTH_MODE", Some "oidc"
+                        "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
+                        "TOOLUP_OIDC_USER_ID_CLAIM", Some " oid "
+                        "TOOLUP_OIDC_TENANT_ID_CLAIM", None
+                    ]
+                    (fun () ->
+                        Expect.equal
+                            (capturedConfig ()).ClaimMapping
+                            (Some {
+                                UserIdClaim = Some "oid"
+                                TenantIdClaim = None
+                            })
+                            "surrounding whitespace in an env value never reaches the claim lookup")
         ]
     )
 
@@ -1615,6 +1738,491 @@ let private oidcAudiencePreflightTests =
         ]
     )
 
+// ─── Claim-mapping seam (AuthConfig.ClaimMapping) ────────────────────
+//
+// `AuthConfig.ClaimMapping` names the claims projected onto
+// `AuthenticatedUser.UserId` / `TenantId` in place of the built-in
+// `sub`. It is the substrate generalisation of the per-IdP claim-
+// remapping decorator the deprecated Entra companion carries, and it is
+// deliberately STRICTER than that decorator: the companion's chain
+// treats a refused or absent claim as "fall through to the next
+// candidate", whereas the seam rejects.
+//
+// This pack asserts three things, and the third is the one that would
+// otherwise rot:
+//
+//   1. **GP 11** — `ClaimMapping = None` leaves the resolved identity
+//      byte-identical, and the payload is not even re-read.
+//   2. **Fail-closed semantics** across every way a named claim can be
+//      unusable: absent, non-string (three JSON kinds), empty, and
+//      refused by `IdentitySanitiser`. Each is asserted to reject AND
+//      to name the claim, because a rejection with an unattributable
+//      message is what turns a five-minute config fix into an outage.
+//   3. **Parity with the companion**, driven through BOTH shipped
+//      entry points over the SAME fixture tokens rather than through a
+//      re-implementation of either. Parity is claimed where the two
+//      agree (a token carrying the claim) and the DIVERGENCE is pinned
+//      where they deliberately differ (a token that does not) — a bare
+//      "these are equal" assertion would have to be either false or
+//      scoped to nothing, and pinning the divergence is what makes the
+//      companion's eventual removal a reviewable step rather than a
+//      behavioural surprise.
+
+module private ClaimMappingFixture =
+    /// A token in the shape both mappings re-read: real base64url
+    /// segments, junk signature. Neither `applyValidatedClaimMapping`
+    /// nor the companion's `applyValidatedClaims` verifies anything —
+    /// that already happened upstream — so signing it would test
+    /// nothing and would obscure that this is a post-validation re-read.
+    let token (claims: (string * string) list) =
+        let escape (s: string) =
+            s
+            |> String.collect (fun ch ->
+                match ch with
+                | '"' -> "\\\""
+                | '\\' -> "\\\\"
+                | c when Char.IsControl c -> sprintf "\\u%04x" (int c)
+                | c -> string c)
+
+        let body =
+            claims
+            |> List.map (fun (k, v) -> sprintf "\"%s\":\"%s\"" k (escape v))
+            |> String.concat ","
+
+        let b64 (bytes: byte[]) =
+            Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        let header = b64 (Encoding.UTF8.GetBytes """{"alg":"RS256","typ":"JWT"}""")
+        let payload = b64 (Encoding.UTF8.GetBytes $"{{{body}}}")
+        $"{header}.{payload}.not-a-signature"
+
+    /// A token whose payload carries a claim of a NON-string JSON kind.
+    /// Built separately because the string-escaping shape above cannot
+    /// express it, and "present but not a string" is a distinct
+    /// rejection reason the provider reports differently.
+    let tokenRawJson (payloadJson: string) =
+        let b64 (bytes: byte[]) =
+            Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        let header = b64 (Encoding.UTF8.GetBytes """{"alg":"RS256","typ":"JWT"}""")
+        $"{header}.{b64 (Encoding.UTF8.GetBytes payloadJson)}.not-a-signature"
+
+    /// The inner provider's already-sanitised output — the value the
+    /// COMPANION falls back to and the seam does not.
+    let innerUser: AuthenticatedUser = {
+        UserId = "inner-sanitised-subject"
+        DisplayName = "Inner Display Name"
+        Email = Some "inner@example.com"
+        TenantId = Some "inner-tenant"
+        Roles = []
+    }
+
+    /// The Entra mapping, expressed as a `ClaimMapping`. This IS the
+    /// migration: `oid` -> UserId, `tid` -> TenantId, on the generic
+    /// provider, with no companion in the graph.
+    let entraShaped: ClaimMapping = {
+        UserIdClaim = Some "oid"
+        TenantIdClaim = Some "tid"
+    }
+
+    let seamMapped (mapping: ClaimMapping) (claims: (string * string) list) =
+        OidcAuthProvider.applyValidatedClaimMapping mapping (token claims) innerUser
+
+    let companionMapped (claims: (string * string) list) =
+        EntraExternalIdAuthProvider.applyValidatedClaims (token claims) innerUser
+
+let private oidcClaimMappingTests =
+    let mkMappedProvider (key: OidcFixture.IssuerKey) (mapping: ClaimMapping option) =
+        let client =
+            new HttpClient(new StubHttpHandler(Map.ofList [ key.JwksUrl, OidcFixture.buildJwks key ]))
+
+        let config = {
+            Issuer = None
+            Audience = None
+            KeySource = JwksExplicit key.JwksUrl
+            TokenLocation = BearerHeader
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None
+            PreferOidWhenPresent = None
+            ClaimMapping = mapping
+        }
+
+        OidcAuthProvider.fromConfigWith client None config
+
+    /// Every hostile shape `IdentitySanitiser` refuses, as the seam must
+    /// see them: a mapped claim becomes a storage-scope container name
+    /// exactly as `sub` does, so it is held to the identical rule.
+    let hostileClaimValues = [
+        "../../etc", "parent-directory traversal"
+        "..\\..\\secrets", "backslash traversal"
+        "tenants/other/secrets", "embedded path separator"
+        "CON", "Windows reserved device name"
+        ".hidden", "leading period"
+        "has space", "embedded whitespace"
+        String.replicate 300 "a", "over-length identifier"
+    ]
+
+    /// Identifiers a real deployment actually uses — these must survive
+    /// the seam byte-for-byte, or the mapping is a naming policy rather
+    /// than a projection.
+    let benignClaimValues = [
+        "9f1c2e7a-4b3d-4e5f-8a90-1122334455ab", "GUID-shaped Entra `oid`"
+        "0123abcd4567", "opaque hex id"
+        "seller-eu-1", "hyphenated regional id"
+        "peer_2", "underscored id"
+        "tenant.eu.buyer", "dotted hierarchical id"
+    ]
+
+    testList "OidcAuthProvider — claim mapping (AuthConfig.ClaimMapping)" [
+        // ─── GP 11 — the unmapped path is untouched ──────────────────
+
+        testCaseAsync "no mapping configured resolves `sub` exactly as before"
+        <| async {
+            let key = OidcFixture.mkKey ()
+            let p = mkMappedProvider key None
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "alice"
+                    "oid", box "alice-object-id"
+                    "tid", box "alice-tenant"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user ->
+                Expect.equal user.UserId "alice" "UserId still comes from `sub`"
+
+                Expect.equal
+                    user.TenantId
+                    None
+                    "TenantId is still unprojected — an `oid`/`tid`-bearing token changes nothing without a mapping"
+        }
+
+        testCase "an explicitly-supplied empty mapping is a no-op"
+        <| fun () ->
+            // `ClaimMapping.none` and `ClaimMapping = None` must agree,
+            // so a builder that starts from `none` and sets nothing does
+            // not accidentally acquire fail-closed behaviour.
+            match
+                OidcAuthProvider.applyValidatedClaimMapping
+                    ClaimMapping.none
+                    (ClaimMappingFixture.token [])
+                    ClaimMappingFixture.innerUser
+            with
+            | Ok user -> Expect.equal user ClaimMappingFixture.innerUser "the user is returned unchanged"
+            | Error(claim, reason) -> failtestf "expected a no-op; got a rejection on '%s': %s" claim reason
+
+        // ─── The happy path, end to end through the real provider ────
+
+        testCaseAsync "a configured `oid` mapping projects it onto UserId through the full validation pipeline"
+        <| async {
+            let key = OidcFixture.mkKey ()
+
+            let p =
+                mkMappedProvider
+                    key
+                    (Some {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = Some "tid"
+                    })
+
+            let token =
+                OidcFixture.mintRs256 key [
+                    "sub", box "pairwise-pseudonymous-subject"
+                    "oid", box "stable-object-id"
+                    "tid", box "home-tenant"
+                    "name", box "Alice"
+                    "exp", futureExp ()
+                ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user ->
+                Expect.equal user.UserId "stable-object-id" "UserId comes from the mapped `oid`, not `sub`"
+                Expect.equal user.TenantId (Some "home-tenant") "TenantId comes from the mapped `tid`"
+                Expect.equal user.DisplayName "Alice" "unmapped claims are resolved exactly as before"
+        }
+
+        testCaseAsync "a mapping naming `sub` reproduces the default identity"
+        <| async {
+            // The degenerate case is worth pinning: it proves the seam
+            // is a projection over claim NAMES and not a special case
+            // for `oid`.
+            let key = OidcFixture.mkKey ()
+
+            let p =
+                mkMappedProvider
+                    key
+                    (Some {
+                        UserIdClaim = Some "sub"
+                        TenantIdClaim = None
+                    })
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Error e -> failtestf "Expected Ok; got Error: %s" e
+            | Ok user -> Expect.equal user.UserId "alice" "mapping `sub` onto UserId is the identity projection"
+        }
+
+        // ─── Fail-closed: every way a named claim can be unusable ────
+
+        testCaseAsync "a validated token missing the mapped claim is REJECTED, not fallen back"
+        <| async {
+            // The whole decision this phase records. The token is
+            // otherwise perfect — signature, exp, `sub` all fine — so a
+            // fallback implementation would return `Ok "alice"` here and
+            // the deployment would silently see a different identity.
+            let key = OidcFixture.mkKey ()
+
+            let p =
+                mkMappedProvider
+                    key
+                    (Some {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = None
+                    })
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+
+            match! p.ValidateRequest(bearerCtx token) with
+            | Ok user -> failtestf "expected a fail-closed rejection; got Ok with UserId '%s'" user.UserId
+            | Error message ->
+                Expect.stringContains message "oid" "the rejection names the claim that could not be honoured"
+
+                Expect.stringContains
+                    message
+                    "absent"
+                    "the rejection says the claim was absent rather than reporting a generic token failure"
+        }
+
+        testCaseAsync "GetUser degrades to anonymous when the mapped claim is missing"
+        <| async {
+            // `GetUser` is the lenient path: every validation failure
+            // becomes anonymous rather than an error. A mapping failure
+            // must ride the SAME path — an unmapped-but-authenticated
+            // user leaking through the lenient entry point would defeat
+            // the fail-closed decision on exactly the surfaces that use
+            // it.
+            let key = OidcFixture.mkKey ()
+
+            let p =
+                mkMappedProvider
+                    key
+                    (Some {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = None
+                    })
+
+            let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
+            let! user = p.GetUser(bearerCtx token)
+
+            Expect.isTrue
+                (AuthenticatedUser.isAnonymous user)
+                "a token whose mapping cannot be honoured yields no identity on the lenient path"
+        }
+
+        testCase "a mapped claim of a non-string JSON kind is rejected, naming the kind"
+        <| fun () ->
+            let mapping = {
+                UserIdClaim = Some "oid"
+                TenantIdClaim = None
+            }
+
+            let cases = [
+                """{"sub":"alice","oid":12345}""", "Number"
+                """{"sub":"alice","oid":{"nested":"object"}}""", "Object"
+                """{"sub":"alice","oid":["a","b"]}""", "Array"
+                """{"sub":"alice","oid":true}""", "True"
+            ]
+
+            for payload, expectedKind in cases do
+                match
+                    OidcAuthProvider.applyValidatedClaimMapping
+                        mapping
+                        (ClaimMappingFixture.tokenRawJson payload)
+                        ClaimMappingFixture.innerUser
+                with
+                | Ok user -> failtestf "expected rejection for a %s claim; got UserId '%s'" expectedKind user.UserId
+                | Error(claim, reason) ->
+                    Expect.equal claim "oid" "the failure is attributed to the mapped claim"
+
+                    Expect.stringContains
+                        reason
+                        expectedKind
+                        $"the reason names the JSON kind actually found ({expectedKind})"
+
+        testCase "a mapped claim present but empty is rejected"
+        <| fun () ->
+            match
+                ClaimMappingFixture.seamMapped
+                    {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = None
+                    }
+                    [ "oid", "" ]
+            with
+            | Ok user -> failtestf "expected rejection for an empty claim; got UserId '%s'" user.UserId
+            | Error(claim, reason) ->
+                Expect.equal claim "oid" "the failure is attributed to the mapped claim"
+                Expect.stringContains reason "empty" "the reason distinguishes empty from absent"
+
+        testCase "a mapped claim refused by IdentitySanitiser is rejected, never applied raw"
+        <| fun () ->
+            // Two separate claims, and the second is the important one:
+            // rejecting is necessary but not sufficient — a seam that
+            // rejected the request AFTER writing the raw value onto the
+            // user would still be a traversal.
+            for value, description in hostileClaimValues do
+                Expect.isFalse
+                    (IdentitySanitiser.sanitiseScopeId value |> Result.isOk)
+                    $"corpus row '{description}' must be one IdentitySanitiser refuses"
+
+                match
+                    ClaimMappingFixture.seamMapped
+                        {
+                            UserIdClaim = Some "oid"
+                            TenantIdClaim = None
+                        }
+                        [ "oid", value ]
+                with
+                | Ok user -> failtestf "expected rejection for a %s; got UserId '%s'" description user.UserId
+                | Error(claim, _) -> Expect.equal claim "oid" $"the {description} rejection names the mapped claim"
+
+        testCase "a well-formed mapped claim survives byte-for-byte"
+        <| fun () ->
+            // The negative control for the row above: without it, a seam
+            // that had broken and started refusing EVERYTHING would pass
+            // every hostile assertion.
+            for value, description in benignClaimValues do
+                match
+                    ClaimMappingFixture.seamMapped
+                        {
+                            UserIdClaim = Some "oid"
+                            TenantIdClaim = Some "tid"
+                        }
+                        [ "oid", value; "tid", value ]
+                with
+                | Error(claim, reason) -> failtestf "a %s was refused on '%s': %s" description claim reason
+                | Ok user ->
+                    Expect.equal user.UserId value $"a well-formed {description} reaches UserId unchanged"
+                    Expect.equal user.TenantId (Some value) $"a well-formed {description} reaches TenantId unchanged"
+
+        testCase "a failing TenantId mapping rejects even when the UserId mapping succeeded"
+        <| fun () ->
+            // Partial application is not a state the seam may reach: a
+            // user carrying a mapped UserId and an unmapped TenantId is
+            // exactly the half-configured identity fail-closed exists to
+            // refuse.
+            match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped [ "oid", "stable-object-id" ] with
+            | Ok user -> failtestf "expected rejection; got a partially-mapped user (UserId '%s')" user.UserId
+            | Error(claim, _) -> Expect.equal claim "tid" "the failure is attributed to the claim that was missing"
+
+        // ─── Parity with the deprecated companion ────────────────────
+
+        testCase "PARITY — the seam reproduces the companion's mapping on every claim-bearing vector"
+        <| fun () ->
+            // Driven through BOTH shipped entry points over the same
+            // fixture tokens. The companion is the oracle; the seam is
+            // the substrate replacement for it.
+            let vectors =
+                [
+                    [ "oid", "entra-object-id"; "tid", "entra-tenant" ], "the companion's own control vector"
+                    [ "oid", "user-1"; "tid", "tenant-1"; "sub", "pairwise-subject" ],
+                    "`oid` wins over `sub` on both sides"
+                ]
+                @ (benignClaimValues
+                   |> List.map (fun (value, description) -> [ "oid", value; "tid", value ], description))
+
+            for claims, description in vectors do
+                let companion = ClaimMappingFixture.companionMapped claims
+
+                match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped claims with
+                | Error(claim, reason) ->
+                    failtestf "seam refused the parity vector (%s) on '%s': %s" description claim reason
+                | Ok seam ->
+                    Expect.equal seam.UserId companion.UserId $"UserId parity on {description}"
+                    Expect.equal seam.TenantId companion.TenantId $"TenantId parity on {description}"
+
+        testCase "PARITY — the companion's own control vector is genuinely mapped on both sides"
+        <| fun () ->
+            // Without this, a parity assertion between two mappings that
+            // had BOTH stopped applying claims would pass: they would
+            // agree on the inner user.
+            let claims = [ "oid", "entra-object-id"; "tid", "entra-tenant" ]
+
+            Expect.notEqual
+                (ClaimMappingFixture.companionMapped claims).UserId
+                ClaimMappingFixture.innerUser.UserId
+                "the companion genuinely overrides the inner UserId"
+
+            match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped claims with
+            | Error(claim, reason) -> failtestf "seam refused the control vector on '%s': %s" claim reason
+            | Ok seam ->
+                Expect.equal seam.UserId "entra-object-id" "the seam genuinely overrides the inner UserId"
+                Expect.equal seam.TenantId (Some "entra-tenant") "the seam genuinely overrides the inner TenantId"
+
+        testCase "DIVERGENCE — the seam is fail-closed exactly where the companion falls back"
+        <| fun () ->
+            // The one deliberate behavioural difference, pinned rather
+            // than left to be discovered at the companion's removal.
+            // Two token shapes the companion accepts and the seam does
+            // not, and in BOTH the companion's answer is the inner
+            // user — i.e. a DIFFERENT identity from the one the operator
+            // asked for, returned as a success.
+            let divergent = [
+                [ "sub", "pairwise-subject" ], "the token carries no `oid` at all"
+                [ "oid", "../../etc"; "sub", "pairwise-subject" ], "the `oid` is refused by IdentitySanitiser"
+            ]
+
+            for claims, description in divergent do
+                let companion = ClaimMappingFixture.companionMapped claims
+
+                Expect.notEqual
+                    companion.UserId
+                    "../../etc"
+                    $"the companion never applies a refused claim raw ({description})"
+
+                match
+                    ClaimMappingFixture.seamMapped
+                        {
+                            UserIdClaim = Some "oid"
+                            TenantIdClaim = None
+                        }
+                        claims
+                with
+                | Ok user ->
+                    failtestf
+                        "the seam must reject where the companion falls back (%s); got UserId '%s'"
+                        description
+                        user.UserId
+                | Error(claim, _) -> Expect.equal claim "oid" $"the rejection names `oid` ({description})"
+
+        testCase "the seam never resolves an identity the companion would have refused"
+        <| fun () ->
+            // The safety direction of the divergence, stated as a
+            // property rather than a case list: for every hostile value,
+            // whatever each side returns, neither ever yields the raw
+            // value as the effective identity.
+            for value, description in hostileClaimValues do
+                let companion = ClaimMappingFixture.companionMapped [ "oid", value ]
+
+                Expect.notEqual companion.UserId value $"companion never yields a raw {description}"
+
+                match
+                    ClaimMappingFixture.seamMapped
+                        {
+                            UserIdClaim = Some "oid"
+                            TenantIdClaim = None
+                        }
+                        [ "oid", value ]
+                with
+                | Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId
+                | Error _ -> ()
+    ]
+
 // ─── Aggregated ─────────────────────────────────────────────────────
 
 let tests =
@@ -1628,4 +2236,5 @@ let tests =
         oidcMockIssuerContract
         oidcStaleJwksTests
         oidcAudiencePreflightTests
+        oidcClaimMappingTests
     ]

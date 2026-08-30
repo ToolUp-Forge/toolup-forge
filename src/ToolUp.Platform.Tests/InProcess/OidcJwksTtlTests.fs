@@ -288,6 +288,7 @@ let private ttlTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let hardening = {
@@ -311,6 +312,7 @@ let private ttlTests =
                 ClockSkewSeconds = None
                 AcceptedAlgorithms = None
                 PreferOidWhenPresent = None
+                ClaimMapping = None
             }
 
             let hardening = {

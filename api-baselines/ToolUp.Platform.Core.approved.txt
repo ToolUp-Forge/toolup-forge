@@ -1773,9 +1773,10 @@ ToolUp.Platform.Auth+RequestContextModule (class)
 ToolUp.Platform.Auth+RequestContextModule.pkg(System.Object) : ToolUp.Platform.Auth+RequestContext
 ToolUp.Platform.Auth+RequestContextModule.value(ToolUp.Platform.Auth+RequestContext) : System.Object
 ToolUp.Platform.AuthConfig (class)
-ToolUp.Platform.AuthConfig..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.KeySource, ToolUp.Platform.TokenLocation, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JwsAlgorithm]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])
+ToolUp.Platform.AuthConfig..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.KeySource, ToolUp.Platform.TokenLocation, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JwsAlgorithm]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClaimMapping])
 ToolUp.Platform.AuthConfig.AcceptedAlgorithms : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JwsAlgorithm]] { get }
 ToolUp.Platform.AuthConfig.Audience : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuthConfig.ClaimMapping : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClaimMapping] { get }
 ToolUp.Platform.AuthConfig.ClockSkewSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Platform.AuthConfig.Issuer : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AuthConfig.KeySource : ToolUp.Platform.KeySource { get }
@@ -2209,6 +2210,13 @@ ToolUp.Platform.ClaimBearerConfig (class)
 ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
 ToolUp.Platform.ClaimBearerConfig.DefaultUseLimit : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.ClaimMapping (class)
+ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ClaimMapping.TenantIdClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ClaimMapping.UserIdClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ClaimMappingModule (class)
+ToolUp.Platform.ClaimMappingModule.isEmpty(ToolUp.Platform.ClaimMapping) : System.Boolean
+ToolUp.Platform.ClaimMappingModule.none : ToolUp.Platform.ClaimMapping { get }
 ToolUp.Platform.ClassificationLevel (class)
 ToolUp.Platform.ClassificationLevel.Confidential : ToolUp.Platform.ClassificationLevel { get }
 ToolUp.Platform.ClassificationLevel.Financial : ToolUp.Platform.ClassificationLevel { get }
@@ -2774,6 +2782,8 @@ ToolUp.Platform.ConfigKeys+Names.oauthRefresher : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcAudience : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcIssuer : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcPreflightTimeoutMs : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.oidcTenantIdClaim : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.oidcUserIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.peerRoutePrefixes : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformKnowledgeBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformSurfaces : System.String (literal)
