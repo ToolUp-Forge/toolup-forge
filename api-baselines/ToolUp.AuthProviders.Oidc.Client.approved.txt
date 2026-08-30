@@ -133,6 +133,7 @@ ToolUp.AuthProviders.Oidc.OidcPresets.entraExternalId(System.String, System.Stri
 ToolUp.AuthProviders.Oidc.OidcPresets.entraExternalIdWithDomain(System.String, System.String, System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcPresets.entraWorkforce(System.String, System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcPresets.generic(System.String, System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.google(System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcRegister (class)
 ToolUp.AuthProviders.Oidc.OidcRegister.handler : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]] { get }
 ToolUp.AuthProviders.Oidc.OidcRegister.signOutHandler(ToolUp.Platform.OidcUIConfig, Microsoft.FSharp.Core.Unit) : System.Void

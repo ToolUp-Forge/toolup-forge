@@ -260,6 +260,80 @@ Client.run
     modules
 ```
 
+#### Provider presets
+
+`OidcPresets` returns a fully-formed `OidcAppConfig` per known identity provider, so the per-provider knobs a consumer would otherwise hand-roll (and get wrong once) live as code. Each preset's descriptive metadata is derived from its `PresetKind` — `PresetKind.label` / `.issuerForm` / `.autoAddedScopes` / `.notes` / `.expectsDecodableAccessToken` — and the `OidcCoherenceValidator` renders it at preflight.
+
+| Preset | Inputs | What the preset encodes |
+|---|---|---|
+| `OidcPresets.generic` | `issuer + clientId + redirectUri` | No provider quirks. Spec-minimum scopes (`openid profile email`); `ValidateIdToken = Some true` (no provider knowledge to judge the boundary by, so the safer default). For Okta, Keycloak, custom OIDC. |
+| `OidcPresets.entraWorkforce` | `tenantId + clientId + redirectUri` | Workforce v2.0 issuer; the load-bearing `api://{clientId}/access_as_user` scope; `offline_access`. |
+| `OidcPresets.entraExternalId` | `tenantSubdomain + clientId + redirectUri` | CIAM `*.ciamlogin.com` v2.0 issuer; `offline_access`; `ValidateIdToken = Some true`. |
+| `OidcPresets.entraExternalIdWithDomain` | `tenantSubdomain + customDomain + clientId + redirectUri` | As above, with a custom CIAM domain replacing the `*.ciamlogin.com` host. |
+| `OidcPresets.auth0` | `domain + clientId + redirectUri` | Tenant URL **with** trailing slash (Auth0's `iss` claim shape); `offline_access`. Tokens stay opaque unless an `audience` extra parameter is passed. |
+| `OidcPresets.google` | `clientId + redirectUri` | Fixed issuer `https://accounts.google.com` — no tenant parameter. Spec-minimum scopes; `ValidateIdToken = Some true`. Refresh tokens ride the `access_type=offline` **authorize parameter**, not an `offline_access` scope. Access tokens are always opaque. |
+
+##### Worked example — Google sign-in
+
+Google needs no tenant, region, or custom-domain input, so the preset takes only the two values the app registration gives you:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders.Oidc.OidcAppConfig
+open ToolUp.AuthProviders.Oidc
+open ToolUp.AuthProviders.Oidc.OidcRegister
+
+// One declaration; both sides project from it.
+let googleCfg: OidcAppConfig =
+    OidcPresets.google
+        "1234567890-abcdefg.apps.googleusercontent.com"   // OAuth 2.0 Client ID
+        "https://app.example.com/auth/callback"           // an Authorised redirect URI
+
+Client.run
+    { ClientConfig.defaults with
+        AppName = "MyApp"
+        AuthUI = OidcAuthUI(OidcAppConfig.toClientConfig googleCfg)
+        Handlers = {
+            ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ OidcRegister.handler ]
+        } }
+    modules
+```
+
+Server side, bind the issuer and audience from the same value rather than restating them:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders
+
+let authConfig = {
+    Issuer = Some googleCfg.Issuer          // https://accounts.google.com
+    Audience = Some googleCfg.Audience      // the OAuth client id
+    KeySource = JwksDiscovery googleCfg.Issuer
+    TokenLocation = BearerHeader
+    ClockSkewSeconds = None
+    AcceptedAlgorithms = None               // RS256 — what Google signs with
+}
+
+ServerApp.empty
+|> ServerApp.withAuth (OidcAuthProvider.fromConfig (Some logger) authConfig)
+|> ServerApp.withConfigValidator (OidcCoherenceValidator googleCfg :> IConfigValidator)
+|> ...
+```
+
+**Refresh tokens are an authorize-parameter concern.** Google ignores `offline_access`, which is why the preset does not request it. Ask for offline access explicitly, via the extras channel:
+
+```fsharp skip=fragment
+// `prompt=consent` matters as much as `access_type=offline`: Google issues a
+// refresh token only on a user's FIRST consent for a given client, so a
+// re-authorising user silently gets none without a consent re-prompt.
+OidcClient.beginSignInWithExtras
+    (OidcAppConfig.toClientConfig googleCfg)
+    [ "access_type", "offline"; "prompt", "consent" ]
+```
+
+The same channel carries `hd` for Workspace-domain restriction (`[ "hd", "example.com" ]`) — treat it as a hint that shapes the account chooser, and verify the `hd` claim server-side rather than trusting the parameter.
+
+**Caveat: Google access tokens are always opaque.** Unlike Auth0 — where a dashboard-configured API audience flips the access token to a decodable JWT — Google has no such knob, so `PresetKind.expectsDecodableAccessToken Google` is `false` and `classifyStoredToken` always reports `OpaqueToken`. The `authConfig` above therefore validates the **`id_token`**, which is a real JWT the client sends as its bearer; a follow-up SDK change adds a first-class opaque-token bearer strategy so this is a declared choice rather than a wiring convention. Until then, keep `ValidateIdToken = Some true` (the preset's default) so a tampered id_token is caught at the callback as well as at the server.
+
 The sign-in button in the app's header invokes the OIDC flow:
 1. Redirect to `{Issuer}/authorize` with PKCE challenge.
 2. User authenticates at the issuer.

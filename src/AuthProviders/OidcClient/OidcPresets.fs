@@ -58,6 +58,17 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 //                       support; issuer is the tenant URL (with
 //                       trailing slash, per Auth0's `iss` claim
 //                       shape).
+//
+//   google            — Google (consumer accounts + Workspace).
+//                       Fixed issuer `https://accounts.google.com`
+//                       — no tenant parameter to get wrong. Scope
+//                       set is the OIDC-spec minimum: Google's
+//                       refresh token comes from the
+//                       `access_type=offline` AUTHORIZE PARAMETER,
+//                       not from an `offline_access` scope, so the
+//                       preset documents the extras rather than
+//                       auto-adding a scope Google ignores. Access
+//                       tokens are always opaque.
 
 let private genericDefaultScopes = [ "openid"; "profile"; "email" ]
 
@@ -71,6 +82,11 @@ let private workforceEntraScopes (clientId: string) = [
 
 let private externalIdDefaultScopes = [ "openid"; "profile"; "email"; "offline_access" ]
 let private auth0DefaultScopes = [ "openid"; "profile"; "email"; "offline_access" ]
+
+/// Google's issuer is a fixed constant — there is no tenant,
+/// subdomain, or region variant to parameterise, which is why
+/// `google` takes only `clientId` + `redirectUri`.
+let private googleIssuer = "https://accounts.google.com"
 
 /// Generic OIDC preset. Explicit issuer; the SDK applies no quirks.
 /// For IdPs the SDK doesn't yet have first-class provider knowledge
@@ -184,4 +200,49 @@ let auth0 (domain: string) (clientId: string) (redirectUri: string) : OidcAppCon
     PostLogoutRedirectUri = None
     ValidateIdToken = None
     Preset = Some Auth0
+}
+
+/// Google preset (consumer Google accounts and Workspace). Takes no
+/// tenant parameter — the issuer is the fixed constant
+/// `https://accounts.google.com`, so the whole class of
+/// wrong-issuer misconfiguration the Entra presets guard against
+/// cannot arise here. Scope set is the OIDC-spec minimum
+/// (`openid profile email`).
+///
+/// Two Google-specific facts the preset encodes as knowledge rather
+/// than as behaviour:
+///
+/// 1. **Refresh tokens are an authorize-parameter concern, not a
+///    scope.** Google ignores `offline_access`; a refresh token is
+///    issued only when the authorize request carries
+///    `access_type=offline`, and — because Google returns one only
+///    on a user's FIRST consent for a given client — usually also
+///    `prompt=consent`, so a re-authorising user is not silently
+///    left without one. Both ride `beginSignInWithExtras`, following
+///    the Auth0 `audience` precedent: the SDK documents the extras,
+///    it does not inject them, because whether an app wants offline
+///    access is the consumer's decision and consent-re-prompting is
+///    a user-visible one.
+///
+/// 2. **Access tokens are always opaque.** Unlike Auth0 — where a
+///    dashboard-configured API audience flips the access token to a
+///    decodable JWT — Google has no such knob, so
+///    `classifyStoredToken` will always see `OpaqueToken` and defer
+///    validity to the server. `PresetKind.expectsDecodableAccessToken
+///    Google` is correspondingly `false`. Server-side bearer
+///    validation of a Google sign-in therefore has to validate the
+///    `id_token`, not the access token.
+///
+/// `ValidateIdToken` defaults to `Some true` — Google sign-in is a
+/// customer-facing boundary, the same argument that flips the
+/// default on `entraExternalId`.
+let google (clientId: string) (redirectUri: string) : OidcAppConfig = {
+    Issuer = googleIssuer
+    Audience = clientId
+    ClientId = clientId
+    Scopes = genericDefaultScopes
+    RedirectUri = redirectUri
+    PostLogoutRedirectUri = None
+    ValidateIdToken = Some true
+    Preset = Some Google
 }
