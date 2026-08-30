@@ -2519,6 +2519,24 @@ ToolUp.Platform.ConfigDriftPayload.Changes : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.ConfigDriftPayload.CompanionSetFrom : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ConfigDriftPayload.CompanionSetTo : System.String { get }
 ToolUp.Platform.ConfigDriftPayload.SnapshotTakenAt : System.DateTime { get }
+ToolUp.Platform.ConfigDriftSummary (class)
+ToolUp.Platform.ConfigDriftSummary..ctor(System.String, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
+ToolUp.Platform.ConfigDriftSummary.DistinctFields : System.Int32 { get }
+ToolUp.Platform.ConfigDriftSummary.HasMigrators : System.Boolean { get }
+ToolUp.Platform.ConfigDriftSummary.MissingFields : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigDriftSummary.ModuleKey : System.String { get }
+ToolUp.Platform.ConfigDriftSummary.Observations : System.Int32 { get }
+ToolUp.Platform.ConfigDriftSummary.OrphanedKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigDriftSummary.TargetVersion : System.Int32 { get }
+ToolUp.Platform.ConfigFieldDriftKind (class)
+ToolUp.Platform.ConfigFieldDriftKind.IsMissingPersistedField : System.Boolean { get }
+ToolUp.Platform.ConfigFieldDriftKind.IsOrphanedPersistedKey : System.Boolean { get }
+ToolUp.Platform.ConfigFieldDriftKind.MissingPersistedField : ToolUp.Platform.ConfigFieldDriftKind { get }
+ToolUp.Platform.ConfigFieldDriftKind.OrphanedPersistedKey : ToolUp.Platform.ConfigFieldDriftKind { get }
+ToolUp.Platform.ConfigFieldDriftKind.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigFieldDriftKind+Tags (class)
+ToolUp.Platform.ConfigFieldDriftKind+Tags.MissingPersistedField : System.Int32 (literal)
+ToolUp.Platform.ConfigFieldDriftKind+Tags.OrphanedPersistedKey : System.Int32 (literal)
 ToolUp.Platform.ConfigFieldKind (class)
 ToolUp.Platform.ConfigFieldKind.Bool : ToolUp.Platform.ConfigFieldKind { get }
 ToolUp.Platform.ConfigFieldKind.IsBool : System.Boolean { get }
@@ -2543,6 +2561,15 @@ ToolUp.Platform.ConfigFieldKind+Tags.Choice : System.Int32 (literal)
 ToolUp.Platform.ConfigFieldKind+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.ConfigFieldKind+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.ConfigFieldKind+Tags.String : System.Int32 (literal)
+ToolUp.Platform.ConfigFieldMigrationNeededEvent (class)
+ToolUp.Platform.ConfigFieldMigrationNeededEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ConfigFieldDriftKind, System.Int32, System.Int32)
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.AtVersion : System.Int32 { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.FieldName : System.String { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.Kind : ToolUp.Platform.ConfigFieldDriftKind { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.ModuleKey : System.String { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.PersistedValue : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.ScopeId : System.String { get }
+ToolUp.Platform.ConfigFieldMigrationNeededEvent.TargetVersion : System.Int32 { get }
 ToolUp.Platform.ConfigFieldSchema (class)
 ToolUp.Platform.ConfigFieldSchema..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ConfigFieldKind, System.Boolean, System.String)
 ToolUp.Platform.ConfigFieldSchema.DefaultJson : System.String { get }
@@ -2840,6 +2867,53 @@ ToolUp.Platform.ConfigKnobType+Tags.StringKnob : System.Int32 (literal)
 ToolUp.Platform.ConfigKnobType+Tags.UriKnob : System.Int32 (literal)
 ToolUp.Platform.ConfigKnobTypeModule (class)
 ToolUp.Platform.ConfigKnobTypeModule.toWireString(ToolUp.Platform.ConfigKnobType) : System.String
+ToolUp.Platform.ConfigMigrationChainError (class)
+ToolUp.Platform.ConfigMigrationChainError.IsAmbiguousConfigMigrationStep : System.Boolean { get }
+ToolUp.Platform.ConfigMigrationChainError.IsConfigChainOvershootsTarget : System.Boolean { get }
+ToolUp.Platform.ConfigMigrationChainError.IsNoConfigMigrationPath : System.Boolean { get }
+ToolUp.Platform.ConfigMigrationChainError.IsNonAdvancingConfigMigrator : System.Boolean { get }
+ToolUp.Platform.ConfigMigrationChainError.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+AmbiguousConfigMigrationStep (class)
+ToolUp.Platform.ConfigMigrationChainError+AmbiguousConfigMigrationStep.atVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+AmbiguousConfigMigrationStep.candidates : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+AmbiguousConfigMigrationStep.moduleKey : System.String { get }
+ToolUp.Platform.ConfigMigrationChainError+ConfigChainOvershootsTarget (class)
+ToolUp.Platform.ConfigMigrationChainError+ConfigChainOvershootsTarget.moduleKey : System.String { get }
+ToolUp.Platform.ConfigMigrationChainError+ConfigChainOvershootsTarget.reachedVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+ConfigChainOvershootsTarget.targetVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+NoConfigMigrationPath (class)
+ToolUp.Platform.ConfigMigrationChainError+NoConfigMigrationPath.atVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+NoConfigMigrationPath.moduleKey : System.String { get }
+ToolUp.Platform.ConfigMigrationChainError+NonAdvancingConfigMigrator (class)
+ToolUp.Platform.ConfigMigrationChainError+NonAdvancingConfigMigrator.fromVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+NonAdvancingConfigMigrator.moduleKey : System.String { get }
+ToolUp.Platform.ConfigMigrationChainError+NonAdvancingConfigMigrator.toVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationChainError+Tags (class)
+ToolUp.Platform.ConfigMigrationChainError+Tags.AmbiguousConfigMigrationStep : System.Int32 (literal)
+ToolUp.Platform.ConfigMigrationChainError+Tags.ConfigChainOvershootsTarget : System.Int32 (literal)
+ToolUp.Platform.ConfigMigrationChainError+Tags.NoConfigMigrationPath : System.Int32 (literal)
+ToolUp.Platform.ConfigMigrationChainError+Tags.NonAdvancingConfigMigrator : System.Int32 (literal)
+ToolUp.Platform.ConfigMigrationChainErrorModule (class)
+ToolUp.Platform.ConfigMigrationChainErrorModule.describe(ToolUp.Platform.ConfigMigrationChainError) : System.String
+ToolUp.Platform.ConfigMigrationEvents (class)
+ToolUp.Platform.ConfigMigrationEvents.ConfigMigrationFailedEventType : System.String (literal)
+ToolUp.Platform.ConfigMigrationEvents.FieldMigrationNeededEventType : System.String (literal)
+ToolUp.Platform.ConfigMigrationEvents.SourceModule : System.String (literal)
+ToolUp.Platform.ConfigMigrationFailedEvent (class)
+ToolUp.Platform.ConfigMigrationFailedEvent..ctor(System.String, System.String, System.Int32, System.Int32, System.String)
+ToolUp.Platform.ConfigMigrationFailedEvent.AtVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationFailedEvent.Error : System.String { get }
+ToolUp.Platform.ConfigMigrationFailedEvent.ModuleKey : System.String { get }
+ToolUp.Platform.ConfigMigrationFailedEvent.ScopeId : System.String { get }
+ToolUp.Platform.ConfigMigrationFailedEvent.TargetVersion : System.Int32 { get }
+ToolUp.Platform.ConfigMigrationMetadata (class)
+ToolUp.Platform.ConfigMigrationMetadata.InitialVersion : System.Int32 (literal)
+ToolUp.Platform.ConfigMigrationMetadata.SchemaVersionKey : System.String (literal)
+ToolUp.Platform.ConfigMigrationMetadata.isReservedKey(System.String) : System.Boolean
+ToolUp.Platform.ConfigMigrationMetadata.readVersion(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : System.Int32
+ToolUp.Platform.ConfigMigrationMetadata.reservedKeys : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ConfigMigrationMetadata.stampVersion(System.Int32, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.Platform.ConfigMigrationMetadata.stripReserved(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
 ToolUp.Platform.ConfigRequirement (class)
 ToolUp.Platform.ConfigRequirement..ctor(System.String, ToolUp.Platform.ConfigKnobType, ToolUp.Platform.ConfigDefault, System.String)
 ToolUp.Platform.ConfigRequirement.Default : ToolUp.Platform.ConfigDefault { get }
@@ -6012,6 +6086,11 @@ ToolUp.Platform.IConfigApi.GetAllModuleConfigs : Microsoft.FSharp.Core.FSharpFun
 ToolUp.Platform.IConfigApi.GetModuleConfig : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleConfigView, System.String]]] { get }
 ToolUp.Platform.IConfigApi.ListModules : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]]] { get }
 ToolUp.Platform.IConfigApi.SaveModuleConfig : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IConfigMigrator (interface)
+ToolUp.Platform.IConfigMigrator.FromVersion : System.Int32 { get }
+ToolUp.Platform.IConfigMigrator.Migrate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
+ToolUp.Platform.IConfigMigrator.ModuleKey : System.String { get }
+ToolUp.Platform.IConfigMigrator.ToVersion : System.Int32 { get }
 ToolUp.Platform.IContentScanner (interface)
 ToolUp.Platform.IContentScanner.Name : System.String { get }
 ToolUp.Platform.IContentScanner.Scan(System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ScanVerdict]
@@ -7548,11 +7627,14 @@ ToolUp.Platform.ModuleConfigEntry.DisplayName : System.String { get }
 ToolUp.Platform.ModuleConfigEntry.ModuleKey : System.String { get }
 ToolUp.Platform.ModuleConfigEntry.Schema : ToolUp.Platform.ModuleConfigSchema { get }
 ToolUp.Platform.ModuleConfigSchema (class)
-ToolUp.Platform.ModuleConfigSchema..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigFieldSchema])
+ToolUp.Platform.ModuleConfigSchema..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigFieldSchema], System.Int32)
 ToolUp.Platform.ModuleConfigSchema.Fields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigFieldSchema] { get }
+ToolUp.Platform.ModuleConfigSchema.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.ModuleConfigSchemaModule (class)
 ToolUp.Platform.ModuleConfigSchemaModule.empty : ToolUp.Platform.ModuleConfigSchema { get }
+ToolUp.Platform.ModuleConfigSchemaModule.ofFields(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigFieldSchema]) : ToolUp.Platform.ModuleConfigSchema
 ToolUp.Platform.ModuleConfigSchemaModule.tryField(System.String, ToolUp.Platform.ModuleConfigSchema) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigFieldSchema]
+ToolUp.Platform.ModuleConfigSchemaModule.withSchemaVersion(System.Int32, ToolUp.Platform.ModuleConfigSchema) : ToolUp.Platform.ModuleConfigSchema
 ToolUp.Platform.ModuleConfigView (class)
 ToolUp.Platform.ModuleConfigView..ctor(System.String, ToolUp.Platform.ModuleConfigSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ModuleConfigView.ModuleKey : System.String { get }
@@ -9664,7 +9746,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralShareTokenKey : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptForwardedHeadersFromAnyProxy : System.Boolean { get }
@@ -9698,6 +9780,7 @@ ToolUp.Platform.ServerConfig.BackfillMissedTicks : System.Boolean { get }
 ToolUp.Platform.ServerConfig.ColumnMapping : ToolUp.Platform.ColumnMappingMode { get }
 ToolUp.Platform.ServerConfig.ComputeBudget : ToolUp.Platform.ComputeBudgetMode { get }
 ToolUp.Platform.ServerConfig.ConfigDriftDetection : ToolUp.Platform.ConfigDriftDetectionMode { get }
+ToolUp.Platform.ServerConfig.ConfigMigrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator] { get }
 ToolUp.Platform.ServerConfig.ConsentAudit : ToolUp.Platform.ConsentAuditMode { get }
 ToolUp.Platform.ServerConfig.ConsentStateStore : ToolUp.Platform.ConsentStateStoreMode { get }
 ToolUp.Platform.ServerConfig.ConversationStore : ToolUp.Platform.ConversationStoreMode { get }

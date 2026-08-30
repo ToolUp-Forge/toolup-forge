@@ -25,6 +25,11 @@ let internal sdkDefaultPlatformSchema: ModuleConfigEntry = {
                 DefaultJson = "\"£\""
             }
         ]
+        // Phase 10b — the SDK's own platform schema has never had a
+        // non-additive change, so it sits at the implicit floor. Bump
+        // this and register an `IConfigMigrator` in the same commit if
+        // one of these keys is ever renamed or its bounds tightened.
+        SchemaVersion = 1
     }
 }
 
@@ -47,8 +52,14 @@ let mergePlatformSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 
         let merged = {
             appPlatform with
+                // Phase 10b — a copy-update, not a fresh literal: merging
+                // the SDK's default fields in must carry the app's declared
+                // SchemaVersion through, or the merge would silently reset a
+                // versioned schema to the implicit floor and strand every
+                // migrator registered against it.
                 Schema = {
-                    Fields = appPlatform.Schema.Fields @ extraSdkFields
+                    appPlatform.Schema with
+                        Fields = appPlatform.Schema.Fields @ extraSdkFields
                 }
         }
 
@@ -170,7 +181,7 @@ let mergeBrandingSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
         let brandingEntry = {
             ModuleKey = ConfigKeys.PlatformModuleKey
             DisplayName = "Platform Defaults"
-            Schema = { Fields = sdkBrandingFields }
+            Schema = ModuleConfigSchema.ofFields sdkBrandingFields
         }
 
         brandingEntry :: appEntries
@@ -183,8 +194,10 @@ let mergeBrandingSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 
         let merged = {
             platform with
+                // Phase 10b — copy-update; see `mergePlatformSchema`.
                 Schema = {
-                    Fields = platform.Schema.Fields @ extraFields
+                    platform.Schema with
+                        Fields = platform.Schema.Fields @ extraFields
                 }
         }
 
@@ -276,6 +289,8 @@ let internal sdkNotificationPrefsSchema: ModuleConfigEntry = {
                 DefaultJson = "100"
             }
         ]
+        // Phase 10b — implicit floor; see `sdkDefaultPlatformSchema`.
+        SchemaVersion = 1
     }
 }
 
@@ -299,8 +314,10 @@ let mergeNotificationPrefsSchema (appEntries: ModuleConfigEntry list) : ModuleCo
 
         let merged = {
             appPrefs with
+                // Phase 10b — copy-update; see `mergePlatformSchema`.
                 Schema = {
-                    Fields = appPrefs.Schema.Fields @ extraSdkFields
+                    appPrefs.Schema with
+                        Fields = appPrefs.Schema.Fields @ extraSdkFields
                 }
         }
 
@@ -358,6 +375,8 @@ let internal sdkUsageSchema: ModuleConfigEntry = {
                 DefaultJson = "0"
             }
         ]
+        // Phase 10b — implicit floor; see `sdkDefaultPlatformSchema`.
+        SchemaVersion = 1
     }
 }
 
@@ -378,8 +397,10 @@ let mergeUsageSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry li
 
         let merged = {
             appUsage with
+                // Phase 10b — copy-update; see `mergePlatformSchema`.
                 Schema = {
-                    Fields = appUsage.Schema.Fields @ extraSdkFields
+                    appUsage.Schema with
+                        Fields = appUsage.Schema.Fields @ extraSdkFields
                 }
         }
 

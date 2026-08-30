@@ -98,8 +98,8 @@ let private newKeyResolver () : PerScopeKeyResolver.PerScopeKeyResolver =
 /// (The SDK-shipped schema the hook actually seeds against is internal to
 /// the server assembly; this stand-in only needs to validate the probe
 /// value.)
-let private platformProbeSchema: ModuleConfigSchema = {
-    Fields = [
+let private platformProbeSchema: ModuleConfigSchema =
+    ModuleConfigSchema.ofFields [
         {
             Key = "currencySymbol"
             DisplayName = "Currency symbol"
@@ -109,7 +109,6 @@ let private platformProbeSchema: ModuleConfigSchema = {
             DefaultJson = "\"£\""
         }
     ]
-}
 
 /// Phase 305 — build a `ProvisioningRequest` for the request-aware
 /// provisioning tests.

@@ -21,7 +21,7 @@ let private defaults: Branding = {
 let private platformWith (fields: ConfigFieldSchema list) : ModuleConfigEntry = {
     ModuleKey = ConfigKeys.PlatformModuleKey
     DisplayName = "Platform Defaults"
-    Schema = { Fields = fields }
+    Schema = ModuleConfigSchema.ofFields fields
 }
 
 let private field (key: string) : ConfigFieldSchema = {
