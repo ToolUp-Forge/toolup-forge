@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (194 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (195 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -140,6 +140,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_OIDC_AUDIENCE` | string | — | no | yes | Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes). |
 | `TOOLUP_OIDC_ISSUER` | string | — | no | yes | OIDC provider discovery URL. Required when TOOLUP_AUTH_MODE=oidc; missing issuer refuses startup. |
 | `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` | int | — | no | pending | Milliseconds the OIDC preflight waits for the issuer discovery document. |
+| `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` | enum: enabled, disabled | disabled | no | yes | Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory). |
 | `TOOLUP_SSE_AUTH` | enum: cookie, cookies, cookieonly | (unset — bearer header only) | no | yes | When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only. |
 | `TOOLUP_TEAM_CREATION_POLICY` | enum: platformadminonly, anyauthenticateduser | platformadminonly | no | yes | Who may create a team: platform admins only, or any authenticated user. |
 

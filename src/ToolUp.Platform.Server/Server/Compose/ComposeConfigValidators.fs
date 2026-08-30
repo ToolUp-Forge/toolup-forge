@@ -120,6 +120,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (DataObjectOrphanSweep.DataObjectOrphanSweepConfiguredValidator(config, services)) // Phase 7c — warn when a persistent deployment composes no data-object orphan sweep (Save writes content before metadata, so a crash between them strands objects/_content/{hash}.data forever — invisible to subject erasure), or composes one that JobScheduler = NoJobScheduler can never fire
 
+    addConfigValidator (DirectAddIdentityProofValidator.DirectAddIdentityProofValidator(config, services)) // Phase 549 — refuse DirectAddIdentityProof = RequireDirectoryProof with no IUserDirectory composed (a proof gate with nothing to consult refuses every direct add)
+
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered
     // after the first-party set so their preflight messages follow.

@@ -3296,6 +3296,18 @@ type ServerConfig = {
     /// under `PlatformAdminOnly` (admins provision freely) and in modes
     /// that don't register `ITeamStore`.
     TeamCreationQuota: int option
+    /// Phase 549 — whether `TeamApi.AddTeamMember` /
+    /// `TeamApi.CreateTeamWithOwner` demand an existence proof for the
+    /// principal id they are handed, resolved against the composed
+    /// `IUserDirectory`. Default `NoIdentityProof` is the pre-549
+    /// behaviour byte-for-byte (GP 11): the id is sanitised at the store
+    /// seam and written unverified, so a typo mints a ghost member.
+    /// `RequireDirectoryProof` refuses ids the directory does not
+    /// recognise, and is refused at startup preflight when no
+    /// `IUserDirectory` is composed. The invite-by-email path is
+    /// untouched — the sign-in that consumes a pending invite is its own
+    /// existence proof.
+    DirectAddIdentityProof: DirectAddIdentityProof
     /// Per-scope retention policy for the registered `INarrativeStore`.
     /// Default `NarrativeRetentionPolicy.defaults` keeps the historical
     /// 100-per-scope cap with no age limit; deployments with long-lived
@@ -3836,6 +3848,9 @@ module ServerConfig =
         AdAnalytics = NoAdAnalytics
         TeamCreationPolicy = PlatformAdminOnly
         TeamCreationQuota = None
+        // Phase 549 — membership rows stay admin-asserted by default; a
+        // deployment opts into the directory existence-proof (GP 11).
+        DirectAddIdentityProof = NoIdentityProof
         NarrativeRetention = NarrativeRetentionPolicy.defaults
         PeerSubstrate = NoPeerSubstrate
         UserSchemaAuthoring = NoUserSchemaAuthoring
@@ -4757,6 +4772,30 @@ module ServerConfig =
                         ]
                         None
                         defaults.TeamCreationPolicy
+                // Phase 549 — direct-add existence proof. Accepts the
+                // boolean spellings an operator reaches for on a
+                // `REQUIRE_*` variable as well as the estate's
+                // enabled/disabled family, so neither reading is a silent
+                // miss; an unrecognised token warns and keeps the
+                // configured value (GP 11 — unset ⇒ `NoIdentityProof`).
+                DirectAddIdentityProof =
+                    parseFlatDuCase
+                        logger
+                        ConfigKeys.Names.requireDirectoryProofForDirectAdd
+                        [
+                            "0", NoIdentityProof
+                            "false", NoIdentityProof
+                            "no", NoIdentityProof
+                            "off", NoIdentityProof
+                            "disabled", NoIdentityProof
+                            "1", RequireDirectoryProof
+                            "true", RequireDirectoryProof
+                            "yes", RequireDirectoryProof
+                            "on", RequireDirectoryProof
+                            "enabled", RequireDirectoryProof
+                        ]
+                        None
+                        defaults.DirectAddIdentityProof
                 // Phase 71.A.11 — fully-nilary DUs the audit grouped as HY
                 // (the in-tree DU carries no payload): pure flat lifts.
                 JobScheduler =

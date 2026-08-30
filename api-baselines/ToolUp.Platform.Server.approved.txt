@@ -2697,6 +2697,9 @@ ToolUp.Platform.DiodeVersionModule (class)
 ToolUp.Platform.DiodeVersionModule.create(System.Int32, System.Int32, System.Int32) : ToolUp.Platform.DiodeVersion
 ToolUp.Platform.DiodeVersionModule.parse(System.String) : ToolUp.Platform.DiodeVersion
 ToolUp.Platform.DiodeVersionModule.zero : ToolUp.Platform.DiodeVersion { get }
+ToolUp.Platform.DirectAddIdentityProofValidator (class)
+ToolUp.Platform.DirectAddIdentityProofValidator+DirectAddIdentityProofValidator (class)
+ToolUp.Platform.DirectAddIdentityProofValidator+DirectAddIdentityProofValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.DistributedLock (class)
 ToolUp.Platform.DistributedLock.acquireBlocking(ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
 ToolUp.Platform.DistributedLock.acquireBlockingEvery(System.TimeSpan, ToolUp.Platform.IDistributedLock, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Lease]
