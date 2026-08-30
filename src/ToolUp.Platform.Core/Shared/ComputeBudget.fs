@@ -159,6 +159,18 @@ module ComputeBudgetPeriod =
         | ComputeBudgetPeriod.Daily -> "daily"
         | ComputeBudgetPeriod.Monthly -> "monthly"
 
+    /// Phase 689 — this period as the platform budget seam's own window.
+    ///
+    /// Total and injective: compute budgets are a subset of the seam's
+    /// periods (it also has `Hourly`, which a token budget needs and a
+    /// compute deployment has no use for), so the projection loses
+    /// nothing and the two produce the same key for the same window.
+    let toBudgetPeriod (period: ComputeBudgetPeriod) : BudgetPeriod =
+        match period with
+        | ComputeBudgetPeriod.Perpetual -> BudgetPeriod.Perpetual
+        | ComputeBudgetPeriod.Daily -> BudgetPeriod.Daily
+        | ComputeBudgetPeriod.Monthly -> BudgetPeriod.Monthly
+
     /// The key identifying the period `now` falls in — `"perpetual"`,
     /// `"2026-08-05"`, or `"2026-08"`.
     ///
@@ -167,13 +179,12 @@ module ComputeBudgetPeriod =
     /// deployment in different periods for an hour twice a year, and the
     /// resulting double-allowance is exactly the kind of thing nobody
     /// notices until the bill.
+    ///
+    /// Phase 689: the key derivation itself lives in `BudgetPeriod.key` —
+    /// one implementation of the period-as-storage-key rule, so two budget
+    /// domains cannot disagree about where a UTC month begins.
     let key (period: ComputeBudgetPeriod) (now: DateTime) : string =
-        let utc = now.ToUniversalTime()
-
-        match period with
-        | ComputeBudgetPeriod.Perpetual -> "perpetual"
-        | ComputeBudgetPeriod.Daily -> utc.ToString "yyyy-MM-dd"
-        | ComputeBudgetPeriod.Monthly -> utc.ToString "yyyy-MM"
+        BudgetPeriod.key (toBudgetPeriod period) now
 
 /// Phase 451 — one set of ceilings. The three dimensions the interface
 /// plan named, and no more.
@@ -265,6 +276,17 @@ type ComputeBudget = {
 
 [<RequireQualifiedAccess>]
 module ComputeBudget =
+    /// Phase 689 — this budget family's stable label in the platform
+    /// budget seam. Namespaces the ledger key, the blob prefix and the
+    /// refusal, so a deployment running compute budgets alongside a token
+    /// or spend budget can never have one read the other's consumption.
+    ///
+    /// It is the string Phase 451 already used as its blob prefix, which
+    /// is what makes adopting the shared ledger a re-expression rather
+    /// than a data migration.
+    [<Literal>]
+    let Domain = "compute-budget"
+
     /// The budget an unconfigured scope has: no ceiling on any dimension,
     /// for any class. Structurally identical to having no budget at all,
     /// which is what makes "no budget configured" and "a budget that
@@ -378,6 +400,32 @@ module ComputeBudgetDenial =
             denial.Requested
             denial.PeriodKey
 
+    /// Phase 689 — this denial as the seam's `BudgetDenial`. Field for
+    /// field: the seam's shape IS this one, generalised with the `Domain`
+    /// that says which budget refused when a deployment runs several.
+    let toBudgetDenial (denial: ComputeBudgetDenial) : BudgetDenial = {
+        Domain = ComputeBudget.Domain
+        ScopeId = denial.ScopeId
+        ClassLabel = denial.SubmitterClass
+        Dimension = denial.Dimension
+        Quota = denial.Quota
+        Spent = denial.Spent
+        Requested = denial.Requested
+        PeriodKey = denial.PeriodKey
+    }
+
+    /// Phase 689 — a seam denial in compute's own vocabulary. The domain
+    /// is dropped, being what a `ComputeBudgetDenial` says by existing.
+    let ofBudgetDenial (denial: BudgetDenial) : ComputeBudgetDenial = {
+        ScopeId = denial.ScopeId
+        SubmitterClass = denial.ClassLabel
+        Dimension = denial.Dimension
+        Quota = denial.Quota
+        Spent = denial.Spent
+        Requested = denial.Requested
+        PeriodKey = denial.PeriodKey
+    }
+
 /// Phase 451 — one scope's live consumption within one period.
 ///
 /// `InFlight` is a **reservation** count, not an observation: it is
@@ -423,6 +471,25 @@ module ComputeBudgetUsage =
         UpdatedAt = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
     }
 
+    /// Phase 689 — this row as the seam's `BudgetUsage`.
+    let toBudgetUsage (usage: ComputeBudgetUsage) : BudgetUsage = {
+        Domain = ComputeBudget.Domain
+        ScopeId = usage.ScopeId
+        PeriodKey = usage.PeriodKey
+        InFlight = usage.InFlight
+        Spent = usage.Spent
+        UpdatedAt = usage.UpdatedAt
+    }
+
+    /// Phase 689 — a seam row in compute's own vocabulary.
+    let ofBudgetUsage (usage: BudgetUsage) : ComputeBudgetUsage = {
+        ScopeId = usage.ScopeId
+        PeriodKey = usage.PeriodKey
+        InFlight = usage.InFlight
+        Spent = usage.Spent
+        UpdatedAt = usage.UpdatedAt
+    }
+
 /// Phase 451 — the admission decision, as a pure function.
 ///
 /// Separated from the store on purpose: the interesting part of a budget
@@ -430,11 +497,67 @@ module ComputeBudgetUsage =
 /// `(limits, usage, submission)` is one a test can exhaust without a blob,
 /// a clock, or a container. The store's job is only to make the read and
 /// the reservation atomic.
+///
+/// **Phase 689 — the decision itself now runs on the platform budget
+/// seam.** `claims` projects this domain's three ceilings onto
+/// `BudgetClaim`s and `admit` is `BudgetPolicy.check` over them. The three
+/// dimensions look unrelated and are all `Spent + Requested > Ceiling`
+/// (see `Budget.fs`), so the projection is total and the behaviour is
+/// unchanged — what changes is that a compute refusal and a token refusal
+/// are now the same decision, in the same order, reported in the same
+/// shape.
 [<RequireQualifiedAccess>]
 module ComputeBudgetPolicy =
 
-    /// Whole seconds of a `TimeSpan`, as the `decimal` a denial reports.
-    let private seconds (span: TimeSpan) : decimal = decimal (int64 span.TotalSeconds)
+    /// Seconds of a `TimeSpan`, as the `decimal` a denial reports.
+    let private seconds (span: TimeSpan) : decimal = decimal span.TotalSeconds
+
+    /// Phase 689 — this submission's ceilings as seam claims, in check
+    /// order.
+    ///
+    /// **Order is concurrency → duration → allowance, cheapest and
+    /// most-immediate first**, and `BudgetPolicy.breach` reports the first
+    /// one hit. Concurrency is the burst control and the one an agent
+    /// trips first; duration is a property of the submission alone;
+    /// allowance is the slowest-moving and the one whose remedy (wait for
+    /// the period to roll) is the least actionable. Reporting the *first*
+    /// ceiling rather than all of them is deliberate — a refusal naming
+    /// three problems invites fixing the wrong one.
+    ///
+    /// An unrestricted dimension contributes no claim at all rather than
+    /// a claim with a zero ceiling: the two are equivalent to the check
+    /// (`<= 0` is unrestricted), and the short list is what a caller
+    /// inspecting the claims to render "3 of 10 runs, 40 of 250 units"
+    /// wants to read.
+    let claims
+        (limits: ComputeBudgetLimits)
+        (usage: ComputeBudgetUsage)
+        (declaredDuration: TimeSpan option)
+        (cost: decimal)
+        : BudgetClaim list =
+        [
+            if limits.MaxConcurrent > 0 then
+                BudgetClaim.create
+                    (ComputeBudgetDimension.label ComputeBudgetDimension.Concurrency)
+                    (decimal limits.MaxConcurrent)
+                    (decimal usage.InFlight)
+                    1M
+
+            match limits.MaxRunDuration, declaredDuration with
+            | Some cap, Some declared ->
+                BudgetClaim.perRequest
+                    (ComputeBudgetDimension.label ComputeBudgetDimension.RunDuration)
+                    (seconds cap)
+                    (seconds declared)
+            | _ -> ()
+
+            if limits.PeriodAllowance > 0M then
+                BudgetClaim.create
+                    (ComputeBudgetDimension.label ComputeBudgetDimension.PeriodAllowance)
+                    limits.PeriodAllowance
+                    usage.Spent
+                    cost
+        ]
 
     /// May one more run be admitted?
     ///
@@ -442,14 +565,6 @@ module ComputeBudgetPolicy =
     /// (`ExternalWorkSpec.Timeout`, or `None` for a fit whose duration the
     /// submitter did not bound). `cost` is what the deployment's cost
     /// model says this run reserves.
-    ///
-    /// **Check order is concurrency → duration → allowance, cheapest and
-    /// most-immediate first.** Concurrency is the burst control and the
-    /// one an agent trips first; duration is a property of the submission
-    /// alone; allowance is the slowest-moving and the one whose remedy
-    /// (wait for the period to roll) is the least actionable. Reporting
-    /// the *first* ceiling hit rather than all of them is deliberate — a
-    /// refusal naming three problems invites fixing the wrong one.
     let admit
         (scopeId: string)
         (submitter: SubmitterClass)
@@ -458,29 +573,12 @@ module ComputeBudgetPolicy =
         (declaredDuration: TimeSpan option)
         (cost: decimal)
         : Result<unit, ComputeBudgetDenial> =
+        let subject =
+            BudgetSubject.create ComputeBudget.Domain scopeId (SubmitterClass.label submitter)
 
-        let deny (dimension: ComputeBudgetDimension) (quota: decimal) (spent: decimal) (requested: decimal) =
-            Error {
-                ScopeId = scopeId
-                SubmitterClass = SubmitterClass.label submitter
-                Dimension = ComputeBudgetDimension.label dimension
-                Quota = quota
-                Spent = spent
-                Requested = requested
-                PeriodKey = usage.PeriodKey
-            }
-
-        if limits.MaxConcurrent > 0 && usage.InFlight >= limits.MaxConcurrent then
-            deny ComputeBudgetDimension.Concurrency (decimal limits.MaxConcurrent) (decimal usage.InFlight) 1M
-        else
-            match limits.MaxRunDuration, declaredDuration with
-            | Some cap, Some declared when declared > cap ->
-                deny ComputeBudgetDimension.RunDuration (seconds cap) 0M (seconds declared)
-            | _ ->
-                if limits.PeriodAllowance > 0M && usage.Spent + cost > limits.PeriodAllowance then
-                    deny ComputeBudgetDimension.PeriodAllowance limits.PeriodAllowance usage.Spent cost
-                else
-                    Ok()
+        claims limits usage declaredDuration cost
+        |> BudgetPolicy.check subject usage.PeriodKey
+        |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
 
     /// The wall-clock budget a submission should actually carry once the
     /// run-duration cap is applied — the submission's own when it is
