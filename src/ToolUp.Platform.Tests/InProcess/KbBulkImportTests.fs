@@ -209,6 +209,131 @@ let private refusalOf (report: BulkImportReport) (sourceFragment: string) : stri
             | UploadRejected reason -> Some reason
             | _ -> None)
 
+// ─── Phase 725 helpers ───────────────────────────────────────────────
+
+/// Counts `PublishInventory` deliveries. Substituted into `deps` so
+/// "one snapshot per batch, not two per item" is measured rather than
+/// asserted. Locked because background extraction publishes from the
+/// thread pool while the request path publishes from the test thread.
+type private InventoryCounter() =
+    let gate = obj ()
+    let mutable count = 0
+
+    member _.Publish() : Async<unit> = async { lock gate (fun () -> count <- count + 1) }
+
+    member _.Count = lock gate (fun () -> count)
+
+/// The docId a report's admitted item landed under, for reading the
+/// stored blob back.
+let private docIdOf (report: BulkImportReport) (fileName: string) : string =
+    report.Items
+    |> List.pick (fun i ->
+        match i.Outcome with
+        | BulkItemOutcome.Admitted doc when doc.FileName = fileName -> Some doc.Id
+        | _ -> None)
+
+/// CRC-32 (IEEE), so the hand-assembled fixture below is well-formed in
+/// every respect except the one lie it exists to tell.
+let private crc32 (data: byte[]) : uint32 =
+    let table =
+        Array.init 256 (fun n ->
+            let mutable c = uint32 n
+
+            for _ in 0..7 do
+                c <-
+                    if c &&& 1u <> 0u then
+                        0xEDB88320u ^^^ (c >>> 1)
+                    else
+                        c >>> 1
+
+            c)
+
+    let mutable crc = 0xFFFFFFFFu
+
+    for b in data do
+        crc <- table[int ((crc ^^^ uint32 b) &&& 0xFFu)] ^^^ (crc >>> 8)
+
+    crc ^^^ 0xFFFFFFFFu
+
+/// Phase 725.C — a zip whose DECLARED uncompressed size understates the
+/// content actually stored.
+///
+/// **This has to be hand-assembled, and that is the finding.** The BCL
+/// `ZipArchive` writer computes and declares honest sizes, so no fixture
+/// built with it can put `readBounded`'s overrun arm on a path — every
+/// oversized entry is caught by a cheap declared-size pre-filter first,
+/// and the guard that actually holds against a hostile archive was
+/// unreachable from any test in the repo. An unreachable guard on a
+/// hostile-input path is indistinguishable from an absent one.
+///
+/// STORED (method 0) rather than deflate: the BCL bounds a read-mode
+/// entry stream by the CENTRAL DIRECTORY'S compressed size and, for a
+/// stored entry, hands those bytes straight back — so `compressedSize`
+/// stays honest (the bytes really are there), `uncompressedSize` carries
+/// the lie, and nothing about the container is malformed. Every other
+/// field is correct, including the CRC, so a refusal can only come from
+/// the bounded read.
+let private lyingZip (entryName: string) (realContent: byte[]) (declaredSize: uint32) : byte[] =
+    let nameBytes = Text.Encoding.ASCII.GetBytes entryName
+    let realSize = uint32 realContent.Length
+    let crc = crc32 realContent
+
+    use buffer = new MemoryStream()
+    use writer = new BinaryWriter(buffer)
+
+    // Local file header.
+    writer.Write 0x04034b50u // signature
+    writer.Write 20us // version needed
+    writer.Write 0us // general-purpose flags
+    writer.Write 0us // method: stored
+    writer.Write 0us // last-mod time
+    writer.Write 33us // last-mod date (1980-01-01)
+    writer.Write crc
+    writer.Write realSize // compressed size — honest
+    writer.Write declaredSize // uncompressed size — THE LIE
+    writer.Write(uint16 nameBytes.Length)
+    writer.Write 0us // extra-field length
+    writer.Write nameBytes
+    writer.Write realContent
+
+    let centralDirectoryOffset = uint32 buffer.Position
+
+    // Central-directory file header — the record the BCL reader
+    // actually consults, so the lie has to appear here too.
+    writer.Write 0x02014b50u // signature
+    writer.Write 20us // version made by
+    writer.Write 20us // version needed
+    writer.Write 0us // general-purpose flags
+    writer.Write 0us // method: stored
+    writer.Write 0us // last-mod time
+    writer.Write 33us // last-mod date
+    writer.Write crc
+    writer.Write realSize
+    writer.Write declaredSize
+    writer.Write(uint16 nameBytes.Length)
+    writer.Write 0us // extra-field length
+    writer.Write 0us // file-comment length
+    writer.Write 0us // disk number start
+    writer.Write 0us // internal attributes
+    writer.Write 0u // external attributes
+    writer.Write 0u // relative offset of local header
+    writer.Write nameBytes
+
+    let centralDirectorySize = uint32 buffer.Position - centralDirectoryOffset
+
+    // End of central directory.
+    writer.Write 0x06054b50u // signature
+    writer.Write 0us // this disk
+    writer.Write 0us // disk with central directory
+    writer.Write 1us // entries on this disk
+    writer.Write 1us // entries total
+    writer.Write centralDirectorySize
+    writer.Write centralDirectoryOffset
+    writer.Write 0us // comment length
+
+    writer.Flush()
+    buffer.ToArray()
+
 let private importedNames (report: BulkImportReport) =
     report.Items
     |> List.filter (fun i -> BulkItemOutcome.isImported i.Outcome)
@@ -908,4 +1033,420 @@ let tests =
                 (report.Imported + report.Refused)
                 (List.length report.Items)
                 "the counts partition the items exactly"
+
+        // ══ Phase 725 — bulk-import hardening ══════════════════════
+        //
+        // Four follow-ons Phase 511 deliberately left outside its lease.
+        // None changes an admission decision; each closes a cost or a
+        // gap that only a corpus-scale import makes visible.
+
+        // ── 725.A — batch-scoped inventory suppression ──
+
+        testCaseAsync "a batch publishes ONE inventory snapshot, not two per item"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let publishes = InventoryCounter()
+
+            let deps = {
+                defaultDeps storage notifications "team-inventory" with
+                    PublishInventory = publishes.Publish
+            }
+
+            // 25 items. The pre-725 code publishes once per item on the
+            // REQUEST path alone — synchronously, before `importBatch`
+            // returns — so the old floor here is 25 and the assertion
+            // below separates the two behaviours by an order of
+            // magnitude rather than by one.
+            let! report =
+                importBatch deps {
+                    Sources = [
+                        for i in 1..25 -> BulkImportSource.File(sprintf "doc-%d.csv" i, csv (string i))
+                    ]
+                }
+
+            // Sampled the instant the batch returns. Extraction runs off
+            // the request path (`Async.Start`), so a background publish
+            // can land after `Close` has already passed the window —
+            // those are DELIBERATELY not suppressed (an extraction
+            // finishing long after the import must still refresh the
+            // inventory). The bound absorbs a couple of those and still
+            // fails hard on the old shape.
+            let delivered = publishes.Count
+
+            Expect.equal (List.length (importedNames report)) 25 "every item was admitted"
+
+            Expect.isLessThanOrEqual
+                delivered
+                5
+                (sprintf "a 25-item batch coalesces to ~1 inventory snapshot, not ~50 (delivered %d)" delivered)
+
+            Expect.isGreaterThan delivered 0 "the batch still publishes the one snapshot at its end"
+        }
+
+        testCaseAsync "an all-refused batch publishes no inventory snapshot at all"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let publishes = InventoryCounter()
+
+            let deps = {
+                mkDeps
+                    storage
+                    notifications
+                    "team-refused"
+                    KnowledgeQuotaPolicy.unlimited
+                    {
+                        KnowledgeUploadPolicy.permissive with
+                            AllowedExtensions = Some(Set.ofList [ "csv" ])
+                    }
+                    None
+                    ArchiveImportPolicy.defaults
+                    UrlIngestionPolicy.disabled
+                    None with
+                    PublishInventory = publishes.Publish
+            }
+
+            let! report =
+                importBatch deps {
+                    Sources = [
+                        for i in 1..4 -> BulkImportSource.File(sprintf "blocked-%d.exe" i, csv (string i))
+                    ]
+                }
+
+            Expect.equal (importedNames report) [] "nothing was admitted"
+
+            // Nothing mutated the inventory, so there is nothing to
+            // re-announce — the gate publishes on close only if an item
+            // actually asked. Fully deterministic (a refusal spawns no
+            // background extraction at all), so this arm pins the
+            // semantics the timing-tolerant one above can only bound.
+            Expect.equal publishes.Count 0 "a batch that persisted nothing publishes nothing"
+        }
+
+        testCaseAsync "the interactive single-file upload still publishes on the request path (GP 11)"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let publishes = InventoryCounter()
+
+            let deps = {
+                defaultDeps storage notifications "team-interactive" with
+                    PublishInventory = publishes.Publish
+            }
+
+            // `uploadDocument` takes the caller's deps, never a gated
+            // copy — which is the whole reason the suppression is a
+            // substituted seam per batch rather than a change to
+            // `persistAndIngest`.
+            let! _ = uploadDocument deps (csv "solo") "solo.csv"
+
+            Expect.isGreaterThan
+                publishes.Count
+                0
+                "the pre-725 interactive path is unchanged: it publishes as it always did"
+        }
+
+        // ── 725.B — a compact transport for nested byte[] ──
+
+        testCaseAsync "the base64 file case admits exactly what the byte[] case does"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let deps = defaultDeps storage notifications "team-b64"
+            let payload = csv "compact"
+
+            let! report =
+                importBatch deps {
+                    Sources = [ BulkImportSource.ofFileBytes "compact.csv" payload ]
+                }
+
+            Expect.equal (importedNames report) [ "compact.csv" ] "the compact case is admitted"
+
+            // Not merely "a document appeared" — the bytes that reached
+            // storage are the bytes submitted. A base64 shape that
+            // round-tripped wrong would still produce a green import.
+            let! stored =
+                storage.Download("team-b64", sprintf "knowledge/%s/compact.csv" (docIdOf report "compact.csv"))
+
+            match stored with
+            | Ok bytes -> Expect.equal bytes payload "the decoded payload is byte-identical to the submitted bytes"
+            | Error reason -> failtestf "the compact case persisted nothing readable: %s" reason
+        }
+
+        testCaseAsync "the base64 archive case expands under the same policy as the byte[] case"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let deps = defaultDeps storage notifications "team-b64-zip"
+
+            let archive = zipOf [ "docs/a.csv", csv "a"; "docs/b.csv", csv "b" ]
+
+            let! report =
+                importBatch deps {
+                    Sources = [ BulkImportSource.ofArchiveBytes "corpus.zip" archive ]
+                }
+
+            Expect.equal (importedNames report) [ "a.csv"; "b.csv" ] "both entries expanded and were admitted"
+        }
+
+        testCaseAsync "malformed base64 is one classified refusal, not a failed batch"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+            let deps = defaultDeps storage notifications "team-b64-bad"
+
+            let! report =
+                importBatch deps {
+                    Sources = [
+                        BulkImportSource.ofFileBytes "good.csv" (csv "good")
+                        BulkImportSource.FileBase64("broken.csv", "not!valid!base64!")
+                        BulkImportSource.ofFileBytes "also-good.csv" (csv "also")
+                    ]
+                }
+
+            Expect.equal
+                (importedNames report)
+                [ "also-good.csv"; "good.csv" ]
+                "the two well-formed items are unaffected — one bad item never fails the batch (511.A)"
+
+            match refusalOf report "broken.csv" with
+            | Some reason -> Expect.stringContains reason "base64" "the refusal names the transport, not a BCL message"
+            | None -> failtest "the malformed base64 item produced no classified refusal"
+        }
+
+        test "the compact shape is a string for a reason: base64 beats the numeric-array encoding" {
+            // The cost 725.B closes is not the .NET host's — server-side
+            // `ByteArrayConverter` already writes base64. It is the
+            // FABLE host's, where a `byte[]` is emitted as `[n, n, ...]`.
+            // A `string` field has no such fork, and this pins the
+            // margin rather than restating the claim.
+            let payload = Array.init 4096 (fun i -> byte ((i * 37 + 11) % 256))
+            let base64Length = (Convert.ToBase64String payload).Length
+
+            let numericArrayLength =
+                let body = payload |> Array.map string |> String.concat ","
+                body.Length + 2
+
+            Expect.isLessThan
+                (base64Length * 2)
+                numericArrayLength
+                (sprintf
+                    "base64 (%d chars) is well under half the numeric-array form (%d chars) for the same %d bytes"
+                    base64Length
+                    numericArrayLength
+                    payload.Length)
+        }
+
+        // ── 725.C — the lying-zip fixture readBounded exists for ──
+
+        test "the lying-zip fixture is a well-formed zip whose declared size understates its content" {
+            // Verify the PROBE before trusting what it proves. A fixture
+            // the BCL could not open would be refused by
+            // `expandArchive`'s "could not be read as a zip" arm, and the
+            // overrun test below would pass without ever reaching
+            // `readBounded` — green, and vacuous. So: the archive opens,
+            // the entry declares the lie, and the entry stream really
+            // does yield the full content.
+            let realContent = compressible 200_000
+            let archive = lyingZip "big.bin" realContent 10u
+
+            use stream = new MemoryStream(archive, writable = false)
+            use zip = new ZipArchive(stream, ZipArchiveMode.Read)
+
+            let entry = zip.Entries |> Seq.exactlyOne
+            Expect.equal entry.Length 10L "the archive DECLARES 10 uncompressed bytes"
+
+            use entryStream = entry.Open()
+            use drained = new MemoryStream()
+            entryStream.CopyTo drained
+
+            Expect.equal
+                drained.Length
+                200_000L
+                "...and the entry stream nevertheless yields 200,000 — which is the whole hazard"
+        }
+
+        testCaseAsync "an entry that streams more than it declares is refused by the bounded read"
+        <| async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let notifications = CapturingNotifications()
+
+            // `readBounded` is the guard that actually holds, and until
+            // now nothing in the repo could exercise its overrun arm:
+            // the BCL `ZipArchive` WRITER always declares honest sizes,
+            // so every in-repo archive made the declared-size pre-filters
+            // correct and the bounded read redundant. This fixture is
+            // hand-assembled precisely so the pre-filters pass and only
+            // the read can refuse it.
+            let deps =
+                mkDeps
+                    storage
+                    notifications
+                    "team-lying-zip"
+                    KnowledgeQuotaPolicy.unlimited
+                    KnowledgeUploadPolicy.permissive
+                    None
+                    {
+                        ArchiveImportPolicy.defaults with
+                            MaxEntryBytes = Some 1_000L
+                            MaxTotalUncompressedBytes = Some 5_000L
+                            // Off deliberately: the ratio lever reads the
+                            // DECLARED total against the archive length,
+                            // so leaving it on refuses this archive at
+                            // the whole-archive stage and the per-entry
+                            // read never runs.
+                            MaxCompressionRatio = None
+                    }
+                    UrlIngestionPolicy.disabled
+                    None
+
+            let archive = lyingZip "big.bin" (compressible 200_000) 10u
+
+            let! report =
+                importBatch deps {
+                    Sources = [ BulkImportSource.Archive("liar.zip", archive) ]
+                }
+
+            Expect.equal (importedNames report) [] "nothing from a lying archive is admitted"
+
+            match refusalOf report "big.bin" with
+            | Some reason ->
+                Expect.stringContains
+                    reason
+                    "streamed more than"
+                    "the refusal is the bounded read's, not a declared-size pre-filter's"
+
+                Expect.stringContains reason "declared size understated" "and it names why the pre-filters passed"
+            | None -> failtest "the lying entry was not refused — the overrun arm did not fire"
+        }
+
+        // ── 725.D — compose-time preflight for the bulk-import surface ──
+
+        test "unguardedLevers names exactly what a policy leaves off" {
+            Expect.equal
+                (ArchiveImportPolicy.unguardedLevers ArchiveImportPolicy.defaults)
+                []
+                "the shipped defaults guard every lever"
+
+            Expect.equal
+                (ArchiveImportPolicy.unguardedLevers ArchiveImportPolicy.unbounded)
+                [
+                    "MaxEntries"
+                    "MaxEntryBytes"
+                    "MaxTotalUncompressedBytes"
+                    "MaxCompressionRatio"
+                ]
+                "unbounded turns all four off, and the validator can name each"
+
+            Expect.isTrue
+                (ArchiveImportPolicy.isUnguarded {
+                    ArchiveImportPolicy.defaults with
+                        MaxCompressionRatio = None
+                })
+                "clearing only the ratio lever is still unguarded — that is the lever catching a bomb of modest entries"
+        }
+
+        testCaseAsync "composing ArchiveImportPolicy.unbounded warns at compose time, naming the posture"
+        <| async {
+            let app = ServerApp.empty |> withArchiveImportPolicy ArchiveImportPolicy.unbounded
+
+            let validator =
+                app.ConfigValidators
+                |> List.find (fun v -> v.Name = "knowledge-base:archive-import-policy")
+
+            match! validator.Validate() with
+            | ConfigValidation.ValidationResult.Warning message ->
+                Expect.stringContains message "MaxCompressionRatio" "the warning names the levers that are off"
+                Expect.stringContains message "decompression bomb" "and says what the posture admits"
+            | other -> failtestf "expected a Warning naming the unguarded posture, got %A" other
+        }
+
+        testCaseAsync "composing the shipped archive defaults warns about nothing"
+        <| async {
+            let app = ServerApp.empty |> withArchiveImportPolicy ArchiveImportPolicy.defaults
+
+            let validator =
+                app.ConfigValidators
+                |> List.find (fun v -> v.Name = "knowledge-base:archive-import-policy")
+
+            match! validator.Validate() with
+            | ConfigValidation.ValidationResult.Ok -> ()
+            | other -> failtestf "a guarded policy must be silent, got %A" other
+        }
+
+        test "isBroadAllowlist trips at the reviewability threshold, never on an inert policy" {
+            let hosts n =
+                UrlIngestionPolicy.allowingHosts [ for i in 1..n -> sprintf "host-%d.example.com" i ]
+
+            Expect.isFalse
+                (UrlIngestionPolicy.isBroadAllowlist UrlIngestionPolicy.disabled)
+                "an inert policy is never broad"
+
+            Expect.isFalse
+                (UrlIngestionPolicy.isBroadAllowlist (hosts (UrlIngestionPolicy.BroadAllowlistThreshold - 1)))
+                "one below the threshold is not broad"
+
+            Expect.isTrue
+                (UrlIngestionPolicy.isBroadAllowlist (hosts UrlIngestionPolicy.BroadAllowlistThreshold))
+                "the threshold itself is broad"
+        }
+
+        testCaseAsync "a broad URL allowlist warns at compose time, and an inert one does not"
+        <| async {
+            let validatorFor (policy: UrlIngestionPolicy) =
+                (ServerApp.empty |> withUrlIngestion policy).ConfigValidators
+                |> List.find (fun v -> v.Name = "knowledge-base:url-ingestion")
+
+            let broad =
+                UrlIngestionPolicy.allowingHosts [
+                    for i in 1 .. UrlIngestionPolicy.BroadAllowlistThreshold -> sprintf "docs-%d.example.com" i
+                ]
+
+            match! (validatorFor broad).Validate() with
+            | ConfigValidation.ValidationResult.Warning message ->
+                Expect.stringContains message "reviewability threshold" "the warning names the posture it found"
+                Expect.stringContains message "allowingHosts" "and points at the lever that narrows it"
+            | other -> failtestf "expected a Warning for a broad allowlist, got %A" other
+
+            // Composing `withUrlIngestion` with an EMPTY allowlist is a
+            // legitimate fail-closed shape (a deployment wiring it from
+            // configuration that came back empty) and can fetch nothing,
+            // so it is not a posture worth a preflight line.
+            match! (validatorFor UrlIngestionPolicy.disabled).Validate() with
+            | ConfigValidation.ValidationResult.Ok -> ()
+            | other -> failtestf "an inert allowlist must be silent, got %A" other
+        }
+
+        testCaseAsync "URL ingestion in a Team deployment warns that the egress surface is shared"
+        <| async {
+            let teamApp = {
+                ServerApp.empty with
+                    Config = {
+                        ServerApp.empty.Config with
+                            Surfaces = [ SurfaceProfile.team ]
+                    }
+            }
+
+            let app =
+                teamApp
+                |> withUrlIngestion (UrlIngestionPolicy.allowingHosts [ "docs.example.com" ])
+
+            let validator =
+                app.ConfigValidators
+                |> List.find (fun v -> v.Name = "knowledge-base:url-ingestion")
+
+            match! validator.Validate() with
+            | ConfigValidation.ValidationResult.Warning message ->
+                // One allowlisted host is nowhere near "broad", so this
+                // can only have fired on the deployment shape — the same
+                // Team / MultiTeam gate the upload and quota validators
+                // use.
+                Expect.stringContains message "Team / MultiTeam" "the warning names the deployment shape"
+
+                Expect.isFalse
+                    (message.Contains "reviewability threshold")
+                    "and not the breadth finding, which does not apply here"
+            | other -> failtestf "expected a Warning for shared-tenant egress, got %A" other
+        }
     ]

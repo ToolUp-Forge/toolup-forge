@@ -13,6 +13,13 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open SharedTypes
 
+// NOTE: `ToolUp.Platform.ConfigValidation` is referenced QUALIFIED below
+// rather than opened. Its `ValidationResult` carries `Ok` / `Error`
+// cases, which shadow `Result`'s — and this file is built on
+// `Result<Uri, string>` (`classifyUrl`) and `Result<UrlFetchResponse,
+// string>` (`IUrlContentFetcher.Fetch`). Opening it turns every one of
+// those into a type error. Same posture as `AICompose.fs`.
+
 // ─── Phase 511 — bulk import source expansion ─────────────────────
 //
 // Everything in this file turns *a source* into *items*. Nothing here
@@ -458,14 +465,99 @@ let private withServiceConfig (register: IServiceCollection -> IServiceCollectio
         }
 }
 
+// ─── Phase 725.D — bulk-import preflight ──────────────────────────
+//
+// Every other KB policy ships an `IConfigValidator` that names a risky
+// posture at compose time (upload: uncapped in Team mode; quota:
+// unlimited in Team mode; content scan: fail-open). The two levers this
+// file registers warned about nothing, which meant the ONE surface whose
+// inputs are wholly attacker-controlled — an archive's declared sizes,
+// and an egress allowlist — was also the one surface whose posture never
+// appeared in a preflight report.
+//
+// Both validators are `Warning`, never `Error`, and never abort startup
+// (GP 11): an unguarded expander and a broad allowlist are legitimate
+// deliberate choices, and the finding's job is to make them *stated*
+// rather than inherited. Both are registered only by their own `with*`
+// call, so a deployment that composes neither pays nothing (GP 13) — and
+// an uncomposed deployment is already the guarded default
+// (`ArchiveImportPolicy.defaults`) and the inert one
+// (`UrlIngestionPolicy.disabled`), so it has nothing to warn about.
+
+type private ArchiveImportPolicyValidator(policy: ArchiveImportPolicy) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "knowledge-base:archive-import-policy"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            match ArchiveImportPolicy.unguardedLevers policy with
+            | [] -> return ConfigValidation.ValidationResult.Ok
+            | levers ->
+                return
+                    ConfigValidation.ValidationResult.Warning(
+                        sprintf
+                            "Knowledge Base archive import leaves %s unbounded (%s). An archive's declared entry sizes are attacker-controlled, so an unguarded expander admits a decompression bomb: the streaming read still refuses an entry that overruns its limit, but with no limit composed there is nothing for it to enforce. Restore the shipped caps with KnowledgeBase.Server.withArchiveImportPolicy ArchiveImportPolicy.defaults, or raise individual levers from defaults rather than clearing them."
+                            (if List.length levers = 1 then
+                                 "one guard"
+                             else
+                                 sprintf "%d guards" (List.length levers))
+                            (String.concat ", " levers)
+                    )
+        }
+
+type private UrlIngestionValidator(serverConfig: ServerConfig, policy: UrlIngestionPolicy) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "knowledge-base:url-ingestion"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            let teamScoped = DeploymentConfig.hasTeamScope serverConfig
+            let hostCount = Set.count policy.AllowedHosts
+
+            // An inert policy is the default posture and is never worth a
+            // line in a preflight report.
+            if UrlIngestionPolicy.isInert policy then
+                return ConfigValidation.ValidationResult.Ok
+            else
+                let findings = [
+                    if UrlIngestionPolicy.isBroadAllowlist policy then
+                        sprintf
+                            "the allowlist names %d hosts (at or above the %d-host reviewability threshold), so a stale or mistaken entry is unlikely to be noticed on review"
+                            hostCount
+                            UrlIngestionPolicy.BroadAllowlistThreshold
+                    if teamScoped then
+                        "the deployment is Team / MultiTeam scoped, so every tenant can make the SERVER fetch from these hosts — the egress surface is shared, not per-tenant"
+                ]
+
+                match findings with
+                | [] -> return ConfigValidation.ValidationResult.Ok
+                | _ ->
+                    return
+                        ConfigValidation.ValidationResult.Warning(
+                            sprintf
+                                "Knowledge Base URL ingestion is enabled for %d host(s) and %s. Redirects are re-gated against this same allowlist and literal IP addresses are always refused, so this is a posture to confirm rather than a defect: narrow the list with KnowledgeBase.Server.withUrlIngestion (UrlIngestionPolicy.allowingHosts [ ... ]), or leave it uncomposed to keep ingestion inert."
+                                hostCount
+                                (String.concat "; and " findings)
+                        )
+        }
+
 /// Phase 511 — override the archive-expansion resource guards. A
 /// deployment that never calls this gets `ArchiveImportPolicy.defaults`,
 /// which already carries real caps: bulk import is a new surface, and an
 /// uncapped archive expander is not a defensible default (see the type's
 /// remarks). The pre-511 single-file upload path is untouched either way
 /// (GP 11).
+///
+/// Phase 725.D — also registers a preflight validator that warns when
+/// this policy leaves any expansion guard unbounded (the posture
+/// `ArchiveImportPolicy.unbounded` states in full).
 let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : ServerApp =
-    app |> withServiceConfig (fun s -> s.AddSingleton<ArchiveImportPolicy>(policy))
+    let withSingleton =
+        app |> withServiceConfig (fun s -> s.AddSingleton<ArchiveImportPolicy>(policy))
+
+    ServerApp.withConfigValidator
+        (ArchiveImportPolicyValidator(policy) :> ConfigValidation.IConfigValidator)
+        withSingleton
 
 /// Phase 511 — enable fetch-by-URL ingestion for an explicit host
 /// allowlist, and register the transport that performs it.
@@ -481,12 +573,22 @@ let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : Ser
 /// Composing an EMPTY allowlist is therefore also inert, deliberately:
 /// a deployment that wires this from configuration and gets an empty
 /// list back fails closed rather than open.
+///
+/// Phase 725.D — also registers a preflight validator that names the
+/// egress posture: a broad allowlist, or any allowlist at all in a
+/// Team / MultiTeam deployment where the fetch surface is shared across
+/// tenants. An empty (inert) allowlist warns about nothing.
 let withUrlIngestion (policy: UrlIngestionPolicy) (app: ServerApp) : ServerApp =
-    app
-    |> withServiceConfig (fun s ->
-        s
-            .AddSingleton<UrlIngestionPolicy>(policy)
-            .AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
+    let withSingletons =
+        app
+        |> withServiceConfig (fun s ->
+            s
+                .AddSingleton<UrlIngestionPolicy>(policy)
+                .AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
+
+    ServerApp.withConfigValidator
+        (UrlIngestionValidator(app.Config, policy) :> ConfigValidation.IConfigValidator)
+        withSingletons
 
 /// Phase 511 — register a custom URL transport (an egress proxy, a
 /// signed-fetch service) without changing the allowlist semantics. The
