@@ -132,7 +132,17 @@ module FactsCompose =
                         | :? DisclosurePurposeConfig as p -> Some p
                         | _ -> None
 
-                    FactDisclosureGate.createConfigured taint purpose store events)
+                    // Phase 675 — declassification budgets arm the same
+                    // way, off an optional `DeclassificationBudgetConfig`
+                    // registration (the `withDeclassificationBudgets`
+                    // compose below); unregistered ⇒ the facet is absent
+                    // and the gate is byte-for-byte the pre-675 one.
+                    let budgets =
+                        match sp.GetService(typeof<DeclassificationBudgetConfig>) with
+                        | :? DeclassificationBudgetConfig as b -> Some b
+                        | _ -> None
+
+                    FactDisclosureGate.createConfiguredWithBudgets taint purpose budgets store events)
             )
             // Phase 558 — the concrete fact resolver closes the Phase 522
             // seam, registered with the store + gate so the fact tier is
@@ -513,6 +523,101 @@ module FactsCompose =
                     }
             }
             |> ServerApp.withRegisteredPurposes (registeredPurposes config)
+
+    // ─── Phase 675 — declassification budgets (opt-in) ────────────────
+    //
+    // A separate, explicit opt-in on top of the fact store — the shape
+    // every opt-in around it takes, and here because it needs a LEDGER.
+    // Folding it into `withFactStore` would compose durable, stateful
+    // accounting into every deployment that wanted a fact base.
+    //
+    // The honesty framing this mechanism is sold under lives in full in
+    // `DeclassificationBudget.fs` and is restated on the helper below,
+    // because a compose helper is where a deployment decides what to
+    // believe about it. Its four points, since they decide whether this
+    // knob is the control a reader thinks it is:
+    //
+    //   * The accounting bounds **questions asked**, not information
+    //     disclosed. A declassification routine is a DETERMINISTIC
+    //     transform, and summing charges over deterministic answers
+    //     bounds nothing formally.
+    //   * Only a routine that draws calibrated noise from an
+    //     `INoiseMechanism` (Phase 481) earns a differential-privacy
+    //     claim, and only such a routine may declare a chargeable
+    //     epsilon — refused here, at registration, not in prose.
+    //   * Composition is **basic (sequential)**: charges add (Dwork &
+    //     Roth, Theorem 3.16). No advanced composition is offered.
+    //   * **Collusion is out of scope.** Two contributing parties that
+    //     share answers are one adversary with two budgets.
+
+    /// Compose declassification budgets (Phase 675): register the
+    /// declared budgets + the ledger they account through, so the gate
+    /// factory above arms the budget facet. Each declaration names a
+    /// Phase 562 declassification routine by operation id; a crossing of
+    /// that routine reserves its charge before the disclosure verdict and
+    /// settles it after, **per contributing party** (Phase 674). An
+    /// exhausted ceiling denies with the same typed, audited refusal
+    /// shape a policy denial takes (GP 6) — never a silent allow.
+    ///
+    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
+    /// `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withDeclassificationBudgets
+    ///        (BlobPrivacyBudgetLedger blob)
+    ///        [ DeclassificationBudget.countedCrossings "aggregate-over-k" 500 ]
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// **This is an accounting control, not a differential-privacy
+    /// guarantee.** `countedCrossings` bounds how many times a routine
+    /// may be crossed — a count of questions asked, which is exactly what
+    /// the number is for a deterministic transform. `chargedEpsilon` is
+    /// available only to a routine that names the `INoiseMechanism` it
+    /// draws calibrated noise from, and the registration below REFUSES
+    /// the combination otherwise rather than documenting against it.
+    /// Charges compose sequentially (Σεᵢ, Dwork & Roth Theorem 3.16); no
+    /// advanced composition is offered, and collusion between
+    /// contributing parties is out of scope — two parties that share
+    /// answers are one adversary with two budgets.
+    ///
+    /// Raises at compose time on an unenforceable declaration (an
+    /// epsilon charge with no noise mechanism, a ceiling at or below
+    /// zero, two budgets for one routine). Loud and early rather than at
+    /// the first disclosure: a privacy control that fails late fails
+    /// after something has already been disclosed.
+    let withDeclassificationBudgets
+        (ledger: IPrivacyBudgetLedger)
+        (budgets: DeclassificationBudget list)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            // Validated HERE, at compose, not inside the DI factory: a
+            // factory throws at first resolve, which is after the
+            // deployment believes it booted clean.
+            let config = DeclassificationBudgetConfig.create ledger budgets
+
+            let register (s: IServiceCollection) =
+                s.AddSingleton<DeclassificationBudgetConfig>(config)
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
 
     // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
     //

@@ -1,0 +1,34 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      One property drives every ToolUp.* pin. Keep it in lockstep with
+      the deployments that consume this module: the packaged assembly's
+      contracts (DataType, ServerModule, the client registration shapes)
+      are SDK-version-sensitive, and a consumer restoring a different
+      major.minor gets a type-load failure rather than a warning.
+    -->
+    <ToolUpSdkVersion>TOOLUP_SDK_VERSION</ToolUpSdkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Server tier -->
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <!-- Client tier -->
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <!-- Build pipeline: the packaged-module conformance check -->
+    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+    <PackageVersion Include="Feliz" Version="3.3.3" />
+    <PackageVersion Include="Fable.Core" Version="5.0" />
+    <PackageVersion Include="Fable.React.Types" Version="18.4" />
+    <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="Expecto" Version="10.2.3" />
+    <PackageVersion Include="Fake.Core.Target" Version="6.1.4" />
+    <PackageVersion Include="Fake.IO.FileSystem" Version="6.1.4" />
+  </ItemGroup>
+</Project>

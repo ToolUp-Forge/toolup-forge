@@ -33,6 +33,15 @@
         <Compile Include="Server\BlobFactStore.fs" />
         <Compile Include="Server\FactStoreEvidenceSource.fs" />
         <Compile Include="Server\DisclosureTaint.fs" />
+        <!-- Phase 675 — the cumulative half of declassification: a budget
+             declared per Phase 562 routine, reserved before the gate's
+             verdict and settled after, accounted per Phase 674
+             contributing party through the Phase 190 ledger seam (which
+             Phase 675 moved into ToolUp.Platform.Server so two tiers
+             share one accounting path rather than two). Compiled after
+             DisclosureTaint.fs (it charges that file's TaintCrossing) and
+             before FactDisclosureGate.fs (which reserves through it). -->
+        <Compile Include="Server\DeclassificationBudget.fs" />
         <Compile Include="Server\FactDisclosureGate.fs" />
         <!-- Phase 623.B — the pure invalidation derivation moved AHEAD of
              the resolver: the read path now derives freshness through

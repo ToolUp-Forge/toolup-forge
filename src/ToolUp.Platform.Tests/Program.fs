@@ -920,6 +920,7 @@ let private registeredTests =
         // Phase 562 — taint-propagating disclosure + declassification routines.
         DisclosureTaintTests.tests
         MultiPartyDisclosureTests.tests
+        DeclassificationBudgetTests.tests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests
@@ -1145,6 +1146,8 @@ let private registeredTests =
         // Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
         TeamInvitationTests.checkMyInvitesTests
         EntraExternalIdConfigTests.tests
+        // Phase 747 — Google Workspace IUserDirectory companion.
+        GoogleDirectoryTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
         ConsentProviderTests.subscriptionFiringTests

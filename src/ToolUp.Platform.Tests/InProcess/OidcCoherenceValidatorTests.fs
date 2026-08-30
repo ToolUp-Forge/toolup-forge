@@ -11,7 +11,7 @@ open ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 
 // ─── OidcCoherenceValidator (0.4.0 — OidcAppConfig) ──────────────────
 //
-// Per-rule coverage of the 11 rules. Each test asserts the expected
+// Per-rule coverage of the 13 rules. Each test asserts the expected
 // per-rule outcome from `evaluate` rather than parsing the
 // aggregated `ValidationResult` message — `evaluate` is the
 // structured surface the future `/dev/inspect` validators panel
@@ -19,9 +19,11 @@ open ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 // aggregator's wording flexible.
 //
 // 0.4.0 BREAKING — validator now takes `OidcAppConfig` directly
-// (preset provenance is on the config itself). Same 11 rules; tests
-// reshaped to construct OidcAppConfig values instead of
-// `OidcUIConfig * PresetMetadata option`.
+// (preset provenance is on the config itself). Tests reshaped to
+// construct OidcAppConfig values instead of
+// `OidcUIConfig * PresetMetadata option`. Rule 12 (generic +
+// ValidateIdToken opt-out) landed at 0.4.3; Rule 13 (google preset
+// vs the fixed Google issuer) with the `google` preset.
 
 let private validCfg =
     OidcAppConfig.create "https://issuer.example.test" "test-client-id" "https://app.example.test/auth/callback"
@@ -403,6 +405,68 @@ let tests: Test =
                     | _ -> false)
 
             Expect.isFalse hasRule12Warn "rule 12 is generic-specific — other presets opt out without surfacing"
+
+        // ─── Rule 13 — google preset + non-Google issuer ───────
+
+        testCase "Rule 13: google preset + a pasted non-Google issuer → WARN"
+        <| fun () ->
+            let cfg = google "client-id" "https://app/cb"
+
+            let pasted = {
+                cfg with
+                    Issuer = "https://mytenant.auth0.com/"
+            }
+
+            let outcomes = evaluate pasted
+            Expect.isTrue (hasWarningMatching "Preset `google` declared" outcomes) ""
+
+        testCase "Rule 13: google preset + the fixed Google issuer → no rule-13 warning"
+        <| fun () ->
+            let outcomes = evaluate (google "client-id" "https://app/cb")
+
+            let hasRule13Warn =
+                outcomes
+                |> List.exists (function
+                    | RuleWarning m -> m.Contains "Preset `google` declared"
+                    | _ -> false)
+
+            Expect.isFalse hasRule13Warn ""
+
+        testCase "Rule 13: trailing slash tolerated (discovery normalises it)"
+        <| fun () ->
+            // A hand-edited config carrying `.../` is not a
+            // misconfiguration — refusing it would report a
+            // non-problem to an operator who has nothing to fix.
+            let cfg = google "client-id" "https://app/cb"
+
+            let slashed = {
+                cfg with
+                    Issuer = "https://accounts.google.com/"
+            }
+
+            let outcomes = evaluate slashed
+
+            let hasRule13Warn =
+                outcomes
+                |> List.exists (function
+                    | RuleWarning m -> m.Contains "Preset `google` declared"
+                    | _ -> false)
+
+            Expect.isFalse hasRule13Warn ""
+
+        testCase "Rule 11 renders the Google issuer form + the opaque-token expectation"
+        <| fun () ->
+            // The preset's per-provider knowledge has to reach the
+            // boot log / validators panel, not merely exist on the
+            // DU — this is where an operator sees it.
+            let outcomes = evaluate (google "client-id" "https://app/cb")
+
+            Expect.isTrue (hasOkMatching "preset `google` applied" outcomes) ""
+            Expect.isTrue (hasOkMatching "https://accounts.google.com" outcomes) "issuer form must render"
+
+            Expect.isTrue
+                (hasOkMatching "expects decodable access token: false" outcomes)
+                "the opaque-access-token fact must render alongside the issuer form"
 
         // ─── Happy path ─────────────────────────────────────────
 
