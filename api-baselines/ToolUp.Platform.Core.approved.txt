@@ -10277,9 +10277,13 @@ ToolUp.Platform.SignedShape (class)
 ToolUp.Platform.SignedShape.ActivationAuthorisation : ToolUp.Platform.SignedShape { get }
 ToolUp.Platform.SignedShape.CleanRoomApprovalRecord : ToolUp.Platform.SignedShape { get }
 ToolUp.Platform.SignedShape.CleanRoomTemplate : ToolUp.Platform.SignedShape { get }
+ToolUp.Platform.SignedShape.CountersignatureRecord : ToolUp.Platform.SignedShape { get }
+ToolUp.Platform.SignedShape.CountersignatureSubject : ToolUp.Platform.SignedShape { get }
 ToolUp.Platform.SignedShape.IsActivationAuthorisation : System.Boolean { get }
 ToolUp.Platform.SignedShape.IsCleanRoomApprovalRecord : System.Boolean { get }
 ToolUp.Platform.SignedShape.IsCleanRoomTemplate : System.Boolean { get }
+ToolUp.Platform.SignedShape.IsCountersignatureRecord : System.Boolean { get }
+ToolUp.Platform.SignedShape.IsCountersignatureSubject : System.Boolean { get }
 ToolUp.Platform.SignedShape.IsPromotedArtifact : System.Boolean { get }
 ToolUp.Platform.SignedShape.IsSignalFeedDelivery : System.Boolean { get }
 ToolUp.Platform.SignedShape.IsWorkerSignedOutcome : System.Boolean { get }
@@ -10291,6 +10295,8 @@ ToolUp.Platform.SignedShape+Tags (class)
 ToolUp.Platform.SignedShape+Tags.ActivationAuthorisation : System.Int32 (literal)
 ToolUp.Platform.SignedShape+Tags.CleanRoomApprovalRecord : System.Int32 (literal)
 ToolUp.Platform.SignedShape+Tags.CleanRoomTemplate : System.Int32 (literal)
+ToolUp.Platform.SignedShape+Tags.CountersignatureRecord : System.Int32 (literal)
+ToolUp.Platform.SignedShape+Tags.CountersignatureSubject : System.Int32 (literal)
 ToolUp.Platform.SignedShape+Tags.PromotedArtifact : System.Int32 (literal)
 ToolUp.Platform.SignedShape+Tags.SignalFeedDelivery : System.Int32 (literal)
 ToolUp.Platform.SignedShape+Tags.WorkerSignedOutcome : System.Int32 (literal)
