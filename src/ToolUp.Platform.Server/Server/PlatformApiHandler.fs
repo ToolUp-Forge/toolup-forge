@@ -67,6 +67,17 @@ let private resolveTeamStore (ctx: HttpContext) =
     | :? ITeamStore as ts -> Some ts
     | _ -> None
 
+/// Phase 549 — the directory companion backing the opt-in existence
+/// proof on the direct-add membership paths. `None` for every
+/// deployment that composes no `IUserDirectory`, which is the default
+/// and costs nothing: the proof gate is only consulted under
+/// `DirectAddIdentityProof = RequireDirectoryProof`, and that
+/// combination is refused at startup preflight.
+let private resolveUserDirectory (ctx: HttpContext) =
+    match ctx.RequestServices.GetService(typeof<IUserDirectory>) with
+    | :? IUserDirectory as d -> Some d
+    | _ -> None
+
 let private resolvePermissionStore (ctx: HttpContext) =
     match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
     | :? IPermissionStore as p -> Some p
@@ -192,6 +203,68 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             return! ts.GetMemberRole(teamId, userId)
     }
 
+    // ── Phase 549 — directory existence proof for direct adds ───────
+    //
+    // The check Phase 131's seam comment reserved a place for, now
+    // shipped as an opt-in. Under `RequireDirectoryProof` a supplied
+    // principal id is resolved against the composed `IUserDirectory`
+    // before any membership row is written; an id the directory does
+    // not recognise is refused, naming the id and the requirement.
+    //
+    // Three properties are deliberate:
+    //
+    //   * **The caller's own id is exempt.** It arrives from the
+    //     validated access token via `ScopeResolutionMiddleware`, so it
+    //     is already proven — a directory round-trip would add latency
+    //     to `CreateTeam` and could refuse a legitimate caller whose
+    //     directory entry is merely stale.
+    //   * **Fail closed, twice.** A missing directory refuses rather
+    //     than passing through (the preflight validator makes that
+    //     combination unreachable in a composed deployment, but a
+    //     hand-built pipeline or `SkipPreflight` must not silently
+    //     downgrade a proof requirement to nothing), and so does a
+    //     substrate failure — admitting an unproven id because the
+    //     provider returned a 5xx is exactly the outcome the mode was
+    //     selected to prevent.
+    //   * **The invite path is untouched.** Pending-by-email invites
+    //     never reach here: they are consumed at sign-in, which is
+    //     their existence proof.
+    //
+    // `ResolveUsers` is the right method rather than `SearchUsers`: it
+    // is the id→entry direction, it batches, and its contract already
+    // says unrecognised ids are omitted rather than raised — so an
+    // absent entry is a clean "not found", not an error to interpret.
+    let directory = resolveUserDirectory ctx
+
+    /// `Ok ()` when `subjectId` may be written as a membership row;
+    /// `Error msg` with an operator-legible refusal otherwise. Returns
+    /// `Ok ()` immediately in the default mode, so a deployment that has
+    /// not opted in pays nothing (GP 13).
+    let directoryProof (subjectId: string) = async {
+        match config.DirectAddIdentityProof with
+        | NoIdentityProof -> return Ok()
+        | RequireDirectoryProof when subjectId = userId -> return Ok()
+        | RequireDirectoryProof ->
+            match directory with
+            | None ->
+                return
+                    Error
+                        $"Directory existence proof is required for direct member adds (ServerConfig.DirectAddIdentityProof = RequireDirectoryProof), but no IUserDirectory companion is composed, so the id '{subjectId}' cannot be verified. Compose an IUserDirectory (e.g. ToolUp.AuthProviders.EntraDirectory) or set DirectAddIdentityProof = NoIdentityProof."
+            | Some d ->
+                let! resolved = d.ResolveUsers [ subjectId ]
+
+                match resolved with
+                | Ok matches when matches |> List.exists (fun u -> u.UserId = subjectId) -> return Ok()
+                | Ok _ ->
+                    return
+                        Error
+                            $"User id '{subjectId}' was not found in the directory, and this deployment requires a directory existence proof for direct member adds (ServerConfig.DirectAddIdentityProof = RequireDirectoryProof). Check the id, or invite the user by email instead."
+                | Error e ->
+                    return
+                        Error
+                            $"Directory lookup for user id '{subjectId}' failed ({e}), and this deployment requires a directory existence proof for direct member adds (ServerConfig.DirectAddIdentityProof = RequireDirectoryProof), so the membership row was not written. Retry once the directory is reachable."
+    }
+
     /// Helper for the Add / Remove paths. Reads the caller's effective
     /// role + checks `TeamRoles.canManageRole` against the target role.
     /// Returns `Ok ()` when permitted, `Error "Insufficient permissions"`
@@ -272,6 +345,26 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     | _ -> return None
                 }
 
+                // Phase 549 — the named owner's existence proof. Gated on
+                // the two decisions above so a caller who was never
+                // permitted to name this owner reads "requires Platform
+                // Admin" rather than a directory refusal, and so a denied
+                // create costs no directory round-trip. Evaluated before
+                // the team id is minted, so a refusal leaves no blob
+                // behind. `None` in the default mode — `directoryProof`
+                // short-circuits without touching the substrate.
+                let! ownerProofError = async {
+                    if allowed && quotaError.IsNone then
+                        let! proof = directoryProof ownerUserId
+
+                        return
+                            match proof with
+                            | Error e -> Some e
+                            | Ok() -> None
+                    else
+                        return None
+                }
+
                 if not allowed then
                     audit
                         "_platform"
@@ -290,6 +383,8 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         })
 
                     return Error quotaError.Value
+                elif ownerProofError.IsSome then
+                    return Error ownerProofError.Value
                 else
                     // Full-width GUID. The previous `[..7]` slice was 32 bits —
                     // birthday-collision-prone at SaaS scale — and the id is the
@@ -385,30 +480,39 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
 
                     match authorised with
                     | Ok() ->
-                        let! result = ts.AddMember(teamId, memberId, role)
+                        // Phase 549 — existence proof for the supplied
+                        // member id, after the role gate (an unauthorised
+                        // caller learns nothing about the directory) and
+                        // before the row is written.
+                        let! proof = directoryProof memberId
 
-                        match result with
+                        match proof with
+                        | Error proofErr -> return Error proofErr
                         | Ok() ->
-                            audit
-                                teamId
-                                (MemberAdded {
-                                    UserId = userId
-                                    TeamId = teamId
-                                    AffectedUserId = memberId
-                                    Role = TeamRoles.displayName role
-                                })
+                            let! result = ts.AddMember(teamId, memberId, role)
 
-                            // First-team-becomes-active: a member with
-                            // no active-team pointer would otherwise
-                            // resolve as `AuthenticatedUser` (personal
-                            // scope) on every request — empty data,
-                            // empty module list — with no affordance
-                            // to transition. Never re-points an
-                            // existing selection.
-                            do! ActiveTeamPolicy.ensureActiveTeam ts memberId teamId
-                        | Error _ -> ()
+                            match result with
+                            | Ok() ->
+                                audit
+                                    teamId
+                                    (MemberAdded {
+                                        UserId = userId
+                                        TeamId = teamId
+                                        AffectedUserId = memberId
+                                        Role = TeamRoles.displayName role
+                                    })
 
-                        return result
+                                // First-team-becomes-active: a member with
+                                // no active-team pointer would otherwise
+                                // resolve as `AuthenticatedUser` (personal
+                                // scope) on every request — empty data,
+                                // empty module list — with no affordance
+                                // to transition. Never re-points an
+                                // existing selection.
+                                do! ActiveTeamPolicy.ensureActiveTeam ts memberId teamId
+                            | Error _ -> ()
+
+                            return result
                     | Error e -> return Error e
                 | None -> return Error "Team management not available in this mode"
             }

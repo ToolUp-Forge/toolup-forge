@@ -1110,6 +1110,10 @@ let private registeredTests =
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
         TeamCreationPolicyTests.quotaTests
+        // Phase 549 — opt-in directory existence proof for direct member
+        // adds (AddTeamMember / CreateTeamWithOwner), plus the fail-closed
+        // preflight for the mode-without-a-directory misconfiguration.
+        DirectAddIdentityProofTests.tests
         // Phase 304 — TeamApi.TransferOwnership: Owner-gated ownership
         // hand-over (promote-then-demote single-Owner invariant, member /
         // self / non-Owner rejections, TeamOwnershipTransferred audit).

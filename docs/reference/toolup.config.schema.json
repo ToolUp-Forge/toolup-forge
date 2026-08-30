@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
   "title": "ToolUp deployment configuration manifest",
-  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 112 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 113 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -486,6 +486,12 @@
       "type": [ "integer", "string" ],
       "pattern": "^-?[0-9]+$",
       "default": 1
+    },
+    "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD": {
+      "description": "Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory).",
+      "type": "string",
+      "enum": [ "enabled", "disabled" ],
+      "default": "disabled"
     },
     "TOOLUP_REQUIRE_HTTPS": {
       "description": "When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces.",

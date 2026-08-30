@@ -1060,6 +1060,33 @@ module ArchiveImportPolicy =
         MaxCompressionRatio = None
     }
 
+    /// Phase 725.D — names every lever this policy leaves unbounded, in
+    /// the order they appear on the type. `defaults` yields `[]`;
+    /// `unbounded` yields all four.
+    ///
+    /// Pure and total so the compose-time validator states a *posture*
+    /// rather than a verdict: the preflight prints these names back at
+    /// the operator, and a deployment that genuinely wants an unguarded
+    /// expander still gets one (`Warning`, never `Error` — GP 11).
+    ///
+    /// Note the ratio lever is the one that catches a bomb whose entries
+    /// are each individually modest, so "MaxEntries and MaxEntryBytes are
+    /// set" is not on its own a guarded posture.
+    let unguardedLevers (policy: ArchiveImportPolicy) : string list = [
+        if Option.isNone policy.MaxEntries then
+            "MaxEntries"
+        if Option.isNone policy.MaxEntryBytes then
+            "MaxEntryBytes"
+        if Option.isNone policy.MaxTotalUncompressedBytes then
+            "MaxTotalUncompressedBytes"
+        if Option.isNone policy.MaxCompressionRatio then
+            "MaxCompressionRatio"
+    ]
+
+    /// `true` when at least one archive-expansion guard is off.
+    let isUnguarded (policy: ArchiveImportPolicy) : bool =
+        not (List.isEmpty (unguardedLevers policy))
+
 /// Compose-time URL-ingestion allowlist (Phase 511.C). **Inert by
 /// default and inert by construction**: `AllowedHosts` is a `Set`, the
 /// empty set admits nothing, and there is no wildcard case — so a
@@ -1112,6 +1139,24 @@ module UrlIngestionPolicy =
         not (isNull host)
         && policy.AllowedHosts.Contains(host.Trim().ToLowerInvariant())
 
+    /// Phase 725.D — the allowlist size at or above which the compose-time
+    /// preflight calls the egress surface *broad*.
+    ///
+    /// A threshold rather than a judgement about which hosts are risky,
+    /// because there is no such judgement to make: exact-host matching
+    /// means every entry is precise, and the thing that degrades is
+    /// *reviewability* — an allowlist nobody reads is one nobody notices
+    /// a stale entry in. Ten is the point past which a reader stops
+    /// checking each line, not a security boundary, which is why the
+    /// finding is a `Warning` naming the count rather than a refusal.
+    [<Literal>]
+    let BroadAllowlistThreshold = 10
+
+    /// `true` when the allowlist is large enough to warrant naming at
+    /// compose time. An inert policy is never broad.
+    let isBroadAllowlist (policy: UrlIngestionPolicy) : bool =
+        Set.count policy.AllowedHosts >= BroadAllowlistThreshold
+
 /// One thing to import. `Archive` expands into many items server-side;
 /// `Url` is fetched only when the deployment allowlisted its host.
 ///
@@ -1127,6 +1172,23 @@ module UrlIngestionPolicy =
 /// migration script talking to the API directly — pays base64's 33%
 /// instead. Deployments moving very large corpora upload the archive
 /// with `UploadDocument`'s optimised path or split the batch.
+///
+/// **Phase 725.B — the compact cases close that cost without moving the
+/// transport.** `FileBase64` / `ArchiveBase64` carry the same payload as
+/// `File` / `Archive` but type it as a `string`, so the encoding is
+/// pinned by the SHAPE rather than left to whichever host serialises the
+/// DU. That is the whole mechanism: a `byte[]` field is base64 on the
+/// .NET host (`ByteArrayConverter` writes `WriteBase64StringValue`) and
+/// a numeric array on the Fable host (`Fable.SimpleJson` emits
+/// `[n, n, …]`), and only the second is expensive — roughly 4× raw
+/// against base64's 1.33×. A `string` field has no such fork: both hosts
+/// send the same ~1.33× characters, and the server decodes once.
+///
+/// The `byte[]` cases are untouched and still accepted (GP 11) — a
+/// programmatic caller already paying base64 through
+/// `ByteArrayConverter` gains nothing by migrating, and no existing
+/// submission changes meaning. A malformed base64 string is one
+/// classified `Refused` line, never a thrown batch.
 [<RequireQualifiedAccess>]
 type BulkImportSource =
     /// Raw bytes under a caller-supplied name — the programmatic
@@ -1138,6 +1200,44 @@ type BulkImportSource =
     /// A URL to fetch. Refused unless the deployment allowlisted the
     /// host.
     | Url of url: string
+    /// Phase 725.B — `File` with the payload carried as base64 text.
+    /// Identical admission; the only difference is what crosses the
+    /// wire.
+    | FileBase64 of fileName: string * contentBase64: string
+    /// Phase 725.B — `Archive` with the payload carried as base64 text.
+    /// Identical expansion under the same `ArchiveImportPolicy`.
+    | ArchiveBase64 of fileName: string * contentBase64: string
+
+module BulkImportSource =
+    /// Phase 725.B — decode a base64 payload, or say why it could not be.
+    ///
+    /// Total by construction: `Convert.FromBase64String` throws on
+    /// malformed input, and a batch of 500 items must not lose 499
+    /// outcomes because one caller sent a truncated string. The error is
+    /// user-legible and names the field rather than surfacing a BCL
+    /// message about a "base-64 char array" (GP 9).
+    let tryDecodeBase64 (contentBase64: string) : Result<byte[], string> =
+        if isNull contentBase64 then
+            Error "base64 content is missing"
+        else
+            try
+                Ok(Convert.FromBase64String contentBase64)
+            with _ ->
+                Error(
+                    sprintf
+                        "base64 content is not decodable (%d character(s) submitted); send standard base64 with padding, or use the byte[] form"
+                        contentBase64.Length
+                )
+
+    /// The compact wire form of a raw payload — what a browser client
+    /// composes instead of `File`, and the one place the encoding choice
+    /// is spelled so a caller cannot half-adopt it.
+    let ofFileBytes (fileName: string) (content: byte[]) : BulkImportSource =
+        BulkImportSource.FileBase64(fileName, Convert.ToBase64String content)
+
+    /// The compact wire form of an archive payload. See `ofFileBytes`.
+    let ofArchiveBytes (fileName: string) (content: byte[]) : BulkImportSource =
+        BulkImportSource.ArchiveBase64(fileName, Convert.ToBase64String content)
 
 /// A batch submission. One list, so ordering across kinds is the
 /// caller's and the report can be read against the request positionally.
