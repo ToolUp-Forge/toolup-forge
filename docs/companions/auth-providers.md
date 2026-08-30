@@ -597,6 +597,58 @@ Configuration via environment / Vite env:
 
 `#if DEBUG` in the consuming app typically controls Clerk activation — debug skips sign-in, release enables it.
 
+## Directory companions
+
+A *directory* companion is not an `IAuthProvider`. It implements `IUserDirectory`, a separate substrate the SDK's team-management surface uses to look people up rather than to sign them in: a typeahead over the identity provider's directory (`SearchUsers`), a reverse batch lookup that turns stored user ids into names and emails in the admin tables (`ResolveUsers`), and a branded invitation email (`NotifyInvitation`).
+
+They are optional in the strongest sense — a deployment that registers none gets `Ok []` from the typeahead handler, the invite form degrades to a plain email input, and the invite still lands via the pending-by-email store with the invitee told out of band. Register one with `ServerApp.withUserDirectory`, independently of which `IAuthProvider` signs users in.
+
+| Companion | Directory | Auth model |
+|---|---|---|
+| `ToolUp.AuthProviders.EntraDirectory` | Microsoft Graph (Entra / Azure AD) | App-only via `DefaultAzureCredential` — managed identity in production, `az login` locally. |
+| `ToolUp.AuthProviders.GoogleDirectory` | Google Workspace (Admin SDK Directory API + Gmail API) | Service-account JSON + domain-wide delegation, read from `ISecretStore`. |
+
+### `ToolUp.AuthProviders.GoogleDirectory` (Google Workspace directory)
+
+The Google analogue of `EntraDirectory`: same three capabilities, same degradation semantics, a materially different auth model. BCL `HttpClient` throughout — no Google client SDK in the dependency graph.
+
+Google Workspace has no managed-identity equivalent for these APIs. The only application-scoped path is **domain-wide delegation**: a service account, authorised by a Workspace super-admin, may impersonate users in the domain for an explicit list of OAuth scopes. Every call therefore runs *as some user*, and the two capabilities need two different subjects — directory reads impersonate a Workspace admin (only an admin may list the directory), while the invitation email impersonates the sender mailbox (Gmail sends as whoever the token impersonates). Tokens are minted with an RS256-signed JWT-bearer grant and cached per subject and scope set.
+
+Scopes requested, and no others:
+
+- `https://www.googleapis.com/auth/admin.directory.user.readonly` — always.
+- `https://www.googleapis.com/auth/gmail.send` — only when `SenderUserId` is set. Send-only; it grants no mailbox read.
+
+Wiring. The service-account JSON comes from the deployment's `ISecretStore`, never an environment variable or a file path — a delegated key can impersonate any user in the domain, so it belongs behind an audited secret backend. That is also why this companion ships no `fromEnv`:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders
+
+let directoryConfig = {
+    GoogleDirectoryConfig.defaults with
+        Domain = "example.com"
+        ImpersonatedAdmin = "directory-reader@example.com"
+        SenderUserId = Some "invites@example.com"
+}
+
+let directory = GoogleDirectory.create secretStore directoryConfig
+
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withUserDirectory (Some directory)
+|> ServerApp.run
+```
+
+`CredentialScopeId` / `CredentialSecretKey` default to `_platform` / `google_directory_service_account`; the stored value is the key file's contents verbatim.
+
+Ship the pair alongside it. `GoogleDirectoryConfigValidator.create` performs a real token exchange per requested scope at preflight — which is exactly where Google enforces the delegation, so a mint is proof the grant exists. A missing credential or an ungranted directory scope aborts startup; an ungranted *Gmail* scope is a `Warning`, because invitation email degrading is a real loss but not a reason to refuse to boot. `GoogleDirectoryHealth.create` adds a readiness probe that makes a live authenticated directory call.
+
+Query shape. Google's `query` parameter ANDs multiple `field:value` prefix terms — there is no OR — so matching display name *or* email is two requests (`name:'…'`, `email:'…'`) merged and de-duplicated by id. `EntraDirectory` expresses the same intent as one OData filter with `or` clauses; the observable behaviour is the same. A minimum prefix of 2 characters is enforced server-side.
+
+Errors follow `EntraDirectory` exactly: transient directory failures (and a credential that will not load, and a delegation that was never granted) surface as `Error "directory unavailable: …"` under the typeahead input; mail-send failures as `Error "notification unavailable: …"`, which the invite handler swallows. `SenderUserId = None` disables the mail path with no other consequence. An id `ResolveUsers` cannot find is skipped, never an error.
+
+The permission-grant walkthrough — both consoles, in order, with the PowerShell for the Cloud half — is in the companion's own [README](https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/AuthProviders/GoogleDirectory/README.md).
+
 ## Writing a custom provider
 
 For an auth mechanism not covered by the shipped companions (LDAP / SAML / proprietary / etc.):
