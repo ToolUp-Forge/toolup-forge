@@ -2166,6 +2166,10 @@
              into every sibling pack that runs an explicitly-enumerated list
              rather than Expecto auto-discovery; must compile immediately
              before each pack's Program.fs. -->
+        <!-- Phase 747 — Google Workspace IUserDirectory companion:
+             the JWT-grant token exchange, the two-leg query mapping,
+             the error posture, and the health / preflight pair. -->
+        <Compile Include="InProcess\GoogleDirectoryTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
@@ -2226,6 +2230,9 @@
         <ProjectReference Include="..\AuthProviders\OidcClient\OidcClient.fsproj" />
         <!-- Phase 3d — Entra External ID companion config / claim-mapping unit tests. -->
         <ProjectReference Include="..\AuthProviders\EntraExternalId\EntraExternalId.fsproj" />
+        <!-- Phase 747 — Google Workspace IUserDirectory companion, driven
+             against a stub transport (no Workspace tenant required). -->
+        <ProjectReference Include="..\AuthProviders\GoogleDirectory\GoogleDirectory.fsproj" />
         <!-- GitHub OAuth companion — opaque-token validation + org gating +
              code-exchange contract tests via stub HttpMessageHandler (no
              env-gate; the handler removes the need for real GitHub creds). -->
