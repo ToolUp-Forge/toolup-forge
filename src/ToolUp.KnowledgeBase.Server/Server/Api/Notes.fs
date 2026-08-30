@@ -105,7 +105,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                     OriginatingUserId = Some deps.UserId
                 }
 
-                let accepted = deps.Queue.Enqueue(job)
+                // Phase 723 — async enqueue: the sync form is a blocking
+                // store round-trip on the request thread once a
+                // deployment composes a durable queue.
+                let! accepted = deps.Queue.EnqueueAsync(job)
                 deps.RecordEnqueue accepted
 
                 if not accepted then
@@ -221,7 +224,8 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                             OriginatingUserId = Some deps.UserId
                         }
 
-                        let accepted = deps.Queue.Enqueue(job)
+                        // Phase 723 — async enqueue; see `addNote`.
+                        let! accepted = deps.Queue.EnqueueAsync(job)
                         deps.RecordEnqueue accepted
 
                         if not accepted then
