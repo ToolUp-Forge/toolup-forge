@@ -66,6 +66,11 @@
     <Compile Include="Cli\StampCommand.fs" />
     <Compile Include="Cli\ModuleCommand.fs" />
     <Compile Include="Cli\MembershipsDoctorCommand.fs" />
+    <!-- Phase 550 — the tenant / user lifecycle verbs. `Users.fs` reuses
+         `Tenants.fs`'s admin transport and offboard runner (a user
+         offboard IS a scope offboard), so it compiles after it. -->
+    <Compile Include="Commands\Tenants.fs" />
+    <Compile Include="Commands\Users.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

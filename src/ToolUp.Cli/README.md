@@ -34,6 +34,8 @@ toolup docker emit --help
 | `stamp` | Writes/refreshes a module-binding manifest (`module-bindings.json`) — the deploy-time stamper for the module-binding gate. |
 | `module add` / `module remove` | Transactionally scaffold + register a module into an app, or reverse it byte-for-byte. |
 | `memberships doctor` | Detects membership-integrity drift in a local-file deployment's blob layout; `--repair` fixes the provably-safe subset. |
+| `tenants list` / `preview` / `offboard` | Scripted tenant lifecycle over a running deployment's admin API: enumerate teams, preview an offboard's blast radius, run one. |
+| `users list` / `offboard` | Enumerate the principals the substrate has evidence for (`--team-less` for the stray-account residue), and offboard one's personal scope. |
 
 #### `module add` / `module remove`
 
@@ -108,6 +110,62 @@ live repair.
 |---|---|
 | `--data-root <dir>` | The deployment's local blob-storage root (required). |
 | `--repair` | Apply the safe subset instead of reporting only. |
+
+#### `tenants` / `users` — tenant + principal lifecycle
+
+Unlike every other verb here, these talk to a **running deployment** over its admin API rather than
+to files on disk. They are a thin client: every decision — who may call, what a preview counts,
+whether an offboard needs a confirmation token, which user id the audit trail records — is made
+server-side and is not re-implemented, relaxed, or second-guessed here.
+
+```bash
+# Both flags are required on every call; alias them in a script.
+$admin = @("--endpoint", "https://app.example.com", "--token-file", "/run/secrets/toolup-admin")
+
+toolup users list --team-less @admin           # principals with a login and no team
+toolup tenants preview user-u42 @admin         # what an offboard WOULD destroy
+toolup users offboard u42 --reason "left the company" @admin
+```
+
+| Setting | Meaning |
+|---|---|
+| `--endpoint <url>` | Deployment origin. |
+| `--token-file <path>` | File holding a Platform-Admin bearer token. |
+
+**Why a file, and why no environment variable.** A credential passed as an argument lands in shell
+history and in every process listing on the machine; one passed in the environment is inherited by
+every child process and shows up in crash dumps. A file carries filesystem permissions and is the
+shape a container secret mount already has. And `TOOLUP_*` is the *deployment's* configuration
+namespace — centrally registered, dumped by `--print-config`, documented in the config reference —
+whereas these configure a client process. The obvious name is in fact already taken by something
+else: `TOOLUP_ADMIN_TOKEN` is the deployment's shared crypto-shred secret, replayed as an
+`X-Admin-Token` header, not an admin's bearer identity. A CLI reading it on a box that also runs the
+server would send the wrong secret under the wrong scheme.
+
+| Command | What it does |
+|---|---|
+| `tenants list` | Every team on the deployment with its membership summary (the deployment-wide admin read). |
+| `tenants preview <scopeId>` | Each lifecycle hook's would-affect projection — the key that would be destroyed, the jobs that would be cancelled, the records that would be erased. Modifies nothing. |
+| `tenants offboard <scopeId>` | Runs every deprovision hook. **Irreversible.** |
+| `users list [--team-less]` | The derived principal enumeration — membership blobs, personal `user-<id>` scopes, and the sign-in audit trail, merged per user. `--team-less` keeps exactly those holding no membership row. |
+| `users offboard <userId>` | Sugar for `tenants offboard user-<userId>` — same hooks, same gate, same audit trail. |
+
+`offboard` options: `--export-first` writes the tenant's data-export archive as a durable pre-step
+and erases only once it is written (a failed export aborts before any destruction, and the archive
+reference is printed so you can hand it to the departing customer); `--reason <text>` is recorded in
+the audit trail; `--token <t>` replays a confirmation token.
+
+**On the confirmation gate.** When a deployment runs a confirmation mode, the server refuses a
+token-less offboard. The CLI surfaces that refusal **verbatim** and exits non-zero — it does not
+mint a token, and there is no flag that makes it. Under the two-person rule the minting admin must
+be a *different person* from the redeeming one, which is not a property a command-line flag can
+attest to; the token reaches you out of band and `--token` replays it unchanged.
+
+Exit codes are the CI-relevant part. `0` means the call succeeded and, for an offboard, that no hook
+failed. `1` covers a server refusal (including the confirmation banner), an unreachable deployment,
+and a **partially completed** offboard — the sweep does not abort on a failing hook, so the rest of
+the erasure still runs and the tenant is left half-offboarded, which a scripted sweep should stop on
+rather than report as clean. `2` is a bad invocation, and nothing was sent.
 
 #### `docker emit`
 

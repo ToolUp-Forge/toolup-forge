@@ -14,6 +14,10 @@
          pure-BCL classification + sanitiser mirror pinned to the server
          substrate over one fixture tree (the stamp-round-trip mechanism). -->
     <Compile Include="MembershipsDoctorTests.fs" />
+    <!-- Phase 550 — the tenant / user lifecycle verbs: parsing, the
+         Result-envelope read, a mocked-transport round-trip per verb, and
+         the no-confirmation-bypass assertions. -->
+    <Compile Include="TenantUserVerbsTests.fs" />
     <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
          ToolUp.Platform.Tests so there is one implementation. -->
     <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
