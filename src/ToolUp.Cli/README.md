@@ -119,18 +119,28 @@ whether an offboard needs a confirmation token, which user id the audit trail re
 server-side and is not re-implemented, relaxed, or second-guessed here.
 
 ```bash
-$env:TOOLUP_ADMIN_ENDPOINT = "https://app.example.com"
-$env:TOOLUP_ADMIN_TOKEN    = "<a Platform-Admin bearer token>"
+# Both flags are required on every call; alias them in a script.
+$admin = @("--endpoint", "https://app.example.com", "--token-file", "/run/secrets/toolup-admin")
 
-toolup users list --team-less                 # principals with a login and no team
-toolup tenants preview user-u42               # what an offboard WOULD destroy
-toolup users offboard u42 --reason "left the company"
+toolup users list --team-less @admin           # principals with a login and no team
+toolup tenants preview user-u42 @admin         # what an offboard WOULD destroy
+toolup users offboard u42 --reason "left the company" @admin
 ```
 
 | Setting | Meaning |
 |---|---|
-| `TOOLUP_ADMIN_ENDPOINT` / `--endpoint <url>` | Deployment origin. The flag wins over the variable. |
-| `TOOLUP_ADMIN_TOKEN` | Platform-Admin bearer credential. **Environment only** — a credential passed as an argument lands in shell history and in every process listing on the machine. |
+| `--endpoint <url>` | Deployment origin. |
+| `--token-file <path>` | File holding a Platform-Admin bearer token. |
+
+**Why a file, and why no environment variable.** A credential passed as an argument lands in shell
+history and in every process listing on the machine; one passed in the environment is inherited by
+every child process and shows up in crash dumps. A file carries filesystem permissions and is the
+shape a container secret mount already has. And `TOOLUP_*` is the *deployment's* configuration
+namespace — centrally registered, dumped by `--print-config`, documented in the config reference —
+whereas these configure a client process. The obvious name is in fact already taken by something
+else: `TOOLUP_ADMIN_TOKEN` is the deployment's shared crypto-shred secret, replayed as an
+`X-Admin-Token` header, not an admin's bearer identity. A CLI reading it on a box that also runs the
+server would send the wrong secret under the wrong scheme.
 
 | Command | What it does |
 |---|---|

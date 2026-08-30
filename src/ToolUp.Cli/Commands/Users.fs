@@ -112,16 +112,9 @@ let runOffboardUser
 
 // ── Help + registration ─────────────────────────────────────────────
 
-let private endpointHelp = [
-    "Endpoint + credential:"
-    "  --endpoint <url>    Deployment origin, e.g. https://app.example.com."
-    sprintf "                      Defaults to %s." EndpointEnvVar
-    sprintf "  %s   Platform-Admin bearer token (environment only)." TokenEnvVar
-]
-
 let listHelp =
     [
-        "Usage: toolup users list [--team-less] [--endpoint <url>]"
+        "Usage: toolup users list [--team-less] --endpoint <url> --token-file <path>"
         ""
         "Enumerates every principal the substrate has evidence for — membership"
         "blobs, personal `user-<id>` storage scopes, and the sign-in audit trail"
@@ -138,7 +131,8 @@ let listHelp =
 let offboardHelp =
     [
         "Usage: toolup users offboard <userId> [--export-first] [--token <t>]"
-        "                             [--reason <text>] [--endpoint <url>]"
+        "                             [--reason <text>] --endpoint <url>"
+        "                             --token-file <path>"
         ""
         "Offboards the user's personal storage scope (`user-<userId>`) — exactly"
         "`toolup tenants offboard user-<userId>`, with the same hooks, the same"
@@ -157,11 +151,6 @@ let offboardHelp =
         ""
     ]
     @ endpointHelp
-
-let private withTransport (verb: string) (help: string list) (opts: Options) (body: Transport -> int) =
-    match resolveEndpoint opts.Endpoint with
-    | Error message -> usageError verb help message
-    | Ok endpoint -> body (httpTransport endpoint)
 
 let listCommand = {
     Path = [ "users"; "list" ]

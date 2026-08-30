@@ -30,6 +30,7 @@
 module ToolUp.Cli.Commands.Tenants
 
 open System
+open System.IO
 open System.Net.Http
 open System.Text
 open System.Text.Json
@@ -62,12 +63,6 @@ type AdminEndpoint = {
     Token: string
 }
 
-[<Literal>]
-let EndpointEnvVar = "TOOLUP_ADMIN_ENDPOINT"
-
-[<Literal>]
-let TokenEnvVar = "TOOLUP_ADMIN_TOKEN"
-
 /// Advisory wire actor. The server pins the real actor to the
 /// authenticated caller (the wire value is forward-compat shape only), so
 /// this is a provenance marker in request logs, never an identity claim.
@@ -81,31 +76,41 @@ let tenantRoute (methodName: string) =
 /// Route of the team admin API (the deployment-wide team read).
 let teamRoute (methodName: string) = sprintf "/api/TeamApi/%s" methodName
 
-let private envValue (name: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null -> None
-    | "" -> None
-    | v -> Some(v.Trim())
-
-/// Resolve the endpoint from an explicit `--endpoint` (when given) plus
-/// the environment. The credential is environment-only *by design*: a
-/// bearer token passed as an argument lands in shell history and in every
-/// process listing on the box, which is a poor trade for one saved
-/// `$env:` line in a script.
-let resolveEndpoint (explicitBaseUrl: string option) : Result<AdminEndpoint, string> =
-    let baseUrl =
-        match explicitBaseUrl with
-        | Some v -> Some(v.Trim())
-        | None -> envValue EndpointEnvVar
-
-    match baseUrl, envValue TokenEnvVar with
-    | None, _ -> Error(sprintf "no deployment endpoint — pass --endpoint <url> or set %s" EndpointEnvVar)
-    | _, None -> Error(sprintf "no admin credential — set %s to a Platform-Admin bearer token" TokenEnvVar)
-    | Some url, Some token ->
-        Ok {
-            BaseUrl = url.TrimEnd '/'
-            Token = token
-        }
+/// Resolve where to call and with what, from `--endpoint` and
+/// `--token-file`.
+///
+/// **Neither is an environment variable, and that is deliberate.**
+/// `TOOLUP_*` is the *deployment's* configuration namespace — centrally
+/// registered, dumped by `--print-config`, documented in the config
+/// reference — and this CLI configures a client process, not a
+/// deployment. The natural name was already taken and means something
+/// else entirely: `TOOLUP_ADMIN_TOKEN` is the deployment's shared
+/// crypto-shred secret, replayed as an `X-Admin-Token` header, not an
+/// admin's bearer identity. A CLI silently picking that up on a box
+/// where the server also runs would send the wrong secret under the
+/// wrong scheme, and the resulting 401 would look like a login problem.
+///
+/// **And the credential is read from a FILE rather than argv or the
+/// environment.** A token in argv lands in shell history and in every
+/// process listing on the machine; a token in the environment is
+/// inherited by every child process and shows up in crash dumps. A file
+/// carries filesystem permissions, and it is the shape a container
+/// secret mount already has.
+let resolveEndpoint (baseUrl: string option) (tokenFile: string option) : Result<AdminEndpoint, string> =
+    match baseUrl, tokenFile with
+    | None, _ -> Error "no deployment endpoint — pass --endpoint <url>"
+    | _, None -> Error "no admin credential — pass --token-file <path> holding a Platform-Admin bearer token"
+    | Some url, Some path ->
+        try
+            match File.ReadAllText(path).Trim() with
+            | "" -> Error(sprintf "the token file '%s' is empty" path)
+            | token ->
+                Ok {
+                    BaseUrl = url.Trim().TrimEnd '/'
+                    Token = token
+                }
+        with ex ->
+            Error(sprintf "could not read the token file '%s': %s" path ex.Message)
 
 /// The real transport. One-shot per call: a CLI process makes a handful
 /// of requests, so a pooled client would buy nothing.
@@ -486,6 +491,7 @@ let runOffboard
 
 type Options = {
     Endpoint: string option
+    TokenFile: string option
     ScopeId: string option
     Reason: string
     ExportFirst: bool
@@ -495,6 +501,7 @@ type Options = {
 
 let defaultOptions = {
     Endpoint = None
+    TokenFile = None
     ScopeId = None
     Reason = "offboard requested via the toolup CLI"
     ExportFirst = false
@@ -511,6 +518,8 @@ let rec parse (opts: Options) (args: string list) : Result<Options, string> =
     | [] -> Ok opts
     | "--endpoint" :: v :: rest -> parse { opts with Endpoint = Some v } rest
     | [ "--endpoint" ] -> Error "missing value for --endpoint"
+    | "--token-file" :: v :: rest -> parse { opts with TokenFile = Some v } rest
+    | [ "--token-file" ] -> Error "missing value for --token-file"
     | "--reason" :: v :: rest -> parse { opts with Reason = v } rest
     | [ "--reason" ] -> Error "missing value for --reason"
     | "--token" :: v :: rest -> parse { opts with Token = Some v } rest
@@ -531,18 +540,22 @@ let usageError (verb: string) (help: string list) (message: string) =
 
 // ── Help + registration ─────────────────────────────────────────────
 
-let private endpointHelp = [
-    "Endpoint + credential:"
+let endpointHelp = [
+    "Endpoint + credential (both required):"
     "  --endpoint <url>    Deployment origin, e.g. https://app.example.com."
-    sprintf "                      Defaults to %s." EndpointEnvVar
-    sprintf "  %s   Platform-Admin bearer token (environment only —" TokenEnvVar
-    "                      a credential in argv lands in shell history and in"
-    "                      every process listing on the machine)."
+    "  --token-file <path> File holding a Platform-Admin bearer token."
+    ""
+    "The token is read from a file rather than a flag or an environment"
+    "variable: a credential in argv lands in shell history and in every process"
+    "listing, and one in the environment is inherited by every child process. A"
+    "file carries filesystem permissions, and is the shape a container secret"
+    "mount already has. (Note TOOLUP_ADMIN_TOKEN is a DIFFERENT thing — the"
+    "deployment's shared crypto-shred secret — and is not read here.)"
 ]
 
 let listHelp =
     [
-        "Usage: toolup tenants list [--endpoint <url>]"
+        "Usage: toolup tenants list --endpoint <url> --token-file <path>"
         ""
         "Lists every team on the deployment with its membership summary — the"
         "same deployment-wide admin read the Platform-Management table uses."
@@ -553,7 +566,7 @@ let listHelp =
 
 let previewHelp =
     [
-        "Usage: toolup tenants preview <scopeId> [--endpoint <url>]"
+        "Usage: toolup tenants preview <scopeId> --endpoint <url> --token-file <path>"
         ""
         "Renders each lifecycle hook's would-affect projection for an offboard"
         "of <scopeId> WITHOUT modifying anything — the encryption key that"
@@ -567,7 +580,8 @@ let previewHelp =
 let offboardHelp =
     [
         "Usage: toolup tenants offboard <scopeId> [--export-first] [--token <t>]"
-        "                               [--reason <text>] [--endpoint <url>]"
+        "                               [--reason <text>] --endpoint <url>"
+        "                               --token-file <path>"
         ""
         "Runs every registered deprovision hook for <scopeId>: crypto-shred,"
         "membership-cache eviction, scheduled-job cancellation, subject-data"
@@ -597,8 +611,8 @@ let offboardHelp =
 
 /// Build a verb whose body needs a resolved transport. Endpoint
 /// resolution failures are usage errors (nothing was sent).
-let private withTransport (verb: string) (help: string list) (opts: Options) (body: Transport -> int) =
-    match resolveEndpoint opts.Endpoint with
+let withTransport (verb: string) (help: string list) (opts: Options) (body: Transport -> int) =
+    match resolveEndpoint opts.Endpoint opts.TokenFile with
     | Error message -> usageError verb help message
     | Ok endpoint -> body (httpTransport endpoint)
 

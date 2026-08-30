@@ -21,6 +21,8 @@
 module ToolUp.Cli.Tests.TenantUserVerbsTests
 
 open Expecto
+open System
+open System.IO
 open System.Text.Json
 open ToolUp.Cli.Dispatch
 open ToolUp.Cli.Commands
@@ -113,11 +115,27 @@ let tests =
                 | Error e -> failtest e
             }
 
-            test "--endpoint and --team-less parse" {
-                match Tenants.parse Tenants.defaultOptions [ "--endpoint"; "https://x"; "--team-less" ] with
+            test "--endpoint, --token-file and --team-less parse" {
+                let args = [ "--endpoint"; "https://x"; "--token-file"; "/tmp/t"; "--team-less" ]
+
+                match Tenants.parse Tenants.defaultOptions args with
                 | Ok opts ->
                     Expect.equal opts.Endpoint (Some "https://x") "endpoint"
+                    Expect.equal opts.TokenFile (Some "/tmp/t") "token file"
                     Expect.isTrue opts.TeamLess "--team-less"
+                | Error e -> failtest e
+            }
+
+            test "--token-file and --token are different options" {
+                // One is a path to a credential, the other a single-use
+                // confirmation token. A parser that conflated them would make
+                // `--token-file` look like a way to supply a confirmation.
+                let args = [ "--token-file"; "/tmp/t"; "--token"; "tok-1" ]
+
+                match Tenants.parse Tenants.defaultOptions args with
+                | Ok opts ->
+                    Expect.equal opts.TokenFile (Some "/tmp/t") "the path"
+                    Expect.equal opts.Token (Some "tok-1") "the confirmation token"
                 | Error e -> failtest e
             }
 
@@ -126,7 +144,7 @@ let tests =
             }
 
             test "a value-less option is a parse error, not a silent default" {
-                for flag in [ "--endpoint"; "--reason"; "--token" ] do
+                for flag in [ "--endpoint"; "--token-file"; "--reason"; "--token" ] do
                     Expect.isError (Tenants.parse Tenants.defaultOptions [ flag ]) flag
             }
 
@@ -460,28 +478,77 @@ let tests =
         // ── Endpoint resolution (550.C) ─────────────────────────────
 
         testList "endpoint resolution" [
-            test "a missing endpoint names the flag and the environment variable" {
-                // Deliberately reads the ambient environment: on a machine
-                // that HAS the variables set this still holds, because the
-                // assertion is on the message when it fails, not on
-                // whether it fails.
-                match Tenants.resolveEndpoint None with
-                | Error message ->
-                    Expect.isTrue
-                        (message.Contains Tenants.EndpointEnvVar || message.Contains Tenants.TokenEnvVar)
-                        "the message names the environment variable to set"
-                | Ok endpoint -> Expect.isNotEmpty endpoint.BaseUrl "a resolved endpoint has a base url"
+            test "each half of the configuration is required, and named when absent" {
+                match Tenants.resolveEndpoint None None with
+                | Error message -> Expect.stringContains message "--endpoint" "names the missing flag"
+                | Ok _ -> failtest "an unconfigured CLI must not resolve an endpoint"
+
+                match Tenants.resolveEndpoint (Some "https://x") None with
+                | Error message -> Expect.stringContains message "--token-file" "names the missing flag"
+                | Ok _ -> failtest "an endpoint without a credential must not resolve"
+            }
+
+            test "the token is read from the file, trimmed, with the base url normalised" {
+                let path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                File.WriteAllText(path, "  bearer-value\r\n")
+
+                try
+                    match Tenants.resolveEndpoint (Some " https://app.example.com/ ") (Some path) with
+                    | Ok endpoint ->
+                        Expect.equal endpoint.Token "bearer-value" "trailing newline trimmed"
+
+                        Expect.equal
+                            endpoint.BaseUrl
+                            "https://app.example.com"
+                            "trailing slash stripped so route concatenation cannot double it"
+                    | Error e -> failtest e
+                finally
+                    File.Delete path
+            }
+
+            test "an empty or unreadable token file is refused, not sent as an empty credential" {
+                let empty = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                File.WriteAllText(empty, "   \n")
+
+                try
+                    Expect.isError (Tenants.resolveEndpoint (Some "https://x") (Some empty)) "empty token file"
+                finally
+                    File.Delete empty
+
+                let missing = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                Expect.isError (Tenants.resolveEndpoint (Some "https://x") (Some missing)) "absent token file"
             }
 
             test "the credential is never taken from an argument" {
                 // A bearer token in argv lands in shell history and in every
-                // process listing; the parser must have no option that
-                // accepts one. `--token` is the *confirmation* token, which
-                // is single-use, scope-bound and not a credential.
+                // process listing, so the parser must have no option that
+                // accepts one — `--token-file` takes a path. `--token` is the
+                // *confirmation* token: single-use, scope-bound, not a
+                // credential.
                 let credentialFlags = [ "--admin-token"; "--bearer"; "--credential"; "--password" ]
 
                 for flag in credentialFlags do
                     Expect.isError (Tenants.parse Tenants.defaultOptions [ flag; "secret" ]) flag
+            }
+
+            test "the credential is never taken from the environment either" {
+                // TOOLUP_* is the DEPLOYMENT's config namespace, and
+                // TOOLUP_ADMIN_TOKEN in it is a different secret entirely (the
+                // shared crypto-shred token, replayed as X-Admin-Token). A CLI
+                // that picked it up on a box running the server would send the
+                // wrong secret under the wrong scheme. Setting them must have
+                // no effect at all.
+                let priorToken = Environment.GetEnvironmentVariable "TOOLUP_ADMIN_TOKEN"
+                let priorEndpoint = Environment.GetEnvironmentVariable "TOOLUP_ADMIN_ENDPOINT"
+
+                try
+                    Environment.SetEnvironmentVariable("TOOLUP_ADMIN_TOKEN", "server-shared-secret")
+                    Environment.SetEnvironmentVariable("TOOLUP_ADMIN_ENDPOINT", "https://wrong.example.com")
+
+                    Expect.isError (Tenants.resolveEndpoint None None) "the environment configures nothing"
+                finally
+                    Environment.SetEnvironmentVariable("TOOLUP_ADMIN_TOKEN", priorToken)
+                    Environment.SetEnvironmentVariable("TOOLUP_ADMIN_ENDPOINT", priorEndpoint)
             }
 
             test "routes carry the reserved admin prefixes" {
