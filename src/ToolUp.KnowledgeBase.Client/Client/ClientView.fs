@@ -77,11 +77,23 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
                         |> List.map (fun file -> async {
                             let! bytes = readFileBytes file
 
+                            // Phase 725.B — the browser composes the
+                            // BASE64 cases, not the `byte[]` ones. A
+                            // `byte[]` nested in the DU is not the
+                            // multipart-optimised top-level argument
+                            // `UploadDocument` gets; it rides the JSON
+                            // path, where Fable.SimpleJson encodes it as
+                            // `[n, n, …]` — roughly 4× raw, so a 200 MB
+                            // archive was ~800 MB on the wire. Base64 is
+                            // ~1.33×. Admission is identical either way;
+                            // the server still accepts the `byte[]`
+                            // cases from any caller that sends them
+                            // (GP 11).
                             return
                                 if isArchiveName file.name then
-                                    BulkImportSource.Archive(file.name, bytes)
+                                    BulkImportSource.ofArchiveBytes file.name bytes
                                 else
-                                    BulkImportSource.File(file.name, bytes)
+                                    BulkImportSource.ofFileBytes file.name bytes
                         })
                         |> Async.Sequential
 

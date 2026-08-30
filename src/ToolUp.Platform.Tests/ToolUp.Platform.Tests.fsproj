@@ -869,6 +869,12 @@
              Env-mutating: wired into the Phase 653 sequenced group. -->
         <Compile Include="InProcess\EmbeddingProviderEnvTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
+        <!-- Phase 457 — the composed store's at-rest posture: the refusal
+             for a non-encrypting store under RequireAuth, the
+             acknowledgement's downgrade, and the SkipPreflight-proof
+             security-class registration. Env-mutating, so the list is
+             `testSequenced`. -->
+        <Compile Include="InProcess\SecretStoreAtRestPostureValidatorTests.fs" />
         <Compile Include="InProcess\ShareTokenSigningKeyProvenanceValidatorTests.fs" />
         <!-- Phase 460 — the signing key as an operator-managed secret:
              the refusal ladder, the provenance marker, and the
@@ -1312,6 +1318,9 @@
         <Compile Include="InProcess\ContentAdminAuthorizationTests.fs" />
         <Compile Include="InProcess\InMemoryRateLimitStoreTests.fs" />
         <Compile Include="InProcess\TeamCreationPolicyTests.fs" />
+        <!-- Phase 549 — opt-in directory existence proof on the direct-add
+             membership paths (handler arms + preflight validator). -->
+        <Compile Include="InProcess\DirectAddIdentityProofTests.fs" />
         <Compile Include="InProcess\TeamOwnershipTransferTests.fs" />
         <Compile Include="InProcess\TeamAdminLifecycleTests.fs" />
         <!-- Phase 545 — user-scope offboard completeness: PurgeUser +

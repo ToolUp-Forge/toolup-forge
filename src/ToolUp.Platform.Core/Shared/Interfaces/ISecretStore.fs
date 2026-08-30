@@ -86,3 +86,57 @@ type ISecretCacheInvalidation =
     /// entry. This is the same documented exemption to portability
     /// rule 2 that `INotificationChannel.Subscribe`'s handler carries.
     abstract InvalidateScope: scopeId: string -> unit
+
+/// Phase 457 — what a secret store does to the values it persists.
+///
+/// The posture is what the store DECLARES about itself, not what a
+/// caller infers about it. Before this existed the only way to ask was a
+/// type test against the one shipped wrapper plus an environment switch
+/// — which answers for the SDK's own two shapes and is silent about
+/// every companion and every consumer-written store.
+type SecretAtRestPosture =
+    /// Values are encrypted before they reach durable media. `mechanism`
+    /// names how, in operator vocabulary ("AES-256-GCM envelope under
+    /// TOOLUP_SECRETS_MASTER_KEY", "Azure Key Vault, service-managed
+    /// keys"), so a preflight message can say what is protecting the
+    /// secrets rather than only that something is.
+    | EncryptsAtRest of mechanism: string
+    /// Values are persisted as written — readable by anything that can
+    /// read the medium. `reason` names why, so a refusal can distinguish
+    /// "this store never encrypts" from "this store would, but has no
+    /// key".
+    | PlaintextAtRest of reason: string
+    /// The store cannot answer for itself — the shape a DECORATOR takes
+    /// when the store it wraps declares nothing. Distinct from
+    /// `PlaintextAtRest` on purpose: a fail-closed reader treats both as
+    /// "not encrypting", but only one of them is a claim somebody made,
+    /// and telling an operator their store writes plaintext when nothing
+    /// established that is how a guard loses its credibility.
+    | UnknownAtRest of reason: string
+
+/// Phase 457 — the optional at-rest-posture seam an `ISecretStore`
+/// implements to declare what it does with the values it persists.
+///
+/// A SEPARATE interface for the same two reasons `ISecretCacheInvalidation`
+/// above is one, and the first is the load-bearing one here:
+///
+///  * Additive by construction (GP 11). `ISecretStore` is a public
+///    interface with implementors outside this repository — cloud
+///    companions and consumers' own stores. A fifth member on it would
+///    break every one of them at once, for a question most of them can
+///    answer in one line and none of them asked for.
+///  * A store that does not implement it is genuinely UNDECLARED, and a
+///    reader can say so. Forcing every implementation to return
+///    something would erase the difference between "this store says it
+///    writes plaintext" and "nobody has ever said", which is exactly the
+///    distinction a preflight refusal needs in order to be believed.
+///
+/// Read it through `SecretStoreAtRestPostureValidator.resolveAtRestPosture`
+/// (`ToolUp.Platform.Server`) rather than type-testing at each call site
+/// — that helper also carries the recognitions the SDK can make for a
+/// store that declares nothing, so the two never drift.
+type ISecretStoreAtRestPosture =
+    /// What this store does to the values it persists. A configuration
+    /// fact resolved at construction, never a probe: it is read during
+    /// preflight, before any request is served, so it must not do I/O.
+    abstract AtRestPosture: SecretAtRestPosture

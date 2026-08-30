@@ -41,6 +41,24 @@ type ResilientSecretStore(inner: ISecretStore, policy: TransientFaultPolicy) =
         member _.ListKeys(scopeId) =
             runner.Run(fun () -> inner.ListKeys scopeId)
 
+    /// Phase 457 — a decorator changes retry behaviour, not what the inner
+    /// store does to the bytes, so the posture is the inner store's. It is
+    /// DELEGATED rather than asserted: a wrapper that answered for itself
+    /// would report a KMS-backed companion as plaintext the moment a
+    /// deployment opted into resilience, which is a refusal manufactured by
+    /// a retry policy.
+    ///
+    /// An inner store that declares nothing yields `UnknownAtRest` naming
+    /// the wrapper, not `PlaintextAtRest` — the decorator has no more
+    /// standing to make that claim than the reader does.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            match box inner with
+            | :? ISecretStoreAtRestPosture as declared -> declared.AtRestPosture
+            | _ ->
+                UnknownAtRest
+                    "the store wrapped by ResilientSecretStore declares no at-rest posture (ISecretStoreAtRestPosture)"
+
 /// Apply the resilience decorator when the deployment opted in.
 /// `NoResilience` returns `inner` un-wrapped — byte-for-byte identical to
 /// the bare store (GP 13). Mirrors `applyStorageResilience`.

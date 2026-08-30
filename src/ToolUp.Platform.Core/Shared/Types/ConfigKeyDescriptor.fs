@@ -449,6 +449,11 @@ module Names =
     [<Literal>]
     let teamCreationPolicy = "TOOLUP_TEAM_CREATION_POLICY"
 
+    // --- Phase 549: direct-add membership existence proof ---
+    [<Literal>]
+    let requireDirectoryProofForDirectAdd =
+        "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD"
+
     [<Literal>]
     let rateLimitStore = "TOOLUP_RATE_LIMIT_STORE"
 
@@ -476,6 +481,16 @@ module Names =
     [<Literal>]
     let acceptPlaintextSecretsInAuthMode =
         "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE"
+
+    /// Phase 457 — the second spelling of the acknowledgement above, and
+    /// deliberately not a second FACT: both feed the one
+    /// `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired` field, so the
+    /// three plaintext-secret validators cannot disagree about whether an
+    /// operator has opted in. A separate flag would have produced exactly
+    /// that: an operator who set one and was still refused by a validator
+    /// reading the other.
+    [<Literal>]
+    let acceptPlaintextSecrets = "TOOLUP_ACCEPT_PLAINTEXT_SECRETS"
 
     [<Literal>]
     let acceptInProcessSchedulerMultiInstance =
@@ -1710,6 +1725,15 @@ let all: ConfigKeyDescriptor list = [
         Category = "Auth & identity"
     }
     {
+        EnvVar = Names.requireDirectoryProofForDirectAdd
+        Description =
+            "Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory)."
+        Type = EnumKey [ "enabled"; "disabled" ]
+        Default = Some "disabled"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
         EnvVar = Names.entraExternalIdTenant
         Description = "Entra External ID tenant name."
         Type = StringKey
@@ -2099,6 +2123,15 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.acceptPlaintextSecretsInAuthMode
         Description =
             "Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = EscapeHatchCategory
+    }
+    {
+        EnvVar = Names.acceptPlaintextSecrets
+        Description =
+            "Acknowledges that the composed secret store does not encrypt at rest. Same acknowledgement as TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE — either spelling lowers the plaintext-secrets refusals to warnings."
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
@@ -2522,6 +2555,7 @@ let manifestBindable: Set<string> =
         Names.acceptLocalFallback
         Names.acceptNoRateLimitInAuthMode
         Names.acceptPendingInviteStoreMultiInstance
+        Names.acceptPlaintextSecrets
         Names.acceptPlaintextSecretsInAuthMode
         Names.acceptQueryParamSseAuthInAuthMode
         Names.acceptSameSiteOnlyCsrfInAuthMode
@@ -2598,6 +2632,7 @@ let manifestBindable: Set<string> =
         Names.rateLimitWindowSeconds
         Names.rateLimiter
         Names.replicaCount
+        Names.requireDirectoryProofForDirectAdd
         Names.requireHttps
         Names.resultStore
         Names.secretStore

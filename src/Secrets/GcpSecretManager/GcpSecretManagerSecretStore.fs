@@ -520,6 +520,15 @@ type GcpSecretManagerSecretStore(config: GcpSecretManagerConfig) =
         return! Rest.send http token request
     }
 
+    /// Phase 457 — Secret Manager encrypts payloads at rest with
+    /// Google-managed AES-256 keys (or a CMEK where the project configures
+    /// one). Declared so the at-rest preflight passes on the composed
+    /// store's own evidence rather than on the `TOOLUP_SECRET_STORE`
+    /// spelling.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            EncryptsAtRest "Google Cloud Secret Manager, Google-managed AES-256 encryption at rest"
+
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
             let keyName, version = Naming.parseVersion key

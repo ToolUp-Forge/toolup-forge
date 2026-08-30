@@ -146,6 +146,91 @@ That narrows the window to a single store round-trip; it is not a
 compare-and-set, because `ISecretStore` exposes no conditional write. The
 complete fix is pre-provisioning, which is why the validator now insists on it.
 
+## Secrets at rest — the master key, and what happens without it
+
+Everything a deployment holds on a user's behalf that is not data ends up in
+`ISecretStore`: BYOK provider API keys entered through the settings UI, OAuth
+refresh and cached access tokens, webhook signing secrets, per-tenant
+credentials. **Whether any of it is encrypted where it lands depends entirely
+on which store is composed**, and the SDK's own default is not one that
+encrypts.
+
+### The three postures, and which one you are in
+
+| Composed store | `TOOLUP_SECRET_STORE` | Encrypted at rest? |
+|---|---|---|
+| `FileSecretStore` (the SDK default when nothing else is composed) | `file` | **No** — flat JSON on disk |
+| `EnvironmentSecretStore` | `env` | **No** — process environment, read-only |
+| `EncryptedSecretStore` over `FileSecretStore`, no master key | unset / `encrypted` | **No** — the wrapper passes values through unchanged |
+| `EncryptedSecretStore` over `FileSecretStore`, master key set | unset / `encrypted` | Yes — AES-256-GCM envelope per secret |
+| A KMS companion (Key Vault / Secrets Manager / Secret Manager / Vault) | the companion's name | Yes — the service's own managed encryption |
+
+The fourth row is the one that surprises people. `EncryptedSecretStore` is a
+decorator: with `TOOLUP_SECRETS_MASTER_KEY` unset it writes plaintext and says
+so once, at boot. That is a reasonable development default and a poor
+production one.
+
+### Provisioning the master key
+
+Generate one 32-byte key, base64-encoded, once per deployment —
+`EncryptedSecretStore.generateMasterKey ()` returns exactly that shape — and
+set it as `TOOLUP_SECRETS_MASTER_KEY`. Treat it as you would a database
+credential: provision it through your secret-management system, back it up,
+and know how to rotate it. **Losing it loses every secret encrypted under it**
+— there is no recovery path, because there is no second copy by design.
+
+Rotation is `EncryptedSecretStore.rotateScope`, per scope, decrypting under the
+old key and re-encrypting under the new; run it before you change the env var,
+then restart. Values that are not envelopes (legacy plaintext written before
+the key existed) are left alone, so rotation is safe to re-run and safe to run
+mid-migration.
+
+Note the key alone is not enough: the decorator has to be composed. A
+deployment on a raw `FileSecretStore` with `TOOLUP_SECRETS_MASTER_KEY` set is
+still writing plaintext, and used to pass preflight while doing it.
+
+### The preflight refusal
+
+`secret-store-at-rest-posture` is a **security-class** validator: it inspects
+the store that was actually composed and **refuses startup** whenever the
+deployment requires authentication and that store does not encrypt at rest.
+Security-class means `ServerConfig.SkipPreflight = true` does not bypass it —
+the boolean that skips slow connectivity probes must not also be able to turn
+off the check standing between a deployment's credentials and a readable disk.
+
+A store the SDK has never heard of — a companion, or your own implementation —
+answers for itself by implementing `ISecretStoreAtRestPosture`, a small
+optional interface returning `EncryptsAtRest` / `PlaintextAtRest` /
+`UnknownAtRest`. A store that implements nothing is treated as not encrypting
+and is named in the refusal as *undeclared* rather than as plaintext: the
+guard does not assert what nobody established.
+
+### The acknowledgement, and when it is the right answer
+
+Set `TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1` (or, equivalently,
+`ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true`; the older
+`TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1` spelling sets the same field)
+and the refusal becomes a warning that names the acknowledgement as the reason
+nothing was refused. The deployment boots, and preflight keeps reporting the
+posture rather than going quiet — an opt-out nobody remembers making is worse
+than no opt-out at all.
+
+It is the right answer when the **medium** provides the encryption the store
+does not: full-disk encryption on the volume holding `secrets*.json`, an
+encrypting block device, a KMS-managed bucket behind a blob-backed store. It
+is the wrong answer as a way past a failing boot — the credentials really are
+readable by anything that can read the medium.
+
+### Recommended production posture
+
+In order of preference: a **KMS-backed companion** (`TOOLUP_SECRET_STORE=azure-key-vault`
+/ `aws-secrets-manager` / `gcp-secret-manager` / `vault`), which puts key
+custody outside the deployment entirely; failing that, `EncryptedSecretStore`
+with a provisioned, backed-up `TOOLUP_SECRETS_MASTER_KEY`. Reach for the
+acknowledgement only with a specific medium-level control in mind, and record
+which one in your deployment notes — the next operator reading the warning
+will need it.
+
 ## Steady-state storage cost
 
 Two SDK subsystems produce residue that is **reclaimed only by a scheduled

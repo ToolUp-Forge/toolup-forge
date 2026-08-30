@@ -333,6 +333,14 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     // Implementing `ISecretCacheInvalidation` lets a cross-instance
     // rotation broadcast reach this cache (first caller: the Phase 464
     // webhook signing-secret rotation fanout).
+    /// Phase 457 — this store writes `secrets*.json` as flat JSON. Whatever
+    /// protects those files is the medium's business (disk FDE, an encrypting
+    /// volume, a KMS-managed bucket); the store itself does nothing to the
+    /// values, and says so rather than leaving preflight to infer it.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            PlaintextAtRest "FileSecretStore writes secrets to secrets*.json as flat, unencrypted JSON"
+
     interface ISecretCacheInvalidation with
         member _.InvalidateScope(scopeId) =
             // Same monitor `SetSecret` / `DeleteSecret` take, so an

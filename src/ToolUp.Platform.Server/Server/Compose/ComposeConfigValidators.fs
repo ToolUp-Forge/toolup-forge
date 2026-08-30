@@ -74,6 +74,8 @@ let registerFirstPartyConfigValidators
     |> ignore
 
     addConfigValidator (EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(config, secretStore)) // refuse plaintext secrets in authenticated modes (KMS/FDE escape hatch)
+
+    addConfigValidator (SecretStoreAtRestPostureValidator.SecretStoreAtRestPostureValidator(config, secretStore)) // Phase 457 — refuse an auth-requiring deployment whose COMPOSED store does not encrypt at rest, whatever the store; the validator above reads only the master-key env var, so a raw FileSecretStore passed it while writing plaintext (acknowledgement: TOOLUP_ACCEPT_PLAINTEXT_SECRETS)
     addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config)) // refuse InProcessJobScheduler in multi-instance deployments
     addConfigValidator (DeployPlaneDepsValidator.DeployPlaneDepsValidator(config, services)) // warn SingleNodeDeployPlane with IJobScheduler / IEntityStore / IContainerScheduler unregistered (else first-request 500 when the affected service resolves)
     addConfigValidator (SignedExportDepsValidator.SignedExportDepsValidator(config, services)) // Phase 162 — refuse DataSubjectRequests SignExports=true with no IExportEnvelopeSigner composed
@@ -119,6 +121,8 @@ let registerFirstPartyConfigValidators
     addConfigValidator (DataProtectionBackendValidator.DataProtectionBackendValidator(resolvedBlobStorage)) // Phase 329 — refuse a misconfigured/unreachable DataProtection key-ring backend (silent ephemeral-key boot → cross-replica CSRF seal failure); security-class
 
     addConfigValidator (DataObjectOrphanSweep.DataObjectOrphanSweepConfiguredValidator(config, services)) // Phase 7c — warn when a persistent deployment composes no data-object orphan sweep (Save writes content before metadata, so a crash between them strands objects/_content/{hash}.data forever — invisible to subject erasure), or composes one that JobScheduler = NoJobScheduler can never fire
+
+    addConfigValidator (DirectAddIdentityProofValidator.DirectAddIdentityProofValidator(config, services)) // Phase 549 — refuse DirectAddIdentityProof = RequireDirectoryProof with no IUserDirectory composed (a proof gate with nothing to consult refuses every direct add)
 
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered

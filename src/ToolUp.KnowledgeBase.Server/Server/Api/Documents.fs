@@ -1111,6 +1111,26 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
             }
         ]
     | BulkImportSource.Archive(fileName, content) -> return expandArchive deps.ArchiveImportPolicy fileName content
+    // Phase 725.B — the compact cases decode to EXACTLY the bytes their
+    // `byte[]` twins carry and then take the identical path, so there is
+    // one expansion implementation and one admission decision per kind.
+    // A decode failure is one classified refusal line, never a throw
+    // that would cost the batch every outcome computed before it.
+    | BulkImportSource.FileBase64(fileName, contentBase64) ->
+        match BulkImportSource.tryDecodeBase64 contentBase64 with
+        | Error reason -> return [ Rejected(fileName, fileName, reason) ]
+        | Ok content ->
+            return [
+                Expanded {
+                    Source = fileName
+                    FileName = fileName
+                    Content = content
+                }
+            ]
+    | BulkImportSource.ArchiveBase64(fileName, contentBase64) ->
+        match BulkImportSource.tryDecodeBase64 contentBase64 with
+        | Error reason -> return [ Rejected(fileName, fileName, reason) ]
+        | Ok content -> return expandArchive deps.ArchiveImportPolicy fileName content
     | BulkImportSource.Url url ->
         // The gate runs FIRST and independently of whether a transport
         // exists, so an uncomposed deployment's refusal reads identically
@@ -1134,9 +1154,97 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
                 | Error reason -> return [ Rejected(url, url, reason) ]
 }
 
+/// Phase 725.A — coalesces inventory publication for the duration of one
+/// batch, then publishes once.
+///
+/// **Why this is a gate around the seam rather than a flag through the
+/// call chain.** `persistAndIngest` publishes twice per item — once on
+/// the request path after the blob and index writes land, and once from
+/// the background extraction async when it reaches a terminal status (or
+/// fails). Each publish is an index read plus a notification, so a
+/// 500-document batch costs ~1,000 of them. The obvious fix — a
+/// `publishInventory: bool` threaded down beside 511's `announceToUser`
+/// — would have to be plumbed through `uploadDocumentCore`,
+/// `persistUnlessOverQuota` and `persistAndIngest`, widening three
+/// signatures (two of them public) to express something that is not a
+/// property of an upload at all. `KnowledgeApiDeps.PublishInventory` is
+/// already the single seam every one of those publishes goes through, so
+/// the batch substitutes its own and the functions below are unchanged
+/// for every caller. See the caller enumeration on `importBatch`.
+///
+/// **A publish is never dropped, only deferred or merged.** Extraction
+/// runs off the request path, so an item's background publish can land
+/// during the batch or long after it. While the window is open, a
+/// request sets a pending flag and returns; `Close` publishes once if
+/// anything asked. After `Close`, requests pass straight through — so an
+/// extraction completing ten minutes after a 500-document import still
+/// refreshes the inventory exactly as it does today. The bound is
+/// therefore on the batch window (one publish, whatever happened inside
+/// it), not on the process.
+///
+/// Deliberately mutable (GP 5's documented exception): this is a
+/// coordination primitive scoped to a single batch, and both fields are
+/// read and written from the request thread and from background
+/// extraction threads at once — hence the lock rather than a plain
+/// `mutable`.
+type private BatchInventoryGate(publish: unit -> Async<unit>) =
+    let sync = obj ()
+    let mutable windowOpen = true
+    let mutable pending = false
+
+    /// The `PublishInventory` the batch's items see.
+    member _.Request() : Async<unit> =
+        let passThrough =
+            lock sync (fun () ->
+                if windowOpen then
+                    pending <- true
+                    false
+                else
+                    true)
+
+        if passThrough then publish () else async.Return()
+
+    /// Closes the window and publishes once if any item asked. Idempotent
+    /// — a second call publishes nothing, so closing on the error path as
+    /// well as the success path is safe.
+    member _.Close() : Async<unit> =
+        let shouldPublish =
+            lock sync (fun () ->
+                let wanted = windowOpen && pending
+                windowOpen <- false
+                pending <- false
+                wanted)
+
+        if shouldPublish then publish () else async.Return()
+
 /// Phase 511 — corpus-scale import. Expands every source, routes each
 /// surviving item through the single-item upload path, and returns one
 /// report plus one completion notification.
+///
+/// **Phase 725.A — inventory publication is batch-scoped.** Every item
+/// runs against a `deps` whose `PublishInventory` is the batch's
+/// `BatchInventoryGate`, so the ~2N snapshots a corpus-scale import used
+/// to emit collapse to one at the end. The substitution is a
+/// copy-and-update of the deps RECORD, which is what keeps the blast
+/// radius nil — the enumeration of everything that reads the seam, and
+/// what each sees:
+///
+///   * `persistAndIngest`, all three sites (the request-path publish and
+///     the background extraction's success and failure publishes) — the
+///     only ones reached from here. Inside the window they set the
+///     pending flag; after it they publish immediately, unchanged.
+///   * `uploadDocument`, the interactive single-file path — takes the
+///     caller's `deps`, never the gated copy, so it is byte-for-byte its
+///     pre-725 self (GP 11). This is the same posture 511 took with
+///     `announceToUser`.
+///   * `deleteDocument` and `setDocumentTags` (this file), `getAIContext`
+///     / `setAIContext` (`Api/AIContext.fs`), the narrative ingest and
+///     overwrite paths (`Api/Narrative.fs`), note create and update
+///     (`Api/Notes.fs`) — none is reachable from a batch, all take
+///     `deps` directly, none observes any change.
+///   * `PlatformAdmin.fs` composes `PublishInventory` as a no-op already
+///     (platform-scoped KB writes update no user's inventory), so a
+///     gate there would coalesce nothing; it is not wired to one.
 ///
 /// **Items are admitted SEQUENTIALLY, and that is a correctness
 /// requirement rather than a simplification.** The corpus quota is a
@@ -1161,8 +1269,18 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
     let startedAt = DateTimeOffset.UtcNow
     let collected = ResizeArray<BulkImportItemReport>()
 
+    // Phase 725.A — every item runs against this, never the caller's
+    // `deps`; see the enumeration above for what each other reader of the
+    // seam sees (nothing changes for any of them).
+    let inventoryGate = BatchInventoryGate(deps.PublishInventory)
+
+    let batchDeps = {
+        deps with
+            PublishInventory = inventoryGate.Request
+    }
+
     for source in request.Sources do
-        let! outcomes = expandSource deps source
+        let! outcomes = expandSource batchDeps source
 
         for outcome in outcomes do
             match outcome with
@@ -1179,7 +1297,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
                 // replaced by this batch's single completion summary.
                 let! itemReport = async {
                     try
-                        let! doc = uploadDocumentCore false deps item.Content item.FileName
+                        let! doc = uploadDocumentCore false batchDeps item.Content item.FileName
 
                         return {
                             Source = item.Source
@@ -1204,6 +1322,13 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
                 }
 
                 collected.Add itemReport
+
+    // Phase 725.A — close the window BEFORE the completion summary, so
+    // the one inventory snapshot the batch publishes has landed by the
+    // time the user's client is told the import finished and re-reads.
+    // Publishes nothing when no item asked (an all-refused batch mutated
+    // no inventory, so there is nothing to re-announce).
+    do! inventoryGate.Close()
 
     let report =
         BulkImportReport.ofItems batchId startedAt DateTimeOffset.UtcNow (List.ofSeq collected)

@@ -181,6 +181,8 @@ let private registeredTests =
         OAuthSubstrateTests.pkceFlowTests
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
+        // Phase 457 — the at-rest posture of the store that is actually composed.
+        SecretStoreAtRestPostureValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
         ShareTokenSigningKeyGovernanceTests.tests
@@ -1108,6 +1110,10 @@ let private registeredTests =
         TeamCreationPolicyTests.tests
         TeamCreationPolicyTests.integrityTests
         TeamCreationPolicyTests.quotaTests
+        // Phase 549 — opt-in directory existence proof for direct member
+        // adds (AddTeamMember / CreateTeamWithOwner), plus the fail-closed
+        // preflight for the mode-without-a-directory misconfiguration.
+        DirectAddIdentityProofTests.tests
         // Phase 304 — TeamApi.TransferOwnership: Owner-gated ownership
         // hand-over (promote-then-demote single-Owner invariant, member /
         // self / non-Owner rejections, TeamOwnershipTransferred audit).

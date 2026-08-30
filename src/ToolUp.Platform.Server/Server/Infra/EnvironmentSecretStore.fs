@@ -52,3 +52,15 @@ type EnvironmentSecretStore() =
         // (FileSecretStore) for user/team-scoped keys and leave the
         // platform-scoped env vars untouched.
         member _.ListKeys(_scopeId) = async { return [] }
+
+    /// Phase 457 — a read-only store over process environment variables.
+    /// It never writes, so it adds no at-rest exposure of its own — but the
+    /// values it serves were placed in the environment in the clear by
+    /// whatever provisioned the process, and an orchestrator's environment
+    /// block is not encrypted storage. Declared plaintext so a deployment
+    /// that reaches for `TOOLUP_SECRET_STORE=env` to escape the refusal
+    /// does not escape it by relabelling the same exposure.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            PlaintextAtRest
+                "EnvironmentSecretStore serves values held in the process environment, which the host or orchestrator stores unencrypted"

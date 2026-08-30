@@ -206,6 +206,22 @@ type EncryptedSecretStore(inner: ISecretStore, masterKey: byte[] option) =
         // value bytes, not key names.
         member _.ListKeys(scopeId) = async { return! inner.ListKeys(scopeId) }
 
+    /// Phase 457 — the declared form of the same fact `ProvidesEncryptionAtRest`
+    /// carries below. The boolean answers a caller that already knows this
+    /// is an `EncryptedSecretStore`; the declaration answers one that does
+    /// not, which is every caller holding only an `ISecretStore`.
+    ///
+    /// The plaintext arm names the missing key rather than the wrapper,
+    /// because "the encrypted store is not encrypting" is the sentence an
+    /// operator has to be able to act on.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            match masterKey with
+            | Some _ -> EncryptsAtRest "AES-256-GCM envelope under TOOLUP_SECRETS_MASTER_KEY"
+            | None ->
+                PlaintextAtRest
+                    "EncryptedSecretStore has no master key (TOOLUP_SECRETS_MASTER_KEY unset or malformed), so values pass through to the inner store unencrypted"
+
     /// Phase 138 — does this wrapper actually encrypt at rest? True only
     /// when a master key is configured; with `masterKey = None` the
     /// wrapper is in plaintext-passthrough mode (see `SetSecret` above).
