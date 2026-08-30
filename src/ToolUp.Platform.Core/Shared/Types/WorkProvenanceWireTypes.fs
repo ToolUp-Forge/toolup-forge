@@ -57,6 +57,15 @@ namespace ToolUp.Platform
 //      and collapsing them turns a working control into apparent
 //      missing data.
 //
+// The third property has a twin, and it is stated here rather than
+// numbered fourth because it is the same rule read from the other side:
+// **an unresolvable record is not an absent one either.** A ref the
+// page's own records named, which the source then holds nothing under,
+// crosses as its own typed marker (`SeveredWorkEdge`) for exactly the
+// reason a refused one does — a walk that dropped it would return a page
+// one record shorter than its own linkage asserts, and nothing about the
+// answer would say so.
+//
 // **Fable-safe by construction** (GP 10): records, unions and pure
 // string handling only, so these types compile on the client tier with
 // the rest of `ToolUp.Platform.Core`. The seam itself
@@ -177,6 +186,57 @@ type WithheldWorkRecord = {
     PolicyRef: string
 }
 
+/// One ancestor edge the walk could not follow, as it crosses the seam.
+///
+/// **The EDGE, not the record.** A reached record named this parent and
+/// the source system then held nothing under the ref, so what is lost is
+/// a join the page itself asserted — and a join has two ends. The marker
+/// carries both: the ref that failed to resolve, and the record that
+/// named it. Either alone is unactionable — the failing ref with no
+/// namer cannot be located in the chain, and the namer with no ref does
+/// not say what is missing.
+///
+/// The shape mirrors `WithheldWorkRecord` deliberately. A refused record
+/// crosses as a typed marker rather than a hole because "this exists and
+/// you may not see it" is a different answer from "there is no work
+/// recorded here"; an UNRESOLVABLE record — one the page's own linkage
+/// named and the source then disowned — is at least as significant, and
+/// it is the one answer case an ancestor walk has historically mapped to
+/// nothing at all.
+///
+/// **Never an exception and never a walk failure.** One lost edge must
+/// not cost the caller the records the walk did reach, or severing an
+/// edge becomes the cheapest way to suppress an entire page.
+type SeveredWorkEdge = {
+    /// The parent ref that failed to resolve — the same ref the naming
+    /// record's `Parents` carries, so chain SHAPE survives the break.
+    Ref: WorkRecordRef
+    /// The record the walk DID reach that named `Ref` as a parent. The
+    /// half that makes the finding locatable.
+    NamedBy: WorkRecordRef
+}
+
+[<RequireQualifiedAccess>]
+module SeveredWorkEdge =
+
+    /// A stable key naming the EDGE rather than the record behind it.
+    ///
+    /// Two reasons it is the edge. Two different reached records naming
+    /// the same unresolvable parent are two severed joins, not one, and a
+    /// record-keyed identity would collapse them. And the record behind a
+    /// severed edge is precisely what no enumeration line can carry — its
+    /// kind, its label, its own parents are all on the far side of the
+    /// break — so a surface that names the broken edge has reported the
+    /// edge and has still not enumerated the record.
+    let key (edge: SeveredWorkEdge) : string =
+        $"{edge.NamedBy.RecordId}->{edge.Ref.RecordId}"
+
+    /// Render a severed edge for an operator-facing surface. One place,
+    /// so a diagnostic, a test and a consumer's rendering all read the
+    /// same wording.
+    let describe (edge: SeveredWorkEdge) : string =
+        $"{WorkRecordRef.describe edge.Ref} SEVERED — named as a parent by {WorkRecordRef.describe edge.NamedBy}, and the source holds no record under that ref"
+
 /// The answer to a single-record lookup. Three outcomes, deliberately
 /// not two: a reader must be able to distinguish "suppressed" from "no
 /// work recorded".
@@ -214,6 +274,17 @@ type WorkAncestorPage = {
     Records: WorkRecord list
     /// Records the source system refused, as typed markers.
     Withheld: WithheldWorkRecord list
+    /// Ancestor edges this page's own records named and the walk could
+    /// not follow, as typed markers.
+    ///
+    /// Empty for a page that lost nothing, which is every page a source
+    /// that never severs produces. "Complete by construction" is a claim
+    /// about the walk's own honesty, not about the source system's: a
+    /// page whose linkage names a parent the source then disowns is one
+    /// record shorter than it asserts, and a reader who could not tell
+    /// would take "here is the work behind this deployment" from an
+    /// answer that lost part of it.
+    Severed: SeveredWorkEdge list
     /// The depth the walk was bounded to — echoed so a reader holding a
     /// stored answer knows what bound produced it.
     Depth: int
@@ -225,8 +296,17 @@ module WorkAncestorPage =
     /// How many records the walk reached, readable plus withheld. This
     /// is the number the record cap is taken against: a walk does not
     /// become smaller by refusing to show you part of it.
+    /// **Severed edges are deliberately NOT counted.** The cap bounds the
+    /// size of an answer, and a record the walk could not resolve is not
+    /// part of the answer's size — counting it would let a source shrink
+    /// its own effective cap by disowning refs, and would silently change
+    /// what an already-declared cap means.
     let size (page: WorkAncestorPage) : int =
         List.length page.Records + List.length page.Withheld
+
+    /// Whether this page lost an edge its own records named. Provided so
+    /// a caller cannot write the emptiness test three different ways.
+    let isSevered (page: WorkAncestorPage) : bool = not (List.isEmpty page.Severed)
 
 /// The bounds a deployment's work provenance surface declares. Read by
 /// `GetCaps` so a caller can size its walk instead of discovering the

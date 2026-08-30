@@ -1394,6 +1394,14 @@ let private registeredTests =
         EvidenceChainBreakTests.bundleFalsificationTests
         EvidenceChainBreakTests.documentTamperCorpusTests
         EvidenceChainBreakTests.absentVsBrokenTests
+        // Phase 729 — the corpus's one unproven class, promoted. A
+        // severed ANCESTOR edge is recorded as a typed marker rather than
+        // dropped, so the hop reads broken at the ref that failed, the
+        // enumeration behind it stays incomplete, and both are derived
+        // from the same recording rather than from two observations that
+        // could drift.
+        EvidenceChainBreakTests.severedAncestorEdgeTests
+        EvidenceChainBreakTests.severedAncestorReportTests
         // Phase 716 — the walk proves it enumerated everything its own
         // linkage names, not merely everything it liked: the expected
         // positions derived rather than configured, a missing interior

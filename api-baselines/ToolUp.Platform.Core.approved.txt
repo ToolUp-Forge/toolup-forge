@@ -10058,6 +10058,13 @@ ToolUp.Platform.SessionStatus.Tag : System.Int32 { get }
 ToolUp.Platform.SessionStatus+Tags (class)
 ToolUp.Platform.SessionStatus+Tags.ActiveSession : System.Int32 (literal)
 ToolUp.Platform.SessionStatus+Tags.RevokedSession : System.Int32 (literal)
+ToolUp.Platform.SeveredWorkEdge (class)
+ToolUp.Platform.SeveredWorkEdge..ctor(ToolUp.Platform.WorkRecordRef, ToolUp.Platform.WorkRecordRef)
+ToolUp.Platform.SeveredWorkEdge.NamedBy : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.SeveredWorkEdge.Ref : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.SeveredWorkEdgeModule (class)
+ToolUp.Platform.SeveredWorkEdgeModule.describe(ToolUp.Platform.SeveredWorkEdge) : System.String
+ToolUp.Platform.SeveredWorkEdgeModule.key(ToolUp.Platform.SeveredWorkEdge) : System.String
 ToolUp.Platform.ShareToken (class)
 ToolUp.Platform.ShareToken..ctor(System.String, ToolUp.Platform.ShareTokenClaim)
 ToolUp.Platform.ShareToken.Claim : ToolUp.Platform.ShareTokenClaim { get }
@@ -11823,12 +11830,14 @@ ToolUp.Platform.WithheldWorkRecord.Kind : ToolUp.Platform.WorkRecordKind { get }
 ToolUp.Platform.WithheldWorkRecord.PolicyRef : System.String { get }
 ToolUp.Platform.WithheldWorkRecord.Ref : ToolUp.Platform.WorkRecordRef { get }
 ToolUp.Platform.WorkAncestorPage (class)
-ToolUp.Platform.WorkAncestorPage..ctor(ToolUp.Platform.WorkRecordRef, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WithheldWorkRecord], System.Int32)
+ToolUp.Platform.WorkAncestorPage..ctor(ToolUp.Platform.WorkRecordRef, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WithheldWorkRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeveredWorkEdge], System.Int32)
 ToolUp.Platform.WorkAncestorPage.Depth : System.Int32 { get }
 ToolUp.Platform.WorkAncestorPage.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WorkRecord] { get }
 ToolUp.Platform.WorkAncestorPage.Root : ToolUp.Platform.WorkRecordRef { get }
+ToolUp.Platform.WorkAncestorPage.Severed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeveredWorkEdge] { get }
 ToolUp.Platform.WorkAncestorPage.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WithheldWorkRecord] { get }
 ToolUp.Platform.WorkAncestorPageModule (class)
+ToolUp.Platform.WorkAncestorPageModule.isSevered(ToolUp.Platform.WorkAncestorPage) : System.Boolean
 ToolUp.Platform.WorkAncestorPageModule.size(ToolUp.Platform.WorkAncestorPage) : System.Int32
 ToolUp.Platform.WorkAncestorRequest (class)
 ToolUp.Platform.WorkAncestorRequest..ctor(ToolUp.Platform.WorkRecordRef, System.Int32)
