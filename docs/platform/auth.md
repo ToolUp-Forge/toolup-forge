@@ -136,7 +136,7 @@ Client.run
 
 `OidcAuthUI` is protocol-named, not vendor-named, so it stays a first-class `AuthUIMode` case rather than moving to `ProviderAuthUI` (Phase 494). The `AuthUIHandlers` entry is **not optional**: since Phase 13a the companion exports a `handler` *value* instead of registering itself at module load, and `AuthUIProvider` fails loudly at startup if `AuthUI = OidcAuthUI _` is set with no handler carrying the `"oidc"` tag. `SignOutHandler` is optional — supply it to have the shell render a "Sign out" affordance wired to the issuer's end-session flow.
 
-`OidcUIConfig.defaults issuer clientId redirectUri` fills the last three fields with `[ "openid"; "profile"; "email" ]` / `None` / `None` if you would rather not spell the record out. For a first-class preset per IdP (Entra workforce, Entra External ID, Auth0) see `OidcPresets` in the same companion.
+`OidcUIConfig.defaults issuer clientId redirectUri` fills the last three fields with `[ "openid"; "profile"; "email" ]` / `None` / `None` if you would rather not spell the record out. For a first-class preset per IdP (Entra workforce, Entra External ID, Auth0, Google) see `OidcPresets` in the same companion, and the [preset table](../companions/auth-providers.md#provider-presets).
 
 ### `ToolUp.AuthProviders.EntraExternalId{,.Client}` (Microsoft Entra External ID)
 

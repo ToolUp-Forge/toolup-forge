@@ -22,7 +22,7 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 // relied on `PresetMetadata.AutoAddedScopes` / `.Notes` now derive
 // the same data from `PresetKind` via the helpers in `OidcAppConfig`.
 //
-// Rules (12):
+// Rules (13):
 //
 //   1. ERROR    Issuer empty.
 //   2. ERROR    ClientId empty.
@@ -66,6 +66,13 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 //               means an explicit opt-out. Surfaces so the
 //               decision is visible at startup rather than
 //               assumed-safe by silence.
+//  13. WARN     Preset `google` declared but Issuer is not
+//               `https://accounts.google.com`. Google's issuer is a
+//               fixed constant with no tenant / region variant, so
+//               ANY divergence is a mistake — a copied issuer from
+//               another preset, or a hand-edit that added a path
+//               segment or trailing slash. Distinct from rules 7–9,
+//               which have to reason about a parameterised family.
 
 /// Per-rule outcome.  Aggregator collapses these into a single
 /// `ValidationResult`; `evaluate` exposes the raw list for tests +
@@ -187,6 +194,19 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
             RuleWarning(
                 sprintf
                     "Preset `auth0` declared but OidcAppConfig.Issuer is `%s`, which is a Microsoft Entra issuer. Did you mean `OidcPresets.entraWorkforce`?"
+                    cfg.Issuer
+            )
+
+        // Rule 13 — google preset but a non-Google issuer.
+        // Cheaper to judge than rules 7–9: Google's issuer is a
+        // fixed constant, so this is an exact comparison rather
+        // than a shape heuristic. Trailing slash tolerated — the
+        // discovery fetch normalises it, and refusing it would
+        // report a non-problem.
+        if label = "google" && cfg.Issuer.TrimEnd '/' <> "https://accounts.google.com" then
+            RuleWarning(
+                sprintf
+                    "Preset `google` declared but OidcAppConfig.Issuer is `%s`, not `https://accounts.google.com`. Google's issuer is a fixed constant — there is no tenant, region, or custom-domain variant — so any other value will fail OIDC discovery. If you meant a different identity provider, use the matching preset (or `OidcPresets.generic` for one the SDK has no first-class knowledge of)."
                     cfg.Issuer
             )
 
