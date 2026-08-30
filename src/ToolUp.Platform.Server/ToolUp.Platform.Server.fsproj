@@ -759,6 +759,10 @@
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />
+        <!-- GIS CSP preflight — probes the live IServiceCollection for a
+             contributor covering accounts.google.com, so must follow
+             ICspContributor.fs. -->
+        <Compile Include="Server\GoogleIdentityCspValidator.fs" />
         <Compile Include="Server\SecurityHardening.fs" />
         <!-- Phase 156 — SecurityHeadersValidator moved after SecurityHardening:
              its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
