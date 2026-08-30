@@ -2794,7 +2794,13 @@ type ServerConfig = {
     /// no-master-key wrapper. Operators set the env var or accept
     /// the risk by flipping this flag.
     ///
-    /// Override via `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1`.
+    /// Override via `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1` or,
+    /// since Phase 457, the shorter `TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1`.
+    /// Both spellings set this one field: the flag is the deployment's
+    /// single "I know these secrets are not encrypted at rest" statement,
+    /// honoured by `EncryptedSecretStoreModeValidator`,
+    /// `OAuthSecretEncryptionModeValidator` and
+    /// `SecretStoreAtRestPostureValidator` alike.
     AcceptPlaintextSecretsWhenAuthRequired: bool
 
     /// Operator-declared replica count for the running
@@ -4489,7 +4495,14 @@ module ServerConfig =
                 SseAuthMode = parseSseAuthMode logger
                 AuthCookieIssuance = parseAuthCookieIssuance logger
                 AcceptHeaderAuthWhenAuthRequired = envFlag ConfigKeys.Names.acceptHeaderAuthInAuthMode
-                AcceptPlaintextSecretsWhenAuthRequired = envFlag ConfigKeys.Names.acceptPlaintextSecretsInAuthMode
+                // Phase 457 — two spellings, one acknowledgement. The
+                // shorter name is what the at-rest-posture validator's
+                // refusal prints; ORing here is what keeps it from becoming
+                // a second, separately-honoured opt-out. Unset → unchanged
+                // (GP 11).
+                AcceptPlaintextSecretsWhenAuthRequired =
+                    envFlag ConfigKeys.Names.acceptPlaintextSecretsInAuthMode
+                    || envFlag ConfigKeys.Names.acceptPlaintextSecrets
                 ReplicaCount = parseReplicaCount logger
                 AcceptInProcessSchedulerInMultiInstance = envFlag ConfigKeys.Names.acceptInProcessSchedulerMultiInstance
                 AcceptNoRateLimitWhenAuthRequired = envFlag ConfigKeys.Names.acceptNoRateLimitInAuthMode

@@ -1130,3 +1130,199 @@ let activeTeamPolicyTests =
             Expect.equal active (Some teamId) "auto-joined member's active team set"
         }
     ]
+// ─── Phase 548 — on-demand pending-invite consumption ──────────────────
+//
+// `ITeamInviteApi.CheckMyInvites` runs the same consumption core as the
+// middleware's session-window trigger, on demand, for the authenticated
+// caller only. The caller is read from
+// `HttpContext.Items["ToolUp.User"]` — the `AuthenticatedUser` the
+// scope-resolution middleware stamps from the validated principal — so
+// these tests stamp it the way the middleware does rather than passing
+// an id through the API surface (there is no argument to pass: the
+// method takes `unit`, which is the point).
+
+let private ctxForAuthenticatedUser (store: IPendingInviteStore) (user: AuthenticatedUser) : HttpContext =
+    let services = ServiceCollection()
+    services.AddSingleton<IPendingInviteStore>(store) |> ignore
+    let sp = services.BuildServiceProvider() :> IServiceProvider
+    let ctx = DefaultHttpContext() :> HttpContext
+    ctx.RequestServices <- sp
+    ctx.Items["ToolUp.User"] <- box user
+    ctx.Items["ToolUp.UserId"] <- box user.UserId
+    ctx
+
+let private signedInAs (email: string) : AuthenticatedUser = {
+    AuthenticatedUser.anonymous with
+        UserId = email
+        Email = Some email
+}
+
+[<Tests>]
+let checkMyInvitesTests =
+    testList "CheckMyInvites" [
+        testCaseAsync "consumes a pending invite on demand and echoes the joined team"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let email = "check-ondemand-happy@example.com"
+
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresAt = DateTime.UtcNow.AddDays 7.0
+                    InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
+                }
+
+            let ctx = ctxForAuthenticatedUser (pendingStore storage) (signedInAs email)
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            match! api.CheckMyInvites() with
+            | Error e -> failtestf "expected Ok, got Error %s" e
+            | Ok None -> failtest "expected the pending invite to be consumed"
+            | Ok(Some team) -> Expect.equal team.TeamId teamId "the joined team is echoed back"
+
+            let! role = ts.GetMemberRole(teamId, email)
+            Expect.equal role (Some Member) "the caller joined with the baked-in role"
+
+            let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
+            Expect.contains names "TeamInviteAcceptedFromPending" "the consumption core's join audit still fires"
+        }
+
+        testCaseAsync "nothing pending returns Ok None"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! _ = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let ctx =
+                ctxForAuthenticatedUser (pendingStore storage) (signedInAs "check-nothing-pending@example.com")
+
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! result = api.CheckMyInvites()
+            Expect.equal result (Ok None) "no pending entry is Ok None, not an error"
+        }
+
+        testCaseAsync "an expired pending invite returns Ok None and emits the expiry audit row"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let email = "check-ondemand-expired@example.com"
+
+            // Seeded through the raw store shim so the lapsed entry is
+            // present on disk — the `IPendingInviteStore` consume path
+            // is what drops it (and emits `TeamInviteExpired`, Phase
+            // 547.A), which is exactly what this call must exercise.
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert
+                    storage
+                    email
+                    (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            let ctx = ctxForAuthenticatedUser store (signedInAs email)
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! result = api.CheckMyInvites()
+            Expect.equal result (Ok None) "an expired invite reads as nothing pending"
+
+            let! role = ts.GetMemberRole(teamId, email)
+            Expect.isNone role "an expired invite never joins the caller"
+
+            let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
+            Expect.contains names "TeamInviteExpired" "the lapse is visible in the audit trail (Phase 547.A)"
+        }
+
+        testCaseAsync "an anonymous caller is refused"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let email = "check-ondemand-anonymous@example.com"
+
+            // A live pending entry the caller would consume IF the
+            // anonymous gate were missing — so the assertion below
+            // cannot pass vacuously on an empty store.
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresAt = DateTime.UtcNow.AddDays 7.0
+                    InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
+                }
+
+            // No `ToolUp.User` / `ToolUp.UserId` stamp at all — the
+            // shape an unauthenticated request presents.
+            let services = ServiceCollection()
+            services.AddSingleton<IPendingInviteStore>(pendingStore storage) |> ignore
+            let sp = services.BuildServiceProvider() :> IServiceProvider
+            let ctx = DefaultHttpContext() :> HttpContext
+            ctx.RequestServices <- sp
+
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! result = api.CheckMyInvites()
+            Expect.isError result "an anonymous caller is refused"
+
+            let! role = ts.GetMemberRole(teamId, email)
+            Expect.isNone role "the refused call consumed nothing"
+        }
+
+        testCaseAsync "a second call is idempotent — Ok None, membership unchanged"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let email = "check-ondemand-idempotent@example.com"
+
+            do!
+                ToolUp.Platform.Teams.PendingInviteStore.upsert storage email {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresAt = DateTime.UtcNow.AddDays 7.0
+                    InviterUserId = "alice@example.com"
+                    IssuedAt = DateTime.UtcNow
+                }
+
+            let ctx = ctxForAuthenticatedUser (pendingStore storage) (signedInAs email)
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! first = api.CheckMyInvites()
+            Expect.isOk first "the first call consumes the invite"
+
+            let! second = api.CheckMyInvites()
+            Expect.equal second (Ok None) "the second call finds nothing pending"
+
+            let! role = ts.GetMemberRole(teamId, email)
+            Expect.equal role (Some Member) "membership survives the repeat call"
+
+            let joins =
+                audit.Recorded
+                |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = "TeamInviteAcceptedFromPending")
+
+            Expect.equal (List.length joins) 1 "exactly one join audit — the repeat call did not re-join"
+        }
+    ]

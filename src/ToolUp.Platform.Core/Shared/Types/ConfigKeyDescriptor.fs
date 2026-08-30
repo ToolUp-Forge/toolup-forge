@@ -477,6 +477,16 @@ module Names =
     let acceptPlaintextSecretsInAuthMode =
         "TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE"
 
+    /// Phase 457 — the second spelling of the acknowledgement above, and
+    /// deliberately not a second FACT: both feed the one
+    /// `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired` field, so the
+    /// three plaintext-secret validators cannot disagree about whether an
+    /// operator has opted in. A separate flag would have produced exactly
+    /// that: an operator who set one and was still refused by a validator
+    /// reading the other.
+    [<Literal>]
+    let acceptPlaintextSecrets = "TOOLUP_ACCEPT_PLAINTEXT_SECRETS"
+
     [<Literal>]
     let acceptInProcessSchedulerMultiInstance =
         "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE"
@@ -2105,6 +2115,15 @@ let all: ConfigKeyDescriptor list = [
         Category = EscapeHatchCategory
     }
     {
+        EnvVar = Names.acceptPlaintextSecrets
+        Description =
+            "Acknowledges that the composed secret store does not encrypt at rest. Same acknowledgement as TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE — either spelling lowers the plaintext-secrets refusals to warnings."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = EscapeHatchCategory
+    }
+    {
         EnvVar = Names.acceptInProcessSchedulerMultiInstance
         Description =
             "Allows the in-process job scheduler when ReplicaCount is above 1, so scheduled jobs run on every instance. Lowers a startup preflight refusal to a warning."
@@ -2522,6 +2541,7 @@ let manifestBindable: Set<string> =
         Names.acceptLocalFallback
         Names.acceptNoRateLimitInAuthMode
         Names.acceptPendingInviteStoreMultiInstance
+        Names.acceptPlaintextSecrets
         Names.acceptPlaintextSecretsInAuthMode
         Names.acceptQueryParamSseAuthInAuthMode
         Names.acceptSameSiteOnlyCsrfInAuthMode

@@ -181,6 +181,8 @@ let private registeredTests =
         OAuthSubstrateTests.pkceFlowTests
         OAuthSubstrateTests.refresherScrubTests
         OAuthSecretEncryptionModeValidatorTests.tests
+        // Phase 457 — the at-rest posture of the store that is actually composed.
+        SecretStoreAtRestPostureValidatorTests.tests
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         // Phase 460 — share-token signing-key governance (refusal ladder, provenance, race).
         ShareTokenSigningKeyGovernanceTests.tests
@@ -1134,6 +1136,8 @@ let private registeredTests =
         TeamInvitationTests.expiredInviteVisibilityTests
         TeamInvitationTests.inviteExpiryNotificationTests
         TeamInvitationTests.activeTeamPolicyTests
+        // Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
+        TeamInvitationTests.checkMyInvitesTests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests

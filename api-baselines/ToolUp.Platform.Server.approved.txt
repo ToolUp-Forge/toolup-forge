@@ -7977,6 +7977,11 @@ ToolUp.Platform.SecretStore+CloudSecretStoreResolver (class)
 ToolUp.Platform.SecretStore+CloudSecretStoreResolver..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]])
 ToolUp.Platform.SecretStore+CloudSecretStoreResolver.Name : System.String { get }
 ToolUp.Platform.SecretStore+CloudSecretStoreResolver.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]] { get }
+ToolUp.Platform.SecretStoreAtRestPostureValidator (class)
+ToolUp.Platform.SecretStoreAtRestPostureValidator.encryptsAtRest(ToolUp.Platform.Secrets+ISecretStore) : System.Boolean
+ToolUp.Platform.SecretStoreAtRestPostureValidator.resolveAtRestPosture(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Secrets+SecretAtRestPosture
+ToolUp.Platform.SecretStoreAtRestPostureValidator+SecretStoreAtRestPostureValidator (class)
+ToolUp.Platform.SecretStoreAtRestPostureValidator+SecretStoreAtRestPostureValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.SecurityHardening (class)
 ToolUp.Platform.SecurityHardening.aggregate(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : ToolUp.Platform.SecurityHardening+ResolvedCspPolicy
 ToolUp.Platform.SecurityHardening.buildPolicy(ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CspSourceDirective]) : System.String

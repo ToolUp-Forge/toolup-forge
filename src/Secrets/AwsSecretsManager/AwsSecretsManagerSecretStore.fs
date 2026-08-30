@@ -159,6 +159,16 @@ type AwsSecretsManagerSecretStore(config: AwsSecretsManagerConfig) =
     // ordinary type raises FS3536. Only instance methods are used.
     let client = new AmazonSecretsManagerClient(clientConfig)
 
+    /// Phase 457 — Secrets Manager encrypts every secret at rest under a
+    /// KMS key (the `aws/secretsmanager` managed key unless the secret was
+    /// created against a customer-managed one). Declared so a deployment on
+    /// this companion passes the at-rest preflight on the store's own
+    /// evidence rather than on the `TOOLUP_SECRET_STORE` spelling — the
+    /// switch says what was ASKED for, this says what was composed.
+    interface ISecretStoreAtRestPosture with
+        member _.AtRestPosture =
+            EncryptsAtRest "AWS Secrets Manager, KMS-managed encryption at rest"
+
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
             let name = Naming.secretName scopeId key
