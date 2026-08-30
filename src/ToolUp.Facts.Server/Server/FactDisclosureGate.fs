@@ -40,6 +40,22 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // policy vocabulary keyed by the ref the STORED fact carries; no party
 // identity is ever read from the caller.
 //
+// **Phase 675 — declassification budgets.** A declassification routine
+// that is safe to cross once is a routine a counterparty may cross a
+// thousand times, and the walk above cannot notice: every crossing was
+// permitted. When a `DeclassificationBudgetConfig` is composed the gate
+// therefore RESERVES each budgeted crossing's charge before finalising
+// the verdict and SETTLES it after, per contributing party, through the
+// Phase 190 ledger seam. An exhausted ceiling denies with the same typed,
+// audited refusal shape a policy denial takes (GP 6) — never a silent
+// allow, and never a quantity on the wire. No config composed ⇒ the whole
+// path is one option match and behaviour is byte-for-byte pre-675
+// (GP 11 / GP 13). The honesty framing — accounting bounds *questions
+// asked*; only a noise-drawing routine earns a DP claim; basic sequential
+// composition; collusion out of scope — is stated in full in
+// `DeclassificationBudget.fs`, which is also where the registration-time
+// refusal of an epsilon charge on a deterministic routine lives.
+//
 // **Audit (GP 6).** Every deny writes a `FactDisclosureDenied` event
 // (surface, fact id, metric, policy ref, principal — never the value); a
 // declassification-cleared disclosure writes a `FactDisclosureDeclassified`
@@ -90,7 +106,8 @@ type FactDisclosureGate
         events: IEventStore,
         ?resolvePolicy: DisclosurePolicyResolver,
         ?taint: DisclosureTaintConfig,
-        ?purpose: DisclosurePurposeConfig
+        ?purpose: DisclosurePurposeConfig,
+        ?budgets: DeclassificationBudgetConfig
     ) =
 
     static let jsonOptions = FableConverters.create ()
@@ -101,6 +118,15 @@ type FactDisclosureGate
     // the facet absent: no claim is read, no refusal minted, behaviour
     // byte-for-byte pre-592 (GP 11 / GP 13).
     let purposeConfig = purpose
+
+    // Phase 675 — the budget facet. `None` (no budgets declared) keeps
+    // the facet absent: no ledger is read, no reservation opened,
+    // behaviour byte-for-byte pre-675 (GP 11 / GP 13). A config that
+    // declares no routine is treated as absent for the same reason — a
+    // deployment that composed the knob and declared nothing pays
+    // nothing.
+    let budgetConfig =
+        budgets |> Option.filter (DeclassificationBudgetConfig.isEmpty >> not)
 
     // The policy resolver: an explicit one wins; otherwise the registered
     // taint policy vocabulary drives it (Phase 562.A — the resolver's first
@@ -161,6 +187,22 @@ type FactDisclosureGate
         // Unresolvable in this scope (unknown id, or a fact belonging to
         // another tenant) ⇒ deny, conservatively — never fail open.
         | None -> FactNotDisclosable "unknown-fact", ""
+
+    // NOTE on the widened constructor (Phase 675). `?budgets` widens the
+    // SINGLE generated `.ctor`, so the five-argument token disappears
+    // from the public-API baseline — a recorded retype, regenerated
+    // surgically, under the 2026-08-04 record/contract widening
+    // dispensation. Every existing call site still compiles unchanged
+    // (F# optional arguments), and every source form remains valid.
+    //
+    // The obvious alternative — keeping the five-argument arity as an
+    // explicit secondary constructor so the baseline diff stayed purely
+    // additive — was implemented, measured and REJECTED: two overloads
+    // differing only in a trailing optional argument are ambiguous to
+    // overload resolution, so `FactDisclosureGate(store, events)` stopped
+    // compiling with FS0041 at three call sites in this very file. It
+    // traded a recorded, source-compatible baseline retype for a genuine
+    // consumer break, which is the wrong direction.
 
     interface IFactDisclosureGate with
 
@@ -259,7 +301,36 @@ type FactDisclosureGate
                                 | None -> FactDisclosable, Some outcome
                             | _ -> baseV, None
 
-                    let finalVerdict, taintOutcome = verdict
+                    let preBudgetVerdict, taintOutcome = verdict
+
+                    // ── Phase 675 — reserve BEFORE the verdict is final ──
+                    //
+                    // Only a disclosure that would otherwise be RELEASED
+                    // and whose derivation actually crossed a routine can
+                    // spend anything: a fact already denied on its own
+                    // policy, on the conjunction, or on purpose has
+                    // disclosed nothing and owes nothing, and charging it
+                    // would spend a party's allowance on a question the
+                    // gate never answered.
+                    //
+                    // The reservation is durable before the verdict
+                    // stands, so a crossing cannot reach a caller on
+                    // credit. `settle` below closes every hold once the
+                    // verdict is known — including on the refusal path,
+                    // where earlier crossings' holds are settled rather
+                    // than leaked.
+                    let! budgetHolds =
+                        match preBudgetVerdict, taintOutcome, budgetConfig with
+                        | FactDisclosable, Some outcome, Some config when not (List.isEmpty outcome.Crossings) -> async {
+                            let! reserved = DeclassificationBudgetGate.reserve config outcome.Crossings
+                            return Some(config, reserved)
+                          }
+                        | _ -> async.Return None
+
+                    let finalVerdict =
+                        match budgetHolds with
+                        | Some(_, CrossingsRefused(policyRef, _)) -> FactNotDisclosable policyRef
+                        | _ -> preBudgetVerdict
 
                     // Phase 674.C — the contribution facet on every audit
                     // row. With a taint outcome it is the whole walked
@@ -326,6 +397,22 @@ type FactDisclosureGate
                                     TaxonomyVersion = taxonomyVersion
                                 }
 
+                    // Phase 675 — settle AFTER the verdict. A released
+                    // disclosure commits its charges; a denied one is
+                    // settled per each routine's own declared
+                    // `WithholdCharge`, which is deployment policy and
+                    // not an SDK opinion.
+                    match budgetHolds with
+                    | Some(config, CrossingsHeld held)
+                    | Some(config, CrossingsRefused(_, held)) when not (List.isEmpty held) ->
+                        let disclosed =
+                            match finalVerdict with
+                            | FactDisclosable -> true
+                            | FactNotDisclosable _ -> false
+
+                        do! DeclassificationBudgetGate.settle config disclosed held
+                    | _ -> ()
+
                     return factId, finalVerdict
                 })
                 |> Async.Parallel
@@ -375,4 +462,24 @@ module FactDisclosureGate =
         (events: IEventStore)
         : IFactDisclosureGate =
         FactDisclosureGate(store, events, ?resolvePolicy = None, ?taint = taint, ?purpose = purpose)
+        :> IFactDisclosureGate
+
+    /// Phase 675 — `createConfigured` with the third optional facet:
+    /// declassification budgets. `None` on all three axes is the Phase
+    /// 525 gate exactly; `None` on this one alone is the Phase 674 gate
+    /// exactly (GP 11 / GP 13). This is the shape `FactsCompose`'s DI
+    /// factory builds from the optional registrations.
+    ///
+    /// A new entry point rather than a widened `createConfigured`: the
+    /// existing signature is public surface a consumer binds against, and
+    /// retyping it would delete that token. Same reason the gate's
+    /// pre-675 constructor is kept explicitly beside the widened one.
+    let createConfiguredWithBudgets
+        (taint: DisclosureTaintConfig option)
+        (purpose: DisclosurePurposeConfig option)
+        (budgets: DeclassificationBudgetConfig option)
+        (store: IFactStore)
+        (events: IEventStore)
+        : IFactDisclosureGate =
+        FactDisclosureGate(store, events, ?resolvePolicy = None, ?taint = taint, ?purpose = purpose, ?budgets = budgets)
         :> IFactDisclosureGate

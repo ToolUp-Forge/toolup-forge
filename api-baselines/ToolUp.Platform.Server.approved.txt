@@ -628,6 +628,10 @@ ToolUp.Platform.BlobModelRegistryModule (class)
 ToolUp.Platform.BlobModelRegistryModule.create(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLimits(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILineageStore) : ToolUp.Platform.IModelRegistry
+ToolUp.Platform.BlobPrivacyBudgetLedger (class)
+ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.BlobPrivacyBudgetLedger.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPrivacyBudgetLedger]
 ToolUp.Platform.BlobProviderProfile (class)
 ToolUp.Platform.BlobProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.Platform.BlobStorageEnv (class)
@@ -766,6 +770,56 @@ ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BoundedWorkProvenanceSource (class)
 ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
+ToolUp.Platform.BudgetDecision (class)
+ToolUp.Platform.BudgetDecision.IsBudgetRefused : System.Boolean { get }
+ToolUp.Platform.BudgetDecision.IsBudgetReserved : System.Boolean { get }
+ToolUp.Platform.BudgetDecision.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetDecision+BudgetRefused (class)
+ToolUp.Platform.BudgetDecision+BudgetRefused.refusal : ToolUp.Platform.BudgetRefusal { get }
+ToolUp.Platform.BudgetDecision+BudgetReserved (class)
+ToolUp.Platform.BudgetDecision+BudgetReserved.remaining : System.Decimal { get }
+ToolUp.Platform.BudgetDecision+BudgetReserved.spend : ToolUp.Platform.BudgetSpend { get }
+ToolUp.Platform.BudgetDecision+Tags (class)
+ToolUp.Platform.BudgetDecision+Tags.BudgetRefused : System.Int32 (literal)
+ToolUp.Platform.BudgetDecision+Tags.BudgetReserved : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch (class)
+ToolUp.Platform.BudgetEpoch.DailyBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.IsDailyBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.IsMonthlyBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.IsPerpetualBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.MonthlyBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.PerpetualBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetEpoch+Tags (class)
+ToolUp.Platform.BudgetEpoch+Tags.DailyBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch+Tags.MonthlyBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch+Tags.PerpetualBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetRefusal (class)
+ToolUp.Platform.BudgetRefusal.IsBudgetExhausted : System.Boolean { get }
+ToolUp.Platform.BudgetRefusal.IsBudgetLedgerUnavailable : System.Boolean { get }
+ToolUp.Platform.BudgetRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted (class)
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.ceiling : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.remaining : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.requested : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetLedgerUnavailable (class)
+ToolUp.Platform.BudgetRefusal+BudgetLedgerUnavailable.reason : System.String { get }
+ToolUp.Platform.BudgetRefusal+Tags (class)
+ToolUp.Platform.BudgetRefusal+Tags.BudgetExhausted : System.Int32 (literal)
+ToolUp.Platform.BudgetRefusal+Tags.BudgetLedgerUnavailable : System.Int32 (literal)
+ToolUp.Platform.BudgetScope (class)
+ToolUp.Platform.BudgetScope..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BudgetScope.CounterpartyPeerId : System.String { get }
+ToolUp.Platform.BudgetScope.Epoch : System.String { get }
+ToolUp.Platform.BudgetScope.TemplateId : System.String { get }
+ToolUp.Platform.BudgetSpend (class)
+ToolUp.Platform.BudgetSpend..ctor(System.String, ToolUp.Platform.BudgetScope, System.Decimal, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Platform.BudgetSpend.Epsilon : System.Decimal { get }
+ToolUp.Platform.BudgetSpend.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.BudgetSpend.MethodName : System.String { get }
+ToolUp.Platform.BudgetSpend.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.BudgetSpend.ReservationId : System.String { get }
+ToolUp.Platform.BudgetSpend.Scope : ToolUp.Platform.BudgetScope { get }
 ToolUp.Platform.BudgetedComputeDispatcher (class)
 ToolUp.Platform.BudgetedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ComputeBudgetGuard, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.BuildRouteHandlers (class)
@@ -5013,6 +5067,11 @@ ToolUp.Platform.IPresenceTracker.Join(System.String, System.String, Microsoft.FS
 ToolUp.Platform.IPresenceTracker.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Move(System.String, System.String, ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]
+ToolUp.Platform.IPrivacyBudgetLedger (interface)
+ToolUp.Platform.IPrivacyBudgetLedger.IsDurable : System.Boolean { get }
+ToolUp.Platform.IPrivacyBudgetLedger.RecordSpend(ToolUp.Platform.BudgetSpend, ToolUp.Platform.SpendOutcome) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IPrivacyBudgetLedger.RemainingBudget(ToolUp.Platform.BudgetScope, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PrivacyBudget]
+ToolUp.Platform.IPrivacyBudgetLedger.ReserveBudget(ToolUp.Platform.BudgetSpend, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetDecision]
 ToolUp.Platform.IPromotedArtifactSigner (interface)
 ToolUp.Platform.IPromotedArtifactSigner.SignArtifact(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactSignature, System.String]]
 ToolUp.Platform.IProvenanceGraph (interface)
@@ -5329,6 +5388,10 @@ ToolUp.Platform.InMemoryPresenceChannel (class)
 ToolUp.Platform.InMemoryPresenceChannel..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryPresenceTracker (class)
 ToolUp.Platform.InMemoryPresenceTracker..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.InMemoryPrivacyBudgetLedger (class)
+ToolUp.Platform.InMemoryPrivacyBudgetLedger..ctor()
+ToolUp.Platform.InMemoryPrivacyBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.InMemoryPrivacyBudgetLedger.Scopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetScope] { get }
 ToolUp.Platform.InMemoryRateLimitStore (class)
 ToolUp.Platform.InMemoryRateLimitStore.create() : ToolUp.Platform.IRateLimitStore
 ToolUp.Platform.InMemoryRateLimitStore.createWithClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]) : ToolUp.Platform.IRateLimitStore
@@ -6654,6 +6717,8 @@ ToolUp.Platform.NoOpRateLimiter (class)
 ToolUp.Platform.NoOpRateLimiter..ctor()
 ToolUp.Platform.NoOpUserClaims (class)
 ToolUp.Platform.NoOpUserClaims..ctor()
+ToolUp.Platform.NoPrivacyBudgetLedger (class)
+ToolUp.Platform.NoPrivacyBudgetLedger..ctor()
 ToolUp.Platform.NoopEdgeCache (class)
 ToolUp.Platform.NoopEdgeCache..ctor()
 ToolUp.Platform.NoopEdgeCacheModule (class)
@@ -7069,6 +7134,40 @@ ToolUp.Platform.PrincipalRegistry (class)
 ToolUp.Platform.PrincipalRegistry.defaultAuditLookBack : System.TimeSpan { get }
 ToolUp.Platform.PrincipalRegistry.listPrincipals(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]]
 ToolUp.Platform.PrincipalRegistry.listPrincipalsWith(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]]
+ToolUp.Platform.PrivacyBudget (class)
+ToolUp.Platform.PrivacyBudget..ctor(ToolUp.Platform.BudgetScope, System.Decimal, System.Decimal, System.Decimal, System.Int32)
+ToolUp.Platform.PrivacyBudget.EpsilonCeiling : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.EpsilonCommitted : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.EpsilonReserved : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.QueryCount : System.Int32 { get }
+ToolUp.Platform.PrivacyBudget.Scope : ToolUp.Platform.BudgetScope { get }
+ToolUp.Platform.PrivacyBudgetMeter (class)
+ToolUp.Platform.PrivacyBudgetMeter..ctor(ToolUp.Platform.IPrivacyBudgetLedger, ToolUp.Platform.PrivacyBudgetPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.PrivacyBudgetMeter.Ledger : ToolUp.Platform.IPrivacyBudgetLedger { get }
+ToolUp.Platform.PrivacyBudgetMeter.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.PrivacyBudgetMeter.Policy : ToolUp.Platform.PrivacyBudgetPolicy { get }
+ToolUp.Platform.PrivacyBudgetMeterModule (class)
+ToolUp.Platform.PrivacyBudgetMeterModule.create(ToolUp.Platform.IPrivacyBudgetLedger, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetMeter
+ToolUp.Platform.PrivacyBudgetMeterModule.spendFor(System.String, System.String, System.String, ToolUp.Platform.PrivacyBudgetMeter) : ToolUp.Platform.BudgetSpend
+ToolUp.Platform.PrivacyBudgetMeterModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Platform.PrivacyBudgetMeter) : ToolUp.Platform.PrivacyBudgetMeter
+ToolUp.Platform.PrivacyBudgetPolicy (class)
+ToolUp.Platform.PrivacyBudgetPolicy..ctor(System.Decimal, System.Decimal, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Decimal], ToolUp.Platform.BudgetEpoch, ToolUp.Platform.WithholdCharge, System.TimeSpan)
+ToolUp.Platform.PrivacyBudgetPolicy.Epoch : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.PrivacyBudgetPolicy.EpsilonCeiling : System.Decimal { get }
+ToolUp.Platform.PrivacyBudgetPolicy.EpsilonPerQuery : System.Decimal { get }
+ToolUp.Platform.PrivacyBudgetPolicy.MethodEpsilon : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Decimal] { get }
+ToolUp.Platform.PrivacyBudgetPolicy.ReservationTtl : System.TimeSpan { get }
+ToolUp.Platform.PrivacyBudgetPolicy.WithholdCharge : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.PrivacyBudgetPolicyModule (class)
+ToolUp.Platform.PrivacyBudgetPolicyModule.DefaultReservationTtlMinutes : System.Double (literal)
+ToolUp.Platform.PrivacyBudgetPolicyModule.create(System.Decimal, System.Decimal) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.epochLabel(System.DateTimeOffset, ToolUp.Platform.PrivacyBudgetPolicy) : System.String
+ToolUp.Platform.PrivacyBudgetPolicyModule.epsilonFor(System.String, ToolUp.Platform.PrivacyBudgetPolicy) : System.Decimal
+ToolUp.Platform.PrivacyBudgetPolicyModule.scopeFor(System.String, System.String, System.DateTimeOffset, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.BudgetScope
+ToolUp.Platform.PrivacyBudgetPolicyModule.withEpoch(ToolUp.Platform.BudgetEpoch, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withMethodEpsilon(System.String, System.Decimal, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withReservationTtl(System.TimeSpan, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withWithholdCharge(ToolUp.Platform.WithholdCharge, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
 ToolUp.Platform.ProcessProfileGate (class)
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
@@ -8523,6 +8622,16 @@ ToolUp.Platform.SoftwareBillOfMaterials.Subject : ToolUp.Platform.SbomSubject { 
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SpendOutcome (class)
+ToolUp.Platform.SpendOutcome.IsSpendCommitted : System.Boolean { get }
+ToolUp.Platform.SpendOutcome.IsSpendReturned : System.Boolean { get }
+ToolUp.Platform.SpendOutcome.SpendCommitted : ToolUp.Platform.SpendOutcome { get }
+ToolUp.Platform.SpendOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.SpendOutcome+SpendReturned (class)
+ToolUp.Platform.SpendOutcome+SpendReturned.reason : System.String { get }
+ToolUp.Platform.SpendOutcome+Tags (class)
+ToolUp.Platform.SpendOutcome+Tags.SpendCommitted : System.Int32 (literal)
+ToolUp.Platform.SpendOutcome+Tags.SpendReturned : System.Int32 (literal)
 ToolUp.Platform.SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -9273,6 +9382,15 @@ ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy..ctor(Microsoft.FSharp.Coll
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule (class)
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule.empty : ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.WithholdCharge (class)
+ToolUp.Platform.WithholdCharge.IsWithholdCharged : System.Boolean { get }
+ToolUp.Platform.WithholdCharge.IsWithholdFree : System.Boolean { get }
+ToolUp.Platform.WithholdCharge.Tag : System.Int32 { get }
+ToolUp.Platform.WithholdCharge.WithholdCharged : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.WithholdCharge.WithholdFree : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.WithholdCharge+Tags (class)
+ToolUp.Platform.WithholdCharge+Tags.WithholdCharged : System.Int32 (literal)
+ToolUp.Platform.WithholdCharge+Tags.WithholdFree : System.Int32 (literal)
 ToolUp.Platform.WorkProvenance (class)
 ToolUp.Platform.WorkProvenance.attest(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployWorkAttestation]
 ToolUp.Platform.WorkProvenance.attestRecord(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WorkAttestedDeployRecord]
