@@ -1536,14 +1536,25 @@
              CompositionDryRun.fs (its slotInterface parser). Pure — nothing
              registers into DI, nothing runs at compose (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionUpgradePlan.fs" />
-    <!-- Phase 676 — the N-party countersignature registry: a signed
-         propose / review / approve / revoke lifecycle over arbitrary
-         content-hashed subjects, with approval live only under every
-         enrolled party's signature over the exact subject hash. Placed
-         last because it depends only on things far above it — the Core
-         signed-shape separators, IBlobStorage, IdentitySanitiser and the
-         shared JSON converter set — and nothing in the file is composed
-         by default, so nothing below needs to see it (GP 11 / GP 13). -->
+        <!-- Phase 723 — the scope-enumeration seam (IScopeEnumerator + its
+             ITeamStore-backed default) and the converged restart-recovery
+             sweep (IIngestionRecoverySurface + IngestionRecoverySweep) the
+             RAG and KnowledgeBase companions now share. After
+             Teams\TeamManagement.fs (the default adapts ITeamStore.ListTeams
+             rather than adding a member to it) and IngestionStatusStore.fs
+             (the RAG-side surface adapter wraps IIngestionStatusStore).
+             Nothing here registers into DI and nothing runs at compose — a
+             deployment that composes no enumerator and no sweep is
+             byte-for-byte unchanged (GP 11 / GP 13). -->
+        <Compile Include="Server\ScopeEnumeration.fs" />
+        <!-- Phase 676 — the N-party countersignature registry: a signed
+             propose / review / approve / revoke lifecycle over arbitrary
+             content-hashed subjects, with approval live only under every
+             enrolled party's signature over the exact subject hash. Placed
+             last because it depends only on things far above it — the Core
+             signed-shape separators, IBlobStorage, IdentitySanitiser and the
+             shared JSON converter set — and nothing in the file is composed
+             by default, so nothing below needs to see it (GP 11 / GP 13). -->
         <Compile Include="Server\CountersignatureRegistry.fs" />
     </ItemGroup>
   <ItemGroup>

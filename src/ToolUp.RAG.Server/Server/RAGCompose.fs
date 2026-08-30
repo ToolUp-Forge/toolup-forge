@@ -869,11 +869,21 @@ type RAGServerApp = {
     /// restart genuinely loses the job and the per-file status would
     /// otherwise read `Pending` forever with nothing ever to clear it;
     /// on a durable queue the job is redelivered instead, so the sweep is
-    /// belt-and-braces. Containers are enumerated by the consumer (the
-    /// SDK has no scope-enumeration seam) — the same shape KB's
-    /// `recoverStuckDocumentsAtStartup` uses. Set via
-    /// `RAGServerApp.withIngestionRecoverySweep`.
+    /// belt-and-braces. Set via `RAGServerApp.withIngestionRecoverySweep`.
+    ///
+    /// Phase 723 — no longer the ONLY way to name the containers. A
+    /// deployment that composes `withScopeEnumerator` has them
+    /// enumerated instead, and the two compose (the union is swept), so
+    /// migrating from a hand-written list to an enumerator never loses
+    /// coverage in the gap.
     IngestionRecoveryScopes: string list
+    /// Phase 723 — the composed scope-enumeration seam, answering "what
+    /// storage scopes does this deployment hold?" for the restart
+    /// recovery sweep. `None` (default) ⇒ scopes come only from
+    /// `IngestionRecoveryScopes`, exactly as before (GP 11 / GP 13). Set
+    /// via `RAGServerApp.withScopeEnumerator`; the SDK default is
+    /// `ScopeEnumeration.fromTeamStore`.
+    ScopeEnumerator: IScopeEnumerator option
     /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
     /// the supplied `IEmbeddingProvider` in. `None` (default) constructs
     /// the process-local `InMemoryEmbeddingCache`, so an existing
@@ -1577,58 +1587,47 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // the Data Manager badge reads "still ingesting" forever with
         // nothing left to clear it. This flips those entries to `Failed`
         // with a restart-interrupted reason, making the loss visible.
-        // Only registered when the consumer named containers to sweep —
-        // an unconfigured deployment carries no hosted service (GP 13).
+        //
+        // Phase 723 — the sweep body no longer lives here. The traversal,
+        // the per-scope error isolation, the reason string and the
+        // logging shape are `ToolUp.Platform.IngestionRecoverySweep`,
+        // shared with KB's `recoverStuckDocumentsAtStartup`, which was a
+        // near-identical copy of exactly this loop in another companion.
+        // What this block still owns is the two composition decisions:
+        // WHETHER a sweep runs at all, and which surfaces + scopes it
+        // gets.
+        //
+        // Registered when the consumer named containers to sweep OR
+        // composed a scope enumerator — an unconfigured deployment still
+        // carries no hosted service and no surface registration, so it
+        // is byte-for-byte its pre-509 self (GP 11 / GP 13).
+        //
+        // Surfaces are resolved from the BUILT provider at StartAsync,
+        // not captured here, so a companion that registers its own
+        // surface (KB's document index, via
+        // `KnowledgeBaseServerApp.withIngestionRecovery`) is picked up
+        // with no ordering requirement between compose helpers — and the
+        // scope enumeration is a live read, so a team created since the
+        // last start is swept on this one.
         let s =
-            if app.IngestionRecoveryScopes.IsEmpty then
+            if app.IngestionRecoveryScopes.IsEmpty && app.ScopeEnumerator.IsNone then
                 s
             else
-                let scopes = app.IngestionRecoveryScopes
-                let statusStore = ingestionStatusStore
+                let explicitScopes = app.IngestionRecoveryScopes
+                let enumerator = app.ScopeEnumerator
 
-                let reason =
-                    "Ingestion was interrupted by a process restart before the document finished indexing. Re-upload the file to re-index it."
+                let ragSurface: IIngestionRecoverySurface =
+                    IngestionRecoverySweep.ofIngestionStatusStore ingestionStatusStore
 
-                s.AddSingleton<IHostedService>(
-                    { new IHostedService with
-                        member _.StartAsync(_ct) =
-                            async {
-                                let mutable total = 0
-
-                                for scope in scopes do
-                                    try
-                                        let! entries = statusStore.List scope
-
-                                        let stuck =
-                                            entries
-                                            |> List.filter (fun (_, status) -> status = FileIngestionStatus.Pending)
-
-                                        for (documentId, _) in stuck do
-                                            do! statusStore.Set(scope, documentId, FileIngestionStatus.Failed reason)
-                                            total <- total + 1
-                                    with ex ->
-                                        ragLogger.Error(
-                                            sprintf
-                                                "[RAGCompose] event=ingestion_recovery_scan_failed container=%s: skipping this container"
-                                                scope,
-                                            Some ex
-                                        )
-
-                                if total > 0 then
-                                    ragLogger.Warn(
-                                        sprintf
-                                            "[RAGCompose] event=ingestion_recovery_swept count=%d containers=%d: document(s) left Pending by a prior process were marked Failed. Affected uploaders see a Failed badge and can re-upload."
-                                            total
-                                            (List.length scopes)
-                                    )
-                            }
-                            |> Async.StartAsTask
-                            :> System.Threading.Tasks.Task
-
-                        member _.StopAsync(_ct) =
-                            System.Threading.Tasks.Task.CompletedTask
-                    }
-                )
+                s
+                    .AddSingleton<IIngestionRecoverySurface>(ragSurface)
+                    .AddSingleton<IHostedService>(
+                        System.Func<System.IServiceProvider, IHostedService>(fun sp ->
+                            IngestionRecoverySweep.hostedService
+                                ragLogger
+                                (fun () -> sp.GetServices<IIngestionRecoverySurface>() |> List.ofSeq)
+                                (fun () -> IngestionRecoverySweep.resolveScopes explicitScopes enumerator ragLogger))
+                    )
 
         let s =
             match app.Reranker with
@@ -1912,6 +1911,7 @@ module RAGServerApp =
             RetrievalPipelineOverride = None
             IngestionQueueStore = None
             IngestionRecoveryScopes = []
+            ScopeEnumerator = None
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -1959,6 +1959,7 @@ module RAGServerApp =
             RetrievalPipelineOverride = None
             IngestionQueueStore = None
             IngestionRecoveryScopes = []
+            ScopeEnumerator = None
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -2365,14 +2366,46 @@ module RAGServerApp =
     /// `recoverStuckDocumentsAtStartup` — auto re-enqueue would need the
     /// per-handler extraction wiring lifted to a shared shape.
     ///
-    /// Containers are enumerated by the consumer (typically
-    /// `ITeamStore.ListTeams` plus the well-known `_platform` /
-    /// `_deployment` containers) because the SDK has no scope-enumeration
-    /// seam. Empty (default) ⇒ no sweep and no hosted service (GP 11 /
-    /// GP 13).
+    /// Containers are named by the consumer. Empty (default) ⇒ no sweep
+    /// and no hosted service (GP 11 / GP 13).
+    ///
+    /// **Phase 723 — prefer `withScopeEnumerator` for anything but a
+    /// fixed scope set.** A hand-written list is the shape that made the
+    /// sweep least likely to be wired exactly where it mattered most: a
+    /// deployment large enough to need restart recovery is the one whose
+    /// container list is longest, changes as teams are created, and goes
+    /// stale silently. The two compose — the union of the explicit list
+    /// and the enumeration is swept — so a deployment can migrate
+    /// without a gap and then drop the list.
     let withIngestionRecoverySweep (containers: string list) (app: RAGServerApp) : RAGServerApp = {
         app with
             IngestionRecoveryScopes = containers
+    }
+
+    /// Phase 723 — compose the scope-enumeration seam, so the restart
+    /// recovery sweep discovers the containers to visit instead of being
+    /// handed a list.
+    ///
+    /// The SDK default is `ScopeEnumeration.fromTeamStore teamStore`:
+    /// every team's `team-{id}` container (read through the EXISTING
+    /// `ITeamStore.ListTeams` — no interface member was added, so no
+    /// external `ITeamStore` implementation breaks) plus the well-known
+    /// `_platform` / `_deployment` containers. A deployment whose scopes
+    /// come from elsewhere composes its own `IScopeEnumerator`; one whose
+    /// scopes are genuinely fixed can pass `ScopeEnumeration.ofScopes`.
+    ///
+    /// Composing this ENABLES the sweep on its own — a deployment that
+    /// names no containers and composes an enumerator sweeps the
+    /// enumerated ones, which is the entire point of the seam. A
+    /// deployment that composes neither is unchanged (GP 13).
+    ///
+    /// Note what the default cannot see: personal (`user-{id}`)
+    /// containers are not enumerable from `ITeamStore`. A personal-mode
+    /// deployment composes `ScopeEnumeration.ofScopes` or its own
+    /// enumerator; see the `ScopeEnumeration.fromTeamStoreWith` remarks.
+    let withScopeEnumerator (enumerator: IScopeEnumerator) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            ScopeEnumerator = Some enumerator
     }
 
     /// Phase 14t — set the retry / dead-letter policy for transient

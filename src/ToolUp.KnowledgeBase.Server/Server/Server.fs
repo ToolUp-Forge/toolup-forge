@@ -281,3 +281,16 @@ let withUrlContentFetcher = KnowledgeBase.ServerBulkImport.withUrlContentFetcher
 /// badge and the user can re-upload. Defined in `Server/Recovery.fs`.
 let recoverStuckDocumentsAtStartup =
     KnowledgeBase.ServerRecovery.recoverStuckDocumentsAtStartup
+
+/// Phase 723 — enrol the KB document index in the automatic startup
+/// restart-recovery sweep, so the hook above does not have to be called
+/// by hand with a container list the deployment has to keep current.
+///
+/// Registers KB's `IIngestionRecoverySurface` adapter; the sweep that
+/// visits it is the hosted service `composeWithRAG` registers once the
+/// deployment composes `RAGServerApp.withScopeEnumerator` (or an
+/// explicit `withIngestionRecoverySweep` list). Composing this alone
+/// sweeps nothing — the declaration and the decision to run are
+/// deliberately separate (GP 11 / GP 13). Defined in
+/// `Server/Recovery.fs`.
+let withIngestionRecovery = KnowledgeBase.ServerRecovery.withIngestionRecovery
