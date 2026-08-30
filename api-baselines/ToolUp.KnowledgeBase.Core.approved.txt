@@ -31,7 +31,9 @@ SharedTypes+ArchiveImportPolicy.MaxEntryBytes : Microsoft.FSharp.Core.FSharpOpti
 SharedTypes+ArchiveImportPolicy.MaxTotalUncompressedBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 SharedTypes+ArchiveImportPolicyModule (class)
 SharedTypes+ArchiveImportPolicyModule.defaults : SharedTypes+ArchiveImportPolicy { get }
+SharedTypes+ArchiveImportPolicyModule.isUnguarded(SharedTypes+ArchiveImportPolicy) : System.Boolean
 SharedTypes+ArchiveImportPolicyModule.unbounded : SharedTypes+ArchiveImportPolicy { get }
+SharedTypes+ArchiveImportPolicyModule.unguardedLevers(SharedTypes+ArchiveImportPolicy) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 SharedTypes+BulkImportItemReport (class)
 SharedTypes+BulkImportItemReport..ctor(System.String, System.String, SharedTypes+BulkItemOutcome)
 SharedTypes+BulkImportItemReport.FileName : System.String { get }
@@ -52,21 +54,35 @@ SharedTypes+BulkImportRequest..ctor(Microsoft.FSharp.Collections.FSharpList`1[Sh
 SharedTypes+BulkImportRequest.Sources : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportSource] { get }
 SharedTypes+BulkImportSource (class)
 SharedTypes+BulkImportSource.IsArchive : System.Boolean { get }
+SharedTypes+BulkImportSource.IsArchiveBase64 : System.Boolean { get }
 SharedTypes+BulkImportSource.IsFile : System.Boolean { get }
+SharedTypes+BulkImportSource.IsFileBase64 : System.Boolean { get }
 SharedTypes+BulkImportSource.IsUrl : System.Boolean { get }
 SharedTypes+BulkImportSource.Tag : System.Int32 { get }
 SharedTypes+BulkImportSource+Archive (class)
 SharedTypes+BulkImportSource+Archive.content : System.Byte[] { get }
 SharedTypes+BulkImportSource+Archive.fileName : System.String { get }
+SharedTypes+BulkImportSource+ArchiveBase64 (class)
+SharedTypes+BulkImportSource+ArchiveBase64.contentBase64 : System.String { get }
+SharedTypes+BulkImportSource+ArchiveBase64.fileName : System.String { get }
 SharedTypes+BulkImportSource+File (class)
 SharedTypes+BulkImportSource+File.content : System.Byte[] { get }
 SharedTypes+BulkImportSource+File.fileName : System.String { get }
+SharedTypes+BulkImportSource+FileBase64 (class)
+SharedTypes+BulkImportSource+FileBase64.contentBase64 : System.String { get }
+SharedTypes+BulkImportSource+FileBase64.fileName : System.String { get }
 SharedTypes+BulkImportSource+Tags (class)
 SharedTypes+BulkImportSource+Tags.Archive : System.Int32 (literal)
+SharedTypes+BulkImportSource+Tags.ArchiveBase64 : System.Int32 (literal)
 SharedTypes+BulkImportSource+Tags.File : System.Int32 (literal)
+SharedTypes+BulkImportSource+Tags.FileBase64 : System.Int32 (literal)
 SharedTypes+BulkImportSource+Tags.Url : System.Int32 (literal)
 SharedTypes+BulkImportSource+Url (class)
 SharedTypes+BulkImportSource+Url.url : System.String { get }
+SharedTypes+BulkImportSourceModule (class)
+SharedTypes+BulkImportSourceModule.ofArchiveBytes(System.String, System.Byte[]) : SharedTypes+BulkImportSource
+SharedTypes+BulkImportSourceModule.ofFileBytes(System.String, System.Byte[]) : SharedTypes+BulkImportSource
+SharedTypes+BulkImportSourceModule.tryDecodeBase64(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
 SharedTypes+BulkImportSummary (class)
 SharedTypes+BulkImportSummary..ctor(System.String, System.Int32, System.Int32, System.Int32, System.DateTimeOffset, System.String)
 SharedTypes+BulkImportSummary.BatchId : System.String { get }
@@ -435,7 +451,9 @@ SharedTypes+UrlIngestionPolicy.MaxRedirects : System.Int32 { get }
 SharedTypes+UrlIngestionPolicy.MaxResponseBytes : System.Int64 { get }
 SharedTypes+UrlIngestionPolicy.TimeoutSeconds : System.Int32 { get }
 SharedTypes+UrlIngestionPolicyModule (class)
+SharedTypes+UrlIngestionPolicyModule.BroadAllowlistThreshold : System.Int32 (literal)
 SharedTypes+UrlIngestionPolicyModule.allowingHosts(System.Collections.Generic.IEnumerable`1[System.String]) : SharedTypes+UrlIngestionPolicy
 SharedTypes+UrlIngestionPolicyModule.allowsHost(System.String, SharedTypes+UrlIngestionPolicy) : System.Boolean
 SharedTypes+UrlIngestionPolicyModule.disabled : SharedTypes+UrlIngestionPolicy { get }
+SharedTypes+UrlIngestionPolicyModule.isBroadAllowlist(SharedTypes+UrlIngestionPolicy) : System.Boolean
 SharedTypes+UrlIngestionPolicyModule.isInert(SharedTypes+UrlIngestionPolicy) : System.Boolean
