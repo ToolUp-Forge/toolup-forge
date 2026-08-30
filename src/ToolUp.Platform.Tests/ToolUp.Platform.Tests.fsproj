@@ -396,6 +396,11 @@
         <Compile Include="InProcess\ParquetDatasetCodecTests.fs" />
         <Compile Include="InProcess\ModelFitBatchTests.fs" />
         <Compile Include="InProcess\ModelExecutionApiTests.fs" />
+        <!-- Phase 728 — the opt-in model-execution compose leg. Deliberately
+             builds its own graph from the substrate forge composes rather
+             than reusing the fixture above: proving the fixtures are no
+             longer the only registration path is the acceptance criterion. -->
+        <Compile Include="InProcess\ModelExecutionComposeTests.fs" />
         <Compile Include="InProcess\DatasetAssemblyTests.fs" />
         <Compile Include="InProcess\DatasetRevintageTests.fs" />
         <Compile Include="InProcess\VirtualDatasetTests.fs" />
@@ -2137,6 +2142,18 @@
              discriminator, both pinned closed alongside the correct-path
              behaviour they must not disturb (GP 11). -->
         <Compile Include="InProcess\FailClosedDispatchTests.fs" />
+        <!-- Phase 450 — the external model-fit binding. Bound against a stub
+             fit worker on a REAL socket, reached through the shipped generic
+             HTTP compute companion, resolving through the REAL Phase 320
+             ingress — because the claim under test is that a worker needs no
+             SDK from this repo, and a faked transport would elide every half
+             of that claim. The stub's status endpoint reports `running`
+             forever, so a fit that resolves can only have been resolved by
+             the callback: push is proved structurally, not by a race. The
+             wire schema is asserted as literal TEXT, since a round-trip
+             through this repo's own parser would stay green while both
+             halves renamed a field together. -->
+        <Compile Include="InProcess\ExternalModelFitTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard. Source-linked
              into every sibling pack that runs an explicitly-enumerated list
              rather than Expecto auto-discovery; must compile immediately

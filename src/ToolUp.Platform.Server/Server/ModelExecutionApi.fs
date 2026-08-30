@@ -17,6 +17,17 @@ open ToolUp.Platform.TeamManagement
 // resolves every substrate lazily from DI per request and reports a typed
 // `SubstrateDisabled` refusal naming whichever surface is absent.
 //
+// **Where those substrates come from (Phase 728).** `IJobScheduler`,
+// `IAuditLog`, `IDatasetStore`, `ModelFitProviderRegistry` and
+// `ComputeBudgetGuard` are composed by forge on their own config modes.
+// `IModelRegistry` was composed by NOTHING until the Phase 728 leg —
+// `ServerApp.withModelExecution` (`ComposeModelExecution`) — so mounting
+// this face used to mean hand-registering it and finding out on the first
+// request; `ModelExecutionDepsValidator` now names that at startup.
+// `IModelScorer` and `ModelExecutionPolicy` remain consumer-supplied
+// (optionally through the same leg): forge cannot build a scorer without
+// score providers, and an absent policy is `permissive` by design.
+//
 // **Scope discipline (GP 4).** Every method executes under the caller's
 // resolved `AccessContext` scope — wire shapes never carry a scope, so a
 // submitter cannot name another team's data (the `JobApi`

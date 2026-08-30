@@ -79,6 +79,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config)) // refuse InProcessJobScheduler in multi-instance deployments
     addConfigValidator (DeployPlaneDepsValidator.DeployPlaneDepsValidator(config, services)) // warn SingleNodeDeployPlane with IJobScheduler / IEntityStore / IContainerScheduler unregistered (else first-request 500 when the affected service resolves)
     addConfigValidator (SignedExportDepsValidator.SignedExportDepsValidator(config, services)) // Phase 162 — refuse DataSubjectRequests SignExports=true with no IExportEnvelopeSigner composed
+    addConfigValidator (ModelExecutionDepsValidator.ModelExecutionDepsValidator(config, services)) // Phase 728 — warn ModelExecution = EnabledModelExecutionApi with no IModelRegistry composed (else first-request SubstrateDisabled on every outcome read)
     addConfigValidator (PublicBaseUrlFormatValidator.PublicBaseUrlFormatValidator(config)) // warn PublicBaseUrl set to a non-absolute-http(s) URL (breaks sitemap loc / canonical / share-token redirects)
     addConfigValidator (NotificationChannelInstanceValidator.NotificationChannelInstanceValidator(config)) // warn in-memory notification channel under multi-instance
     addConfigValidator (MultiInstanceAdminCoherenceValidator.MultiInstanceAdminCoherenceValidator(config)) // Phase 236 — warn in-process admin subsystems (admin store / permission store / webhook dispatcher / DSR preview cache) under multi-instance

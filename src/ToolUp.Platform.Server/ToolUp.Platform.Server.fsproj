@@ -369,6 +369,15 @@
         <Compile Include="Server\DatasetProvenanceOps.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
         <Compile Include="Server\ModelFitJobHandler.fs" />
+        <!-- Phase 450 — the EXTERNAL execution binding of the Phase 449 fit
+             envelope: the versioned `modelfit/v1` work-spec convention, the
+             completion rendezvous a Phase 320 callback resolves, and the
+             IModelFitProvider that submits through IExternalComputeDispatcher.
+             Compiles after IModelFitProvider.fs (the seam it implements) and
+             needs IDatasetStore + IExternalComputeDispatcher +
+             IExternalHandleStore + IJobProgressSink, all above. Nothing
+             composes it — a deployment wires the worker itself (GP 13). -->
+        <Compile Include="Server\ExternalModelFitProvider.fs" />
         <!-- Phase 453 — model registry: governed-artifact types, the seam,
              then the blob-backed default (rides IDataObjectStore + ILineageStore
              above; carries the Phase 449 fit envelope's composite key). -->
@@ -422,6 +431,17 @@
              then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
         <Compile Include="Server\IModelScorer.fs" />
         <Compile Include="Server\ModelScoringJobHandler.fs" />
+        <!-- Phase 728 — the opt-in model-execution compose leg (registers
+             IModelRegistry, and optionally the scorer / executor policy /
+             Phase 651 observers) plus the startup validator that names a
+             mounted ModelExecutionApi with no registry composed. Placed
+             here: it needs only the model seams above (BlobModelRegistry,
+             ModelRegistrationObservers, IModelScorer) and must compile
+             before Compose/ComposeConfigValidators.fs, which registers the
+             validator, and before ServerApp.fs, whose withModelExecution
+             builder folds `register` into the DI graph. -->
+        <Compile Include="Server\ComposeModelExecution.fs" />
+        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <!-- Phase 452 — dataset assembly (transforms-as-data): the spec +
              closed transform DU, then the executor (rides IDatasetStore for
              output + ITimeSeriesStore for range sources; propagates Phase 482
