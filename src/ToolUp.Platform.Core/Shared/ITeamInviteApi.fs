@@ -27,6 +27,11 @@ open System
 //     associated with the token (looked up via `IShareTokenStore`).
 //   * `ListPendingInvites` — caller must hold `Owner`/`Admin` on the
 //     listed team.
+//   * `CheckMyInvites` — any authenticated caller, acting only on
+//     their own behalf. The consumed invitation is selected by the
+//     email claim on the resolved principal; the method takes no
+//     argument, so there is nothing a caller could point at someone
+//     else's invitation.
 //
 // All `Error` strings are operator-readable and safe to render to
 // end users — they never include token content or signature
@@ -163,6 +168,37 @@ type ITeamInviteApi = {
     /// invite is visible rather than silently gone.
     [<RequiresClaim "scope">]
     ListRecentlyExpiredInvites: string -> Async<Result<TeamInviteExpiredPayload list, string>>
+
+    /// Phase 548 — drain any pending-by-email invitation addressed to
+    /// **the authenticated caller**, on demand. Same consumption core
+    /// as the sign-in resolve path
+    /// (`TeamInvitationHandler.tryConsumePendingForUser`), same trust
+    /// model: the email is read from the resolved principal, never
+    /// from a caller-supplied argument — hence the `unit` input. Any
+    /// authenticated caller may invoke it for themselves; there is no
+    /// team-role gate because there is no team to gate on until the
+    /// invitation is consumed.
+    ///
+    /// `Ok (Some team)` when an invitation was consumed and the caller
+    /// is now a member (the joined team is echoed so a client can
+    /// switch to it without a reload); `Ok None` when nothing was
+    /// pending, the pending entry had expired, or the store was
+    /// momentarily unreachable — all three are "nothing to do now,
+    /// ask again later" from the caller's point of view, and the
+    /// expiry case additionally emits the `TeamInviteExpired` audit
+    /// row the store hook writes. `Error` only for an anonymous
+    /// caller or a deployment with no pending-invite store composed.
+    ///
+    /// Idempotent: the consumption itself removes the pending entry
+    /// atomically with the read, and an already-a-member caller
+    /// short-circuits, so a second call returns `Ok None`. Deliberately
+    /// **not** `[<Audit>]`-annotated — the consumption core already
+    /// emits the domain-specific `TeamInviteAcceptedFromPending` row,
+    /// and a dispatcher-emitted twin would double-audit the join while
+    /// adding a row for every no-op poll (same reasoning as
+    /// `AcceptInvite`).
+    [<RequiresClaim "scope">]
+    CheckMyInvites: unit -> Async<Result<TeamInfo option, string>>
 }
 
 module TeamInviteApi =

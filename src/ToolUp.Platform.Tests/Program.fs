@@ -1134,6 +1134,8 @@ let private registeredTests =
         TeamInvitationTests.expiredInviteVisibilityTests
         TeamInvitationTests.inviteExpiryNotificationTests
         TeamInvitationTests.activeTeamPolicyTests
+        // Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
+        TeamInvitationTests.checkMyInvitesTests
         EntraExternalIdConfigTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
