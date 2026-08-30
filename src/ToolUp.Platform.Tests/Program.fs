@@ -703,6 +703,7 @@ let private registeredTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
+        OidcClaimMappingAdvisoryValidatorTests.tests
         // Phase 248 OidcAuthValidatorTimeoutTests is wired above (Phase 653),
         // inside the "env-mutating-config-validators" sequenced group.
         // Phase 247 — invite-by-email capability validator (warns when the

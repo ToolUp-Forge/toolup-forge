@@ -22,13 +22,29 @@ open ToolUp.AuthProviders.EntraExternalIdConfig
 // migration walk-through.
 //
 // This module stays compiling for one minor cycle (consumer migration
-// window) and is scheduled for removal at 0.Y.0. The use case where
-// it remains the right answer is the `oid` -> `UserId` /
-// `tid` -> `TenantId` claim-mapping decorator below — the generic
-// `OidcAuthProvider` does not yet expose claim remapping as a
-// first-class option, so deployments whose downstream code depends
-// on the stable `oid` user-id stay on this wrapper until the
-// substrate gains a claim-mapping seam (tracked separately).
+// window) and is scheduled for removal at 0.Y.0.
+//
+// **The claim-remapping reason to stay is CLOSED as of 2026-08-30.**
+// The substrate gained the seam this banner used to anticipate:
+// `AuthConfig.ClaimMapping` on the generic `OidcAuthProvider` projects
+// any named claim onto `UserId` / `TenantId`, so
+// `ClaimMapping = Some { UserIdClaim = Some "oid"
+//                        TenantIdClaim = Some "tid" }` reproduces the
+// `applyEntraMapping` decorator below without this wrapper.
+//
+// One deliberate difference, and it is the thing to check before
+// migrating: the seam is FAIL-CLOSED where this decorator falls back. A
+// validated token that omits `oid` (or whose value the identity
+// sanitiser refuses) is rejected by the seam, whereas the chain below
+// falls through to `sub` and then to the inner provider's value. Every
+// Entra v2 token carries `oid` and `tid`, so a correctly-configured
+// tenant never diverges; a federated flow whose tokens sometimes omit
+// `oid` does.
+//
+// What still keeps this module alive is the CLIENT-side dual-button
+// sign-up affordance (`EntraExternalIdAuthUI.wrap`, a distinct User
+// Flow via `SignUpPolicyId`), which has no substrate equivalent yet.
+// See `docs/migrations/0.4.0-entra-external-id-deprecation.md`.
 
 // ─── Entra External ID auth-provider companion ──────────────────────
 //
@@ -265,6 +281,13 @@ let private toAuthConfig (config: EntraExternalIdConfig) : AuthConfig =
         // UserId remapping via `applyEntraMapping` post-validation,
         // so the inner OIDC provider keeps `sub`-only behaviour here.
         PreferOidWhenPresent = None
+        // The companion performs its own `oid` / `tid` remapping in
+        // `applyEntraMapping` post-validation (with fallback semantics),
+        // so the inner provider is left on plain `sub` and does no
+        // mapping of its own. A deployment wanting the substrate seam
+        // instead configures `AuthConfig.ClaimMapping` on the generic
+        // provider directly — see the auth-provider companion docs.
+        ClaimMapping = None
     }
 
 let private wrapWithEntraMapping
