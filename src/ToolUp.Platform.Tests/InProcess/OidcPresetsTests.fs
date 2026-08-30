@@ -274,6 +274,80 @@ let tests: Test =
                 Expect.isTrue mentionsAudience "Notes must reference the `audience` extra parameter for JWT tokens"
         ]
 
+        // ─── google preset ─────────────────────────────────────────
+
+        testList "google" [
+            testCase "Preset = Some Google"
+            <| fun () ->
+                let cfg = google testClientId testRedirectUri
+                Expect.equal cfg.Preset (Some Google) ""
+
+            testCase "PresetKind.label Google = \"google\""
+            <| fun () -> Expect.equal (PresetKind.label Google) "google" ""
+
+            testCase "issuer is the fixed https://accounts.google.com (no tenant parameter)"
+            <| fun () ->
+                // Google has no tenant / region / custom-domain
+                // variant — the whole class of wrong-issuer
+                // misconfiguration the Entra presets guard against
+                // cannot arise, provided this constant stays exact.
+                let cfg = google testClientId testRedirectUri
+                Expect.equal cfg.Issuer "https://accounts.google.com" ""
+
+            testCase "scopes are the OIDC-spec minimum — NO offline_access"
+            <| fun () ->
+                // Load-bearing negative assertion. Google ignores
+                // `offline_access`; a refresh token comes from the
+                // `access_type=offline` authorize parameter. Adding
+                // the scope here would encode a falsehood AND give
+                // validator Rule 10 a phantom regression to report
+                // whenever a consumer trimmed it back.
+                let cfg = google testClientId testRedirectUri
+                Expect.equal cfg.Scopes [ "openid"; "profile"; "email" ] ""
+
+                Expect.isFalse
+                    (List.contains "offline_access" cfg.Scopes)
+                    "Google ignores offline_access — the preset must not request it"
+
+            testCase "PresetKind.autoAddedScopes Google is empty"
+            <| fun () -> Expect.equal (PresetKind.autoAddedScopes Google testClientId) [] ""
+
+            testCase "PresetKind.expectsDecodableAccessToken = false (Google tokens ALWAYS opaque)"
+            <| fun () ->
+                // Not a default that a dashboard setting can flip
+                // (which is what distinguishes Google from Auth0) —
+                // a fixed property of the provider.
+                Expect.isFalse (PresetKind.expectsDecodableAccessToken Google) ""
+
+            testCase "ValidateIdToken defaults to Some true (customer-facing boundary)"
+            <| fun () ->
+                let cfg = google testClientId testRedirectUri
+                Expect.equal cfg.ValidateIdToken (Some true) ""
+
+            testCase "PresetKind.notes reference access_type=offline, not an offline_access scope"
+            <| fun () ->
+                let notes = PresetKind.notes Google
+
+                Expect.isTrue
+                    (notes |> List.exists (fun s -> s.Contains "access_type=offline"))
+                    "Notes must name the authorize parameter that actually yields a refresh token"
+
+                Expect.isTrue
+                    (notes |> List.exists (fun s -> s.Contains "prompt=consent"))
+                    "Notes must name the consent re-prompt, without which a repeat authorisation yields no refresh token"
+
+            testCase "PresetKind.notes state the access token is opaque"
+            <| fun () ->
+                let notes = PresetKind.notes Google
+
+                Expect.isTrue
+                    (notes |> List.exists (fun s -> s.Contains "opaque"))
+                    "Notes must warn that server-side bearer validation cannot decode a Google access token"
+
+            testCase "PresetKind.issuerForm Google renders the fixed accounts.google.com form"
+            <| fun () -> Expect.stringContains (PresetKind.issuerForm Google) "https://accounts.google.com" ""
+        ]
+
         // ─── cross-preset invariants ───────────────────────────────
 
         testList "cross-preset invariants" [
@@ -284,6 +358,7 @@ let tests: Test =
                     PresetKind.label EntraWorkforce
                     PresetKind.label EntraExternalId
                     PresetKind.label Auth0
+                    PresetKind.label Google
                 ]
                 // Note: EntraExternalIdWithDomain shares label
                 // "entra-external-id" with EntraExternalId by
@@ -305,6 +380,7 @@ let tests: Test =
                     (fun () -> entraExternalId "t" testClientId testRedirectUri)
                     (fun () -> entraExternalIdWithDomain "t" "login.b.com" testClientId testRedirectUri)
                     (fun () -> auth0 "t.auth0.com" testClientId testRedirectUri)
+                    (fun () -> google testClientId testRedirectUri)
                 ]
 
                 for buildCfg in presets do
@@ -320,6 +396,7 @@ let tests: Test =
                     entraExternalId "t" testClientId testRedirectUri
                     entraExternalIdWithDomain "t" "login.b.com" testClientId testRedirectUri
                     auth0 "t.auth0.com" testClientId testRedirectUri
+                    google testClientId testRedirectUri
                 ]
 
                 for cfg in cfgs do
@@ -332,6 +409,7 @@ let tests: Test =
                     (entraWorkforce testTenantGuid testClientId testRedirectUri).Scopes
                     (entraExternalId "t" testClientId testRedirectUri).Scopes
                     (auth0 "t.auth0.com" testClientId testRedirectUri).Scopes
+                    (google testClientId testRedirectUri).Scopes
                 ]
 
                 for s in scopes do

@@ -1145,6 +1145,8 @@ let private registeredTests =
         // Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
         TeamInvitationTests.checkMyInvitesTests
         EntraExternalIdConfigTests.tests
+        // Phase 747 — Google Workspace IUserDirectory companion.
+        GoogleDirectoryTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
         ConsentProviderTests.subscriptionFiringTests
