@@ -491,6 +491,7 @@ let compose
     let sseConnectionManager = notificationStack.SseConnectionManager
     let baseNotificationChannel = notificationStack.BaseNotificationChannel
     let configStoreInstance = notificationStack.ConfigStoreInstance
+    let configMigrationSupport = notificationStack.ConfigMigrationSupport
     let auditLog = notificationStack.AuditLog
     // Phase 66 Stream A.7 / C.6 — apply the composable
     // `ShareTokenStoreDecorators` chain wrapped around the resolved
@@ -611,6 +612,23 @@ let compose
         DegradedCapabilities.DegradedCapabilitiesDiagnosticsContributor(degradedCapabilities)
         :> IDevDiagnosticsContributor
     )
+    |> ignore
+
+    // Phase 10b — the "Pending Config Migrations" panel, over the SAME
+    // drift tracker the decorated `IConfigStore` records into. Reads
+    // two in-memory structures; renders an explanatory note rather
+    // than an ambiguous empty panel when no schema declares a version.
+    services.AddSingleton<IDevDiagnosticsContributor>(
+        ConfigMigrationDevDiagnostics.PendingConfigMigrationsContributor(configMigrationSupport)
+        :> IDevDiagnosticsContributor
+    )
+    |> ignore
+
+    // Phase 10b — the migration substrate itself, so a deployment can
+    // resolve the registry (to ask a module's declared schema version)
+    // or the drift tracker (to build a bespoke admin view) without
+    // reaching through the store decorator.
+    services.AddSingleton<ConfigMigrationRegistry.ConfigMigrationSupport>(configMigrationSupport)
     |> ignore
 
     // Phase 120 — default IAuthAuditHook over the resolved IAuditLog.

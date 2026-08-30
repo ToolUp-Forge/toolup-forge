@@ -902,6 +902,17 @@
         <Compile Include="Server\Scope\HostActionAuditHook.fs" />
         <Compile Include="Server\Config\IConfigStore.fs" />
         <Compile Include="Server\Config\ConfigStore.fs" />
+        <!-- Phase 10b — config schema-evolution server half: pure chain
+             resolution, the declared registry, the per-process drift tracker,
+             and the IConfigStore decorator that applies all three on the read
+             path. After ConfigStore.fs (reuses its projectToRecord /
+             tryProjectExact / toRawMap so the decorator projects a migrated
+             map through exactly the same semantics). -->
+        <Compile Include="Server\Config\ConfigMigrationRegistry.fs" />
+        <!-- Phase 10b — the "Pending Config Migrations" /dev/inspect panel
+             (gap audit Gap 7). After ConfigMigrationRegistry.fs, whose
+             support record it reads. -->
+        <Compile Include="Server\Config\ConfigMigrationDevDiagnostics.fs" />
         <Compile Include="Server\ConfigStoreErasureHandler.fs" />
         <Compile Include="Server\TeamQuotaPolicy.fs" />
         <Compile Include="Server\UsageQueryApi.fs" />

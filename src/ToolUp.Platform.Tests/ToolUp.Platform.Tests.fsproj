@@ -257,6 +257,11 @@
              payload-coercion rule, and the runner's idempotency +
              per-object failure policy. -->
         <Compile Include="InProcess\DataMigrationTests.fs" />
+        <!-- Phase 10b — configuration schema evolution: the V1->V2 rename
+             read path, the failure policy, the _schema_version reserved-key
+             CONTRACT (run against two IConfigStore implementations), chain
+             resolution, and pre-migration drift observability. -->
+        <Compile Include="InProcess\ConfigMigrationTests.fs" />
         <!-- Phase 173 — ingestion-status store contract + Data Manager
              observer transitions. -->
         <Compile Include="InProcess\IngestionStatusTests.fs" />

@@ -60,8 +60,8 @@ let private salesModuleWithConfig () : ServerModule = {
     ServerModule.create "Sales" with
         RoutePrefixes = [ "/api/sales"; "/api/sales/reports" ]
         ConfigSchema =
-            Some {
-                Fields = [
+            Some(
+                ModuleConfigSchema.ofFields [
                     {
                         Key = "retention-days"
                         DisplayName = "Retention (days)"
@@ -71,7 +71,7 @@ let private salesModuleWithConfig () : ServerModule = {
                         DefaultJson = "30"
                     }
                 ]
-            }
+            )
 }
 
 let private sampleVerdict: ModuleConformanceVerdict = {

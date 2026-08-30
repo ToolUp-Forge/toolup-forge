@@ -189,6 +189,11 @@ let private pinningSchema: ModuleConfigSchema = {
             DefaultJson = "\"[]\""
         }
     ]
+    // Phase 10b — implicit floor. Both fields are opaque JSON-array
+    // strings whose shape is owned by this handler, so a change here
+    // would be a value-format migration rather than a key rename;
+    // bump and register an `IConfigMigrator` if that ever happens.
+    SchemaVersion = 1
 }
 
 /// Per-*user* scope for the pinning document — keyed by the user id for
