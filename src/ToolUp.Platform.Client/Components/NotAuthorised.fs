@@ -38,40 +38,35 @@ open ToolUp.Platform
 /// The heading for a denial. Deliberately plain — the sentence below
 /// carries the actionable part, and a shouty title on what is often a
 /// mis-pasted URL reads as an accusation.
-let private title (denial: SidebarVisibility.NavigationDenial) : string =
+let private title (msgs: NotAuthorisedMessages) (denial: SidebarVisibility.NavigationDenial) : string =
     match denial with
-    | SidebarVisibility.NavigationDenial.NotSignedIn -> "Sign in to continue"
-    | SidebarVisibility.NavigationDenial.NoActiveTeam -> "Pick a team first"
+    | SidebarVisibility.NavigationDenial.NotSignedIn -> msgs.TitleNotSignedIn
+    | SidebarVisibility.NavigationDenial.NoActiveTeam -> msgs.TitleNoActiveTeam
     // Phase 637 — a curated-out module is not an access refusal, and
     // titling it "you don't have access" would send the caller to ask an
     // admin for a permission nobody withheld. The page is not part of
     // this deployment's surface; say that.
-    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile -> "This page isn't part of this workspace"
+    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile -> msgs.TitleNotInVisibilityProfile
     | SidebarVisibility.NavigationDenial.RequiresPlatformAdmin
     | SidebarVisibility.NavigationDenial.RequiresTeamOwnerAdmin
     | SidebarVisibility.NavigationDenial.NotExposedToTeam
-    | SidebarVisibility.NavigationDenial.NotAvailableToSubject -> "You don't have access to this page"
+    | SidebarVisibility.NavigationDenial.NotAvailableToSubject -> msgs.TitleNoAccess
 
 /// The sentence that names the remedy. Each case answers "so what do I
 /// do now?" — the question a bare denial leaves open.
-let private hint (moduleName: string) (denial: SidebarVisibility.NavigationDenial) : string =
+let private hint
+    (msgs: NotAuthorisedMessages)
+    (moduleName: string)
+    (denial: SidebarVisibility.NavigationDenial)
+    : string =
     match denial with
-    | SidebarVisibility.NavigationDenial.NotSignedIn ->
-        sprintf "\"%s\" isn't available to signed-out visitors. Sign in and try the link again." moduleName
-    | SidebarVisibility.NavigationDenial.RequiresPlatformAdmin ->
-        sprintf "\"%s\" is a platform administration page. Ask a Platform Admin if you need access." moduleName
-    | SidebarVisibility.NavigationDenial.RequiresTeamOwnerAdmin ->
-        sprintf "\"%s\" is for team owners and admins. Ask an owner of this team if you need access." moduleName
-    | SidebarVisibility.NavigationDenial.NotExposedToTeam ->
-        sprintf "\"%s\" isn't switched on for this team. A Platform Admin can enable it." moduleName
-    | SidebarVisibility.NavigationDenial.NotAvailableToSubject ->
-        sprintf "\"%s\" isn't available in your current workspace. Switching team or scope may reach it." moduleName
-    | SidebarVisibility.NavigationDenial.NoActiveTeam ->
-        sprintf "\"%s\" is scoped to a team, and you haven't picked one yet. Choose a team to continue." moduleName
-    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile ->
-        sprintf
-            "\"%s\" isn't one of the modules this workspace uses. An owner can add it to the workspace's module selection."
-            moduleName
+    | SidebarVisibility.NavigationDenial.NotSignedIn -> msgs.HintNotSignedIn moduleName
+    | SidebarVisibility.NavigationDenial.RequiresPlatformAdmin -> msgs.HintRequiresPlatformAdmin moduleName
+    | SidebarVisibility.NavigationDenial.RequiresTeamOwnerAdmin -> msgs.HintRequiresTeamOwnerAdmin moduleName
+    | SidebarVisibility.NavigationDenial.NotExposedToTeam -> msgs.HintNotExposedToTeam moduleName
+    | SidebarVisibility.NavigationDenial.NotAvailableToSubject -> msgs.HintNotAvailableToSubject moduleName
+    | SidebarVisibility.NavigationDenial.NoActiveTeam -> msgs.HintNoActiveTeam moduleName
+    | SidebarVisibility.NavigationDenial.NotInVisibilityProfile -> msgs.HintNotInVisibilityProfile moduleName
 
 /// The SDK built-in denial surface. Rendered by the shell in the content
 /// area, so the sidebar, header and team switcher stay live around it —
@@ -80,12 +75,18 @@ let private hint (moduleName: string) (denial: SidebarVisibility.NavigationDenia
 /// redirect.
 [<ReactComponent>]
 let NotAuthorisedView (ctx: NotAuthorisedContext) =
+    // Phase 444 — the denial wording comes from the resolved catalog.
+    // The `NotAuthorisedMessages` record carries one field per
+    // `NavigationDenial` case, so a denial case added upstream fails to
+    // compile until it has been worded here.
+    let msgs = (MessageCatalogProvider.useMessages ()).NotAuthorised
+
     Toolup.UIToolkit.StateViews.emptyState
         Icons.lock
-        (title ctx.Denial)
-        (hint ctx.ModuleName ctx.Denial)
+        (title msgs ctx.Denial)
+        (hint msgs ctx.ModuleName ctx.Denial)
         (Some {
-            Label = "Go to home"
+            Label = msgs.GoHome
             OnClick = ctx.GoHome
         })
 
