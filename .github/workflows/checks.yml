@@ -1030,3 +1030,20 @@ jobs:
 
       - name: Compile the dotnet-new template content (VerifyTemplates)
         run: dotnet run --project Build.fsproj -- VerifyTemplates
+
+      # Phase 587 — the packaged-module template is a whole repository
+      # (own CPM props, own nuget.config, own global.json, a literal
+      # TOOLUP_SDK_VERSION placeholder), so VerifyTemplates cannot build
+      # it in place any more than it can build templates/safer. This is
+      # the instantiate-then-build harness that class needs: it packs the
+      # SDK closure at the same throwaway gate version, `dotnet new`s the
+      # template into a scratch directory outside the repo, and runs the
+      # scaffold's own Pack — which its target chain gates behind BOTH
+      # conformance layers, so a green Pack cannot have skipped either.
+      #
+      # It also fails when the vendored ModuleContract copy in the
+      # template drifts from the SDK's, and when any ToolUp.* resolves at
+      # a version other than the gate one (the NU1603-escalation
+      # equivalent, read off the restore graph).
+      - name: Scaffold, build and pack the packaged-module template (VerifyPackagedModuleTemplate)
+        run: dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate

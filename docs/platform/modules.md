@@ -772,3 +772,39 @@ package uses resolves to concrete files and the laws are decided on real paths. 
 is built from XML *without* a root directory (`Load.sourceListFromXml label None xml`), wildcard
 includes stay unexpanded and the subset law reports each one as **undecidable** rather than
 passing on an empty comparison — a check that cannot see the files says so.
+
+### Starting from a scaffold instead of by hand
+
+Everything above — the shadow project, the pack declarations, the layout contract, the two
+conformance layers and the target chain that puts them ahead of `Pack` — is what
+`dotnet new platformsdk-module-packaged` produces:
+
+```powershell
+dotnet new platformsdk-module-packaged -n Contoso.Orders --datatype OrderExport
+cd Contoso.Orders
+pwsh ./run.ps1
+```
+
+The generated repository is a working packaged module: a packable project and its `fable/` shadow,
+a `Pack` target writing to a configurable folder feed, `run.ps1`, central package management, a
+tool manifest, a package README and a licence placeholder. `--namespace-root` feeds the
+namespace-root law, `--datatype` names the registered `DataTypeId`, and `--feed` is the only
+machine-shaped path in the output.
+
+Two things are worth knowing about the scaffold, because both are choices the generated comments
+explain and a hand-rolled module will hit too:
+
+- **The module id and the data-type id are `[<Literal>]`s in `SharedTypes.fs`**, referenced by both
+  registrations. The id-parity and `TypeName`-uniqueness laws are then satisfied by construction
+  rather than by vigilance — which is the right shape for a law whose failure mode is two
+  composition roots quietly disagreeing.
+- **The client registration is split into `registerWith icon` and `register ()`.** The module's own
+  test binds the real chain on .NET, and `importDefault` is Fable-only, so the icon is the one
+  value that cannot be built in a test process. None of the five laws reads it. The same reasoning
+  puts the remoting proxy behind a `lazy` and the icon behind a function: anything Fable-only in a
+  file that is *also* compiled into the .NET assembly must not run at module initialisation.
+
+The conformance pack ships vendored in the scaffold's test project, for the packaging reason given
+above — the SDK's test project is not packable. The template's own gate
+(`dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate`, in the forge repo) checks
+that copy against this repo's source, so a scaffold is never generated against a stale law set.

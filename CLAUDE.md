@@ -374,6 +374,16 @@ The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVers
 
 `templates/safer/` and `templates/platformsdk-solution/` are deliberately **not** covered — they are standalone solutions carrying their own `nuget.config` (a `../local-nuget-feed` path resolved relative to the consumer's instantiated location) and, in `safer`'s case, a literal `TOOLUP_SDK_VERSION` placeholder substituted at instantiation. Neither is buildable in-repo without rewriting what makes it a template; gating them needs an instantiate-then-build harness.
 
+**Shortcut for the packaged-module template** (Phase 587): `dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate`. `templates/platformsdk-module-packaged/` is in the standalone class the paragraph above describes, so this is the instantiate-then-build harness that class needs, written for the one template that has one. It packs the same six-package closure **plus `ToolUp.Platform.Build`** at the same `0.0.0-templategate` version, `dotnet new`s the template into a scratch directory **under the system temp dir** — outside the repo, because `nuget.config` files MERGE up the tree and forge's sources would otherwise paper over a broken feed declaration in the template — and then runs the scaffold's own `Pack`. One command covers scaffold → build → conformance → pack, because the generated target chain puts both conformance layers ahead of `Pack`: a green `Pack` cannot have skipped the module-seam contract pack (`Test`) or the packaging-layout laws (`VerifyPackagedModule`).
+
+Three things it checks that a build alone would not:
+
+- **The vendored contract pack has not drifted.** The template's test project copies the laws region of `src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs`, because that project is `IsPackable=false` and copying is the documented adoption route for every SDK contract pack. A copy drifts silently by construction, and this one ships to consumers as "born conformant", so it is compared against its source (up to the `// ── a conforming reference module` boundary — the self-test half stays SDK-side).
+- **Every `ToolUp.*` resolved at the gate version.** The equivalent of `VerifyTemplates`' NU1603 escalation, read off the scaffold's `project.assets.json` rather than passed as a warning flag — the scaffold runs its own build driver, so there is nowhere to inject one. A stray version means `packagedModuleTemplateGatePackages` is missing a package and the scaffold compiled against a MIX of current source and a released SDK.
+- **The produced nupkg's `fable/` layout**, which is the half a pre-`Pack` declaration check structurally cannot prove: the shadow project, the four client sources and the icon asset are present, and `Server.fs` is not.
+
+Adding an SDK→SDK dependency reachable from the packaged-module template therefore fails this gate by name, exactly as it does the other one. All three checks were demonstrated red before landing — a drifted vendored copy, a client file dropped from the shadow project, and a client id pinned away from the server's — each naming its own law.
+
 ### What CI actually gates (Phase 614)
 
 Written down here so the next reader does not have to re-derive it from `.github/workflows/checks.yml` — three phases in one batch had to. **Read the "gates?" column, not the job list**: a job existing is not the same as a job gating.
@@ -388,7 +398,7 @@ Written down here so the next reader does not have to re-derive it from `.github
 | **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
 | **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **every `BuildConfig.TestPacks` pack** via `VerifyAll` | **yes** |
 | `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles, via `VerifyDocSnippets` | yes |
-| **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates` | **yes** |
+| **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; and the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate` | **yes** |
 
 Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template.
 

@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Module", "Package", "F#", "Fable", "ToolUp" ],
+  "identity": "ToolUp.Templates.Module.Packaged",
+  "groupIdentity": "ToolUp.Templates.Module.Packaged",
+  "name": "ToolUp Platform SDK Packaged Module",
+  "shortName": "platformsdk-module-packaged",
+  "description": "A ToolUp Platform module as its own repository, distributed as a NuGet package: packable project plus a fable/ shadow project carrying the client tier as source, a FAKE Pack pipeline into a configurable local feed, run.ps1, central package management, tool manifest, and BOTH conformance layers pre-wired — the module-seam contract pack bound in a test project, and the packaged-layout shadow-project check chained ahead of Pack. Use platformsdk-module instead for a module that lives inside the deployment.",
+  "tags": {
+    "language": "F#",
+    "type": "solution"
+  },
+  "sourceName": "MyModule",
+  "preferNameDirectory": true,
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "exclude": [ "**/bin/**", "**/obj/**", "**/.vs/**", "**/artifacts/**" ]
+        }
+      ]
+    }
+  ],
+  "symbols": {
+    "namespace-root": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "",
+      "description": "The single top-level F# namespace root every type in the package sits under (e.g. Contoso.Orders). Feeds the module-contract pack's namespace law — two packages each exporting a bare `DatasetView` cannot compose into one deployment. Defaults to the template name."
+    },
+    "namespaceRootResolved": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "namespace-root",
+        "fallbackVariableName": "name"
+      },
+      "replaces": "MODULE_NAMESPACE_ROOT"
+    },
+    "display-name": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "",
+      "description": "Human-readable module name, shown in the sidebar and used as the package description's subject. Defaults to the template name."
+    },
+    "displayNameResolved": {
+      "type": "generated",
+      "generator": "coalesce",
+      "parameters": {
+        "sourceVariableName": "display-name",
+        "fallbackVariableName": "name"
+      },
+      "replaces": "MODULE_DISPLAY_NAME"
+    },
+    "moduleId": {
+      "type": "generated",
+      "generator": "regex",
+      "dataType": "string",
+      "parameters": {
+        "source": "name",
+        "steps": [
+          {
+            "regex": "[^A-Za-z0-9]",
+            "replacement": ""
+          }
+        ]
+      },
+      "replaces": "MODULE_ID_TOKEN"
+    },
+    "datatype": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "SampleDataset",
+      "description": "The DataTypeId the module registers. That id IS the wire TypeName its Process stamps onto emitted data, and the client's data gate keys on it — one literal in SharedTypes.fs drives both.",
+      "replaces": "MODULE_DATA_TYPE_ID"
+    },
+    "feed": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "../local-nuget-feed",
+      "description": "Folder feed the Pack target writes to, and an extra restore source in nuget.config. The only machine-shaped path in the generated repo; delete the `local` source from nuget.config if you consume released versions only.",
+      "replaces": "LOCAL_FEED_PATH"
+    },
+    "sdk-version": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "0.22.0",
+      "description": "ToolUp.* SDK version. Drives every ToolUp.* pin through $(ToolUpSdkVersion) in Directory.Packages.props; keep it in lockstep with the deployments that consume the module.",
+      "replaces": "TOOLUP_SDK_VERSION"
+    },
+    "authors": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "Unspecified",
+      "description": "Package Authors / Copyright holder.",
+      "replaces": "PACKAGE_AUTHORS"
+    },
+    "license": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "Apache-2.0",
+      "description": "SPDX licence expression for PackageLicenseExpression. Replace the placeholder LICENSE file with the matching text before publishing.",
+      "replaces": "PACKAGE_LICENSE"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "src/MyModule/MyModule.fsproj" },
+    { "path": "tests/MyModule.Tests/MyModule.Tests.fsproj" }
+  ],
+  "postActions": [
+    {
+      "description": "Next steps.",
+      "manualInstructions": [
+        { "text": "Run `pwsh ./run.ps1` — format check, build, both conformance layers, tests." },
+        { "text": "Replace the placeholder LICENSE with real licence text matching PackageLicenseExpression in Directory.Build.props." },
+        { "text": "Set Authors in Directory.Build.props, then replace the echo routine and placeholder data type with your domain." },
+        { "text": "`pwsh ./run.ps1 -Pack` packs into the configured local feed; Pack cannot be reached without both conformance layers passing." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

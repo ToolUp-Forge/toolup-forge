@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SHADOW PROJECT — the compile list the consumer's Fable build reads.
+
+  Packed at `fable/MyModule.fsproj` inside the nupkg. Fable's package
+  loader follows THIS file rather than the main project, because the
+  main project compiles Server.fs (server-only surfaces that would fail
+  a Fable compile) and carries server-tier PackageReferences.
+
+  The relative paths below resolve inside the EXTRACTED nupkg, where
+  the listed .fs files sit alongside this file under `fable/`. They
+  deliberately do not resolve in the source tree — this file lives one
+  directory below the sources and is never built from source. It is
+  excluded from every build here; only its packed copy is ever read.
+
+  Its compile list is checked against the main project's client set on
+  every build of this repo (`VerifyPackagedModule`, wired ahead of
+  Pack in Build.fs): a missing file, a leaked server file, or an order
+  swap fails here rather than in the consumer's build.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="SharedTypes.fs" />
+        <Compile Include="ClientModel.fs" />
+        <Compile Include="Icons.fs" />
+        <Compile Include="ClientRegister.fs" />
+    </ItemGroup>
+</Project>
