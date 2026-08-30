@@ -4811,6 +4811,10 @@ ToolUp.Platform.IIndexLifecycle+IndexLifecycleReportModule (class)
 ToolUp.Platform.IIndexLifecycle+IndexLifecycleReportModule.empty : ToolUp.Platform.IIndexLifecycle+IndexLifecycleReport { get }
 ToolUp.Platform.IIndexLifecycle+IndexLifecycleReportModule.isClean(ToolUp.Platform.IIndexLifecycle+IndexLifecycleReport) : System.Boolean
 ToolUp.Platform.IIndexLifecycle+IndexLifecycleReportModule.summarise(ToolUp.Platform.IIndexLifecycle+IndexLifecycleReport) : System.String
+ToolUp.Platform.IIngestionRecoverySurface (interface)
+ToolUp.Platform.IIngestionRecoverySurface.ListInterrupted(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.IIngestionRecoverySurface.MarkInterrupted(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IIngestionRecoverySurface.Name : System.String { get }
 ToolUp.Platform.IIngestionStatusStore (interface)
 ToolUp.Platform.IIngestionStatusStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+FileIngestionStatus]]
 ToolUp.Platform.IIngestionStatusStore.GetTotal(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
@@ -5133,6 +5137,9 @@ ToolUp.Platform.ISbomSource (interface)
 ToolUp.Platform.ISbomSource.Closure() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]]
 ToolUp.Platform.ISbomSource.Describe() : System.String
 ToolUp.Platform.ISbomSource.Options() : ToolUp.Platform.SbomOptions
+ToolUp.Platform.IScopeEnumerator (interface)
+ToolUp.Platform.IScopeEnumerator.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.IScopeEnumerator.Name : System.String { get }
 ToolUp.Platform.ISeamAuthorityEvidence (interface)
 ToolUp.Platform.ISeamAuthorityEvidence.SeamAuthority : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity] { get }
 ToolUp.Platform.ISeamAuthorityGate (interface)
@@ -5366,6 +5373,12 @@ ToolUp.Platform.InTotoSubject (class)
 ToolUp.Platform.InTotoSubject..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.InTotoSubject.Digest : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.InTotoSubject.Name : System.String { get }
+ToolUp.Platform.IngestionRecoverySweep (class)
+ToolUp.Platform.IngestionRecoverySweep.InterruptedReason : System.String (literal)
+ToolUp.Platform.IngestionRecoverySweep.hostedService(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IIngestionRecoverySurface]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.Platform.IngestionRecoverySweep.ofIngestionStatusStore(ToolUp.Platform.IIngestionStatusStore) : ToolUp.Platform.IIngestionRecoverySurface
+ToolUp.Platform.IngestionRecoverySweep.resolveScopes(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator], ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.IngestionRecoverySweep.run(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IIngestionRecoverySurface], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.IngestionStatusStore (class)
 ToolUp.Platform.IngestionStatusStore.DataType : System.String (literal)
 ToolUp.Platform.IngestionStatusStore.create(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IIngestionStatusStore
@@ -7850,6 +7863,14 @@ ToolUp.Platform.ScopeAtCapacity..ctor(System.String, System.Int32, System.Int32)
 ToolUp.Platform.ScopeAtCapacity.Cap : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.CurrentCount : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.ScopeId : System.String { get }
+ToolUp.Platform.ScopeEnumeration (class)
+ToolUp.Platform.ScopeEnumeration.DeploymentContainer : System.String (literal)
+ToolUp.Platform.ScopeEnumeration.PlatformContainer : System.String (literal)
+ToolUp.Platform.ScopeEnumeration.containerForTeam(System.String) : System.String
+ToolUp.Platform.ScopeEnumeration.fromTeamStore(ToolUp.Platform.TeamManagement+ITeamStore) : ToolUp.Platform.IScopeEnumerator
+ToolUp.Platform.ScopeEnumeration.fromTeamStoreWith(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.TeamManagement+ITeamStore) : ToolUp.Platform.IScopeEnumerator
+ToolUp.Platform.ScopeEnumeration.ofScopes(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.IScopeEnumerator
+ToolUp.Platform.ScopeEnumeration.wellKnownContainers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ScoreContext (class)
 ToolUp.Platform.ScoreContext..ctor(System.String, ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.DatasetVersionRef)
 ToolUp.Platform.ScoreContext.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }

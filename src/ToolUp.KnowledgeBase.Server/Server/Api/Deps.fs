@@ -87,8 +87,8 @@ type KnowledgeApiDeps = {
     /// Publishes a fresh `InventorySummary` to the user's notification
     /// scope. Called after every inventory mutation.
     PublishInventory: unit -> Async<unit>
-    /// Marks a document `Failed` after `IngestionQueue.Enqueue` returned
-    /// false (queue at capacity). Updates `statusCache`, persists the
+    /// Marks a document `Failed` after `IngestionQueue.EnqueueAsync`
+    /// returned false (queue at capacity). Updates `statusCache`, persists the
     /// failed status into the document index, and publishes an
     /// `IngestionStatusUpdate` notification.
     MarkIngestionFailed: string -> string -> string -> Async<unit>

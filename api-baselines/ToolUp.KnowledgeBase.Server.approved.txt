@@ -27,6 +27,7 @@ KnowledgeBase.Server.sweepExpiredDocuments : Microsoft.FSharp.Core.FSharpFunc`2[
 KnowledgeBase.Server.withArchiveImportPolicy : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+ArchiveImportPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withDocumentDedup : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withDocumentVersioning : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
+KnowledgeBase.Server.withIngestionRecovery : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp] { get }
 KnowledgeBase.Server.withKnowledgeQuota : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeQuotaPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withKnowledgeQuotaAndUsageEndpoint : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeQuotaPolicy, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]] { get }
 KnowledgeBase.Server.withKnowledgeRetention : Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]]] { get }
@@ -284,7 +285,9 @@ KnowledgeBase.ServerOriginalSourceResolver+OriginalLocation.SizeBytes : System.I
 KnowledgeBase.ServerPlatformAdmin (class)
 KnowledgeBase.ServerPlatformAdmin.platformKnowledgeApi(Microsoft.AspNetCore.Http.HttpContext) : PlatformKnowledgeApi+IPlatformKnowledgeApi
 KnowledgeBase.ServerRecovery (class)
+KnowledgeBase.ServerRecovery.documentIndexSurface(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IIngestionRecoverySurface
 KnowledgeBase.ServerRecovery.recoverStuckDocumentsAtStartup(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+KnowledgeBase.ServerRecovery.withIngestionRecovery(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 KnowledgeBase.ServerRetentionSweep (class)
 KnowledgeBase.ServerRetentionSweep.SweepHandlerName : System.String (literal)
 KnowledgeBase.ServerRetentionSweep.containerOf(System.String) : System.String
