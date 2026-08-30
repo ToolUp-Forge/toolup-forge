@@ -431,6 +431,17 @@
              then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
         <Compile Include="Server\IModelScorer.fs" />
         <Compile Include="Server\ModelScoringJobHandler.fs" />
+        <!-- Phase 728 — the opt-in model-execution compose leg (registers
+             IModelRegistry, and optionally the scorer / executor policy /
+             Phase 651 observers) plus the startup validator that names a
+             mounted ModelExecutionApi with no registry composed. Placed
+             here: it needs only the model seams above (BlobModelRegistry,
+             ModelRegistrationObservers, IModelScorer) and must compile
+             before Compose/ComposeConfigValidators.fs, which registers the
+             validator, and before ServerApp.fs, whose withModelExecution
+             builder folds `register` into the DI graph. -->
+        <Compile Include="Server\ComposeModelExecution.fs" />
+        <Compile Include="Server\ModelExecutionDepsValidator.fs" />
         <!-- Phase 452 — dataset assembly (transforms-as-data): the spec +
              closed transform DU, then the executor (rides IDatasetStore for
              output + ITimeSeriesStore for range sources; propagates Phase 482
