@@ -226,6 +226,20 @@ module Client =
         /// that leaves `ClientConfig.CommandPalette = NoCommandPalette`
         /// (the default) — the field is inert, the component unmounted.
         CommandPalette: CommandPaletteNav.PaletteState
+        /// Phase 444 — a locale the user (or a consumer module, via
+        /// `LocaleRequest.request`) chose in-session, overriding whatever
+        /// `ClientConfig.Locale` would otherwise resolve to. `None` for
+        /// every deployment that never issues a switch — which is all of
+        /// them until one opts in — so the resolve collapses to the
+        /// declared mode and the field is inert (GP 13).
+        ///
+        /// Deliberately NOT cleared by `TeamSwitched`, unlike every other
+        /// per-team field beside it: an explicit language choice is a
+        /// property of the person reading, not of the team they are
+        /// looking at, and silently reverting it on a team switch would
+        /// be the more surprising behaviour. A `TeamDefault` deployment's
+        /// team locale still wins for anyone who has *not* chosen.
+        LocaleOverride: string option
     }
 
     type Msg =
@@ -318,6 +332,22 @@ module Client =
         /// same chain `ConfigsLoaded` and `FlagsLoaded` run, just
         /// rebound to the new team's data (or no team).
         | TeamSwitched of string option
+        /// Phase 444 — the shell's active locale changed. Dispatched by
+        /// the boot-time `LocaleRequest.subscribe` lifetime effect when a
+        /// module (a settings page, a consumer's own language picker)
+        /// calls `LocaleRequest.request`.
+        ///
+        /// Runs the SAME reset path `TeamSwitched` runs, and for the same
+        /// reason: a module that formatted a string at `Init` — a column
+        /// header, a status label, a validation message it holds in its
+        /// own model — is not re-rendered into the new language by a
+        /// React re-render alone, because the string is in its state
+        /// rather than in its view. Clearing `ModuleStates` and re-initing
+        /// is the only reset that reaches those. The per-team loads are
+        /// re-issued too; that is redundant work for a pure language
+        /// change, and it is the price of having exactly one reset path
+        /// rather than two that can drift.
+        | LocaleSwitched of locale: string
         /// Server-driven equivalent of `TeamSwitched None` — fired by
         /// the notification subscriber when `MembershipChanged.Removed`
         /// affects the current user's active team. Routes through the
@@ -1379,6 +1409,9 @@ module Client =
             Degradations = []
             PrefetchedProcessedData = []
             CommandPalette = CommandPaletteNav.closed
+            // Phase 444 — no in-session locale choice yet; the resolve
+            // uses `ClientConfig.Locale` alone.
+            LocaleOverride = None
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -1754,6 +1787,56 @@ module Client =
                     bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
                     activeTeamRoleCmd newTeamIdOpt
                 ]
+
+            | LocaleSwitched locale ->
+                // Phase 444 — an in-session language change. Same reset
+                // shape as `TeamSwitched` above (see that arm's comment
+                // and this message's doc-comment for why a re-render is
+                // not enough), with two deliberate differences:
+                //
+                //   * `ActiveTeamId` / `ActiveTeamRole` are NOT touched —
+                //     the scope did not move, only the language, so the
+                //     team-role read is not stale and re-clearing it
+                //     would blink the sidebar's role gate open and shut.
+                //   * `LocaleOverride` is SET rather than cleared; it is
+                //     the one piece of state this message exists to
+                //     carry.
+                //
+                // A blank tag is treated as "clear the choice" and falls
+                // back to whatever `ClientConfig.Locale` resolves to,
+                // rather than resolving to an empty `Intl` locale.
+                let normalised =
+                    if System.String.IsNullOrWhiteSpace locale then
+                        None
+                    else
+                        Some(locale.Trim())
+
+                if normalised = model.LocaleOverride then
+                    // Already there. Re-running the reset would tear down
+                    // every module's state for no visible change.
+                    model, Cmd.none
+                else
+                    let reset = {
+                        model with
+                            LocaleOverride = normalised
+                            ModuleConfigs = Map.empty
+                            PlatformConfig = Map.empty
+                            ResolvedFlags = Map.empty
+                            AccessibleModules = None
+                            ModuleStates = Map.empty
+                            ResetCounters = Map.empty
+                            ConfigsPrefetch = Prefetch.none
+                            FlagsPrefetch = Prefetch.none
+                            InitPhase = Prefetching
+                            Degradations = []
+                    }
+
+                    reset,
+                    Cmd.batch [
+                        bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+                        bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
+                        bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
+                    ]
 
             | MembershipRevoked teamId ->
                 // Server-driven `MembershipChanged.Removed` for this
@@ -2968,6 +3051,39 @@ module Client =
         // customised nothing) renders byte-for-byte as before. Live on
         // team switch: `TeamSwitched` clears `PlatformConfig` and the
         // `ConfigsLoaded` reload repopulates it, re-running this resolve.
+        // Phase 444 — resolve the active locale and the message catalog
+        // the shell renders from. Three inputs in precedence order: an
+        // in-session choice (`Model.LocaleOverride`, set by
+        // `LocaleSwitched`), then the declared `ClientConfig.Locale`
+        // resolved against the team's `_platform.locale` and the browser
+        // preference. Live on team switch for the same reason branding is
+        // — `TeamSwitched` clears `PlatformConfig` and `ConfigsLoaded`
+        // repopulates it, re-running this resolve.
+        //
+        // Under the default `FixedLocale "en"` with no override, this is
+        // a `match` returning a constant plus a `None` branch, and
+        // `MessageCatalog.english` is returned by reference — no map read,
+        // no browser call, no allocation (GP 11 / GP 13).
+        let resolvedLocale =
+            match model.LocaleOverride with
+            | Some chosen -> chosen
+            | None ->
+                match config.Locale with
+                | FixedLocale _ ->
+                    // The fixed arm reads neither ambient source, so
+                    // resolve it without paying for either.
+                    MessageCatalog.resolveLocale config.Locale None None
+                | BrowserLocale _ ->
+                    MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+                | TeamDefault _ ->
+                    MessageCatalog.resolveLocale
+                        config.Locale
+                        (MessageCatalog.teamLocaleOf model.PlatformConfig)
+                        (MessageCatalogProvider.browserLocale ())
+
+        let resolvedCatalog =
+            MessageCatalog.resolve resolvedLocale config.MessageCatalogOverride
+
         let resolvedBranding =
             Branding.resolve
                 {
@@ -3187,9 +3303,20 @@ module Client =
         // team's `Branding` via `BrandingProvider.useBranding`. The
         // `BrandedHeader` sibling, mounted inside the provider, applies
         // the favicon + `--brand-primary` document side effects.
-        BrandingProvider.provider
-            resolvedBranding
-            (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withPresence ])
+        let withBranding =
+            BrandingProvider.provider
+                resolvedBranding
+                (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withPresence ])
+
+        // Phase 444 — outermost wrap: the resolved message catalog, so
+        // every shell-chrome and built-in-module view reads its strings
+        // through `MessageCatalogProvider.useMessages ()`. Outside the
+        // branding provider rather than inside it because the catalog is
+        // the more fundamental of the two (a branded header still renders
+        // its own labels from the catalog) and because the resolve is
+        // strictly cheaper — a `match` and, only in the non-default
+        // modes, one map read.
+        MessageCatalogProvider.provider resolvedCatalog withBranding
 
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
@@ -4177,6 +4304,23 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Phase 444 — shell-locale switch subscription. Translates every
+        // `LocaleRequest.request` into a `LocaleSwitched` dispatch, which
+        // runs the `TeamSwitched`-shaped reset. Same lifetime-aware shape
+        // and the same teardown contract as the navigation subscription
+        // above; the seam is a mutable global for the same reason
+        // `NavigationRequest` is, so a language picker in a consumer's own
+        // chrome needs no dependency on the shell's `Msg` type and
+        // `ClientModuleContext` needs no new field.
+        let localeRequestEffect =
+            EffectHandle.programLifetime "locale-request" (fun dispatch ->
+                let unsubscribe =
+                    LocaleRequest.subscribe (fun locale -> dispatch (LocaleSwitched locale))
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
         // Cross-module client event bus subscription. Translates every
         // `ModuleEvents.publish` into a `ModuleEventPublished` dispatch the
         // shell update fans out to subscribing modules. Same
@@ -4330,6 +4474,7 @@ module Client =
 
         [
             navigationEffect
+            localeRequestEffect
             moduleEventsEffect
             notificationsEffect
             authTokenAcquiredEffect

@@ -1946,6 +1946,67 @@ type ClientConfig = {
     /// `PresenceContext.provider` nested inside the shell's takes
     /// precedence for the views below it.
     Presence: PresenceMode
+
+    /// Phase 444 — how the shell resolves the active locale for its own
+    /// chrome and the SDK's built-in modules.
+    ///
+    /// Default `FixedLocale "en"`, which is why a deployment that never
+    /// touches this field renders byte-for-byte as it did before Phase
+    /// 444: the resolution collapses to the constant `"en"`, no browser
+    /// preference or `_platform.locale` read happens, and
+    /// `MessageCatalog.english` is returned unmodified (GP 11 / GP 13).
+    ///
+    /// `BrowserLocale fb` reads `navigator.language`; `TeamDefault fb`
+    /// prefers the active team's `_platform.locale` — the same key the
+    /// server-side `LocaleResolver` reads, so one team setting drives
+    /// both tiers — then the browser, then `fb`.
+    ///
+    /// Setting this alone changes nothing visible: the built-in catalog
+    /// is English at every locale. It is `MessageCatalogOverride` that
+    /// supplies the translation, and this field that decides which one
+    /// the override is asked for.
+    Locale: LocaleMode
+
+    /// Phase 444 — the deployment's translation of the SDK's shell +
+    /// built-in-module strings.
+    ///
+    /// The function is handed `MessageCatalog.english` stamped with the
+    /// resolved locale (`catalog.Locale`) and returns the catalog to
+    /// render. Because `MessageCatalog` is a record, a partial
+    /// translation is ordinary record-update syntax, and a string the
+    /// translation forgot is a compile error rather than a silently
+    /// English cell:
+    ///
+    /// ```fsharp
+    /// let private french (c: MessageCatalog) = {
+    ///     c with
+    ///         Shell = {
+    ///             c.Shell with
+    ///                 SignOut = "Se déconnecter"
+    ///                 SelectTeam = "Choisir une équipe"
+    ///                 ResultsAvailableIn = fun m -> $"Résultats disponibles dans {m}"
+    ///         }
+    ///         Toast = { Info = "Info"; Warning = "Avertissement"; Error = "Erreur" }
+    /// }
+    ///
+    /// // One function, several languages — match on the resolved tag.
+    /// let catalog (c: MessageCatalog) =
+    ///     if c.Locale.StartsWith "fr" then french c else c
+    ///
+    /// { ClientConfig.create handlers with
+    ///     Locale = TeamDefault "en"
+    ///     MessageCatalogOverride = Some catalog }
+    /// ```
+    ///
+    /// Returning the argument unchanged for a language the deployment
+    /// does not cover IS the fallback to English — the chain is the
+    /// identity function, not a per-field lookup, which is what keeps
+    /// the whole surface total.
+    ///
+    /// `None` (the default) skips the call entirely. An override that
+    /// raises is swallowed back to the English catalog: a translation
+    /// bug degrades the shell's language, never its availability.
+    MessageCatalogOverride: (MessageCatalog -> MessageCatalog) option
 }
 
 module ClientConfig =
@@ -2039,6 +2100,11 @@ module ClientConfig =
         // Phase 622 — no shell presence mount, no heartbeat, no SSE
         // subscription until the deployment opts in (GP 11 + GP 13).
         Presence = NoPresence
+        // Phase 444 — one fixed locale, the built-in English catalog, no
+        // browser or team-config read. Byte-for-byte the pre-444 shell
+        // (GP 11 + GP 13).
+        Locale = FixedLocale MessageCatalog.BuiltInLocale
+        MessageCatalogOverride = None
     }
 
     /// Back-compat: `ClientConfig` with every field at the SDK default
