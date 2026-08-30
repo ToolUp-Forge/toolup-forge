@@ -167,6 +167,21 @@ module WorkProvenanceSource =
     /// A withheld ancestor stops the walk THROUGH that record and is
     /// recorded as a marker: its own parents are exactly the content the
     /// refusal sealed, so continuing past it would be inventing edges.
+    ///
+    /// An UNRESOLVABLE ancestor is recorded too, for the same reason and
+    /// in the same shape. A parent ref a reached record named, which the
+    /// source then holds nothing under, is a join the page itself
+    /// asserted and could not follow; it crosses as a `SeveredWorkEdge`
+    /// carrying the failing ref and the record that named it. The walk
+    /// still returns every record it DID reach — one lost edge must not
+    /// cost the caller the rest of the page, or severing an edge becomes
+    /// the cheapest way to suppress the whole answer.
+    ///
+    /// **The ROOT is not an edge.** A root the source holds nothing under
+    /// was named by the caller, not by this page, so its absence is the
+    /// caller's own question coming back empty rather than a break inside
+    /// a page; it is answered exactly as it was before this marker
+    /// existed, with an empty page.
     let walkOverLookups
         (source: IWorkProvenanceSource)
         (request: WorkAncestorRequest)
@@ -182,30 +197,39 @@ module WorkProvenanceSource =
                 let seen = HashSet<string * string>()
                 let records = ResizeArray<WorkRecord>()
                 let withheld = ResizeArray<WithheldWorkRecord>()
+                let severed = ResizeArray<SeveredWorkEdge>()
 
                 seen.Add(request.Root.SourceSystem, request.Root.RecordId) |> ignore
 
-                let rec walkLevel (frontier: WorkRecordRef list) (hop: int) : Async<unit> = async {
+                // Each frontier entry carries the record that NAMED it,
+                // where one did. The root carries none, which is what
+                // keeps root-level absence distinguishable from a severed
+                // edge inside the page rather than a special case checked
+                // after the fact.
+                let rec walkLevel (frontier: (WorkRecordRef * WorkRecordRef option) list) (hop: int) : Async<unit> = async {
                     if hop >= request.Depth || List.isEmpty frontier then
                         return ()
                     else
-                        let next = ResizeArray<WorkRecordRef>()
+                        let next = ResizeArray<WorkRecordRef * WorkRecordRef option>()
 
-                        for reference in frontier do
+                        for reference, namedBy in frontier do
                             match! source.GetRecord reference with
                             | WorkRecordAnswer.Found record ->
                                 records.Add record
 
                                 for parent in record.Parents do
                                     if seen.Add(parent.SourceSystem, parent.RecordId) then
-                                        next.Add parent
+                                        next.Add(parent, Some record.Ref)
                             | WorkRecordAnswer.Withheld marker -> withheld.Add marker
-                            | WorkRecordAnswer.Absent -> ()
+                            | WorkRecordAnswer.Absent ->
+                                match namedBy with
+                                | Some namer -> severed.Add { Ref = reference; NamedBy = namer }
+                                | None -> ()
 
                         return! walkLevel (List.ofSeq next) (hop + 1)
                 }
 
-                do! walkLevel [ request.Root ] 0
+                do! walkLevel [ request.Root, None ] 0
 
                 let reached = records.Count + withheld.Count
 
@@ -217,6 +241,7 @@ module WorkProvenanceSource =
                             Root = request.Root
                             Records = List.ofSeq records
                             Withheld = List.ofSeq withheld
+                            Severed = List.ofSeq severed
                             Depth = request.Depth
                         }
         }

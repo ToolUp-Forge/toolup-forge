@@ -27,7 +27,7 @@ open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
 //
 //   * **a missing interior position is NAMED.** A source that holds the
 //     head and not its parent is the motivating failure; the verdict
-//     carries the parent's own key, not a count.
+//     carries the unresolvable edge's own key, not a count.
 //
 //   * **a declared bound is not an omission.** The same absent parent
 //     reads `Bounded` when the depth the caller asked for accounts for
@@ -51,9 +51,9 @@ let private system = "work-system"
 let private ref' (id: string) : WorkRecordRef = WorkRecordRef.create system id
 
 /// A source system double over a fixed record table. A ref the table
-/// does not hold answers `Absent`, which is precisely the answer the
-/// ancestor walk drops silently — and therefore the answer this pack
-/// exists to make visible.
+/// does not hold answers `Absent`, which is the answer the ancestor walk
+/// once dropped silently — and therefore the answer this pack exists to
+/// make visible.
 type private FakeWorkSource(records: Map<string, WorkRecordAnswer>) =
     interface IWorkProvenanceSource with
         member _.SourceSystem() = system
@@ -99,9 +99,12 @@ let private wholeTable =
     ]
 
 /// The head and the grandparent resolve and the record BETWEEN them does
-/// not. The ancestor walk asks for `w2`, is told `Absent`, and moves on
-/// — so the enumeration is one line where the linkage names two, and
-/// nothing about the rendered chain says so.
+/// not. The ancestor walk asks for `w2` and is told `Absent`, so the
+/// enumeration is one line where the linkage names two. The walk now
+/// RECORDS that lost edge rather than moving on, so the hop reads broken
+/// as well — the enumeration verdict this pack is about is derived from
+/// the same recording, which is why the two agree here by construction
+/// rather than by coincidence.
 let private gappedTable =
     Map.ofList [ "w1", WorkRecordAnswer.Found w1; "w3", WorkRecordAnswer.Found w3 ]
 
@@ -222,10 +225,25 @@ let derivationTests =
                     EvidenceChain.order
                     "every arrangement returns the full hop list in walk order"
 
+            // The outcome is a separate axis from the enumeration verdict
+            // — but the two are not INDEPENDENT, and since the ancestor
+            // walk began recording the edges it cannot follow they move
+            // together on the gapped table by construction: an
+            // unresolvable parent is a recorded join that does not hold,
+            // so the hop reads broken and the enumeration behind it
+            // reads incomplete, from one recording. The depth ladder over
+            // the WHOLE table is where the axes genuinely separate, and
+            // it is asserted here rather than the gapped one.
+            for depth in [ 1; 3 ] do
                 Expect.equal
-                    (EvidenceChainOutcome.label chain.Outcome)
+                    (EvidenceChainOutcome.label (chainAt wholeTable depth).Outcome)
                     (EvidenceChainOutcome.label (chainAt wholeTable 3).Outcome)
-                    "and the same top-line outcome — the enumeration verdict is a separate axis"
+                    "narrowing the requested depth moves the enumeration verdict and not the chain's outcome"
+
+            Expect.equal
+                (EvidenceChainOutcome.label (chainAt gappedTable 2).Outcome)
+                "chain-broken"
+                "while a chain that LOST an edge its own records named is broken on both axes, and says so on each"
         }
 
         test "a deployment whose linkage names nothing is complete over an empty set" {
@@ -256,8 +274,8 @@ let missingPositionTests =
             | EnumerationCompleteness.Incomplete(missing, reason) ->
                 Expect.equal
                     (missing |> List.map _.Key)
-                    [ "w2" ]
-                    "the record the source would not resolve is named, so the finding is actionable from the one line"
+                    [ "w1->w2" ]
+                    "the EDGE the source would not resolve is named — which record named which unresolvable parent — so the finding is actionable from the one line"
 
                 Expect.equal
                     (missing |> List.map _.Hop)

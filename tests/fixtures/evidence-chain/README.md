@@ -32,7 +32,28 @@ Every case carries the same five fields, whatever level it sits at:
     it is a faithful copy minus one check rather than a strawman.
 * `unproven` — present and `true` only where a break class has **no verdict to assert**. Such a
   case is recorded as unproven, with what was observed instead; it is never quietly kept as
-  though it had been proved.
+  though it had been proved. **No case currently carries it** — see the note below.
+
+## The retired silence-pinning arm
+
+`work-ancestor-severed` was the corpus's one `unproven` case. A severed **ancestor** edge produced
+no verdict at all: the ancestor walk dropped a parent reference it could not resolve and returned
+the records it did reach, so the hop read `linked` exactly as it does when nothing is severed, and
+only the enumeration behind it was one line shorter. With no verdict to assert there was no check
+to falsify, so what the case pinned instead was the silence itself — an `expectedAncestorFindings`
+count asserted to be strictly smaller than the healthy baseline's.
+
+That arm is **retired**, and the case now asserts a verdict and a position like every other break
+class, falsified by the same discriminating twin. The walk records an unresolvable parent as a
+typed marker carrying the failing ref and the record that named it; the hop reads `broken` at that
+ref, and the enumeration behind it stays incomplete because naming a broken edge is not the same as
+enumerating the record on the far side of it.
+
+The retirement note is kept rather than deleted. A strictly-smaller-count assertion is what an
+unproven check looks like when it is kept honestly, and the shape is worth recognising the next time
+a class turns out to have no verdict to assert. The baseline's own ancestor-enumeration count
+(`upstreamAncestorFindings`) stays pinned for a different reason: it is what proves a page with no
+severed edges still renders exactly as it did.
 
 ## Identifiers
 

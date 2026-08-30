@@ -308,6 +308,7 @@ let tests =
                     Root = ref' "w1"
                     Records = [ w1; w2; w3 ]
                     Withheld = []
+                    Severed = []
                     Depth = 3
                 }
 
