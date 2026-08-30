@@ -1,0 +1,19 @@
+PLACEHOLDER — replace this file with your module's licence text.
+
+The generated `Directory.Build.props` declares
+`<PackageLicenseExpression>PACKAGE_LICENSE</PackageLicenseExpression>`, so the package metadata
+already claims a licence. This file is what a reader of the repository sees, and what
+`--license` selected must actually be.
+
+Two things to do before the first `Pack`:
+
+1. Replace the whole of this file with the full text of the licence you chose. For Apache-2.0
+   that is the text published at https://www.apache.org/licenses/LICENSE-2.0.txt; for MIT it is
+   the short template with your copyright line filled in.
+2. Check that `PackageLicenseExpression` in `Directory.Build.props` names the same licence, as an
+   SPDX identifier (`Apache-2.0`, `MIT`, `BSD-3-Clause`, …). A mismatch between the two is worse
+   than either being wrong on its own: consumers read the metadata, auditors read this file.
+
+If the module is proprietary and not to be licensed at all, remove `PackageLicenseExpression`
+from `Directory.Build.props` and state the terms here instead — NuGet will warn about the missing
+expression, which is the correct signal for a package that has none.
