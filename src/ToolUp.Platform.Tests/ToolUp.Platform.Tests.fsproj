@@ -2161,6 +2161,10 @@
              into every sibling pack that runs an explicitly-enumerated list
              rather than Expecto auto-discovery; must compile immediately
              before each pack's Program.fs. -->
+        <!-- Phase 676 — the N-party countersignature registry: the
+             generic core's own cases plus the N=2 parity matrix against
+             the Phase 480 bilateral surface it now implements. -->
+        <Compile Include="InProcess\CountersignatureRegistryTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>

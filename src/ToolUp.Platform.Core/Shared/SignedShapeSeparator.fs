@@ -139,6 +139,17 @@ type SignedShape =
     /// A worker's signed terminal outcome, carried on the
     /// `X-ToolUp-Worker-Signature` header (Phase 320-era signing).
     | WorkerSignedOutcome
+    /// A countersignature SUBJECT hashed by the generic registry's own
+    /// encoder (Phase 676) — the case where a domain hands the registry
+    /// canonical bytes rather than a hash it computed under its own
+    /// separator. The kind tag is inside the hashed bytes, so the same
+    /// content registered under two kinds cannot produce one hash.
+    | CountersignatureSubject
+    /// An N-party countersignature lifecycle record (Phase 676). The
+    /// generic successor to `CleanRoomApprovalRecord`, which keeps its
+    /// own separator unchanged — a bilateral approval already minted
+    /// must keep verifying.
+    | CountersignatureRecord
 
 [<RequireQualifiedAccess>]
 module SignedShapeSeparator =
@@ -204,6 +215,8 @@ module SignedShape =
         SignedShape.SignalFeedDelivery
         SignedShape.PromotedArtifact
         SignedShape.WorkerSignedOutcome
+        SignedShape.CountersignatureSubject
+        SignedShape.CountersignatureRecord
     ]
 
     /// The typed parts of a shape's domain separator.
@@ -250,6 +263,22 @@ module SignedShape =
         | SignedShape.WorkerSignedOutcome -> {
             Vendor = "toolup"
             Path = [ "signed-outcome" ]
+            Version = 1
+          }
+        // Branded `toolup` for the same reason `WorkerSignedOutcome`
+        // is, and not by oversight: the countersignature registry is a
+        // generic platform mechanism in `ToolUp.Platform.Server`, not a
+        // federation wire shape. The four federation-branded separators
+        // above name one specific cross-deployment protocol; these two
+        // name a substrate any subject kind can be registered under.
+        | SignedShape.CountersignatureSubject -> {
+            Vendor = "toolup"
+            Path = [ "countersignature"; "subject" ]
+            Version = 1
+          }
+        | SignedShape.CountersignatureRecord -> {
+            Vendor = "toolup"
+            Path = [ "countersignature"; "record" ]
             Version = 1
           }
 

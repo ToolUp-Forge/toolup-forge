@@ -130,6 +130,30 @@ let private fixedEnvelope: WorkerOutcomeSignature = {
     Signature = "not-covered-by-signingPayload"
 }
 
+/// Phase 676 — a fixed payload for the generic subject encoder. Not
+/// derived from any live type: the pin's job is to notice the ENCODING
+/// moving, so its input must not move with a domain's record shape.
+let private fixedSubjectPayload = Encoding.UTF8.GetBytes "phase-676-payload"
+
+let private fixedCountersignatureSubject: CountersignatureSubject =
+    CountersignatureSubject.ofCanonicalBytes "phase-676-kind" "phase-676-subject" fixedSubjectPayload
+
+let private fixedCountersignatureRecord: CountersignatureRecord = {
+    Subject = fixedCountersignatureSubject
+    // Deliberately written UNSORTED: the encoder emits a roster
+    // count-first in ordinal order, so if this pin ever moves after a
+    // roster is reordered somewhere, the encoder stopped canonicalising.
+    Roster = [ "party-c"; "party-a"; "party-b" ]
+    ActingPartyId = "party-a"
+    Action = SubjectApproved
+    IssuedAt = fixedInstant
+    NotBefore = fixedInstant
+    ExpiresAt = None
+    // Deliberately not a real signature: `recordBytes` covers every
+    // field EXCEPT this one, which is what signs it.
+    Signature = "not-covered-by-recordBytes"
+}
+
 // ─── The pins ────────────────────────────────────────────────────────
 
 type private ShapePin = {
@@ -210,6 +234,27 @@ let private pins: Map<SignedShape, ShapePin> =
                     |> Encoding.UTF8.GetBytes
                     |> sha256Hex
             ExpectedDigest = "7c9d3185544e745eba705fcf23299a90c21b8b256001c39c5b28c4c9941a9cfc"
+        }
+
+        // Phase 676 — the generic countersignature core's two shapes.
+        // Branded `toolup` because they name a platform substrate
+        // rather than a cross-deployment wire protocol; see the note
+        // beside them in `SignedShape.parts`.
+        SignedShape.CountersignatureSubject,
+        {
+            Separator = "toolup.countersignature.subject/1"
+            Digest =
+                fun () ->
+                    CountersignatureCanonical.subjectBytes "phase-676-kind" "phase-676-subject" fixedSubjectPayload
+                    |> sha256Hex
+            ExpectedDigest = "76f58313017cfe3214496081b9089ec7f82eef70acea5cdd70524fe457815ae6"
+        }
+
+        SignedShape.CountersignatureRecord,
+        {
+            Separator = "toolup.countersignature.record/1"
+            Digest = fun () -> sha256Hex (CountersignatureCanonical.recordBytes fixedCountersignatureRecord)
+            ExpectedDigest = "c80d397313ad0a2427b6d269e2b125cf05dccdb2a69d1f34ccc72ed452151a26"
         }
     ]
 

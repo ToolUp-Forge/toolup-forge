@@ -1525,6 +1525,15 @@
              CompositionDryRun.fs (its slotInterface parser). Pure — nothing
              registers into DI, nothing runs at compose (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionUpgradePlan.fs" />
+    <!-- Phase 676 — the N-party countersignature registry: a signed
+         propose / review / approve / revoke lifecycle over arbitrary
+         content-hashed subjects, with approval live only under every
+         enrolled party's signature over the exact subject hash. Placed
+         last because it depends only on things far above it — the Core
+         signed-shape separators, IBlobStorage, IdentitySanitiser and the
+         shared JSON converter set — and nothing in the file is composed
+         by default, so nothing below needs to see it (GP 11 / GP 13). -->
+        <Compile Include="Server\CountersignatureRegistry.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />
