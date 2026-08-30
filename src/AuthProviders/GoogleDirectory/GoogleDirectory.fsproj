@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.GoogleDirectory</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.GoogleDirectory</AssemblyName>
+    <Description>Google Workspace IUserDirectory companion for ToolUp.Platform — user-search typeahead, id resolution, and invitation email via the Admin SDK Directory API and the Gmail API.</Description>
+    <PackageTags>fsharp;sdk;auth;google;google-workspace;gsuite;directory;admin-sdk;gmail;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GoogleDirectoryAuth.fs" />
+    <Compile Include="GoogleDirectory.fs" />
+    <Compile Include="GoogleDirectoryHealth.fs" />
+    <Compile Include="GoogleDirectoryConfigValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      No Google client SDK (GP 1). The Admin SDK Directory API, the
+      Gmail API, and the JWT-bearer token exchange are all served by
+      BCL HttpClient + System.Security.Cryptography + System.Text.Json,
+      per the companion-authoring guide's steer for HTTP-shaped
+      companions. The equivalent Google.Apis.Auth path drags ~15
+      transitive packages into every consumer.
+    -->
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

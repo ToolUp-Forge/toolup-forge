@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>MyModule</PackageId>
+        <Description>MODULE_DISPLAY_NAME — a ToolUp Platform module distributed as a NuGet package. Ships the server assembly plus the client tier as Fable source under fable/.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- ServerModule / the server-tier surfaces live on top of ASP.NET. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <PropertyGroup>
+        <!--
+            The client files call Feliz / Fable.Core / ToolUp.Platform.Client
+            surfaces. The .NET compile pass needs FABLE_COMPILER defined so it
+            follows the same branches Fable does. The Fable.* libraries ship
+            netstandard2.0 facades, so the .NET build links cleanly.
+
+            Nothing in the resulting DLL's client half is meant to RUN on the
+            server: it exists so .NET consumers resolve the symbols, and so
+            this repo's own conformance test can bind the real registration.
+            That is why anything Fable-only in those files is deferred behind
+            a function or a `lazy` — see Icons.fs and ClientModel.fs.
+        -->
+        <DefineConstants>FABLE_COMPILER</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <!--
+            Compile order is semantic in F#. SharedTypes is read by both
+            tiers; Server is server-only; the client files cascade
+            ClientModel -> Icons -> ClientRegister.
+
+            The shadow project under fable/ must list the CLIENT subset of
+            this list in the SAME relative order. `VerifyPackagedModule`
+            checks exactly that, so the two lists cannot drift apart
+            silently.
+        -->
+        <Compile Include="SharedTypes.fs" />
+        <Compile Include="Server.fs" />
+        <Compile Include="ClientModel.fs" />
+        <Compile Include="Icons.fs" />
+        <Compile Include="ClientRegister.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Server tier -->
+        <PackageReference Include="ToolUp.Platform.Core" />
+        <PackageReference Include="ToolUp.Platform.Server" />
+        <!-- Client tier: drives the .NET compile of the client files;
+             Fable resolves the same packages on the consumer side. -->
+        <PackageReference Include="ToolUp.Platform.Client" />
+        <PackageReference Include="Feliz" />
+        <PackageReference Include="Fable.Core" />
+        <PackageReference Include="Fable.React.Types" />
+        <PackageReference Include="Fable.ReactDom.Types" />
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+    <ItemGroup>
+        <!--
+            Fable-source-in-nupkg delivery. Fable compiles F#, not IL, so
+            the client tier has to travel as SOURCE: the .fs files, the
+            shadow project that orders them, and the icon assets the
+            `importDefault` paths resolve against, all under `fable/`.
+
+            Every entry here is checked by `VerifyPackagedModule` against
+            the shadow project's compile list and the declared assets — a
+            file added to the client tier but not packed fails this repo's
+            build, not the consumer's.
+        -->
+        <Content Include="SharedTypes.fs;ClientModel.fs;Icons.fs;ClientRegister.fs" PackagePath="fable\" />
+        <Content Include="fable\MyModule.fsproj" PackagePath="fable\" />
+        <Content Include="icons\*.svg" PackagePath="fable\icons\" />
+    </ItemGroup>
+</Project>
