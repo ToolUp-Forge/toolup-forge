@@ -230,8 +230,37 @@ module private EvidenceChainHops =
     /// did not carry: the source answered `Absent` and the ancestor walk
     /// moved on, which is exactly the silent stop this claim exists to
     /// surface.
+    ///
+    /// **Where the page RECORDED the break, the position comes from the
+    /// marker and from nowhere else.** A page carrying severed-edge
+    /// markers has already said which joins it could not follow, so this
+    /// derivation reads them rather than re-inferring them from what did
+    /// not come back — the link tier's verdict and this tier's missing
+    /// position are then two renderings of one recording and cannot drift
+    /// apart. Each such position is keyed on the EDGE, because that is
+    /// what the marker identifies and because naming a broken edge is not
+    /// enumerating the record behind it: the record's kind, label and own
+    /// parents are all on the far side of the break, so the position
+    /// stays unaccounted-for while the break stands, which is precisely
+    /// what `Incomplete` is reserved for.
+    ///
+    /// The `Absent`-inferred fallback below is kept for a source with its
+    /// own native ancestor walk, which may resolve a page without ever
+    /// producing a marker. Such a page reads exactly as it did before
+    /// this phase.
     let ancestorPositions (page: WorkAncestorPage) : EnumerationPosition list =
         let hop = EvidenceChain.UpstreamWorkRecordHop
+
+        /// The refs the page itself recorded as severed — excluded from
+        /// the inferred derivation below so one break is never reported
+        /// twice under two different keys.
+        let severedRefs =
+            page.Severed |> List.map (fun edge -> edge.Ref.RecordId) |> Set.ofList
+
+        let severedPositions =
+            page.Severed
+            |> List.map (fun edge ->
+                EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind (SeveredWorkEdge.key edge))
 
         let recordsById =
             page.Records
@@ -280,28 +309,35 @@ module private EvidenceChainHops =
                 | [] -> None
                 | levels -> Some(List.min levels)
 
-        page.Root.RecordId
-        :: (page.Records
-            |> List.collect (fun record -> record.Parents |> List.map _.RecordId))
-        |> List.distinct
-        |> List.map (fun id ->
-            match renderIndex |> Map.tryFind id with
-            | Some index when index >= FindingCap ->
-                EvidenceEnumeration.bounded
-                    hop
-                    EvidenceEnumeration.WorkAncestorKind
-                    id
-                    EvidenceEnumeration.EnumerationCapBound
-            | Some _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id
-            | None ->
-                match namedAt id with
-                | Some level when level + 1 >= page.Depth ->
+        let inferred =
+            page.Root.RecordId
+            :: (page.Records
+                |> List.collect (fun record -> record.Parents |> List.map _.RecordId))
+            |> List.distinct
+            |> List.filter (fun id -> not (severedRefs.Contains id))
+
+        let inferredPositions =
+            inferred
+            |> List.map (fun id ->
+                match renderIndex |> Map.tryFind id with
+                | Some index when index >= FindingCap ->
                     EvidenceEnumeration.bounded
                         hop
                         EvidenceEnumeration.WorkAncestorKind
                         id
-                        EvidenceEnumeration.WorkDepthBound
-                | _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id)
+                        EvidenceEnumeration.EnumerationCapBound
+                | Some _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id
+                | None ->
+                    match namedAt id with
+                    | Some level when level + 1 >= page.Depth ->
+                        EvidenceEnumeration.bounded
+                            hop
+                            EvidenceEnumeration.WorkAncestorKind
+                            id
+                            EvidenceEnumeration.WorkDepthBound
+                    | _ -> EvidenceEnumeration.required hop EvidenceEnumeration.WorkAncestorKind id)
+
+        inferredPositions @ severedPositions
 
     /// The deploy this walk is about, for a break that needs to name a
     /// position and has only the deployment to name.
@@ -332,7 +368,13 @@ module private EvidenceChainHops =
                     (WorkRecordKind.label marker.Kind)
                     marker.PolicyRef)
 
-        readable @ withheld
+        // Appended last, so a readable or withheld record's rendered
+        // index — which `ancestorPositions` computes against the declared
+        // enumeration cap — is exactly where it was before this line
+        // existed.
+        let severed = page.Severed |> List.map SeveredWorkEdge.describe
+
+        readable @ withheld @ severed
 
     /// The join from the deploy to the work that authored its sources.
     ///
@@ -348,6 +390,14 @@ module private EvidenceChainHops =
     /// no ancestor page names no positions — there is no enumeration to
     /// be complete about — and the branch that resolves one derives them
     /// from the page's parent refs.
+    ///
+    /// **A page that resolved and lost an edge is broken, not linked.**
+    /// The doctrine this walk is built on is that absent and broken are
+    /// different claims, both sayable; it was applied at every hop except
+    /// inside this one's own page, where an unresolvable parent used to
+    /// leave the hop reading exactly as it reads when nothing is severed.
+    /// A parent ref IS a recorded join, so a page carrying one that does
+    /// not hold reads broken at that ref's position.
     let walkWorkRecord
         (sources: EvidenceChainSources)
         (depth: int)
@@ -418,9 +468,40 @@ module private EvidenceChainHops =
 
                             match ancestors with
                             | Ok page ->
+                                // The join from the deploy to the head
+                                // holds; what may not hold is a join
+                                // INSIDE the page, between two records
+                                // the page itself named. A recorded join
+                                // that fails is a break, and a parent ref
+                                // is a recorded join — so a page carrying
+                                // severed-edge markers reads broken at
+                                // the first of them, in walk order, for
+                                // the reason the ledger hop names only
+                                // the first break: everything past it is
+                                // a page already known to be short.
+                                //
+                                // Derived from the SAME markers the
+                                // enumeration's missing positions come
+                                // from, so the two tiers state one
+                                // recording twice rather than observing
+                                // the page twice.
+                                let link =
+                                    match page.Severed with
+                                    | [] -> EvidenceLink.Linked(head.RecordId, detail)
+                                    | edge :: _ ->
+                                        EvidenceLink.LinkBroken(
+                                            WorkRecordRef.describe edge.Ref,
+                                            sprintf
+                                                "%s, and the ancestor walk behind it lost %d recorded edge(s): %s named %s as a parent and the source system holds no record under that ref, so this page is shorter than its own records say it is"
+                                                detail
+                                                (List.length page.Severed)
+                                                (WorkRecordRef.describe edge.NamedBy)
+                                                (WorkRecordRef.describe edge.Ref)
+                                        )
+
                                 return
                                     {
-                                        Link = EvidenceLink.Linked(head.RecordId, detail)
+                                        Link = link
                                         Findings = capFindings (ancestorFindings page)
                                     },
                                     ancestorPositions page

@@ -20,13 +20,12 @@
       "class": "severed-reference",
       "hop": "upstream-work-record",
       "ordinal": 1,
-      "verdict": "linked",
-      "position": "wc-head",
-      "outcome": "chain-complete",
-      "falsification": "unproven",
-      "unproven": true,
-      "unprovenReason": "A severed ANCESTOR edge produces no verdict at all. The ancestor walk drops a reference it cannot resolve and returns the records it did reach, so the hop stays linked and the enumeration behind it is silently one line shorter. There is no verdict to assert and therefore no check to falsify; what is pinned instead is the silence itself — the finding count — so that a later phase can act on it rather than rediscover it.",
-      "expectedAncestorFindings": 1
+      "verdict": "broken",
+      "position": "wc-parent (corpus-work-system)",
+      "outcome": "chain-broken",
+      "falsification": "discriminating-twin",
+      "note": "A record the walk reached names a parent, and the source system then holds nothing under that ref. A parent ref is a recorded join, so a join that does not hold inside the page is a break at the ref that failed — not a shorter page under an unchanged verdict. The walk still returns every record it did reach: one lost edge must not cost the caller the rest of the page.",
+      "wasUnprovenUntil": "This case pinned the SILENCE until the ancestor walk learned to record what it could not follow. The retired arm asserted a strictly-smaller finding count against the baseline's, which is what an unproven check looks like when it is kept honestly rather than quietly."
     },
     {
       "id": "work-record-withheld",

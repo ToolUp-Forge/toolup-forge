@@ -10,6 +10,7 @@ open System.Text
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
@@ -62,14 +63,22 @@ open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
 // identifiers are synthetic throughout and name no deployment, tenant,
 // key or system that exists.
 //
-// ── What is deliberately NOT claimed ─────────────────────────────────
+// ── The one class that had no verdict, and now has one ───────────────
 //
-// One break class has no verdict to assert, and it is recorded as
-// unproven rather than quietly kept: a severed ANCESTOR reference is
-// dropped by the ancestor walk, so the hop stays linked and its
-// enumeration is silently one line shorter. What is pinned there is the
-// silence itself, so it sits on the record as a finding rather than
-// waiting to be rediscovered.
+// `work-ancestor-severed` was recorded as UNPROVEN rather than quietly
+// kept: a severed ANCESTOR reference was dropped by the ancestor walk,
+// so the hop stayed linked and its enumeration was silently one line
+// shorter. With no verdict to assert there was no check to falsify, and
+// what the arm pinned instead was the silence itself — a strictly
+// smaller finding count than the baseline's.
+//
+// The walk now RECORDS an unresolvable parent as a typed marker carrying
+// the failing ref and the record that named it, so the case asserts a
+// verdict and a position like every other class and is falsified by the
+// same discriminating twin. The silence-pinning arm is retired, with the
+// reasoning kept in the corpus README: a strictly-smaller-count
+// assertion is what an unproven check looks like when it is kept
+// honestly, and the shape is worth recognising again.
 
 // ─── Reading the corpus ──────────────────────────────────────────────
 
@@ -986,8 +995,9 @@ let healthyBaselineTests =
         }
 
         test "the baseline's ancestor enumeration is pinned too" {
-            // The count the severed-ancestor case is measured against, so
-            // it is pinned rather than inferred.
+            // What proves a page with NO severed edges still renders
+            // exactly as it did — the byte-for-byte half of the severed
+            // -edge work, pinned rather than inferred.
             let baseline = corpus "healthy-baseline.json"
 
             Expect.equal
@@ -1043,37 +1053,26 @@ let chainBreakCorpusTests =
                             case.Id)
                 }
 
-        test "a severed ANCESTOR reference produces no verdict — recorded as unproven" {
-            // Part C's honest half: a break class that cannot be made to
-            // fire is reported as such and its check treated as unproven,
-            // never quietly kept. The ancestor walk drops a reference it
-            // cannot resolve and returns what it did reach, so the hop
-            // stays linked and only the enumeration behind it is shorter.
-            let case = chainCase "work-ancestor-severed"
-
-            Expect.isTrue case.Unproven "the corpus records this case as unproven"
-            Expect.equal case.Falsification "unproven" "and names its falsification method accordingly"
-
-            let chain = injectedChain case
-            let hop = hopOf chain EvidenceChain.UpstreamWorkRecordHop
+        test "no case is recorded as unproven any more, and the corpus says so in both places" {
+            // The retired arm's replacement. `work-ancestor-severed` was
+            // the corpus's one unproven case; it now asserts a verdict in
+            // the loop above like every other class. This arm is what
+            // stops the flag creeping back in unexamined — and what makes
+            // the loop above provably non-vacuous, since a case silently
+            // re-marked unproven would be skipped there without comment.
+            Expect.isEmpty
+                (chainCases |> List.filter _.Unproven |> List.map _.Id)
+                "a class with no verdict to assert is recorded as unproven and reasoned about, never left flagged after it gained one"
 
             Expect.equal
-                (EvidenceLink.label hop.Link)
-                "linked"
-                "the hop reads exactly as it does when nothing is severed — which is the finding, not a pass"
+                (chainCase "work-ancestor-severed").Falsification
+                "discriminating-twin"
+                "and the case that carried the flag now names the falsification method the rest of the corpus uses"
 
-            let expected =
-                intField (chainCaseElement "work-ancestor-severed") "expectedAncestorFindings"
-
-            Expect.equal
-                (List.length hop.Findings)
-                expected
-                "the severed edge is dropped silently; the corpus pins the shortened enumeration so the silence is on the record"
-
-            Expect.isLessThan
-                (List.length hop.Findings)
-                (List.length (hopOf healthyChain EvidenceChain.UpstreamWorkRecordHop).Findings)
-                "and it really is shorter than the baseline's — otherwise this arm would pin nothing at all"
+            Expect.isFalse
+                ((chainCaseElement "work-ancestor-severed").TryGetProperty "expectedAncestorFindings"
+                 |> fst)
+                "the silence-pinning field is gone with the arm that read it — a corpus field nothing reads is drift waiting to happen"
         }
     ]
 
@@ -1146,6 +1145,280 @@ let chainFalsificationTests =
                     |> List.map (fun hopId -> sprintf "'%s' also moved hop '%s'" case.Id hopId))
 
             Expect.isEmpty bleeding "each injection perturbs exactly one join"
+        }
+    ]
+
+// ─── The severed ancestor edge, at all three tiers ───────────────────
+//
+// The corpus arm above asserts the verdict and the position like every
+// other break class. What it cannot show from the rendered chain alone
+// is that the verdict, the enumeration's missing position and the
+// evidence a counterparty receives are all derived from ONE recording —
+// the severed-edge markers the walk produced — rather than from two or
+// three independent observations of the same page that could drift.
+// These arms read the markers directly and measure each tier against
+// them.
+
+/// The page the injected source actually produces, read from the seam
+/// rather than inferred from the chain. The markers are the recording;
+/// every arm below measures a tier against them, never against another
+/// tier.
+let private severedPage () : WorkAncestorPage =
+    let source =
+        CorpusWorkSource(severedAncestorTable, coveringHead) :> IWorkProvenanceSource
+
+    match
+        source.GetAncestors {
+            Root = ref' "wc-head"
+            Depth = walkDepth
+        }
+        |> Async.RunSynchronously
+    with
+    | Result.Ok page -> page
+    | Result.Error error ->
+        failtestf
+            "the severed fixture's ancestor walk must RESOLVE, not refuse: %s"
+            (WorkProvenanceError.describe error)
+
+/// The page the healthy baseline produces — the control for the
+/// no-markers arm.
+let private healthyPage () : WorkAncestorPage =
+    let source = CorpusWorkSource(fullTable, coveringHead) :> IWorkProvenanceSource
+
+    match
+        source.GetAncestors {
+            Root = ref' "wc-head"
+            Depth = walkDepth
+        }
+        |> Async.RunSynchronously
+    with
+    | Result.Ok page -> page
+    | Result.Error error ->
+        failtestf "the baseline's ancestor walk must resolve: %s" (WorkProvenanceError.describe error)
+
+let private severedChain = injectedChain (chainCase "work-ancestor-severed")
+
+let private severedHop = hopOf severedChain EvidenceChain.UpstreamWorkRecordHop
+
+/// The missing positions a chain's enumeration verdict carries at the
+/// work hop, or a failure naming what it said instead.
+let private missingWorkPositions (chain: EvidenceChain) : EnumerationPosition list =
+    match chain.Enumeration with
+    | EnumerationCompleteness.Incomplete(missing, _) ->
+        missing
+        |> List.filter (fun position -> position.Hop = EvidenceChain.UpstreamWorkRecordHop)
+    | other ->
+        failtestf
+            "a chain that lost an ancestor edge must read incomplete, not %s"
+            (EnumerationCompleteness.label other)
+
+let severedAncestorEdgeTests =
+    testList "Phase 729 — a severed ancestor edge is a verdict, not a silence" [
+
+        test "one fixture yields the marker, the broken hop and the incomplete enumeration" {
+            // All three from a single severed edge, so none of them can
+            // be true of an arrangement in which the others are not.
+            let page = severedPage ()
+
+            Expect.equal
+                (page.Severed |> List.map (fun edge -> edge.Ref.RecordId, edge.NamedBy.RecordId))
+                [ "wc-parent", "wc-head" ]
+                "the walk records the ref that failed to resolve AND the reached record that named it — either alone is unactionable"
+
+            Expect.equal
+                (EvidenceLink.label severedHop.Link)
+                "broken"
+                "a parent ref is a recorded join, so a page carrying one that does not hold is broken rather than merely shorter"
+
+            Expect.equal
+                (EnumerationCompleteness.label severedChain.Enumeration)
+                "incomplete"
+                "and the record on the far side of the break is still not enumerated, which is what the enumeration tier says"
+        }
+
+        test "the hop verdict and the missing position are two renderings of the same markers" {
+            // The no-double-report property, asserted rather than
+            // assumed. Two independent observations of the same page
+            // could agree today and drift later; these are derived from
+            // one list, so agreement is structural.
+            let page = severedPage ()
+
+            Expect.equal
+                (EvidenceLink.reference severedHop.Link)
+                (WorkRecordRef.describe (List.head page.Severed).Ref)
+                "the hop names the first severed ref in walk order, exactly as the marker records it"
+
+            Expect.equal
+                (missingWorkPositions severedChain |> List.map _.Key)
+                (page.Severed |> List.map SeveredWorkEdge.key)
+                "and the enumeration's missing positions are the same markers, keyed on the edge each one identifies"
+
+            Expect.isTrue
+                (missingWorkPositions severedChain
+                 |> List.forall (fun position -> Option.isNone position.Bound))
+                "a lost edge is an omission and not a declared bound — nobody was told this join would be skipped"
+        }
+
+        test "the walk still returns every record it DID reach" {
+            // One lost edge must not cost the caller the rest of the
+            // page, or severing an edge is the cheapest way to suppress
+            // the whole answer.
+            let page = severedPage ()
+
+            Expect.equal
+                (page.Records |> List.map (fun record -> record.Ref.RecordId))
+                [ "wc-head" ]
+                "the head resolved and is carried, break or no break"
+
+            Expect.equal
+                (WorkAncestorPage.size page)
+                1
+                "and the severed edge is not counted against the record cap — it names a record the walk never reached"
+
+            Expect.isGreaterThan
+                (List.length severedHop.Findings)
+                1
+                "the hop renders the record it reached AND the edge it could not follow, so a reader gets both"
+
+            Expect.isTrue
+                (severedHop.Findings |> List.exists (fun finding -> finding.Contains "SEVERED"))
+                "the lost edge has its own rendered line, the way a refused record does"
+        }
+
+        test "a root the source holds nothing under is unchanged" {
+            // The root was named by the CALLER, not by this page, so its
+            // absence is the caller's own question coming back empty
+            // rather than a break inside a page. Pinned because the
+            // marker would otherwise be the obvious place to record it.
+            let source = CorpusWorkSource(fullTable, coveringHead) :> IWorkProvenanceSource
+
+            match
+                source.GetAncestors {
+                    Root = ref' "wc-nobody-holds-this"
+                    Depth = walkDepth
+                }
+                |> Async.RunSynchronously
+            with
+            | Result.Ok page ->
+                Expect.isEmpty page.Records "an unheld root resolves nothing"
+                Expect.isEmpty page.Withheld "and refuses nothing"
+
+                Expect.isEmpty
+                    page.Severed
+                    "and severs nothing — no record of this page named the root, so no edge inside it was lost"
+            | Result.Error error ->
+                failtestf
+                    "an unheld root answers with an empty page, not a refusal: %s"
+                    (WorkProvenanceError.describe error)
+        }
+
+        test "a page that lost nothing reads exactly as it did before markers existed" {
+            // The byte-for-byte half. A deployment whose source never
+            // severs must be unable to tell this phase shipped.
+            let baseline = corpus "healthy-baseline.json"
+            let healthyWorkHop = hopOf healthyChain EvidenceChain.UpstreamWorkRecordHop
+
+            Expect.isEmpty (healthyPage ()).Severed "the baseline's page loses no edge"
+
+            Expect.isFalse
+                (WorkAncestorPage.isSevered (healthyPage ()))
+                "and says so through the helper a caller would ask with"
+
+            Expect.equal (EvidenceLink.label healthyWorkHop.Link) "linked" "so its hop is linked"
+
+            Expect.equal
+                (List.length healthyWorkHop.Findings)
+                (intField baseline "upstreamAncestorFindings")
+                "its enumeration is exactly as long as the corpus pins it"
+
+            Expect.equal
+                healthyChain.VerdictDigest
+                (field baseline "chainVerdictDigest")
+                "and the chain still addresses to the digest pinned before this phase — the strongest form of unchanged there is"
+        }
+
+        test "a bundle over a severed chain is distinguishable offline from one over a complete one" {
+            // What a counterparty receives. Nothing here consults the
+            // deployment that produced either document.
+            let severedBundle = EvidenceBundleExport.bundleOf observer observedAt severedChain
+
+            Expect.equal
+                (BundleIntegrity.label (EvidenceBundleExport.verifyBundle severedBundle))
+                "intact"
+                "the document is well-formed — the finding it carries is about the chain, not about the bundle"
+
+            Expect.notEqual
+                severedBundle.ContentId
+                healthyBundle.ContentId
+                "and it is a different record set, so it cannot be offered as the complete one"
+
+            let rendered = EvidenceBundle.render severedBundle
+            let healthyRendered = EvidenceBundle.render healthyBundle
+
+            Expect.stringContains
+                rendered
+                (WorkRecordRef.describe (List.head (severedPage ()).Severed).Ref)
+                "the ref the walk could not resolve is named in the artefact a holder reads"
+
+            Expect.stringContains rendered "incomplete" "and the stated enumeration verdict travels with it"
+
+            // The discrimination, and it is not the ref. The COMPLETE
+            // chain's bundle names `wc-parent` too — it resolved that
+            // record — so naming the ref cannot be what tells the two
+            // documents apart. What does is the lost edge's own rendered
+            // line and the verdicts it moved.
+            Expect.isTrue
+                (healthyRendered.Contains "wc-parent")
+                "the complete chain's bundle names the very same ref — pinned, so this arm cannot pass by testing for a string neither document carries"
+
+            Expect.isFalse
+                (healthyRendered.Contains "SEVERED")
+                "and carries no lost-edge line, so that line is evidence rather than boilerplate"
+
+            Expect.isFalse (healthyRendered.Contains "incomplete") "nor does it state an incomplete enumeration"
+        }
+    ]
+
+/// Sequenced, like the walker pack's own report arms: several of the
+/// report's earlier sections read the process-wide configuration
+/// resolution seam, and a concurrent arm installing a manifest would
+/// move sections this one does not assert about.
+let severedAncestorReportTests =
+    testSequenced
+    <| testList "Phase 729 — the lost edge reaches the deployment verification report" [
+
+        test "the chain section fails and names the ref the walk could not resolve" {
+            let sectionFor (chain: EvidenceChain) =
+                let report =
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withEvidenceChain (
+                        Some(fun () -> async { return Result.Ok chain })
+                    )
+                    |> fun evidence -> DeploymentVerificationReport.buildReport evidence "probe" DateTime.UnixEpoch
+                    |> Async.RunSynchronously
+
+                report.Sections |> List.find (fun s -> s.Id = EvidenceChainSection)
+
+            let severed = sectionFor severedChain
+            let healthy = sectionFor healthyChain
+
+            Expect.equal
+                (VerificationSectionVerdict.label healthy.Verdict)
+                "verified"
+                "the complete chain verifies the section, which is what makes the arm below a discrimination"
+
+            Expect.equal
+                (VerificationSectionVerdict.label severed.Verdict)
+                "failed"
+                "and a chain that lost a recorded edge fails it"
+
+            Expect.isTrue
+                (severed.Findings |> List.exists (fun finding -> finding.Contains "wc-parent"))
+                "with the ref named in the section's own findings, so an operator reading only the report can act on it"
+
+            Expect.isFalse
+                (healthy.Findings |> List.exists (fun finding -> finding.Contains "wc-parent"))
+                "and absent from the complete chain's, so the line is evidence rather than boilerplate"
         }
     ]
 

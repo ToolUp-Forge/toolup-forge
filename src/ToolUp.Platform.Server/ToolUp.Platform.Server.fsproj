@@ -369,6 +369,15 @@
         <Compile Include="Server\DatasetProvenanceOps.fs" />
         <Compile Include="Server\IModelFitProvider.fs" />
         <Compile Include="Server\ModelFitJobHandler.fs" />
+        <!-- Phase 450 — the EXTERNAL execution binding of the Phase 449 fit
+             envelope: the versioned `modelfit/v1` work-spec convention, the
+             completion rendezvous a Phase 320 callback resolves, and the
+             IModelFitProvider that submits through IExternalComputeDispatcher.
+             Compiles after IModelFitProvider.fs (the seam it implements) and
+             needs IDatasetStore + IExternalComputeDispatcher +
+             IExternalHandleStore + IJobProgressSink, all above. Nothing
+             composes it — a deployment wires the worker itself (GP 13). -->
+        <Compile Include="Server\ExternalModelFitProvider.fs" />
         <!-- Phase 453 — model registry: governed-artifact types, the seam,
              then the blob-backed default (rides IDataObjectStore + ILineageStore
              above; carries the Phase 449 fit envelope's composite key). -->
