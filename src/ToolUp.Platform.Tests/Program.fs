@@ -1218,6 +1218,11 @@ let private registeredTests =
         CommandPaletteContractTests.expansionTests
         CommandPaletteContractTests.fuzzyTests
         CommandPaletteContractTests.paletteStateTests
+        // Phase 444.E — client-shell localization substrate.
+        MessageCatalogContractTests.tests
+        MessageCatalogContractTests.teamDefaultTests
+        MessageCatalogContractTests.consumerOverrideTests
+        MessageCatalogContractTests.localeSwitchTests
         // Phase 572 — per-user sidebar entry hiding. The pure preference
         // algebra plus the "still reachable" acceptance arm; four
         // separate bindings, all of which must be listed here or they run

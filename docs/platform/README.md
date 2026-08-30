@@ -96,6 +96,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 ## Other reference
 
 - [`command-palette.md`](command-palette.md) — the opt-in Ctrl+K / Cmd+K quick-nav overlay: enabling it, the keybinding contract, how its entries are derived from the same visibility fold as the sidebar, and the `data-toolup-palette-*` theming hooks.
+- [`client-localization.md`](client-localization.md) — shipping the client shell in another language: the typed `MessageCatalog` record (a missing translation is a compile error, not a runtime fallback), the three `ClientConfig.Locale` modes and their resolution order, the `MessageCatalogOverride` hook with a worked second language, in-session switching, and `Intl` for dates and numbers.
 - [`portability-rules.md`](portability-rules.md) — six rules every distributed-implementation-friendly interface satisfies.
 - [`auth.md`](auth.md) — auth providers and how to write one.
 - [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (`ClerkAuthUI` is deprecated).
