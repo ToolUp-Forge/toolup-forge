@@ -14,6 +14,7 @@ let private registeredTests =
         StampRoundTripTests.tests
         ModuleAddRemoveTests.tests
         MembershipsDoctorTests.tests
+        TenantUserVerbsTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

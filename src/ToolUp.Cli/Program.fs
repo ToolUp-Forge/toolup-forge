@@ -18,6 +18,11 @@ let main argv =
         ModuleCommand.addCommand
         ModuleCommand.removeCommand
         MembershipsDoctorCommand.command
+        Commands.Tenants.listCommand
+        Commands.Tenants.previewCommand
+        Commands.Tenants.offboardCommand
+        Commands.Users.listCommand
+        Commands.Users.offboardCommand
     ]
 
     Dispatch.run commands argv
