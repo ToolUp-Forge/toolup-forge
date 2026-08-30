@@ -154,6 +154,110 @@ let private projectSummary (claim: ShareTokenClaim) : TeamInviteSummary option =
 // acceptable for a diagnostic (no correctness dependency).
 let private directoryAbsentWarned = ref false
 
+// ─── Pending-invite consumption core ────────────────────────────────
+//
+// Phase 548 moved this above `teamInvitationApi` (it used to sit at the
+// foot of the file) so the on-demand `CheckMyInvites` surface can call
+// it — F# resolves top-down within a compilation unit, and the two
+// triggers must funnel into ONE consumption function rather than two
+// copies that drift. Nothing about the function itself changed.
+
+/// Helper used by `ScopeResolutionMiddleware` (and any other
+/// scope-resolution path that gets a freshly-authenticated user) to
+/// drain a pending email-keyed invitation and apply it. Returns the
+/// consumed entry on success so the caller can refresh in-memory
+/// caches; `None` when no pending entry matches the email or the
+/// match expired. Safe to call on every sign-in resolve — the default
+/// `InMemoryPendingInviteStore` is bounded by its 30-second in-memory
+/// cache, and the eventual `BlobPendingInviteStore` (Phase 9c half-2
+/// follow-up) accepts the per-call substrate round-trip in exchange
+/// for multi-instance correctness.
+///
+/// Phase 548 — also the core of `ITeamInviteApi.CheckMyInvites`, the
+/// on-demand trigger an already-signed-in invitee can fire from the
+/// no-active-team landing without waiting for the middleware's
+/// session-window approximation. Both callers reach this same
+/// function; it is idempotent by construction (the store consume is
+/// atomic with the read, and an already-a-member caller short-circuits
+/// on the `GetMemberRole` branch below), so a second trigger is a
+/// no-op rather than a double-join.
+///
+/// On `AddMember` failure the pending entry is still consumed
+/// (single-shot semantics — `TryConsumeForEmail` removes it atomically
+/// with the read) but a `TeamInviteAcceptedFromPendingFailed` audit
+/// event is emitted carrying the failure reason. Without this, a
+/// transient store glitch would silently drop the invitation with no
+/// trace; the audit row gives operators a fix-forward signal.
+///
+/// On store-level failure (the `IPendingInviteStore` itself returns
+/// `Error` — substrate unreachable, optimistic-concurrency exhaustion
+/// on the future ETag impl), this function returns `None`. The pending
+/// entry is left in place for the next sign-in resolve to retry; no
+/// audit emission because nothing was consumed. Callers treat this
+/// as "no pending match", same as the no-entry case.
+let tryConsumePendingForUser
+    (pendingStore: IPendingInviteStore)
+    (teamStore: ITeamStore)
+    (auditLog: IAuditLog)
+    (user: AuthenticatedUser)
+    : Async<PendingInviteByEmail option> =
+    async {
+        match user.Email with
+        | None -> return None
+        | Some email ->
+            match! pendingStore.TryConsumeForEmail email with
+            | Error _ -> return None
+            | Ok None -> return None
+            | Ok(Some entry) ->
+                // Skip if already a member — substrate state is the
+                // source of truth, the pending row is a hint.
+                let! existing = teamStore.GetMemberRole(entry.TeamId, user.UserId)
+
+                match existing with
+                | Some _ ->
+                    // Already a member but possibly stranded with no
+                    // active-team pointer (pre-fix add paths never set
+                    // it). Heal on the sign-in resolve — only writes
+                    // when the pointer is unset.
+                    do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+                    return Some entry
+                | None ->
+                    match! teamStore.AddMember(entry.TeamId, user.UserId, entry.Role) with
+                    | Error reason ->
+                        do!
+                            auditLog.Record(
+                                teamScopeId entry.TeamId,
+                                TeamInviteAcceptedFromPendingFailed {
+                                    TeamId = entry.TeamId
+                                    InviteeUserId = user.UserId
+                                    InviteeEmail = email
+                                    InviterUserId = entry.InviterUserId
+                                    Role = entry.Role
+                                    Reason = reason
+                                }
+                            )
+
+                        return Some entry
+                    | Ok() ->
+                        // First-team-becomes-active — same policy as
+                        // the interactive accept path above.
+                        do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+
+                        do!
+                            auditLog.Record(
+                                teamScopeId entry.TeamId,
+                                TeamInviteAcceptedFromPending {
+                                    TeamId = entry.TeamId
+                                    InviteeUserId = user.UserId
+                                    InviteeEmail = email
+                                    InviterUserId = entry.InviterUserId
+                                    Role = entry.Role
+                                }
+                            )
+
+                        return Some entry
+    }
+
 // ─── Per-request API construction ───────────────────────────────────
 
 let teamInvitationApi
@@ -779,91 +883,82 @@ let teamInvitationApi
                         |> List.distinctBy (fun p -> p.InviteeEmail.ToLowerInvariant())
                         |> Ok
             }
-    }
 
-/// Helper used by `ScopeResolutionMiddleware` (and any other
-/// scope-resolution path that gets a freshly-authenticated user) to
-/// drain a pending email-keyed invitation and apply it. Returns the
-/// consumed entry on success so the caller can refresh in-memory
-/// caches; `None` when no pending entry matches the email or the
-/// match expired. Safe to call on every sign-in resolve — the default
-/// `InMemoryPendingInviteStore` is bounded by its 30-second in-memory
-/// cache, and the eventual `BlobPendingInviteStore` (Phase 9c half-2
-/// follow-up) accepts the per-call substrate round-trip in exchange
-/// for multi-instance correctness.
-///
-/// On `AddMember` failure the pending entry is still consumed
-/// (single-shot semantics — `TryConsumeForEmail` removes it atomically
-/// with the read) but a `TeamInviteAcceptedFromPendingFailed` audit
-/// event is emitted carrying the failure reason. Without this, a
-/// transient store glitch would silently drop the invitation with no
-/// trace; the audit row gives operators a fix-forward signal.
-///
-/// On store-level failure (the `IPendingInviteStore` itself returns
-/// `Error` — substrate unreachable, optimistic-concurrency exhaustion
-/// on the future ETag impl), this function returns `None`. The pending
-/// entry is left in place for the next sign-in resolve to retry; no
-/// audit emission because nothing was consumed. Callers treat this
-/// as "no pending match", same as the no-entry case.
-let tryConsumePendingForUser
-    (pendingStore: IPendingInviteStore)
-    (teamStore: ITeamStore)
-    (auditLog: IAuditLog)
-    (user: AuthenticatedUser)
-    : Async<PendingInviteByEmail option> =
-    async {
-        match user.Email with
-        | None -> return None
-        | Some email ->
-            match! pendingStore.TryConsumeForEmail email with
-            | Error _ -> return None
-            | Ok None -> return None
-            | Ok(Some entry) ->
-                // Skip if already a member — substrate state is the
-                // source of truth, the pending row is a hint.
-                let! existing = teamStore.GetMemberRole(entry.TeamId, user.UserId)
+        // ─── Phase 548 — on-demand pending-invite consumption ─────
+        //
+        // The middleware trigger (`ScopeResolutionMiddleware`) fires on
+        // the first request of a 20-minute session window, so an
+        // invitee who is ALREADY signed in when the invite lands waits
+        // out the window — the folk remedy being "sign out and back
+        // in". This is the same consumption, on demand. The middleware
+        // path is untouched (548.C): both funnel into
+        // `tryConsumePendingForUser`, which is idempotent, so the two
+        // triggers racing costs nothing.
+        //
+        // The caller is read from `HttpContext.Items["ToolUp.User"]`
+        // — the `AuthenticatedUser` the middleware resolved from the
+        // validated principal — never from an argument, which is why
+        // the method takes `unit`. The `access.UserId` fallback covers
+        // a host that stamped only the id; it carries `Email = None`,
+        // so consumption short-circuits to `Ok None` rather than
+        // matching some other user's pending entry.
+        CheckMyInvites =
+            fun () -> async {
+                let user =
+                    match ctx.Items.TryGetValue "ToolUp.User" with
+                    | true, (:? AuthenticatedUser as u) -> u
+                    | _ -> {
+                        AuthenticatedUser.anonymous with
+                            UserId = access.UserId
+                      }
 
-                match existing with
-                | Some _ ->
-                    // Already a member but possibly stranded with no
-                    // active-team pointer (pre-fix add paths never set
-                    // it). Heal on the sign-in resolve — only writes
-                    // when the pointer is unset.
-                    do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
-                    return Some entry
-                | None ->
-                    match! teamStore.AddMember(entry.TeamId, user.UserId, entry.Role) with
-                    | Error reason ->
-                        do!
-                            auditLog.Record(
-                                teamScopeId entry.TeamId,
-                                TeamInviteAcceptedFromPendingFailed {
-                                    TeamId = entry.TeamId
-                                    InviteeUserId = user.UserId
-                                    InviteeEmail = email
-                                    InviterUserId = entry.InviterUserId
-                                    Role = entry.Role
-                                    Reason = reason
-                                }
-                            )
+                if AuthenticatedUser.isAnonymous user then
+                    return Error "You must sign in before checking for invitations."
+                else
+                    match ctx.RequestServices.GetService(typeof<IPendingInviteStore>) with
+                    | :? IPendingInviteStore as pendingStore ->
+                        match! tryConsumePendingForUser pendingStore teamStore auditLog user with
+                        | None ->
+                            // Nothing pending, an expired entry (the
+                            // store hook emitted `TeamInviteExpired` on
+                            // its way out), or a momentarily unreachable
+                            // store. All three are "ask again later".
+                            return Ok None
+                        | Some entry ->
+                            // `tryConsumePendingForUser` returns the
+                            // entry even when the membership write
+                            // failed (it consumed the single-shot row
+                            // and audited the failure). Confirm the
+                            // membership before reporting a join —
+                            // echoing a team the caller is not in would
+                            // send the client into a switch it cannot
+                            // complete, and reporting `Ok None` would
+                            // read as "no invitation" after the pending
+                            // row had already been destroyed.
+                            let! role = teamStore.GetMemberRole(entry.TeamId, user.UserId)
 
-                        return Some entry
-                    | Ok() ->
-                        // First-team-becomes-active — same policy as
-                        // the interactive accept path above.
-                        do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
-
-                        do!
-                            auditLog.Record(
-                                teamScopeId entry.TeamId,
-                                TeamInviteAcceptedFromPending {
-                                    TeamId = entry.TeamId
-                                    InviteeUserId = user.UserId
-                                    InviteeEmail = email
-                                    InviterUserId = entry.InviterUserId
-                                    Role = entry.Role
-                                }
-                            )
-
-                        return Some entry
+                            match role with
+                            | None ->
+                                return
+                                    Error
+                                        "We found an invitation for you but could not add you to the team. \
+                                         Ask a team owner or admin to re-issue it."
+                            | Some _ ->
+                                match! teamStore.GetTeam entry.TeamId with
+                                | Some team -> return Ok(Some team)
+                                | None ->
+                                    // Membership landed but the team
+                                    // record did not read back (deleted
+                                    // between the two calls). Rare, and
+                                    // recoverable by a reload — say so
+                                    // rather than reporting "nothing
+                                    // pending".
+                                    return
+                                        Error
+                                            "You were added to a team, but its details could not be loaded. \
+                                             Reload the page to continue."
+                    | _ ->
+                        return
+                            Error "This deployment has no pending-invite store composed, so there is nothing to check."
+            }
     }
