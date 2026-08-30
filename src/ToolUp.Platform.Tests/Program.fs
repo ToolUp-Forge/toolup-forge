@@ -21,6 +21,8 @@ let private registeredTests =
         DataObjectStoreTests.tests
         // Phase 10a — module data-migration framework.
         DataMigrationTests.tests
+        // Phase 10b — configuration schema evolution.
+        ConfigMigrationTests.tests
         // Phase 447 — seed / fixture-pack loader.
         SeedDataLoaderTests.tests
         // Phase 448 — IDatasetStore conformance (blob-backed default).

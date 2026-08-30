@@ -2478,6 +2478,25 @@ type ServerConfig = {
     /// leaving the admin module's trigger as the only way a pass
     /// starts.
     DataMigrations: DataMigrationMode
+    /// Phase 10b — declared config schema migrators, one per forward
+    /// step per module key. Default `[]`.
+    ///
+    /// **A plain list rather than a mode DU, unlike `DataMigrations`
+    /// above, because the two have different cost shapes.** A data
+    /// migration pass is a background sweep over every stored object,
+    /// so it needs a knob to decide whether the hosted service runs at
+    /// all. A config migration is lazy: it runs on the read that
+    /// discovers a stale document, and only when the reading module's
+    /// declared `ModuleConfigSchema.SchemaVersion` is above 1. An empty
+    /// list therefore already costs nothing (GP 13), and a mode DU
+    /// would be a second thing to set for no behaviour anyone could
+    /// distinguish.
+    ///
+    /// Populated per module via `ServerModule.withConfigMigration`;
+    /// declaring one directly on the config is the escape hatch for a
+    /// deployment migrating a `_platform*` key it does not own a
+    /// `ServerModule` for.
+    ConfigMigrations: IConfigMigrator list
     /// Phase 448 — dataset substrate selection. Default: `NoDatasets` — no
     /// `IDatasetStore` registered, zero cost. `BlobDatasets` registers the
     /// blob-backed default over `IDataObjectStore` (JSON-frame codec, no
@@ -3776,6 +3795,11 @@ module ServerConfig =
         // Phase 10a — no migration registry, no status store, no
         // startup sweep, no API route (GP 11 / GP 13).
         DataMigrations = NoDataMigrations
+        // Phase 10b — no declared config migrators. Every schema reads
+        // at the implicit version 1, no `_schema_version` stamp is
+        // written, and every persisted document decodes exactly as it
+        // did before this substrate existed (GP 11 / GP 13).
+        ConfigMigrations = []
         Datasets = NoDatasets
         // Phase 528 — no session registry; nothing is recorded, the
         // revocation middleware is not registered and ISessionApi 404s

@@ -39,6 +39,16 @@ type ServerModule = {
     DataTypes: DataType list
     VectorisationHandlers: VectorisationHandler list
     ConfigSchema: ModuleConfigSchema option
+    /// Phase 10b — forward migration steps for this module's persisted
+    /// config documents, one per `V_n` → `V_(n+1)` hop. Default `[]`.
+    ///
+    /// Fanned into `ServerConfig.ConfigMigrations` at `addModule` time
+    /// and applied lazily on read: a document stamped below the
+    /// schema's declared `SchemaVersion` is upgraded through this chain
+    /// and written back before the module ever sees it. Declare via
+    /// `ServerModule.withConfigMigration`, in the same commit that
+    /// bumps `ModuleConfigSchema.SchemaVersion`.
+    ConfigMigrations: IConfigMigrator list
     /// Handlers this module exposes to the cross-module query bus
     /// (Phase 6b). Accumulated across every registered `ServerModule`
     /// at `compose` time and handed to `InMemoryModuleQueryBus`.
@@ -176,6 +186,7 @@ module ServerModule =
         DataTypes = []
         VectorisationHandlers = []
         ConfigSchema = None
+        ConfigMigrations = []
         QueryHandlers = []
         AITools = []
         MetricDefinitions = []
@@ -243,6 +254,39 @@ module ServerModule =
     }
 
     let withConfig (schema: ModuleConfigSchema) (m: ServerModule) : ServerModule = { m with ConfigSchema = Some schema }
+
+    /// Phase 10b — register one forward config-schema migration step.
+    /// Appends (like every other list field), so a module accumulates
+    /// its chain by calling this once per hop, oldest first by
+    /// convention though order does not matter: the chain is resolved
+    /// by `FromVersion`, not by registration order.
+    ///
+    /// The migrator's `ModuleKey` is NOT taken from `m.Name` — it is
+    /// read off the migrator, so a deployment can also migrate a
+    /// reserved `_platform*` config key that no `ServerModule` owns
+    /// (via `ServerConfig.ConfigMigrations` directly). A migrator whose
+    /// `ModuleKey` does not match any declared schema is inert rather
+    /// than an error: the target version of an unknown key is the
+    /// implicit floor, so no chain is ever resolved for it.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "Assistant"
+    /// |> ServerModule.withConfig (
+    ///     ModuleConfigSchema.ofFields [ modelField ]
+    ///     |> ModuleConfigSchema.withSchemaVersion 2)
+    /// |> ServerModule.withConfigMigration renameModelIdToModel
+    /// ```
+    let withConfigMigration (migrator: IConfigMigrator) (m: ServerModule) : ServerModule = {
+        m with
+            ConfigMigrations = m.ConfigMigrations @ [ migrator ]
+    }
+
+    /// Register several forward config-schema migration steps at once.
+    /// Equivalent to folding `withConfigMigration` over the list.
+    let withConfigMigrations (migrators: IConfigMigrator list) (m: ServerModule) : ServerModule = {
+        m with
+            ConfigMigrations = m.ConfigMigrations @ migrators
+    }
 
     /// Expose one or more cross-module query handlers (Phase 6b). Use
     /// `ModuleQueryHandler.typed` to keep request and
@@ -2295,6 +2339,14 @@ module ServerApp =
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
+                                // Phase 10b — fan the module's declared
+                                // config-schema migration steps onto the
+                                // app-level set the compose-time registry
+                                // is built from. A module declaring none
+                                // contributes the empty list, so a
+                                // pre-10b module composes byte-identically
+                                // (GP 11).
+                                ConfigMigrations = app.Config.ConfigMigrations @ m.ConfigMigrations
                                 // Phase 437 — append-only; the empty list
                                 // when no envelope declares a request rate.
                                 RateLimits = app.Config.RateLimits @ envelopeRouteLimits

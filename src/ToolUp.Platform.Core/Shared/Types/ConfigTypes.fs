@@ -64,13 +64,47 @@ type ConfigFieldSchema = {
 /// Empty `Fields` is valid and means "no team-editable config" —
 /// equivalent to `Config = None` but retained for schemas assembled
 /// dynamically.
-type ModuleConfigSchema = { Fields: ConfigFieldSchema list }
+type ModuleConfigSchema = {
+    Fields: ConfigFieldSchema list
+    /// Phase 10b — the version of this field set. Version `1` is the
+    /// implicit floor and the default: a schema that never declares a
+    /// version, and a document persisted before this substrate existed,
+    /// are both version 1, so a deployment that does not opt in is
+    /// byte-for-byte unchanged (GP 11) — no version stamp is written
+    /// into any document while the declared version is 1.
+    ///
+    /// Bump it in the same commit that makes a NON-ADDITIVE change to
+    /// `Fields` — a renamed key, a tightened `Int` / `Float` bound, a
+    /// removed `Choice` option, a field made `Required` — and register
+    /// an `IConfigMigrator` from the previous version via
+    /// `ServerModule.withConfigMigration`. Purely additive changes (a
+    /// new optional field with a `DefaultJson`) need neither: an absent
+    /// key already falls through to the default.
+    SchemaVersion: SchemaVersion
+}
 
 module ModuleConfigSchema =
     /// A schema with no editable fields. Useful as a placeholder for
     /// modules that expose `Config = Some _` only to receive the
     /// platform-level context on `Init` without adding their own keys.
-    let empty: ModuleConfigSchema = { Fields = [] }
+    let empty: ModuleConfigSchema = { Fields = []; SchemaVersion = 1 }
+
+    /// Build a schema at the implicit version 1 from a field list. The
+    /// shape every pre-Phase-10b construction had, kept as a helper so
+    /// adding a field to the record does not force every call site to
+    /// spell the default (GP 11).
+    let ofFields (fields: ConfigFieldSchema list) : ModuleConfigSchema = { Fields = fields; SchemaVersion = 1 }
+
+    /// Declare this schema's version. Chainable onto `ofFields`:
+    ///
+    /// ```fsharp
+    /// ModuleConfigSchema.ofFields [ modelField ]
+    /// |> ModuleConfigSchema.withSchemaVersion 2
+    /// ```
+    let withSchemaVersion (version: SchemaVersion) (schema: ModuleConfigSchema) : ModuleConfigSchema = {
+        schema with
+            SchemaVersion = version
+    }
 
     /// Look up a field by key, honouring exact-match semantics (keys
     /// are case-sensitive — they're identifiers, not display strings).

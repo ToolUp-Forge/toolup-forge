@@ -32,6 +32,15 @@ type NotificationStack = {
     SseConnectionManager: SSEConnectionManager
     BaseNotificationChannel: INotificationChannel
     ConfigStoreInstance: IConfigStore
+    /// Phase 10b — the config schema-evolution substrate the
+    /// `ConfigStoreInstance` above is decorated with: the declared
+    /// registry, the per-process drift tracker, and the event/log
+    /// sinks the failure policy writes through. Surfaced on the stack
+    /// (rather than kept inside the decorator) because `compose`
+    /// registers the `/dev/inspect` contributor over the SAME tracker
+    /// instance the store is recording into — two instances would show
+    /// an empty panel beside live drift.
+    ConfigMigrationSupport: ConfigMigrationRegistry.ConfigMigrationSupport
     AuditLog: IAuditLog
     ShareTokenStoreInstance: IShareTokenStore option
     TransactionalDispatcher: TransactionalDispatcher.TransactionalDispatcher option
@@ -117,8 +126,26 @@ let buildNotificationStack
     // double-construction.
     // Logger threaded so the store's fallback paths (corrupt blob /
     // decode failure → silent defaults) surface as Warn lines.
+    // Phase 10b — config schema evolution. The blob-backed store is
+    // wrapped in the migration decorator so the reserved
+    // `_schema_version` stamp, the read-path migration chain and the
+    // drift observer apply to every consumer of `IConfigStore` —
+    // including the pre-DI Phase 6f transactional dispatcher, which
+    // takes this same instance.
+    //
+    // Applied unconditionally rather than behind a mode knob: the
+    // reserved-key contract has to hold for every read and write from
+    // the start, or a deployment that later declares its first schema
+    // version finds a mix of stamped and unstamped documents with no
+    // way to tell which is which. It costs nothing when unused — no
+    // schema declaring a version means no stamp is written and every
+    // path reduces to a delegation (`IsInert`, GP 11 / GP 13).
+    let configMigrationSupport =
+        ConfigMigrationRegistry.support config (Some eventStore) resolvedLogger
+
     let configStoreInstance =
         ConfigStore.createWithLogger resolvedBlobStorage resolvedLogger
+        |> ConfigMigrationRegistry.decorate configMigrationSupport
 
     // Phase 9 / Phase 1g SDK-wide audit log. `EventStoreAuditLog` wraps
     // the DI-registered `IEventStore` (which is itself the
@@ -302,6 +329,7 @@ let buildNotificationStack
         SseConnectionManager = sseConnectionManager
         BaseNotificationChannel = baseNotificationChannel
         ConfigStoreInstance = configStoreInstance
+        ConfigMigrationSupport = configMigrationSupport
         AuditLog = auditLog
         ShareTokenStoreInstance = shareTokenStoreInstance
         TransactionalDispatcher = transactionalDispatcher

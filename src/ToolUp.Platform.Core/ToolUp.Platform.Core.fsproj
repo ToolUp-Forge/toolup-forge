@@ -299,6 +299,14 @@
         <Compile Include="Shared\SessionTypes.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
         <Compile Include="Shared\Types\ConfigTypes.fs" />
+        <!-- Phase 10b — config schema-evolution substrate (Fable-safe half):
+             the reserved _schema_version stamp, the IConfigMigrator seam, the
+             chain-error DU, and the failure / drift event payloads. After
+             MigrationTypes.fs (reuses its SchemaVersion alias, deliberately —
+             one mental model with Phase 10a) and ConfigTypes.fs (the schema it
+             versions); before SDK.Shared.fs, which carries the
+             ServerConfig.ConfigMigrations field. BCL-only, no server coupling. -->
+        <Compile Include="Shared\ConfigMigrationTypes.fs" />
         <!-- Phase 214 / 689 — the ConfigKeys module: reserved config-subsystem
              identifiers plus the central env-var config-key registry (name /
              type / default / description / secret flag). Lives in Core, not
