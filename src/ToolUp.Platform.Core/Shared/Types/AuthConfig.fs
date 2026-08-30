@@ -111,6 +111,67 @@ type TokenLocation =
     /// header) and the matching cookie (for SSE).
     | BearerOrCookie of cookieName: string
 
+/// Opt-in override of which JWT claims an OIDC-style provider projects
+/// onto `AuthenticatedUser.UserId` / `TenantId`.
+///
+/// The generic OIDC provider's built-in mapping is `sub` -> `UserId`
+/// with no `TenantId` projection. That is correct for most IdPs and
+/// wrong for a family of them: some issuers mint a `sub` that is
+/// PAIRWISE PSEUDONYMOUS (a different value per relying party / app
+/// registration), so downstream artefacts keyed on it — admin lists,
+/// RBAC entries, audit records — lose identity continuity the moment
+/// the application is re-registered. Those IdPs publish a stable
+/// identifier under a different claim name (`oid` on Microsoft Entra,
+/// and various vendor-specific spellings elsewhere), and a tenant
+/// identifier under another (`tid`). Naming them here covers the whole
+/// family generically instead of one provider-specific decorator per
+/// IdP.
+///
+/// **Both fields are `string option` and both default to `None`.** A
+/// mapping that names no claim is a no-op, and `AuthConfig.ClaimMapping
+/// = None` skips the projection entirely — an existing deployment is
+/// byte-for-byte unchanged until it opts in (GP 11).
+///
+/// **A named claim is REQUIRED, not preferred (fail-closed).** When a
+/// claim is named here and the validated token does not carry it as a
+/// non-empty string that survives `IdentitySanitiser.sanitiseScopeId`,
+/// the request is REJECTED rather than falling back to `sub`. An
+/// operator who names a claim has asserted that their IdP mints it; a
+/// silent fallback would hand the deployment a *different* identity for
+/// the same human — precisely the pairwise-`sub` continuity break the
+/// mapping exists to avoid — and would do it invisibly, at the moment
+/// the IdP's configuration drifted. Fail-closed turns that into a
+/// diagnosable authentication failure naming the claim.
+///
+/// The projection is applied strictly AFTER the token's signature,
+/// issuer, audience and expiry have been verified. It reads already-
+/// trusted bytes; it is not a second validation path and it can never
+/// admit a token the validator refused.
+type ClaimMapping = {
+    /// Claim name to project onto `AuthenticatedUser.UserId` in place of
+    /// `sub`. `None` keeps the provider's built-in `sub` behaviour.
+    /// Example: `Some "oid"` for a Microsoft Entra tenant.
+    UserIdClaim: string option
+    /// Claim name to project onto `AuthenticatedUser.TenantId`. `None`
+    /// leaves `TenantId` exactly as the provider resolved it (which is
+    /// `None` for the generic OIDC provider). Example: `Some "tid"`.
+    TenantIdClaim: string option
+}
+
+module ClaimMapping =
+    /// A mapping that names no claim — behaviourally identical to
+    /// `AuthConfig.ClaimMapping = None`. Useful as a builder start point.
+    let none: ClaimMapping = {
+        UserIdClaim = None
+        TenantIdClaim = None
+    }
+
+    /// `true` when the mapping names no claim at all, so applying it is a
+    /// no-op. Providers short-circuit on this so an explicitly-supplied
+    /// empty mapping costs nothing (GP 13).
+    let isEmpty (mapping: ClaimMapping) : bool =
+        mapping.UserIdClaim.IsNone && mapping.TenantIdClaim.IsNone
+
 /// Declarative configuration for an `IAuthProvider`. Providers read
 /// the fields they care about and ignore the rest — e.g.
 /// `StaticJwtAuthProvider` expects `KeySource = StaticSecret _`;
@@ -177,4 +238,17 @@ type AuthConfig = {
     /// the provider falls back to `sub` — never breaks the request
     /// path on a missing optional claim.
     PreferOidWhenPresent: bool option
+    /// Opt-in override of which claims become `AuthenticatedUser.UserId`
+    /// / `TenantId`, applied post-validation. `None` (the default) keeps
+    /// the provider's built-in `sub` -> `UserId` behaviour with no
+    /// `TenantId` projection, byte-for-byte (GP 11).
+    ///
+    /// Distinct from `PreferOidWhenPresent`, which is a single-IdP
+    /// convenience with fallback semantics: it PREFERS `oid` and falls
+    /// back to `sub` when the claim is absent. `ClaimMapping` is the
+    /// generic form and is fail-closed — a named claim the token does
+    /// not carry rejects the request. Set one or the other; when both
+    /// are set `ClaimMapping.UserIdClaim` wins, because it is the
+    /// explicit operator instruction and the stricter of the two.
+    ClaimMapping: ClaimMapping option
 }

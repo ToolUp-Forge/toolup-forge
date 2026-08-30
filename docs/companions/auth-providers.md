@@ -104,10 +104,53 @@ Configuration via environment variables (read by the provider at startup):
 - `TOOLUP_OIDC_AUDIENCE` — required.
 - `TOOLUP_OIDC_CLOCK_SKEW_SECONDS` — optional; default 60.
 - `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` — optional; the reachability-probe deadline in milliseconds (default 5000). Raise it for a cold-start-slow tier whose first outbound HTTPS call exceeds 5s, instead of disabling the probe entirely. Range-guarded — a non-numeric / non-positive / absurd value (> 300000) is rejected at preflight rather than silently defaulted. The probe-timeout error message names this var as the lever.
+- `TOOLUP_OIDC_USER_ID_CLAIM` / `TOOLUP_OIDC_TENANT_ID_CLAIM` — optional; see [Claim mapping](#claim-mapping-mapping-a-non-sub-identity) below.
 
 `OidcAuthValidator` `IConfigValidator` probes `.well-known/openid-configuration` at preflight; refuses startup if unreachable. `ServerConfig.SkipPreflight = true` bypasses.
 
 Pair with `ToolUp.AuthProviders.Oidc.Client` for the browser-side sign-in flow.
+
+#### Claim mapping (mapping a non-`sub` identity)
+
+By default the provider maps the OIDC `sub` claim onto `AuthenticatedUser.UserId` and leaves `TenantId` unpopulated. That is correct for most issuers and wrong for a family of them: some IdPs mint a **pairwise pseudonymous** `sub` — a different value per relying party, so it changes when the application is re-registered — and publish a stable identifier under a different claim name instead. Microsoft Entra is the canonical example (`oid` is tenant-wide stable, `sub` is per-app-registration), but the shape is not Entra-specific.
+
+`AuthConfig.ClaimMapping` names the claims to project, so the generic provider covers the whole family rather than needing one decorator per IdP:
+
+```fsharp skip=fragment
+let authConfig = {
+    Issuer = Some issuerUrl
+    Audience = Some audience
+    KeySource = JwksDiscovery issuerUrl
+    TokenLocation = BearerHeader
+    ClockSkewSeconds = None
+    AcceptedAlgorithms = None
+    PreferOidWhenPresent = None
+    ClaimMapping =
+        Some {
+            UserIdClaim = Some "oid"    // -> AuthenticatedUser.UserId
+            TenantIdClaim = Some "tid"  // -> AuthenticatedUser.TenantId
+        }
+}
+```
+
+Or, for an env-composed deployment (`AuthProvider.fromEnv`):
+
+```bash
+TOOLUP_OIDC_USER_ID_CLAIM=oid
+TOOLUP_OIDC_TENANT_ID_CLAIM=tid
+```
+
+Either field may be set alone. `ClaimMapping = None` (the default, and what both variables unset produce) leaves the provider's behaviour byte-for-byte unchanged — the payload is not even re-read.
+
+**Three properties are worth knowing before you turn it on.**
+
+*It is applied after validation, and cannot weaken it.* The projection runs only once the token's signature has verified against the resolved JWKS key and `iss` / `aud` / `exp` / `nbf` have all passed. It re-reads the payload segment that was just accepted, so it reads already-trusted bytes; it is not a second validation path, and every code path either returns the validated identity or an error. Mapped values still go through the same `IdentitySanitiser` guard `sub` does — a mapped claim becomes a storage-scope container name exactly as `sub` does, and is held to the identical rule.
+
+*It is fail-closed.* If a named claim is absent from a validated token, is not a JSON string, is empty, or is refused by the sanitiser, **the request is rejected** — it does not fall back to `sub`. Naming a claim asserts that your IdP mints it; a silent fallback would hand the deployment a *different* identity for the same human at the exact moment the IdP's configuration drifted, and would do it invisibly. The rejection names the claim and the reason, so a mapping that stops being satisfiable is a diagnosable authentication failure rather than a mysterious wave of new users. Verify the claim is present in a real token from your issuer before enabling this in production.
+
+*Turning it on renames every existing identity.* `UserId` is the key for RBAC entries, `TOOLUP_INITIAL_PLATFORM_ADMIN` matching, audit records, and (through the storage-scope resolver) the container every scoped read and write lands in. A deployment that switches from `sub` to `oid` will see previously-known users as new ones, with no data. Plan it as an identity migration, not a config tweak. The `oidc-claim-mapping-advisory` config validator announces an active mapping in the startup preflight summary for this reason — it is a `Warning`, never a refusal; the configuration is supported.
+
+**Relationship to `PreferOidWhenPresent`.** That flag is a single-IdP convenience with *fallback* semantics: it prefers `oid` and falls back to `sub` when absent, and `AuthProvider.fromEnv` auto-enables it for `login.microsoftonline.com` / `ciamlogin.com` issuers. `ClaimMapping` is the generic form and is fail-closed. When both are set, `ClaimMapping.UserIdClaim` wins — it is the explicit operator instruction and the stricter of the two. They resolve identically for a token that carries `oid`, and differ only for one that does not.
 
 #### Wiring `IMetricsSink`
 

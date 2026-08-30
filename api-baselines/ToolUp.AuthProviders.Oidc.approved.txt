@@ -4,6 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.OidcAuthProvider (class)
+ToolUp.AuthProviders.OidcAuthProvider.applyValidatedClaimMapping(ToolUp.Platform.ClaimMapping, System.String, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.Tuple`2[System.String, System.String]]
 ToolUp.AuthProviders.OidcAuthProvider.fromConfig(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigHardened(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigMetered(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider

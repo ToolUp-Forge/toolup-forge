@@ -95,6 +95,43 @@ let private preferOidFromIssuer (issuer: string) : bool option =
 
     if isEntra then Some true else None
 
+/// Derive `AuthConfig.ClaimMapping` from `TOOLUP_OIDC_USER_ID_CLAIM` /
+/// `TOOLUP_OIDC_TENANT_ID_CLAIM`. Both unset yields `None` — the
+/// provider then does no claim projection at all and an existing
+/// env-composed deployment is byte-for-byte unchanged (GP 11 / GP 13).
+///
+/// This is the env-composed route to the substrate seam that replaces
+/// per-IdP claim-remapping decorators. An operator on an IdP whose `sub`
+/// is pairwise-pseudonymous sets `TOOLUP_OIDC_USER_ID_CLAIM` to the
+/// stable claim their issuer publishes (`oid` on Microsoft Entra) and
+/// keeps the generic provider.
+///
+/// Values are trimmed; a variable set to whitespace is treated as unset
+/// rather than as a claim literally named " ", which no IdP mints and
+/// which would otherwise fail every request closed with a confusing
+/// message. An empty variable is a typo, and the unknown-key /
+/// advisory-validator path is where a typo should surface.
+///
+/// Each variable is applied to `ConfigResolution.tryValue` at its own
+/// call site rather than through a `read key` helper. That is not style:
+/// the manifest-bindability conformance test anchors on the seam CALL
+/// and resolves its ARGUMENT, so a key read through a local wrapper
+/// resolves to the wrapper's parameter and the key reads as
+/// declared-bindable-but-unread. The check is right to say so — one
+/// level of indirection is exactly how a reader stops being findable.
+let private claimMappingFromEnv () : ClaimMapping option =
+    // A variable set to whitespace is a typo, not a claim name.
+    let nonBlank =
+        Option.map (fun (value: string) -> value.Trim())
+        >> Option.filter (String.IsNullOrWhiteSpace >> not)
+
+    let mapping = {
+        UserIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcUserIdClaim |> nonBlank
+        TenantIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcTenantIdClaim |> nonBlank
+    }
+
+    if ClaimMapping.isEmpty mapping then None else Some mapping
+
 let private buildAuthConfig (issuer: string) (audience: string option) : AuthConfig = {
     Issuer = Some issuer
     Audience = audience
@@ -103,6 +140,7 @@ let private buildAuthConfig (issuer: string) (audience: string option) : AuthCon
     ClockSkewSeconds = None
     AcceptedAlgorithms = None
     PreferOidWhenPresent = preferOidFromIssuer issuer
+    ClaimMapping = claimMappingFromEnv ()
 }
 
 /// Build the deployment's `IAuthProvider` from `TOOLUP_AUTH_MODE`.

@@ -482,7 +482,7 @@ module CleanRoomGate =
                             // varying its query has a second oracle
                             // beside the one the k-floor already refuses.
                             let reason =
-                                match PrivacyBudgetMeter.refusalDecision template.TemplateId refusal with
+                                match PeerPrivacyBudget.refusalDecision template.TemplateId refusal with
                                 | Withheld r -> r
                                 | Released _
                                 | NoisedRelease _ -> ""

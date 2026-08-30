@@ -202,6 +202,41 @@ type ITemplateApprovalSigner =
     /// genuine mismatch — is an `Error`.
     abstract Verify: peerId: string * message: byte[] * signature: string -> Async<Result<unit, string>>
 
+// ── Phase 676 — re-expressed over the generic countersignature core ──
+//
+// Everything above is Phase 480 and is unchanged as a CONTRACT. What
+// changed underneath is that the lifecycle this file invented is no
+// longer implemented here: `ToolUp.Platform.CountersignatureRegistry`
+// carries the N-party form — content-hashed subjects, a signed roster,
+// and one fail-closed evaluation — and this file is its first
+// specialisation, with the roster pinned at two.
+//
+// **Three things are deliberately NOT re-expressed**, and each is a GP 11
+// obligation rather than an omission:
+//
+//   * **The canonical bytes.** `templateBytes` / `recordBytes` keep their
+//     own field sequences and their own Phase 654 domain separators, so
+//     every approval already signed across a federation still verifies.
+//     What they now share with the generic core is the ENCODER — the
+//     length-prefixed field writer, the ordinal set writer, the digest
+//     and the second-truncation — so the two cannot drift apart in the
+//     one place drift would be invisible.
+//   * **The blob layout.** Records stay at
+//     `_platform/peer-template-approvals/{templateId}/{recordId}.json`.
+//     Re-homing them under the generic store's prefix would make every
+//     approval an existing deployment already holds invisible on
+//     upgrade, which is precisely the byte-for-byte guarantee GP 13
+//     makes about a feature nobody opted into.
+//   * **The wire face.** `ITemplateApprovalApi` and its contract id are
+//     untouched, so a pre-676 peer and a post-676 peer interoperate.
+//
+// What IS re-expressed is the part where a second implementation could
+// disagree: the DECISION. `TemplateApproval.status` now projects its
+// records into the generic vocabulary and asks
+// `Countersignature.status`, so the bilateral answer is the N-party
+// answer at N = 2 by construction rather than by two codebases
+// independently agreeing to fail closed in the same order.
+
 /// Canonical, length-prefixed encodings of a clean-room template and of
 /// an approval record. **This is the whole of the binding between an
 /// approval and the bytes it approves** — read the file header before
@@ -232,9 +267,12 @@ module TemplateCanonical =
     /// field boundary, because the reader (and any adversary reasoning
     /// about collisions) is told how many bytes the value occupies
     /// before it starts.
-    let private field (sb: StringBuilder) (value: string) : unit =
-        sb.Append(Encoding.UTF8.GetByteCount value).Append(':').Append(value).Append('\n')
-        |> ignore
+    ///
+    /// **Phase 676 — the writer is the generic core's, not a copy.** The
+    /// bytes are identical (this was the definition the generic module
+    /// was lifted from); what changed is that a future change to the
+    /// field encoding cannot now land on one shape and miss the other.
+    let private field = CountersignatureCanonical.field
 
     /// The stable wire name of an output shape. Written out rather than
     /// derived from the DU case name so renaming a case in F# source
@@ -258,12 +296,7 @@ module TemplateCanonical =
     /// its members in. `String.CompareOrdinal` rather than the ambient
     /// culture: a culture-sensitive sort would make the hash depend on
     /// the machine that computed it.
-    let private sortedSet (sb: StringBuilder) (values: string seq) : unit =
-        let ordered =
-            values |> Seq.sortWith (fun a b -> String.CompareOrdinal(a, b)) |> List.ofSeq
-
-        field sb (string (List.length ordered))
-        ordered |> List.iter (field sb)
+    let private sortedSet = CountersignatureCanonical.sortedSet
 
     /// The canonical UTF-8 encoding of a template. Every field of
     /// `CleanRoomTemplate` and `PrivacyGate` is covered — a template
@@ -281,8 +314,7 @@ module TemplateCanonical =
 
     /// Lowercase hex SHA-256, the estate's existing digest presentation
     /// (`PeerSurface.export`'s `SurfaceHash` uses the same shape).
-    let private sha256Hex (bytes: byte[]) : string =
-        SHA256.HashData bytes |> Convert.ToHexString |> _.ToLowerInvariant()
+    let private sha256Hex = CountersignatureCanonical.sha256Hex
 
     /// A template's version: `sha256:{lowercase hex}` over its canonical
     /// encoding. The algorithm is named in the value so a future digest
@@ -293,12 +325,12 @@ module TemplateCanonical =
     /// Unix seconds, the signed representation of an instant. Truncating
     /// to whole seconds is what lets a record survive a JSON round trip
     /// and still re-canonicalise to the bytes it was signed over.
-    let private instant (value: DateTimeOffset) = string (value.ToUnixTimeSeconds())
+    let private instant = CountersignatureCanonical.instant
 
     /// Truncate an instant to the precision the canonical encoding
     /// carries, so a record's stored fields and its signed bytes agree.
     let truncate (value: DateTimeOffset) : DateTimeOffset =
-        DateTimeOffset.FromUnixTimeSeconds(value.ToUnixTimeSeconds())
+        CountersignatureCanonical.truncate value
 
     /// The canonical UTF-8 encoding of an approval record — every field
     /// EXCEPT `Signature`, which is what signs it. `ExpiresAt = None`
@@ -332,6 +364,70 @@ module TemplateCanonical =
         let full = Array.append signed (Encoding.UTF8.GetBytes record.Signature)
         sha256Hex full
 
+/// Phase 676 — the projection between this file's bilateral vocabulary
+/// and the generic N-party core. Pure, total, and the only place the two
+/// vocabularies meet: everything else on either side speaks one of them.
+[<RequireQualifiedAccess>]
+module TemplateCountersignature =
+
+    /// The subject kind a clean-room template registers under. Written
+    /// out rather than derived from the F# type name, on the same rule
+    /// `TemplateCanonical.shapeName` states: a rename in source must not
+    /// be able to re-key an agreement.
+    [<Literal>]
+    let subjectKind = "cleanroom-template"
+
+    /// The generic subject for one template version.
+    ///
+    /// **The version is carried as BOTH the id and the content hash, and
+    /// that is exact rather than lazy.** Phase 480 keys its evaluation on
+    /// the version alone, and the version is the digest of an encoding
+    /// that already includes the template id — so the version determines
+    /// the id. Carrying the id here as well would add a second, weaker
+    /// key that could disagree with the first, which is the one thing the
+    /// content-addressed design exists to prevent.
+    let subject (templateVersion: string) : CountersignatureSubject =
+        CountersignatureSubject.create subjectKind templateVersion templateVersion
+
+    /// The canonical roster of a bilateral pair.
+    let roster (a: string) (b: string) : string list = Countersignature.roster [ a; b ]
+
+    let private actionOf (action: TemplateApprovalAction) =
+        match action with
+        | TemplateProposed -> SubjectProposed
+        | TemplateReviewed -> SubjectReviewed
+        | TemplateApproved -> SubjectApproved
+        | TemplateRevoked -> SubjectRevoked
+
+    /// One bilateral record as a generic one. The roster is the record's
+    /// OWN pair, not the pair being evaluated — which is what makes the
+    /// generic roster filter reproduce Phase 480's "records must name
+    /// both parties" filter exactly.
+    let record (source: TemplateApprovalRecord) : CountersignatureRecord = {
+        Subject = subject source.TemplateVersion
+        Roster = roster source.ActingPeerId source.CounterpartyPeerId
+        ActingPartyId = source.ActingPeerId
+        Action = actionOf source.Action
+        IssuedAt = source.IssuedAt
+        NotBefore = source.NotBefore
+        ExpiresAt = source.ExpiresAt
+        Signature = source.Signature
+    }
+
+    /// A bilateral signer as a generic one. The seam takes opaque bytes,
+    /// so a deployment that has already established peer key custody for
+    /// its template approvals can register the generic registry over the
+    /// same keys rather than standing up a second hierarchy — which is
+    /// the argument Phase 480 made for reusing the peer keys, applied one
+    /// level up.
+    let signer (source: ITemplateApprovalSigner) : ICountersignatureSigner =
+        { new ICountersignatureSigner with
+            member _.Sign(partyId, message) = source.Sign(partyId, message)
+
+            member _.Verify(partyId, message, signature) =
+                source.Verify(partyId, message, signature)
+        }
+
 /// Evaluating a set of records into a bilateral decision. Pure and
 /// total, deliberately: the decision is the security-relevant part, and
 /// keeping it out of the store means it can be tested exhaustively
@@ -347,45 +443,6 @@ module TemplateApproval =
     /// clocks may be.
     let defaultSkew = TimeSpan.FromSeconds(float JwtCrypto.clockSkewSeconds)
 
-    /// Records for one party, newest first. Ties on `IssuedAt` resolve
-    /// towards `TemplateRevoked` — two records stamped in the same
-    /// second is exactly the case where failing closed matters.
-    let private latestFor (peerId: string) (records: TemplateApprovalRecord list) =
-        records
-        |> List.filter (fun r -> r.ActingPeerId = peerId)
-        |> List.sortByDescending (fun r ->
-            r.IssuedAt,
-            (match r.Action with
-             | TemplateRevoked -> 1
-             | _ -> 0))
-        |> List.tryHead
-
-    /// One party's contribution to the decision.
-    type private PartyVerdict =
-        | PartyLive of effectiveFrom: DateTimeOffset
-        | PartyPending
-        | PartyRevoked of at: DateTimeOffset
-        | PartyExpired of at: DateTimeOffset
-
-    let private verdict (skew: TimeSpan) (asOf: DateTimeOffset) (record: TemplateApprovalRecord option) =
-        match record with
-        | None -> PartyPending
-        | Some r ->
-            match r.Action with
-            | TemplateRevoked -> PartyRevoked r.IssuedAt
-            | TemplateProposed
-            | TemplateReviewed -> PartyPending
-            | TemplateApproved ->
-                if asOf + skew < r.NotBefore then
-                    // Agreed, but not yet in force. Pending rather than
-                    // expired: nothing is wrong, the start date has not
-                    // arrived.
-                    PartyPending
-                else
-                    match r.ExpiresAt with
-                    | Some expiry when asOf - skew > expiry -> PartyExpired expiry
-                    | _ -> PartyLive r.NotBefore
-
     /// The bilateral decision over `query`'s exact template version.
     ///
     /// Only records naming BOTH parties (in either role) and that exact
@@ -396,6 +453,15 @@ module TemplateApproval =
     /// Precedence is fail-closed: a revocation from either side beats
     /// everything, then an expiry, then a pending party, and only a
     /// fully-live pair approves.
+    ///
+    /// **Phase 676 — this is now the N-party evaluation at N = 2.** The
+    /// body below is a projection into
+    /// `ToolUp.Platform.Countersignature.status` and a mapping back; the
+    /// latest-record selection, the revoked-beats-expired-beats-pending
+    /// precedence, the same-second tie towards revocation and the
+    /// clock-skew handling all live there now. Two implementations of
+    /// one fail-closed order is exactly the shape that drifts, and the
+    /// bilateral half is the one a federation already depends on.
     let status
         (skew: TimeSpan)
         (localPeerId: string)
@@ -405,50 +471,28 @@ module TemplateApproval =
         (records: TemplateApprovalRecord list)
         : BilateralApprovalStatus =
 
-        let parties = Set.ofList [ localPeerId; counterpartyPeerId ]
+        let generic =
+            Countersignature.status
+                skew
+                [ localPeerId; counterpartyPeerId ]
+                (TemplateCountersignature.subject templateVersion)
+                asOf
+                (records |> List.map TemplateCountersignature.record)
 
-        let relevant =
-            records
-            |> List.filter (fun r ->
-                r.TemplateVersion = templateVersion
-                && Set.ofList [ r.ActingPeerId; r.CounterpartyPeerId ] = parties)
+        match generic with
+        | Countersigned from -> BilaterallyApproved from
+        | CountersignatureRevoked(peerId, at) -> ApprovalRevoked(peerId, at)
+        | CountersignatureExpired(peerId, at) -> ApprovalExpired(peerId, at)
+        | CountersignaturePending awaiting ->
+            // Re-ordered to LOCAL-then-counterparty. The generic core
+            // reports its roster in ordinal order, which is the right
+            // answer for N parties with no distinguished member; this
+            // surface has always named the two halves in the caller's
+            // own order, and a shipped list order is a contract whether
+            // or not anyone wrote it down.
+            let missing = Set.ofList awaiting
 
-        let local = verdict skew asOf (latestFor localPeerId relevant)
-        let remote = verdict skew asOf (latestFor counterpartyPeerId relevant)
-
-        let revoked =
-            [ localPeerId, local; counterpartyPeerId, remote ]
-            |> List.tryPick (fun (peerId, v) ->
-                match v with
-                | PartyRevoked at -> Some(ApprovalRevoked(peerId, at))
-                | _ -> None)
-
-        let expired =
-            [ localPeerId, local; counterpartyPeerId, remote ]
-            |> List.tryPick (fun (peerId, v) ->
-                match v with
-                | PartyExpired at -> Some(ApprovalExpired(peerId, at))
-                | _ -> None)
-
-        let pending =
-            [ localPeerId, local; counterpartyPeerId, remote ]
-            |> List.choose (fun (peerId, v) ->
-                match v with
-                | PartyPending -> Some peerId
-                | _ -> None)
-
-        match revoked, expired, pending with
-        | Some r, _, _ -> r
-        | None, Some e, _ -> e
-        | None, None, [] ->
-            match local, remote with
-            | PartyLive a, PartyLive b -> BilaterallyApproved(max a b)
-            // Unreachable: every non-`PartyLive` verdict is captured
-            // above. Failing closed rather than asserting keeps the
-            // total match honest without a partial function on a
-            // security path.
-            | _ -> ApprovalPending [ localPeerId; counterpartyPeerId ]
-        | None, None, awaiting -> ApprovalPending awaiting
+            ApprovalPending([ localPeerId; counterpartyPeerId ] |> List.filter missing.Contains)
 
     /// The audit-facing explanation of a status. Recorded on the
     /// `PeerCleanRoomDecision` row and NEVER sent on the wire — the

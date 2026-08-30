@@ -507,6 +507,7 @@ let tests: Test =
                         ClockSkewSeconds = None
                         AcceptedAlgorithms = None
                         PreferOidWhenPresent = None
+                        ClaimMapping = None
                     }
 
                     let provider = OidcAuthProvider.fromConfigWith (new HttpClient()) None config
