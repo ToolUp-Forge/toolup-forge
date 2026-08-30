@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.DataSources.Excel</PackageId>
+    <AssemblyName>ToolUp.DataSources.Excel</AssemblyName>
+    <Description>Spreadsheet IDataSource companion for ToolUp.Platform. Reads .xlsx / .xlsm workbooks through IBlobStorage (any provider, including LocalFileStorage for files on disk). Sheets, Excel Tables (ListObjects) and workbook-scoped named ranges are all addressable as first-class table names; schema is inferred by type-probing a configurable row sample and Query emits RFC 4180 CSV. Cached values only — no formula evaluation and no Power Query refresh.</Description>
+    <PackageTags>fsharp;sdk;data-source;ingestion;excel;xlsx;spreadsheet;file;server</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ExcelDataSource.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\Common\ToolUp.DataSources.Common.fsproj" />
+    <!-- The GRID reader. Shared strings, inline strings, number-format-aware
+         date detection and the 1904 date system are already solved and
+         contract-tested in ToolUp.Tabular's XLSX leg; this companion adds the
+         workbook-level structure (sheet / Table / defined-name enumeration and
+         range slicing) that a typed-row reader has no reason to expose.
+         ToolUp.Tabular carries the same OpenXml dependency this project needs
+         anyway, so the reference adds no vendor surface. -->
+    <ProjectReference Include="..\..\ToolUp.Tabular\ToolUp.Tabular.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <!-- Workbook-level structure only; the grid comes from ToolUp.Tabular.
+         The vendor dependency stays in this companion (GP 1) — nothing in
+         ToolUp.Platform.* references OpenXml. -->
+    <PackageReference Include="DocumentFormat.OpenXml" />
+  </ItemGroup>
+</Project>

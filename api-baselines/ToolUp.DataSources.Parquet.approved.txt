@@ -3,5 +3,16 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.DataSources.Parquet.ParquetDataSource (class)
+ToolUp.DataSources.Parquet.ParquetDataSource.Kind : System.String (literal)
+ToolUp.DataSources.Parquet.ParquetDataSource.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Parquet.ParquetDataSource.fieldPath(Parquet.Schema.DataField) : System.String
+ToolUp.DataSources.Parquet.ParquetDataSource.nativeName(Parquet.Schema.DataField) : System.String
+ToolUp.DataSources.Parquet.ParquetDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Parquet.ParquetDataSource.schemaOf(System.String, System.Collections.Generic.IEnumerable`1[Parquet.Schema.DataField]) : ToolUp.Platform.TableSchema
+ToolUp.DataSources.Parquet.ParquetDataSource.toColumnType(System.Type) : DataManagementTypes+ColumnType
+ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings (class)
+ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings..ctor(ToolUp.DataSources.Common.Files+FileSourceSettings)
+ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings.File : ToolUp.DataSources.Common.Files+FileSourceSettings { get }
 ToolUp.DataSources.Parquet.ParquetDatasetCodec (class)
 ToolUp.DataSources.Parquet.ParquetDatasetCodec..ctor()
