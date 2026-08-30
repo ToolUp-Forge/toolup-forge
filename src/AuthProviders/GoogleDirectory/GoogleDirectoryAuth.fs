@@ -77,10 +77,14 @@ let DirectoryReadonlyScope =
 [<Literal>]
 let GmailSendScope = "https://www.googleapis.com/auth/gmail.send"
 
-/// Google's OAuth 2.0 token endpoint. Overridable on
-/// `GoogleDirectoryConfig` for test doubles and for the rare private
-/// egress proxy; the service-account JSON's own `token_uri` wins when
-/// present, since that is what the key was minted against.
+/// Google's OAuth 2.0 token endpoint, and the value a real
+/// service-account key file names in its own `token_uri`. Because the
+/// two coincide in the ordinary case, the companion resolves them by
+/// treating this value as "unspecified": a key naming a NON-default
+/// `token_uri` wins (that is the audience it was minted against),
+/// while a key naming this one — or omitting it entirely — defers to
+/// `GoogleDirectoryConfig.TokenEndpoint`, so a configured egress proxy
+/// or test double is actually reached.
 [<Literal>]
 let DefaultTokenEndpoint = "https://oauth2.googleapis.com/token"
 

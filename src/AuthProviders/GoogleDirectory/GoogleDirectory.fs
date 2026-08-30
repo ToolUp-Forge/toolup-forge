@@ -113,9 +113,12 @@ type GoogleDirectoryConfig = {
     /// Gmail API base — `https://gmail.googleapis.com` by default.
     /// Same override rationale as `DirectoryEndpoint`.
     GmailEndpoint: string
-    /// OAuth 2.0 token endpoint. Used only when the service-account
-    /// JSON omits its own `token_uri`; a key file that carries one
-    /// wins, because that is the audience the key was minted against.
+    /// OAuth 2.0 token endpoint. A real key file names Google's own
+    /// endpoint here too, so the two are resolved by treating that
+    /// value as "unspecified": a key naming a NON-default `token_uri`
+    /// wins (it is the audience the key was minted against), and
+    /// anything else defers to this field. Override it for a private
+    /// egress proxy or a test double.
     TokenEndpoint: string
     /// The Workspace primary domain the directory query is scoped to,
     /// e.g. `"example.com"`. Required — an unscoped Directory API
