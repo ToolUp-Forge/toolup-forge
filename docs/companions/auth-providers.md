@@ -260,6 +260,80 @@ Client.run
     modules
 ```
 
+#### Provider presets
+
+`OidcPresets` returns a fully-formed `OidcAppConfig` per known identity provider, so the per-provider knobs a consumer would otherwise hand-roll (and get wrong once) live as code. Each preset's descriptive metadata is derived from its `PresetKind` — `PresetKind.label` / `.issuerForm` / `.autoAddedScopes` / `.notes` / `.expectsDecodableAccessToken` — and the `OidcCoherenceValidator` renders it at preflight.
+
+| Preset | Inputs | What the preset encodes |
+|---|---|---|
+| `OidcPresets.generic` | `issuer + clientId + redirectUri` | No provider quirks. Spec-minimum scopes (`openid profile email`); `ValidateIdToken = Some true` (no provider knowledge to judge the boundary by, so the safer default). For Okta, Keycloak, custom OIDC. |
+| `OidcPresets.entraWorkforce` | `tenantId + clientId + redirectUri` | Workforce v2.0 issuer; the load-bearing `api://{clientId}/access_as_user` scope; `offline_access`. |
+| `OidcPresets.entraExternalId` | `tenantSubdomain + clientId + redirectUri` | CIAM `*.ciamlogin.com` v2.0 issuer; `offline_access`; `ValidateIdToken = Some true`. |
+| `OidcPresets.entraExternalIdWithDomain` | `tenantSubdomain + customDomain + clientId + redirectUri` | As above, with a custom CIAM domain replacing the `*.ciamlogin.com` host. |
+| `OidcPresets.auth0` | `domain + clientId + redirectUri` | Tenant URL **with** trailing slash (Auth0's `iss` claim shape); `offline_access`. Tokens stay opaque unless an `audience` extra parameter is passed. |
+| `OidcPresets.google` | `clientId + redirectUri` | Fixed issuer `https://accounts.google.com` — no tenant parameter. Spec-minimum scopes; `ValidateIdToken = Some true`. Refresh tokens ride the `access_type=offline` **authorize parameter**, not an `offline_access` scope. Access tokens are always opaque. |
+
+##### Worked example — Google sign-in
+
+Google needs no tenant, region, or custom-domain input, so the preset takes only the two values the app registration gives you:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders.Oidc.OidcAppConfig
+open ToolUp.AuthProviders.Oidc
+open ToolUp.AuthProviders.Oidc.OidcRegister
+
+// One declaration; both sides project from it.
+let googleCfg: OidcAppConfig =
+    OidcPresets.google
+        "1234567890-abcdefg.apps.googleusercontent.com"   // OAuth 2.0 Client ID
+        "https://app.example.com/auth/callback"           // an Authorised redirect URI
+
+Client.run
+    { ClientConfig.defaults with
+        AppName = "MyApp"
+        AuthUI = OidcAuthUI(OidcAppConfig.toClientConfig googleCfg)
+        Handlers = {
+            ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ OidcRegister.handler ]
+        } }
+    modules
+```
+
+Server side, bind the issuer and audience from the same value rather than restating them:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders
+
+let authConfig = {
+    Issuer = Some googleCfg.Issuer          // https://accounts.google.com
+    Audience = Some googleCfg.Audience      // the OAuth client id
+    KeySource = JwksDiscovery googleCfg.Issuer
+    TokenLocation = BearerHeader
+    ClockSkewSeconds = None
+    AcceptedAlgorithms = None               // RS256 — what Google signs with
+}
+
+ServerApp.empty
+|> ServerApp.withAuth (OidcAuthProvider.fromConfig (Some logger) authConfig)
+|> ServerApp.withConfigValidator (OidcCoherenceValidator googleCfg :> IConfigValidator)
+|> ...
+```
+
+**Refresh tokens are an authorize-parameter concern.** Google ignores `offline_access`, which is why the preset does not request it. Ask for offline access explicitly, via the extras channel:
+
+```fsharp skip=fragment
+// `prompt=consent` matters as much as `access_type=offline`: Google issues a
+// refresh token only on a user's FIRST consent for a given client, so a
+// re-authorising user silently gets none without a consent re-prompt.
+OidcClient.beginSignInWithExtras
+    (OidcAppConfig.toClientConfig googleCfg)
+    [ "access_type", "offline"; "prompt", "consent" ]
+```
+
+The same channel carries `hd` for Workspace-domain restriction (`[ "hd", "example.com" ]`) — treat it as a hint that shapes the account chooser, and verify the `hd` claim server-side rather than trusting the parameter.
+
+**Caveat: Google access tokens are always opaque.** Unlike Auth0 — where a dashboard-configured API audience flips the access token to a decodable JWT — Google has no such knob, so `PresetKind.expectsDecodableAccessToken Google` is `false` and `classifyStoredToken` always reports `OpaqueToken`. The `authConfig` above therefore validates the **`id_token`**, which is a real JWT the client sends as its bearer; a follow-up SDK change adds a first-class opaque-token bearer strategy so this is a declared choice rather than a wiring convention. Until then, keep `ValidateIdToken = Some true` (the preset's default) so a tampered id_token is caught at the callback as well as at the server.
+
 The sign-in button in the app's header invokes the OIDC flow:
 1. Redirect to `{Issuer}/authorize` with PKCE challenge.
 2. User authenticates at the issuer.
@@ -411,6 +485,58 @@ Configuration via environment / Vite env:
 - Server-side signing key — see Clerk's docs.
 
 `#if DEBUG` in the consuming app typically controls Clerk activation — debug skips sign-in, release enables it.
+
+## Directory companions
+
+A *directory* companion is not an `IAuthProvider`. It implements `IUserDirectory`, a separate substrate the SDK's team-management surface uses to look people up rather than to sign them in: a typeahead over the identity provider's directory (`SearchUsers`), a reverse batch lookup that turns stored user ids into names and emails in the admin tables (`ResolveUsers`), and a branded invitation email (`NotifyInvitation`).
+
+They are optional in the strongest sense — a deployment that registers none gets `Ok []` from the typeahead handler, the invite form degrades to a plain email input, and the invite still lands via the pending-by-email store with the invitee told out of band. Register one with `ServerApp.withUserDirectory`, independently of which `IAuthProvider` signs users in.
+
+| Companion | Directory | Auth model |
+|---|---|---|
+| `ToolUp.AuthProviders.EntraDirectory` | Microsoft Graph (Entra / Azure AD) | App-only via `DefaultAzureCredential` — managed identity in production, `az login` locally. |
+| `ToolUp.AuthProviders.GoogleDirectory` | Google Workspace (Admin SDK Directory API + Gmail API) | Service-account JSON + domain-wide delegation, read from `ISecretStore`. |
+
+### `ToolUp.AuthProviders.GoogleDirectory` (Google Workspace directory)
+
+The Google analogue of `EntraDirectory`: same three capabilities, same degradation semantics, a materially different auth model. BCL `HttpClient` throughout — no Google client SDK in the dependency graph.
+
+Google Workspace has no managed-identity equivalent for these APIs. The only application-scoped path is **domain-wide delegation**: a service account, authorised by a Workspace super-admin, may impersonate users in the domain for an explicit list of OAuth scopes. Every call therefore runs *as some user*, and the two capabilities need two different subjects — directory reads impersonate a Workspace admin (only an admin may list the directory), while the invitation email impersonates the sender mailbox (Gmail sends as whoever the token impersonates). Tokens are minted with an RS256-signed JWT-bearer grant and cached per subject and scope set.
+
+Scopes requested, and no others:
+
+- `https://www.googleapis.com/auth/admin.directory.user.readonly` — always.
+- `https://www.googleapis.com/auth/gmail.send` — only when `SenderUserId` is set. Send-only; it grants no mailbox read.
+
+Wiring. The service-account JSON comes from the deployment's `ISecretStore`, never an environment variable or a file path — a delegated key can impersonate any user in the domain, so it belongs behind an audited secret backend. That is also why this companion ships no `fromEnv`:
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders
+
+let directoryConfig = {
+    GoogleDirectoryConfig.defaults with
+        Domain = "example.com"
+        ImpersonatedAdmin = "directory-reader@example.com"
+        SenderUserId = Some "invites@example.com"
+}
+
+let directory = GoogleDirectory.create secretStore directoryConfig
+
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withUserDirectory (Some directory)
+|> ServerApp.run
+```
+
+`CredentialScopeId` / `CredentialSecretKey` default to `_platform` / `google_directory_service_account`; the stored value is the key file's contents verbatim.
+
+Ship the pair alongside it. `GoogleDirectoryConfigValidator.create` performs a real token exchange per requested scope at preflight — which is exactly where Google enforces the delegation, so a mint is proof the grant exists. A missing credential or an ungranted directory scope aborts startup; an ungranted *Gmail* scope is a `Warning`, because invitation email degrading is a real loss but not a reason to refuse to boot. `GoogleDirectoryHealth.create` adds a readiness probe that makes a live authenticated directory call.
+
+Query shape. Google's `query` parameter ANDs multiple `field:value` prefix terms — there is no OR — so matching display name *or* email is two requests (`name:'…'`, `email:'…'`) merged and de-duplicated by id. `EntraDirectory` expresses the same intent as one OData filter with `or` clauses; the observable behaviour is the same. A minimum prefix of 2 characters is enforced server-side.
+
+Errors follow `EntraDirectory` exactly: transient directory failures (and a credential that will not load, and a delegation that was never granted) surface as `Error "directory unavailable: …"` under the typeahead input; mail-send failures as `Error "notification unavailable: …"`, which the invite handler swallows. `SenderUserId = None` disables the mail path with no other consequence. An id `ResolveUsers` cannot find is skipped, never an error.
+
+The permission-grant walkthrough — both consoles, in order, with the PowerShell for the Cloud half — is in the companion's own [README](https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/AuthProviders/GoogleDirectory/README.md).
 
 ## Writing a custom provider
 

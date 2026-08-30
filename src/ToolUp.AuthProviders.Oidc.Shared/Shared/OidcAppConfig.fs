@@ -60,6 +60,12 @@ type PresetKind =
     /// opaque by default; a decodable JWT requires an `audience`
     /// extra parameter on the authorize request.
     | Auth0
+    /// Google — the fixed issuer `https://accounts.google.com` (no
+    /// tenant/domain parameter). Access tokens are ALWAYS opaque —
+    /// unlike Auth0 there is no dashboard knob that makes them
+    /// decodable. Refresh tokens come from the `access_type=offline`
+    /// authorize parameter, not from an `offline_access` scope.
+    | Google
 
 module PresetKind =
     /// Short stable label — used as a metric tag, log key, and
@@ -72,6 +78,7 @@ module PresetKind =
         | EntraExternalId -> "entra-external-id"
         | EntraExternalIdWithDomain _ -> "entra-external-id"
         | Auth0 -> "auth0"
+        | Google -> "google"
 
     /// Human-readable description of the expected issuer URL form
     /// for the preset. Rendered by the coherence validator when an
@@ -84,6 +91,7 @@ module PresetKind =
         | EntraExternalIdWithDomain customDomain ->
             sprintf "https://%s/{tenantSubdomain}/v2.0  (custom-domain override)" customDomain
         | Auth0 -> "https://{tenant}.auth0.com/  (or regional variant — *.eu.auth0.com / *.us.auth0.com / ...)"
+        | Google -> "https://accounts.google.com  (fixed — no tenant or domain parameter)"
 
     /// Whether the preset expects a decodable JWT access token vs an
     /// opaque token. Affects classifier expectations and the
@@ -95,6 +103,11 @@ module PresetKind =
         | EntraExternalId -> true
         | EntraExternalIdWithDomain _ -> true
         | Auth0 -> false
+        // Google access tokens are opaque, always. Unlike Auth0
+        // there is no configured-API-audience knob that flips them
+        // to a decodable JWT — so this is a fixed property of the
+        // provider, not a deployment choice.
+        | Google -> false
 
     /// Scopes the preset auto-adds on top of the OIDC-spec minimum
     /// (`openid profile email`). Some entries depend on `clientId`
@@ -109,6 +122,11 @@ module PresetKind =
         | EntraExternalId
         | EntraExternalIdWithDomain _ -> [ "offline_access" ]
         | Auth0 -> [ "offline_access" ]
+        // Deliberately empty. Google's refresh token rides the
+        // `access_type=offline` AUTHORIZE PARAMETER, not a scope —
+        // adding `offline_access` here would encode a scope Google
+        // ignores and give Rule 10 a false regression to report.
+        | Google -> []
 
     /// Operator-facing hints for the preset.  Each note is a single
     /// self-contained sentence the coherence validator may surface
@@ -138,6 +156,12 @@ module PresetKind =
             "Auth0 access tokens are opaque by default. Pass an `audience` extra parameter via `beginSignInWithExtras` to receive a decodable JWT addressed to your configured Auth0 API."
             "`offline_access` is included by default for refresh-token rotation."
             "Issuer trailing slash matters — Auth0 issues `iss` claims WITH the trailing slash; `classifyStoredToken`'s normalisation handles both shapes, but downstream server-side validators may not."
+          ]
+        | Google -> [
+            "Refresh tokens require the `access_type=offline` authorize parameter — passed via `beginSignInWithExtras`, NOT an `offline_access` scope, which Google ignores. Pair it with `prompt=consent`: Google issues a refresh token only on the first consent for a given client/user unless consent is re-prompted, so a re-authorising user otherwise silently gets none."
+            "Google access tokens are ALWAYS opaque (never JWTs). Unlike Auth0 there is no dashboard audience knob that flips them to a decodable token, so `classifyStoredToken` always sees `OpaqueToken` and defers validity to the server. Server-side bearer validation must therefore validate the `id_token` rather than the access token."
+            "Issuer is the fixed `https://accounts.google.com` — no tenant or domain parameter. Restricting sign-in to a Workspace domain rides the `hd` authorize parameter (another `beginSignInWithExtras` extra) and is a hint, not a guarantee: verify the `hd` claim server-side."
+            "ValidateIdToken defaults to `Some true` — consumer Google sign-in is a customer-facing boundary, so id_token signature / iss / aud / exp are re-checked on every callback (same argument as the Entra External ID preset)."
           ]
 
 /// The unified one-declaration OIDC config. Both client and server

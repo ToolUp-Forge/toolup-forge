@@ -22,11 +22,13 @@ ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.Auth0 : ToolUp.AuthProviders.
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.EntraExternalId : ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.EntraWorkforce : ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.Generic : ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind { get }
+ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.Google : ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsAuth0 : System.Boolean { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsEntraExternalId : System.Boolean { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsEntraExternalIdWithDomain : System.Boolean { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsEntraWorkforce : System.Boolean { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsGeneric : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.IsGoogle : System.Boolean { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.Tag : System.Int32 { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+EntraExternalIdWithDomain (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+EntraExternalIdWithDomain.customDomain : System.String { get }
@@ -36,6 +38,7 @@ ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.EntraExternalId : System
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.EntraExternalIdWithDomain : System.Int32 (literal)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.EntraWorkforce : System.Int32 (literal)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.Generic : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.Google : System.Int32 (literal)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.autoAddedScopes(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.expectsDecodableAccessToken(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : System.Boolean

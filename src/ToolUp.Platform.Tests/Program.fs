@@ -1145,6 +1145,8 @@ let private registeredTests =
         // Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
         TeamInvitationTests.checkMyInvitesTests
         EntraExternalIdConfigTests.tests
+        // Phase 747 — Google Workspace IUserDirectory companion.
+        GoogleDirectoryTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
         ConsentProviderTests.subscriptionFiringTests
@@ -2048,6 +2050,13 @@ let private registeredTests =
         // Subject, `premium-status` still open — so "everything is refused"
         // cannot pass as a fix.
         FailClosedDispatchTests.tests
+        // Phase 723 — the scope-enumeration seam + the converged restart
+        // recovery sweep. Its GP-13 arm asserts against a RECORDING
+        // surface rather than a returned count, because a sweep that read
+        // every scope and marked none would return zero too; and its
+        // enqueue arms are gated on a TaskCompletionSource rather than a
+        // sleep, so "the caller got its thread back" is deterministic.
+        ScopeEnumerationSweepTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
