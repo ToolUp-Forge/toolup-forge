@@ -630,11 +630,19 @@ let private persistAndIngest
                     // outcome, not an empty job to push through the
                     // queue: the document is already fully indexed at
                     // this content.
-                    let accepted =
+                    // Phase 723 — `EnqueueAsync`, not `Enqueue`. On the
+                    // in-memory default the two are the same lock-free
+                    // channel write; on a queue backed by an
+                    // `IIngestionQueueStore` the sync form is
+                    // `Async.RunSynchronously` over a store round-trip
+                    // taken on the request thread. Awaiting it costs
+                    // nothing on the default arm and stops occupying a
+                    // thread-pool thread on the durable one.
+                    let! accepted =
                         if List.isEmpty chunkPairs then
-                            true
+                            async { return true }
                         else
-                            deps.Queue.Enqueue(job)
+                            deps.Queue.EnqueueAsync(job)
 
                     if not (List.isEmpty chunkPairs) then
                         deps.RecordEnqueue accepted
@@ -1661,7 +1669,9 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                                     OriginatingUserId = Some deps.UserId
                                 }
 
-                                let accepted = deps.Queue.Enqueue(job)
+                                // Phase 723 — async enqueue; see the
+                                // `uploadDocument` call site.
+                                let! accepted = deps.Queue.EnqueueAsync(job)
                                 deps.RecordEnqueue accepted
 
                                 if not accepted then

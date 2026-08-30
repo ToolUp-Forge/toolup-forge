@@ -1548,6 +1548,17 @@
              IConditionalBlobStorage (Core) and the FableConverters set
              (Server/Remoting/Json/), and nothing above it needs it. -->
         <Compile Include="Server\PrivacyBudgetLedger.fs" />
+        <!-- Phase 723 — the scope-enumeration seam (IScopeEnumerator + its
+             ITeamStore-backed default) and the converged restart-recovery
+             sweep (IIngestionRecoverySurface + IngestionRecoverySweep) the
+             RAG and KnowledgeBase companions now share. After
+             Teams\TeamManagement.fs (the default adapts ITeamStore.ListTeams
+             rather than adding a member to it) and IngestionStatusStore.fs
+             (the RAG-side surface adapter wraps IIngestionStatusStore).
+             Nothing here registers into DI and nothing runs at compose — a
+             deployment that composes no enumerator and no sweep is
+             byte-for-byte unchanged (GP 11 / GP 13). -->
+        <Compile Include="Server\ScopeEnumeration.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

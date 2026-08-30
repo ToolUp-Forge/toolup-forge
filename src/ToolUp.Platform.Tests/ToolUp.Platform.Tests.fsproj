@@ -2166,6 +2166,12 @@
              through this repo's own parser would stay green while both
              halves renamed a field together. -->
         <Compile Include="InProcess\ExternalModelFitTests.fs" />
+        <!-- Phase 723 — the scope-enumeration seam and the converged
+             restart-recovery sweep, plus the async-enqueue adoption at the
+             KB upload call sites. Needs BOTH the RAG and KnowledgeBase
+             companions (the two surfaces the sweep converged), so it sits
+             after their ProjectReferences are in scope. -->
+        <Compile Include="InProcess\ScopeEnumerationSweepTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard. Source-linked
              into every sibling pack that runs an explicitly-enumerated list
              rather than Expecto auto-discovery; must compile immediately
