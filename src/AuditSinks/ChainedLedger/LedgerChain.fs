@@ -77,6 +77,24 @@ type LedgerRecord = {
     EventType: string
     /// Canonical JSON of the subject-and-event body.
     Payload: string
+    /// Phase 677 — the scope facets this record was tagged with AT APPEND
+    /// TIME, so a per-party export filters on data the chain committed to
+    /// rather than by inspecting `Payload` after the fact. Content
+    /// inspection at export time is a filter nobody can check: it depends
+    /// on the exporter's code at the moment of export, and two exports of
+    /// the same ledger can disagree without either being detectable. A
+    /// facet decided by the writer and framed into the digest is a claim
+    /// the chain itself carries.
+    ///
+    /// **The empty list is the shipped default and costs nothing.** It
+    /// contributes ZERO bytes to `canonicalBytes` (see the facet block
+    /// there), so every chain written before facets existed recomputes to
+    /// exactly the digests it already stores and keeps verifying — the
+    /// backward-compatible default GP 11 asks for, obtained structurally
+    /// rather than by a version switch. A record carrying no facet is
+    /// visible to NO party scope: fail-closed, so tagging that never
+    /// happened cannot read as universal entitlement.
+    ScopeFacets: string list
 }
 
 /// What a verification walk found wrong. One value per class, so a
@@ -180,11 +198,36 @@ let canonicaliseJson (json: string) : string =
 
     Encoding.UTF8.GetString(buffer.ToArray())
 
+/// A record's facets, with the `null` an absent JSON field deserialises
+/// to coerced to the empty list.
+///
+/// **Not defensiveness — the documented shape of an older record.** The
+/// converter set this ledger serialises through initialises an absent
+/// reference-typed field to `null`, and a null F# list throws on every
+/// list operation (`[]` is the `Empty` singleton, not null). Every
+/// record written before Phase 677 omits the field, so the read path and
+/// the digest path both meet it.
+let facetsOf (record: LedgerRecord) : string list =
+    if obj.ReferenceEquals(record.ScopeFacets, null) then
+        []
+    else
+        record.ScopeFacets
+
 /// The exact bytes a record's digest is taken over: every field except
 /// `Digest` itself, each length-framed, in a fixed order.
 ///
 /// `PreviousDigest` is inside the framing, which is what makes the
 /// digest commit to the whole prefix rather than to this record alone.
+///
+/// **The facet block is appended only when the record carries facets**,
+/// and that conditional is load-bearing rather than an optimisation: a
+/// record with no facets frames byte-for-byte what it framed before
+/// facets existed, so an existing ledger's stored digests stay correct
+/// and an existing head signature stays valid. The block frames the
+/// COUNT before the facets, so `["ab"]` and `["a"; "b"]` cannot
+/// canonicalise alike, and a facet list can never be re-cut into a
+/// different one — the same argument length-framing makes for the
+/// fields above.
 let canonicalBytes (record: LedgerRecord) : byte[] =
     use buffer = new MemoryStream()
     let frame = Canonical.frame buffer
@@ -197,6 +240,14 @@ let canonicalBytes (record: LedgerRecord) : byte[] =
     frame record.SubjectKind
     frame record.EventType
     frame record.Payload
+
+    let facets = facetsOf record
+
+    if not (List.isEmpty facets) then
+        frame (string (List.length facets))
+
+        for facet in facets do
+            frame facet
 
     buffer.ToArray()
 
@@ -306,6 +357,29 @@ let verifyRecords (records: LedgerRecord list) (tornTail: string option) : Resul
     walk 0L genesisDigest records
 
 module LedgerRecord =
+    /// The record with its facets coerced away from `null` — what a
+    /// reader applies immediately after deserialising a stored line, so
+    /// nothing downstream has to know that an older record omits the
+    /// field.
+    let coerceFacets (record: LedgerRecord) : LedgerRecord = {
+        record with
+            ScopeFacets = facetsOf record
+    }
+
+    /// A facet set in canonical order: distinct, ordinally sorted.
+    ///
+    /// Applied by the PRODUCER, before the digest is taken, because the
+    /// digest is over the list as stored. Two taggers that name the same
+    /// set in different orders must not produce different chains, and
+    /// this is where that is settled — verification recomputes over
+    /// exactly what it reads and never re-sorts, so it can never
+    /// disagree with the writer about what was framed.
+    let normaliseFacets (facets: string list) : string list =
+        facets
+        |> List.filter (String.IsNullOrWhiteSpace >> not)
+        |> List.distinct
+        |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+
     /// The subject-and-event body a record carries, decoded from
     /// `Payload`. Provided for consumers reading the ledger back;
     /// verification deliberately never calls it, so a decode failure
