@@ -3359,4 +3359,290 @@ let main args =
     // set; the target body resolves and reports its own missing inputs.
     CoreWebVitalsBudgetGate.registerTarget ()
 
+    // Phase 587 — instantiate-then-build smoke gate for the
+    // `platformsdk-module-packaged` template.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate`
+    //
+    // WHY THIS IS A SEPARATE TARGET FROM VerifyTemplates. That gate
+    // builds template PROJECTS in place, against the repo's own
+    // Directory.Build.props / Directory.Packages.props / nuget.config.
+    // It works because those templates are root-inheriting fragments.
+    // This template is not: it is a whole repository — its own CPM
+    // props, its own nuget.config, its own global.json, and a literal
+    // TOOLUP_SDK_VERSION placeholder — which is exactly the class the
+    // VerifyTemplates note calls "not buildable in-repo without
+    // rewriting what makes it a template", alongside templates/safer
+    // and templates/platformsdk-solution. So this IS the
+    // instantiate-then-build harness that note said such a template
+    // would need: `dotnet new` it into a scratch directory OUTSIDE the
+    // repo (so no ancestor MSBuild file leaks in) and run the
+    // scaffold's own pipeline end to end.
+    //
+    // WHAT IT PROVES, in the phase's words: scaffold -> build -> pack ->
+    // both conformance layers green. The scaffold's own target chain
+    // makes that one command: `Pack` depends on `Test` (the module-seam
+    // contract pack) and on `VerifyPackagedModule` (the packaging
+    // layout laws), so a green Pack cannot have skipped either.
+    //
+    // The gate-version + cache-wipe machinery is shared with
+    // VerifyTemplates and load-bearing for the same reason: packing at
+    // $(ToolUpSdkVersion) would be a same-version repack, and NuGet
+    // would serve the previously-extracted copy, so the gate would
+    // measure whatever was packed last rather than current source.
+    let packagedModuleTemplateDir = "templates/platformsdk-module-packaged"
+
+    // The VerifyTemplates closure plus the Build package: the generated
+    // repo's Build.fsproj references ToolUp.Platform.Build for the
+    // packaged-module conformance target. Everything else it restores
+    // (Feliz, Fable.*, Expecto, FAKE) comes from nuget.org, which is
+    // what a real consumer does.
+    let packagedModuleTemplateGatePackages =
+        templateGatePackages @ [ "ToolUp.Platform.Build" ]
+
+    Target.create "VerifyPackagedModuleTemplate" (fun _ ->
+        let runIn exe args dir =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory dir
+            |> Proc.run
+            |> fun r -> r.ExitCode
+
+        let runCheckedIn exe args dir =
+            let code = runIn exe args dir
+
+            if code <> 0 then
+                failwithf
+                    "VerifyPackagedModuleTemplate: `%s %s` exited %d (in %s)"
+                    exe
+                    (String.concat " " args)
+                    code
+                    dir
+
+        // ── 0. The vendored conformance pack has not drifted ─────────
+        //
+        // The template's test project VENDORS the SDK's ModuleContract
+        // laws, because the SDK's test project is not packable and
+        // copying is the documented adoption route. A vendored copy
+        // drifts silently by construction, and this one is shipped to
+        // consumers as "born conformant" — so the copy is checked
+        // against its source here rather than trusted.
+        //
+        // Only the LAWS half is vendored: everything from the reference
+        // module onwards is the pack's own self-test, which binds
+        // deliberately non-conforming witnesses and belongs to the SDK.
+        let packSource = "src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs"
+
+        let vendoredPack =
+            packagedModuleTemplateDir + "/tests/MyModule.Tests/Contracts/ModuleContract.fs"
+
+        let selfTestMarker = "// ── a conforming reference module"
+
+        let normaliseText (s: string) =
+            s.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
+
+        let sourceText = File.ReadAllText packSource
+
+        let markerIndex =
+            sourceText.IndexOf(selfTestMarker, System.StringComparison.Ordinal)
+
+        if markerIndex < 0 then
+            failwithf
+                "VerifyPackagedModuleTemplate: could not find the laws/self-test boundary marker %s in %s. The vendored-copy drift check cannot run; re-establish the marker or update this target."
+                selfTestMarker
+                packSource
+
+        let expectedVendored = normaliseText (sourceText.Substring(0, markerIndex))
+        let actualVendored = normaliseText (File.ReadAllText vendoredPack)
+
+        if expectedVendored <> actualVendored then
+            failwithf
+                "VerifyPackagedModuleTemplate: the vendored conformance pack has drifted from the SDK's.%sRe-copy the laws region:%s  the first %d characters of %s (everything before `%s`) into %s."
+                System.Environment.NewLine
+                System.Environment.NewLine
+                markerIndex
+                packSource
+                selfTestMarker
+                vendoredPack
+
+        Trace.tracefn "▶ VerifyPackagedModuleTemplate: vendored conformance pack matches %s" packSource
+
+        // ── 1. A scratch feed carrying the SDK at the gate version ───
+        let feedDir = Path.getFullName "obj/packaged-module-template-feed"
+        Shell.deleteDir feedDir
+        Directory.ensure feedDir
+
+        let globalPackages =
+            match Environment.environVarOrNone "NUGET_PACKAGES" with
+            | Some dir when dir <> "" -> dir
+            | _ ->
+                Path.Combine(
+                    System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile,
+                    ".nuget",
+                    "packages"
+                )
+
+        for pkg in packagedModuleTemplateGatePackages do
+            let cached =
+                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+
+            if Directory.Exists cached then
+                Shell.deleteDir cached
+
+        for pkg in packagedModuleTemplateGatePackages do
+            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s @ %s" pkg templateGateVersion
+
+            runCheckedIn
+                "dotnet"
+                [
+                    "pack"
+                    sprintf "src/%s/%s.fsproj" pkg pkg
+                    sprintf "-p:Version=%s" templateGateVersion
+                    "-o"
+                    feedDir
+                    "--nologo"
+                ]
+                "."
+
+        // ── 2. Instantiate OUTSIDE the repo ──────────────────────────
+        //
+        // Under the repo, the scaffold's own Directory.Build.props stops
+        // the MSBuild walk but nuget.config files MERGE up the tree, so
+        // forge's sources would silently paper over a broken feed
+        // declaration in the template. A short temp path also keeps
+        // Windows MAX_PATH away from fsc, which fails by emitting no dll
+        // and no error.
+        let scratchRoot = Path.Combine(Path.GetTempPath(), "tu-pmt")
+        let moduleName = "Gate.Module"
+        let scaffoldDir = Path.Combine(scratchRoot, moduleName)
+        Shell.deleteDir scratchRoot
+        Directory.ensure scaffoldDir
+
+        let templatePath = Path.getFullName packagedModuleTemplateDir
+
+        // Uninstall first, ignoring the exit code: a dev machine may
+        // carry an earlier install of the same identity, and `install`
+        // refuses rather than replacing.
+        runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+
+        runCheckedIn "dotnet" [ "new"; "install"; templatePath ] "."
+
+        try
+            // Forward slashes for the feed: it lands in an F# verbatim
+            // string in the generated Build.fs and in nuget.config, and
+            // a trailing-backslash Windows path would break the former.
+            let feedForTemplate = feedDir.Replace('\\', '/')
+
+            runCheckedIn
+                "dotnet"
+                [
+                    "new"
+                    "platformsdk-module-packaged"
+                    "-n"
+                    moduleName
+                    "-o"
+                    scaffoldDir
+                    "--namespace-root"
+                    "Gate.Module"
+                    "--sdk-version"
+                    templateGateVersion
+                    "--feed"
+                    feedForTemplate
+                ]
+                "."
+
+            // ── 3. The scaffold's own pipeline, end to end ───────────
+            //
+            // One command, because the generated target chain wires
+            // both conformance layers ahead of Pack. If either the
+            // module-seam laws or the packaging layout laws fail, this
+            // fails.
+            runCheckedIn "dotnet" [ "run"; "--project"; "Build.fsproj"; "--"; "Pack" ] scaffoldDir
+
+            // ── 4. Every ToolUp.* resolved at the gate version ───────
+            //
+            // The equivalent of VerifyTemplates' NU1603 escalation, done
+            // by reading the restore result rather than by a warning
+            // flag we cannot inject through the scaffold's own driver. A
+            // ToolUp.* package resolved at any other version means the
+            // gate closure above is incomplete and the scaffold compiled
+            // against a mix of current and released SDK.
+            let assetsFile =
+                Path.Combine(scaffoldDir, "src", moduleName, "obj", "project.assets.json")
+
+            if not (File.Exists assetsFile) then
+                failwithf
+                    "VerifyPackagedModuleTemplate: no restore graph at %s — the scaffold did not restore."
+                    assetsFile
+
+            let strayPins =
+                System.Text.RegularExpressions.Regex.Matches(
+                    File.ReadAllText assetsFile,
+                    "\"(ToolUp\\.[A-Za-z.]+)/([^\"]+)\""
+                )
+                |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
+                |> Seq.filter (fun (_, version) -> version <> templateGateVersion)
+                |> Seq.distinct
+                |> List.ofSeq
+
+            if not (List.isEmpty strayPins) then
+                failwithf
+                    "VerifyPackagedModuleTemplate: %d ToolUp.* package(s) resolved at a version other than %s — the gate closure is incomplete, so the scaffold built against a MIX of current source and a released SDK: %s. Add the named package(s) to `packagedModuleTemplateGatePackages`."
+                    (List.length strayPins)
+                    templateGateVersion
+                    (strayPins |> List.map (fun (p, v) -> sprintf "%s@%s" p v) |> String.concat ", ")
+
+            // ── 5. The packed layout is what the contract declared ───
+            //
+            // VerifyPackagedModule ran pre-Pack against the project's
+            // DECLARATIONS. This reads the artefact NuGet actually
+            // produced, which is the half a declaration cannot prove.
+            let nupkg =
+                Directory.GetFiles(feedDir, moduleName + ".*.nupkg")
+                |> Array.filter (fun p -> not (p.EndsWith(".snupkg", System.StringComparison.OrdinalIgnoreCase)))
+                |> Array.sort
+                |> Array.tryLast
+
+            match nupkg with
+            | None ->
+                failwithf
+                    "VerifyPackagedModuleTemplate: the scaffold's Pack produced no %s nupkg in %s."
+                    moduleName
+                    feedDir
+            | Some path ->
+                use archive = System.IO.Compression.ZipFile.OpenRead path
+
+                let entries =
+                    archive.Entries |> Seq.map (fun e -> e.FullName.Replace('\\', '/')) |> Set.ofSeq
+
+                let required = [
+                    "fable/" + moduleName + ".fsproj"
+                    "fable/SharedTypes.fs"
+                    "fable/ClientModel.fs"
+                    "fable/Icons.fs"
+                    "fable/ClientRegister.fs"
+                    "fable/icons/module-icon.svg"
+                ]
+
+                let missing = required |> List.filter (fun r -> not (entries.Contains r))
+
+                if not (List.isEmpty missing) then
+                    failwithf
+                        "VerifyPackagedModuleTemplate: the packed nupkg is missing %s. A consumer's Fable build resolves the client tier from these paths."
+                        (String.concat ", " missing)
+
+                // The server tier must NOT be in the Fable set: a
+                // server-only file reaching Fable breaks the consumer's
+                // build, naming this package's namespace.
+                if entries.Contains "fable/Server.fs" then
+                    failwith
+                        "VerifyPackagedModuleTemplate: Server.fs is packed under fable/ — declared server-only, so it must never reach a consumer's Fable compile."
+
+                Trace.tracefn
+                    "▶ VerifyPackagedModuleTemplate: %s carries a conformant fable/ layout"
+                    (Path.GetFileName path)
+        finally
+            runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+
+        Trace.tracefn "▶ VerifyPackagedModuleTemplate: scaffold -> build -> conformance -> pack, green")
+
     execute args

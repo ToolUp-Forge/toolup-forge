@@ -1,12 +1,13 @@
 # ToolUp Platform SDK — `dotnet new` templates
 
-Four templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
+Templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
 
 | Template | Purpose |
 |---|---|
 | `platformsdk-solution` | Full F# full-stack solution with primary `{AppName}-Server` + `{AppName}-Client` pair, one Starter module, `Build.fs`, `compose.yml`, CI workflow, `ToolUp.Sdk` `<PackageReference>` pre-wired. |
 | `platformsdk-application` | Adds a second / Nth Server+Client pair to an existing `platformsdk-solution`. For multi-Application projects (e.g. seller / buyer testbed). |
-| `platformsdk-module` | Four-file analysis module (`SharedTypes` / `Server` / `ClientModel` / `ClientView`) plus `.fsproj` + `.Client.props`. Compiles against `ToolUp.Platform.Core` only — proves the minimum-viable-module dependency floor. |
+| `platformsdk-module` | Four-file analysis module (`SharedTypes` / `Server` / `ClientModel` / `ClientView`) plus `.fsproj` + `.Client.props`. Compiles against `ToolUp.Platform.Core` only — proves the minimum-viable-module dependency floor. **In-tree shape**: the module lives inside the deployment. |
+| `platformsdk-module-packaged` | The same module seam, as **its own repository shipped as a NuGet package**: packable project + `fable/` shadow project carrying the client tier as source, `Pack` into a configurable folder feed, `run.ps1`, CPM, tool manifest, README, licence placeholder — and **both conformance layers pre-wired**, so the discipline is the default rather than a retrofit. |
 | `platformsdk-datamanager` | External data manager module: same shape as `platformsdk-module` but registers via `ExternalDataManager` mode and ships an `IDataSource` skeleton. |
 
 ## Install
@@ -15,6 +16,7 @@ Four templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
 dotnet new install .\templates\platformsdk-solution
 dotnet new install .\templates\platformsdk-application
 dotnet new install .\templates\platformsdk-module
+dotnet new install .\templates\platformsdk-module-packaged
 dotnet new install .\templates\platformsdk-datamanager
 ```
 
@@ -56,6 +58,12 @@ dotnet new platformsdk-module -n MyTestModule -o src/Modules --app MyTestApp2
 
 # Add an external data manager
 dotnet new platformsdk-datamanager -n MyDataManager -o src/Modules --source api
+
+# Scaffold a module that ships as its OWN repository + NuGet package
+dotnet new platformsdk-module-packaged -n Contoso.Orders `
+    --datatype OrderExport --feed ../local-nuget-feed --sdk-version 0.22.0
+cd Contoso.Orders
+pwsh ./run.ps1 -Pack
 ```
 
 ## Programmatic invocation
@@ -64,7 +72,18 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
 
 ## Implementation notes
 
-- All templates target `net10.0` and `IsPackable=false`.
+- All templates target `net10.0`. Every project is `IsPackable=false` except the module project in
+  `platformsdk-module-packaged`, whose whole point is to pack.
+- **Two classes of template, and the difference decides how each is gated.** The *root-inheriting*
+  ones (`platformsdk-application`, `platformsdk-datamanager`, `platformsdk-module`) are project
+  fragments that build against the repo's own `Directory.*.props` + `nuget.config`, so
+  `VerifyTemplates` compiles them in place. The *standalone* ones (`safer`,
+  `platformsdk-solution`, `platformsdk-module-packaged`) carry their own MSBuild roots and a
+  literal `TOOLUP_SDK_VERSION` placeholder, and are not buildable in-repo without rewriting what
+  makes them templates. `platformsdk-module-packaged` is the first of that class with a gate:
+  `VerifyPackagedModuleTemplate` instantiates it into a scratch directory outside the repo and runs
+  the scaffold's own pipeline end to end. See the root `CLAUDE.md` for what that gate checks
+  beyond "it compiles".
 - ToolUp.* packages are consumed via the `ToolUpSdkVersion` property in `Directory.Packages.props`; bump the property to bump every transitive ToolUp package.
 - The `platformsdk-solution` template includes a `Directory.Build.props`, `Directory.Packages.props`, `nuget.config`, `global.json`, and `.gitignore` so the scaffold is a complete buildable repo root.
 - Modules ship the same 4-file convention demonstrated by `samples/HelloWorld/HelloWorld.Module/`.
