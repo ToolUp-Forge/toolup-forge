@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AuthProviders.GoogleIdentity.Client</PackageId>
+    <AssemblyName>ToolUp.AuthProviders.GoogleIdentity.Client</AssemblyName>
+    <Description>Client-side Google Identity Services sign-in UI for ToolUp.Platform: idempotent GIS library bootstrap, Google's rendered branded button, opt-in One Tap prompt, and a credential bridge that admits the returned id_token to the same OIDC token store the redirect flow writes.</Description>
+    <PackageTags>fsharp;fable;feliz;sdk;auth;oidc;google;one-tap;gsi;client;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GoogleIdentityConfig.fs" />
+    <Compile Include="GoogleIdentityScriptLoader.fs" />
+    <Compile Include="GoogleIdentityClient.fs" />
+    <Compile Include="GoogleIdentityAuthUI.fs" />
+    <Compile Include="GoogleIdentityRegister.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <!-- The session this companion mints IS an OIDC session: the token
+         store, the stored-token classifier, sign-out and the refresh
+         timer are all reused rather than reimplemented. -->
+    <ProjectReference Include="..\OidcClient\OidcClient.fsproj" />
+  </ItemGroup>
+</Project>

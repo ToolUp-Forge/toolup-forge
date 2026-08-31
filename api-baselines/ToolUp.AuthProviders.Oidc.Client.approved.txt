@@ -138,12 +138,17 @@ ToolUp.AuthProviders.Oidc.OidcRegister (class)
 ToolUp.AuthProviders.Oidc.OidcRegister.handler : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]] { get }
 ToolUp.AuthProviders.Oidc.OidcRegister.signOutHandler(ToolUp.Platform.OidcUIConfig, Microsoft.FSharp.Core.Unit) : System.Void
 ToolUp.AuthProviders.Oidc.OidcStateMachine (class)
+ToolUp.AuthProviders.Oidc.OidcStateMachine.decideBearerToken(ToolUp.Platform.BearerTokenKind, ToolUp.AuthProviders.Oidc.OidcStateMachine+BearerInputs) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError]
 ToolUp.AuthProviders.Oidc.OidcStateMachine.decideCallbackStart(ToolUp.AuthProviders.Oidc.OidcStateMachine+CallbackInputs) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AuthProviders.Oidc.OidcStateMachine+CallbackStart, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError]
 ToolUp.AuthProviders.Oidc.OidcStateMachine.decideNonceValidity(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]], ToolUp.AuthProviders.Oidc.OidcStateMachine+NonceInputs) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError]
 ToolUp.AuthProviders.Oidc.OidcStateMachine.isTerminal(ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage) : System.Boolean
 ToolUp.AuthProviders.Oidc.OidcStateMachine.stageLabel(ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage) : System.String
 ToolUp.AuthProviders.Oidc.OidcStateMachine.toAuthState(ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage) : ToolUp.AuthProviders.Oidc.OidcTypes+AuthState
 ToolUp.AuthProviders.Oidc.OidcStateMachine.walk(ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage, ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage) : System.Void
+ToolUp.AuthProviders.Oidc.OidcStateMachine+BearerInputs (class)
+ToolUp.AuthProviders.Oidc.OidcStateMachine+BearerInputs..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AuthProviders.Oidc.OidcStateMachine+BearerInputs.AccessToken : System.String { get }
+ToolUp.AuthProviders.Oidc.OidcStateMachine+BearerInputs.IdToken : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AuthProviders.Oidc.OidcStateMachine+CallbackInputs (class)
 ToolUp.AuthProviders.Oidc.OidcStateMachine+CallbackInputs..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AuthProviders.Oidc.OidcStateMachine+CallbackInputs.StashedNonce : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

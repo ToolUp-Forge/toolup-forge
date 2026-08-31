@@ -1,0 +1,11 @@
+{
+    "name": "@toolup/google-identity-client",
+    "version": "1.0.0",
+    "private": true,
+    "comment": "No npm dependencies — the Google Identity Services library is loaded at runtime from https://accounts.google.com/gsi/client by GoogleIdentityScriptLoader, exactly as Google requires (their npm mirrors are not supported for the credential flow).",
+    "dependencies": {},
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+    }
+}

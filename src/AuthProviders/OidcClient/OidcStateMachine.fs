@@ -3,6 +3,7 @@
 
 module ToolUp.AuthProviders.Oidc.OidcStateMachine
 
+open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcTokenStore
 open ToolUp.AuthProviders.Oidc.AuthTracer
@@ -245,3 +246,50 @@ let decideNonceValidity (equals: string -> string -> bool) (inputs: NonceInputs)
                 Ok()
             else
                 Error NonceMismatch
+
+// ─── Bearer-token selection ──────────────────────────────────────────
+//
+// A token-endpoint response — from the authorization-code exchange or
+// from a refresh — carries an `access_token` (mandatory) and, when the
+// `openid` scope was requested, an `id_token`. Which of the two becomes
+// this session's HTTP bearer is the deployment's declared
+// `BearerTokenKind`, resolved from `OidcUIConfig.BearerToken`.
+//
+// Pure, so .NET-side Expecto covers every branch without a browser.
+
+/// The token-endpoint fields the bearer decision reads. Both the
+/// code-exchange and the refresh response project into this shape, so
+/// one decision covers both call sites and cannot drift between them.
+type BearerInputs = {
+    /// The `access_token` field. Always present — the token endpoint's
+    /// response is rejected upstream without it.
+    AccessToken: string
+    /// The `id_token` field, when the issuer returned one.
+    IdToken: string option
+}
+
+/// Choose the token to store and send as the session's bearer.
+///
+/// `AccessTokenBearer` is total: the access token is always present by
+/// the time this runs.
+///
+/// `IdTokenBearer` **fails** when the response carried no id_token,
+/// rather than falling back to the access token. The fallback would be
+/// the worse outcome in both directions: on the callback path the
+/// deployment selected this strategy precisely because its access token
+/// cannot be validated, so falling back stores a credential guaranteed
+/// to 401; on the refresh path it would silently swap the session's
+/// bearer to a different token class mid-session, which no server-side
+/// validator is expecting. A typed error instead drops the session to
+/// the sign-in screen — recoverable, and visible.
+let decideBearerToken (kind: BearerTokenKind) (inputs: BearerInputs) : Result<string, AuthError> =
+    match kind with
+    | AccessTokenBearer -> Ok inputs.AccessToken
+    | IdTokenBearer ->
+        match inputs.IdToken with
+        | Some idToken -> Ok idToken
+        | None ->
+            Error(
+                TokenExchangeFailed
+                    "bearer strategy is `id-token` but the token-endpoint response carried no `id_token`. Confirm the `openid` scope is requested at the authorize endpoint (the OIDC spec makes an id_token mandatory when it is), and that the issuer reissues one on a refresh_token grant."
+            )

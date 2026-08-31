@@ -120,6 +120,7 @@ let oidcConfig: OidcUIConfig = {
     Scopes = [ "openid"; "profile"; "email" ]
     PostLogoutRedirectUri = None
     ValidateIdToken = Some true
+    BearerToken = None   // None = send the access token (the default)
 }
 
 Client.run

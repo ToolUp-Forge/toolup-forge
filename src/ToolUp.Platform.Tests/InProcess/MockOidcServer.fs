@@ -51,6 +51,29 @@ type MockOidcConfig = {
     Name: string
     /// Lifetime stamped into a minted token's `exp` claim.
     TokenLifetime: TimeSpan
+    /// When `true`, `/token` returns an **opaque** `access_token` — a
+    /// random non-JWT string, the way Google (and Auth0 without a
+    /// configured API audience) actually behave — while still
+    /// returning a properly-signed RS256 `id_token`. Models the
+    /// provider class that motivates the id_token bearer strategy:
+    /// sign-in succeeds, and an access-token bearer then has nothing
+    /// the server can validate.
+    ///
+    /// `false` (the default) keeps the historical behaviour where both
+    /// fields carry the same signed JWT, so every pre-existing fixture
+    /// is untouched.
+    OpaqueAccessTokens: bool
+    /// The `aud` claim minted into the `id_token`. `None` (the default)
+    /// omits `aud` entirely, matching the historical mock. Set it to
+    /// the client id to exercise the id_token-as-bearer path, whose
+    /// whole audience contract is `aud` = client id.
+    IdTokenAudience: string option
+    /// When `false`, a `refresh_token` grant returns **no** `id_token`,
+    /// modelling an issuer that reissues only the access token. Drives
+    /// the negative leg of refresh coherence: under the id_token
+    /// strategy the session cannot renew its bearer and must fail
+    /// rather than silently keep or swap one.
+    ReissueIdTokenOnRefresh: bool
 }
 
 module MockOidcConfig =
@@ -59,6 +82,18 @@ module MockOidcConfig =
         Email = "mock-user@example.test"
         Name = "Mock User"
         TokenLifetime = TimeSpan.FromMinutes 30.0
+        OpaqueAccessTokens = false
+        IdTokenAudience = None
+        ReissueIdTokenOnRefresh = true
+    }
+
+    /// An issuer shaped like Google: opaque access tokens, a signed
+    /// id_token addressed to `clientId`, and an id_token reissued on
+    /// every refresh.
+    let opaqueAccessTokenIssuer (clientId: string) = {
+        defaults with
+            OpaqueAccessTokens = true
+            IdTokenAudience = Some clientId
     }
 
 let private b64url (bytes: byte[]) =
@@ -86,8 +121,11 @@ type MockOidcServer(cfg: MockOidcConfig) =
 
     /// RS256 JWT carrying the seeded claims. A negative `lifetime`
     /// yields an already-expired token (used for the expired-credential
-    /// contract case).
-    let mintToken (lifetime: TimeSpan) =
+    /// contract case). `audience` populates the `aud` claim when the
+    /// config asks for one; `jti` makes successive mints textually
+    /// distinct so a test can prove a refresh actually ROTATED the
+    /// bearer rather than re-storing the same string.
+    let mintTokenWith (lifetime: TimeSpan) (audience: string option) (jti: string option) =
         let now = DateTimeOffset.UtcNow
         let header = $"""{{"alg":"RS256","typ":"JWT","kid":"{Kid}"}}"""
 
@@ -99,6 +137,8 @@ type MockOidcServer(cfg: MockOidcConfig) =
             d["iss"] <- box issuerUrl
             d["iat"] <- box (now.ToUnixTimeSeconds())
             d["exp"] <- box (now.Add(lifetime).ToUnixTimeSeconds())
+            audience |> Option.iter (fun a -> d["aud"] <- box a)
+            jti |> Option.iter (fun j -> d["jti"] <- box j)
             JsonSerializer.Serialize d
 
         let hB = b64url (Encoding.UTF8.GetBytes header)
@@ -106,6 +146,14 @@ type MockOidcServer(cfg: MockOidcConfig) =
         let msg = Encoding.UTF8.GetBytes $"{hB}.{pB}"
         let sg = rsa.SignData(msg, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
         $"{hB}.{pB}.{b64url sg}"
+
+    let mintToken (lifetime: TimeSpan) = mintTokenWith lifetime None None
+
+    /// A random non-JWT string, the shape an opaque access token
+    /// actually takes. Prefixed the way Google's are so a failure
+    /// message reads recognisably.
+    let mintOpaqueAccessToken () =
+        $"ya29.{b64url (RandomNumberGenerator.GetBytes 24)}"
 
     let app =
         let builder = WebApplication.CreateBuilder()
@@ -143,20 +191,49 @@ type MockOidcServer(cfg: MockOidcConfig) =
 
         a.MapPost(
             "/token",
-            Func<HttpContext, Task>(fun ctx ->
-                let token = mintToken cfg.TokenLifetime
+            Func<HttpContext, Task>(fun ctx -> task {
+                // The grant type decides whether this is the initial
+                // code exchange or a refresh; the id_token-reissue
+                // switch only applies to the latter.
+                let! grantType = task {
+                    if ctx.Request.HasFormContentType then
+                        let! form = ctx.Request.ReadFormAsync()
+                        return string form["grant_type"]
+                    else
+                        return ""
+                }
+
+                let isRefresh = grantType = "refresh_token"
+
+                // A fresh `jti` per mint, so a refreshed id_token is
+                // textually distinct from the one it replaces and a
+                // test can assert rotation rather than mere presence.
+                let idToken =
+                    mintTokenWith cfg.TokenLifetime cfg.IdTokenAudience (Some(Guid.NewGuid().ToString "N"))
+
+                let accessToken =
+                    if cfg.OpaqueAccessTokens then
+                        mintOpaqueAccessToken ()
+                    else
+                        // Historical shape: access_token and id_token
+                        // are the same signed JWT.
+                        idToken
 
                 let body =
                     let d = Dictionary<string, obj>()
-                    d["access_token"] <- box token
+                    d["access_token"] <- box accessToken
                     d["token_type"] <- box "Bearer"
                     d["expires_in"] <- box (int cfg.TokenLifetime.TotalSeconds)
                     d["refresh_token"] <- box "mock-refresh-token"
-                    d["id_token"] <- box token
+
+                    if not isRefresh || cfg.ReissueIdTokenOnRefresh then
+                        d["id_token"] <- box idToken
+
                     JsonSerializer.Serialize d
 
                 ctx.Response.ContentType <- "application/json"
-                ctx.Response.WriteAsync body)
+                do! ctx.Response.WriteAsync body
+            })
         )
         |> ignore
 
