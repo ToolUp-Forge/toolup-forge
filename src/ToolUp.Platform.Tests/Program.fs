@@ -552,12 +552,14 @@ let private registeredTests =
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
+        GoogleIdentityCompanionTests.tests
         OidcDiagnoseTests.tests
         OidcTracerTests.tests
         OidcStateMachineTests.tests
         OidcPresetsTests.tests
         OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
+        OidcBearerStrategyTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         // Phase 10f — Google Analytics 4 connector: IDataSource +
@@ -703,6 +705,7 @@ let private registeredTests =
         RateLimitConfigHelpersTests.tests
         SseAuthModeValidatorTests.tests
         OidcAudienceBindingValidatorTests.tests
+        OidcClaimMappingAdvisoryValidatorTests.tests
         // Phase 248 OidcAuthValidatorTimeoutTests is wired above (Phase 653),
         // inside the "env-mutating-config-validators" sequenced group.
         // Phase 247 — invite-by-email capability validator (warns when the
@@ -920,6 +923,7 @@ let private registeredTests =
         // Phase 562 — taint-propagating disclosure + declassification routines.
         DisclosureTaintTests.tests
         MultiPartyDisclosureTests.tests
+        DeclassificationBudgetTests.tests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests
@@ -2057,6 +2061,24 @@ let private registeredTests =
         // enqueue arms are gated on a TaskCompletionSource rather than a
         // sleep, so "the caller got its thread back" is deterministic.
         ScopeEnumerationSweepTests.tests
+        // Phase 676 — the N-party countersignature registry: the Phase
+        // 480 lifecycle generalised over arbitrary content-hashed
+        // subjects and an arbitrary party roster. The two axes it opens
+        // are the two it tests hardest — an edit is structurally
+        // unapproved, and a ROSTER change re-opens approval, so a party
+        // cannot be added to an agreement it never saw and have it read
+        // as complete. `parityTests` measures the GP 11 claim that the
+        // bilateral surface is this evaluation at N=2, over a scenario
+        // matrix with a non-vacuity arm; its complement is the Phase 480
+        // pack above, which runs unmodified.
+        CountersignatureRegistryTests.subjectTests
+        CountersignatureRegistryTests.completenessTests
+        CountersignatureRegistryTests.invalidationTests
+        CountersignatureRegistryTests.revocationTests
+        CountersignatureRegistryTests.signatureTests
+        CountersignatureRegistryTests.storeTests
+        CountersignatureRegistryTests.queueTests
+        CountersignatureRegistryTests.parityTests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

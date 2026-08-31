@@ -5,8 +5,9 @@
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.Oidc.OidcAppConfig (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig (class)
-ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind])
+ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind])
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Audience : System.String { get }
+ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.BearerToken : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.ClientId : System.String { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Issuer : System.String { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.PostLogoutRedirectUri : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -16,6 +17,7 @@ ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Scopes : Microsoft.FSharp.
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.ValidateIdToken : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfigModule (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfigModule.create(System.String, System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfigModule.resolveBearerToken(ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.Platform.BearerTokenKind
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfigModule.toClientConfig(ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.Platform.OidcUIConfig
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind.Auth0 : ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind { get }
@@ -41,7 +43,9 @@ ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.Generic : System.Int32 (
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind+Tags.Google : System.Int32 (literal)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.autoAddedScopes(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.defaultBearerToken(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : ToolUp.Platform.BearerTokenKind
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.expectsDecodableAccessToken(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : System.Boolean
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.issuerForm(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : System.String
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.label(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : System.String
 ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.notes(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKindModule.opaqueAccessTokenIsUnfixable(ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind) : System.Boolean

@@ -4,6 +4,7 @@
 module ToolUp.AuthProviders.Oidc.OidcCoherenceValidator
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.AuthProviders.Oidc.OidcAppConfig
 
@@ -22,7 +23,7 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 // relied on `PresetMetadata.AutoAddedScopes` / `.Notes` now derive
 // the same data from `PresetKind` via the helpers in `OidcAppConfig`.
 //
-// Rules (13):
+// Rules (15):
 //
 //   1. ERROR    Issuer empty.
 //   2. ERROR    ClientId empty.
@@ -73,6 +74,33 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 //               another preset, or a hand-edit that added a path
 //               segment or trailing slash. Distinct from rules 7–9,
 //               which have to reason about a parameterised family.
+//  14. ERROR    Bearer strategy resolves to `id-token` but
+//               `Audience` is not `ClientId`. An id_token's `aud`
+//               claim is ALWAYS the client id — the OIDC spec says
+//               so — while `Audience` is the value the server-side
+//               validator binds against. A deployment that set
+//               `Audience` to something else (an Auth0 API
+//               identifier, a separately-presented workforce API
+//               audience) and then selects the id_token as its
+//               bearer has built a configuration in which EVERY
+//               authenticated request fails audience validation.
+//               Non-recoverable at runtime and invisible until the
+//               first API call, which is the same argument that
+//               makes rule 10's workforce-Entra arm an Error.
+//  15. WARN     A preset whose access-token opacity is unfixable by
+//               configuration (`Google`) left on the `access-token`
+//               bearer strategy. The sign-in will succeed and every
+//               subsequent request will 401, because there is no
+//               dashboard knob, scope, or authorize parameter that
+//               makes the access token decodable. Deliberately NOT
+//               keyed on `expectsDecodableAccessToken` — `Generic`
+//               and `Auth0` also answer `false` there, but for
+//               reasons a deployment can act on (no SDK knowledge;
+//               a configurable API audience), so warning about them
+//               would report a non-problem. A Warning rather than an
+//               Error because an explicit `Some AccessTokenBearer`
+//               is a legitimate choice for a deployment validating
+//               the opaque token by some other means.
 
 /// Per-rule outcome.  Aggregator collapses these into a single
 /// `ValidationResult`; `evaluate` exposes the raw list for tests +
@@ -120,6 +148,8 @@ let private looksLikeCiam (issuer: string) =
     || (issuer.Contains "/v2.0" && not (issuer.Contains "login.microsoftonline.com"))
 
 let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
+    let bearerKind = OidcAppConfig.resolveBearerToken cfg
+
     // ─── Rule 1 — Issuer empty ──────────────────────────────
     if String.IsNullOrWhiteSpace cfg.Issuer then
         RuleError
@@ -164,7 +194,25 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
                 cfg.RedirectUri
         )
 
-    // ─── Preset-aware rules (7–11) ──────────────────────────
+    // ─── Rule 14 — id_token bearer with a non-clientId audience ──
+    // Preset-independent: it applies to a hand-built config that
+    // selected the strategy explicitly just as much as to a preset
+    // that defaulted into it, which is why it sits outside the
+    // preset-aware block below.
+    if
+        bearerKind = IdTokenBearer
+        && not (String.IsNullOrWhiteSpace cfg.ClientId)
+        && cfg.Audience <> cfg.ClientId
+    then
+        RuleError(
+            sprintf
+                "OidcAppConfig selects the `id-token` bearer strategy but Audience (`%s`) is not ClientId (`%s`). An id_token's `aud` claim is always the client id, so the server-side validator — which binds against Audience — will reject every authenticated request after an otherwise-successful sign-in. Either set Audience = ClientId, or select `BearerToken = Some AccessTokenBearer` and configure the identity provider to issue a decodable access token addressed to `%s`."
+                cfg.Audience
+                cfg.ClientId
+                cfg.Audience
+        )
+
+    // ─── Preset-aware rules (7–11, 15) ──────────────────────
     match cfg.Preset with
     | None -> ()
     | Some kind ->
@@ -233,14 +281,23 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
             else
                 RuleWarning message
 
+        // Rule 15 — unfixably-opaque access token left as the bearer.
+        if PresetKind.opaqueAccessTokenIsUnfixable kind && bearerKind = AccessTokenBearer then
+            RuleWarning(
+                sprintf
+                    "Preset `%s` issues opaque access tokens with no configuration that makes them decodable, but this deployment sends the access token as its bearer. Sign-in will succeed and every authenticated request will then 401, because the server-side validator has no JWT to verify. The preset's own default (via `PresetKind.defaultBearerToken`) is the id_token — an ordinary RS256 JWT with `aud` = ClientId, which the server validates unchanged — so this deployment has set `BearerToken = Some AccessTokenBearer` explicitly. That is legitimate only if the opaque token is validated by some other means; otherwise drop the override and let the preset's default apply."
+                    label
+            )
+
         // Rule 11 — informational provenance.
         RuleOk(
             sprintf
-                "preset `%s` applied (issuer form: %s; auto-added scopes: [%s]; expects decodable access token: %b)"
+                "preset `%s` applied (issuer form: %s; auto-added scopes: [%s]; expects decodable access token: %b; bearer: %s)"
                 label
                 (PresetKind.issuerForm kind)
                 (String.concat "; " added)
                 (PresetKind.expectsDecodableAccessToken kind)
+                (BearerTokenKind.label bearerKind)
         )
 
         // Rule 12 — Generic + ValidateIdToken = None explicit opt-out.

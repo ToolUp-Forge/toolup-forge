@@ -3,6 +3,8 @@ module ToolUp.AuthProviders.OidcAuthProvider
 open System
 open System.Net.Http
 open System.Security.Cryptography
+open System.Text
+open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
@@ -422,6 +424,130 @@ let private userFromPayload (preferOid: bool) (payload: JwtPayload) : Authentica
         Roles = []
     }
 
+// ─── Claim mapping (post-validation projection) ──────────────────────
+//
+// `AuthConfig.ClaimMapping` names the claims a deployment wants
+// projected onto `UserId` / `TenantId` in place of the built-in `sub`.
+// The claims an operator may name are open-ended, so they cannot be
+// pre-parsed into the typed `JwtPayload` — the payload segment is
+// re-read here for the named names only.
+//
+// **The re-read is signature-safe** and this is the whole reason it is
+// placed where it is: it runs only on the `Ok()` branch of the
+// validation chain, i.e. after the signature has verified against the
+// resolved JWKS key and after `iss` / `aud` / `exp` / `nbf` / max-age
+// have all passed. The bytes are already trusted at that point, so
+// decoding them without re-verifying adds no trust; it only reads more
+// of what the validator already accepted. It can never ADMIT a token —
+// every path below either returns the token's user (possibly remapped)
+// or an error.
+//
+// This mirrors the pattern the deprecated Entra companion decorator
+// uses for its `oid` -> UserId / `tid` -> TenantId remapping, and
+// generalises it: the claim NAMES become configuration instead of being
+// hard-coded per IdP. It uses the same shared `ToolUp.Platform.Base64Url`
+// codec (re-exported as `base64UrlDecode` by the `.Jwt` partial), so
+// there is one base64url implementation on this path, not two.
+//
+// Semantics are FAIL-CLOSED, and deliberately stricter than the
+// companion's fallback chain — see `ClaimMapping` in `AuthConfig.fs` for
+// the rationale. A claim that is absent, non-string, empty, or refused
+// by `IdentitySanitiser` rejects the request naming the claim, rather
+// than silently reverting to `sub`.
+
+/// Read a single mapped claim from an already-validated payload element,
+/// returning the sanitised value or the operator-facing reason it could
+/// not be used. `IdentitySanitiser.sanitiseScopeId` is the same guard
+/// `userFromPayload` applies to `sub` / `oid` — a mapped claim becomes a
+/// storage-scope container name exactly as they do, so it is held to the
+/// identical rule rather than a per-seam dialect.
+let private readMappedClaim (root: JsonElement) (claim: string) : Result<string, string> =
+    match tryGetString claim root with
+    | None ->
+        // Distinguish "absent" from "present but not a string" — an
+        // operator debugging a mapping needs to know whether to change
+        // the IdP's claim set or the claim's type.
+        match root.TryGetProperty claim with
+        | true, v -> Error $"the claim is present but its JSON value is {v.ValueKind}, not a string"
+        | _ -> Error "the claim is absent from the token payload"
+    | Some raw when String.IsNullOrWhiteSpace raw -> Error "the claim is present but empty"
+    | Some raw ->
+        match IdentitySanitiser.sanitiseScopeId raw with
+        | Result.Ok clean -> Result.Ok clean
+        | Result.Error reason ->
+            // Never echo the raw claim value back into a log line — it is
+            // attacker-controlled at this boundary by construction.
+            Error $"the claim's value is not a usable scope identifier ({reason})"
+
+/// Apply a `ClaimMapping` to an already-validated `AuthenticatedUser`,
+/// given the raw token the validator accepted.
+///
+/// **Performs no validation of its own.** The caller MUST have verified
+/// the token's signature, issuer, audience and expiry first — the
+/// validation pipeline has, by the time it calls this. Exposed publicly
+/// (rather than kept private to `validate`) so conformance packs can
+/// drive the shipped mapping rather than a re-implementation of it: a
+/// re-implementation is exactly what would let the two drift, and the
+/// mapping's whole job is identity continuity.
+///
+/// Returns `Ok user` unchanged when the mapping names no claim, and
+/// `Error (claim, reason)` when a named claim cannot be honoured
+/// (fail-closed). The claim name is returned separately from the reason
+/// so callers can classify without parsing a message: the validation
+/// pipeline puts it in `MappedClaimUnusable`, and a conformance pack can
+/// assert WHICH claim was refused rather than only that one was.
+let applyValidatedClaimMapping
+    (mapping: ClaimMapping)
+    (rawToken: string)
+    (user: AuthenticatedUser)
+    : Result<AuthenticatedUser, string * string> =
+    if ClaimMapping.isEmpty mapping then
+        Result.Ok user
+    else
+        // The claim name the failure is attributed to when the payload
+        // itself is unreadable: whichever claim the mapping names first.
+        let firstNamed =
+            mapping.UserIdClaim
+            |> Option.orElse mapping.TenantIdClaim
+            |> Option.defaultValue ""
+
+        let parsed =
+            try
+                let parts = rawToken.Split('.')
+
+                if parts.Length <> 3 then
+                    Result.Error(firstNamed, "the token does not have three base64url segments")
+                else
+                    Result.Ok(JsonDocument.Parse(Encoding.UTF8.GetString(base64UrlDecode parts[1])))
+            with ex ->
+                // The validator already accepted this token, so a parse
+                // failure here is implausible. It is still an error and
+                // not a silent pass: with a mapping configured there is
+                // no safe identity to fall through to.
+                Result.Error(firstNamed, $"the token payload could not be re-read after validation ({ex.Message})")
+
+        match parsed with
+        | Result.Error failure -> Result.Error failure
+        | Result.Ok document ->
+            use doc = document
+            let root = doc.RootElement
+
+            let applyOne
+                (claim: string option)
+                (label: string)
+                (set: string -> AuthenticatedUser -> AuthenticatedUser)
+                (current: AuthenticatedUser)
+                =
+                match claim with
+                | None -> Result.Ok current
+                | Some name ->
+                    readMappedClaim root name
+                    |> Result.mapError (fun reason -> name, $"{label} mapping: {reason}")
+                    |> Result.map (fun value -> set value current)
+
+            applyOne mapping.UserIdClaim "UserId" (fun value u -> { u with UserId = value }) user
+            |> Result.bind (applyOne mapping.TenantIdClaim "TenantId" (fun value u -> { u with TenantId = Some value }))
+
 // ─── Validation pipeline ─────────────────────────────────────────────
 
 /// Full validation: extract → parse → resolve JWKS → verify signature
@@ -551,10 +677,46 @@ let private validate
                                                         (String.concat ", " jwt.Payload.UnmappedRoleClaims)
                                                 )
 
-                                            incr AuthMetrics.ValidateSuccess
                                             let preferOid = config.PreferOidWhenPresent |> Option.defaultValue false
+                                            let baseUser = userFromPayload preferOid jwt.Payload
 
-                                            return Ok(userFromPayload preferOid jwt.Payload)
+                                            // Claim mapping runs LAST, on the fully-
+                                            // validated token, and only when a deployment
+                                            // configured one. `None` short-circuits to the
+                                            // historical result byte-for-byte (GP 11 / GP 13
+                                            // — an unmapped deployment does not even parse
+                                            // the payload a second time). A configured
+                                            // `UserIdClaim` overrides `PreferOidWhenPresent`
+                                            // because it is the explicit operator
+                                            // instruction and the stricter of the two.
+                                            match config.ClaimMapping with
+                                            | None ->
+                                                incr AuthMetrics.ValidateSuccess
+                                                return Ok baseUser
+                                            | Some mapping ->
+                                                match applyValidatedClaimMapping mapping raw baseUser with
+                                                | Result.Ok mapped ->
+                                                    incr AuthMetrics.ValidateSuccess
+                                                    return Ok mapped
+                                                | Result.Error(claim, reason) ->
+                                                    // Counted as a malformed-token outcome:
+                                                    // from the deployment's point of view the
+                                                    // token did not carry what this deployment
+                                                    // requires of it. A dedicated counter would
+                                                    // be a new metric name on a hot path for a
+                                                    // condition that is a misconfiguration, not
+                                                    // a traffic pattern — the Warn line below
+                                                    // is the diagnosable signal.
+                                                    incr AuthMetrics.ValidateMalformed
+
+                                                    logger.Warn(
+                                                        sprintf
+                                                            "OIDC claim mapping could not be honoured for an otherwise-valid token — claim '%s': %s. Rejecting fail-closed rather than falling back to `sub` (AuthConfig.ClaimMapping)."
+                                                            claim
+                                                            reason
+                                                    )
+
+                                                    return Error(MappedClaimUnusable(claim, reason))
     }
 
 // ─── No-op logger fallback ───────────────────────────────────────────

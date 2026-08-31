@@ -604,10 +604,11 @@ ToolUp.Platform.BlobBackedPublisherKeyStore (class)
 ToolUp.Platform.BlobBackedPublisherKeyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule (class)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IPublisherKeyStore
-ToolUp.Platform.BlobBudgetLedger (class)
-ToolUp.Platform.BlobBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]])
 ToolUp.Platform.BlobComputeBudgetStore (class)
 ToolUp.Platform.BlobComputeBudgetStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.BlobCountersignatureRegistry (class)
+ToolUp.Platform.BlobCountersignatureRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ICountersignatureSigner)
+ToolUp.Platform.BlobCountersignatureRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ICountersignatureSigner, System.TimeSpan)
 ToolUp.Platform.BlobDatasetStore (class)
 ToolUp.Platform.BlobDatasetStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec)
 ToolUp.Platform.BlobDatasetStoreModule (class)
@@ -630,6 +631,10 @@ ToolUp.Platform.BlobModelRegistryModule (class)
 ToolUp.Platform.BlobModelRegistryModule.create(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLimits(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILineageStore) : ToolUp.Platform.IModelRegistry
+ToolUp.Platform.BlobPrivacyBudgetLedger (class)
+ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.BlobPrivacyBudgetLedger.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPrivacyBudgetLedger]
 ToolUp.Platform.BlobProviderProfile (class)
 ToolUp.Platform.BlobProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.Platform.BlobStorageEnv (class)
@@ -768,32 +773,56 @@ ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BoundedWorkProvenanceSource (class)
 ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
-ToolUp.Platform.BudgetContention (class)
-ToolUp.Platform.BudgetContention.Dimension : System.String (literal)
-ToolUp.Platform.BudgetContention.denial(ToolUp.Platform.BudgetUsage) : ToolUp.Platform.BudgetDenial
-ToolUp.Platform.BudgetLedgerKey (class)
-ToolUp.Platform.BudgetLedgerKey..ctor(System.String, System.String, System.String)
-ToolUp.Platform.BudgetLedgerKey.Domain : System.String { get }
-ToolUp.Platform.BudgetLedgerKey.PeriodKey : System.String { get }
-ToolUp.Platform.BudgetLedgerKey.ScopeId : System.String { get }
-ToolUp.Platform.BudgetLedgerKeyModule (class)
-ToolUp.Platform.BudgetLedgerKeyModule.cacheKey(ToolUp.Platform.BudgetLedgerKey) : System.String
-ToolUp.Platform.BudgetLedgerKeyModule.create(System.String, System.String, System.String) : ToolUp.Platform.BudgetLedgerKey
-ToolUp.Platform.BudgetLedgerKeyModule.emptyUsage(ToolUp.Platform.BudgetLedgerKey) : ToolUp.Platform.BudgetUsage
-ToolUp.Platform.BudgetLedgerKeyModule.ofSubject(ToolUp.Platform.BudgetSubject, System.String) : ToolUp.Platform.BudgetLedgerKey
-ToolUp.Platform.BudgetLedgerLayout (class)
-ToolUp.Platform.BudgetLedgerLayout.DefaultContainer : System.String (literal)
-ToolUp.Platform.BudgetLedgerLayout.domainPrefix(System.String) : System.String
-ToolUp.Platform.BudgetLedgerLayout.scopePrefix(System.String, System.String) : System.String
-ToolUp.Platform.BudgetLedgerLayout.usageBlob(ToolUp.Platform.BudgetLedgerKey) : System.String
-ToolUp.Platform.BudgetUsageJson (class)
-ToolUp.Platform.BudgetUsageJson.SchemaVersion : System.Int32 (literal)
-ToolUp.Platform.BudgetUsageJson.deserialise(ToolUp.Platform.BudgetLedgerKey, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BudgetUsage]
-ToolUp.Platform.BudgetUsageJson.serialise(ToolUp.Platform.BudgetUsage) : System.Byte[]
-ToolUp.Platform.BudgetWarningLatch (class)
-ToolUp.Platform.BudgetWarningLatch..ctor()
-ToolUp.Platform.BudgetWarningLatch.Reset() : System.Void
-ToolUp.Platform.BudgetWarningLatch.ShouldReport(ToolUp.Platform.BudgetLedgerKey) : System.Boolean
+ToolUp.Platform.BudgetDecision (class)
+ToolUp.Platform.BudgetDecision.IsBudgetRefused : System.Boolean { get }
+ToolUp.Platform.BudgetDecision.IsBudgetReserved : System.Boolean { get }
+ToolUp.Platform.BudgetDecision.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetDecision+BudgetRefused (class)
+ToolUp.Platform.BudgetDecision+BudgetRefused.refusal : ToolUp.Platform.BudgetRefusal { get }
+ToolUp.Platform.BudgetDecision+BudgetReserved (class)
+ToolUp.Platform.BudgetDecision+BudgetReserved.remaining : System.Decimal { get }
+ToolUp.Platform.BudgetDecision+BudgetReserved.spend : ToolUp.Platform.BudgetSpend { get }
+ToolUp.Platform.BudgetDecision+Tags (class)
+ToolUp.Platform.BudgetDecision+Tags.BudgetRefused : System.Int32 (literal)
+ToolUp.Platform.BudgetDecision+Tags.BudgetReserved : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch (class)
+ToolUp.Platform.BudgetEpoch.DailyBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.IsDailyBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.IsMonthlyBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.IsPerpetualBudget : System.Boolean { get }
+ToolUp.Platform.BudgetEpoch.MonthlyBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.PerpetualBudget : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.BudgetEpoch.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetEpoch+Tags (class)
+ToolUp.Platform.BudgetEpoch+Tags.DailyBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch+Tags.MonthlyBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetEpoch+Tags.PerpetualBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetRefusal (class)
+ToolUp.Platform.BudgetRefusal.IsBudgetExhausted : System.Boolean { get }
+ToolUp.Platform.BudgetRefusal.IsBudgetLedgerUnavailable : System.Boolean { get }
+ToolUp.Platform.BudgetRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted (class)
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.ceiling : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.remaining : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetExhausted.requested : System.Decimal { get }
+ToolUp.Platform.BudgetRefusal+BudgetLedgerUnavailable (class)
+ToolUp.Platform.BudgetRefusal+BudgetLedgerUnavailable.reason : System.String { get }
+ToolUp.Platform.BudgetRefusal+Tags (class)
+ToolUp.Platform.BudgetRefusal+Tags.BudgetExhausted : System.Int32 (literal)
+ToolUp.Platform.BudgetRefusal+Tags.BudgetLedgerUnavailable : System.Int32 (literal)
+ToolUp.Platform.BudgetScope (class)
+ToolUp.Platform.BudgetScope..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BudgetScope.CounterpartyPeerId : System.String { get }
+ToolUp.Platform.BudgetScope.Epoch : System.String { get }
+ToolUp.Platform.BudgetScope.TemplateId : System.String { get }
+ToolUp.Platform.BudgetSpend (class)
+ToolUp.Platform.BudgetSpend..ctor(System.String, ToolUp.Platform.BudgetScope, System.Decimal, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Platform.BudgetSpend.Epsilon : System.Decimal { get }
+ToolUp.Platform.BudgetSpend.ExpiresAt : System.DateTimeOffset { get }
+ToolUp.Platform.BudgetSpend.MethodName : System.String { get }
+ToolUp.Platform.BudgetSpend.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.BudgetSpend.ReservationId : System.String { get }
+ToolUp.Platform.BudgetSpend.Scope : ToolUp.Platform.BudgetScope { get }
 ToolUp.Platform.BudgetedComputeDispatcher (class)
 ToolUp.Platform.BudgetedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ComputeBudgetGuard, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.BuildRouteHandlers (class)
@@ -1680,7 +1709,6 @@ ToolUp.Platform.ComputeBudgetLayout (class)
 ToolUp.Platform.ComputeBudgetLayout.BlobPrefix : System.String (literal)
 ToolUp.Platform.ComputeBudgetLayout.DefaultContainer : System.String (literal)
 ToolUp.Platform.ComputeBudgetLayout.budgetBlob(System.String) : System.String
-ToolUp.Platform.ComputeBudgetLayout.ledgerKey(System.String, System.String) : ToolUp.Platform.BudgetLedgerKey
 ToolUp.Platform.ComputeBudgetLayout.scopePrefix(System.String) : System.String
 ToolUp.Platform.ComputeBudgetLayout.usageBlob(System.String, System.String) : System.String
 ToolUp.Platform.ComputeBudgetReservation (class)
@@ -1997,6 +2025,108 @@ ToolUp.Platform.CorsConfigValidator (class)
 ToolUp.Platform.CorsConfigValidator.credentialsWildcardConflict(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.CorsConfigValidator+CorsConfigValidator (class)
 ToolUp.Platform.CorsConfigValidator+CorsConfigValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.Countersignature (class)
+ToolUp.Platform.Countersignature.defaultSkew : System.TimeSpan { get }
+ToolUp.Platform.Countersignature.explain(ToolUp.Platform.CountersignatureSubject, ToolUp.Platform.CountersignatureStatus) : System.String
+ToolUp.Platform.Countersignature.roster(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Countersignature.status(System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CountersignatureSubject, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CountersignatureRecord]) : ToolUp.Platform.CountersignatureStatus
+ToolUp.Platform.CountersignatureAction (class)
+ToolUp.Platform.CountersignatureAction.IsSubjectApproved : System.Boolean { get }
+ToolUp.Platform.CountersignatureAction.IsSubjectProposed : System.Boolean { get }
+ToolUp.Platform.CountersignatureAction.IsSubjectReviewed : System.Boolean { get }
+ToolUp.Platform.CountersignatureAction.IsSubjectRevoked : System.Boolean { get }
+ToolUp.Platform.CountersignatureAction.SubjectApproved : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureAction.SubjectProposed : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureAction.SubjectReviewed : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureAction.SubjectRevoked : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureAction.Tag : System.Int32 { get }
+ToolUp.Platform.CountersignatureAction+Tags (class)
+ToolUp.Platform.CountersignatureAction+Tags.SubjectApproved : System.Int32 (literal)
+ToolUp.Platform.CountersignatureAction+Tags.SubjectProposed : System.Int32 (literal)
+ToolUp.Platform.CountersignatureAction+Tags.SubjectReviewed : System.Int32 (literal)
+ToolUp.Platform.CountersignatureAction+Tags.SubjectRevoked : System.Int32 (literal)
+ToolUp.Platform.CountersignatureCanonical (class)
+ToolUp.Platform.CountersignatureCanonical.actionName(ToolUp.Platform.CountersignatureAction) : System.String
+ToolUp.Platform.CountersignatureCanonical.field(System.Text.StringBuilder, System.String) : System.Void
+ToolUp.Platform.CountersignatureCanonical.instant(System.DateTimeOffset) : System.String
+ToolUp.Platform.CountersignatureCanonical.recordBytes(ToolUp.Platform.CountersignatureRecord) : System.Byte[]
+ToolUp.Platform.CountersignatureCanonical.recordDomain : System.String { get }
+ToolUp.Platform.CountersignatureCanonical.recordId(ToolUp.Platform.CountersignatureRecord) : System.String
+ToolUp.Platform.CountersignatureCanonical.sha256Hex(System.Byte[]) : System.String
+ToolUp.Platform.CountersignatureCanonical.sortedSet(System.Text.StringBuilder, System.Collections.Generic.IEnumerable`1[System.String]) : System.Void
+ToolUp.Platform.CountersignatureCanonical.subjectBytes(System.String, System.String, System.Byte[]) : System.Byte[]
+ToolUp.Platform.CountersignatureCanonical.subjectDomain : System.String { get }
+ToolUp.Platform.CountersignatureCanonical.truncate(System.DateTimeOffset) : System.DateTimeOffset
+ToolUp.Platform.CountersignatureError (class)
+ToolUp.Platform.CountersignatureError.IsCountersignatureRejected : System.Boolean { get }
+ToolUp.Platform.CountersignatureError.IsCountersignatureUnsigned : System.Boolean { get }
+ToolUp.Platform.CountersignatureError.IsCountersignatureUnverified : System.Boolean { get }
+ToolUp.Platform.CountersignatureError.Tag : System.Int32 { get }
+ToolUp.Platform.CountersignatureError+CountersignatureRejected (class)
+ToolUp.Platform.CountersignatureError+CountersignatureRejected.reason : System.String { get }
+ToolUp.Platform.CountersignatureError+CountersignatureUnsigned (class)
+ToolUp.Platform.CountersignatureError+CountersignatureUnsigned.reason : System.String { get }
+ToolUp.Platform.CountersignatureError+CountersignatureUnverified (class)
+ToolUp.Platform.CountersignatureError+CountersignatureUnverified.reason : System.String { get }
+ToolUp.Platform.CountersignatureError+Tags (class)
+ToolUp.Platform.CountersignatureError+Tags.CountersignatureRejected : System.Int32 (literal)
+ToolUp.Platform.CountersignatureError+Tags.CountersignatureUnsigned : System.Int32 (literal)
+ToolUp.Platform.CountersignatureError+Tags.CountersignatureUnverified : System.Int32 (literal)
+ToolUp.Platform.CountersignatureQueue (class)
+ToolUp.Platform.CountersignatureQueue.project(System.TimeSpan, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CountersignatureRecord]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CountersignatureQueueEntry]
+ToolUp.Platform.CountersignatureQueueEntry (class)
+ToolUp.Platform.CountersignatureQueueEntry..ctor(ToolUp.Platform.CountersignatureSubject, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CountersignatureAction]]], ToolUp.Platform.CountersignatureStatus)
+ToolUp.Platform.CountersignatureQueueEntry.Actions : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CountersignatureAction]]] { get }
+ToolUp.Platform.CountersignatureQueueEntry.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CountersignatureQueueEntry.Status : ToolUp.Platform.CountersignatureStatus { get }
+ToolUp.Platform.CountersignatureQueueEntry.Subject : ToolUp.Platform.CountersignatureSubject { get }
+ToolUp.Platform.CountersignatureRecord (class)
+ToolUp.Platform.CountersignatureRecord..ctor(ToolUp.Platform.CountersignatureSubject, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, ToolUp.Platform.CountersignatureAction, System.DateTimeOffset, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.String)
+ToolUp.Platform.CountersignatureRecord.ActingPartyId : System.String { get }
+ToolUp.Platform.CountersignatureRecord.Action : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureRecord.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.CountersignatureRecord.IssuedAt : System.DateTimeOffset { get }
+ToolUp.Platform.CountersignatureRecord.NotBefore : System.DateTimeOffset { get }
+ToolUp.Platform.CountersignatureRecord.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CountersignatureRecord.Signature : System.String { get }
+ToolUp.Platform.CountersignatureRecord.Subject : ToolUp.Platform.CountersignatureSubject { get }
+ToolUp.Platform.CountersignatureRequest (class)
+ToolUp.Platform.CountersignatureRequest..ctor(ToolUp.Platform.CountersignatureSubject, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, ToolUp.Platform.CountersignatureAction, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.CountersignatureRequest.ActingPartyId : System.String { get }
+ToolUp.Platform.CountersignatureRequest.Action : ToolUp.Platform.CountersignatureAction { get }
+ToolUp.Platform.CountersignatureRequest.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.CountersignatureRequest.NotBefore : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.CountersignatureRequest.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CountersignatureRequest.Subject : ToolUp.Platform.CountersignatureSubject { get }
+ToolUp.Platform.CountersignatureStatus (class)
+ToolUp.Platform.CountersignatureStatus.IsCountersignatureExpired : System.Boolean { get }
+ToolUp.Platform.CountersignatureStatus.IsCountersignaturePending : System.Boolean { get }
+ToolUp.Platform.CountersignatureStatus.IsCountersignatureRevoked : System.Boolean { get }
+ToolUp.Platform.CountersignatureStatus.IsCountersigned : System.Boolean { get }
+ToolUp.Platform.CountersignatureStatus.Tag : System.Int32 { get }
+ToolUp.Platform.CountersignatureStatus+CountersignatureExpired (class)
+ToolUp.Platform.CountersignatureStatus+CountersignatureExpired.at : System.DateTimeOffset { get }
+ToolUp.Platform.CountersignatureStatus+CountersignatureExpired.byPartyId : System.String { get }
+ToolUp.Platform.CountersignatureStatus+CountersignaturePending (class)
+ToolUp.Platform.CountersignatureStatus+CountersignaturePending.awaiting : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CountersignatureStatus+CountersignatureRevoked (class)
+ToolUp.Platform.CountersignatureStatus+CountersignatureRevoked.at : System.DateTimeOffset { get }
+ToolUp.Platform.CountersignatureStatus+CountersignatureRevoked.byPartyId : System.String { get }
+ToolUp.Platform.CountersignatureStatus+Countersigned (class)
+ToolUp.Platform.CountersignatureStatus+Countersigned.effectiveFrom : System.DateTimeOffset { get }
+ToolUp.Platform.CountersignatureStatus+Tags (class)
+ToolUp.Platform.CountersignatureStatus+Tags.CountersignatureExpired : System.Int32 (literal)
+ToolUp.Platform.CountersignatureStatus+Tags.CountersignaturePending : System.Int32 (literal)
+ToolUp.Platform.CountersignatureStatus+Tags.CountersignatureRevoked : System.Int32 (literal)
+ToolUp.Platform.CountersignatureStatus+Tags.Countersigned : System.Int32 (literal)
+ToolUp.Platform.CountersignatureSubject (class)
+ToolUp.Platform.CountersignatureSubject..ctor(System.String, System.String, System.String)
+ToolUp.Platform.CountersignatureSubject.ContentHash : System.String { get }
+ToolUp.Platform.CountersignatureSubject.Kind : System.String { get }
+ToolUp.Platform.CountersignatureSubject.SubjectId : System.String { get }
+ToolUp.Platform.CountersignatureSubjectModule (class)
+ToolUp.Platform.CountersignatureSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.CountersignatureSubject
+ToolUp.Platform.CountersignatureSubjectModule.ofCanonicalBytes(System.String, System.String, System.Byte[]) : ToolUp.Platform.CountersignatureSubject
 ToolUp.Platform.CronExpression (class)
 ToolUp.Platform.CronExpression.isDue(ToolUp.Platform.CronExpression+CronExpression, System.DateTime) : System.Boolean
 ToolUp.Platform.CronExpression.nextRunAfter(ToolUp.Platform.CronExpression+CronExpression, System.DateTime) : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]
@@ -3921,6 +4051,12 @@ ToolUp.Platform.GateVerdict.Name : System.String { get }
 ToolUp.Platform.GateVerdict.Observed : System.Double { get }
 ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
+ToolUp.Platform.GoogleIdentityCspValidator (class)
+ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator (class)
+ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.GoogleIdentityServicesCspContributor (class)
+ToolUp.Platform.GoogleIdentityServicesCspContributor..ctor()
+ToolUp.Platform.GoogleIdentityServicesCspContributor.LibraryUrl : System.String { get }
 ToolUp.Platform.GrantAuthorityEntry (class)
 ToolUp.Platform.GrantAuthorityEntry..ctor(System.String, ToolUp.Platform.ComponentId, ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantPrincipalClass], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.GrantAuthorityEntry.AuthorityComponent : ToolUp.Platform.ComponentId { get }
@@ -4514,10 +4650,6 @@ ToolUp.Platform.IBackgroundExportStore.Complete(System.String, System.Byte[]) : 
 ToolUp.Platform.IBackgroundExportStore.Download(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.ExportStatus]]
 ToolUp.Platform.IBackgroundExportStore.Fail(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IBackgroundExportStore.GetStatus(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExportStatus]
-ToolUp.Platform.IBudgetLedger (interface)
-ToolUp.Platform.IBudgetLedger.ReadUsage(ToolUp.Platform.BudgetLedgerKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetUsage]
-ToolUp.Platform.IBudgetLedger.Release(ToolUp.Platform.BudgetLedgerKey, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.IBudgetLedger.Reserve(ToolUp.Platform.BudgetLedgerKey, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]]
 ToolUp.Platform.IBuildOrchestrator (interface)
 ToolUp.Platform.IBuildOrchestrator.CancelBuild(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BuildOrchestratorError]]
 ToolUp.Platform.IBuildOrchestrator.EnqueueBuild(ToolUp.Platform.BuildRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.BuildOrchestratorError]]
@@ -4575,6 +4707,14 @@ ToolUp.Platform.IConversionStore.List(System.String) : Microsoft.FSharp.Control.
 ToolUp.Platform.IConversionStore.ListRecords(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ConversionRecord]]
 ToolUp.Platform.IConversionStore.Save(System.String, ColumnMappingTypes+Conversion) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IConversionStore.SaveRecord(System.String, ColumnMappingTypes+ConversionRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.ICountersignatureRegistry (interface)
+ToolUp.Platform.ICountersignatureRegistry.Accept(ToolUp.Platform.CountersignatureRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CountersignatureError]]
+ToolUp.Platform.ICountersignatureRegistry.Issue(ToolUp.Platform.CountersignatureRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CountersignatureRecord, ToolUp.Platform.CountersignatureError]]
+ToolUp.Platform.ICountersignatureRegistry.Records(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CountersignatureRecord]]
+ToolUp.Platform.ICountersignatureRegistry.Status(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CountersignatureSubject, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CountersignatureStatus]
+ToolUp.Platform.ICountersignatureSigner (interface)
+ToolUp.Platform.ICountersignatureSigner.Sign(System.String, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
+ToolUp.Platform.ICountersignatureSigner.Verify(System.String, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.ICspContributor (interface)
 ToolUp.Platform.ICspContributor.RequiredSources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CspSourceDirective] { get }
 ToolUp.Platform.IDataCatalog (interface)
@@ -5046,6 +5186,11 @@ ToolUp.Platform.IPresenceTracker.Join(System.String, System.String, Microsoft.FS
 ToolUp.Platform.IPresenceTracker.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Move(System.String, System.String, ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPresenceTracker.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]
+ToolUp.Platform.IPrivacyBudgetLedger (interface)
+ToolUp.Platform.IPrivacyBudgetLedger.IsDurable : System.Boolean { get }
+ToolUp.Platform.IPrivacyBudgetLedger.RecordSpend(ToolUp.Platform.BudgetSpend, ToolUp.Platform.SpendOutcome) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IPrivacyBudgetLedger.RemainingBudget(ToolUp.Platform.BudgetScope, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PrivacyBudget]
+ToolUp.Platform.IPrivacyBudgetLedger.ReserveBudget(ToolUp.Platform.BudgetSpend, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetDecision]
 ToolUp.Platform.IPromotedArtifactSigner (interface)
 ToolUp.Platform.IPromotedArtifactSigner.SignArtifact(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModelArtifactSignature, System.String]]
 ToolUp.Platform.IProvenanceGraph (interface)
@@ -5327,8 +5472,6 @@ ToolUp.Platform.InMemoryAuditSink.Received : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.InMemoryAuditSink.ReceivedEvents : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]] { get }
 ToolUp.Platform.InMemoryAuditSink.StopFailing() : System.Void
 ToolUp.Platform.InMemoryAuditSink.TotalDelivered : System.Int32 { get }
-ToolUp.Platform.InMemoryBudgetLedger (class)
-ToolUp.Platform.InMemoryBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryComputeBudgetStore (class)
 ToolUp.Platform.InMemoryComputeBudgetStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryDataSource (class)
@@ -5364,6 +5507,10 @@ ToolUp.Platform.InMemoryPresenceChannel (class)
 ToolUp.Platform.InMemoryPresenceChannel..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryPresenceTracker (class)
 ToolUp.Platform.InMemoryPresenceTracker..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.InMemoryPrivacyBudgetLedger (class)
+ToolUp.Platform.InMemoryPrivacyBudgetLedger..ctor()
+ToolUp.Platform.InMemoryPrivacyBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.InMemoryPrivacyBudgetLedger.Scopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetScope] { get }
 ToolUp.Platform.InMemoryRateLimitStore (class)
 ToolUp.Platform.InMemoryRateLimitStore.create() : ToolUp.Platform.IRateLimitStore
 ToolUp.Platform.InMemoryRateLimitStore.createWithClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]) : ToolUp.Platform.IRateLimitStore
@@ -6689,6 +6836,8 @@ ToolUp.Platform.NoOpRateLimiter (class)
 ToolUp.Platform.NoOpRateLimiter..ctor()
 ToolUp.Platform.NoOpUserClaims (class)
 ToolUp.Platform.NoOpUserClaims..ctor()
+ToolUp.Platform.NoPrivacyBudgetLedger (class)
+ToolUp.Platform.NoPrivacyBudgetLedger..ctor()
 ToolUp.Platform.NoopEdgeCache (class)
 ToolUp.Platform.NoopEdgeCache..ctor()
 ToolUp.Platform.NoopEdgeCacheModule (class)
@@ -6848,6 +6997,9 @@ ToolUp.Platform.OfflineTolerantValidator.InnerBudget : System.TimeSpan { get }
 ToolUp.Platform.OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator (class)
 ToolUp.Platform.OidcAudienceBindingValidator+OidcAudienceBindingValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator (class)
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator+OidcClaimMappingAdvisoryValidator (class)
+ToolUp.Platform.OidcClaimMappingAdvisoryValidator+OidcClaimMappingAdvisoryValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.OidcConfigCompletenessValidator (class)
 ToolUp.Platform.OidcConfigCompletenessValidator+OidcConfigCompletenessValidator (class)
 ToolUp.Platform.OidcConfigCompletenessValidator+OidcConfigCompletenessValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -7101,6 +7253,40 @@ ToolUp.Platform.PrincipalRegistry (class)
 ToolUp.Platform.PrincipalRegistry.defaultAuditLookBack : System.TimeSpan { get }
 ToolUp.Platform.PrincipalRegistry.listPrincipals(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]]
 ToolUp.Platform.PrincipalRegistry.listPrincipalsWith(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]]
+ToolUp.Platform.PrivacyBudget (class)
+ToolUp.Platform.PrivacyBudget..ctor(ToolUp.Platform.BudgetScope, System.Decimal, System.Decimal, System.Decimal, System.Int32)
+ToolUp.Platform.PrivacyBudget.EpsilonCeiling : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.EpsilonCommitted : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.EpsilonReserved : System.Decimal { get }
+ToolUp.Platform.PrivacyBudget.QueryCount : System.Int32 { get }
+ToolUp.Platform.PrivacyBudget.Scope : ToolUp.Platform.BudgetScope { get }
+ToolUp.Platform.PrivacyBudgetMeter (class)
+ToolUp.Platform.PrivacyBudgetMeter..ctor(ToolUp.Platform.IPrivacyBudgetLedger, ToolUp.Platform.PrivacyBudgetPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.PrivacyBudgetMeter.Ledger : ToolUp.Platform.IPrivacyBudgetLedger { get }
+ToolUp.Platform.PrivacyBudgetMeter.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.PrivacyBudgetMeter.Policy : ToolUp.Platform.PrivacyBudgetPolicy { get }
+ToolUp.Platform.PrivacyBudgetMeterModule (class)
+ToolUp.Platform.PrivacyBudgetMeterModule.create(ToolUp.Platform.IPrivacyBudgetLedger, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetMeter
+ToolUp.Platform.PrivacyBudgetMeterModule.spendFor(System.String, System.String, System.String, ToolUp.Platform.PrivacyBudgetMeter) : ToolUp.Platform.BudgetSpend
+ToolUp.Platform.PrivacyBudgetMeterModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Platform.PrivacyBudgetMeter) : ToolUp.Platform.PrivacyBudgetMeter
+ToolUp.Platform.PrivacyBudgetPolicy (class)
+ToolUp.Platform.PrivacyBudgetPolicy..ctor(System.Decimal, System.Decimal, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Decimal], ToolUp.Platform.BudgetEpoch, ToolUp.Platform.WithholdCharge, System.TimeSpan)
+ToolUp.Platform.PrivacyBudgetPolicy.Epoch : ToolUp.Platform.BudgetEpoch { get }
+ToolUp.Platform.PrivacyBudgetPolicy.EpsilonCeiling : System.Decimal { get }
+ToolUp.Platform.PrivacyBudgetPolicy.EpsilonPerQuery : System.Decimal { get }
+ToolUp.Platform.PrivacyBudgetPolicy.MethodEpsilon : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Decimal] { get }
+ToolUp.Platform.PrivacyBudgetPolicy.ReservationTtl : System.TimeSpan { get }
+ToolUp.Platform.PrivacyBudgetPolicy.WithholdCharge : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.PrivacyBudgetPolicyModule (class)
+ToolUp.Platform.PrivacyBudgetPolicyModule.DefaultReservationTtlMinutes : System.Double (literal)
+ToolUp.Platform.PrivacyBudgetPolicyModule.create(System.Decimal, System.Decimal) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.epochLabel(System.DateTimeOffset, ToolUp.Platform.PrivacyBudgetPolicy) : System.String
+ToolUp.Platform.PrivacyBudgetPolicyModule.epsilonFor(System.String, ToolUp.Platform.PrivacyBudgetPolicy) : System.Decimal
+ToolUp.Platform.PrivacyBudgetPolicyModule.scopeFor(System.String, System.String, System.DateTimeOffset, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.BudgetScope
+ToolUp.Platform.PrivacyBudgetPolicyModule.withEpoch(ToolUp.Platform.BudgetEpoch, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withMethodEpsilon(System.String, System.Decimal, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withReservationTtl(System.TimeSpan, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
+ToolUp.Platform.PrivacyBudgetPolicyModule.withWithholdCharge(ToolUp.Platform.WithholdCharge, ToolUp.Platform.PrivacyBudgetPolicy) : ToolUp.Platform.PrivacyBudgetPolicy
 ToolUp.Platform.ProcessProfileGate (class)
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
@@ -8555,6 +8741,16 @@ ToolUp.Platform.SoftwareBillOfMaterials.Subject : ToolUp.Platform.SbomSubject { 
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SpendOutcome (class)
+ToolUp.Platform.SpendOutcome.IsSpendCommitted : System.Boolean { get }
+ToolUp.Platform.SpendOutcome.IsSpendReturned : System.Boolean { get }
+ToolUp.Platform.SpendOutcome.SpendCommitted : ToolUp.Platform.SpendOutcome { get }
+ToolUp.Platform.SpendOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.SpendOutcome+SpendReturned (class)
+ToolUp.Platform.SpendOutcome+SpendReturned.reason : System.String { get }
+ToolUp.Platform.SpendOutcome+Tags (class)
+ToolUp.Platform.SpendOutcome+Tags.SpendCommitted : System.Int32 (literal)
+ToolUp.Platform.SpendOutcome+Tags.SpendReturned : System.Int32 (literal)
 ToolUp.Platform.SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -9305,6 +9501,15 @@ ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy..ctor(Microsoft.FSharp.Coll
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule (class)
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule.empty : ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.WithholdCharge (class)
+ToolUp.Platform.WithholdCharge.IsWithholdCharged : System.Boolean { get }
+ToolUp.Platform.WithholdCharge.IsWithholdFree : System.Boolean { get }
+ToolUp.Platform.WithholdCharge.Tag : System.Int32 { get }
+ToolUp.Platform.WithholdCharge.WithholdCharged : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.WithholdCharge.WithholdFree : ToolUp.Platform.WithholdCharge { get }
+ToolUp.Platform.WithholdCharge+Tags (class)
+ToolUp.Platform.WithholdCharge+Tags.WithholdCharged : System.Int32 (literal)
+ToolUp.Platform.WithholdCharge+Tags.WithholdFree : System.Int32 (literal)
 ToolUp.Platform.WorkProvenance (class)
 ToolUp.Platform.WorkProvenance.attest(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeployWorkAttestation]
 ToolUp.Platform.WorkProvenance.attestRecord(ToolUp.Platform.WorkProvenanceMode, ToolUp.Platform.DeployRecord) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WorkAttestedDeployRecord]

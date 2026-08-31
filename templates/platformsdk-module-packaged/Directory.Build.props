@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    Repo-wide MSBuild defaults for the MyModule package.
+
+    Present at the repo root, so MSBuild stops walking up here: an
+    instantiated copy inherits nothing from whatever directory it
+    happens to sit under.
+  -->
+  <PropertyGroup>
+    <Authors>PACKAGE_AUTHORS</Authors>
+    <Copyright>Copyright (c) PACKAGE_AUTHORS</Copyright>
+    <PackageTags>fsharp;toolup;module</PackageTags>
+    <PackageLicenseExpression>PACKAGE_LICENSE</PackageLicenseExpression>
+    <!--
+      SemVer-on-0.x: minor bumps may break during 0.x, patch bumps do
+      not. Advance this in the SAME commit as any change to the packed
+      contract — a folder feed keys on id+version, so repacking a slot
+      in place swaps the contract under every consumer whose extracted
+      cache still serves the old bits.
+    -->
+    <Version>0.1.0</Version>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false' And Exists('$(MSBuildProjectDirectory)\README.md')">
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

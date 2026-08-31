@@ -719,6 +719,7 @@
         <Compile Include="Server\ServiceStatusBoardDepsValidator.fs" />
         <Compile Include="Server\OidcConfigCompletenessValidator.fs" />
         <Compile Include="Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="Server\OidcClaimMappingAdvisoryValidator.fs" />
         <Compile Include="Server\HeaderAuthProviderModeValidator.fs" />
         <Compile Include="Server\InviteEmailCapabilityValidator.fs" />
         <!-- Phase 549 — direct-add existence-proof preflight. Anywhere
@@ -768,6 +769,10 @@
         <Compile Include="Server\SseAuthModeValidator.fs" />
         <Compile Include="Server\SecurityHeaders.fs" />
         <Compile Include="Server\ICspContributor.fs" />
+        <!-- GIS CSP preflight — probes the live IServiceCollection for a
+             contributor covering accounts.google.com, so must follow
+             ICspContributor.fs. -->
+        <Compile Include="Server\GoogleIdentityCspValidator.fs" />
         <Compile Include="Server\SecurityHardening.fs" />
         <!-- Phase 156 — SecurityHeadersValidator moved after SecurityHardening:
              its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
@@ -1545,6 +1550,18 @@
              CompositionDryRun.fs (its slotInterface parser). Pure — nothing
              registers into DI, nothing runs at compose (GP 11 / GP 13). -->
         <Compile Include="Server\CompositionUpgradePlan.fs" />
+        <!-- Phase 675 — the cumulative privacy-budget ledger, MOVED here
+             from the federation companion (it was
+             InterPlatform/Server/PrivacyBudgetLedger.fs, Phase 190). Two
+             tiers now meter against it — the clean-room gate and the
+             grounding tier's declassification routines — and a second
+             implementation of a privacy control is how a path that
+             enforces slightly less appears, so the seam sits at the layer
+             both already depend on rather than minting a companion ->
+             companion package edge (GP 1). Appended last: it needs
+             IConditionalBlobStorage (Core) and the FableConverters set
+             (Server/Remoting/Json/), and nothing above it needs it. -->
+        <Compile Include="Server\PrivacyBudgetLedger.fs" />
         <!-- Phase 723 — the scope-enumeration seam (IScopeEnumerator + its
              ITeamStore-backed default) and the converged restart-recovery
              sweep (IIngestionRecoverySurface + IngestionRecoverySweep) the
@@ -1556,6 +1573,15 @@
              deployment that composes no enumerator and no sweep is
              byte-for-byte unchanged (GP 11 / GP 13). -->
         <Compile Include="Server\ScopeEnumeration.fs" />
+        <!-- Phase 676 — the N-party countersignature registry: a signed
+             propose / review / approve / revoke lifecycle over arbitrary
+             content-hashed subjects, with approval live only under every
+             enrolled party's signature over the exact subject hash. Placed
+             last because it depends only on things far above it — the Core
+             signed-shape separators, IBlobStorage, IdentitySanitiser and the
+             shared JSON converter set — and nothing in the file is composed
+             by default, so nothing below needs to see it (GP 11 / GP 13). -->
+        <Compile Include="Server\CountersignatureRegistry.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" />

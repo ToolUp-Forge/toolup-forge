@@ -14,6 +14,7 @@ This page is a cross-cutting overview of the shipped provider companions. For fu
 | `ToolUp.AuthProviders.Oidc.Client` | Client | OIDC sign-in UI: Authorization Code + PKCE flow. |
 | `ToolUp.AuthProviders.EntraExternalId` | Server | Microsoft Entra External ID (CIAM): wraps `Oidc` with tenant-aware issuer construction + `oid`/`tid` claim mapping. |
 | `ToolUp.AuthProviders.EntraExternalId.Client` | Client | Entra External ID sign-in UI: wraps `OidcClient` with `offline_access` scope default + sign-up / sign-in user-flow policy routing. |
+| `ToolUp.AuthProviders.GoogleIdentity.Client` | Client | Google Identity Services: the branded sign-in button and opt-in One Tap. A UX layer over the Google OIDC preset, not a second way to sign in. |
 | `ToolUp.AuthProviders.ClerkUI` | Client | Clerk sign-in UI; commercial product integration. |
 
 Client- vs server-side: the OIDC stack ships as **two packages** because authentication has both ends. The server validates tokens; the client renders the sign-in UX. They share no code but share the OIDC protocol.
@@ -103,10 +104,53 @@ Configuration via environment variables (read by the provider at startup):
 - `TOOLUP_OIDC_AUDIENCE` — required.
 - `TOOLUP_OIDC_CLOCK_SKEW_SECONDS` — optional; default 60.
 - `TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS` — optional; the reachability-probe deadline in milliseconds (default 5000). Raise it for a cold-start-slow tier whose first outbound HTTPS call exceeds 5s, instead of disabling the probe entirely. Range-guarded — a non-numeric / non-positive / absurd value (> 300000) is rejected at preflight rather than silently defaulted. The probe-timeout error message names this var as the lever.
+- `TOOLUP_OIDC_USER_ID_CLAIM` / `TOOLUP_OIDC_TENANT_ID_CLAIM` — optional; see [Claim mapping](#claim-mapping-mapping-a-non-sub-identity) below.
 
 `OidcAuthValidator` `IConfigValidator` probes `.well-known/openid-configuration` at preflight; refuses startup if unreachable. `ServerConfig.SkipPreflight = true` bypasses.
 
 Pair with `ToolUp.AuthProviders.Oidc.Client` for the browser-side sign-in flow.
+
+#### Claim mapping (mapping a non-`sub` identity)
+
+By default the provider maps the OIDC `sub` claim onto `AuthenticatedUser.UserId` and leaves `TenantId` unpopulated. That is correct for most issuers and wrong for a family of them: some IdPs mint a **pairwise pseudonymous** `sub` — a different value per relying party, so it changes when the application is re-registered — and publish a stable identifier under a different claim name instead. Microsoft Entra is the canonical example (`oid` is tenant-wide stable, `sub` is per-app-registration), but the shape is not Entra-specific.
+
+`AuthConfig.ClaimMapping` names the claims to project, so the generic provider covers the whole family rather than needing one decorator per IdP:
+
+```fsharp skip=fragment
+let authConfig = {
+    Issuer = Some issuerUrl
+    Audience = Some audience
+    KeySource = JwksDiscovery issuerUrl
+    TokenLocation = BearerHeader
+    ClockSkewSeconds = None
+    AcceptedAlgorithms = None
+    PreferOidWhenPresent = None
+    ClaimMapping =
+        Some {
+            UserIdClaim = Some "oid"    // -> AuthenticatedUser.UserId
+            TenantIdClaim = Some "tid"  // -> AuthenticatedUser.TenantId
+        }
+}
+```
+
+Or, for an env-composed deployment (`AuthProvider.fromEnv`):
+
+```bash
+TOOLUP_OIDC_USER_ID_CLAIM=oid
+TOOLUP_OIDC_TENANT_ID_CLAIM=tid
+```
+
+Either field may be set alone. `ClaimMapping = None` (the default, and what both variables unset produce) leaves the provider's behaviour byte-for-byte unchanged — the payload is not even re-read.
+
+**Three properties are worth knowing before you turn it on.**
+
+*It is applied after validation, and cannot weaken it.* The projection runs only once the token's signature has verified against the resolved JWKS key and `iss` / `aud` / `exp` / `nbf` have all passed. It re-reads the payload segment that was just accepted, so it reads already-trusted bytes; it is not a second validation path, and every code path either returns the validated identity or an error. Mapped values still go through the same `IdentitySanitiser` guard `sub` does — a mapped claim becomes a storage-scope container name exactly as `sub` does, and is held to the identical rule.
+
+*It is fail-closed.* If a named claim is absent from a validated token, is not a JSON string, is empty, or is refused by the sanitiser, **the request is rejected** — it does not fall back to `sub`. Naming a claim asserts that your IdP mints it; a silent fallback would hand the deployment a *different* identity for the same human at the exact moment the IdP's configuration drifted, and would do it invisibly. The rejection names the claim and the reason, so a mapping that stops being satisfiable is a diagnosable authentication failure rather than a mysterious wave of new users. Verify the claim is present in a real token from your issuer before enabling this in production.
+
+*Turning it on renames every existing identity.* `UserId` is the key for RBAC entries, `TOOLUP_INITIAL_PLATFORM_ADMIN` matching, audit records, and (through the storage-scope resolver) the container every scoped read and write lands in. A deployment that switches from `sub` to `oid` will see previously-known users as new ones, with no data. Plan it as an identity migration, not a config tweak. The `oidc-claim-mapping-advisory` config validator announces an active mapping in the startup preflight summary for this reason — it is a `Warning`, never a refusal; the configuration is supported.
+
+**Relationship to `PreferOidWhenPresent`.** That flag is a single-IdP convenience with *fallback* semantics: it prefers `oid` and falls back to `sub` when absent, and `AuthProvider.fromEnv` auto-enables it for `login.microsoftonline.com` / `ciamlogin.com` issuers. `ClaimMapping` is the generic form and is fail-closed. When both are set, `ClaimMapping.UserIdClaim` wins — it is the explicit operator instruction and the stricter of the two. They resolve identically for a token that carries `oid`, and differ only for one that does not.
 
 #### Wiring `IMetricsSink`
 
@@ -262,7 +306,7 @@ Client.run
 
 #### Provider presets
 
-`OidcPresets` returns a fully-formed `OidcAppConfig` per known identity provider, so the per-provider knobs a consumer would otherwise hand-roll (and get wrong once) live as code. Each preset's descriptive metadata is derived from its `PresetKind` — `PresetKind.label` / `.issuerForm` / `.autoAddedScopes` / `.notes` / `.expectsDecodableAccessToken` — and the `OidcCoherenceValidator` renders it at preflight.
+`OidcPresets` returns a fully-formed `OidcAppConfig` per known identity provider, so the per-provider knobs a consumer would otherwise hand-roll (and get wrong once) live as code. Each preset's descriptive metadata is derived from its `PresetKind` — `PresetKind.label` / `.issuerForm` / `.autoAddedScopes` / `.notes` / `.expectsDecodableAccessToken` / `.defaultBearerToken` / `.opaqueAccessTokenIsUnfixable` — and the `OidcCoherenceValidator` renders it at preflight.
 
 | Preset | Inputs | What the preset encodes |
 |---|---|---|
@@ -271,7 +315,7 @@ Client.run
 | `OidcPresets.entraExternalId` | `tenantSubdomain + clientId + redirectUri` | CIAM `*.ciamlogin.com` v2.0 issuer; `offline_access`; `ValidateIdToken = Some true`. |
 | `OidcPresets.entraExternalIdWithDomain` | `tenantSubdomain + customDomain + clientId + redirectUri` | As above, with a custom CIAM domain replacing the `*.ciamlogin.com` host. |
 | `OidcPresets.auth0` | `domain + clientId + redirectUri` | Tenant URL **with** trailing slash (Auth0's `iss` claim shape); `offline_access`. Tokens stay opaque unless an `audience` extra parameter is passed. |
-| `OidcPresets.google` | `clientId + redirectUri` | Fixed issuer `https://accounts.google.com` — no tenant parameter. Spec-minimum scopes; `ValidateIdToken = Some true`. Refresh tokens ride the `access_type=offline` **authorize parameter**, not an `offline_access` scope. Access tokens are always opaque. |
+| `OidcPresets.google` | `clientId + redirectUri` | Fixed issuer `https://accounts.google.com` — no tenant parameter. Spec-minimum scopes; `ValidateIdToken = Some true`. Refresh tokens ride the `access_type=offline` **authorize parameter**, not an `offline_access` scope. Access tokens are always opaque, so the preset defaults `BearerToken` to `IdTokenBearer` — see [Bearer-token strategy](#bearer-token-strategy). |
 
 ##### Worked example — Google sign-in
 
@@ -332,16 +376,57 @@ OidcClient.beginSignInWithExtras
 
 The same channel carries `hd` for Workspace-domain restriction (`[ "hd", "example.com" ]`) — treat it as a hint that shapes the account chooser, and verify the `hd` claim server-side rather than trusting the parameter.
 
-**Caveat: Google access tokens are always opaque.** Unlike Auth0 — where a dashboard-configured API audience flips the access token to a decodable JWT — Google has no such knob, so `PresetKind.expectsDecodableAccessToken Google` is `false` and `classifyStoredToken` always reports `OpaqueToken`. The `authConfig` above therefore validates the **`id_token`**, which is a real JWT the client sends as its bearer; a follow-up SDK change adds a first-class opaque-token bearer strategy so this is a declared choice rather than a wiring convention. Until then, keep `ValidateIdToken = Some true` (the preset's default) so a tampered id_token is caught at the callback as well as at the server.
+**Google access tokens are always opaque, and the preset handles it.** Unlike Auth0 — where a dashboard-configured API audience flips the access token to a decodable JWT — Google has no such knob, so `PresetKind.expectsDecodableAccessToken Google` is `false` and no deployment-side action changes that. The preset therefore selects the **`id_token`** as the session's bearer (`PresetKind.defaultBearerToken Google` is `IdTokenBearer`), which is why the `authConfig` above works unchanged: an id_token is an ordinary RS256 JWT signed by the same JWKS key set, with `aud` = the client id, which is exactly what `Audience = Some googleCfg.Audience` binds against. See [Bearer-token strategy](#bearer-token-strategy) for the mechanism and for the deployments that need to state it by hand.
 
-The sign-in button in the app's header invokes the OIDC flow:
-1. Redirect to `{Issuer}/authorize` with PKCE challenge.
+Keep `ValidateIdToken = Some true` (the preset's default) so a tampered id_token is caught at the callback as well as at the server — under this strategy the id_token *is* the session credential, which makes the client-side check worth more here than anywhere else.
+
+The whole loop, end to end:
+1. Redirect to `{Issuer}/authorize` with PKCE challenge (plus `access_type=offline` + `prompt=consent` if you want a refresh token).
 2. User authenticates at the issuer.
 3. Issuer redirects back to `{RedirectUri}` with auth code.
-4. Client exchanges code for tokens (with PKCE verifier).
-5. Bearer token persists in `localStorage`; sent on every API request.
+4. Client exchanges code for tokens (with PKCE verifier). The response carries an **opaque** `access_token` and a signed `id_token`.
+5. The declared bearer strategy picks the `id_token`; it persists in `localStorage` and is sent on every API request.
+6. `OidcAuthProvider` validates it against Google's JWKS — `iss` = `https://accounts.google.com`, `aud` = the client id — and the request is authenticated.
+7. `classifyStoredToken` reports `FreshJwt` on a later cold start (not `OpaqueToken`, as it would for the access token), so a stale session is recovered by refresh rather than by a forced re-sign-in.
+8. The pre-expiry timer reads `exp` off the id_token and refreshes at `exp − 60s`; the token endpoint reissues an id_token on the `refresh_token` grant, and that reissued token becomes the new bearer.
 
-Token refresh: the client checks `exp` on the access token; when within 5 minutes of expiry, calls `{Issuer}/token` with the refresh token. No manual intervention.
+Token refresh in general: the client reads `exp` from whichever token is the bearer and calls `{Issuer}/token` with the refresh token shortly before it expires. No manual intervention.
+
+#### Bearer-token strategy
+
+Most identity providers issue a JWT access token, and the SDK sends it as the HTTP `Authorization: Bearer` credential. Some do not: their access tokens are **opaque** — random strings carrying no claims — so a deployment signs in successfully and then 401s on every API call, because `OidcAuthProvider`'s bearer path validates a JWT against the issuer's JWKS and an opaque string has nothing to validate.
+
+`BearerTokenKind` lets a deployment declare which of the two tokens the session stores and sends:
+
+| Value | Meaning |
+|---|---|
+| `AccessTokenBearer` | Send the `access_token`. The OAuth-conventional choice and the SDK default. |
+| `IdTokenBearer` | Send the `id_token`. An id_token is a JWT by OIDC mandate, signed by the same key set, with `iss` = the issuer and `aud` = the client id — so the **unchanged** server-side provider validates it end to end. |
+
+Declare it on `OidcAppConfig`:
+
+```fsharp skip=fragment
+let cfg = {
+    OidcAppConfig.create issuer clientId redirectUri with
+        BearerToken = Some IdTokenBearer
+}
+```
+
+`None` — the default on every config, preset or hand-built — resolves through `OidcAppConfig.resolveBearerToken`: the consumer's explicit choice if there is one, else the preset's own default, else `AccessTokenBearer`. A deployment that says nothing therefore behaves exactly as it did before this option existed.
+
+**Which presets default to which, and why the rule is not the obvious one.** Three presets report `expectsDecodableAccessToken = false`, and only one of them defaults to the id_token — because they say `false` for three different reasons:
+
+- **`Generic`** — the SDK has no provider knowledge, so it cannot *claim* the access token is decodable. It may well be a perfectly good JWT. Defaulting these deployments to the id_token would change working behaviour on an absence of information.
+- **`Auth0`** — opaque *by default*, and fixable by configuration: set an API audience in the Auth0 dashboard, pass it as the `audience` extra parameter, and the access token becomes a decodable JWT addressed to that API. The remedy belongs to the deployment.
+- **`Google`** — opaque *always*, with **no knob that changes it**. The access-token strategy cannot be made to work by any deployment-side action, which is what makes an SDK-chosen default correct here and presumptuous in the other two cases.
+
+`PresetKind.defaultBearerToken` encodes that distinction, and `PresetKind.opaqueAccessTokenIsUnfixable` is the predicate behind it. Reach for `Some IdTokenBearer` yourself when your IdP has opaque access tokens and no preset covers it.
+
+**Audience must be the client id under this strategy.** An id_token's `aud` claim is always the client id — the OIDC spec says so — while `OidcAppConfig.Audience` is what the server-side validator binds against. A config that sets `Audience` to something else (an Auth0 API identifier, a separately-presented workforce API audience) *and* selects the id_token bearer authenticates nobody: the coherence validator refuses startup with a rule-14 **Error** rather than letting the deployment discover it at the first API call. Conversely, leaving a `Google` config on the access-token strategy raises a rule-15 **Warning** — a Warning rather than an Error, because an explicit `Some AccessTokenBearer` is legitimate for a deployment that validates the opaque token by some other means.
+
+**What follows for free, and what does not.** The token store holds exactly one bearer slot, so everything reading it agrees with the strategy by construction rather than by a rule anyone maintains — `classifyStoredToken` reports `FreshJwt` where it used to report `OpaqueToken`, and the pre-expiry timer keys off the id_token's own `exp` instead of falling back to a fixed cadence. What does *not* come free is refresh: under `IdTokenBearer` the token endpoint must reissue an `id_token` on the `refresh_token` grant (issuers do when the `openid` scope is in play). If one does not, the refresh **fails loudly** with a typed `TokenExchangeFailed` and the session drops to the sign-in screen. It deliberately does not fall back to the access token — that would silently swap the session's bearer to a token class the server cannot validate, which is the failure this whole mechanism exists to remove.
+
+Not implemented, deliberately: **RFC 7662 token introspection**. Google does not implement it, and its `tokeninfo` endpoint is a Google-ism rather than a standard, so it belongs in preset notes and not in the substrate. Introspection can be cut as its own seam if a real IdP demands it.
 
 #### Client-side `id_token` validation (opt-in)
 
@@ -454,6 +539,116 @@ Setup walkthrough — Entra portal:
 7. **Claim mapping.** Under the user-flow blade, ensure `oid`, `tid`, `email`, and `idp` are emitted on the issued tokens (External ID emits these by default).
 
 For the full operator playbook including federated-IdP wiring and the invitation flow, see [`docs/migrations/3d-entra-external-id-invitations.md`](../migrations/3d-entra-external-id-invitations.md).
+
+### `ToolUp.AuthProviders.GoogleIdentity.Client` (Google branded button + One Tap)
+
+#### When to bother
+
+**Google sign-in already works without this package.** `ToolUp.AuthProviders.Oidc.Client` plus
+`OidcPresets.google` — the [worked example](#worked-example--google-sign-in) above — is a complete
+Google sign-in: redirect, PKCE, callback, session, sign-out. Nothing about it is provisional, and a
+deployment that never installs this companion is not missing a feature.
+
+This companion exists for the two things that specifically require loading Google's own JavaScript
+library, and it is worth the vendor script only if you want one of them:
+
+- **Google's rendered branded button.** Google's brand guidelines ask for their button rather than a
+  look-alike, and only the GIS library renders it.
+- **One Tap.** The prompt offering a returning visitor their Google account without a click.
+
+Everything else — the session, the bearer, sign-out, the server side — is unchanged either way. If
+neither of those is a requirement, stop at the redirect flow and skip this section.
+
+#### Composition
+
+```fsharp skip=fragment
+open ToolUp.AuthProviders.GoogleIdentity
+open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
+
+// The only required input: Google's issuer is a fixed constant, so
+// there is no tenant, region, or custom domain to get wrong.
+let googleUi =
+    GoogleIdentityUIConfig.create "1234567890-abcdefg.apps.googleusercontent.com"
+
+Client.run
+    { ClientConfig.defaults with
+        AppName = "MyApp"
+        AuthUI = GoogleIdentityRegister.authUI googleUi
+        Handlers = {
+            ClientHandlerRegistry.empty with
+                AuthUIHandlers = [ GoogleIdentityRegister.handler ]
+                SignOutHandler = Some(GoogleIdentityRegister.signOutHandler googleUi)
+        } }
+    modules
+```
+
+The server side is **unchanged from the redirect flow** — same `OidcAuthProvider`, same issuer, same
+audience. This companion adds no server-side identity code, because it changes how the user reaches a
+session, not what the session is.
+
+**One Tap is off unless asked for.** Auto-prompting a deployment's visitors is a product decision the
+SDK does not make on its behalf (GP 11), so the default composition renders the button and nothing
+else:
+
+```fsharp skip=fragment
+let googleUiWithOneTap = GoogleIdentityUIConfig.withOneTap googleUi
+```
+
+`AutoSelect` (signing a returning visitor straight back in, no click) is a further opt-in on top, and
+only reachable when One Tap is on.
+
+#### Content-Security-Policy
+
+The GIS library is fetched from `accounts.google.com`, injects an iframe, calls back to Google's
+origin, and installs its own stylesheet. Under an enforced CSP all four are blocked unless the policy
+was widened — and the failure is silent: the header is emitted, the app boots green, and the button
+never renders for anyone.
+
+Widen it by composition rather than by hand-editing a header:
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withCspContributor (GoogleIdentityServicesCspContributor())
+|> ServerApp.withConfigValidator (
+    GoogleIdentityCspValidator.GoogleIdentityCspValidator(serverConfig, services) :> IConfigValidator)
+```
+
+The second line is a startup preflight. Registering it is how a deployment *declares* that it renders
+the Google button — nothing on the server can observe a client-tier composition by itself, since
+`ClientConfig` never reaches that process — and it then warns if no contributor covers Google's
+origins. It matches on the host rather than on our own type, so a deployment that widened its policy
+its own way is not nagged; it warns rather than aborting, because the policy may be terminated at a
+proxy this app cannot see. A redirect-flow deployment needs none of these origins and never registers
+it.
+
+#### What the session is
+
+GIS returns exactly one value: an `id_token` JWT signed by Google. There is no access token, and
+decisively no refresh token — the credential flow has no token endpoint to exchange against.
+
+The bridge validates the credential's `iss` / `aud` / `exp` (and `nonce`, when one was configured),
+then stores it through the **same** `OidcTokenStore.persistTokens` call the redirect flow makes. That
+is the whole of the "one session" guarantee: `classifyStoredToken`, `signOut` and the pre-expiry
+refresh timer all take the projected `OidcUIConfig`, so a GIS session and a redirect-flow session are
+the same session to everything downstream. There is no parallel session machinery. A refused
+credential raises the ordinary `AuthError` cases (`IdTokenIssuerInvalid`, `IdTokenAudienceInvalid`,
+`IdTokenExpired`, `NonceMismatch`), so one error screen serves both entry points.
+
+Two consequences follow from Google's flow rather than from any SDK choice, and both are worth
+knowing before adopting:
+
+1. **The bearer is a real JWT.** `classifyStoredToken` reports `FreshJwt` for a GIS session where the
+   Google *redirect* flow reports `OpaqueToken` — Google's access tokens are always opaque, its
+   id_tokens never are. The server validates it against Google's JWKS with no extra wiring.
+2. **There is no refresh token, so the session cannot be renewed silently.** The refresh timer arms
+   as usual, finds nothing to refresh at expiry, and the shell returns to the sign-in screen — a
+   re-prompt roughly hourly. A deployment needing long-lived sessions uses the redirect flow with
+   `access_type=offline`, which is where Google issues refresh tokens; the two can be composed
+   together off one client id.
+
+Sign-out clears Google's auto-select state *before* the shared OIDC sign-out. The ordering is
+load-bearing: reversed, One Tap can sign the visitor straight back in on the next page load and
+sign-out looks broken.
 
 ### `ToolUp.AuthProviders.ClerkUI` (Clerk integration)
 

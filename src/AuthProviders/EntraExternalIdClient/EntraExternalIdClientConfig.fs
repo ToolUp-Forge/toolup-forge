@@ -118,4 +118,8 @@ module EntraExternalIdClientConfig =
         Scopes = config.Scopes |> Option.defaultValue defaultScopes
         PostLogoutRedirectUri = config.PostLogoutRedirectUri
         ValidateIdToken = Some true
+        // Entra External ID issues decodable v2 JWT access tokens, so
+        // the default access-token bearer is correct and this stays
+        // `None` — today's behaviour, byte for byte.
+        BearerToken = None
     }

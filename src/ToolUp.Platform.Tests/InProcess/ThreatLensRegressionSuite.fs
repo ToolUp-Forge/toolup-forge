@@ -153,6 +153,7 @@ let private jwksProvider (servedKey: OidcFixture.IssuerKey) (audience: string op
         ClockSkewSeconds = None
         AcceptedAlgorithms = None
         PreferOidWhenPresent = None
+        ClaimMapping = None
     }
 
     OidcAuthProvider.fromConfigWith client None config
