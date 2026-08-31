@@ -604,6 +604,8 @@ ToolUp.Platform.BlobBackedPublisherKeyStore (class)
 ToolUp.Platform.BlobBackedPublisherKeyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule (class)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IPublisherKeyStore
+ToolUp.Platform.BlobBudgetLedger (class)
+ToolUp.Platform.BlobBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]])
 ToolUp.Platform.BlobComputeBudgetStore (class)
 ToolUp.Platform.BlobComputeBudgetStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.BlobCountersignatureRegistry (class)
@@ -773,6 +775,9 @@ ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BoundedWorkProvenanceSource (class)
 ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
+ToolUp.Platform.BudgetContention (class)
+ToolUp.Platform.BudgetContention.Dimension : System.String (literal)
+ToolUp.Platform.BudgetContention.denial(ToolUp.Platform.BudgetUsage) : ToolUp.Platform.BudgetDenial
 ToolUp.Platform.BudgetDecision (class)
 ToolUp.Platform.BudgetDecision.IsBudgetRefused : System.Boolean { get }
 ToolUp.Platform.BudgetDecision.IsBudgetReserved : System.Boolean { get }
@@ -797,6 +802,21 @@ ToolUp.Platform.BudgetEpoch+Tags (class)
 ToolUp.Platform.BudgetEpoch+Tags.DailyBudget : System.Int32 (literal)
 ToolUp.Platform.BudgetEpoch+Tags.MonthlyBudget : System.Int32 (literal)
 ToolUp.Platform.BudgetEpoch+Tags.PerpetualBudget : System.Int32 (literal)
+ToolUp.Platform.BudgetLedgerKey (class)
+ToolUp.Platform.BudgetLedgerKey..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BudgetLedgerKey.Domain : System.String { get }
+ToolUp.Platform.BudgetLedgerKey.PeriodKey : System.String { get }
+ToolUp.Platform.BudgetLedgerKey.ScopeId : System.String { get }
+ToolUp.Platform.BudgetLedgerKeyModule (class)
+ToolUp.Platform.BudgetLedgerKeyModule.cacheKey(ToolUp.Platform.BudgetLedgerKey) : System.String
+ToolUp.Platform.BudgetLedgerKeyModule.create(System.String, System.String, System.String) : ToolUp.Platform.BudgetLedgerKey
+ToolUp.Platform.BudgetLedgerKeyModule.emptyUsage(ToolUp.Platform.BudgetLedgerKey) : ToolUp.Platform.BudgetUsage
+ToolUp.Platform.BudgetLedgerKeyModule.ofSubject(ToolUp.Platform.BudgetSubject, System.String) : ToolUp.Platform.BudgetLedgerKey
+ToolUp.Platform.BudgetLedgerLayout (class)
+ToolUp.Platform.BudgetLedgerLayout.DefaultContainer : System.String (literal)
+ToolUp.Platform.BudgetLedgerLayout.domainPrefix(System.String) : System.String
+ToolUp.Platform.BudgetLedgerLayout.scopePrefix(System.String, System.String) : System.String
+ToolUp.Platform.BudgetLedgerLayout.usageBlob(ToolUp.Platform.BudgetLedgerKey) : System.String
 ToolUp.Platform.BudgetRefusal (class)
 ToolUp.Platform.BudgetRefusal.IsBudgetExhausted : System.Boolean { get }
 ToolUp.Platform.BudgetRefusal.IsBudgetLedgerUnavailable : System.Boolean { get }
@@ -823,6 +843,14 @@ ToolUp.Platform.BudgetSpend.MethodName : System.String { get }
 ToolUp.Platform.BudgetSpend.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.BudgetSpend.ReservationId : System.String { get }
 ToolUp.Platform.BudgetSpend.Scope : ToolUp.Platform.BudgetScope { get }
+ToolUp.Platform.BudgetUsageJson (class)
+ToolUp.Platform.BudgetUsageJson.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.BudgetUsageJson.deserialise(ToolUp.Platform.BudgetLedgerKey, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BudgetUsage]
+ToolUp.Platform.BudgetUsageJson.serialise(ToolUp.Platform.BudgetUsage) : System.Byte[]
+ToolUp.Platform.BudgetWarningLatch (class)
+ToolUp.Platform.BudgetWarningLatch..ctor()
+ToolUp.Platform.BudgetWarningLatch.Reset() : System.Void
+ToolUp.Platform.BudgetWarningLatch.ShouldReport(ToolUp.Platform.BudgetLedgerKey) : System.Boolean
 ToolUp.Platform.BudgetedComputeDispatcher (class)
 ToolUp.Platform.BudgetedComputeDispatcher..ctor(ToolUp.Platform.IExternalComputeDispatcher, ToolUp.Platform.ComputeBudgetGuard, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.BuildRouteHandlers (class)
@@ -1709,6 +1737,7 @@ ToolUp.Platform.ComputeBudgetLayout (class)
 ToolUp.Platform.ComputeBudgetLayout.BlobPrefix : System.String (literal)
 ToolUp.Platform.ComputeBudgetLayout.DefaultContainer : System.String (literal)
 ToolUp.Platform.ComputeBudgetLayout.budgetBlob(System.String) : System.String
+ToolUp.Platform.ComputeBudgetLayout.ledgerKey(System.String, System.String) : ToolUp.Platform.BudgetLedgerKey
 ToolUp.Platform.ComputeBudgetLayout.scopePrefix(System.String) : System.String
 ToolUp.Platform.ComputeBudgetLayout.usageBlob(System.String, System.String) : System.String
 ToolUp.Platform.ComputeBudgetReservation (class)
@@ -4650,6 +4679,10 @@ ToolUp.Platform.IBackgroundExportStore.Complete(System.String, System.Byte[]) : 
 ToolUp.Platform.IBackgroundExportStore.Download(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.ExportStatus]]
 ToolUp.Platform.IBackgroundExportStore.Fail(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IBackgroundExportStore.GetStatus(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExportStatus]
+ToolUp.Platform.IBudgetLedger (interface)
+ToolUp.Platform.IBudgetLedger.ReadUsage(ToolUp.Platform.BudgetLedgerKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetUsage]
+ToolUp.Platform.IBudgetLedger.Release(ToolUp.Platform.BudgetLedgerKey, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IBudgetLedger.Reserve(ToolUp.Platform.BudgetLedgerKey, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]]
 ToolUp.Platform.IBuildOrchestrator (interface)
 ToolUp.Platform.IBuildOrchestrator.CancelBuild(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BuildOrchestratorError]]
 ToolUp.Platform.IBuildOrchestrator.EnqueueBuild(ToolUp.Platform.BuildRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.BuildOrchestratorError]]
@@ -5472,6 +5505,8 @@ ToolUp.Platform.InMemoryAuditSink.Received : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.InMemoryAuditSink.ReceivedEvents : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]] { get }
 ToolUp.Platform.InMemoryAuditSink.StopFailing() : System.Void
 ToolUp.Platform.InMemoryAuditSink.TotalDelivered : System.Int32 { get }
+ToolUp.Platform.InMemoryBudgetLedger (class)
+ToolUp.Platform.InMemoryBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryComputeBudgetStore (class)
 ToolUp.Platform.InMemoryComputeBudgetStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryDataSource (class)

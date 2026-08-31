@@ -1955,6 +1955,15 @@ let private registeredTests =
         // 9d metering integration, and the blob store's scope partitioning
         // + its concurrent-admission race.
         ComputeBudgetTests.tests
+        // Phase 689 — the platform budget seam Phase 451 was generalised
+        // into: one predicate for every ceiling, the three-way verdict,
+        // the period-as-storage-key rule, the compute re-expression pinned
+        // field for field (including that the shared ledger reads and
+        // writes the blob 451 has always written, asserted in BOTH
+        // directions), the IBudgetLedger contract against both shipped
+        // ledgers, and a worked hourly token budget — the domain no
+        // compute test can speak for.
+        BudgetSeamTests.tests
         // Phase 7c — data-object orphan-blob sweep. The orphan is produced
         // through the real Save path (metadata write refused, content
         // write already landed), so the sweep is exercised against the

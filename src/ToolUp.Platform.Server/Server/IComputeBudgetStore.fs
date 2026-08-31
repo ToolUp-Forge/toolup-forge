@@ -119,6 +119,14 @@ type IComputeBudgetStore =
 /// Phase 451 — where budget state lives in blob storage. Shared so a
 /// future admin surface or sweep enumerates exactly what the store writes,
 /// the reason `ComputeMemoLayout` exists.
+///
+/// Phase 689: the usage half is `BudgetLedgerLayout` with this domain's
+/// label, which is why the shared ledger reads and writes exactly the
+/// blobs this phase has been writing since it shipped — the adoption is a
+/// re-expression, not a data migration. The budget blob stays here,
+/// because where a domain's *ceilings* are configured is the domain's own
+/// question (a token budget will read them from per-team config) and the
+/// ledger deliberately owns only the counter.
 [<RequireQualifiedAccess>]
 module ComputeBudgetLayout =
     /// Reserved SDK-level container, alongside every other platform store.
@@ -129,11 +137,16 @@ module ComputeBudgetLayout =
     [<Literal>]
     let BlobPrefix = "compute-budget/"
 
+    /// The ledger key for one scope+period in this domain.
+    let ledgerKey (scopeId: string) (periodKey: string) : BudgetLedgerKey =
+        BudgetLedgerKey.create ComputeBudget.Domain scopeId periodKey
+
     /// Every blob for one scope. The scope segment is what makes the
     /// layout structurally isolating (GP 4) — a lookup for one scope
     /// cannot construct a path under another, and the only prefix a caller
     /// can enumerate is bounded by the scope it resolved.
-    let scopePrefix (scopeId: string) : string = BlobPrefix + scopeId + "/"
+    let scopePrefix (scopeId: string) : string =
+        BudgetLedgerLayout.scopePrefix ComputeBudget.Domain scopeId
 
     /// The configured budget for one scope.
     let budgetBlob (scopeId: string) : string = scopePrefix scopeId + "budget.json"
@@ -143,4 +156,4 @@ module ComputeBudgetLayout =
     /// different blob that does not exist yet, and a blob that does not
     /// exist reads as zero consumption.
     let usageBlob (scopeId: string) (periodKey: string) : string =
-        scopePrefix scopeId + "usage/" + periodKey + ".json"
+        BudgetLedgerLayout.usageBlob (ledgerKey scopeId periodKey)

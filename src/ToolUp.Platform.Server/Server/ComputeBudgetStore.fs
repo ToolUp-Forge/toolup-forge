@@ -159,21 +159,13 @@ module ComputeBudgetJson =
             None
 
     /// Serialise a usage row.
+    ///
+    /// Phase 689: the stored shape is `BudgetUsageJson`'s, which was
+    /// lifted from this function — so the bytes are the ones this store
+    /// has always written, and a row written before the seam existed reads
+    /// back through the shared ledger unchanged.
     let serialiseUsage (usage: ComputeBudgetUsage) : byte[] =
-        use ms = new IO.MemoryStream()
-
-        (use writer = new Utf8JsonWriter(ms)
-         writer.WriteStartObject()
-         writer.WriteNumber("SchemaVersion", SchemaVersion)
-         writer.WriteString("ScopeId", usage.ScopeId)
-         writer.WriteString("PeriodKey", usage.PeriodKey)
-         writer.WriteNumber("InFlight", usage.InFlight)
-         writer.WriteNumber("Spent", usage.Spent)
-         writer.WriteNumber("UpdatedAtTicks", usage.UpdatedAt.Ticks)
-         writer.WriteEndObject()
-         writer.Flush())
-
-        ms.ToArray()
+        BudgetUsageJson.serialise (ComputeBudgetUsage.toBudgetUsage usage)
 
     /// Parse a usage row, refusing one that is not for `scopeId` +
     /// `periodKey`.
@@ -183,27 +175,8 @@ module ComputeBudgetJson =
     /// path degrade to "no consumption recorded" rather than to one tenant
     /// spending another's allowance.
     let deserialiseUsage (scopeId: string) (periodKey: string) (bytes: byte[]) : ComputeBudgetUsage option =
-        try
-            use doc = JsonDocument.Parse(ReadOnlyMemory<byte> bytes)
-            let root = doc.RootElement
-
-            let matches =
-                root.GetProperty("SchemaVersion").GetInt32() = SchemaVersion
-                && root.GetProperty("ScopeId").GetString() = scopeId
-                && root.GetProperty("PeriodKey").GetString() = periodKey
-
-            if not matches then
-                None
-            else
-                Some {
-                    ScopeId = scopeId
-                    PeriodKey = periodKey
-                    InFlight = root.GetProperty("InFlight").GetInt32()
-                    Spent = root.GetProperty("Spent").GetDecimal()
-                    UpdatedAt = DateTime(root.GetProperty("UpdatedAtTicks").GetInt64(), DateTimeKind.Utc)
-                }
-        with _ ->
-            None
+        BudgetUsageJson.deserialise (ComputeBudgetLayout.ledgerKey scopeId periodKey) bytes
+        |> Option.map ComputeBudgetUsage.ofBudgetUsage
 
 /// Phase 451 — the blob-backed `IComputeBudgetStore` registered when
 /// `ServerConfig.ComputeBudget = EnabledComputeBudget`.
@@ -216,172 +189,44 @@ module ComputeBudgetJson =
 type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: string, ?clock: unit -> DateTime) =
 
     let container = defaultArg container ComputeBudgetLayout.DefaultContainer
-    let now = defaultArg clock (fun () -> DateTime.UtcNow)
-
-    let conditional =
-        match box blobs with
-        | :? IConditionalBlobStorage as c -> Some c
-        | _ -> None
-
-    /// Bounded CAS retries. Small on purpose: contention on ONE scope's
-    /// ONE period row is the burst this store exists to bound, and a
-    /// caller who loses five races in a row is, in practice, a caller
-    /// whose scope is saturated — which is the answer the budget was
-    /// going to give anyway. An unbounded retry here would turn a
-    /// saturated scope into an unbounded write amplification against the
-    /// blob backend.
-    let maxCasAttempts = 5
-
-    /// Per-`(scope, period)` write gate. Bounded by the number of
-    /// scope+period pairs this process has touched; entries are cheap
-    /// (one semaphore) and a period key stops being written to when the
-    /// period rolls, so the natural bound is "active scopes", not "runs".
-    let gates = ConcurrentDictionary<string, SemaphoreSlim>()
-
-    let gateFor (scopeId: string) (periodKey: string) =
-        gates.GetOrAdd(scopeId + "|" + periodKey, fun _ -> new SemaphoreSlim(1, 1))
 
     let warn (message: string) =
         match logger with
         | Some log -> log.Warn message
         | None -> ()
 
-    /// The stored usage row plus its ETag, or the zero row plus `None`.
-    let readUsageWithETag (scopeId: string) (periodKey: string) : Async<ComputeBudgetUsage * string option> = async {
-        let name = ComputeBudgetLayout.usageBlob scopeId periodKey
-
-        match conditional with
-        | Some cond ->
-            match! cond.DownloadWithETag(container, name) with
-            | Ok(bytes, etag) ->
-                match ComputeBudgetJson.deserialiseUsage scopeId periodKey bytes with
-                | Some usage -> return usage, Some etag
-                | None ->
-                    // Corrupt or foreign: treat as no consumption, but
-                    // keep the etag so the repairing write still CASes
-                    // against what we read rather than blind-overwriting
-                    // a row another writer may have just fixed.
-                    warn
-                        $"BlobComputeBudgetStore: unreadable usage row for scope '{scopeId}' period '{periodKey}' — treating as zero consumption and rewriting."
-
-                    return ComputeBudgetUsage.empty scopeId periodKey, Some etag
-            | Error _ -> return ComputeBudgetUsage.empty scopeId periodKey, None
-        | None ->
-            match! blobs.Download(container, name) with
-            | Ok bytes ->
-                match ComputeBudgetJson.deserialiseUsage scopeId periodKey bytes with
-                | Some usage -> return usage, None
-                | None ->
-                    warn
-                        $"BlobComputeBudgetStore: unreadable usage row for scope '{scopeId}' period '{periodKey}' — treating as zero consumption and rewriting."
-
-                    return ComputeBudgetUsage.empty scopeId periodKey, None
-            | Error _ -> return ComputeBudgetUsage.empty scopeId periodKey, None
-    }
-
-    /// Write `usage`, CASing against `expected` when the backend supports
-    /// it. `Ok false` means the CAS was refused and the caller should
-    /// re-read and re-decide.
-    let writeUsage
-        (scopeId: string)
-        (periodKey: string)
-        (expected: string option)
-        (usage: ComputeBudgetUsage)
-        : Async<bool> =
-        async {
-            let name = ComputeBudgetLayout.usageBlob scopeId periodKey
-            let bytes = ComputeBudgetJson.serialiseUsage usage
-
-            match conditional with
-            | Some cond ->
-                let condition =
-                    match expected with
-                    | Some etag -> IfMatch etag
-                    | None -> IfAbsent
-
-                match! cond.UploadWithETag(container, name, bytes, condition) with
-                | Ok _ -> return true
-                | Error(ETagMismatch _) -> return false
-                | Error(ConditionalWriteFailure message) ->
-                    // Infrastructure, not contention. Do not re-decide in
-                    // a loop against a backend that is failing — report
-                    // and let the caller proceed, for the fail-open
-                    // reason in the file header.
-                    warn
-                        $"BlobComputeBudgetStore: conditional write failed for scope '{scopeId}' period '{periodKey}': {message}. Budget accounting for this submission is not durable."
-
-                    return true
-            | None ->
-                match! blobs.Upload(container, name, bytes) with
-                | Ok _ -> return true
-                | Error message ->
-                    warn
-                        $"BlobComputeBudgetStore: usage write failed for scope '{scopeId}' period '{periodKey}': {message}. Budget accounting for this submission is not durable."
-
-                    return true
-        }
-
-    /// Run `mutate` against the live row and persist the result, retrying
-    /// the whole decision on a lost CAS. `mutate` returns `Error` to
-    /// abandon the write (a refusal), `Ok` to persist.
-    let mutateUsage
-        (scopeId: string)
-        (periodKey: string)
-        (mutate: ComputeBudgetUsage -> Result<ComputeBudgetUsage, ComputeBudgetDenial>)
-        : Async<Result<ComputeBudgetUsage, ComputeBudgetDenial>> =
-        async {
-            let gate = gateFor scopeId periodKey
-            do! gate.WaitAsync() |> Async.AwaitTask
-
-            try
-                let mutable attempt = 0
-
-                let mutable result =
-                    Unchecked.defaultof<Result<ComputeBudgetUsage, ComputeBudgetDenial>>
-
-                let mutable settled = false
-
-                while not settled do
-                    attempt <- attempt + 1
-                    let! current, etag = readUsageWithETag scopeId periodKey
-
-                    match mutate current with
-                    | Error denial ->
-                        // Refused: nothing is written, so a denial costs
-                        // one read and never a blob write.
-                        result <- Error denial
-                        settled <- true
-                    | Ok updated ->
-                        let! written = writeUsage scopeId periodKey etag updated
-
-                        if written then
-                            result <- Ok updated
-                            settled <- true
-                        elif attempt >= maxCasAttempts then
-                            // Lost the CAS `maxCasAttempts` times: the row
-                            // is hot. Admitting here would be the one
-                            // failure direction a budget may not have on
-                            // its *contended* path — that is precisely the
-                            // burst being bounded — so this refuses, and
-                            // says why in the denial rather than in a log
-                            // line the submitter never sees.
-                            result <-
-                                Error {
-                                    ScopeId = scopeId
-                                    SubmitterClass = SubmitterClass.label SubmitterClass.Human
-                                    Dimension = ComputeBudgetDimension.label ComputeBudgetDimension.Concurrency
-                                    Quota = 0M
-                                    Spent = decimal current.InFlight
-                                    Requested = 1M
-                                    PeriodKey = periodKey
-                                }
-
-                            settled <- true
-
-                return result
-            finally
-                gate.Release() |> ignore
-        }
+    /// Phase 689 — the consumption half, on the shared ledger.
+    ///
+    /// Every property this store's header described — the per-key
+    /// semaphore, the ETag CAS with bounded retries, the fail-open read,
+    /// the exact blob path — is the ledger's, because the ledger is this
+    /// code with the seam's types substituted for compute's. The store
+    /// keeps the half that is genuinely its own: where the *ceilings*
+    /// live, which is a per-domain question the seam deliberately does not
+    /// answer.
+    ///
+    /// The contention refusal is phrased in compute's own vocabulary, so a
+    /// lost-CAS refusal reads to a submitter exactly as it did before —
+    /// a concurrency refusal, which is what a hot row means here.
+    let ledger =
+        BlobBudgetLedger(
+            blobs,
+            ?logger = logger,
+            container = container,
+            ?clock = clock,
+            onContention =
+                fun usage -> {
+                    Domain = usage.Domain
+                    ScopeId = usage.ScopeId
+                    ClassLabel = SubmitterClass.label SubmitterClass.Human
+                    Dimension = ComputeBudgetDimension.label ComputeBudgetDimension.Concurrency
+                    Quota = 0M
+                    Spent = decimal usage.InFlight
+                    Requested = 1M
+                    PeriodKey = usage.PeriodKey
+                }
+        )
+        :> IBudgetLedger
 
     interface IComputeBudgetStore with
         member _.GetBudget(scopeId: string) = async {
@@ -413,42 +258,31 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
         }
 
         member _.ReadUsage(scopeId: string, periodKey: string) = async {
-            let! usage, _ = readUsageWithETag scopeId periodKey
-            return usage
+            let! usage = ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
+            return ComputeBudgetUsage.ofBudgetUsage usage
         }
 
-        member _.Admit(scopeId, periodKey, cost, decide) =
-            mutateUsage scopeId periodKey (fun current ->
-                match decide current with
-                | Error denial -> Error denial
-                | Ok() ->
-                    Ok {
-                        current with
-                            InFlight = current.InFlight + 1
-                            Spent = current.Spent + cost
-                            UpdatedAt = now ()
-                    })
+        member _.Admit(scopeId, periodKey, cost, decide) = async {
+            let! reserved =
+                ledger.Reserve(
+                    ComputeBudgetLayout.ledgerKey scopeId periodKey,
+                    cost,
+                    fun row ->
+                        decide (ComputeBudgetUsage.ofBudgetUsage row)
+                        |> Result.mapError ComputeBudgetDenial.toBudgetDenial
+                )
 
-        member _.Settle(scopeId, periodKey, costAdjustment) = async {
-            let! _ =
-                mutateUsage scopeId periodKey (fun current ->
-                    Ok {
-                        current with
-                            // Clamped: a negative in-flight count would
-                            // silently grant extra concurrency.
-                            InFlight = max 0 (current.InFlight - 1)
-                            // Spend is likewise floored — an adjustment
-                            // larger than the period's recorded spend
-                            // means the reservation was written in a
-                            // period that has since rolled, and crediting
-                            // the NEW period for it would manufacture
-                            // allowance out of a clock boundary.
-                            Spent = max 0M (current.Spent + costAdjustment)
-                            UpdatedAt = now ()
-                    })
-
-            return ()
+            return
+                reserved
+                |> Result.map ComputeBudgetUsage.ofBudgetUsage
+                |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
         }
+
+        member _.Settle(scopeId, periodKey, costAdjustment) =
+            // The in-flight and spend clamps live in `BudgetUsage.settle`,
+            // shared by every ledger so two of them cannot drift on what
+            // settling means.
+            ledger.Release(ComputeBudgetLayout.ledgerKey scopeId periodKey, costAdjustment)
 
 /// Phase 451 — an in-process `IComputeBudgetStore` for tests and
 /// single-node development.
@@ -458,12 +292,10 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
 /// reservation is the *safe* loss — a restart releases every leaked slot.
 /// Not registered by compose; a deployment gets `BlobComputeBudgetStore`.
 type InMemoryComputeBudgetStore(?clock: unit -> DateTime) =
-    let now = defaultArg clock (fun () -> DateTime.UtcNow)
     let budgets = ConcurrentDictionary<string, ComputeBudget>()
-    let usage = ConcurrentDictionary<string, ComputeBudgetUsage>()
-    let gate = obj ()
 
-    let key (scopeId: string) (periodKey: string) = scopeId + "|" + periodKey
+    /// Phase 689 — the consumption half, on the shared in-memory ledger.
+    let ledger = InMemoryBudgetLedger(?clock = clock) :> IBudgetLedger
 
     interface IComputeBudgetStore with
         member _.GetBudget(scopeId: string) = async {
@@ -478,48 +310,25 @@ type InMemoryComputeBudgetStore(?clock: unit -> DateTime) =
         }
 
         member _.ReadUsage(scopeId: string, periodKey: string) = async {
-            match usage.TryGetValue(key scopeId periodKey) with
-            | true, row -> return row
-            | _ -> return ComputeBudgetUsage.empty scopeId periodKey
+            let! row = ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
+            return ComputeBudgetUsage.ofBudgetUsage row
         }
 
         member _.Admit(scopeId, periodKey, cost, decide) = async {
+            let! reserved =
+                ledger.Reserve(
+                    ComputeBudgetLayout.ledgerKey scopeId periodKey,
+                    cost,
+                    fun row ->
+                        decide (ComputeBudgetUsage.ofBudgetUsage row)
+                        |> Result.mapError ComputeBudgetDenial.toBudgetDenial
+                )
+
             return
-                lock gate (fun () ->
-                    let k = key scopeId periodKey
-
-                    let current =
-                        match usage.TryGetValue k with
-                        | true, row -> row
-                        | _ -> ComputeBudgetUsage.empty scopeId periodKey
-
-                    match decide current with
-                    | Error denial -> Error denial
-                    | Ok() ->
-                        let updated = {
-                            current with
-                                InFlight = current.InFlight + 1
-                                Spent = current.Spent + cost
-                                UpdatedAt = now ()
-                        }
-
-                        usage[k] <- updated
-                        Ok updated)
+                reserved
+                |> Result.map ComputeBudgetUsage.ofBudgetUsage
+                |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
         }
 
-        member _.Settle(scopeId, periodKey, costAdjustment) = async {
-            lock gate (fun () ->
-                let k = key scopeId periodKey
-
-                let current =
-                    match usage.TryGetValue k with
-                    | true, row -> row
-                    | _ -> ComputeBudgetUsage.empty scopeId periodKey
-
-                usage[k] <- {
-                    current with
-                        InFlight = max 0 (current.InFlight - 1)
-                        Spent = max 0M (current.Spent + costAdjustment)
-                        UpdatedAt = now ()
-                })
-        }
+        member _.Settle(scopeId, periodKey, costAdjustment) =
+            ledger.Release(ComputeBudgetLayout.ledgerKey scopeId periodKey, costAdjustment)
