@@ -7,6 +7,7 @@ open System.Security.Cryptography
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.AuditSinks
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.AuditSinks.LedgerChain
 open ToolUp.Platform.BlobStorage
@@ -254,6 +255,7 @@ let private chainTests =
                 SubjectKind = "bc"
                 EventType = "d"
                 Payload = "{}"
+                ScopeFacets = []
             }
 
             let shifted = {
@@ -279,6 +281,7 @@ let private chainTests =
                 SubjectKind = "team"
                 EventType = "UserLoggedIn"
                 Payload = "{}"
+                ScopeFacets = []
             }
 
             let a = chain 1L (String('a', 64)) record
@@ -725,5 +728,440 @@ let private ledgerTests =
         }
     ]
 
+// ─── Phase 677 — per-party scoped export ─────────────────────────
+//
+// The property under test is not "the filter works". It is that a party
+// holding ONLY its own segment can tell three things apart: a chain that
+// was tampered with, an export that was under-disclosed to it, and one
+// that is sound. Each is probed by producing the state and asserting the
+// verdict names it — and every probe first asserts the unperturbed
+// export verifies, so a verifier that cannot fail proves nothing.
+
+let private alphaScopeId = "team-alpha"
+let private betaScopeId = "team-beta"
+
+/// Tags each record with the facet naming the scope it was recorded
+/// under — the shape a deployment configures, kept trivial here so the
+/// tests are about the export rather than about the tagging policy.
+let private facetTagger: LedgerScopeTagger =
+    fun envelope -> [ sprintf "scope:%s" envelope.ScopeId ]
+
+let private partyEnvelope (scopeId: string) (offset: float) : AuditEnvelope =
+    AuditEnvelope.fromScopeId
+        scopeId
+        (baseTime.AddSeconds offset)
+        (UserLoggedIn {
+            UserId = sprintf "%s-user-%d" scopeId (int offset)
+            AuthProvider = "Header"
+        })
+
+let private alphaScope =
+    LedgerScopedExport.PartyScope.create "alpha" [ sprintf "scope:%s" alphaScopeId ]
+
+/// A ledger over its own directory whose records are facet-tagged, and
+/// which alternates between the two parties' scopes.
+let private newTaggedLedger () = async {
+    let dir = uniqueDir ()
+    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let sink = createScoped "ledger-scoped" settings storage facetTagger
+
+    let batch = [
+        partyEnvelope alphaScopeId 0.0
+        partyEnvelope betaScopeId 1.0
+        partyEnvelope alphaScopeId 2.0
+        partyEnvelope betaScopeId 3.0
+        partyEnvelope alphaScopeId 4.0
+    ]
+
+    match! sink.Deliver batch with
+    | Ok() -> ()
+    | Error message -> failwithf "tagged ledger seed failed: %s" message
+
+    return storage
+}
+
+let private exportForAlpha (storage: IBlobStorage) = async {
+    match! LedgerScopedExport.exportFor settings storage alphaScope with
+    | Ok export -> return export
+    | Error message -> return failwithf "scoped export failed: %s" message
+}
+
+/// Rewrite one entry of an export. Perturbations are applied to the
+/// EXPORT rather than to the stored ledger, because the party holding an
+/// export is exactly the party who cannot see the ledger — the threat is
+/// a document handed over already altered.
+let private mapEntry
+    (position: int64)
+    (transform: LedgerScopedExport.ScopedExportEntry -> LedgerScopedExport.ScopedExportEntry)
+    (export: LedgerScopedExport.ScopedLedgerExport)
+    =
+    {
+        export with
+            Entries =
+                export.Entries
+                |> List.map (fun entry ->
+                    if LedgerScopedExport.ScopedExportEntry.sequence entry = position then
+                        transform entry
+                    else
+                        entry)
+    }
+
+type private EcdsaStatementSigner(keyId: string, key: ECDsa) =
+    interface IStatementEnvelopeSigner with
+        member _.KeyId() = keyId
+
+        member _.SignPreAuthenticated(pae: byte[]) = async {
+            return
+                Ok {
+                    KeyId = keyId
+                    Signature = key.SignData(pae, HashAlgorithmName.SHA256)
+                }
+        }
+
+let private scopedExportTests =
+    testList "scoped export" [
+
+        testCaseAsync "a party's export discloses its own records and withholds every other party's"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            Expect.equal
+                (List.length export.Entries)
+                5
+                "Every position in the source chain must appear — the skeleton is what proves completeness"
+
+            let disclosed = LedgerScopedExport.disclosedRecords export
+
+            Expect.equal (List.length disclosed) 3 "The three alpha records are disclosed"
+
+            Expect.all
+                disclosed
+                (fun record -> record.ScopeId = alphaScopeId)
+                "Nothing outside the party's scope may be disclosed"
+
+            Expect.isEmpty
+                (LedgerScopedExport.disclosedOutOfScope alphaScope export)
+                "The structural leakage check must find nothing"
+
+            // The strongest available statement about content leakage:
+            // the serialised document a counterparty receives does not
+            // contain the other party's record bodies anywhere.
+            let document = LedgerScopedExport.canonicalForm export
+
+            Expect.isFalse
+                (document.Contains(sprintf "%s-user-1" betaScopeId))
+                "A withheld record's payload must not appear anywhere in the exported document"
+
+            Expect.isFalse
+                (document.Contains(sprintf "%s-user-3" betaScopeId))
+                "A withheld record's payload must not appear anywhere in the exported document"
+
+            match LedgerScopedExport.verifyExport alphaScope export with
+            | LedgerScopedExport.ExportIntact(partyId, disclosedCount, withheldCount, recordCount, _) ->
+                Expect.equal partyId "alpha" "The verdict names the party the export was checked as"
+                Expect.equal disclosedCount 3 "Three disclosed"
+                Expect.equal withheldCount 2 "Two withheld"
+                Expect.equal recordCount 5L "The full chain length is recovered from the export alone"
+            | other -> failtestf "An untouched export must verify; got %A" other
+        }
+
+        testCaseAsync "a tampered disclosed record is reported as tampered, at its position"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            Expect.isTrue
+                (LedgerScopedExport.verifyExport alphaScope export
+                 |> LedgerScopedExport.ScopedExportVerification.isIntact)
+                "The export must verify BEFORE it is perturbed"
+
+            // Edit a disclosed record's body, leaving its stored digest
+            // as it was — the edit-in-place an exporter or a recipient
+            // could attempt on a document in hand.
+            let tampered =
+                export
+                |> mapEntry 2L (function
+                    | LedgerScopedExport.DisclosedRecord record ->
+                        LedgerScopedExport.DisclosedRecord {
+                            record with
+                                Payload = record.Payload.Replace("alpha-user-2", "alpha-user-9")
+                        }
+                    | entry -> entry)
+
+            match LedgerScopedExport.verifyExport alphaScope tampered with
+            | LedgerScopedExport.ExportBrokenAt breakage ->
+                Expect.equal breakage.Kind TamperedRecord "The class must be named"
+                Expect.equal breakage.Position 2L "The break must be positioned where the edit was made"
+            | other -> failtestf "A tampered export must not verify; got %A" other
+        }
+
+        testCaseAsync "an in-scope record downgraded to a withheld witness is detected"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            // The selective-omission attack the facet labels exist to
+            // stop: the record is replaced by a witness carrying its own
+            // true digest, so the chain still walks perfectly. Only the
+            // facet it declares gives it away.
+            let omitted =
+                export
+                |> mapEntry 2L (function
+                    | LedgerScopedExport.DisclosedRecord record ->
+                        LedgerScopedExport.WithheldRecord(record.Sequence, record.Digest, facetsOf record)
+                    | entry -> entry)
+
+            match LedgerScopedExport.verifyExport alphaScope omitted with
+            | LedgerScopedExport.ExportScopeViolation(position, detail) ->
+                Expect.equal position (Some 2L) "The omission must be positioned"
+
+                Expect.stringContains
+                    detail
+                    "incomplete within its own scope"
+                    "The verdict must say the export is under-disclosed rather than broken"
+            | other -> failtestf "A downgraded in-scope record must be detected; got %A" other
+        }
+
+        testCaseAsync "an in-scope record removed outright leaves a gap the walk names"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            let removed = {
+                export with
+                    Entries =
+                        export.Entries
+                        |> List.filter (fun entry -> LedgerScopedExport.ScopedExportEntry.sequence entry <> 2L)
+            }
+
+            match LedgerScopedExport.verifyExport alphaScope removed with
+            | LedgerScopedExport.ExportBrokenAt breakage ->
+                Expect.equal breakage.Kind DroppedRecord "A vanished position is a deletion"
+                Expect.equal breakage.Position 2L "Positioned where the record should have been"
+            | other -> failtestf "A removed position must not verify; got %A" other
+        }
+
+        testCaseAsync "a truncated export contradicts the head's signed record count"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            // Every remaining entry chains perfectly; what is missing is
+            // the tail. Only the record count inside the head bytes —
+            // which the exporter cannot re-sign — catches this.
+            let truncated = {
+                export with
+                    Entries =
+                        export.Entries
+                        |> List.filter (fun entry -> LedgerScopedExport.ScopedExportEntry.sequence entry < 4L)
+            }
+
+            match LedgerScopedExport.verifyExport alphaScope truncated with
+            | LedgerScopedExport.ExportBrokenAt breakage ->
+                Expect.equal breakage.Kind DroppedRecord "A lopped tail is a deletion"
+                Expect.stringContains breakage.Detail "the head records" "The head's count must be what catches it"
+            | other -> failtestf "A truncated export must not verify; got %A" other
+        }
+
+        testCaseAsync "an over-disclosed record is refused even though the chain is sound"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            // The other direction: a beta record handed to alpha in
+            // full. The chain walks — it is the real record — and the
+            // scope check is the only thing between the counterparty and
+            // data it is not entitled to.
+            let! stored = ChainedLedger.read settings storage
+
+            let betaRecord =
+                match stored with
+                | Ok ledger -> ledger.Records |> List.find (fun record -> record.Sequence = 1L)
+                | Error message -> failwithf "ledger read failed: %s" message
+
+            let leaked =
+                export |> mapEntry 1L (fun _ -> LedgerScopedExport.DisclosedRecord betaRecord)
+
+            match LedgerScopedExport.verifyExport alphaScope leaked with
+            | LedgerScopedExport.ExportScopeViolation(position, detail) ->
+                Expect.equal position (Some 1L) "The leak must be positioned"
+                Expect.stringContains detail "disclosed to a scope" "The verdict must name over-disclosure"
+            | other -> failtestf "An over-disclosed record must be refused; got %A" other
+        }
+
+        testCaseAsync "an export is refused when checked as a different party"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            let betaScope =
+                LedgerScopedExport.PartyScope.create "beta" [ sprintf "scope:%s" betaScopeId ]
+
+            match LedgerScopedExport.verifyExport betaScope export with
+            | LedgerScopedExport.ExportScopeViolation(None, detail) ->
+                Expect.stringContains detail "alpha" "The verdict must name the party the export was taken for"
+            | other -> failtestf "An export must not verify under another party's scope; got %A" other
+        }
+
+        testCaseAsync "an untagged ledger discloses nothing to anybody"
+        <| async {
+            // Fail-closed, end to end: a deployment that composes the
+            // ledger without a tagger produces records no scope reaches.
+            // The export is honest about it — every position withheld,
+            // none omitted.
+            let storage, sink = newLedger ()
+            do! seed sink 3
+
+            match! LedgerScopedExport.exportFor settings storage alphaScope with
+            | Error message -> failtestf "An untagged ledger must still export: %s" message
+            | Ok export ->
+                Expect.isEmpty (LedgerScopedExport.disclosedRecords export) "An untagged record is visible to no scope"
+
+                match LedgerScopedExport.verifyExport alphaScope export with
+                | LedgerScopedExport.ExportIntact(_, disclosed, withheld, _, _) ->
+                    Expect.equal disclosed 0 "Nothing disclosed"
+                    Expect.equal withheld 3 "Everything withheld, and nothing silently dropped"
+                | other -> failtestf "A wholly-withheld export is still a valid export; got %A" other
+        }
+
+        testCaseAsync "a record written before scope facets existed verifies unchanged"
+        <| async {
+            // The GP 11 claim made testable: strip the facet property
+            // from the stored JSON, which is exactly the shape a
+            // pre-Phase-677 ledger has on disk, and assert both the
+            // chain digests and the export still hold.
+            let storage, sink = newLedger ()
+            do! seed sink 3
+
+            let! names = segmentNames storage
+            let name = List.exactlyOne names
+            let! lines = readLines storage name
+
+            let stripped =
+                lines
+                |> List.map (fun line ->
+                    let node =
+                        System.Text.Json.Nodes.JsonNode.Parse line :?> System.Text.Json.Nodes.JsonObject
+
+                    node.Remove "ScopeFacets" |> ignore
+                    node.ToJsonString())
+
+            Expect.all
+                stripped
+                (fun line -> not (line.Contains "ScopeFacets"))
+                "The probe must actually have removed the field, or it proves nothing"
+
+            do! writeLines storage name stripped
+
+            match! verify settings storage None with
+            | Ok(LedgerVerified(count, _, HeadUnsigned)) ->
+                Expect.equal count 3L "A ledger with no facet field still walks to its full length"
+            | Ok other -> failtestf "A pre-facet ledger must verify unchanged; got %A" other
+            | Error message -> failtestf "Ledger unreadable: %s" message
+        }
+
+        testCaseAsync "a broken source chain is refused rather than exported"
+        <| async {
+            let storage, sink = newLedger ()
+            do! seed sink 3
+
+            do!
+                perturb storage (fun lines ->
+                    lines
+                    |> List.mapi (fun index line ->
+                        if index = 1 then
+                            let record = parseRecord line
+                            renderRecord { record with EventType = "Rewritten" }
+                        else
+                            line))
+
+            match! LedgerScopedExport.exportFor settings storage alphaScope with
+            | Ok _ -> failtest "An export must not be taken from a chain that does not verify"
+            | Error message ->
+                Expect.stringContains message "refusing to export" "The refusal must say what it refused"
+                Expect.stringContains message "position 1" "The refusal must name the break"
+        }
+
+        testCaseAsync "a scoped export round-trips through the stock DSSE path"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
+
+            let signer =
+                EcdsaStatementSigner("statement-key-1", key) :> IStatementEnvelopeSigner
+
+            match! LedgerScopedExport.sign signer export with
+            | Error message -> failtestf "Signing the export failed: %s" message
+            | Ok envelope ->
+                let json = DsseEnvelope.toJson envelope
+
+                // Stock path: the signature covers the PAE of the
+                // payload, and nothing about this SDK is needed to check
+                // it beyond the DSSE encoding itself.
+                use publicKey = coldPublicKeyOf key
+
+                let pae =
+                    match DsseEnvelope.paeOf envelope with
+                    | Ok bytes -> bytes
+                    | Error message -> failwithf "PAE unreadable: %s" message
+
+                let signatureBytes =
+                    match DsseEnvelope.signatureFor "statement-key-1" envelope with
+                    | Some signature ->
+                        match DsseEnvelope.signatureBytes signature with
+                        | Ok bytes -> bytes
+                        | Error message -> failwithf "signature unreadable: %s" message
+                    | None -> failwith "the envelope carries no signature for the signing key"
+
+                Expect.isTrue
+                    (publicKey.VerifyData(pae, signatureBytes, HashAlgorithmName.SHA256))
+                    "A stock DSSE verifier holding only the public key must accept the envelope"
+
+                // And the document reader recovers the export and
+                // reaches the same verdict the in-memory value did.
+                match LedgerScopedExport.verifyDocument alphaScope json with
+                | LedgerScopedExport.ExportIntact(partyId, disclosed, withheld, count, _) ->
+                    Expect.equal partyId "alpha" "The party survives the round trip"
+                    Expect.equal disclosed 3 "Three disclosed"
+                    Expect.equal withheld 2 "Two withheld"
+                    Expect.equal count 5L "The full chain length survives the round trip"
+                | other -> failtestf "A signed export must read back intact; got %A" other
+
+                Expect.equal
+                    (LedgerScopedExport.contentId export)
+                    (DsseEnvelope.sha256Hex (LedgerScopedExport.canonicalBytes export))
+                    "The subject digest is a plain SHA-256 over the canonical bytes, checkable without this SDK"
+        }
+
+        testCaseAsync "a document of another predicate type is refused rather than read hopefully"
+        <| async {
+            let! storage = newTaggedLedger ()
+            let! export = exportForAlpha storage
+
+            use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
+
+            let signer =
+                EcdsaStatementSigner("statement-key-1", key) :> IStatementEnvelopeSigner
+
+            match!
+                DsseEnvelope.sign
+                    signer
+                    [ LedgerScopedExport.subjectFor export ]
+                    "https://toolup-forge.io/attestations/something-else/v1"
+                    (LedgerScopedExport.predicateJson export)
+            with
+            | Error message -> failtestf "Signing failed: %s" message
+            | Ok envelope ->
+                match LedgerScopedExport.verifyDocument alphaScope (DsseEnvelope.toJson envelope) with
+                | LedgerScopedExport.ExportUnreadable(position, reason) ->
+                    Expect.equal position "document/predicateType" "The refusal must name where it stopped"
+                    Expect.stringContains reason "scoped-audit-ledger-export" "The expected type must be named"
+                | other -> failtestf "A foreign predicate type must be refused; got %A" other
+        }
+    ]
+
 let tests =
-    testList "ChainedLedger audit sink" [ contractTests; chainTests; ledgerTests ]
+    testList "ChainedLedger audit sink" [ contractTests; chainTests; ledgerTests; scopedExportTests ]

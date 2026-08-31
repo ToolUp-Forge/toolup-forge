@@ -106,6 +106,42 @@ The content digest is what makes the sink **batch-idempotent**, as `IAuditSink` 
 
 Retention and write-once immutability are configured **at the destination** — an object-storage retention policy, a filesystem ACL. The sink writes the blob; the destination owns the promise.
 
+## Per-party scoped export
+
+A ledger written on behalf of several contributing parties can hand each one the segment its scope entitles it to, as a document that party verifies in its own hands.
+
+**Tag at append time.** Compose the sink with a *scope tagger* — `AuditEnvelope -> string list` — and each record is written carrying the facets it was classified under. The facets are framed into the record's digest, so the classification is a claim the chain commits to rather than a filter re-derived at export time.
+
+```fsharp
+let sink =
+    createScoped "audit-ledger" settings blobStorage (fun envelope -> [ $"scope:{envelope.ScopeId}" ])
+```
+
+`createSignedScoped` is the same with a head signer. The four-argument `create` / `createSigned` are unchanged and tag nothing.
+
+**An export is the whole chain, not a filtered list.** Filtering records out would break every link across the elision, leaving the recipient unable to distinguish a legitimate omission from a deletion. So every position appears in order: an in-scope position in full, an out-of-scope position as a *witness* carrying its sequence, its digest and its facet labels — enough to walk the links through it, and not the record.
+
+```fsharp
+let scope = LedgerScopedExport.PartyScope.create "acme" [ "scope:team-acme" ]
+
+match! LedgerScopedExport.exportFor settings blobStorage scope with
+| Ok export ->
+    match! LedgerScopedExport.sign statementSigner export with
+    | Ok envelope -> DsseEnvelope.toJson envelope |> writeToFile
+    | Error reason -> …
+| Error reason -> …   // the source chain does not verify; nothing is exported
+```
+
+The recipient verifies with `LedgerScopedExport.verifyExport scope export`, or `verifyDocument scope json` straight from the DSSE file. The verdict is one of four, and none can be read as another: intact; broken at a position (in the ledger's own tamper vocabulary); a scope violation (a record disclosed that the scope does not reach, or a position withheld that it does); or unreadable.
+
+**What is detected.** An edited record fails its own digest. A removed or permuted position fails the walk. A truncated tail contradicts the record count inside the signed head. An in-scope record quietly downgraded to a witness is caught by the facet label the witness must declare.
+
+**What the export discloses about withheld records.** The count of records, the position of each withheld one, its digest, and its facet labels — never a record body. The digest is preimage-resistant; the honest caveat is that it is a confirmation oracle for a *guessed* record, which matters only where a body is low-entropy. The facet labels are the price of detecting selective omission: without them, downgrading an in-scope record to a witness leaves a chain that walks perfectly.
+
+**The limit, stated exactly.** A witness's facets are asserted by the exporter, not proved to a holder who cannot recompute the digest. They are bound — the digest commits to them — so a false claim is falsifiable by anyone who can obtain the record, including another party whose scope covers it. This is detectability by an auditor, not unilateral proof by the recipient.
+
+**Two signatures, two claims.** The ledger head's signature (above) binds the source chain and is carried verbatim inside the export. The DSSE envelope's signature binds *this document* to the key that produced it. A holder checks both, against two keys, for two different questions; neither is expressed in terms of the other. The envelope is a stock in-toto Statement under predicate type `https://toolup-forge.io/attestations/scoped-audit-ledger-export/v1`, so an unmodified DSSE verifier checks the signature and the subject digest with nothing that understands this SDK.
+
 ## Distributed-readiness
 
 **Single-writer per ledger**, by construction (see above). The sink holds an in-process head cache and an append semaphore, so it is not a stateless-between-calls component in the portability-rule-4 sense — that is inherent to a serial chain, not an oversight. Run one ledger per writer.
