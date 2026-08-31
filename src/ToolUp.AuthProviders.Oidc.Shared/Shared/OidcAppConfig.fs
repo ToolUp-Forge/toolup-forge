@@ -206,7 +206,7 @@ module PresetKind =
             "Tenant subdomain is the External ID tenant name (left of `.ciamlogin.com`), embedded into both the issuer host AND the v2.0 path segment."
             "`offline_access` is included by default — External ID requires it for refresh-token rotation."
             "ValidateIdToken defaults to `Some true` (client-side signature + iss + aud + exp via WebCrypto). Customer-facing CIAM surface — defence-in-depth at the boundary is materially more valuable than for an internal OIDC consumer."
-            "For sign-up / sign-in user-flow policy routing, use the dedicated `EntraExternalIdClient` companion (this preset returns a single OidcAppConfig without the policy-routing surface)."
+            "For the sign-up user flow, pipe the config through `OidcPresets.withEntraSignUpUserFlow <policyId>` — the standard shell then renders a `Sign up` button beside `Sign in`, carrying `p=<policyId>` on its authorize request."
           ]
         | Auth0 -> [
             "Auth0 access tokens are opaque by default. Pass an `audience` extra parameter via `beginSignInWithExtras` to receive a decodable JWT addressed to your configured Auth0 API."
@@ -219,6 +219,52 @@ module PresetKind =
             "Issuer is the fixed `https://accounts.google.com` — no tenant or domain parameter. Restricting sign-in to a Workspace domain rides the `hd` authorize parameter (another `beginSignInWithExtras` extra) and is a hint, not a guarantee: verify the `hd` claim server-side."
             "ValidateIdToken defaults to `Some true` — consumer Google sign-in is a customer-facing boundary, so id_token signature / iss / aud / exp are re-checked on every callback (same argument as the Entra External ID preset)."
           ]
+
+/// Helpers over `OidcSecondaryFlow` — the optional second sign-in
+/// affordance (the "Sign up" button beside "Sign in").
+///
+/// **They live here rather than beside the type** (which has to sit in
+/// the client tier, because `OidcUIConfig` carries it): a module-level
+/// *value* in `SDK.ClientTypes.fs` triggers that whole file's startup
+/// initialisation, which reaches the AG Grid Fable `import` stubs and
+/// throws "You've hit dummy code used for Fable bindings" the moment
+/// .NET-side code touches it. That would make the reserved-parameter
+/// list unreadable from the Expecto runner and from the coherence
+/// validator's own tests — i.e. unenforceable exactly where it
+/// matters. This file has no such neighbours.
+module SecondaryFlow =
+    /// The authorize-request parameter names the OIDC client emits for
+    /// itself on every flow, primary or secondary. A secondary flow
+    /// that repeats one of these produces a DUPLICATED query
+    /// parameter, and an issuer's handling of a duplicate is undefined
+    /// — so a collision is a configuration defect, not an override
+    /// mechanism. Pinned against the client's own parameter builder
+    /// (`OidcStateMachine.authorizeParams`) by test, so the two cannot
+    /// drift.
+    let reservedAuthorizeParams = [
+        "response_type"
+        "client_id"
+        "redirect_uri"
+        "scope"
+        "state"
+        "nonce"
+        "code_challenge"
+        "code_challenge_method"
+    ]
+
+    /// Construct a secondary flow from its button label + the extra
+    /// authorize parameters that route it.
+    let create (label: string) (extraAuthorizeParams: (string * string) list) : OidcSecondaryFlow = {
+        Label = label
+        ExtraAuthorizeParams = extraAuthorizeParams
+    }
+
+    /// The flow's extra-parameter keys that collide with the reserved
+    /// set, in declaration order. Empty for a well-formed flow.
+    let collidingParams (flow: OidcSecondaryFlow) : string list =
+        flow.ExtraAuthorizeParams
+        |> List.map fst
+        |> List.filter (fun key -> List.contains key reservedAuthorizeParams)
 
 /// The unified one-declaration OIDC config. Both client and server
 /// sides project their needed fields from a single value. New in
@@ -288,6 +334,22 @@ type OidcAppConfig = {
     /// opaque) are both honoured verbatim. See
     /// `OidcAppConfig.resolveBearerToken`.
     BearerToken: BearerTokenKind option
+
+    /// An optional SECOND sign-in affordance — a button rendered
+    /// beside "Sign in" that starts the same OIDC sign-in with extra
+    /// authorize-request parameters. The generic form of the
+    /// dual-button "Sign in / Sign up" shell: same client id, same
+    /// redirect URI, same PKCE / state / nonce machinery, same
+    /// callback, same token path — only the authorize request differs.
+    ///
+    /// `None` (the default on every preset and on
+    /// `OidcAppConfig.create`) renders today's single-button shell
+    /// byte for byte (GP 11).
+    ///
+    /// Attach one with `OidcPresets.withSecondaryFlow`, or with the
+    /// provider-specific `OidcPresets.withEntraSignUpUserFlow` for an
+    /// Entra External ID sign-up user flow.
+    SecondaryFlow: OidcSecondaryFlow option
 }
 
 module OidcAppConfig =
@@ -305,6 +367,7 @@ module OidcAppConfig =
         ValidateIdToken = None
         Preset = None
         BearerToken = None
+        SecondaryFlow = None
     }
 
     /// The effective bearer strategy for a config: the consumer's
@@ -333,6 +396,12 @@ module OidcAppConfig =
     /// through: the client tier reads a decided value, so the
     /// preset-default rule lives in exactly one place and the browser
     /// orchestration never has to know what a `PresetKind` is.
+    ///
+    /// The secondary flow, by contrast, is projected VERBATIM — there
+    /// is nothing to resolve. No preset supplies one by default (a
+    /// second button is a product decision, not a provider quirk), so
+    /// `None` here means exactly what `None` meant on the app config:
+    /// the single-button shell.
     let toClientConfig (cfg: OidcAppConfig) : OidcUIConfig = {
         Issuer = cfg.Issuer
         ClientId = cfg.ClientId
@@ -341,4 +410,5 @@ module OidcAppConfig =
         PostLogoutRedirectUri = cfg.PostLogoutRedirectUri
         ValidateIdToken = cfg.ValidateIdToken
         BearerToken = Some(resolveBearerToken cfg)
+        SecondaryFlow = cfg.SecondaryFlow
     }

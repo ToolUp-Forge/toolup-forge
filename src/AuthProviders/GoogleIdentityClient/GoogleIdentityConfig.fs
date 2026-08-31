@@ -197,6 +197,12 @@ module GoogleIdentityUIConfig =
         PostLogoutRedirectUri = config.PostLogoutRedirectUri
         ValidateIdToken = Some true
         BearerToken = Some IdTokenBearer
+        // `None`: GIS renders Google's own branded button and never
+        // reaches the generic sign-in screen, so a secondary-flow
+        // affordance would have nowhere to render. A deployment that
+        // also wires the redirect flow declares its secondary flow on
+        // that config.
+        SecondaryFlow = None
     }
 
     /// GIS wire value for a button theme.

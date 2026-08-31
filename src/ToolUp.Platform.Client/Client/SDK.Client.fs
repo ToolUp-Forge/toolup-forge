@@ -226,6 +226,20 @@ module Client =
         /// that leaves `ClientConfig.CommandPalette = NoCommandPalette`
         /// (the default) — the field is inert, the component unmounted.
         CommandPalette: CommandPaletteNav.PaletteState
+        /// Phase 444 — a locale the user (or a consumer module, via
+        /// `LocaleRequest.request`) chose in-session, overriding whatever
+        /// `ClientConfig.Locale` would otherwise resolve to. `None` for
+        /// every deployment that never issues a switch — which is all of
+        /// them until one opts in — so the resolve collapses to the
+        /// declared mode and the field is inert (GP 13).
+        ///
+        /// Deliberately NOT cleared by `TeamSwitched`, unlike every other
+        /// per-team field beside it: an explicit language choice is a
+        /// property of the person reading, not of the team they are
+        /// looking at, and silently reverting it on a team switch would
+        /// be the more surprising behaviour. A `TeamDefault` deployment's
+        /// team locale still wins for anyone who has *not* chosen.
+        LocaleOverride: string option
     }
 
     type Msg =
@@ -318,6 +332,22 @@ module Client =
         /// same chain `ConfigsLoaded` and `FlagsLoaded` run, just
         /// rebound to the new team's data (or no team).
         | TeamSwitched of string option
+        /// Phase 444 — the shell's active locale changed. Dispatched by
+        /// the boot-time `LocaleRequest.subscribe` lifetime effect when a
+        /// module (a settings page, a consumer's own language picker)
+        /// calls `LocaleRequest.request`.
+        ///
+        /// Runs the SAME reset path `TeamSwitched` runs, and for the same
+        /// reason: a module that formatted a string at `Init` — a column
+        /// header, a status label, a validation message it holds in its
+        /// own model — is not re-rendered into the new language by a
+        /// React re-render alone, because the string is in its state
+        /// rather than in its view. Clearing `ModuleStates` and re-initing
+        /// is the only reset that reaches those. The per-team loads are
+        /// re-issued too; that is redundant work for a pure language
+        /// change, and it is the price of having exactly one reset path
+        /// rather than two that can drift.
+        | LocaleSwitched of locale: string
         /// Server-driven equivalent of `TeamSwitched None` — fired by
         /// the notification subscriber when `MembershipChanged.Removed`
         /// affects the current user's active team. Routes through the
@@ -654,6 +684,43 @@ module Client =
         | "team-role" -> "Team role"
         | "auth-bridge" -> "Session refresh"
         | other -> other
+
+    /// Phase 444 — resolve the active locale and the message catalog the
+    /// shell renders from. One definition, called from `view` (chrome +
+    /// the provider mount) and from `update` (the handful of arms that
+    /// author user-visible text outside a render, e.g. the cross-module
+    /// results toast), so the two cannot answer differently.
+    ///
+    /// Precedence: an in-session choice (`Model.LocaleOverride`, set by
+    /// `LocaleSwitched`) first, then the declared `ClientConfig.Locale`
+    /// resolved against the team's `_platform.locale` and the browser
+    /// preference. Under the default `FixedLocale "en"` with no override
+    /// this is a `match` returning a constant plus a `None` branch, and
+    /// `MessageCatalog.english` comes back by reference — no map read, no
+    /// browser call, no allocation (GP 11 / GP 13).
+    let private resolveCatalog
+        (config: ClientConfig)
+        (localeOverride: string option)
+        (platformConfig: Map<string, string>)
+        : MessageCatalog =
+        let locale =
+            match localeOverride with
+            | Some chosen -> chosen
+            | None ->
+                match config.Locale with
+                | FixedLocale _ ->
+                    // The fixed arm consults neither ambient source, so
+                    // resolve it without paying for either.
+                    MessageCatalog.resolveLocale config.Locale None None
+                | BrowserLocale _ ->
+                    MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+                | TeamDefault _ ->
+                    MessageCatalog.resolveLocale
+                        config.Locale
+                        (MessageCatalog.teamLocaleOf platformConfig)
+                        (MessageCatalogProvider.browserLocale ())
+
+        MessageCatalog.resolve locale config.MessageCatalogOverride
 
     /// Sources the shell can re-run on demand. The auth bridge retries
     /// itself on its refresh interval, so its banner row carries no
@@ -1379,6 +1446,9 @@ module Client =
             Degradations = []
             PrefetchedProcessedData = []
             CommandPalette = CommandPaletteNav.closed
+            // Phase 444 — no in-session locale choice yet; the resolve
+            // uses `ClientConfig.Locale` alone.
+            LocaleOverride = None
         }
 
         // 0.5.5 — Boot-time fetches are gated on auth state below.
@@ -1754,6 +1824,56 @@ module Client =
                     bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
                     activeTeamRoleCmd newTeamIdOpt
                 ]
+
+            | LocaleSwitched locale ->
+                // Phase 444 — an in-session language change. Same reset
+                // shape as `TeamSwitched` above (see that arm's comment
+                // and this message's doc-comment for why a re-render is
+                // not enough), with two deliberate differences:
+                //
+                //   * `ActiveTeamId` / `ActiveTeamRole` are NOT touched —
+                //     the scope did not move, only the language, so the
+                //     team-role read is not stale and re-clearing it
+                //     would blink the sidebar's role gate open and shut.
+                //   * `LocaleOverride` is SET rather than cleared; it is
+                //     the one piece of state this message exists to
+                //     carry.
+                //
+                // A blank tag is treated as "clear the choice" and falls
+                // back to whatever `ClientConfig.Locale` resolves to,
+                // rather than resolving to an empty `Intl` locale.
+                let normalised =
+                    if System.String.IsNullOrWhiteSpace locale then
+                        None
+                    else
+                        Some(locale.Trim())
+
+                if normalised = model.LocaleOverride then
+                    // Already there. Re-running the reset would tear down
+                    // every module's state for no visible change.
+                    model, Cmd.none
+                else
+                    let reset = {
+                        model with
+                            LocaleOverride = normalised
+                            ModuleConfigs = Map.empty
+                            PlatformConfig = Map.empty
+                            ResolvedFlags = Map.empty
+                            AccessibleModules = None
+                            ModuleStates = Map.empty
+                            ResetCounters = Map.empty
+                            ConfigsPrefetch = Prefetch.none
+                            FlagsPrefetch = Prefetch.none
+                            InitPhase = Prefetching
+                            Degradations = []
+                    }
+
+                    reset,
+                    Cmd.batch [
+                        bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+                        bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
+                        bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
+                    ]
 
             | MembershipRevoked teamId ->
                 // Server-driven `MembershipChanged.Removed` for this
@@ -2172,7 +2292,10 @@ module Client =
                         // target is active (the user is already looking
                         // at the result).
                         if moduleId <> model.ActiveModuleId then
-                            let text = $"Results available in {moduleImpl.Definition.Name}"
+                            let text =
+                                (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
+                                    .Shell.ResultsAvailableIn
+                                    moduleImpl.Definition.Name
 
                             let envelope =
                                 NotificationEnvelope.create
@@ -2308,6 +2431,11 @@ module Client =
     let TeamSwitcher (myTeams: TeamInfo list) (activeTeamId: string option) (dispatch: Msg -> unit) =
         let isOpen, setIsOpen = React.useState false
         let rootRef = React.useRef<Browser.Types.HTMLDivElement option> (None)
+        // Phase 444 — shell chrome reads its strings from the resolved
+        // catalog. A hook is legal here, and not inside a module's `view`,
+        // because this is a `[<ReactComponent>]` — the same distinction
+        // `FileManagerUI.LoadingSlot` documents.
+        let msgs = (MessageCatalogProvider.useMessages ()).Shell
 
         // Close on outside click — same idiom as UI.Toolkit.Forms.dropdown.
         React.useEffect (
@@ -2332,7 +2460,7 @@ module Client =
             activeTeamId
             |> Option.bind (fun id -> myTeams |> List.tryFind (fun t -> t.TeamId = id))
             |> Option.map _.Name
-            |> Option.defaultValue "Select team"
+            |> Option.defaultValue msgs.SelectTeam
 
         // Surface a failed switch via the existing ToastCentre instead of
         // swallowing it — a silent failure leaves the user believing they
@@ -2341,7 +2469,7 @@ module Client =
             NotificationClient.publishLocal (
                 NotificationEnvelope.create
                     (UserSession.getUserId ())
-                    (Notification.SystemMessage(SystemMessageLevel.Warning, "Couldn't switch team. Please try again."))
+                    (Notification.SystemMessage(SystemMessageLevel.Warning, msgs.SwitchTeamFailed))
             )
 
         Html.div [
@@ -2353,7 +2481,7 @@ module Client =
                         "list-none cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-sm"
                     prop.onClick (fun _ -> setIsOpen (not isOpen))
                     prop.children [
-                        Html.span [ prop.className "text-gray-500"; prop.text "Team:" ]
+                        Html.span [ prop.className "text-gray-500"; prop.text msgs.TeamLabel ]
                         Html.span [ prop.className "font-medium text-gray-900"; prop.text activeName ]
                         Html.span [ prop.className "text-gray-400 text-xs"; prop.text "▾" ]
                     ]
@@ -2409,6 +2537,8 @@ module Client =
     let NoActiveTeamSurface (myTeams: TeamInfo list) (dispatch: Msg -> unit) =
         let newName, setNewName = React.useState ""
         let busy, setBusy = React.useState false
+        // Phase 444 — see `TeamSwitcher` above for why the hook is legal here.
+        let msgs = (MessageCatalogProvider.useMessages ()).Shell
 
         let toast (level: SystemMessageLevel) (text: string) =
             NotificationClient.publishLocal (
@@ -2420,9 +2550,9 @@ module Client =
                 try
                     match! withCsrf (teamApi.SetActiveTeam teamId) with
                     | Ok() -> dispatch (TeamSwitched(Some teamId))
-                    | Error _ -> toast SystemMessageLevel.Warning "Couldn't switch team. Please try again."
+                    | Error _ -> toast SystemMessageLevel.Warning msgs.SwitchTeamFailed
                 with _ ->
-                    toast SystemMessageLevel.Warning "Couldn't switch team. Please try again."
+                    toast SystemMessageLevel.Warning msgs.SwitchTeamFailed
             }
             |> Async.StartImmediate
 
@@ -2446,7 +2576,7 @@ module Client =
                             toast SystemMessageLevel.Warning msg
                     with _ ->
                         setBusy false
-                        toast SystemMessageLevel.Warning "Couldn't create the team. Please try again."
+                        toast SystemMessageLevel.Warning msgs.CreateTeamFailed
                 }
                 |> Async.StartImmediate
 
@@ -2458,22 +2588,18 @@ module Client =
                     prop.children [
                         Html.h2 [
                             prop.className "text-lg font-semibold text-gray-900"
-                            prop.text "You're not in a team yet"
+                            prop.text msgs.NoTeamHeading
                         ]
 
                         if List.isEmpty myTeams then
-                            Html.p [
-                                prop.className "text-sm text-gray-600"
-                                prop.text
-                                    "Analysis tools are scoped to a team. Create one to get started, or ask a Platform Admin to add you (or open an invite link you've been sent)."
-                            ]
+                            Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoTeamBody ]
 
                             Html.div [
                                 prop.className "space-y-2"
                                 prop.children [
                                     Html.input [
                                         prop.className "w-full px-3 py-2 border border-gray-200 rounded text-sm"
-                                        prop.placeholder "Team name"
+                                        prop.placeholder msgs.TeamNamePlaceholder
                                         prop.value newName
                                         prop.onChange (fun (v: string) -> setNewName v)
                                         prop.onKeyDown (fun e ->
@@ -2484,13 +2610,13 @@ module Client =
                                         prop.className
                                             "w-full px-3 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                                         prop.disabled (busy || newName.Trim() = "")
-                                        prop.text (if busy then "Creating…" else "Create team")
+                                        prop.text (if busy then msgs.CreatingTeam else msgs.CreateTeam)
                                         prop.onClick (fun _ -> createTeam ())
                                     ]
                                 ]
                             ]
                         else
-                            Html.p [ prop.className "text-sm text-gray-600"; prop.text "Pick a team to continue:" ]
+                            Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.PickTeam ]
 
                             Html.div [
                                 prop.className "space-y-1"
@@ -2510,6 +2636,16 @@ module Client =
         ]
 
     let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
+        // Phase 444 — the catalog every string in this render comes from.
+        // Resolved once at the top of `view` because chrome is built at
+        // several depths below (the page-route placeholder, the area
+        // switcher entries, the header actions) and they must all read the
+        // same value.
+        let resolvedCatalog =
+            resolveCatalog config model.LocaleOverride model.PlatformConfig
+
+        let shellMsgs = resolvedCatalog.Shell
+
         // Select the page content for the active module. Multi-page
         // modules (`PageViews = Some map`) dispatch on the active
         // `PageConfig.Route`; their views return `PageContent` directly.
@@ -2611,7 +2747,7 @@ module Client =
                                     // so this branch only fires when a multi-page module's
                                     // ActivePageRoute doesn't match any registered PageViews entry.
                                     SplitPanel(
-                                        Html.div $"No view registered for page route {model.ActivePageRoute}",
+                                        Html.div (shellMsgs.NoViewForRoute(defaultArg model.ActivePageRoute "")),
                                         Html.div ""
                                     )
 
@@ -2623,7 +2759,8 @@ module Client =
                         let resetKey = sprintf "%s-%d" teamPart counter
 
                         let boundaryEl =
-                            Components.ModuleBoundary.wrap
+                            Components.ModuleBoundary.wrapWith
+                                resolvedCatalog.ModuleBoundary
                                 model.ActiveModuleId
                                 resetKey
                                 config.OnError
@@ -2632,7 +2769,7 @@ module Client =
                                 renderInner
 
                         Custom boundaryEl
-                | None -> SplitPanel(Html.div "Error: Module not found", Html.div "")
+                | None -> SplitPanel(Html.div shellMsgs.ModuleNotFound, Html.div "")
 
         // Composite sidebar Id for the active-border highlight so that
         // the shell matches the sidebar entry emitted for the active
@@ -2734,7 +2871,7 @@ module Client =
                         [
                             ({
                                 Id = Toolup.Sidebar.ProductAreaId
-                                Name = "Back to app"
+                                Name = shellMsgs.BackToApp
                                 // Phase 610 Tidy-Up — this was `Html.none`,
                                 // and in the NARROW icon-only rail the icon
                                 // is the entire row: the switcher rendered
@@ -2776,7 +2913,7 @@ module Client =
                                 [
                                     ({
                                         Id = Toolup.Sidebar.AdminAreaId
-                                        Name = "Administration"
+                                        Name = shellMsgs.AdministrationArea
                                         // Phase 610 Tidy-Up — was
                                         // `Html.none`; see the sibling
                                         // switcher above for why an empty
@@ -2899,7 +3036,7 @@ module Client =
                             "border border-border text-text"
                             "hover:bg-gray-100"
                         ]
-                        prop.text "Sign out"
+                        prop.text shellMsgs.SignOut
                         prop.onClick (fun _ -> signOut ())
                     ]
                 )
@@ -2932,15 +3069,15 @@ module Client =
                         ]
                         prop.title (
                             if model.ShowAllModules then
-                                "Showing every module, including ones hidden from this team. Click to return to the member view."
+                                shellMsgs.ShowingAllModulesHint
                             else
-                                "You're seeing this team's member view — modules hidden from the team are omitted. Click to reveal them."
+                                shellMsgs.MemberViewHint
                         )
                         prop.text (
                             if model.ShowAllModules then
-                                "Viewing all modules"
+                                shellMsgs.ViewingAllModules
                             else
-                                "Show hidden modules"
+                                shellMsgs.ShowHiddenModules
                         )
                         prop.onClick (fun _ -> dispatch ToggleShowAllModules)
                     ]
@@ -2968,6 +3105,19 @@ module Client =
         // customised nothing) renders byte-for-byte as before. Live on
         // team switch: `TeamSwitched` clears `PlatformConfig` and the
         // `ConfigsLoaded` reload repopulates it, re-running this resolve.
+        // Phase 444 — resolve the active locale and the message catalog
+        // the shell renders from. Three inputs in precedence order: an
+        // in-session choice (`Model.LocaleOverride`, set by
+        // `LocaleSwitched`), then the declared `ClientConfig.Locale`
+        // resolved against the team's `_platform.locale` and the browser
+        // preference. Live on team switch for the same reason branding is
+        // — `TeamSwitched` clears `PlatformConfig` and `ConfigsLoaded`
+        // repopulates it, re-running this resolve.
+        //
+        // Under the default `FixedLocale "en"` with no override, this is
+        // a `match` returning a constant plus a `None` branch, and
+        // `MessageCatalog.english` is returned by reference — no map read,
+        // no browser call, no allocation (GP 11 / GP 13).
         let resolvedBranding =
             Branding.resolve
                 {
@@ -3056,8 +3206,8 @@ module Client =
                         |> List.tryFind (fun m -> m.Definition.Id = candidate.ModuleId)
                         |> Option.map (fun m ->
                             match ClientConfig.effectiveArea m.Area m.Group with
-                            | ModuleArea.Administration -> "Administration"
-                            | ModuleArea.Product -> "App")
+                            | ModuleArea.Administration -> shellMsgs.AdministrationArea
+                            | ModuleArea.Product -> shellMsgs.ProductArea)
 
                 let toEntry
                     (candidate: CommandPaletteNav.PaletteCandidate)
@@ -3115,8 +3265,11 @@ module Client =
         // Phase 121 — standard dismissible degradation banner. Renders
         // `Html.none` when no boot load has failed (GP 13).
         let degradationBanner =
-            BootDegradation.banner model.Degradations (RetryBootLoad >> dispatch) (fun () ->
-                dispatch DismissBootDegradations)
+            BootDegradation.bannerWith
+                resolvedCatalog.BootDegradation
+                model.Degradations
+                (RetryBootLoad >> dispatch)
+                (fun () -> dispatch DismissBootDegradations)
 
         let flagged =
             FeatureFlags.provider
@@ -3187,9 +3340,20 @@ module Client =
         // team's `Branding` via `BrandingProvider.useBranding`. The
         // `BrandedHeader` sibling, mounted inside the provider, applies
         // the favicon + `--brand-primary` document side effects.
-        BrandingProvider.provider
-            resolvedBranding
-            (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withPresence ])
+        let withBranding =
+            BrandingProvider.provider
+                resolvedBranding
+                (React.Fragment [ Components.BrandedHeader.BrandedHeader(); withPresence ])
+
+        // Phase 444 — outermost wrap: the resolved message catalog, so
+        // every shell-chrome and built-in-module view reads its strings
+        // through `MessageCatalogProvider.useMessages ()`. Outside the
+        // branding provider rather than inside it because the catalog is
+        // the more fundamental of the two (a branded header still renders
+        // its own labels from the catalog) and because the resolve is
+        // strictly cheaper — a `match` and, only in the non-default
+        // modes, one map read.
+        MessageCatalogProvider.provider resolvedCatalog withBranding
 
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
@@ -4177,6 +4341,23 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Phase 444 — shell-locale switch subscription. Translates every
+        // `LocaleRequest.request` into a `LocaleSwitched` dispatch, which
+        // runs the `TeamSwitched`-shaped reset. Same lifetime-aware shape
+        // and the same teardown contract as the navigation subscription
+        // above; the seam is a mutable global for the same reason
+        // `NavigationRequest` is, so a language picker in a consumer's own
+        // chrome needs no dependency on the shell's `Msg` type and
+        // `ClientModuleContext` needs no new field.
+        let localeRequestEffect =
+            EffectHandle.programLifetime "locale-request" (fun dispatch ->
+                let unsubscribe =
+                    LocaleRequest.subscribe (fun locale -> dispatch (LocaleSwitched locale))
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
         // Cross-module client event bus subscription. Translates every
         // `ModuleEvents.publish` into a `ModuleEventPublished` dispatch the
         // shell update fans out to subscribing modules. Same
@@ -4330,6 +4511,7 @@ module Client =
 
         [
             navigationEffect
+            localeRequestEffect
             moduleEventsEffect
             notificationsEffect
             authTokenAcquiredEffect

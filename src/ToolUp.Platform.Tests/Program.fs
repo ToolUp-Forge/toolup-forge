@@ -560,6 +560,7 @@ let private registeredTests =
         OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
         OidcBearerStrategyTests.tests
+        OidcSecondaryFlowTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         // Phase 10f — Google Analytics 4 connector: IDataSource +
@@ -1221,6 +1222,11 @@ let private registeredTests =
         CommandPaletteContractTests.expansionTests
         CommandPaletteContractTests.fuzzyTests
         CommandPaletteContractTests.paletteStateTests
+        // Phase 444.E — client-shell localization substrate.
+        MessageCatalogContractTests.tests
+        MessageCatalogContractTests.teamDefaultTests
+        MessageCatalogContractTests.consumerOverrideTests
+        MessageCatalogContractTests.localeSwitchTests
         // Phase 572 — per-user sidebar entry hiding. The pure preference
         // algebra plus the "still reachable" acceptance arm; four
         // separate bindings, all of which must be listed here or they run

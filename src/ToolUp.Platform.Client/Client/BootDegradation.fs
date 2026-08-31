@@ -61,10 +61,43 @@ let add (entry: BootDegradation) (existing: BootDegradation list) : BootDegradat
 let remove (source: string) (existing: BootDegradation list) : BootDegradation list =
     existing |> List.filter (fun e -> e.Source <> source)
 
+/// Phase 444 — the display name for a boot source, in the caller's
+/// locale. The stable `Source` key is what the shell's retry dispatcher
+/// and the dedup both run on; only this projection is localised, so a
+/// translation can never break retry.
+///
+/// A source the SDK does not know (a consumer-registered loader) falls
+/// through to whatever `entry.Label` carries, which is the pre-444
+/// behaviour for every key and the only sensible answer for a string the
+/// catalog has no field for.
+let localisedLabel (msgs: BootSourceMessages) (source: string) (fallback: string) : string =
+    match source with
+    | "teams" -> msgs.Teams
+    | "active-team" -> msgs.ActiveTeam
+    | "team-auto-select" -> msgs.TeamAutoSelect
+    | "permissions" -> msgs.Permissions
+    | "configs" -> msgs.Configs
+    | "flags" -> msgs.Flags
+    | "platform-role" -> msgs.PlatformRole
+    | "team-role" -> msgs.TeamRole
+    | "auth-bridge" -> msgs.AuthBridge
+    | _ -> fallback
+
 /// Dismissible top-of-viewport banner listing every degraded source
 /// with a per-source Retry affordance. Returns `Html.none` when the
 /// list is empty (GP 13 — zero footprint on a clean boot).
-let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDismiss: unit -> unit) : ReactElement =
+///
+/// Phase 444 — localised through `msgs`. This is a NEW entry point
+/// rather than a parameter added to `banner`: `banner` is public
+/// surface, and widening its arity would read as a removal in the
+/// public-API baseline and break every caller. `banner` delegates here
+/// with the built-in English catalog, so its behaviour is unchanged.
+let bannerWith
+    (msgs: BootDegradationMessages)
+    (degradations: BootDegradation list)
+    (onRetry: string -> unit)
+    (onDismiss: unit -> unit)
+    : ReactElement =
     if List.isEmpty degradations then
         Html.none
     else
@@ -76,10 +109,7 @@ let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDis
                 Html.div [
                     prop.className "max-w-5xl mx-auto px-4 py-2 flex items-start gap-3"
                     prop.children [
-                        Html.span [
-                            prop.className "font-medium whitespace-nowrap"
-                            prop.text "Some data failed to load"
-                        ]
+                        Html.span [ prop.className "font-medium whitespace-nowrap"; prop.text msgs.Heading ]
                         Html.div [
                             prop.className "flex-1 flex flex-wrap items-center gap-x-4 gap-y-1"
                             prop.children (
@@ -90,11 +120,11 @@ let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDis
                                         prop.className "inline-flex items-center gap-2"
                                         prop.title d.Error
                                         prop.children [
-                                            Html.span [ prop.text d.Label ]
+                                            Html.span [ prop.text (localisedLabel msgs.Sources d.Source d.Label) ]
                                             if d.Retryable then
                                                 Html.button [
                                                     prop.className "underline hover:no-underline font-medium"
-                                                    prop.text "Retry"
+                                                    prop.text msgs.Retry
                                                     prop.onClick (fun _ -> onRetry d.Source)
                                                 ]
                                         ]
@@ -103,7 +133,7 @@ let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDis
                         ]
                         Html.button [
                             prop.className "shrink-0 px-1 leading-none text-lg"
-                            prop.ariaLabel "Dismiss"
+                            prop.ariaLabel msgs.Dismiss
                             prop.text "×"
                             prop.onClick (fun _ -> onDismiss ())
                         ]
@@ -111,3 +141,9 @@ let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDis
                 ]
             ]
         ]
+
+/// Back-compat entry point — the pre-444 signature, rendering the
+/// built-in English catalog. Kept so existing callers (and the public
+/// surface) are unchanged; the shell calls `bannerWith`.
+let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDismiss: unit -> unit) : ReactElement =
+    bannerWith MessageCatalog.english.BootDegradation degradations onRetry onDismiss

@@ -121,6 +121,7 @@ let oidcConfig: OidcUIConfig = {
     PostLogoutRedirectUri = None
     ValidateIdToken = Some true
     BearerToken = None   // None = send the access token (the default)
+    SecondaryFlow = None // None = the single-button sign-in screen (the default)
 }
 
 Client.run

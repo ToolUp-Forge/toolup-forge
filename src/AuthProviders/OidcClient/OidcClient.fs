@@ -110,7 +110,10 @@ let isCallbackUrl (cfg: OidcUIConfig) : bool =
 /// `code_challenge`, `code_challenge_method`) — `urlEncode` would
 /// emit duplicates and the issuer's behaviour is undefined. The
 /// helper does not enforce this; callers are responsible for
-/// choosing provider-specific keys outside the standard set.
+/// choosing provider-specific keys outside the standard set. A
+/// secondary flow declared on the config *is* checked: the coherence
+/// validator's rule 16 refuses a collision at preflight, reading the
+/// same reserved list `authorizeParams` emits.
 let beginSignInWithExtras (cfg: OidcUIConfig) (extraParams: (string * string) list) : Async<Result<unit, AuthError>> = async {
     let corrId = generateState ()
     stashCorrelationId corrId
@@ -127,22 +130,23 @@ let beginSignInWithExtras (cfg: OidcUIConfig) (extraParams: (string * string) li
         let nonce = generateState ()
         stashPendingSignIn verifier state nonce
 
-        let scopes = String.concat " " cfg.Scopes
+        // The parameter set is built by the pure `authorizeParams`
+        // (OidcStateMachine) so the exact query a given flow produces is
+        // assertable from .NET — the primary button and a secondary
+        // flow differ in nothing but the appended extras.
+        let request: AuthorizeRequest = {
+            ClientId = cfg.ClientId
+            RedirectUri = cfg.RedirectUri
+            Scopes = cfg.Scopes
+            State = state
+            Nonce = nonce
+            CodeChallenge = challenge
+        }
 
-        let standardParams: (string * obj) list = [
-            "response_type", box "code"
-            "client_id", box cfg.ClientId
-            "redirect_uri", box cfg.RedirectUri
-            "scope", box scopes
-            "state", box state
-            "nonce", box nonce
-            "code_challenge", box challenge
-            "code_challenge_method", box "S256"
-        ]
-
-        let extras: (string * obj) list = extraParams |> List.map (fun (k, v) -> k, box v)
-
-        let query = createObj (standardParams @ extras)
+        let query =
+            authorizeParams request extraParams
+            |> List.map (fun (k, v) -> k, box v)
+            |> createObj
 
         let url = doc.AuthorizationEndpoint + "?" + urlEncode query
         emitOk (Some corrId) "authorize-redirect" None

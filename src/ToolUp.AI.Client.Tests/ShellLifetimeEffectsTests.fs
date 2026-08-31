@@ -25,12 +25,20 @@ open ToolUp.Platform
 // of them into an outer program, dispatch lifted through the outer Msg
 // (the exact `ShellMsg` shape `withSidePanel` uses).
 
-/// The five shell subscriptions, in their attach order. A shell effect
+/// The six shell subscriptions, in their attach order. A shell effect
 /// added without extending this list fails the pin below — which is the
 /// point: it must also be delivered through every outer composer, and
 /// this test is where that obligation surfaces.
+///
+/// Phase 444 added `locale-request`, and this pin is what surfaced the
+/// obligation: an AI-composed app whose shell effects were re-attached
+/// without it would take a `LocaleRequest.request` from a settings page
+/// and do nothing at all, because the bus is a documented no-op with no
+/// subscribers — the same silent shape the navigation seam produced in
+/// the Phase 573 follow-up this pack was written for.
 let private expectedIds = [
     "navigation-request"
+    "locale-request"
     "module-events"
     "notifications-stream"
     "auth-token-acquired"
@@ -54,7 +62,7 @@ let tests =
             Expect.equal
                 (Client.programLifetimeEffects ClientConfig.defaults |> List.map _.Id)
                 expectedIds
-                "the five shell seams, in attach order — a new shell effect must join this list AND every outer composer"
+                "the six shell seams, in attach order — a new shell effect must join this list AND every outer composer"
 
         testCase "the navigation-request effect translates bus requests into ModuleSelected"
         <| fun () ->

@@ -122,4 +122,10 @@ module EntraExternalIdClientConfig =
         // the default access-token bearer is correct and this stays
         // `None` — today's behaviour, byte for byte.
         BearerToken = None
+        // `None` deliberately: this companion renders its OWN
+        // dual-button sign-in screen from `SignUpPolicyId`, so the
+        // generic shell's secondary-flow affordance must not also fire.
+        // A consumer wanting that affordance on the standard shell uses
+        // `OidcPresets.withEntraSignUpUserFlow` and drops the companion.
+        SecondaryFlow = None
     }

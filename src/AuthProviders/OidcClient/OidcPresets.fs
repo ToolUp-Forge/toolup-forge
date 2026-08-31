@@ -3,6 +3,7 @@
 
 module ToolUp.AuthProviders.Oidc.OidcPresets
 
+open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc.OidcAppConfig
 
 // ─── Provider presets (0.4.0 — return OidcAppConfig) ──────────────────
@@ -111,6 +112,7 @@ let generic (issuer: string) (clientId: string) (redirectUri: string) : OidcAppC
     ValidateIdToken = Some true
     Preset = Some Generic
     BearerToken = None
+    SecondaryFlow = None
 }
 
 /// Workforce Entra ID / Azure AD preset. `tenantId` MUST be a tenant
@@ -135,6 +137,7 @@ let entraWorkforce (tenantId: string) (clientId: string) (redirectUri: string) :
     ValidateIdToken = None
     Preset = Some EntraWorkforce
     BearerToken = None
+    SecondaryFlow = None
 }
 
 /// Entra External ID (CIAM) preset. Issuer follows the documented
@@ -148,10 +151,12 @@ let entraWorkforce (tenantId: string) (clientId: string) (redirectUri: string) :
 /// boundary where a tampered token's failure mode is materially
 /// worse than for an internal OIDC consumer.
 ///
-/// For sign-up / sign-in user-flow policy routing, use the dedicated
-/// `EntraExternalIdClient` companion (which exposes the sign-up
-/// affordance separately); this preset is the single-call path for
-/// the no-policy-split case.
+/// For the sign-up user flow, pipe the result through
+/// `withEntraSignUpUserFlow` — the standard `OidcAuthUI` shell then
+/// renders the dual-button "Sign in / Sign up" screen, with the
+/// sign-up button carrying `p=<policyId>` on its authorize request.
+/// The `EntraExternalIdClient` companion is no longer needed for
+/// that.
 let entraExternalId (tenantSubdomain: string) (clientId: string) (redirectUri: string) : OidcAppConfig = {
     Issuer = sprintf "https://%s.ciamlogin.com/%s/v2.0" tenantSubdomain tenantSubdomain
     Audience = clientId
@@ -162,6 +167,7 @@ let entraExternalId (tenantSubdomain: string) (clientId: string) (redirectUri: s
     ValidateIdToken = Some true
     Preset = Some EntraExternalId
     BearerToken = None
+    SecondaryFlow = None
 }
 
 /// Entra External ID preset with a custom-domain override. Use when
@@ -204,6 +210,7 @@ let auth0 (domain: string) (clientId: string) (redirectUri: string) : OidcAppCon
     ValidateIdToken = None
     Preset = Some Auth0
     BearerToken = None
+    SecondaryFlow = None
 }
 
 /// Google preset (consumer Google accounts and Workspace). Takes no
@@ -259,4 +266,70 @@ let google (clientId: string) (redirectUri: string) : OidcAppConfig = {
     ValidateIdToken = Some true
     Preset = Some Google
     BearerToken = None
+    SecondaryFlow = None
 }
+
+// ─── Secondary-flow attachments ──────────────────────────────────────
+//
+// A secondary flow is a SECOND button on the sign-in screen that
+// starts the same OIDC sign-in with extra authorize-request
+// parameters — the generic form of the dual-button
+// "Sign in / Sign up" shell. These helpers attach one to an
+// already-built config, so the preset constructors above stay
+// single-purpose and every one of them keeps returning
+// `SecondaryFlow = None` (GP 11).
+//
+// They are `cfg`-last so they compose in a pipeline:
+//
+//     OidcPresets.entraExternalId tenant clientId redirect
+//     |> OidcPresets.withEntraSignUpUserFlow "B2C_1_signup"
+
+/// Attach an arbitrary secondary flow: the button's label plus the
+/// extra parameters its authorize request carries. Vendor-neutral —
+/// the SDK never interprets the parameters.
+///
+/// Keys must not collide with the standard OAuth/PKCE set the client
+/// emits itself (`SecondaryFlow.reservedAuthorizeParams`); the
+/// coherence validator's rule 16 refuses a config that does, because a
+/// duplicated authorize parameter has undefined issuer behaviour and
+/// is invisible until a user presses the button.
+///
+/// Example — a Google deployment offering explicit re-consent so a
+/// returning user can be re-issued a refresh token:
+///
+///     OidcPresets.google clientId redirectUri
+///     |> OidcPresets.withSecondaryFlow "Re-consent" [ "prompt", "consent" ]
+let withSecondaryFlow
+    (label: string)
+    (extraAuthorizeParams: (string * string) list)
+    (cfg: OidcAppConfig)
+    : OidcAppConfig =
+    {
+        cfg with
+            SecondaryFlow = Some(SecondaryFlow.create label extraAuthorizeParams)
+    }
+
+/// The authorize-request parameter Entra External ID (and Azure AD
+/// B2C before it) routes user flows on. Named here rather than spelled
+/// inline so the parity test against the `EntraExternalIdClient`
+/// companion's shell — which passes `[ "p", policyId ]` to
+/// `beginSignInWithExtras` — has one value to pin.
+[<Literal>]
+let EntraUserFlowParameter = "p"
+
+/// Attach the Entra External ID **sign-up user flow** as the sign-in
+/// screen's secondary affordance: a "Sign up" button beside "Sign in"
+/// that routes through the named user-flow policy.
+///
+/// This is the preset-path replacement for the `EntraExternalIdClient`
+/// companion's dual-button shell. The parameter shape is ported from
+/// that shell verbatim (`p=<policyId>` alongside the full OAuth / PKCE
+/// param set), so the authorize request the sign-up button issues is
+/// the one the companion issued — same redirect URI, same callback,
+/// same nonce binding back to *this* attempt.
+///
+///     let cfg =
+///         OidcPresets.entraExternalId "contoso" clientId redirectUri
+///         |> OidcPresets.withEntraSignUpUserFlow "B2C_1_signup"
+let withEntraSignUpUserFlow (policyId: string) (cfg: OidcAppConfig) : OidcAppConfig =
+    withSecondaryFlow "Sign up" [ EntraUserFlowParameter, policyId ] cfg

@@ -36,6 +36,7 @@ let private log = Logger.forCategory "client.module-boundary"
 
 type private BoundaryProps = {|
     ModuleId: string
+    Messages: ModuleBoundaryMessages
     OnError: (ModuleErrorReport -> unit) option
     OnReload: unit -> unit
     RenderInner: unit -> PageContent
@@ -101,23 +102,20 @@ type private Boundary(initialProps: BoundaryProps) =
             // boundary's componentDidCatch.
             ModuleViewHost this.props.InputsWidth this.props.RenderInner
         | Some _ ->
-            // PHASE-12A-I18N: replace literals with tr "modules.error.title" /
-            // tr "modules.error.detail" / tr "modules.error.reload" once Phase
-            // 12a (locale resolution) ships.
             Html.div [
                 prop.className "p-6 min-h-full flex flex-col items-center justify-center gap-4 text-gray-700"
                 prop.children [
                     Html.h2 [
                         prop.className "text-lg font-semibold"
-                        prop.text "This module encountered an error."
+                        prop.text this.props.Messages.Heading
                     ]
                     Html.p [
                         prop.className "text-sm text-gray-500 max-w-prose text-center"
-                        prop.text "You can reload just this module without affecting the rest of the app."
+                        prop.text this.props.Messages.Body
                     ]
                     Html.button [
                         prop.className "px-4 py-2 rounded bg-gray-900 text-white text-sm hover:bg-gray-700"
-                        prop.text "Reload module"
+                        prop.text this.props.Messages.Reload
                         prop.onClick (fun _ -> this.props.OnReload())
                     ]
                 ]
@@ -136,7 +134,8 @@ type private Boundary(initialProps: BoundaryProps) =
 /// The thunk is invoked inside the boundary's child component so both sync
 /// F# exceptions during `pageView state dispatch` AND React render-time
 /// exceptions in the produced tree route into `componentDidCatch`.
-let wrap
+let wrapWith
+    (msgs: ModuleBoundaryMessages)
     (moduleId: string)
     (resetKey: string)
     (onError: (ModuleErrorReport -> unit) option)
@@ -152,6 +151,22 @@ let wrap
             OnReload = onReload
             RenderInner = renderInner
             InputsWidth = inputsWidth
+            Messages = msgs
         |}
 
     ReactLegacy.createElement (unbox<ReactElement> (jsConstructor<Boundary>), propsWithKey)
+
+/// Back-compat entry point — the pre-444 signature, rendering the
+/// built-in English fallback text. A NEW function rather than an added
+/// parameter on `wrap`, because `wrap` is public surface and widening
+/// its arity reads as a removal in the public-API baseline. The shell
+/// calls `wrapWith`.
+let wrap
+    (moduleId: string)
+    (resetKey: string)
+    (onError: (ModuleErrorReport -> unit) option)
+    (onReload: unit -> unit)
+    (inputsWidth: InputsPaneWidth)
+    (renderInner: unit -> PageContent)
+    : ReactElement =
+    wrapWith MessageCatalog.english.ModuleBoundary moduleId resetKey onError onReload inputsWidth renderInner

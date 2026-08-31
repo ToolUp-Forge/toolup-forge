@@ -736,6 +736,7 @@
         <Compile Include="InProcess\OidcCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\OidcSignInContractTests.fs" />
         <Compile Include="InProcess\OidcBearerStrategyTests.fs" />
+        <Compile Include="InProcess\OidcSecondaryFlowTests.fs" />
         <Compile Include="InProcess\GitHubAuthProviderTests.fs" />
         <Compile Include="InProcess\GitHubAppFlowTests.fs" />
         <!-- Phase 10f — Google Analytics 4 connector: the IDataSource and
@@ -1442,6 +1443,17 @@
              the page-expansion rule (the two-page nesting threshold), the
              fuzzy scorer's ranking contract, and the overlay state. -->
         <Compile Include="InProcess\CommandPaletteContractTests.fs" />
+        <!-- Phase 444.E — client-shell localization substrate. Pins locale
+             resolution precedence per mode, the team-default plumb-through
+             (including that the client reads the same `_platform.locale`
+             key the server-side LocaleResolver writes), and the consumer
+             override hook. Catalog COMPLETENESS is deliberately absent:
+             `MessageCatalog` is a record, so a missing translation is a
+             missing field the compiler names — asserting it here would be
+             strictly weaker and would suggest the compile-time property is
+             not trusted. Runs on .NET, which is why MessageCatalog.fs
+             carries no Feliz dependency. -->
+        <Compile Include="InProcess\MessageCatalogContractTests.fs" />
         <!-- Phase 572 — per-user sidebar entry hiding: the pure
              `SidebarPreferences` algebra (hide / restore round-trip, the
              pin/hide rule, the legacy-blob null coercion) plus the
