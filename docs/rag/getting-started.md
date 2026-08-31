@@ -22,7 +22,7 @@ In your server project's `.fsproj`:
 
 ## 2. Wire an embedding provider
 
-```fsharp skip=fragment
+```fsharp
 // The provider package is a top-level module — there is no
 // ToolUp.EmbeddingProviders.* namespace to open, and `create` already
 // returns IEmbeddingProvider.
@@ -35,7 +35,7 @@ The provider reads the OpenAI API key from `ISecretStore` under the `_platform` 
 
 Hard-coding `OpenAIEmbeddingProvider.create` means the dev, CI and production builds differ in source. `EmbeddingProviderEnv.fromEnv` moves the choice to configuration instead, the same way `SecretStore.fromEnv` and `BlobStorageEnv.fromEnv` do for their substrates:
 
-```fsharp skip=fragment
+```fsharp
 let embedder =
     EmbeddingProviderEnv.fromEnv logger [
         { Name = "local"; Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
@@ -58,7 +58,7 @@ Every variable above is in the [configuration reference](../reference/config-ref
 
 ## 3. Switch from `AIServerApp.create` to `RAGServerApp.create`
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.RAG
 
 // Curried, and the second argument is the platform-wide IProviderProfile
@@ -73,15 +73,15 @@ RAGServerApp.create aiProviderFactory providerProfile embedder
 
 `RAGServerApp` is a flat superset of `AIServerApp`. Every `AIServerApp.with*` helper is mirrored on `RAGServerApp`. AI tools are not passed here — each module contributes its own through `ServerModule.withAITools`. Plus RAG-specific tuning:
 
-- `withTopK 10` — how many chunks to retrieve per query (default 5).
-- `withMinScore 0.4` — minimum cosine similarity to include a chunk (default 0.3).
-- `withMergeStrategy DenseSparseHybrid` — combine dense + BM25 sparse signals (default `DenseOnly`).
-- `withSnippetCharLimit 500` — truncate long chunks before prompt injection (default 1500).
-- `withOriginFilter (Some [Team; Platform])` — restrict retrievable origins (default `None` = all readable origins).
-- `withGroundingMode StrictlyGrounded` — assistant refuses to answer when retrieval yields nothing (default `Permissive`).
-- `withIngestionConcurrency 4` — max concurrent ingestion jobs (default 2).
-- `withIngestionQueueCapacity 1000` — bounded queue size (default `None` = unbounded).
-- `withTelemetry myRagTelemetry` — register a custom `IRagTelemetry` impl (default `NoOpRagTelemetry`).
+- `withTopK 10` — how many chunks to retrieve per query (default 5; clamped to ≥ 1).
+- `withMinScore (Some 0.4)` — drop matches at or below this cosine similarity. Takes a `float option`; the default is `None`, i.e. no gate at all. Clamped to `[0.0, 0.99]` so a fat-fingered threshold cannot silently filter out every match.
+- `withMergeStrategy Separate` — how multi-scope results combine. `Interleaved` (default) re-ranks by score regardless of scope; `Separate` keeps per-scope grouping for callers presenting platform vs team knowledge separately.
+- `withSnippetCharLimit 500` — maximum characters of each `RetrievedSource.Snippet` preview (default 240; floor 16).
+- `withOriginFilter (Some(Set.ofList [ Document; Note ]))` — restrict retrievable origins. Takes a `Set<ChunkOrigin> option`; the default is the set `{ Document; Note; Narrative; Conversation }`, which excludes `AIContext` because a deployment already injects that verbatim every turn. `None` clears the gate entirely.
+- `withGroundingMode StrictlyGrounded` — assistant refuses to answer when retrieval yields nothing (default `Preferred`, which keeps the KB authoritative on conflict but still answers from general knowledge; `Permissive` is the unconstrained stance).
+- `withIngestionConcurrency 4` — max documents the ingestion service embeds in parallel (default 8).
+- `withIngestionQueueCapacity 1000` — bounded queue size (default 5,000; when full, `IngestionQueue.EnqueueAsync` returns `false` and the deployment's `IngestionOverflowPolicy` decides what happens).
+- `withTelemetry myRagTelemetry` — register a custom `IRagTelemetry` impl (default is the rolling-window in-memory one `/health/rag` reports from).
 
 The defaults are sensible for most deployments. Tune when you have evidence.
 
@@ -106,22 +106,43 @@ The simplest path: use `ToolUp.KnowledgeBase` — adds a multi-page module with 
 
 Upload a document via the Knowledge Base sidebar entry. Watch the ingestion-status panel in the UI; ingestion-status updates flow over SSE.
 
-For programmatic ingestion (no UI), enqueue an `IngestionJob` directly:
+For programmatic ingestion (no UI), enqueue a `DocumentIngestionJob` directly. The queue is per-**document**, not per-chunk: the background service issues one batched embedding call covering every chunk in a job, so a 100-chunk document costs one upstream call rather than a hundred.
 
-```fsharp skip=fragment
-open ToolUp.RAG
+```fsharp
+open ToolUp.RAG.IngestionTypes
 
 let queue = serviceProvider.GetRequiredService<IngestionQueue>()
-do! queue.Enqueue {
-    DocumentId = Guid.NewGuid()
+
+let documentId = Guid.NewGuid().ToString()
+
+// A TextChunk is content plus free-form metadata — no id field. The
+// chunk ID is the producer's to choose; the shipped convention is
+// `{documentId}:chunk:{n}`.
+let chunk: TextChunk = {
+    Content = "Q3 priorities: revenue mix, EMEA expansion, retention."
+    Metadata = Map.ofList [ "_source", "manual-ingest" ]
+}
+
+let job: DocumentIngestionJob = {
+    DocumentId = documentId
+    DocumentName = "q3-strategy.md"
+    Chunks = [ $"{documentId}:chunk:0", chunk ]
     Scope = Team teamId
-    Chunks = [
-        { Id = Guid.NewGuid(); Text = "..."; Metadata = Map.empty; ... }
-    ]
+    ScopeId = teamId
+    Container = $"team-{teamId}"
+    // `None` on a non-user path; observers treat it as "no re-auth".
+    OriginatingUserId = None
+}
+
+let enqueue = async {
+    // `false` means the queue is at capacity — the deployment's
+    // `IngestionOverflowPolicy` decides what happens next.
+    let! accepted = queue.EnqueueAsync job
+    return accepted
 }
 ```
 
-The background `IngestionBackgroundService` dequeues and indexes. Watch `KnowledgeChunkIndexed` events under `_platform.ingestion` in the audit log.
+The background `IngestionBackgroundService` dequeues and indexes. Watch `KnowledgeChunkIndexed` (and `KnowledgeChunkFailed`) events in the audit log — the ingestion path writes them under `SourceModule = "ToolUp.RAG"`, in the job's own scope.
 
 ## 6. Chat with the assistant — watch retrieval ground answers
 
@@ -135,8 +156,15 @@ The retrieval pipeline embeds the query, fetches the top-K chunks from the team 
 
 Inspect the retrieval trail via `/dev/inspect` (when `EnableDevEndpoints` is on) or query the audit log:
 
-```fsharp skip=fragment
-let! events = eventStore.ReadByType("_platform.retrieval", "KnowledgeRetrieved")
+```fsharp
+let retrievalTrail = async {
+    // `IEventStore` reads are SCOPE-first. `_platform.retrieval` is the
+    // SOURCE MODULE the tracer writes under, so it belongs to
+    // `ReadBySource` — never in the first position of `ReadByType`.
+    let! everyTrace = eventStore.ReadBySource(scopeId, "_platform.retrieval")
+    let! retrievals = eventStore.ReadByType(scopeId, "KnowledgeRetrieved")
+    return everyTrace, retrievals
+}
 ```
 
 Each `KnowledgeRetrieved` event carries the hashed query (`SHA256`, never plaintext), top-K, scope filter, latency, top score, and result count. Use it for retrieval-quality monitoring.
@@ -147,16 +175,17 @@ Modules that emit non-document content can plug into the ingestion pipeline. Dec
 
 `Vectorise` is a **pure** function over the already-processed payload — not an async callback taking a file name — and a `TextChunk` is just content plus metadata: no id (the store assigns `{documentId}:chunk:{n}`) and no origin field.
 
-```fsharp skip=fragment
+```fsharp
 let myDataVectorisationHandler: VectorisationHandler = {
     DataTypeId = "MyDataType"
     Vectorise =
-        fun processed ->
-            processData processed
-            |> List.map (fun entry -> {
-                Content = $"Entry: {entry.Description}\nValue: {entry.Value}"
-                Metadata = Map.ofList [ "_source", "MyDataType" ]
-            })
+        fun processed -> [
+            for entry in processData processed do
+                {
+                    Content = $"Entry: {entry.Description}\nValue: {entry.Value}"
+                    Metadata = Map.ofList [ "_source", "MyDataType" ]
+                }
+        ]
     // Optional whole-document summary chunk, indexed with a score boost.
     Summarise = None
 }
@@ -164,7 +193,7 @@ let myDataVectorisationHandler: VectorisationHandler = {
 
 Handlers are registered on the **module**, not on `RAGServerApp` — that is what keeps a module self-contained:
 
-```fsharp skip=fragment
+```fsharp
 ServerModule.create "MyModule"
 |> ServerModule.withVectorisation [ myDataVectorisationHandler ]
 ```

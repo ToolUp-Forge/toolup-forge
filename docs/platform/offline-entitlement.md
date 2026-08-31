@@ -69,7 +69,7 @@ upgrade check uses (`byte[] -> string -> Async<Result<unit, string>>`), so the S
 core carries no crypto stack (GP 1) and a deployment adapts its own verifier at
 its own call site:
 
-```fsharp skip=fragment
+```fsharp
 let verify: VerifyDetachedJws =
     fun bytes jws -> async {
         let signature = Convert.FromBase64String jws
@@ -95,17 +95,23 @@ what makes the pin real.
 Gated code checks a flag. It never sees a token, a claim set, a phase, or a
 validity window.
 
-```fsharp skip=fragment
+```fsharp
 // In a module. There is nothing entitlement-shaped here, and that is the point.
-let! enabled = flags.IsEnabled "reporting.advanced-analytics" ctx
-if enabled then renderAdvancedPanel () else renderUpgradePrompt ()
+async {
+    let! enabled = flags.IsEnabled "reporting.advanced-analytics" ctx
+    return (if enabled then renderAdvancedPanel () else renderUpgradePrompt ())
+}
 ```
 
 The composition root wires it once:
 
-```fsharp skip=fragment
-let! capped, budget, registerPreflight =
+```fsharp
+// Resolved ONCE at compose, before the host starts — a per-request resolve
+// would re-verify a signature on the hot path for a value that changes at
+// most once a quarter.
+let capped, budget, registerPreflight =
     EntitlementCompose.resolveAndCap validation presentedToken declaredFlags evaluator
+    |> Async.RunSynchronously
 ```
 
 `capped` is an ordinary `FlagEvaluator` with governed keys bounded by what the
@@ -132,12 +138,16 @@ option nobody declared.
 Row, seat, and compute caps ride the same token and project to a typed read
 surface:
 
-```fsharp skip=fragment
+```fsharp
 match budget.Check "entitlement.seats" requestedSeats with
-| Unbudgeted -> proceed ()                       // no limit declared — unbounded
-| WithinBudget(limit, requested) -> proceed ()
-| BudgetExceeded breach -> refuse breach          // the existing QuotaBreached shape
+| CapacityDecision.Unbudgeted -> proceed ()      // no limit declared — unbounded
+| CapacityDecision.WithinBudget(limit, requested) -> proceed ()
+| CapacityDecision.BudgetExceeded breach -> refuse breach   // the existing QuotaBreached shape
 ```
+
+`CapacityDecision` is `[<RequireQualifiedAccess>]` — `WithinBudget` would
+otherwise shadow `HostRenderBudgetResult.WithinBudget` in the shared namespace,
+so every case is written out in full.
 
 `BudgetExceeded` carries `QuotaBreached`, the same record the per-scope quota
 policy returns, so a capacity entitlement and a quota breach report in one
@@ -216,7 +226,7 @@ clock must not manufacture an expiry.
 
 An appliance that has already declared its drift does not restate it:
 
-```fsharp skip=fragment
+```fsharp
 let validation =
     EntitlementValidation.create pin verify governance
     |> EntitlementValidation.withClockSkew (EntitlementValidation.skewFromApplianceProfile profile)
@@ -278,7 +288,7 @@ decorative, and refusing to boot would confiscate.
 
 ## The boot preflight
 
-```fsharp skip=fragment
+```fsharp
 // Registering IS the opt-in. A deployment that gates nothing never calls it.
 let services = registerPreflight services
 ```
@@ -303,7 +313,7 @@ The entire issuing-side contract is one function. A party that can produce a
 detached JWS over these bytes can issue tokens this SDK accepts, with no
 dependency on it of any kind:
 
-```fsharp skip=fragment
+```fsharp
 let signedBytes = EntitlementClaims.canonicalBytes claims
 ```
 
@@ -316,7 +326,7 @@ operator could diagnose.
 
 Assemble the token from the claims and the signature:
 
-```fsharp skip=fragment
+```fsharp
 let token = EntitlementClaims.toToken keyId algorithm detachedJws claims
 ```
 

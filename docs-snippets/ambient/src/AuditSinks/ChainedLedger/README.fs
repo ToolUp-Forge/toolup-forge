@@ -9,6 +9,7 @@
 // markdown. The blocks that DO build a settings value shadow the ambient
 // one, which is the point of the auto-opened module.
 open ToolUp.Platform.AuditSinks.ChainedLedger
+open ToolUp.Platform.BlobStorage
 
 [<AutoOpen>]
 module PageAmbient =

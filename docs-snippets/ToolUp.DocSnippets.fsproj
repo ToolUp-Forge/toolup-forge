@@ -135,7 +135,9 @@
     <ProjectReference Include="../src/ModelProviders/Reference/ToolUp.ModelProviders.Reference.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Email/SendGrid/ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Email/Smtp/ToolUp.NotificationChannels.Email.Smtp.fsproj" />
+    <ProjectReference Include="../src/NotificationChannels/Push/WebPush/ToolUp.NotificationChannels.Push.WebPush.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj" />
+    <ProjectReference Include="../src/NotificationChannels/Sms/Twilio/ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
     <ProjectReference Include="../src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj" />
     <ProjectReference Include="../src/RateLimit/AzureTableStorage/ToolUp.RateLimit.AzureTableStorage.fsproj" />
     <ProjectReference Include="../src/RateLimit/Redis/ToolUp.RateLimit.Redis.fsproj" />
