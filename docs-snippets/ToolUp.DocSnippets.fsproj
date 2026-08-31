@@ -88,9 +88,11 @@
     <ProjectReference Include="../src/AuditSinks/SplunkHec/ToolUp.AuditSinks.SplunkHec.fsproj" />
     <ProjectReference Include="../src/AuthProviders/ClerkUI/ClerkUI.fsproj" />
     <ProjectReference Include="../src/AuthProviders/EntraDirectory/EntraDirectory.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/EntraExternalId/EntraExternalId.fsproj" />
     <ProjectReference Include="../src/AuthProviders/EntraExternalIdClient/EntraExternalIdClient.fsproj" />
     <ProjectReference Include="../src/AuthProviders/GitHub/GitHubAuth.fsproj" />
     <ProjectReference Include="../src/AuthProviders/GoogleDirectory/GoogleDirectory.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/GoogleIdentityClient/GoogleIdentityClient.fsproj" />
     <ProjectReference Include="../src/AuthProviders/LdapActiveDirectory/LdapActiveDirectory.fsproj" />
     <ProjectReference Include="../src/AuthProviders/Oidc/OidcAuthProvider.fsproj" />
     <ProjectReference Include="../src/AuthProviders/OidcClient/OidcClient.fsproj" />
@@ -126,6 +128,8 @@
     <ProjectReference Include="../src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj" />
     <ProjectReference Include="../src/IngestionQueues/Redis/ToolUp.IngestionQueues.Redis.fsproj" />
     <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />
+    <ProjectReference Include="../src/Media/CloudTranscode/ToolUp.Media.CloudTranscode.fsproj" />
+    <ProjectReference Include="../src/Media/FFmpeg/ToolUp.Media.FFmpeg.fsproj" />
     <ProjectReference Include="../src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj" />
     <ProjectReference Include="../src/Metrics/OpenTelemetry/ToolUp.Metrics.OpenTelemetry.fsproj" />
     <ProjectReference Include="../src/ModelProviders/Reference/ToolUp.ModelProviders.Reference.fsproj" />

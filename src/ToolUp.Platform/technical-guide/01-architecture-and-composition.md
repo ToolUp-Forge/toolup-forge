@@ -110,55 +110,65 @@ In standard Elmish, the top-level program has a single `Model` and `Msg` type. W
 
 The SDK solves this with a two-stage approach:
 
-**Stage 1: Typed construction.** Each module builds a `ClientModule<'Model, 'Msg>` record with its strongly-typed init, update, and view:
+**Stage 1: Typed construction.** Each module builds a `ClientModule<'Model, 'Msg>` carrying its strongly-typed init, update, and view. The record is not written by hand: `ClientModule.create` takes the four required fields — `Init`, `Update`, `Name`, `Icon` — and every other capability arrives through a `with*` helper, so a module declares only what it actually uses and a new field on the record costs existing modules nothing:
 
-```fsharp skip=fragment
+```fsharp
 // In a module's ClientView.fs
-let register () : ToolUp.Platform.ErasedModule =
-    ToolUp.Platform.ClientModule.register {
-        Definition = {
-            Id = "MyModule"          // stable permission key — matches `makePermissionGuardedApi` in Server.fs
-            Name = "My Module"       // display name shown in sidebar
-            Pages = [ ... ]
-        }
+let register () : ErasedModule =
+    ClientModule.create {
         Init = MyModel.init
         Update = MyModel.update
-        View = view
-        NeedsData = Some(fun has -> has "MyDataType")
-        DataTypes = [ myDataTypeDisplay ]
-        ProvidesProcessedData = None
+        Name = "My Module"                       // display name shown in the sidebar
+        Icon = Icon.ofUrl "/svg/chart.svg"
     }
+    |> ClientModule.withId "MyModule"            // stable permission key — matches `makePermissionGuardedApi` in Server.fs
+    |> ClientModule.withView view
+    |> ClientModule.withNeedsData (fun has -> has "MyDataType")
+    |> ClientModule.withDataTypes [ myDataTypeDisplay ]
+    |> ClientModule.register
 ```
 
-`ModuleDefinition` separates identity (`Id`) from presentation (`Name`). `Id` is the stable string used as a Map key for module state, the sidebar filter key against `GetAccessibleModules`, the `AIMessageRequest.ActiveModule` payload, and — for modules exposed by the app server — the `makePermissionGuardedApi` / `AccessContext` permission key. Convention: PascalCase, no spaces (e.g. "SkuAnalysis"). `Name` is free-form human-readable text shown in the sidebar and page header. SDK-built-in modules (FileManager, TeamManager) and companion-provided modules (AI assistant, AI settings) use reserved `Id` prefixes (`_sdk.*`, `_ai.*`) so they can never collide with app module Ids.
+`ModuleDefinition` separates identity (`Id`) from presentation (`Name`). `Id` is the stable string used as a Map key for module state, the sidebar filter key against `GetAccessibleModules`, the `AIMessageRequest.ActiveModule` payload, and — for modules exposed by the app server — the `makePermissionGuardedApi` / `AccessContext` permission key. Convention: PascalCase, no spaces (e.g. "SkuAnalysis"). `create` derives it from `Name` with spaces stripped, so `withId` is only needed when the two must differ. `Name` is free-form human-readable text shown in the sidebar and page header. `Icon` is a typed `ReactElement`, not a path string — `Icon.ofImport` wraps a `vite-plugin-svgr` import (the shape every shipped module uses), and `Icon.ofUrl` is the `<img src=…>` fallback shown above. SDK-built-in modules (FileManager, TeamManager) and companion-provided modules (AI assistant, AI settings) use reserved `Id` prefixes (`_sdk.*`, `_ai.*`) so they can never collide with app module Ids.
+
+A module that renders several pages calls `ClientModule.withPages` instead of `withView`; `register` refuses a module with neither.
 
 **Stage 2: Type erasure.** `ClientModule.register` erases the generic types into `ErasedModule`, where `Model` becomes `obj` and `Msg` becomes `obj`:
 
 ```fsharp skip=fragment
-let register (m: ClientModule<'Model, 'Msg>) : ErasedModule = {
-    Definition = m.Definition
-    Init =
-        fun () ->
-            let model, cmd = m.Init()
-            box model, Cmd.map box cmd
-    Update =
-        fun msg state ->
-            let typedMsg = unbox<'Msg> msg
-            let typedModel = unbox<'Model> state
-            let newModel, cmd = m.Update typedMsg typedModel
-            box newModel, Cmd.map box cmd
-    View =
-        fun state dispatch ->
-            let typedModel = unbox<'Model> state
-            let typedDispatch msg = dispatch (box msg)
-            m.View typedModel typedDispatch
-    NeedsData = m.NeedsData
-    DataTypes = m.DataTypes
-    ProvidesProcessedData =
-        m.ProvidesProcessedData
-        |> Option.map (fun f -> fun state -> f (unbox<'Model> state))
-}
+// The erasing fields only — every declarative field (`NeedsData`,
+// `DataTypes`, `Config`, `FeatureFlags`, `Group`, `Area`, …) is copied
+// across unchanged and is elided here. `ErasedModule` is a record, so
+// this excerpt is deliberately partial and does not compile on its own.
+let register (m: ClientModule<'Model, 'Msg>) : ErasedModule =
+    if m.View.IsNone && m.PageViews.IsNone then
+        failwithf "ClientModule.register: module '%s' has neither View nor PageViews." m.Definition.Id
+
+    {
+        Definition = m.Definition
+        Init =
+            fun ctx ->
+                let model, cmd = m.Init ctx
+                box model, Cmd.map box cmd
+        Update =
+            fun msg state ->
+                let typedMsg = unbox<'Msg> msg
+                let typedModel = unbox<'Model> state
+                let newModel, cmd = m.Update typedMsg typedModel
+                box newModel, Cmd.map box cmd
+        View =
+            m.View
+            |> Option.map (fun v ->
+                fun (state: obj) (dispatch: obj -> unit) ->
+                    let typedModel = unbox<'Model> state
+                    let typedDispatch msg = dispatch (box msg)
+                    v typedModel typedDispatch)
+        ProvidesProcessedData =
+            m.ProvidesProcessedData
+            |> Option.map (fun f -> fun state -> f (unbox<'Model> state))
+    }
 ```
+
+`Init` takes a `ClientModuleContext` — the shell hands each module its persisted config and platform identity at init time, and `ClientModule.withUnitInit` adapts a plain `unit -> 'Model * Cmd<'Msg>` into that shape (which is what `create` does for you). `View` is an *option* because a multi-page module supplies `PageViews` instead; `register` rejects a module that sets neither.
 
 All `box`/`unbox` calls are contained within this single function. Module code never sees type erasure. The shell Elmish program works with `ErasedModule list`, routing messages to the active module's update function and rendering its view.
 
@@ -185,28 +195,25 @@ After every update cycle, the shell calls `computeProcessedData` — a pure aggr
 
 The view function builds the sidebar from `ModuleDefinition` metadata — module names, icons, and data availability. No module name is hardcoded in the SDK.
 
-`SDK.Client.run` constructs the Elmish program, handles data manager injection, wires HMR in Debug mode, and starts the React root:
+`SDK.Client.run` is the entry point the app's `Client.fs` calls. It installs the outbound-request seam, gives a public-entry dispatcher (a share-token embed, say) the chance to take the page instead of the shell, and otherwise starts the shell program on the React root:
 
 ```fsharp skip=fragment
 let run (config: ClientConfig) (modules: ErasedModule list) =
+    // Phase 13a — the request seam is installed BEFORE consulting the
+    // public-entry dispatchers, so a dispatcher that fires authenticated
+    // requests gets the same header attachment any other request gets.
+    installRequestSeam config
 
-    let allDataTypeDisplays = modules |> List.collect (fun m -> m.DataTypes)
-
-    let allModules =
-        match config.DataManager with
-        | NoDataManager -> modules
-        | DefaultDataManager -> FileManagerUI.create allDataTypeDisplays None :: modules
-        | ConfiguredDataManager dmConfig -> FileManagerUI.create allDataTypeDisplays (Some dmConfig) :: modules
-        | ExternalDataManager custom -> custom :: modules
-
-    let program =
-        Program.mkProgram (init config allModules) (update allModules) (viewWithSignIn config allModules)
-#if DEBUG
-        |> Program.withConsoleTrace
-#endif
-
-    program |> Program.withReactSynchronous "elmish-app" |> Program.run
+    if tryDispatchPublicEntry config then
+        ()
+    else
+        program config modules
+        |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
+        |> Program.withReactSynchronous "elmish-app"
+        |> Program.run
 ```
+
+`program` is where the composition happens: it calls `prepareModules`, which folds the consumer's modules together with the SDK built-ins and the data manager selected by `ClientConfig.DataManager` (`NoDataManager` / `DefaultDataManager` / `ConfiguredDataManager` / `ExternalDataManager`), builds the module query bus, and assembles the Elmish program from `init` / `update` / `viewWithSignIn`.
 
 `viewWithSignIn` runs `view` and pipes the result through the `AuthUIProvider` gate. The gate is a pass-through when the deployment's surface admits anonymous callers and when `ClientConfig.AuthUI = NoAuthUI` (the default) — it only wraps when a companion-backed sign-in UI has been selected. See the [Sign-in UI companions](03-authentication-secrets-and-encryption.md#sign-in-ui-companions) section (Chapter 3) for the delegate-registry pattern.
 
@@ -218,7 +225,7 @@ Apps compose their server through a layered record-based fluent API. Each layer 
 - `AIServerApp` — wraps a `ServerApp.Base`; adds AI provider factory, AI config store, AI tools, module AI contexts
 - `RAGServerApp` — wraps an `AIServerApp.AI`; adds an embedding provider
 
-```fsharp skip=fragment
+```fsharp
 // No AI:
 ServerApp.empty
 |> ServerApp.withConfig config
@@ -248,7 +255,7 @@ RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
 
 A `ServerModule` record collects everything one module contributes to the server:
 
-```fsharp skip=fragment
+```fsharp
 ServerModule.create "SkuAnalysis"           // Name = RBAC key for makePermissionGuardedApi
 |> ServerModule.withGuardedApi apiFactory   // HttpContext -> 'T, wrapped in makePermissionGuardedApi
 |> ServerModule.withDataTypes [ salesDataType ]
@@ -293,7 +300,7 @@ Compose does the following:
 
 The DI registration and middleware setup are spelled out directly against the raw ASP.NET Core APIs — no Saturn DSL. The composition reads top-to-bottom so it can be skimmed without learning a wrapper:
 
-```fsharp skip=fragment
+```fsharp
 let builder = WebApplication.CreateBuilder()
 builder.WebHost.UseUrls($"http://0.0.0.0:{serverPort}") |> ignore
 
@@ -319,7 +326,7 @@ services
     .AddSingleton<IModuleQueryBus>(moduleQueryBus)
 |> ignore
 
-// Team-mode-only: shared TeamStore instance reused by TeamScopeResolver
+// Team-surface-only: shared TeamStore instance reused by TeamScopeResolver
 match teamStoreOpt with
 | Some ts -> services.AddSingleton<ITeamStore>(ts :> ITeamStore) |> ignore
 | None -> ()
@@ -329,16 +336,33 @@ match extensions.ServiceConfig with
 | Some cfg -> cfg services |> ignore
 | None -> ()
 
+// The scope resolver is derived from `config.Surfaces`, not from a
+// single deployment mode: a declared Team surface wins outright,
+// otherwise the dominant AuthenticatedUser surface's `Persistence`
+// picks between the ephemeral and persistent resolvers.
 let scopeResolver: IStorageScopeResolver =
-    match config.Mode with
-    | Anonymous -> AnonymousScopeResolver()
-    | AuthenticatedEphemeral -> AuthenticatedEphemeralScopeResolver()
-    | Individual -> AuthenticatedScopeResolver()
-    | Team -> TeamScopeResolver(teamStoreOpt.Value, MemoryCache(MemoryCacheOptions()))
+    if DeploymentConfig.hasTeamScope config then
+        new TeamScopeResolver(
+            teamStoreOpt.Value :> ITeamStore,
+            new MemoryCache(MemoryCacheOptions()),
+            resolvedNotificationChannel,
+            resolvedLogger
+        )
+    else
+        let userPersistence =
+            config.Surfaces
+            |> List.tryPick (function
+                | SurfaceProfile.AuthenticatedUser cfg -> Some cfg.Persistence
+                | _ -> None)
+
+        match userPersistence with
+        | Some Ephemeral -> AuthenticatedEphemeralScopeResolver()
+        | Some Persistent -> AuthenticatedScopeResolver()
+        | None -> AnonymousScopeResolver()
 
 services
     .AddSingleton<IStorageScopeResolver>(scopeResolver)
-    .AddScoped<AccessContext>(fun sp -> ...)       // Per-request, reads from HttpContext.Items
+    .AddScoped<AccessContext>(fun sp -> accessContextFor sp)  // Per-request, reads from HttpContext.Items
     .AddHttpContextAccessor()
     .AddSession()
 |> ignore
@@ -363,13 +387,14 @@ else match config.StaticPathBehaviour with
      | SkipSilent -> ()
 
 app.UseSession() |> ignore
-app.UseMiddleware<ScopeResolutionMiddleware>() |> ignore
-app.UseMiddleware<AuthEnforcementMiddleware>(config) |> ignore
-app.UseMiddleware<RemotingBodyNormalizationMiddleware>() |> ignore
+app.UseMiddleware<ScopeResolutionMiddleware>(config) |> ignore
+app.UseMiddleware<SurfaceEnforcementMiddleware>() |> ignore
 
 app.UseGiraffe router
 app.Run()
 ```
+
+The `...` above are genuine elisions — the static-file options and the log / failure messages are long and beside the point. The middleware *names* and their order are what this excerpt is for; the complete ordering, including the conditional steps omitted here, is in the [pipeline-position](#pipeline-position) listing below.
 
 ### Production deployment knobs
 
@@ -410,35 +435,45 @@ Apps extend the ASP.NET Core middleware chain through three opt-in surfaces, eac
 
 `AllowCredentials = true` cannot combine with wildcard origins (browser policy); `compose` logs a warning and falls back to non-credentialed mode. For per-route or dynamic-origin policies, use `withPreMiddleware` and register the policy by hand.
 
-**`ServerApp.withPreMiddleware` / `withPostMiddleware`** — accumulate `IApplicationBuilder -> IApplicationBuilder` thunks at the **pre** position (after CORS / security headers, BEFORE `ScopeResolutionMiddleware` / `AuthEnforcementMiddleware`) and the **post** position (AFTER `app.UseGiraffe(router devRoutes)`, before `app.Run()`). Pre is for IP allowlists, custom auth-precondition rejection, request-shape sanitisation; post is for fallback handlers, custom 404 pages, debug-only routes that shouldn't be in the Giraffe surface. Thunks apply in registration order.
+**`ServerApp.withPreMiddleware` / `withPostMiddleware`** — accumulate `IApplicationBuilder -> IApplicationBuilder` thunks at the **pre** position (after CORS / security headers / session, BEFORE `ScopeResolutionMiddleware` / `SurfaceEnforcementMiddleware`) and the **post** position (AFTER `app.UseGiraffe(router devRoutes)`, before `app.Run()`). Pre is for IP allowlists, custom auth-precondition rejection, request-shape sanitisation; post is for fallback handlers, custom 404 pages, debug-only routes that shouldn't be in the Giraffe surface. Thunks apply in registration order.
 
 #### Pipeline position
 
 ```
-ForwardedHeaders         ← if config.TrustForwardedHeaders
-HttpsRedirection         ← if config.RequireHttps
-SecurityHeadersMiddleware ← Phase 1f (always registered; no-op when SecurityHeaders is empty)
-CspMiddleware            ← Phase 9j (always registered; no-op when SecurityHardening = NoSecurityHardening)
-UseCors                  ← if config.Cors.IsSome
+ForwardedHeaders            ← if config.TrustForwardedHeaders
+ExceptionHandler
+HttpsRedirection            ← if config.RequireHttps
+RequestIdMiddleware
+SecurityHeadersMiddleware   ← Phase 1f (always registered; no-op when SecurityHeaders is empty)
+CspMiddleware               ← Phase 9j (always registered; no-op when SecurityHardening = NoSecurityHardening)
+UseCors                     ← if config.Cors.IsSome
 ResponseCompression
-StaticFiles              ← when PublicPath exists
+PrerenderedRoutesMiddleware
+StaticFiles + SpaFallback   ← when PublicPath exists
 Session
-CsrfMiddleware           ← Phase 9j (always registered; no-op when SecurityHardening = NoSecurityHardening)
-[withPreMiddleware]      ← Phase 1f pre seam (before scope resolution)
+CsrfMiddleware              ← Phase 9j (always registered; no-op when SecurityHardening = NoSecurityHardening)
+[withPreMiddleware]         ← Phase 1f pre seam (before scope resolution)
+ShareTokenAuthMiddleware
+ServiceAccountTokenMiddleware  ← if config.ServiceAccounts is enabled
 ScopeResolutionMiddleware
-AuthEnforcementMiddleware
+PlatformAdminAuthorizationMiddleware
+PeerBearerAuthMiddleware    ← if the peer substrate is enabled
+SurfaceEnforcementMiddleware
+AnonymousSessionMigrationMiddleware
+MetricsMiddleware           ← if a metrics sink is composed
 RequestTimingMiddleware
-RateLimiter              ← if config.RateLimit.IsSome
-RemotingBodyNormalizationMiddleware
+RateLimiter                 ← if config.RateLimit.IsSome
 MapHealthChecks
 UseGiraffe(router)
-[withPostMiddleware]     ← Phase 1f post seam (after Giraffe)
+[withPostMiddleware]        ← Phase 1f post seam (after Giraffe)
 Run
 ```
 
+The body-normalisation middleware that sat between the rate limiter and Giraffe in the 0.3.x pipeline is gone — Phase 69b.A folded that behaviour into the ToolUp.Remoting dispatcher itself (default on; opt out per API with `Remoting.withoutBodyNormalisation`), and Phase 69a removed the registration.
+
 #### Worked example: CSP via `SecurityHeaders`
 
-```fsharp skip=fragment
+```fsharp
 let private securityHeaders =
     Map.ofList [
         "Content-Security-Policy",
@@ -473,7 +508,7 @@ ServerApp.empty
 
 **`ICspContributor`.** Every subsystem/companion that needs a non-`'self'` origin declares it; `SecurityHardening.aggregate` walks the `IServiceCollection` at compose time (same instance-descriptor contract as `IHealthCheck` / `IConfigValidator`) and folds them into one header. First-party defaults auto-registered when hardening is on: the OIDC issuer (from `TOOLUP_OIDC_ISSUER`, inert if unset) and the AI provider hosts (`api.anthropic.com`, `api.openai.com`) → `connect-src`. A CDN-delivered grid host is opt-in via `ServerApp.withCspContributor (AgGridCdnCspContributor())`. Companions register their own with `services.AddSingleton<ICspContributor>(...)` through the `ComposeExtensions.ServiceConfig` hook.
 
-```fsharp skip=fragment
+```fsharp
 type StripeCspContributor() =
     interface ICspContributor with
         member _.RequiredSources =
@@ -497,14 +532,14 @@ ServerApp.empty
 
 The thunk runs before scope resolution, but `AccessContext.TeamId` is not yet populated — the resolver runs later. Use the request's resolved user (set by `ScopeResolutionMiddleware` when present) only when you also register an earlier copy of the resolver, or read team metadata from a header / token claim that's available before scope resolution. The simpler shape is to gate on `Request.Headers["X-Team-Slug"]` (set by an upstream proxy) or on the resolved user's tenant id from the auth provider:
 
-```fsharp skip=fragment
+```fsharp
 let private allowlistMiddleware (allowlist: Map<string, string list>) =
     fun (app: IApplicationBuilder) ->
         app.Use(fun (ctx: HttpContext) (next: Func<Task>) ->
             task {
                 let teamSlug =
                     match ctx.Request.Headers.TryGetValue "X-Team-Slug" with
-                    | true, vs when vs.Count > 0 -> vs.[0]
+                    | true, vs when vs.Count > 0 -> vs[0]
                     | _ -> ""
 
                 let remoteIp = ctx.Connection.RemoteIpAddress |> string
@@ -560,9 +595,8 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IDataSourceConfigStore` + `IDataIngestor` | OptIn | `config.DataIngestion` | `SDK.Server.fs:1218–1251` |
 | `RateLimiter` middleware | OptIn | `config.RateLimit` | `SDK.Server.fs:1273–1277` |
 | `ScopeResolutionMiddleware` | Always | — | pipeline |
-| `AuthEnforcementMiddleware` | Always (surface-aware) | `config.Surfaces` | pipeline |
+| `SurfaceEnforcementMiddleware` | Always (surface-aware) | `config.Surfaces` | pipeline |
 | `RequestTimingMiddleware` | OptIn | `config.SlowRequestThreshold` | pipeline |
-| `RemotingBodyNormalizationMiddleware` | Always | — | pipeline |
 | `platformInfoApiHandler` / `teamApiHandler` / `permissionApiHandler` / `accessibilityApiHandler` / `dataCatalogApiHandler` | Always (surface trims for anonymous subjects) | `config.Surfaces` | router |
 | `configHandler` / `featureFlagHandler` / `moduleQueryBusHandler` | Always | — | router |
 | `webhookHandler` | OptIn | `config.Webhooks` | router |
@@ -577,7 +611,7 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 
 1. `Notifications = NotificationsAuto` (the default) flips to `InMemoryNotifications` whenever any of the following is true:
    - `config.JobScheduler <> NoJobScheduler` (background jobs publish dead-letter notifications)
-   - `config.Mode = MultiTeam` (membership-change events feed the client team-switch reset path)
+   - the deployment declares a `HeaderSwitcher` Team surface — `DeploymentConfig.hasMultiTeamSwitcher config`, e.g. `Surfaces.multiTeam` (membership-change events feed the client team-switch reset path)
    - `composeWithAI` or `composeWithRAG` is wrapping `compose` (each adds itself to `extensions.NotificationConsumers`)
    - Otherwise `NoNotifications` — the SSE endpoint and `InMemoryNotificationChannel` are not registered.
 2. `AuditLog = NoAuditLog` (the default) replaces `EventStoreAuditLog` with `NoOpAuditLog`. Emission callsites (`ScopeResolutionMiddleware`, the platform-API handlers — `TeamApi` / `PermissionApi` — and `fileManagementApi`) keep their unconditional `IAuditLog.Record` calls — the no-op swallows them, so callsites stay clean and future emission additions don't need a mode check. This deviates from the original "interface unregistered" framing in favour of single-touchpoint gating.

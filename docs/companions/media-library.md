@@ -19,7 +19,7 @@ that a media item serves into.
 `ToolUp.MediaLibrary` is opt-in (GP 13). Set the mode and compose with
 `MediaLibraryServerApp` instead of `ServerApp`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.MediaLibrary
 open ToolUp.MediaLibrary.MediaCompose
 
@@ -68,12 +68,15 @@ The pure decision logic is `ByteRange.parse` (unit-tested across the full
 ### Scope-signed expiring URLs (GP 4)
 
 A gated media item is never served from a world-readable blob URL.
-`IMediaLibrary.SignedUrl id scope ttl` mints a URL whose token HMAC-signs
+`IMediaLibrary.SignedUrl(id, scope, ttl)` mints a URL whose token HMAC-signs
 `(MediaId, ScopeId, Container, ExpiresAt)`:
 
-```fsharp skip=fragment
-let! url = mediaLibrary.SignedUrl(mediaId, viewerScope, TimeSpan.FromMinutes 15.0)
-//  /media/signed/{mediaId}?token=… — valid for 15 minutes, this scope only
+```fsharp
+async {
+    let! url = mediaLibrary.SignedUrl(mediaId, viewerScope, TimeSpan.FromMinutes 15.0)
+    //  /media/signed/{mediaId}?token=… — valid for 15 minutes, this scope only
+    return url
+}
 ```
 
 The signing key is a 32-byte secret in `ISecretStore` under the reserved
@@ -107,7 +110,7 @@ that same cursor. **Re-sending a chunk already accepted at its offset,
 with the same length, is a no-op** — which is what makes the client loop
 below safe to retry after a request whose response it never saw.
 
-```fsharp skip=fragment
+```fsharp
 // `api` is the Fable.Remoting `IMediaApi` proxy.
 let uploadResumable (api: IMediaApi) (bytes: byte[]) (filename: string) (mimeType: string) = async {
     match! api.BeginUpload(filename, mimeType, int64 bytes.Length, None) with
@@ -239,7 +242,7 @@ sweeps sessions whose last append is older than
 `BackgroundService` and no timer, so a deployment that never opens a
 session runs no sweep at all (GP 13).
 
-```fsharp skip=fragment
+```fsharp
 app
 |> MediaLibraryServerApp.withOptions
     { MediaLibraryOptions.defaults with
@@ -282,8 +285,8 @@ stores the original and serves a single-file progressive download with
 Shells out to the system `ffmpeg` / `ffprobe` binaries (must be on
 `PATH`; ships no bundled binary):
 
-```fsharp skip=fragment
-open ToolUp.Media.FFmpeg.FFmpegMediaProvider
+```fsharp
+open ToolUp.Media.FFmpeg
 
 app
 |> MediaLibraryServerApp.withDerivation (FFmpegMediaProvider.create None None)        // poster + probe
@@ -303,8 +306,8 @@ The seam for cloud-managed transcode (AWS MediaConvert, Mux, Coconut, …).
 The SDK ships **no cloud-vendor SDK**; the deployment supplies a `submit`
 callback that runs the provider job and returns the produced HLS files:
 
-```fsharp skip=fragment
-open ToolUp.Media.CloudTranscode.CloudTranscodeProvider
+```fsharp
+open ToolUp.Media.CloudTranscode
 
 let transcoder =
     CloudTranscodeProvider.create (fun originalBytes mimeType -> async {
@@ -329,7 +332,7 @@ route auth is no longer on the path. The bytes are simply there.
 
 So the segments are encrypted and the **key** is what stays gated:
 
-```fsharp skip=fragment
+```fsharp
 app
 |> MediaLibraryServerApp.withTranscoder (FFmpegMediaProvider.createTranscoder None)
 |> MediaLibraryServerApp.withOptions
@@ -338,7 +341,7 @@ app
 
 Per-upload instead of (or against) the deployment default:
 
-```fsharp skip=fragment
+```fsharp
 MediaUploadRequest.createWithEncryption
     options bytes filename mimeType uploadedBy caption (Some true)
 ```
@@ -451,7 +454,7 @@ The chunk is `MediaLibraryOptions.RangeChunkBytes` (default 1 MiB).
 Raising it trades peak memory per in-flight response for fewer round
 trips; lowering it does the reverse:
 
-```fsharp skip=fragment
+```fsharp
 app
 |> MediaLibraryServerApp.withOptions
     { MediaLibraryOptions.defaults with RangeChunkBytes = 4 * 1024 * 1024 }
@@ -464,10 +467,14 @@ rather than a member on `IMediaLibrary`: an implementation that answers
 with a CDN redirect has no window to open, so consumers probe for it and
 fall back to the whole-blob `OpenDerived` read.
 
-```fsharp skip=fragment
+```fsharp
 match box mediaLibrary with
-| :? IMediaRangeReader as ranged -> // bounded window
-| _ -> // whole-blob OpenDerived
+| :? IMediaRangeReader as ranged ->
+    // bounded window
+    ranged.OpenDerivedRange(container, mediaId, relativePath, range) |> Async.Ignore
+| _ ->
+    // whole-blob OpenDerived
+    mediaLibrary.OpenDerived(container, mediaId, relativePath) |> Async.Ignore
 ```
 
 ### Encrypted originals are correct, but not cheap to seek
@@ -610,12 +617,16 @@ ordinary usage records, so a deployment reads them through the read path
 its usage dashboard already uses — `IUsageQueryApi.Query` — and folds them
 with a pure function the companion ships:
 
-```fsharp skip=fragment
-let! rows = usageQueryApi.Query(None, Some { From = from; To = until })
+```fsharp
+async {
+    let! rows = usageQueryApi.Query(None, Some { From = from; To = until })
 
-let rollups = PlaybackTelemetry.PlaybackRollup.ofUsageRecords rows
-// each: MediaId, ScopeId, Day, Plays, UniqueSessions, Completions,
-//       CompletionRate, OriginEgressBytes
+    let rollups = PlaybackTelemetry.PlaybackRollup.ofUsageRecords rows
+    // each: MediaId, ScopeId, Day, Plays, UniqueSessions, Completions,
+    //       CompletionRate, OriginEgressBytes, and the Phase 742
+    //       delivered-egress columns
+    return rollups
+}
 ```
 
 `ofUsageRecords` ignores records of other kinds, so handing it a whole
@@ -634,7 +645,7 @@ either one alone is enough to start receiving that half.
 
 To receive both, compose them as usual:
 
-```fsharp skip=fragment
+```fsharp
 { ServerConfig.defaults with
     MediaLibrary = EnabledMediaLibrary
     UsageMetering = EnabledUsageMetering

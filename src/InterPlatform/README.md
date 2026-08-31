@@ -52,7 +52,7 @@ The companion is a *consumer* of substrate (`IBlobStorage` for the directory + j
 
 The substrate is selected by a single `ServerConfig` field — `PeerSubstrate`, mirroring `EntityStoreMode` / `JobSchedulerMode` (binary, opt-in). Compose with `PeerServerApp` (the [`PeerCompose`](Server/PeerCompose.fs) companion root), which wraps a base `ServerApp` and adds peer-specific `with*` helpers:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 
@@ -66,14 +66,16 @@ let config = {
         JobScheduler = InProcessJobScheduler
 }
 
-[<EntryPoint>]
+// In your own Server.fs `main` carries [<EntryPoint>]; PeerServerApp.run
+// returns the int exit code it needs.
 let main _ =
     PeerServerApp.create ()
     |> PeerServerApp.withConfig config
-    |> PeerServerApp.withAuth (StaticJwtAuthProvider(...))
-    |> PeerServerApp.withStorage (LocalFileStorage("data"))
+    |> PeerServerApp.withAuth authProvider
+    |> PeerServerApp.withStorage (LocalFileStorage.LocalFileStorage("data"))
     |> PeerServerApp.withLocalPeer { PeerId = "seller"; DisplayName = "Seller Deployment" }
-    |> PeerServerApp.withContract (JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] >> applyImpl)
+    |> PeerServerApp.withContract (fun fusion ->
+        JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl)
     |> PeerServerApp.run
 ```
 
@@ -92,7 +94,7 @@ When `PeerSubstrate = NoPeerSubstrate`, `run` short-circuits to `ServerApp.run a
 
 `JwtPeerAuthProvider` reads a peer's symmetric HS256 signing key from `ISecretStore` on **every** issue / validate, at scope `_platform`, key `peers/{peerId}/signing-key` (rotation flows through immediately). Seed each trusted peer's key out of band before the first call:
 
-```fsharp skip=fragment
+```fsharp
 secrets.SetSecret("_platform", "peers/buyer/signing-key", sharedKey) |> Async.RunSynchronously |> ignore
 ```
 
@@ -108,7 +110,7 @@ A composition that trips this logs one `peer-auth-posture:` `Warn` at startup (P
 
 A contract is a **record whose fields are functions**. Declare it once, shared by both peers:
 
-```fsharp skip=fragment
+```fsharp
 type DirectoryContract = {
     GetCapabilities: unit -> Async<string list>            // immediate
     BuildReport: ReportRequest -> Async<PeerJobHandle<Report>>   // long-running
@@ -119,21 +121,24 @@ type DirectoryContract = {
 
 **Receiver side** — supply an implementation value and host it:
 
-```fsharp skip=fragment
+```fsharp
 let directoryImpl : DirectoryContract = {
     GetCapabilities = fun () -> async { return [ "directory.list"; "directory.lookup" ] }
     BuildReport = fun req -> async { return reportJobHandle req }
 }
 
-// fusion: PeerJobFusion option -> PeerContractHost
-let directoryHost = JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl
+// `withContract` takes a BUILDER, not a host: it threads the deployment's
+// composed job fusion in, so the host is built once the scheduler is known.
+//     directoryHost : PeerJobFusion option -> PeerContractHost
+let directoryHost fusion =
+    JsonRpcPeerHost.contract<DirectoryContract> "directory" [ v1 ] fusion directoryImpl
 ```
 
-Register it with `PeerServerApp.withContract`. Immediate-only contracts ignore the threaded `fusion`; long-running methods use it to schedule the background job.
+Register it with `PeerServerApp.withContract directoryHost`. Immediate-only contracts ignore the threaded `fusion`; long-running methods use it to schedule the background job.
 
 **Caller side** — build a typed proxy and call it like a local API:
 
-```fsharp skip=fragment
+```fsharp
 let seller: TargetPeer = { Peer = sellerId; BaseUrl = "https://seller.example" }
 
 let proxy = JsonRpcPeerClient.create<DirectoryContract> {
@@ -146,10 +151,15 @@ let proxy = JsonRpcPeerClient.create<DirectoryContract> {
     HopBudget = 8
 }
 
-let! caps = proxy.GetCapabilities()     // immediate — resolves inline
-let! handle = proxy.BuildReport req      // long-running — returns a poll handle
-let! report = PeerJobHandle.resolve handle
+let callSeller (req: ReportRequest) = async {
+    let! caps = proxy.GetCapabilities()  // immediate — resolves inline
+    let! handle = proxy.BuildReport req  // long-running — returns a poll handle
+    let! report = PeerJobHandle.resolve handle
+    return caps, report
+}
 ```
+
+`PeerJobHandle.resolve` polls to a terminal state and answers `Result<'T, PeerError>`; `resolveEvery` takes a caller-chosen interval.
 
 A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationException` — the typed API presents `Async<'T>`, not `Async<Result<_, _>>`.
 
@@ -161,7 +171,7 @@ A peer-side `PeerError` surfaces on the caller as a raised `PeerInvocationExcept
 
 So a handler that continues an inbound cascade by building another `create` proxy silently discards the inbound route, hop budget, and correlation id: loop detection and hop limits stop spanning the cascade, and the cross-hop audit correlation is lost. **Continuing an inbound cascade uses `forward` instead:**
 
-```fsharp skip=fragment
+```fsharp
 // Inside a handler for an inbound peer call, `inbound` is the
 // PeerCallContext this deployment is currently serving.
 let next: TargetPeer = { Peer = nextPeerId; BaseUrl = "https://next.example" }
@@ -176,7 +186,10 @@ let onward = JsonRpcPeerClient.forward<DirectoryContract> inbound {
     HopBudget = 8              // ignored on a forwarding proxy — see below
 }
 
-let! caps = onward.GetCapabilities()
+let onwardCapabilities () = async {
+    let! caps = onward.GetCapabilities()
+    return caps
+}
 ```
 
 Each call through a `forward` proxy derives its context from `inbound` via the same `PeerCascade.deriveNext` bookkeeping `IPeerCascade.Forward` uses, so the two forwarding paths compose instead of diverging:
@@ -214,7 +227,7 @@ Defaults are far above the documented `HopBudget` guidance (32 hops, 32 route en
 
 A **clean-room contract** answers an approved query against sensitive data with privacy-preserving outputs only — cohort counts at or above a k-anonymity floor, small cells suppressed, output shape constrained — never row-level data. `ICleanRoomBroker` ships that mechanism; `PeerServerApp.withCleanRoomTemplate` is what makes it *run*:
 
-```fsharp skip=fragment
+```fsharp
 let reachTemplate: CleanRoomTemplate = {
     TemplateId = "reach"
     AllowedMethods = Set.ofList [ "EstimateReach"; "Histogram" ]
@@ -243,7 +256,7 @@ Composing a template for a contract id this deployment does not host **refuses t
 
 The floor decides about **one** answer. Cohort floors do not compose — differencing two in-floor cohorts that overlap in all but one record recovers that record, and no per-query check can see it because *each query passed*. `PeerServerApp.withPrivacyBudget` bounds the series:
 
-```fsharp skip=fragment
+```fsharp
 app
 |> PeerServerApp.withCleanRoomTemplate "example.reach" reachTemplate
 |> PeerServerApp.withPrivacyBudget (
@@ -268,7 +281,7 @@ The substrate records one `PeerCallCompleted` audit row per inbound call, keyed 
 
 **Receiver side** — opt in when composing:
 
-```fsharp skip=fragment
+```fsharp
 PeerServerApp.create ()
 |> PeerServerApp.withConfig config            // PeerSubstrate = EnabledPeerSubstrate
 |> PeerServerApp.withContract directoryHost
@@ -278,7 +291,7 @@ PeerServerApp.create ()
 
 **Caller side** — build a typed `IPeerAuditApi` proxy and query:
 
-```fsharp skip=fragment
+```fsharp
 let auditTarget: TargetPeer = { Peer = sellerId; BaseUrl = "https://seller.example" }
 
 let audit = JsonRpcPeerClient.create<IPeerAuditApi> {
@@ -291,7 +304,18 @@ let audit = JsonRpcPeerClient.create<IPeerAuditApi> {
     HopBudget = 8
 }
 
-let! mine = audit.QueryCalls { ContractId = None; MethodName = None; SinceUtc = None; FailuresOnly = true; Limit = 100 }
+let myFailedCalls () = async {
+    let! mine =
+        audit.QueryCalls {
+            ContractId = None
+            MethodName = None
+            SinceUtc = None
+            FailuresOnly = true
+            Limit = 100
+        }
+
+    return mine
+}
 ```
 
 **Scoping is the load-bearing guarantee:** the receiver answers only with rows where the *authenticated* caller made the call. `PeerAuditQuery` carries no caller-id field, so a peer cannot widen its scope, and `PeerAuditEntry` omits `CallerPeerId` (always the querying peer) — cross-peer leakage is impossible by construction. A deployment with `AuditLog = NoAuditLog` still registers the contract but answers with an empty trail.
@@ -302,8 +326,10 @@ The foundation handshake (`IPeerHandshake.Negotiate`) resolves the single highes
 
 **Receiver side** — declare a method lifecycle profile and compose it:
 
-```fsharp skip=fragment
-let v1, v2, v3 = { Major = 1; Minor = 0 }, { Major = 2; Minor = 0 }, { Major = 3; Minor = 0 }
+```fsharp
+let v1: ContractVersion = { Major = 1; Minor = 0 }
+let v2: ContractVersion = { Major = 2; Minor = 0 }
+let v3: ContractVersion = { Major = 3; Minor = 0 }
 
 // Reflection auto-populates every method as Active at every version;
 // the overlay marks specific (method, version) pairs Deprecated / Removed.
@@ -321,15 +347,17 @@ PeerServerApp.create ()
 
 **Caller side** — negotiate a method through the handshake:
 
-```fsharp skip=fragment
-match! handshake.NegotiateMethod(target, "directory", "GetCapabilities") with
-| Ok res ->
-    match res.Status with
-    | Active -> ()                                   // safe to call at res.Version
-    | Deprecated notice -> log $"deprecated, removed in {notice.RemovedIn}: {notice.Note}"
-    | Removed notice -> failwith $"gone: {notice.Note}"
-| Error (RemoteProfileUnavailable e) -> ()          // remote unreachable
-| Error e -> ()                                      // ContractNotAdvertised / MethodNotAdvertised / NoMutual
+```fsharp
+async {
+    match! handshake.NegotiateMethod(target, "directory", "GetCapabilities") with
+    | Ok res ->
+        match res.Status with
+        | Active -> ()                               // safe to call at res.Version
+        | Deprecated notice -> log $"deprecated, removed in {notice.RemovedIn}: {notice.Note}"
+        | Removed notice -> failwith $"gone: {notice.Note}"
+    | Error (RemoteProfileUnavailable e) -> ()       // remote unreachable
+    | Error e -> ()                                  // ContractNotAdvertised / MethodNotAdvertised / NoMutualContractVersion
+}
 ```
 
 A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: its bare `CapabilityList` is read as an all-`Active` profile, so a 18d-aware caller still negotiates. The new endpoint is purely additive — `GET /peer/v1/capabilities` is byte-for-byte unchanged, and a deployment that never calls `withContractProfile` advertises versions-only profiles (no per-method lifecycle).
@@ -343,7 +371,7 @@ A peer that predates 18d (no `/capabilities/profile` route) degrades cleanly: it
 - **TrustPosture** — what the composition wires by construction: fail-closed HS256 bearer JWTs with per-call key reads, whether inbound audiences are bound to the local peer id (exactly when `withLocalPeer` is declared), trust-anchor delegation verification, the freshness-window replay stance, and the deployment-managed transport stance.
 - **Budgets** — the cascade guard shape (per-call hop budget + route loop detection) and whether long-running dispatch is available.
 
-```fsharp skip=fragment
+```fsharp
 let app =
     PeerServerApp.create ()
     |> PeerServerApp.withConfig config
@@ -362,7 +390,7 @@ The export is **deterministic and hash-stamped**: every list is sorted before se
 
 A deployment that consumes a peer contract no counterparty serves — at an incompatible version, or under a trust posture the counterparty never declared — used to discover it at call time. You cannot introspect another organisation's deployment, so the preflight validates against the label each counterparty **published**: pin its `PeerSurface` export and the composition's federation edges are checked before traffic.
 
-```fsharp skip=fragment
+```fsharp
 // The counterparty's published export, verified against the stamp agreed out of band.
 let sellerPin =
     FederationPin.ofExportJson "seller-ssp" "peers/seller-ssp.surface.json" agreedHash DateTimeOffset.UtcNow document
