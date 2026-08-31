@@ -203,6 +203,12 @@
              and NotificationClient.fs (the SSE subscription it folds);
              before SDK.Client.fs, which mounts it. -->
         <Compile Include="Client\PresenceMount.fs" />
+        <!-- Phase 535 — CRDT co-editing pump (catch-up / publish / apply).
+             Standalone: depends only on Fable.Core + the Core-tier Crdt
+             value types, and imports NO npm package — the CRDT library is
+             a parameter the consuming app supplies, so a deployment that
+             never co-edits ships no vendor bundle weight (GP 13). -->
+        <Compile Include="Client\CrdtSyncClient.fs" />
         <!-- Phase 12d — AG Grid value-provenance overlay. After
              NotificationClient.fs (its click seam publishes a local
              CustomNotification envelope) and after AgGrid.fs (it augments

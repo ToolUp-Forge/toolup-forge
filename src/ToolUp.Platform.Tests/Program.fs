@@ -210,6 +210,9 @@ let private registeredTests =
         // Phase 442 — presence tracker + advisory soft-lock conformance.
         IPresenceTrackerContract.tests
         IEntityLockStoreContract.tests
+        // Phase 535 — CRDT co-editing log conformance (cursor laws,
+        // compaction, scope isolation, the convergence property).
+        ICrdtDocumentStoreContract.tests
         // Phase 242 — A/B experiment substrate.
         ExperimentSubstrateTests.tests
         // Phase 243 — BPMN-shaped workflow engine.

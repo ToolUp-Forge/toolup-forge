@@ -822,6 +822,11 @@ let compose
     // `ComposeNotifications.registerPresenceSubstrate`).
     registerPresenceSubstrate services notificationStack.PresenceSubstrate
 
+    // Phase 535 — register the CRDT co-editing store when
+    // `ServerConfig.CrdtDocuments = EnabledCrdtDocuments` (extracted to
+    // `ComposeNotifications.registerCrdtDocumentStore`).
+    registerCrdtDocumentStore services notificationStack.CrdtDocumentStore
+
     // Phase 9v — outbound `IRateLimiter` registration (extracted to
     // `ComposeRuntimeServices.registerOutboundRateLimiter`). Populates
     // `rateLimiterCell` so the webhook dispatcher's per-attempt `Wait`

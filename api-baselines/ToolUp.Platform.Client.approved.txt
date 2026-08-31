@@ -3930,6 +3930,29 @@ ToolUp.Platform.Consent.IConsentProvider.OnStateChanged(Microsoft.FSharp.Core.FS
 ToolUp.Platform.Consent.IConsentProvider.RequestConsent(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConsentState]
 ToolUp.Platform.Consent.NoOpConsentProvider (class)
 ToolUp.Platform.Consent.NoOpConsentProvider..ctor()
+ToolUp.Platform.CrdtSyncClient (class)
+ToolUp.Platform.CrdtSyncClient.documentStateVector(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient.mergePayloads(ToolUp.Platform.CrdtSyncClient+IYjs, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate]) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient.mergedState(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient.start(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc, ToolUp.Platform.CrdtSyncClient+CrdtTransport, System.String) : ToolUp.Platform.CrdtSyncClient+CrdtSession
+ToolUp.Platform.CrdtSyncClient+CrdtSession (class)
+ToolUp.Platform.CrdtSyncClient+CrdtSession..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CrdtUpdate, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.StateVector], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
+ToolUp.Platform.CrdtSyncClient+CrdtSession.ApplyRemote : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CrdtUpdate, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.CrdtSyncClient+CrdtSession.Cursor : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.StateVector] { get }
+ToolUp.Platform.CrdtSyncClient+CrdtSession.Dispose : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.CrdtSyncClient+CrdtSession.Resync : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.CrdtSyncClient+CrdtTransport (class)
+ToolUp.Platform.CrdtSyncClient+CrdtTransport..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StateVector, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate], ToolUp.Platform.StateVector]]])
+ToolUp.Platform.CrdtSyncClient+CrdtTransport.FetchDiff : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StateVector, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate], ToolUp.Platform.StateVector]]] { get }
+ToolUp.Platform.CrdtSyncClient+CrdtTransport.Publish : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.CrdtSyncClient+IYDoc (interface)
+ToolUp.Platform.CrdtSyncClient+IYDoc.off(System.String, System.Action`2[System.Byte[], System.Object]) : System.Void
+ToolUp.Platform.CrdtSyncClient+IYDoc.on(System.String, System.Action`2[System.Byte[], System.Object]) : System.Void
+ToolUp.Platform.CrdtSyncClient+IYjs (interface)
+ToolUp.Platform.CrdtSyncClient+IYjs.applyUpdate(ToolUp.Platform.CrdtSyncClient+IYDoc, System.Byte[], System.Object) : System.Void
+ToolUp.Platform.CrdtSyncClient+IYjs.encodeStateAsUpdate(ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient+IYjs.encodeStateVector(ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient+IYjs.mergeUpdates(System.Byte[][]) : System.Byte[]
 ToolUp.Platform.CustomAuthUI (class)
 ToolUp.Platform.CustomAuthUI..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement])
 ToolUp.Platform.CustomAuthUI.Wrap : Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement] { get }

@@ -335,6 +335,14 @@
              SDK.Shared.fs so ServerConfig can carry a `Presence` field. Pure /
              Fable-safe (BCL primitives + EntityId). -->
         <Compile Include="Shared\PresenceTypes.fs" />
+        <!-- Phase 535 — CRDT co-editing value types (CrdtDocRef /
+             StateVector / CrdtUpdate / CrdtSnapshot / CrdtUpdateEvent) +
+             the CrdtDocumentMode opt-in DU. After PresenceTypes.fs
+             (CrdtAwareness projects a co-editing position into a
+             PresenceLocation) and before SDK.Shared.fs so ServerConfig can
+             carry a `CrdtDocuments` field. Pure / Fable-safe: opaque
+             byte[] payloads, no CRDT library on either tier. -->
+        <Compile Include="Shared\CrdtTypes.fs" />
         <Compile Include="Shared\IHealthCheck.fs" />
         <!-- Phase 178 — declarative alert-rule / threshold data (AlertSource
              / ThresholdCondition / AlertDelivery / AlertRule). After
