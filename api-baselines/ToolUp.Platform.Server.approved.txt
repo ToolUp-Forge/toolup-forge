@@ -775,6 +775,20 @@ ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.BoundedWorkProvenanceSource (class)
 ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
+ToolUp.Platform.BudgetAmendment (class)
+ToolUp.Platform.BudgetAmendment..ctor(System.String, System.String, System.Decimal, System.Decimal)
+ToolUp.Platform.BudgetAmendment.CeilingDelta : System.Decimal { get }
+ToolUp.Platform.BudgetAmendment.PartyId : System.String { get }
+ToolUp.Platform.BudgetAmendment.PriorCeiling : System.Decimal { get }
+ToolUp.Platform.BudgetAmendment.TemplateId : System.String { get }
+ToolUp.Platform.BudgetAmendmentModule (class)
+ToolUp.Platform.BudgetAmendmentModule.Kind : System.String (literal)
+ToolUp.Platform.BudgetAmendmentModule.amendedCeiling(ToolUp.Platform.BudgetAmendment) : System.Decimal
+ToolUp.Platform.BudgetAmendmentModule.canonicalBytes(ToolUp.Platform.BudgetAmendment) : System.Byte[]
+ToolUp.Platform.BudgetAmendmentModule.canonicalDecimal(System.Decimal) : System.String
+ToolUp.Platform.BudgetAmendmentModule.subject(ToolUp.Platform.BudgetAmendment) : ToolUp.Platform.CountersignatureSubject
+ToolUp.Platform.BudgetAmendmentModule.subjectId(ToolUp.Platform.BudgetAmendment) : System.String
+ToolUp.Platform.BudgetAmendmentModule.validate(ToolUp.Platform.BudgetAmendment) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.BudgetContention (class)
 ToolUp.Platform.BudgetContention.Dimension : System.String (literal)
 ToolUp.Platform.BudgetContention.denial(ToolUp.Platform.BudgetUsage) : ToolUp.Platform.BudgetDenial
