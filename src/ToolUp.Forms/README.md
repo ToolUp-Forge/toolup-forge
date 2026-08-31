@@ -4,7 +4,7 @@ Schema-driven forms, validation, persistence, and a small state-machine workflow
 
 **Phase 21 status (2026-05-05): shipped.** 17/17 tests pass; six-rule portability audit clean; strip-imports test verified in both directions.
 
-**Phase 21b status (2026-05-06): shipped.** Adds *Publishable surveys* — a token-gated public-write surface so anonymous respondents can submit forms without an account. Seven slices total (substrate → API → embed entry → admin dashboard → multi-survey overview); see "Publishable surveys" below and the slice-by-slice commit log on the `Platform-independence` branch (988e566 / 17a4af4 / c9eb5a0 / dc82528 / 6d30e42 / dad818f / 8d397ad).
+**Phase 21b status (2026-05-06): shipped.** Adds *Publishable surveys* — a token-gated public-write surface so anonymous respondents can submit forms without an account. Seven slices total (substrate → API → embed entry → admin dashboard → multi-survey overview); see "Publishable surveys" below.
 
 ## What this is
 
