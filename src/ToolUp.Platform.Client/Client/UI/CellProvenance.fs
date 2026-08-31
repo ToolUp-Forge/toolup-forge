@@ -29,7 +29,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 #nowarn "1182"
 

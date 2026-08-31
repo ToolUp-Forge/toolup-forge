@@ -9,7 +9,7 @@ For deep technical detail, see [`TECHNICAL_GUIDE.md`](TECHNICAL_GUIDE.md). This 
 Two reasons it doesn't live in `ToolUp.Platform`:
 
 1. **AI is an optional platform capability.** Deployments that don't use AI shouldn't pay for its types, dependencies, or runtime. Stripping the `ToolUp.AI` reference removes all AI surface from the app.
-2. **The runtime surface is substantial.** Agent loop, SSE plumbing, conversation persistence, tool registry, system-prompt composition — keeping this in core would conflate platform infrastructure with feature code. Companion packages (the same pattern as [`AgGridEnterprise`](../AgGridEnterprise/)) keep the boundary clean.
+2. **The runtime surface is substantial.** Agent loop, SSE plumbing, conversation persistence, tool registry, system-prompt composition — keeping this in core would conflate platform infrastructure with feature code. Companion packages (the same pattern as [`AgGridEnterprise`](../Feliz.AgGrid.Enterprise/)) keep the boundary clean.
 
 What stays in core:
 

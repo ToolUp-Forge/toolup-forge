@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+      Feliz.AgGrid.Enterprise — renamed from ToolUp.AgGridEnterprise by
+      Phase 344, which promoted the Community bindings beside it into the
+      standalone Feliz.AgGrid / Feliz.AgCharts packages. The rename puts
+      the Enterprise companion in the same family as the binding it
+      activates, rather than in the SDK's namespace.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>Feliz.AgGrid.Enterprise</PackageId>
+    <AssemblyName>Feliz.AgGrid.Enterprise</AssemblyName>
+    <Description>Client-side AG Grid / AG Charts Enterprise initialisation companion for the Feliz.AgGrid and Feliz.AgCharts bindings. Licensing-isolated so deployments on the Community distribution don't ship Enterprise code. The binding is Apache-2.0; the AG Grid Enterprise licence key is the deploying organisation's own.</Description>
+    <PackageTags>fsharp;fable;feliz;ag-grid;ag-charts;enterprise</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Phase 344 — the Enterprise-gated members of the erased grid types
+         moved here from ToolUp.Platform.Client/Client/UI/AgGrid.Enterprise.fs.
+         They augment Feliz.AgGrid's types, so they compile first: the
+         Enterprise type modules below build on the augmented surface. -->
+    <Compile Include="AgGrid.Enterprise.fs" />
+    <Compile Include="AgGridEnterpriseTypes.fs" />
+    <Compile Include="AgChartEnterpriseTypes.fs" />
+    <Compile Include="ProvenanceOverlay.fs" />
+    <Compile Include="AgGridEnterprise.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. The library's own .fsproj + .fs files ship inside
+       the nupkg; Fable's package loader extracts and compiles source
+       directly. Mirrors the Feliz / Fable.Elmish convention. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 344 — the Community bindings this companion activates. The
+         former ProjectReference to ToolUp.Platform.Client carried them
+         transitively; they are now their own packages, so the edge is
+         direct and the SDK client tier is no longer in the graph for
+         them.
+
+         The ToolUp.Platform.Core reference the project used to carry was
+         dropped in the same phase: no Platform.Core symbol was named
+         anywhere in these five files.
+
+         ToolUp.Platform.Client remains for exactly ONE reason —
+         ProvenanceOverlay.fs flips the Phase 12d value-provenance
+         overlay on by calling ToolUp.Platform.CellProvenance
+         .setProvenanceOverlayEnabled. That substrate is Community-side
+         by design (AG Grid tooltips are a Community feature) and lives
+         in the SDK client tier because its click seam publishes through
+         NotificationClient. Phase 344 could not drop the edge without
+         either moving CellProvenance (out of scope, and it is not a
+         pure binding concern) or inventing a seam for a single boolean.
+         Recorded rather than worked around. -->
+    <ProjectReference Include="..\Feliz.AgGrid\Feliz.AgGrid.fsproj" />
+    <ProjectReference Include="..\Feliz.AgCharts\Feliz.AgCharts.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.Core / Feliz / FSharp.Core resolved transitively via
+       Feliz.AgGrid + Feliz.AgCharts + the .NET SDK. -->
+</Project>
