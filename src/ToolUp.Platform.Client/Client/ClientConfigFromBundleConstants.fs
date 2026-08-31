@@ -26,7 +26,7 @@ type ClientConfigOverrides = {
     /// AG Grid module configuration. Consumer typically builds via
     /// `AgGridEnterprise.gridModuleConfig agGridLicense` (consuming
     /// the `BundleConstants.agGridLicense` value).
-    GridModules: ToolUp.Platform.AgGrid.AgGridModuleConfig option
+    GridModules: Feliz.AgGrid.AgGridModuleConfig option
     PublicEntryDispatchers: (ClientConfig -> bool) list option
     Handlers: ClientHandlerRegistry option
     /// Reference-app posture: `true` in DEBUG builds, `false` in Release.

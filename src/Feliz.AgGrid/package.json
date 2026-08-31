@@ -1,0 +1,10 @@
+{
+    "name": "@toolup/feliz-aggrid",
+    "version": "1.0.0",
+    "private": true,
+    "//": "npm packages this binding imports from via Fable.Core.JsInterop. Community only — the Enterprise distribution is declared by Feliz.AgGrid.Enterprise, so a consumer of this package alone pulls no Enterprise dependency.",
+    "peerDependencies": {
+        "ag-grid-community": "^35.0.0",
+        "ag-grid-react": "^35.0.0"
+    }
+}
