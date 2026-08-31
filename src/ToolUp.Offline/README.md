@@ -64,7 +64,7 @@ can claim the whole origin. It is a template — read it and adjust `PRECACHE_UR
 
 **2. Turn offline on in your client config.**
 
-```fsharp
+```fsharp skip=fragment
 { ClientConfig.create handlers with
     Offline =
         EnabledOffline {
@@ -82,7 +82,7 @@ can claim the whole origin. It is a template — read it and adjust `PRECACHE_UR
 
 **3. Boot it, and start the coordinator.**
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Offline.Client
 
 let queue = OfflineQueue.create "inspections-offline"
@@ -102,7 +102,7 @@ async {
 **4. Register a replay adapter per entity type, server-side.** The wire carries bytes; only the
 module that owns the record knows its shape, so it supplies the typed adapter:
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Offline.OfflineSyncHandler
 
 let options =
