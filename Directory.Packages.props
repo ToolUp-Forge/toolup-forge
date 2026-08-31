@@ -244,7 +244,7 @@
          companion (PostgreSQL / TimescaleDB ITimeSeriesStore backend).
          MIT-licensed managed driver (GP 2 — no paid default); isolated to
          the companion (GP 1). -->
-    <PackageVersion Include="Npgsql" Version="9.0.3" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <!-- Phase 16c — OTLP exporter for the cloud umbrella packages.
          Pulled by all three (ToolUp.Cloud.Azure / .Aws / .Gcp) as
          the universal collector-side metrics path. Consumers configure
@@ -453,7 +453,7 @@
          to restore and compile on net10.0 at these versions.
     -->
     <!-- ToolUp.DataSources.Sql — one ADO provider per supported
-         backend. Npgsql is pinned ABOVE (9.0.3, for the Timescale
+         backend. Npgsql is pinned ABOVE (10.0.3, for the Timescale
          time-series store) and deliberately shared rather than
          re-pinned: two versions of one provider in one graph is a
          restore conflict waiting to happen. -->

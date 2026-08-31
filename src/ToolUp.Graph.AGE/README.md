@@ -22,16 +22,60 @@ scale).
 A managed AGE Npgsql plugin exists (`Konnektr.Npgsql.Age`). This companion does
 **not** depend on it, by deliberate choice:
 
-- Its current release requires **Npgsql ≥ 10**, whereas this SDK pins Npgsql at
-  the version its Postgres / TimescaleDB companions already share — adopting the
-  plugin would force a repo-wide Npgsql major bump on every consumer for one
-  opt-in companion (against GP 13's "opt-in costs nothing").
 - Hand-rolling keeps the `cypher(...)`-wrapping + agtype-mapping seam
   (`CypherToAgeSql`) **pure and unit-testable** on a fresh checkout with no live
   server, and keeps the dependency graph to the one already-pinned driver (GP 1).
+- The plugin registers an `agtype` type handler at the **driver** level, so this
+  opt-in companion's binding would sit underneath every other Postgres-backed
+  companion sharing the pin. That is a deeper coupling than a SQL-string seam,
+  and it is the coupling the original decision refused.
 
-The `agtype` result cells are re-selected `::text` in the generated SQL, so plain
-Npgsql reads them as strings — no agtype OID handling is needed at the driver.
+The `agtype` result cells are selected **uncast**, and the store reads them under
+`AllResultTypesAreUnknown`, so plain Npgsql hands back each cell's agtype text
+form — no agtype OID handling is needed at the driver.
+
+### Re-evaluation — 2026-08-30 (Phase 607): keep the hand-rolled seam
+
+Phase 607 advanced the repo-wide `Npgsql` pin from 9.0.3 to **10.0.3**, which
+removed the original objection (the plugin's `Npgsql ≥ 10` floor is now met), and
+re-evaluated the collapse against `Konnektr.Npgsql.Age` **2.0.0**. Two of the
+three health criteria pass; the third does not, and it is the decisive one:
+
+| Criterion | Finding |
+|---|---|
+| Licence | **Apache-2.0** — compatible with this SDK's licence and GP 2. Pass. |
+| Npgsql compatibility | Depends on **Npgsql 10.0.3** exactly, with a `net10.0` target. Pass. |
+| Maintenance cadence | Last push **2026-05-28** — three months stale, and the entire recent history is a single day's burst. 5 stars, 1 fork, 2 authors, 0 open issues. **Fail** for a dependency that would gate this repo's shared driver pin. |
+
+The bus factor is the whole argument. Collapsing onto the plugin would make the
+`Npgsql` version of *four* companions (Postgres entity store, Timescale, pgvector,
+AGE) hostage to a 5-star package's release cadence: if Npgsql 11 ships and the
+plugin does not follow, the repo either freezes its driver or drops the binding
+under pressure. That is a strictly worse version of the bind Phase 68c avoided.
+
+The other half of the decision is new evidence. Phase 607 provisioned an
+AGE-enabled Postgres and ran this companion's `IGraphStoreContract` arm **for the
+first time** — 68c shipped it env-gated against a machine with no Docker, so it
+had never executed. It failed at 29 errored / 5 failed / 1 passed, on two latent
+defects in the generated SQL, both since fixed and both pinned by the pure pack:
+
+- `cypher()`'s third argument was passed as `@p::agtype`. AGE parses the call and
+  requires a plain `Param` node there; the cast made every parameterised query
+  fail with `22023: third argument of cypher function must be a parameter`. It is
+  now passed bare, bound `NpgsqlDbType.Unknown`.
+- Result columns were re-selected `::text`. `agtype::text` routes through
+  `agtype_value_to_text`, which is scalar-only — vertex and edge cells failed
+  outright, and string scalars came back unquoted (`carol`, not `"carol"`), which
+  is not parseable JSON and folded to `VNull`. Columns are now selected uncast.
+
+So the seam's awkward surface — the thing the plugin was meant to own — turned
+out to be a dozen lines, and is now covered by a live conformance arm this
+companion did not previously have. Adopting a stale third-party driver plugin to
+avoid maintaining that is a poor trade.
+
+**Re-evaluate when** the plugin shows sustained maintenance across an Npgsql major
+(the honest test of the cadence risk), or when this seam next needs a change the
+uncast/bare-param shape cannot express.
 
 ## Prerequisite: the AGE extension
 
@@ -165,8 +209,18 @@ scope text), so it is injection-safe by construction too.
   behaviour). This is the intended "engine exceeds the floor" property — the same
   two frozen-corpus cases the Neo4j companion notes (the out-of-subset `CREATE`
   throws-case and variable-length row counts) encode in-memory-specific
-  semantics; they are handled by the shared conformance pack, not by editing the
-  frozen corpus.
+  semantics.
+
+  **This paragraph used to end "they are handled by the shared conformance pack,
+  not by editing the frozen corpus". They are not.** Phase 607 ran
+  `GraphStoreContract` against a live AGE server for the first time and those
+  exact cases failed: the pack asserts the in-memory laws unconditionally on
+  every binding, with no engine-tier exemption. Four cases fail here — the
+  `CREATE`-throws case and three variable-length row-count cases — and the Neo4j
+  tier, which binds the same pack behind its own never-run env gate
+  (`TOOLUP_TEST_NEO4J_URI`), will fail them identically the day it is run. The
+  exemption mechanism this bullet described has to be built; until it is, an AGE
+  live run is expected to report those four, and they are **not** AGE defects.
 
 ## Out of scope
 

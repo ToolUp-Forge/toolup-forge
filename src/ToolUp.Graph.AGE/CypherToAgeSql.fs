@@ -21,21 +21,39 @@ open ToolUp.Graph
 //
 // AGE runs a Cypher query through a SQL function:
 //
-//     SELECT c0::text, c1::text
-//     FROM   cypher('<graph>', $ct$ <cypher> $ct$, @p::agtype)
+//     SELECT c0, c1
+//     FROM   cypher('<graph>', $ct$ <cypher> $ct$, @p)
 //            AS (c0 agtype, c1 agtype)
 //
 //   • The graph name is a derived `[a-z0-9_]` identifier (never raw scope text)
 //     embedded as a SQL literal — injection-safe by construction.
 //   • The Cypher text is dollar-quoted with the `$ct$` tag. It is developer-
 //     authored (`CypherQuery.Text`), never untrusted parameter data.
-//   • Parameters ride a SINGLE bound Npgsql parameter `@p`, cast `::agtype` — an
-//     agtype map the Cypher body reads via `$name`. Parameter VALUES are never
-//     string-interpolated into the `$ct$…$ct$` body, so an injection-attempt
-//     value (`'; DROP …`) is a literal map entry, never executed (task 68c.A).
-//   • The projected columns are re-selected `::text` so plain Npgsql reads the
-//     agtype cells as strings (no agtype OID handling needed at the driver) —
-//     the robustness choice that lets this ship over the already-pinned Npgsql.
+//   • Parameters ride a SINGLE bound Npgsql parameter `@p` — an agtype map the
+//     Cypher body reads via `$name`. Parameter VALUES are never string-
+//     interpolated into the `$ct$…$ct$` body, so an injection-attempt value
+//     (`'; DROP …`) is a literal map entry, never executed (task 68c.A).
+//
+//     `@p` is passed BARE — no `::agtype` cast. AGE parses the `cypher()` call
+//     itself and requires its third argument to be a plain `Param` node; a cast
+//     wraps the parameter in a `CoerceViaIO` and AGE rejects the call outright
+//     with `22023: third argument of cypher function must be a parameter`. The
+//     store binds it as `NpgsqlDbType.Unknown` so the value goes out untyped and
+//     Postgres resolves it to `agtype` from the `cypher()` signature.
+//   • The projected columns are selected UNCAST, and the store reads them with
+//     `AllResultTypesAreUnknown` so plain Npgsql hands back each agtype cell's
+//     text form (no agtype OID handling needed at the driver) — the robustness
+//     choice that lets this ship over the already-pinned Npgsql.
+//
+//     They are deliberately NOT re-selected `::text`. `agtype::text` routes
+//     through `agtype_value_to_text`, which handles only SCALARS: a vertex or
+//     edge cell fails with `agtype_value_to_text: unsupported argument agtype`,
+//     and a string scalar comes back UNQUOTED (`carol`, not `"carol"`) — which
+//     is not parseable JSON, so `agtypeToGraphValue` would fold it to `VNull`.
+//     The uncast form yields exactly the annotated text the mapping half below
+//     is written against (`{…}::vertex`, `"carol"`). Both defects were latent
+//     until Phase 607 first ran this companion's conformance arm against a live
+//     AGE server; the pure pack's fixtures had always pinned the uncast shape.
 //
 // Storage shape mirrors the Neo4j companion (68b): a reserved `_id` carries the
 // substrate `NodeId`/`EdgeId` (value identity — never AGE's internal graphid,
@@ -306,7 +324,8 @@ module CypherToAgeSql =
             | Some pv -> VProperty pv
             | None -> VNull
 
-    /// Map a single agtype text cell (as read `::text` from Npgsql) to a
+    /// Map a single agtype text cell (as read uncast from Npgsql under
+    /// `AllResultTypesAreUnknown`) to a
     /// `GraphValue`. A blank / null cell is `VNull`.
     let agtypeToGraphValue (cell: string) : GraphValue =
         if String.IsNullOrWhiteSpace cell then
@@ -426,7 +445,8 @@ module CypherToAgeSql =
     /// `[a-z0-9_]` identifier (see `AgeGraph.nameFor`). `columns` is the derived
     /// RETURN-column list; when empty the query is a write and a single sentinel
     /// column is projected (AGE requires a non-empty column definition list).
-    /// `hasParams` decides whether the `@p::agtype` parameter argument is passed.
+    /// `hasParams` decides whether the bare `@p` parameter argument is passed
+    /// (bare, never cast — see the header note on AGE's `Param`-node check).
     ///
     /// Fail-closed on a dollar-quote collision: if the Cypher body contains the
     /// `$ct$` tag it could break out of the dollar quote, so the wrap is
@@ -451,9 +471,9 @@ module CypherToAgeSql =
 
             let asList = [ 0 .. n - 1 ] |> List.map (sprintf "c%d agtype") |> String.concat ", "
 
-            let selList = [ 0 .. n - 1 ] |> List.map (sprintf "c%d::text") |> String.concat ", "
+            let selList = [ 0 .. n - 1 ] |> List.map (sprintf "c%d") |> String.concat ", "
 
-            let paramArg = if hasParams then ", @p::agtype" else ""
+            let paramArg = if hasParams then ", @p" else ""
 
             let sql =
                 sprintf
@@ -525,8 +545,19 @@ module CypherToAgeSql =
     /// class-42 syntax/undefined error becomes `MalformedQuery`; a connection-
     /// level `NpgsqlException.IsTransient` also folds to `TransientFailure`;
     /// everything else maps to `StorageFailure`.
-    let classifyError (ex: exn) : GraphError =
+    ///
+    /// The store reaches Npgsql through `Async.AwaitTask`, which surfaces a
+    /// faulted task as an `AggregateException`, so the `PostgresException`
+    /// arrives WRAPPED. Unwrapping first is load-bearing rather than defensive:
+    /// without it every match below falls through to `StorageFailure`, and the
+    /// whole `SqlState` classification — including the retryable/non-retryable
+    /// split GP 12 rule 3 requires callers to act on — silently never fires.
+    /// (Latent until Phase 607 first ran this arm against a live AGE server: a
+    /// malformed query returned `StorageFailure`, not `MalformedQuery`.)
+    let rec classifyError (ex: exn) : GraphError =
         match ex with
+        | :? AggregateException as agg when not (isNull agg.InnerException) ->
+            classifyError (agg.Flatten().InnerException)
         | :? PostgresException as px when isTransientSqlState px.SqlState -> TransientFailure px.Message
         | :? PostgresException as px when isMalformedSqlState px.SqlState -> MalformedQuery px.Message
         | :? PostgresException as px -> StorageFailure px.Message

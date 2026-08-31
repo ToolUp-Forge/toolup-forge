@@ -100,7 +100,11 @@ let pureTests =
                 match wrapQuery "tenant_t_abc" "MATCH (n {_id: $id}) RETURN n" true [ "n" ] with
                 | Ok(sql, _) ->
                     Expect.isFalse (sql.Contains evil) "the injection value is absent from the SQL"
-                    Expect.stringContains sql "@p::agtype" "parameters ride the single bound @p, cast ::agtype"
+                    Expect.stringContains sql "@p" "parameters ride the single bound @p"
+
+                    Expect.isFalse
+                        (sql.Contains "@p::agtype")
+                        "@p is passed BARE — AGE rejects a cast third argument with 22023 (Phase 607)"
                 | Error e -> failtestf "wrapQuery unexpectedly failed: %s" e
 
             testCase "paramsJson escapes embedded quotes / backslashes"
@@ -116,13 +120,19 @@ let pureTests =
         // ── cypher() SQL wrapping ──────────────────────────────────
         testList "cypher() wrapping" [
 
-            testCase "wraps a read with ::text-projected agtype columns + the graph literal"
+            testCase "wraps a read with uncast agtype columns + the graph literal"
             <| fun _ ->
                 match wrapQuery "tenant_a_123" "MATCH (n) RETURN n" false [ "n" ] with
                 | Ok(sql, cols) ->
                     Expect.stringContains sql "cypher('tenant_a_123'" "graph name embedded as a SQL literal"
                     Expect.stringContains sql "$ct$ MATCH (n) RETURN n $ct$" "Cypher dollar-quoted with the ct tag"
-                    Expect.stringContains sql "c0::text" "agtype cell re-selected ::text for plain Npgsql"
+                    Expect.stringContains sql "SELECT c0 FROM" "agtype cell selected UNCAST"
+
+                    // agtype::text is scalar-only (a vertex cell errors) and drops
+                    // the JSON quoting a string cell needs, so the cast is a defect
+                    // rather than a style choice — pinned so it cannot return.
+                    Expect.isFalse (sql.Contains "c0::text") "the ::text cast is NOT reintroduced (Phase 607)"
+
                     Expect.stringContains sql "(c0 agtype)" "column definition list"
                     Expect.isFalse (sql.Contains "@p") "no parameter argument when there are no parameters"
                     Expect.equal cols [ "n" ] "the Cypher column names are returned for the result set"

@@ -54,12 +54,21 @@ module internal AgeWrites =
         | Some s -> m |> Map.add ScopeKey (PString s)
         | None -> m
 
-    /// MERGE-upsert a node (whole-property replacement via `SET n = $props`).
+    /// MERGE-upsert a node (whole-property replacement).
+    ///
+    /// The property map is bound through `WITH n, $props AS p SET n = p` rather
+    /// than the direct `SET n = $props`. AGE refuses a parameter on the right of
+    /// a `SET` map assignment — both `SET n = $props` and `SET n += $props` fail
+    /// with `0A000: SET clause expects a map` — but accepts a WITH-bound
+    /// variable. That keeps every VALUE in the bound `@p` parameter (no property
+    /// data is ever interpolated into the Cypher text), and keeps whole-map
+    /// REPLACEMENT semantics, which a per-property `SET n.k = $v` expansion would
+    /// silently downgrade to a merge that leaves removed keys behind.
     let node (scope: string option) (n: GraphNode) : string * Map<string, AgtypeArg> =
         let label = escapeLabel (ageLabelOf n.Labels)
 
         let cypher =
-            sprintf "MERGE (n:%s {%s: $id%s}) SET n = $props" label IdKey (scopeInline scope)
+            sprintf "MERGE (n:%s {%s: $id%s}) WITH n, $props AS p SET n = p" label IdKey (scopeInline scope)
 
         let props =
             n.Properties |> Map.add IdKey (PString(NodeId.value n.Id)) |> addScopeProp scope
@@ -96,7 +105,10 @@ module internal AgeWrites =
 
         let cypher =
             sprintf
-                "MATCH (a {%s: $from%s}), (b {%s: $to%s}) MERGE (a)-[r:%s {%s: $eid}]->(b) SET r = $props"
+                // `WITH r, $props AS p SET r = p` for the same reason as `node`
+                // above — AGE refuses a parameter on the right of a SET map
+                // assignment (0A000).
+                "MATCH (a {%s: $from%s}), (b {%s: $to%s}) MERGE (a)-[r:%s {%s: $eid}]->(b) WITH r, $props AS p SET r = p"
                 IdKey
                 sc
                 IdKey
@@ -172,8 +184,20 @@ module internal AgeExec =
                     cmd.CommandTimeout <- timeout
                     tx |> Option.iter (fun t -> cmd.Transaction <- t)
 
+                    // The projection is uncast `agtype`, an OID plain Npgsql has
+                    // no mapping for. Reading every column as unknown hands each
+                    // cell back in its agtype TEXT form — the annotated shape
+                    // `agtypeToGraphValue` parses. See the CypherToAgeSql header.
+                    cmd.AllResultTypesAreUnknown <- true
+
                     if not (Map.isEmpty parameters) then
-                        cmd.Parameters.AddWithValue("p", paramsJson parameters) |> ignore
+                        // BARE + untyped: AGE requires `cypher()`'s third argument
+                        // to be a plain Param node (a `::agtype` cast is rejected
+                        // with 22023), and `Unknown` sends the agtype map as an
+                        // untyped literal Postgres resolves from the signature.
+                        let p = NpgsqlParameter("p", NpgsqlTypes.NpgsqlDbType.Unknown)
+                        p.Value <- paramsJson parameters
+                        cmd.Parameters.Add p |> ignore
 
                     use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
                     let rows = ResizeArray<string list>()

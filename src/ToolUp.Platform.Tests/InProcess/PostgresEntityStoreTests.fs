@@ -22,7 +22,14 @@ open ToolUp.EntityStores.Postgres
 // case, never Failed. Per factory call a fresh registry is used and unique
 // scope ids isolate data in the shared `toolup_entities` table.
 
-type private Item = {
+// NOT `private`. `tryGetEntityFields` gates on `FSharpType.IsRecord`, which uses
+// PUBLIC binding flags — a private record reads as "not a record" and every
+// `Save` returns `InvalidEntityShape` without touching the server. Declaring the
+// fixture private made this whole suite seed nothing and every pushdown case
+// assert against an empty table (found Phase 607, the first live run of this
+// arm). A real consumer's entity type is public, so the store is right and the
+// fixture was wrong.
+type Item = {
     Id: EntityId
     Type: string
     Version: int
@@ -74,9 +81,14 @@ let tests =
                 mkItem "i-5" "carol" "active" "02"
             ]
 
+            // ASSERT the save. Discarding this result is what let the private-
+            // record defect above hide: every Save failed, the seed reported
+            // nothing, and each case failed later as "expected [...], actual []"
+            // — a symptom that reads like a broken query, not a broken fixture.
             for item in items do
-                let! _ = store.Save<Item>(scope, item)
-                ()
+                match! store.Save<Item>(scope, item) with
+                | Result.Ok _ -> ()
+                | Result.Error e -> failwithf "seed Save of %s failed: %A" item.Id e
         }
 
         let ids (result: Result<Item list, EntityError>) =
