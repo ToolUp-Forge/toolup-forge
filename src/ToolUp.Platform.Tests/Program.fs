@@ -202,6 +202,9 @@ let private registeredTests =
         // Carried `[<Tests>]` but was never in `allTests` — wired in by the
         // 2026-07-20 orphaned-pack audit.
         WebhookSecretMigrationTests.tests
+        // Phase 16a — the dispatcher's failure-state lease, paired with a
+        // two-replica control that must observe the lost update.
+        WebhookFailureStateLeaseTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 622 — presence + lock platform API (scope isolation,
