@@ -2050,6 +2050,114 @@ ToolUp.Platform.BrandingModule.paletteCssVars : Microsoft.FSharp.Collections.FSh
 ToolUp.Platform.BrandingModule.paletteOverrides(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.BrandingModule.paletteVarMap : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.BrandingModule.resolve(ToolUp.Platform.Branding, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Platform.Branding
+ToolUp.Platform.BudgetAccount (class)
+ToolUp.Platform.BudgetAccount..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetDenial, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetWarning, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.BudgetAccount.OnNearLimit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetWarning, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BudgetAccount.OnRefused : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetDenial, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BudgetAccountModule (class)
+ToolUp.Platform.BudgetAccountModule.combine(ToolUp.Platform.BudgetAccount, ToolUp.Platform.BudgetAccount) : ToolUp.Platform.BudgetAccount
+ToolUp.Platform.BudgetAccountModule.onNearLimit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetWarning, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.BudgetAccount
+ToolUp.Platform.BudgetAccountModule.onRefused(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetDenial, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.BudgetAccount
+ToolUp.Platform.BudgetAccountModule.record(ToolUp.Platform.BudgetAccount, ToolUp.Platform.BudgetVerdict) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.BudgetAccountModule.silent : ToolUp.Platform.BudgetAccount { get }
+ToolUp.Platform.BudgetClaim (class)
+ToolUp.Platform.BudgetClaim..ctor(System.String, System.Decimal, System.Decimal, System.Decimal)
+ToolUp.Platform.BudgetClaim.Ceiling : System.Decimal { get }
+ToolUp.Platform.BudgetClaim.Dimension : System.String { get }
+ToolUp.Platform.BudgetClaim.Requested : System.Decimal { get }
+ToolUp.Platform.BudgetClaim.Spent : System.Decimal { get }
+ToolUp.Platform.BudgetClaimModule (class)
+ToolUp.Platform.BudgetClaimModule.create(System.String, System.Decimal, System.Decimal, System.Decimal) : ToolUp.Platform.BudgetClaim
+ToolUp.Platform.BudgetClaimModule.isUnrestricted(ToolUp.Platform.BudgetClaim) : System.Boolean
+ToolUp.Platform.BudgetClaimModule.perRequest(System.String, System.Decimal, System.Decimal) : ToolUp.Platform.BudgetClaim
+ToolUp.Platform.BudgetClaimModule.remaining(ToolUp.Platform.BudgetClaim) : System.Decimal
+ToolUp.Platform.BudgetClaimModule.wouldExceed(ToolUp.Platform.BudgetClaim) : System.Boolean
+ToolUp.Platform.BudgetDenial (class)
+ToolUp.Platform.BudgetDenial..ctor(System.String, System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
+ToolUp.Platform.BudgetDenial.ClassLabel : System.String { get }
+ToolUp.Platform.BudgetDenial.Dimension : System.String { get }
+ToolUp.Platform.BudgetDenial.Domain : System.String { get }
+ToolUp.Platform.BudgetDenial.PeriodKey : System.String { get }
+ToolUp.Platform.BudgetDenial.Quota : System.Decimal { get }
+ToolUp.Platform.BudgetDenial.Requested : System.Decimal { get }
+ToolUp.Platform.BudgetDenial.ScopeId : System.String { get }
+ToolUp.Platform.BudgetDenial.Spent : System.Decimal { get }
+ToolUp.Platform.BudgetDenialModule (class)
+ToolUp.Platform.BudgetDenialModule.describe(ToolUp.Platform.BudgetDenial) : System.String
+ToolUp.Platform.BudgetPeriod (class)
+ToolUp.Platform.BudgetPeriod.Daily : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.Platform.BudgetPeriod.Hourly : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.Platform.BudgetPeriod.IsDaily : System.Boolean { get }
+ToolUp.Platform.BudgetPeriod.IsHourly : System.Boolean { get }
+ToolUp.Platform.BudgetPeriod.IsMonthly : System.Boolean { get }
+ToolUp.Platform.BudgetPeriod.IsPerpetual : System.Boolean { get }
+ToolUp.Platform.BudgetPeriod.Monthly : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.Platform.BudgetPeriod.Perpetual : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.Platform.BudgetPeriod.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetPeriod+Tags (class)
+ToolUp.Platform.BudgetPeriod+Tags.Daily : System.Int32 (literal)
+ToolUp.Platform.BudgetPeriod+Tags.Hourly : System.Int32 (literal)
+ToolUp.Platform.BudgetPeriod+Tags.Monthly : System.Int32 (literal)
+ToolUp.Platform.BudgetPeriod+Tags.Perpetual : System.Int32 (literal)
+ToolUp.Platform.BudgetPeriodModule (class)
+ToolUp.Platform.BudgetPeriodModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetPeriod] { get }
+ToolUp.Platform.BudgetPeriodModule.key(ToolUp.Platform.BudgetPeriod, System.DateTime) : System.String
+ToolUp.Platform.BudgetPeriodModule.label(ToolUp.Platform.BudgetPeriod) : System.String
+ToolUp.Platform.BudgetPeriodModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BudgetPeriod]
+ToolUp.Platform.BudgetPolicy (class)
+ToolUp.Platform.BudgetPolicy.breach(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BudgetClaim]
+ToolUp.Platform.BudgetPolicy.check(ToolUp.Platform.BudgetSubject, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]
+ToolUp.Platform.BudgetPolicy.crossedThreshold(System.Decimal, ToolUp.Platform.BudgetClaim) : System.Boolean
+ToolUp.Platform.BudgetPolicy.defaultWarnThreshold : System.Decimal { get }
+ToolUp.Platform.BudgetPolicy.deny(ToolUp.Platform.BudgetSubject, System.String, ToolUp.Platform.BudgetClaim) : ToolUp.Platform.BudgetDenial
+ToolUp.Platform.BudgetPolicy.verdict(ToolUp.Platform.BudgetSubject, System.String, System.Decimal, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]) : ToolUp.Platform.BudgetVerdict
+ToolUp.Platform.BudgetPolicy.warn(ToolUp.Platform.BudgetSubject, System.String, System.Decimal, ToolUp.Platform.BudgetClaim) : ToolUp.Platform.BudgetWarning
+ToolUp.Platform.BudgetSubject (class)
+ToolUp.Platform.BudgetSubject..ctor(System.String, System.String, System.String)
+ToolUp.Platform.BudgetSubject.ClassLabel : System.String { get }
+ToolUp.Platform.BudgetSubject.Domain : System.String { get }
+ToolUp.Platform.BudgetSubject.ScopeId : System.String { get }
+ToolUp.Platform.BudgetSubjectModule (class)
+ToolUp.Platform.BudgetSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.BudgetSubject
+ToolUp.Platform.BudgetSubjectModule.ofScope(System.String, System.String) : ToolUp.Platform.BudgetSubject
+ToolUp.Platform.BudgetUsage (class)
+ToolUp.Platform.BudgetUsage..ctor(System.String, System.String, System.String, System.Int32, System.Decimal, System.DateTime)
+ToolUp.Platform.BudgetUsage.Domain : System.String { get }
+ToolUp.Platform.BudgetUsage.InFlight : System.Int32 { get }
+ToolUp.Platform.BudgetUsage.PeriodKey : System.String { get }
+ToolUp.Platform.BudgetUsage.ScopeId : System.String { get }
+ToolUp.Platform.BudgetUsage.Spent : System.Decimal { get }
+ToolUp.Platform.BudgetUsage.UpdatedAt : System.DateTime { get }
+ToolUp.Platform.BudgetUsageModule (class)
+ToolUp.Platform.BudgetUsageModule.empty(System.String, System.String, System.String) : ToolUp.Platform.BudgetUsage
+ToolUp.Platform.BudgetUsageModule.reserve(System.Decimal, System.DateTime, ToolUp.Platform.BudgetUsage) : ToolUp.Platform.BudgetUsage
+ToolUp.Platform.BudgetUsageModule.settle(System.Decimal, System.DateTime, ToolUp.Platform.BudgetUsage) : ToolUp.Platform.BudgetUsage
+ToolUp.Platform.BudgetVerdict (class)
+ToolUp.Platform.BudgetVerdict.Allowed : ToolUp.Platform.BudgetVerdict { get }
+ToolUp.Platform.BudgetVerdict.IsAllowed : System.Boolean { get }
+ToolUp.Platform.BudgetVerdict.IsNearLimit : System.Boolean { get }
+ToolUp.Platform.BudgetVerdict.IsRefused : System.Boolean { get }
+ToolUp.Platform.BudgetVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.BudgetVerdict+NearLimit (class)
+ToolUp.Platform.BudgetVerdict+NearLimit.Item : ToolUp.Platform.BudgetWarning { get }
+ToolUp.Platform.BudgetVerdict+Refused (class)
+ToolUp.Platform.BudgetVerdict+Refused.Item : ToolUp.Platform.BudgetDenial { get }
+ToolUp.Platform.BudgetVerdict+Tags (class)
+ToolUp.Platform.BudgetVerdict+Tags.Allowed : System.Int32 (literal)
+ToolUp.Platform.BudgetVerdict+Tags.NearLimit : System.Int32 (literal)
+ToolUp.Platform.BudgetVerdict+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.BudgetWarning (class)
+ToolUp.Platform.BudgetWarning..ctor(System.String, System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
+ToolUp.Platform.BudgetWarning.ClassLabel : System.String { get }
+ToolUp.Platform.BudgetWarning.Dimension : System.String { get }
+ToolUp.Platform.BudgetWarning.Domain : System.String { get }
+ToolUp.Platform.BudgetWarning.PeriodKey : System.String { get }
+ToolUp.Platform.BudgetWarning.Quota : System.Decimal { get }
+ToolUp.Platform.BudgetWarning.ScopeId : System.String { get }
+ToolUp.Platform.BudgetWarning.Spent : System.Decimal { get }
+ToolUp.Platform.BudgetWarning.Threshold : System.Decimal { get }
+ToolUp.Platform.BudgetWarningModule (class)
+ToolUp.Platform.BudgetWarningModule.describe(ToolUp.Platform.BudgetWarning) : System.String
 ToolUp.Platform.BuildDependency (class)
 ToolUp.Platform.BuildDependency..ctor(System.String, System.String, System.String)
 ToolUp.Platform.BuildDependency.ContentDigest : System.String { get }
@@ -2411,6 +2519,8 @@ ToolUp.Platform.ComputeBudgetDenial.Spent : System.Decimal { get }
 ToolUp.Platform.ComputeBudgetDenial.SubmitterClass : System.String { get }
 ToolUp.Platform.ComputeBudgetDenialModule (class)
 ToolUp.Platform.ComputeBudgetDenialModule.describe(ToolUp.Platform.ComputeBudgetDenial) : System.String
+ToolUp.Platform.ComputeBudgetDenialModule.ofBudgetDenial(ToolUp.Platform.BudgetDenial) : ToolUp.Platform.ComputeBudgetDenial
+ToolUp.Platform.ComputeBudgetDenialModule.toBudgetDenial(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Platform.BudgetDenial
 ToolUp.Platform.ComputeBudgetDeniedPayload (class)
 ToolUp.Platform.ComputeBudgetDeniedPayload..ctor(ToolUp.Platform.ComputeBudgetDenial, System.String, System.String, System.String, System.DateTime)
 ToolUp.Platform.ComputeBudgetDeniedPayload.Denial : ToolUp.Platform.ComputeBudgetDenial { get }
@@ -2453,6 +2563,7 @@ ToolUp.Platform.ComputeBudgetMode+Tags (class)
 ToolUp.Platform.ComputeBudgetMode+Tags.EnabledComputeBudget : System.Int32 (literal)
 ToolUp.Platform.ComputeBudgetMode+Tags.NoComputeBudget : System.Int32 (literal)
 ToolUp.Platform.ComputeBudgetModule (class)
+ToolUp.Platform.ComputeBudgetModule.Domain : System.String (literal)
 ToolUp.Platform.ComputeBudgetModule.create(ToolUp.Platform.ComputeBudgetPeriod, ToolUp.Platform.ComputeBudgetLimits) : ToolUp.Platform.ComputeBudget
 ToolUp.Platform.ComputeBudgetModule.isUnrestricted(ToolUp.Platform.ComputeBudget) : System.Boolean
 ToolUp.Platform.ComputeBudgetModule.limitsFor(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudget) : ToolUp.Platform.ComputeBudgetLimits
@@ -2473,8 +2584,10 @@ ToolUp.Platform.ComputeBudgetPeriod+Tags.Perpetual : System.Int32 (literal)
 ToolUp.Platform.ComputeBudgetPeriodModule (class)
 ToolUp.Platform.ComputeBudgetPeriodModule.key(ToolUp.Platform.ComputeBudgetPeriod, System.DateTime) : System.String
 ToolUp.Platform.ComputeBudgetPeriodModule.label(ToolUp.Platform.ComputeBudgetPeriod) : System.String
+ToolUp.Platform.ComputeBudgetPeriodModule.toBudgetPeriod(ToolUp.Platform.ComputeBudgetPeriod) : ToolUp.Platform.BudgetPeriod
 ToolUp.Platform.ComputeBudgetPolicy (class)
 ToolUp.Platform.ComputeBudgetPolicy.admit(System.String, ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ComputeBudgetDenial]
+ToolUp.Platform.ComputeBudgetPolicy.claims(ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]
 ToolUp.Platform.ComputeBudgetPolicy.effectiveDuration(ToolUp.Platform.ComputeBudgetLimits, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]
 ToolUp.Platform.ComputeBudgetUsage (class)
 ToolUp.Platform.ComputeBudgetUsage..ctor(System.String, System.String, System.Int32, System.Decimal, System.DateTime)
@@ -2485,6 +2598,8 @@ ToolUp.Platform.ComputeBudgetUsage.Spent : System.Decimal { get }
 ToolUp.Platform.ComputeBudgetUsage.UpdatedAt : System.DateTime { get }
 ToolUp.Platform.ComputeBudgetUsageModule (class)
 ToolUp.Platform.ComputeBudgetUsageModule.empty(System.String, System.String) : ToolUp.Platform.ComputeBudgetUsage
+ToolUp.Platform.ComputeBudgetUsageModule.ofBudgetUsage(ToolUp.Platform.BudgetUsage) : ToolUp.Platform.ComputeBudgetUsage
+ToolUp.Platform.ComputeBudgetUsageModule.toBudgetUsage(ToolUp.Platform.ComputeBudgetUsage) : ToolUp.Platform.BudgetUsage
 ToolUp.Platform.ComputeBudgetWarningPayload (class)
 ToolUp.Platform.ComputeBudgetWarningPayload..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String, System.DateTime)
 ToolUp.Platform.ComputeBudgetWarningPayload.ObservedAt : System.DateTime { get }

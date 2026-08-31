@@ -413,6 +413,17 @@
              two audit payloads) and ModelExecutionWire.fs (it rides the typed
              peer refusal, plan decision D6). Pure / Fable-safe — the cost
              model and the store are Server-tier. -->
+        <!-- Phase 689 — the platform budget seam: the declare/check/account
+             vocabulary (BudgetPeriod / BudgetSubject / BudgetClaim /
+             BudgetDenial / BudgetWarning / BudgetVerdict / BudgetUsage /
+             BudgetAccount) plus the pure BudgetPolicy every budget domain
+             decides with. BEFORE ComputeBudget.fs, which re-expresses
+             Phase 451's three ceilings as claims and its admission check
+             as BudgetPolicy.check. Depends on nothing but the BCL, so its
+             position is set only by its consumers. Pure / Fable-safe — the
+             ledger, the JSON codec and the enforcement decorators are
+             Server tier. -->
+        <Compile Include="Shared\Budget.fs" />
         <Compile Include="Shared\ComputeBudget.fs" />
         <!-- Phase 654 — the signed-shape separator registry: the closed
              `SignedShape` DU, its typed `SignedShapeSeparator` parts, and
