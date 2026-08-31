@@ -312,7 +312,7 @@ Client.run
 |---|---|---|
 | `OidcPresets.generic` | `issuer + clientId + redirectUri` | No provider quirks. Spec-minimum scopes (`openid profile email`); `ValidateIdToken = Some true` (no provider knowledge to judge the boundary by, so the safer default). For Okta, Keycloak, custom OIDC. |
 | `OidcPresets.entraWorkforce` | `tenantId + clientId + redirectUri` | Workforce v2.0 issuer; the load-bearing `api://{clientId}/access_as_user` scope; `offline_access`. |
-| `OidcPresets.entraExternalId` | `tenantSubdomain + clientId + redirectUri` | CIAM `*.ciamlogin.com` v2.0 issuer; `offline_access`; `ValidateIdToken = Some true`. |
+| `OidcPresets.entraExternalId` | `tenantSubdomain + clientId + redirectUri` | CIAM `*.ciamlogin.com` v2.0 issuer; `offline_access`; `ValidateIdToken = Some true`. Pipe through `OidcPresets.withEntraSignUpUserFlow` for the dual-button sign-up affordance — see [Secondary flow](#secondary-flow--the-sign-up-affordance). |
 | `OidcPresets.entraExternalIdWithDomain` | `tenantSubdomain + customDomain + clientId + redirectUri` | As above, with a custom CIAM domain replacing the `*.ciamlogin.com` host. |
 | `OidcPresets.auth0` | `domain + clientId + redirectUri` | Tenant URL **with** trailing slash (Auth0's `iss` claim shape); `offline_access`. Tokens stay opaque unless an `audience` extra parameter is passed. |
 | `OidcPresets.google` | `clientId + redirectUri` | Fixed issuer `https://accounts.google.com` — no tenant parameter. Spec-minimum scopes; `ValidateIdToken = Some true`. Refresh tokens ride the `access_type=offline` **authorize parameter**, not an `offline_access` scope. Access tokens are always opaque, so the preset defaults `BearerToken` to `IdTokenBearer` — see [Bearer-token strategy](#bearer-token-strategy). |
@@ -428,6 +428,41 @@ let cfg = {
 
 Not implemented, deliberately: **RFC 7662 token introspection**. Google does not implement it, and its `tokeninfo` endpoint is a Google-ism rather than a standard, so it belongs in preset notes and not in the substrate. Introspection can be cut as its own seam if a real IdP demands it.
 
+#### Secondary flow — the "Sign up" affordance
+
+Some identity providers host more than one journey behind the same app registration: an Entra External ID tenant with a separate sign-up user flow, a Google deployment that wants an explicit re-consent path, a Keycloak realm with a required action. The sign-in screen expresses that as a **second button** beside "Sign in".
+
+It is one sign-in, not two. Both buttons run the same Authorization Code + PKCE flow with the same client id, the same redirect URI, the same freshly-minted `state` / `nonce` / PKCE challenge, and land on the same callback and the same token path. They differ in exactly one thing: the extra parameters appended to the authorize request, which is what the provider routes the second journey on.
+
+Declare it on `OidcAppConfig`:
+
+```fsharp skip=fragment
+let cfg =
+    OidcPresets.entraExternalId "<tenant-subdomain>" "<client-id>" "<redirect-uri>"
+    |> OidcPresets.withEntraSignUpUserFlow "<sign-up-user-flow-policy-id>"
+```
+
+`withEntraSignUpUserFlow` is a thin binding over the vendor-neutral `withSecondaryFlow label extras`, which is what the slot actually is:
+
+| Field | Meaning |
+|---|---|
+| `Label` | The button's text — `"Sign up"` for the Entra binding. |
+| `ExtraAuthorizeParams` | Query parameters appended to the authorize request **for this button only**. `[ "p", policyId ]` for an Entra user flow. |
+
+So a Google deployment offering explicit re-consent — Google issues a refresh token only on a user's first consent unless consent is re-prompted — needs no Google-specific SDK surface:
+
+```fsharp skip=fragment
+let cfg =
+    OidcPresets.google "<client-id>" "<redirect-uri>"
+    |> OidcPresets.withSecondaryFlow "Re-consent" [ "prompt", "consent" ]
+```
+
+**No preset supplies one.** Which journeys a deployment offers its users is a product decision, not a provider quirk, so every preset returns `SecondaryFlow = None` and a config that declares nothing renders exactly the single-button screen it rendered before (GP 11).
+
+**The keys must be provider-specific.** The client emits `response_type`, `client_id`, `redirect_uri`, `scope`, `state`, `nonce`, `code_challenge` and `code_challenge_method` itself; extras are *appended*, never merged, so repeating one of those emits it twice and an issuer's handling of a duplicate is undefined — for `redirect_uri` or `code_challenge` that is the callback's security. The coherence validator's **rule 16** refuses such a config at preflight (Error), and warns on a flow that is declared but inert: a blank label, or no extra parameters at all (two buttons issuing one request).
+
+**This replaces the `EntraExternalIdClient` companion's dual-button shell.** That companion existed partly because the generic shell had no sign-up affordance; the authorize request its "Sign up" button issued (`p=<policyId>` alongside the full OAuth / PKCE set) is the request the preset path issues now, parameter for parameter, and the SDK test pack asserts the exact set. See [the deprecation note](../migrations/0.4.0-entra-external-id-deprecation.md) and [the migration](../migrations/748-oidc-secondary-flow.md).
+
 #### Client-side `id_token` validation (opt-in)
 
 By default, the callback handler binds the returned `id_token` to *this* sign-in attempt via nonce validation (mandatory; on by default since Cluster B1), then trusts the id_token's signature / `iss` / `aud` / `exp` until the server validates them on the next protected request. Opt in to immediate client-side validation by setting `OidcUIConfig.ValidateIdToken = Some true`:
@@ -507,7 +542,7 @@ Pair with `ToolUp.AuthProviders.EntraExternalId.Client` for the browser-side sig
 Browser-side counterpart to the External ID server provider. Wraps `ToolUp.AuthProviders.Oidc.Client` with Entra-aware defaults:
 
 - `openid profile email offline_access` scope set (the OIDC defaults omit `offline_access`; External ID requires it for refresh-token issuance).
-- Optional "Sign up" affordance routed through the configured sign-up policy when `SignUpPolicyId` is set.
+- Optional "Sign up" affordance routed through the configured sign-up policy when `SignUpPolicyId` is set. **The generic shell now offers this too** — `OidcPresets.entraExternalId |> OidcPresets.withEntraSignUpUserFlow policyId` issues the identical authorize request without the companion (see [Secondary flow](#secondary-flow--the-sign-up-affordance)), which retires the last client-side reason to stay on this wrapper.
 - `ValidateIdToken = Some true` — client-side id_token validation (signature + iss + aud + exp via WebCrypto) runs on every callback. The generic `OidcUIConfig.defaults` leaves this `None` for back-compat with pre-3b.A consumers; Entra is a customer-facing CIAM surface where defence-in-depth at the boundary is worth the small cost of the WebCrypto verify per sign-in. Opt out via `ValidateIdToken = Some false` on the projected `OidcUIConfig` (regression investigation, intentional fallback during a JWKS-fetch outage).
 
 Wired via the SDK's `CustomAuthUI` extension point (no edit to `AuthUIMode` required):

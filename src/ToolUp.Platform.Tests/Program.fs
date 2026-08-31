@@ -560,6 +560,7 @@ let private registeredTests =
         OidcCoherenceValidatorTests.tests
         OidcSignInContractTests.tests
         OidcBearerStrategyTests.tests
+        OidcSecondaryFlowTests.tests
         GitHubAuthProviderTests.tests
         GitHubAppFlowTests.tests
         // Phase 10f — Google Analytics 4 connector: IDataSource +

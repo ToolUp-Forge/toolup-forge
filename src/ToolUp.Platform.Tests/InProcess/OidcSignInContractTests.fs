@@ -142,6 +142,7 @@ let private mkCfg (issuer: string) (clientId: string) (validate: bool option) : 
     PostLogoutRedirectUri = None
     ValidateIdToken = validate
     BearerToken = None
+    SecondaryFlow = None
 }
 
 let private kid = "phase-3ba-test-key"

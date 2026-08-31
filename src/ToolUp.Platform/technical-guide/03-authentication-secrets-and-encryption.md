@@ -94,6 +94,7 @@ let oidcConfig: OidcUIConfig = {
     PostLogoutRedirectUri = Some "https://app.example.com"
     ValidateIdToken = Some true
     BearerToken = None   // None = send the access token (the default)
+    SecondaryFlow = None // None = the single-button sign-in screen (the default)
 }
 
 let config = {

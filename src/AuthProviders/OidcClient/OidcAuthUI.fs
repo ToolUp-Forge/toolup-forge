@@ -15,7 +15,9 @@ open ToolUp.AuthProviders.Oidc.OidcTokenStore
 //
 //   Checking  → LoadingScreen (brief, on first render while we decide
 //               whether this is a callback or a cold start)
-//   SignedOut → SignInScreen (big button kicking off `beginSignIn`)
+//   SignedOut → SignInScreen (big button kicking off `beginSignIn`,
+//               plus a second button when the config declares an
+//               `OidcSecondaryFlow` — the "Sign up" affordance)
 //   Failed e  → ErrorScreen (message + retry button back to SignedOut)
 //
 // The signed-in path renders the shell directly — there's no wrapper
@@ -41,7 +43,29 @@ let LoadingScreen () : ReactElement =
         ]
     ]
 
-let SignInScreen (onSignIn: unit -> unit) : ReactElement =
+/// The sign-in screen with an optional SECOND button beside "Sign in"
+/// — the generic dual-button ("Sign in / Sign up") affordance. The
+/// secondary flow starts the same OIDC sign-in with extra
+/// authorize-request parameters, so `onSecondary` is wired to the same
+/// machinery as `onSignIn` and the callback path is untouched.
+///
+/// `None` renders exactly what `SignInScreen` renders — the secondary
+/// button is not a hidden element, it is not emitted at all (GP 11).
+let SignInScreenWithSecondary
+    (secondary: OidcSecondaryFlow option)
+    (onSignIn: unit -> unit)
+    (onSecondary: unit -> unit)
+    : ReactElement =
+    let secondaryButton =
+        match secondary with
+        | Some flow ->
+            Html.button [
+                prop.className $"{Tokens.Button.secondary} w-full text-center"
+                prop.text flow.Label
+                prop.onClick (fun _ -> onSecondary ())
+            ]
+        | None -> Html.none
+
     pageFrame [
         Html.h1 [
             prop.className "text-2xl font-semibold text-brand font-[Umami]"
@@ -56,7 +80,14 @@ let SignInScreen (onSignIn: unit -> unit) : ReactElement =
             prop.text "Sign in"
             prop.onClick (fun _ -> onSignIn ())
         ]
+        secondaryButton
     ]
+
+/// The single-button sign-in screen. Retained as the no-secondary-flow
+/// entry point (and so a consumer rendering it directly is unaffected
+/// by the affordance landing).
+let SignInScreen (onSignIn: unit -> unit) : ReactElement =
+    SignInScreenWithSecondary None onSignIn ignore
 
 let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
@@ -132,20 +163,36 @@ let OidcShell (cfg: OidcUIConfig) (shell: ReactElement) : ReactElement =
     // overload) which React invokes on unmount.
     React.useEffectOnce (fun () -> (fun () -> OidcClient.cancelRefresh ()))
 
-    let beginSignIn () =
+    // One entry point for both buttons. The flows differ ONLY in the
+    // extra authorize-request parameters: same PKCE / state / nonce
+    // machinery, same redirect URI, same callback, same token path — so
+    // a secondary flow needs no second code path here and nothing
+    // downstream of the redirect can tell the two apart.
+    //
+    // `beginSignIn` passes `[]`, which is what `OidcClient.beginSignIn`
+    // is defined as, so a config with no secondary flow behaves exactly
+    // as it did before the affordance existed (GP 11).
+    let beginFlow (extraAuthorizeParams: (string * string) list) =
         setAuthState Checking
 
         async {
-            match! OidcClient.beginSignIn cfg with
+            match! OidcClient.beginSignInWithExtras cfg extraAuthorizeParams with
             | Ok() -> ()
             | Error e -> setAuthState (Failed e)
         }
         |> Async.StartImmediate
 
+    let beginSignIn () = beginFlow []
+
+    let beginSecondaryFlow () =
+        match cfg.SecondaryFlow with
+        | Some flow -> beginFlow flow.ExtraAuthorizeParams
+        | None -> ()
+
     match authState with
     | Checking -> LoadingScreen()
     | SignedIn -> shell
-    | SignedOut -> SignInScreen beginSignIn
+    | SignedOut -> SignInScreenWithSecondary cfg.SecondaryFlow beginSignIn beginSecondaryFlow
     | Failed e -> ErrorScreen e (fun () -> setAuthState SignedOut)
 
 // ─── UserMenu — header sign-out trigger ──────────────────────────────

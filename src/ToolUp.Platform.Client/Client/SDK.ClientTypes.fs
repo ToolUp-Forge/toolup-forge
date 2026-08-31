@@ -602,6 +602,45 @@ module BearerTokenKind =
         | AccessTokenBearer -> "access-token"
         | IdTokenBearer -> "id-token"
 
+/// An optional SECOND sign-in affordance, rendered beside the primary
+/// "Sign in" button — the generic form of the dual-button
+/// "Sign in / Sign up" shell.
+///
+/// Both flows are the same OIDC sign-in: same client id, same redirect
+/// URI, the same PKCE / state / nonce machinery, the same callback and
+/// the same token path. They differ ONLY in the extra parameters
+/// appended to the authorize request, which is what an identity
+/// provider routes on when it offers more than one hosted journey — an
+/// Entra External ID sign-up user flow (`p=<policyId>`), a Google
+/// re-consent (`prompt=consent`), a Keycloak required action
+/// (`kc_action=<action>`).
+///
+/// Vendor-neutral by construction: the SDK carries a label and an
+/// opaque parameter list and knows nothing about what any of them
+/// mean. `OidcPresets.withEntraSignUpUserFlow` is the first binding,
+/// not the model.
+///
+/// `None` on a config renders today's single-button shell, byte for
+/// byte (GP 11).
+///
+/// The helpers over this type (`SecondaryFlow.create` /
+/// `.reservedAuthorizeParams` / `.collidingParams`) deliberately live
+/// in `ToolUp.AuthProviders.Oidc.OidcAppConfig` rather than beside the
+/// type: a module-level *value* in this file drags in the whole file's
+/// startup initialisation, which reaches the AG Grid Fable `import`
+/// stubs and throws "You've hit dummy code used for Fable bindings" on
+/// .NET. Functions are safe here; values are not.
+type OidcSecondaryFlow = {
+    /// Text of the rendered button — e.g. `"Sign up"`.
+    Label: string
+    /// Extra query parameters appended to the authorize request for
+    /// THIS flow only; the primary "Sign in" button is unaffected.
+    /// Keys must not collide with the standard OAuth/PKCE set the
+    /// client emits itself (`SecondaryFlow.reservedAuthorizeParams`) —
+    /// the coherence validator's rule 16 refuses a config that does.
+    ExtraAuthorizeParams: (string * string) list
+}
+
 type OidcUIConfig = {
     /// OIDC issuer URL (base). Used for metadata discovery at
     /// `{issuer}/.well-known/openid-configuration`.
@@ -639,6 +678,13 @@ type OidcUIConfig = {
     /// setting against the preset's default and projects the answer
     /// here, so the client tier always receives a fully-decided value.
     BearerToken: BearerTokenKind option
+    /// An optional second sign-in affordance rendered beside "Sign in"
+    /// — the dual-button "Sign in / Sign up" shell. `None` (the
+    /// default) renders the single-button screen byte for byte
+    /// (GP 11). Projected verbatim from `OidcAppConfig.SecondaryFlow`;
+    /// unlike the bearer strategy there is nothing to resolve, because
+    /// no preset supplies one by default.
+    SecondaryFlow: OidcSecondaryFlow option
 }
 
 module OidcUIConfig =
@@ -650,6 +696,7 @@ module OidcUIConfig =
         PostLogoutRedirectUri = None
         ValidateIdToken = None
         BearerToken = None
+        SecondaryFlow = None
     }
 
     /// Resolve the effective bearer strategy for a client-tier config.

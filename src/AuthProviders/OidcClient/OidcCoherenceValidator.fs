@@ -23,7 +23,7 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 // relied on `PresetMetadata.AutoAddedScopes` / `.Notes` now derive
 // the same data from `PresetKind` via the helpers in `OidcAppConfig`.
 //
-// Rules (15):
+// Rules (16):
 //
 //   1. ERROR    Issuer empty.
 //   2. ERROR    ClientId empty.
@@ -101,6 +101,22 @@ open ToolUp.AuthProviders.Oidc.OidcAppConfig
 //               Error because an explicit `Some AccessTokenBearer`
 //               is a legitimate choice for a deployment validating
 //               the opaque token by some other means.
+//  16. ERROR/   A declared `SecondaryFlow` that cannot work. ERROR
+//      WARN     when one of its `ExtraAuthorizeParams` keys collides
+//               with a parameter the client emits itself
+//               (`SecondaryFlow.reservedAuthorizeParams`): the
+//               authorize request then carries that parameter TWICE
+//               and the issuer's handling of a duplicate is
+//               undefined — including the duplicate being
+//               `redirect_uri` or `code_challenge`, i.e. the values
+//               the callback's security rests on. Non-recoverable
+//               and invisible until a user presses the second
+//               button, which is the rule-10 / rule-14 argument.
+//               WARNING when the flow is declared but inert — a
+//               blank label (an unlabelled button) or an empty
+//               parameter list (a second button issuing exactly the
+//               primary flow's request). Both are almost certainly
+//               a half-finished config; neither breaks sign-in.
 
 /// Per-rule outcome.  Aggregator collapses these into a single
 /// `ValidationResult`; `evaluate` exposes the raw list for tests +
@@ -211,6 +227,35 @@ let private collectRules (cfg: OidcAppConfig) : RuleOutcome list = [
                 cfg.ClientId
                 cfg.Audience
         )
+
+    // ─── Rule 16 — a secondary flow that cannot work ─────────────
+    // Preset-independent for the same reason rule 14 is: the slot is
+    // vendor-neutral, and a hand-built config can declare one without
+    // any preset at all.
+    match cfg.SecondaryFlow with
+    | None -> ()
+    | Some flow ->
+        let collisions = SecondaryFlow.collidingParams flow
+
+        if not (List.isEmpty collisions) then
+            RuleError(
+                sprintf
+                    "OidcAppConfig.SecondaryFlow (`%s`) declares extra authorize parameter(s) [%s] that the OIDC client already emits itself. The authorize request would carry each of them twice and an issuer's handling of a duplicate parameter is undefined — for `redirect_uri` or `code_challenge` that is the callback's security, not a cosmetic detail. A secondary flow differs from the primary one only in PROVIDER-SPECIFIC parameters (`p` for an Entra user flow, `prompt` for Google re-consent); reserved: [%s]."
+                    flow.Label
+                    (String.concat "; " collisions)
+                    (String.concat "; " SecondaryFlow.reservedAuthorizeParams)
+            )
+
+        if String.IsNullOrWhiteSpace flow.Label then
+            RuleWarning
+                "OidcAppConfig.SecondaryFlow is declared with a blank Label. The sign-in screen renders a second button with no text on it; give the flow the label a user should read (`\"Sign up\"` for an Entra sign-up user flow)."
+
+        if List.isEmpty flow.ExtraAuthorizeParams then
+            RuleWarning(
+                sprintf
+                    "OidcAppConfig.SecondaryFlow (`%s`) declares no extra authorize parameters, so its button issues exactly the same authorize request as `Sign in` — two buttons, one flow. The extras are what an identity provider routes a second journey on; supply them (e.g. `OidcPresets.withEntraSignUpUserFlow` for an Entra sign-up user flow) or drop the secondary flow."
+                    flow.Label
+            )
 
     // ─── Preset-aware rules (7–11, 15) ──────────────────────
     match cfg.Preset with
