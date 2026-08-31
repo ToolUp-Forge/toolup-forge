@@ -124,6 +124,14 @@ let config = {
             // neither project references the other — nor should it, so
             // neither of the existing packs could host them.
             TestPack.create "Reporting" "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj"
+            // Phase 24 — ToolUp.Offline: the Core retry / status /
+            // drain-selection model and the sync handler's three guards
+            // (server-resolved scope, last-writer-wins conflict
+            // detection, audit stamped with the mutation's ORIGINAL
+            // enqueue time). Pure — no browser, no network, no
+            // credentials. The IndexedDB and Feliz surfaces are
+            // browser-only and ride the Fable compile gate instead.
+            TestPack.create "Offline" "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj"
         ]
 }
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Offline Core — the offline-first queued-mutation model: QueuedMutation / SyncOutcome / ConflictResolution / RetryPolicy / SyncStatus, and the IOfflineSyncApi Fable.Remoting contract. Fable-safe so the client queue and the server sync handler share one vocabulary.</Description>
+        <PackageTags>fsharp;sdk;types;offline;pwa;sync</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under
+         fable/ so the browser queue constructs the same QueuedMutation
+         records the server deserialises. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Offline\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\OfflineTypes.fs" />
+        <Compile Include="Shared\OfflineSyncApi.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. Auth attributes flow
+         from ToolUp.Platform.Core. -->
+</Project>

@@ -1608,6 +1608,124 @@ type AdminSurfaceMode =
     /// (derived via `ClientConfig.effectiveArea`) move to the admin area.
     | SeparateArea
 
+/// Phase 24 — PWA install manifest, for deployments that opt into
+/// offline mode.
+///
+/// Held as SDK-side data rather than a static `manifest.json` asset so
+/// a deployment sets its name and colours from the same place it sets
+/// `AppName` / `AppLogo`, instead of hand-editing a JSON file that then
+/// drifts from them. The service worker registration emits it as a blob
+/// URL when no `ManifestUrl` is supplied.
+type PwaManifest = {
+    /// Full application name shown on the install prompt.
+    Name: string
+    /// Home-screen label. Keep it short — platforms truncate.
+    ShortName: string
+    /// `standalone` (the default), `minimal-ui`, `browser`, or
+    /// `fullscreen`. Passed through verbatim.
+    Display: string
+    /// Splash background.
+    BackgroundColor: string
+    /// Address-bar / task-switcher tint.
+    ThemeColor: string
+    /// Launch URL, root-relative.
+    StartUrl: string
+    /// `(src, sizes, mimeType)` per icon. Empty means the platform
+    /// falls back to the favicon, which is legal but produces a poor
+    /// home-screen icon.
+    Icons: (string * string * string) list
+}
+
+module PwaManifest =
+    /// Placeholder values a deployment overrides. Deliberately generic:
+    /// shipping a plausible-looking name would put OUR wording on
+    /// someone's home screen if they forgot to override it.
+    let defaults: PwaManifest = {
+        Name = "ToolUp Application"
+        ShortName = "ToolUp"
+        Display = "standalone"
+        BackgroundColor = "#ffffff"
+        ThemeColor = "#ffffff"
+        StartUrl = "/"
+        Icons = []
+    }
+
+/// Phase 24 — offline-first configuration. Consumed by the
+/// `ToolUp.Offline` companion; declared here (primitives only, no
+/// companion types) so `ClientConfig` names it without the SDK taking a
+/// dependency on the companion (GP 1).
+type OfflineConfig = {
+    /// URL of the service worker script, root-relative. The reference
+    /// worker ships as `examples/offline-sw.js` in the companion.
+    ServiceWorkerUrl: string
+    /// Scope the worker controls. `"/"` claims the whole origin.
+    ServiceWorkerScope: string
+    /// Cache-name prefix. The registration appends `CacheVersion`, so
+    /// bumping the version evicts the previous generation wholesale —
+    /// which is what stops an upgraded deployment serving last
+    /// release's assets forever.
+    CachePrefix: string
+    /// Bumped per SDK/app release to invalidate caches. A build stamp,
+    /// not a semantic version.
+    CacheVersion: string
+    /// PWA install manifest. `None` registers the worker without an
+    /// install prompt — legitimate for offline-capable apps that do not
+    /// want to be installable.
+    Manifest: PwaManifest option
+    /// Pre-built manifest URL. When set, `Manifest` is ignored and the
+    /// deployment's own static file is linked instead.
+    ManifestUrl: string option
+    /// Milliseconds between drain attempts while online with a
+    /// non-empty queue. v1 polls (plus a visibility-change and an
+    /// `online`-event trigger); the `BackgroundSync` API is out of
+    /// scope for this phase.
+    PollIntervalMs: int
+    /// Retry schedule for a failed replay, as data. Mirrors
+    /// `ToolUp.Offline.RetryPolicy` field-for-field; the companion maps
+    /// between them. Duplicated rather than referenced because
+    /// `ClientConfig` must not name a companion type.
+    RetryInitialDelayMs: int
+    RetryMultiplier: float
+    RetryMaxDelayMs: int
+    RetryMaxAttempts: int
+}
+
+module OfflineConfig =
+    /// The shape a deployment starts from: the companion's reference
+    /// worker at the origin root, a one-second initial backoff doubling
+    /// to five minutes over eight attempts, and a thirty-second drain
+    /// poll.
+    let defaults: OfflineConfig = {
+        ServiceWorkerUrl = "/offline-sw.js"
+        ServiceWorkerScope = "/"
+        CachePrefix = "toolup-offline"
+        CacheVersion = "v1"
+        Manifest = None
+        ManifestUrl = None
+        PollIntervalMs = 30_000
+        RetryInitialDelayMs = 1000
+        RetryMultiplier = 2.0
+        RetryMaxDelayMs = 300_000
+        RetryMaxAttempts = 8
+    }
+
+/// Phase 24 — whether the shell runs offline-first.
+///
+/// **Off by default (GP 11 + GP 13).** `NoOffline` registers no service
+/// worker, opens no IndexedDB database, links no PWA manifest and
+/// mounts no status badge — a deployment that does not opt in renders
+/// and behaves byte-identically to pre-24, and never sees an install
+/// prompt. That last part is the reason this is a DU rather than a
+/// `bool` plus an options record: "offline off" must be one value that
+/// provably does nothing, not a config record whose fields might still
+/// be read.
+type OfflineMode =
+    /// The default — online-only, exactly as before Phase 24.
+    | NoOffline
+    /// Register the service worker and queue mutations while
+    /// disconnected.
+    | EnabledOffline of OfflineConfig
+
 type ClientConfig = {
     AppName: string
     AppLogo: string
@@ -2108,6 +2226,15 @@ type ClientConfig = {
     /// raises is swallowed back to the English catalog: a translation
     /// bug degrades the shell's language, never its availability.
     MessageCatalogOverride: (MessageCatalog -> MessageCatalog) option
+
+    /// Phase 24 — offline-first / PWA support. `NoOffline` (the
+    /// default) costs nothing: no service worker, no IndexedDB, no
+    /// manifest link, no badge.
+    ///
+    /// Read by the `ToolUp.Offline` companion, which the deployment
+    /// composes separately — setting this field alone does not pull the
+    /// companion in, because the SDK core must not depend on it (GP 1).
+    Offline: OfflineMode
 }
 
 module ClientConfig =
@@ -2206,6 +2333,10 @@ module ClientConfig =
         // (GP 11 + GP 13).
         Locale = FixedLocale MessageCatalog.BuiltInLocale
         MessageCatalogOverride = None
+        // Phase 24 — online-only: no service worker registered, no
+        // IndexedDB opened, no PWA manifest linked, no install prompt
+        // (GP 11 + GP 13).
+        Offline = NoOffline
     }
 
     /// Back-compat: `ClientConfig` with every field at the SDK default
