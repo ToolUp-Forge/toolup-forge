@@ -540,6 +540,16 @@ let buildRouteHandlers
         | NoAdAnalytics -> []
         | EnabledAdAnalytics -> AdAnalyticsApiHandler.routes
 
+    // Phase 163 — end-user product-telemetry fan-out endpoint. Mounted
+    // only when `ServerConfig.TelemetrySink = CustomTelemetrySink`; the
+    // default `NoTelemetrySink` yields an empty list, so the route does
+    // not exist on the routing table and a deployment that composes no
+    // analytics is byte-for-byte unchanged (GP 13). The client-side
+    // `Telemetry.track` helper swallows the resulting 404, matching its
+    // best-effort contract.
+    let telemetryRoutes: HttpHandler list =
+        TelemetryApiHandler.routesFor config.TelemetrySink
+
     // Phase 62 — premium claim endpoints (read + grant + revoke).
     // Always mounted — the read endpoint short-circuits to NotPremium
     // for anonymous callers, the write endpoints gate themselves on
@@ -763,6 +773,7 @@ let buildRouteHandlers
             @ smokeTestRoutes
             @ consentAuditRoutes
             @ adAnalyticsRoutes
+            @ telemetryRoutes
             @ premiumApiRoutes
             @ adUnitConfigRoutes
             @ rateLimitEventApiRoutes
