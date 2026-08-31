@@ -3,11 +3,11 @@ module ToolUp.BrandKit.Text
 open Giraffe.ViewEngine
 
 /// Text primitives — display headings, eyebrows, mono labels, dividers.
-/// Each helper emits semantic markup with a `bk-*` class hook + minimal
-/// inline-style references to the canonical CSS variables (see
-/// `Tokens.fs`). Visual presentation is entirely the consumer's
-/// responsibility — define the `--bk-*` variables in `:root` plus
-/// optionally per-class rules.
+/// Each helper emits semantic markup carrying a `bk-*` class hook and
+/// nothing else — no inline style, and no reference to a `--bk-*`
+/// variable (see `Tokens.fs` for the contract). Visual presentation is
+/// entirely the consumer's responsibility — define the `--bk-*`
+/// variables in `:root` and attach them to those class hooks.
 
 // ─── Display headings ──────────────────────────────────────────────
 
