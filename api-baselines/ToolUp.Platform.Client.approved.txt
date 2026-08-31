@@ -4183,6 +4183,12 @@ ToolUp.Platform.TeamManagerMode+Tags.ConfiguredTeamManager : System.Int32 (liter
 ToolUp.Platform.TeamManagerMode+Tags.DefaultTeamManager : System.Int32 (literal)
 ToolUp.Platform.TeamManagerMode+Tags.ExternalTeamManager : System.Int32 (literal)
 ToolUp.Platform.TeamManagerMode+Tags.NoTeamManager : System.Int32 (literal)
+ToolUp.Platform.Telemetry (class)
+ToolUp.Platform.Telemetry.EndpointPath : System.String (literal)
+ToolUp.Platform.Telemetry.isPermitted(ToolUp.Platform.ConsentDecision) : System.Boolean
+ToolUp.Platform.Telemetry.track(ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Telemetry.trackNow(ToolUp.Platform.TelemetryEvent) : System.Void
+ToolUp.Platform.Telemetry.trackVia(ToolUp.Platform.Consent.IConsentProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TelemetryEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ToastCentreMode (class)
 ToolUp.Platform.ToastCentreMode.DefaultToastCentre : ToolUp.Platform.ToastCentreMode { get }
 ToolUp.Platform.ToastCentreMode.IsCustomToastCentre : System.Boolean { get }

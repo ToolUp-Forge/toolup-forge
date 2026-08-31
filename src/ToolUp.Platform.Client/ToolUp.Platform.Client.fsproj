@@ -318,6 +318,11 @@
         <Compile Include="Client\AdPanel\AdScriptLoader.fs" />
         <Compile Include="Client\AdPanel\IAdAnalyticsSink.fs" />
         <Compile Include="Client\AdPanel\ServerSinkAdAnalytics.fs" />
+        <!-- Phase 163 — client end of the ITelemetrySink seam. After
+             Consent\ConsentProvider.fs: `track` gates on
+             `ConsentProvider.current ()` before an event leaves the
+             browser, which is where the analytics-consent gate lives. -->
+        <Compile Include="Client\Telemetry.fs" />
         <Compile Include="Components\AdSlot.fs" />
         <Compile Include="Client\Premium\PremiumHook.fs" />
         <!-- Phase 56 — typed inbound rate-limit banner. Consumers handle
