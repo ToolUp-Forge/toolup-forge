@@ -300,4 +300,8 @@ let liveTests =
             let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
             store, "teama" + suffix, "teamb" + suffix
 
-        GraphStoreContract.tests "AgeGraphStore" factory
+        // Tier: `FullEngine` (Phase 752). AGE supports the constructs the
+        // in-memory floor refuses — the four cases Phase 607's first live run
+        // reported red were the pack asserting interpreter-subset laws here,
+        // not AGE defects.
+        GraphStoreContract.tests "AgeGraphStore" GraphStoreContract.FullEngine factory
