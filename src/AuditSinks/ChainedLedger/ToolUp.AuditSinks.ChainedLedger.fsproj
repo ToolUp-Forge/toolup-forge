@@ -26,6 +26,15 @@
          SHA-256 and the statement seam both come from the envelope
          family already reachable through ToolUp.Platform.Server. -->
     <Compile Include="LedgerScopedExport.fs" />
+    <!-- Phase 678 — the deployment decommission certificate: the closure
+         of a ledger as a signed, cold-verifiable statement binding the
+         terminal op, the head it closed, and the deploy record's
+         retirement. LAST, after LedgerScopedExport.fs, because it reuses
+         that phase's DSSE statement machinery; the terminal-op vocabulary
+         it reads sits in LedgerChain.fs and the closure IO in
+         ChainedLedgerAuditSink.fs, both already compiled above. Adds no
+         primitive and no dependency. -->
+    <Compile Include="LedgerDecommission.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

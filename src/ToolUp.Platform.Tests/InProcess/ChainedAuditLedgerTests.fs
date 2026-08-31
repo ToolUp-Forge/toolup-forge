@@ -1163,5 +1163,348 @@ let private scopedExportTests =
         }
     ]
 
+// ─── Phase 678 — decommission: closure, refusal, certificate ─────
+//
+// Four claims, each probed against the state that would falsify it:
+//
+//   * A closed ledger refuses appends, and the refusal is NOT a chain
+//     break — asserted by showing the closed ledger still VERIFIES. The
+//     two conditions are the ones an operator responds to oppositely,
+//     so a test that only checked "the append failed" would leave the
+//     distinction unproven.
+//   * A retired record refuses to boot — that half lives in
+//     `BootVerificationPreflightTests`, where the preflight is.
+//   * The certificate verifies COLD: from the document and a public key
+//     alone, with no ledger, no storage and no private material in
+//     reach. Probed by exporting the key's public half into a fresh key
+//     object, exactly as the head-signature probes do.
+//   * A deployment that never decommissions is wholly unaffected
+//     (GP 13) — no closure blob, no refusal, and a chain byte-identical
+//     to the one the same envelopes produced before this phase existed.
+
+/// The closure request a decommissioning deployment hands over.
+let private closureRequest: LedgerClosureRequest = {
+    DeployRecordDigest = "9f0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8"
+    DeployId = "deploy-1"
+    ClosedBy = "ops@example.com"
+    Reason = "engagement complete — contained clean room torn down"
+}
+
+/// A seeded ledger whose head is signed, plus the signing key: the shape
+/// a deployment that intends to decommission actually runs.
+let private newSignedLedger () = async {
+    let dir = uniqueDir ()
+    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
+    let signer = EcdsaHeadSigner("ledger-key-1", key) :> ILedgerHeadSigner
+    let sink = createSigned "ledger-decommission" settings storage signer
+
+    do! seed sink 3
+
+    return storage, signer, key, sink
+}
+
+/// `expectVerified` with key material to hand.
+///
+/// The plain helper passes no verifier, which is right for the unsigned
+/// ledgers the tamper probes use and reports `LedgerHeadUntrusted` for a
+/// signed one — correctly, since "signed and unchecked" is not verified.
+/// These probes sign, so they bring the public half.
+let private expectVerifiedWith (storage: IBlobStorage) (key: ECDsa) message = async {
+    let verifier =
+        EcdsaHeadVerifier("ledger-key-1", coldPublicKeyOf key) :> ILedgerHeadVerifier
+
+    match! verify settings storage (Some verifier) with
+    | Ok(LedgerVerified(count, _, signature)) -> return count, signature
+    | Ok other -> return failtestf "%s: expected LedgerVerified, got %A" message other
+    | Error error -> return failtestf "%s: ledger unreadable — %s" message error
+}
+
+let private expectClosed (storage: IBlobStorage) (signer: ILedgerHeadSigner option) = async {
+    match! ChainedLedger.close settings storage signer closureRequest with
+    | Ok op -> return op
+    | Error message -> return failwithf "closing the ledger failed: %s" message
+}
+
+let private decommissionTests =
+    testList "decommission" [
+
+        testCaseAsync "the terminal op binds the head it closed, and is signed under the head-signing seam"
+        <| async {
+            let! storage, signer, key, _sink = newSignedLedger ()
+            let! count, _ = expectVerifiedWith storage key "before closing"
+            let! op = expectClosed storage (Some signer)
+
+            Expect.equal op.RecordCount count "The op closes the chain at the length the walk recovered"
+
+            Expect.isTrue
+                (LedgerTerminalOp.digestHolds op)
+                "The op's stored digest must be the digest of its own content"
+
+            Expect.isTrue (LedgerTerminalOp.isSigned op) "A signed deployment's closure carries a signature"
+
+            Expect.equal op.KeyId (Some "ledger-key-1") "The signing key is recorded so a verifier can select it"
+
+            Expect.equal op.ClosedBy "ops@example.com" "The decommissioning actor is bound into the op"
+
+            Expect.equal op.DeployRecordDigest closureRequest.DeployRecordDigest "The deploy record identity is bound"
+
+            // The binding is only worth having if it is falsifiable: an
+            // op edited to name a different actor no longer digests to
+            // what it stores.
+            let edited = { op with ClosedBy = "someone-else" }
+
+            Expect.isFalse
+                (LedgerTerminalOp.digestHolds edited)
+                "Editing the actor after the fact must break the op's own digest"
+        }
+
+        testCaseAsync "a closed ledger refuses every later append, and the refusal is not a chain break"
+        <| async {
+            let! storage, signer, key, sink = newSignedLedger ()
+
+            match! ChainedLedger.appendRefusal settings storage with
+            | Ok None -> ()
+            | other -> failtestf "An open ledger must refuse nothing; got %A" other
+
+            let! op = expectClosed storage (Some signer)
+
+            match! ChainedLedger.appendRefusal settings storage with
+            | Ok(Some refusal) ->
+                Expect.isTrue (LedgerAppendRefusal.isClosed refusal) "The refusal is a closure, typed as one"
+
+                match refusal with
+                | LedgerClosed found -> Expect.equal found.Digest op.Digest "It names the terminal op that closed it"
+                | other -> failtestf "Expected a closure refusal; got %A" other
+            | other -> failtestf "A closed ledger must refuse; got %A" other
+
+            match! sink.Deliver [ makeEnvelope 99.0 ] with
+            | Ok() ->
+                failtest "An append after closure must be refused — a terminal op that can be bypassed is not terminal"
+            | Error message ->
+                Expect.stringContains message "chained ledger is closed" "The refusal says which refusal it is"
+                Expect.stringContains message op.Digest "and names the terminal op"
+
+            // The claim this whole test exists for: refusal and breakage
+            // are different states, and the closed ledger is in the
+            // FIRST. An operator reading 'broken' hunts for an attacker.
+            let! count, signature = expectVerifiedWith storage key "after closing"
+            Expect.equal count 3L "Closing appends no record and removes none"
+
+            match signature with
+            | HeadSignatureValid _ -> ()
+            | other -> failtestf "The head was validly signed before closing and must stay so; got %A" other
+
+            let! names = segmentNames storage
+            Expect.equal (List.length names) 1 "Closing writes no segment"
+        }
+
+        testCaseAsync "a ledger cannot be closed twice, and a broken chain cannot be closed at all"
+        <| async {
+            let! storage, signer, _key, _sink = newSignedLedger ()
+            let! _ = expectClosed storage (Some signer)
+
+            match! ChainedLedger.close settings storage (Some signer) closureRequest with
+            | Ok _ ->
+                failtest
+                    "A second closure would leave two signed end-markers and no way to say which one a relying party should believe"
+            | Error message -> Expect.stringContains message "close the ledger twice" "The refusal says why"
+
+            // The other refusal: a chain that does not walk. Closing it
+            // would sign a head nobody can reproduce.
+            let dir = uniqueDir ()
+            let broken = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            let brokenSink = create "ledger-broken" settings broken
+            do! seed brokenSink 3
+
+            do!
+                perturb broken (fun lines ->
+                    lines
+                    |> List.map (fun line ->
+                        let record = parseRecord line
+
+                        if record.Sequence = 1L then
+                            renderRecord {
+                                record with
+                                    Payload = record.Payload.Replace("user-1", "user-9")
+                            }
+                        else
+                            line))
+
+            match! ChainedLedger.close settings broken None closureRequest with
+            | Ok _ -> failtest "Closing a broken chain would hand a counterparty a document nobody can make sound"
+            | Error message -> Expect.stringContains message "the chain breaks at position" "The break is named"
+        }
+
+        testCaseAsync "the certificate verifies cold, from the document and a public key alone"
+        <| async {
+            let! storage, signer, key, _sink = newSignedLedger ()
+            let! op = expectClosed storage (Some signer)
+
+            let! certificate = async {
+                match! LedgerDecommission.certificateFor settings storage with
+                | Ok certificate -> return certificate
+                | Error message -> return failwithf "certificate issue failed: %s" message
+            }
+
+            Expect.equal
+                certificate.TerminalOp.Digest
+                op.Digest
+                "The certificate carries the terminal op that closed it"
+
+            Expect.equal
+                certificate.Retirement.LedgerHeadDigest
+                op.HeadDigest
+                "The retirement is bound to the head the op closed"
+
+            Expect.isTrue
+                (DeployRetirement.bindsRecord closureRequest.DeployRecordDigest certificate.Retirement)
+                "and to the deploy record the deployment named"
+
+            // Cold: a verifier built from the EXPORTED PUBLIC half, so it
+            // demonstrably holds no private material.
+            let coldVerifier =
+                EcdsaHeadVerifier("ledger-key-1", coldPublicKeyOf key) :> ILedgerHeadVerifier
+
+            let statementSigner =
+                EcdsaStatementSigner("statement-key-1", key) :> IStatementEnvelopeSigner
+
+            match! LedgerDecommission.sign statementSigner certificate with
+            | Error message -> failtestf "Signing the certificate failed: %s" message
+            | Ok envelope ->
+                let document = DsseEnvelope.toJson envelope
+
+                match! LedgerDecommission.verifyDocument (Some coldVerifier) document with
+                | LedgerDecommission.DecommissionVerified(deployId, recordCount, headDigest, keyId) ->
+                    Expect.equal deployId "deploy-1" "The verdict names the deploy that ended"
+                    Expect.equal recordCount 3L "and the length of the chain it closed"
+                    Expect.equal headDigest op.HeadDigest "and the head it closed at"
+                    Expect.equal keyId "ledger-key-1" "and the key that proved it"
+                | other -> failtestf "An untouched certificate must verify cold; got %A" other
+
+                // Without key material the same document is UNPROVEN —
+                // never verified. A verifier that cannot fail proves
+                // nothing, and one that passes without a key proves less.
+                match! LedgerDecommission.verifyDocument None document with
+                | LedgerDecommission.DecommissionUnproven _ -> ()
+                | other -> failtestf "With no verifier the answer must be unproven; got %A" other
+        }
+
+        testCaseAsync "a certificate whose retirement was edited is reported unbound, not unproven"
+        <| async {
+            let! storage, signer, key, _sink = newSignedLedger ()
+            let! _op = expectClosed storage (Some signer)
+
+            let! certificate = async {
+                match! LedgerDecommission.certificateFor settings storage with
+                | Ok certificate -> return certificate
+                | Error message -> return failwithf "certificate issue failed: %s" message
+            }
+
+            let coldVerifier =
+                EcdsaHeadVerifier("ledger-key-1", coldPublicKeyOf key) :> ILedgerHeadVerifier
+
+            match! LedgerDecommission.verifyCertificate (Some coldVerifier) certificate with
+            | LedgerDecommission.DecommissionVerified _ -> ()
+            | other -> failtestf "The certificate must verify BEFORE it is perturbed; got %A" other
+
+            // Retarget the retirement at another deploy record — the
+            // swap the binding exists to stop.
+            let swapped = {
+                certificate with
+                    Retirement = {
+                        certificate.Retirement with
+                            DeployRecordDigest = "0000000000000000000000000000000000000000000000000000000000000000"
+                    }
+            }
+
+            match! LedgerDecommission.verifyCertificate (Some coldVerifier) swapped with
+            | LedgerDecommission.DecommissionUnbound _ -> ()
+            | other -> failtestf "A retirement pointing at another record must be reported unbound; got %A" other
+
+            // And a terminal op that does not close the head it travels
+            // with is NOT CLOSED, which is a different finding again.
+            let mismatched = {
+                certificate with
+                    Head = {
+                        certificate.Head with
+                            RecordCount = certificate.Head.RecordCount + 1L
+                    }
+            }
+
+            match! LedgerDecommission.verifyCertificate (Some coldVerifier) mismatched with
+            | LedgerDecommission.DecommissionNotClosed _ -> ()
+            | other -> failtestf "A head the op does not close must be reported not-closed; got %A" other
+        }
+
+        testCaseAsync "an unsigned closure is unproven rather than verified"
+        <| async {
+            let dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            let sink = create "ledger-unsigned" settings storage
+            do! seed sink 2
+
+            let! op = expectClosed storage None
+
+            Expect.isFalse (LedgerTerminalOp.isSigned op) "An unsigned deployment may still mark its ledger closed"
+
+            match! LedgerDecommission.certificateFor settings storage with
+            | Error message -> failtestf "an unsigned ledger must still issue a certificate: %s" message
+            | Ok certificate ->
+                match! LedgerDecommission.verifyCertificate None certificate with
+                | LedgerDecommission.DecommissionUnproven(headSignature, opSignature) ->
+                    Expect.equal headSignature HeadUnsigned "The head carries no signature and the verdict says so"
+                    Expect.equal opSignature HeadUnsigned "and neither does the closure"
+                | other -> failtestf "An unsigned closure must never read as proof of decommission; got %A" other
+        }
+
+        testCaseAsync "a deployment that never decommissions is wholly unaffected"
+        <| async {
+            let storage, sink = newLedger ()
+            do! seed sink 3
+
+            let! namesBefore = segmentNames storage
+            let! countBefore, _ = expectVerified storage "an open ledger"
+
+            match! ChainedLedger.readTerminalOp settings storage with
+            | Ok None -> ()
+            | other -> failtestf "A ledger nobody closed must carry no terminal op; got %A" other
+
+            match! ChainedLedger.appendRefusal settings storage with
+            | Ok None -> ()
+            | other -> failtestf "and must refuse nothing; got %A" other
+
+            match! sink.Deliver [ makeEnvelope 3.0 ] with
+            | Ok() -> ()
+            | Error message -> failtestf "an open ledger must keep accepting appends: %s" message
+
+            let! countAfter, _ = expectVerified storage "after a further append"
+            Expect.equal countAfter (countBefore + 1L) "The append landed"
+
+            // The chain itself is what Phase 678 must not have moved: the
+            // same envelopes through a ledger that knows nothing of
+            // closure must produce the same digests, so an existing
+            // deployment's stored ledger and head signature stay valid.
+            let control, controlSink = newLedger ()
+            do! seed controlSink 3
+
+            let! controlNames = segmentNames control
+
+            Expect.equal
+                (namesBefore |> List.map (fun name -> name.Substring(name.LastIndexOf '/' + 1)))
+                (controlNames |> List.map (fun name -> name.Substring(name.LastIndexOf '/' + 1)))
+                "Segment names are content-addressed, so equal names are equal bytes — the chain is unchanged by this phase"
+
+            let! lines = readLines storage (List.exactlyOne namesBefore)
+            let! controlLines = readLines control (List.exactlyOne controlNames)
+            Expect.equal (List.truncate 3 lines) controlLines "and the records themselves are identical"
+
+            match! LedgerDecommission.certificateFor settings storage with
+            | Error message ->
+                Expect.stringContains message "this ledger is open" "An open ledger issues no certificate, and says why"
+            | Ok _ -> failtest "A certificate for an open ledger would attest to a decommission that never happened"
+        }
+    ]
+
 let tests =
-    testList "ChainedLedger audit sink" [ contractTests; chainTests; ledgerTests; scopedExportTests ]
+    testList "ChainedLedger audit sink" [ contractTests; chainTests; ledgerTests; scopedExportTests; decommissionTests ]

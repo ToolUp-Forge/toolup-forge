@@ -161,6 +161,13 @@ let private recordsSegment = "records"
 [<Literal>]
 let private headBlobName = "head.json"
 
+/// Phase 678 — the terminal op's blob name. Its PRESENCE is what closes
+/// the ledger, which is why it is its own blob rather than a field on the
+/// head pointer: the head is rewritten on every append, and a closure
+/// flag living inside it would be one careless write away from clearing.
+[<Literal>]
+let private closureBlobName = "closure.json"
+
 let private root (settings: ChainedLedgerSettings) =
     match settings.PathPrefix with
     | Some prefix when not (String.IsNullOrWhiteSpace prefix) -> (prefix.Trim '/') + "/"
@@ -298,6 +305,75 @@ let private writeHead (settings: ChainedLedgerSettings) (storage: IBlobStorage) 
     | Ok _ -> return Ok()
     | Error message -> return Error(sprintf "chained ledger head write failed: %s" message)
 }
+
+/// Blob name of the terminal op (Phase 678). Beside the head pointer and
+/// the records, in the same prefix, so a ledger travels as one directory.
+let buildClosureName (settings: ChainedLedgerSettings) : string = root settings + closureBlobName
+
+/// Read the terminal op, if this ledger has been closed.
+///
+/// `Ok None` is an OPEN ledger — the overwhelmingly common answer, and
+/// the one an append takes. An unreadable marker is `Error`, never
+/// `None`: a closure that cannot be read must not be silently treated as
+/// an absent one, or a corrupted marker would re-open a closed ledger.
+let readTerminalOp
+    (settings: ChainedLedgerSettings)
+    (storage: IBlobStorage)
+    : Async<Result<LedgerTerminalOp option, string>> =
+    async {
+        let name = buildClosureName settings
+        let! exists = storage.Exists(settings.Container, name)
+
+        if not exists then
+            return Ok None
+        else
+            match! storage.Download(settings.Container, name) with
+            | Error message -> return Error(sprintf "chained ledger closure read failed: %s" message)
+            | Ok bytes ->
+                try
+                    let json = Encoding.UTF8.GetString bytes
+                    return Ok(Some(JsonSerializer.Deserialize<LedgerTerminalOp>(json, ledgerJsonOptions)))
+                with ex ->
+                    return Error(sprintf "chained ledger closure is unreadable: %s" ex.Message)
+    }
+
+let private writeTerminalOp
+    (settings: ChainedLedgerSettings)
+    (storage: IBlobStorage)
+    (op: LedgerTerminalOp)
+    : Async<Result<unit, string>> =
+    async {
+        let json = JsonSerializer.Serialize(op, ledgerJsonOptions)
+
+        match! storage.Upload(settings.Container, buildClosureName settings, Encoding.UTF8.GetBytes json) with
+        | Ok _ -> return Ok()
+        | Error message -> return Error(sprintf "chained ledger closure write failed: %s" message)
+    }
+
+/// The typed refusal an append to this ledger would hit right now, or
+/// `None` when it is open (Phase 678).
+///
+/// Public so a caller can ask BEFORE delivering, and so the refusal is
+/// available as a value rather than only as the message
+/// `IAuditSink.Deliver` can carry. The sink itself calls this on every
+/// append: a terminal op an in-flight writer could bypass would not be
+/// terminal, so the question is asked per batch rather than cached, at
+/// the cost of one existence probe beside the head read that was already
+/// happening.
+///
+/// It answers only about CLOSURE. `LedgerHeadMoved` is a fact about one
+/// writer's own position and cannot be observed from outside it, so this
+/// never returns that case — the sink raises it from inside the append.
+let appendRefusal
+    (settings: ChainedLedgerSettings)
+    (storage: IBlobStorage)
+    : Async<Result<LedgerAppendRefusal option, string>> =
+    async {
+        match! readTerminalOp settings storage with
+        | Error message -> return Error message
+        | Ok None -> return Ok None
+        | Ok(Some op) -> return Ok(Some(LedgerClosed op))
+    }
 
 /// Read every stored record in chain order, plus a torn-tail diagnostic
 /// when the final line could not be parsed.
@@ -570,52 +646,63 @@ type ChainedLedgerAuditSink
     }
 
     let append (batch: AuditEnvelope list) = async {
-        match! readHead settings blobStorage with
+        // Phase 678 — a closed ledger refuses, before anything is read or
+        // written. Typed at the point of decision and rendered on the way
+        // out, so the sink's `Error` string and a caller's own
+        // `appendRefusal` call can never say different things.
+        match! appendRefusal settings blobStorage with
         | Error message -> return Error message
-        | Ok stored ->
-            let storedPosition =
-                stored |> Option.map (fun head -> head.RecordCount, head.HeadDigest)
+        | Ok(Some refusal) -> return Error(LedgerAppendRefusal.describe refusal)
+        | Ok None ->
+            match! readHead settings blobStorage with
+            | Error message -> return Error message
+            | Ok stored ->
+                let storedPosition =
+                    stored |> Option.map (fun head -> head.RecordCount, head.HeadDigest)
 
-            match known, storedPosition with
-            | Some(localCount, localDigest), Some(storedCount, storedDigest) when
-                localCount <> storedCount || localDigest <> storedDigest
-                ->
-                // The head moved without us. Refusing is the honest
-                // answer: appending anyway would fork the chain, and a
-                // forked chain fails verification later, further from
-                // the cause.
-                return
-                    Error(
-                        sprintf
-                            "chained ledger head moved beneath this writer (expected %d/%s, found %d/%s) — another writer is appending to the same ledger"
-                            localCount
-                            localDigest
-                            storedCount
-                            storedDigest
-                    )
-            | _ ->
-                let startSequence, previousDigest =
-                    match storedPosition with
-                    | Some(count, digest) -> count, digest
-                    | None -> 0L, genesisDigest
+                match known, storedPosition with
+                | Some(localCount, localDigest), Some(storedCount, storedDigest) when
+                    localCount <> storedCount || localDigest <> storedDigest
+                    ->
+                    // The head moved without us. Refusing is the honest
+                    // answer: appending anyway would fork the chain, and a
+                    // forked chain fails verification later, further from
+                    // the cause.
+                    //
+                    // Phase 678 gave this refusal a name
+                    // (`LedgerHeadMoved`) and renders it through the same
+                    // `describe` the closure refusal uses. The message is
+                    // unchanged, deliberately: it is what an operator's
+                    // runbook greps for.
+                    return
+                        Error(
+                            LedgerAppendRefusal.describe (
+                                LedgerHeadMoved(localCount, localDigest, storedCount, storedDigest)
+                            )
+                        )
+                | _ ->
+                    let startSequence, previousDigest =
+                        match storedPosition with
+                        | Some(count, digest) -> count, digest
+                        | None -> 0L, genesisDigest
 
-                let records, headDigest = chainBatchTagged tagger startSequence previousDigest batch
-                let content = serialiseRecords records
-                let segment = buildSegmentName settings startSequence (digestBytes content)
+                    let records, headDigest = chainBatchTagged tagger startSequence previousDigest batch
+                    let content = serialiseRecords records
+                    let segment = buildSegmentName settings startSequence (digestBytes content)
 
-                match! blobStorage.Upload(settings.Container, segment, content) with
-                | Error message -> return Error(sprintf "chained ledger segment write failed: %s" message)
-                | Ok _ ->
-                    let recordCount = startSequence + int64 (List.length records)
+                    match! blobStorage.Upload(settings.Container, segment, content) with
+                    | Error message -> return Error(sprintf "chained ledger segment write failed: %s" message)
+                    | Ok _ ->
+                        let recordCount = startSequence + int64 (List.length records)
 
-                    match! signHead recordCount headDigest with
-                    | Error message -> return Error message
-                    | Ok head ->
-                        match! writeHead settings blobStorage head with
+                        match! signHead recordCount headDigest with
                         | Error message -> return Error message
-                        | Ok() ->
-                            known <- Some(recordCount, headDigest)
-                            return Ok()
+                        | Ok head ->
+                            match! writeHead settings blobStorage head with
+                            | Error message -> return Error message
+                            | Ok() ->
+                                known <- Some(recordCount, headDigest)
+                                return Ok()
     }
 
     /// The pre-Phase-677 shape, preserved as an explicit secondary
@@ -695,6 +782,144 @@ let createSignedScoped
     (tagger: LedgerScopeTagger)
     : IAuditSink =
     ChainedLedgerAuditSink(name, settings, blobStorage, Some signer, tagger) :> _
+
+// ─── Phase 678 — closing the ledger ──────────────────────────────────
+
+/// What a deployment must say to close its ledger.
+///
+/// A record rather than five positional arguments, because every field is
+/// a string and a caller that transposed two of them would produce a
+/// perfectly well-formed terminal op naming the wrong deploy.
+type LedgerClosureRequest = {
+    /// Lowercase-hex digest of the canonical bytes of the deploy record
+    /// this ledger belonged to — `DeployRecords.canonicalBytes` hashed by
+    /// `DeployRecords.digestBytes`, the same identity Phase 657's
+    /// composition binding uses.
+    DeployRecordDigest: string
+    /// The deploy's own identifier, for operator-facing display.
+    DeployId: string
+    /// The decommissioning actor.
+    ClosedBy: string
+    /// Why the deployment was decommissioned, in the operator's words.
+    Reason: string
+}
+
+/// Close a ledger: mint the terminal op over its verified head, sign it
+/// with the deployment's own head signer, and store it.
+///
+/// **Refuses to close a chain that does not verify**, on the same
+/// argument Phase 677 refuses to export from one: a closure taken over a
+/// broken chain is a signature attesting to a head nobody can reproduce,
+/// and it converts the operator's problem into every future reader's. The
+/// break is named in the refusal, so an operator is told what to fix.
+///
+/// **Refuses to close a ledger twice.** Terminal means terminal: a second
+/// call naming a different actor or moment would leave two signed
+/// end-markers and no way to tell which one a relying party should
+/// believe. The existing op is named in the refusal, so an operator can
+/// see the closure already happened rather than being told merely that
+/// something went wrong.
+///
+/// The signer is passed rather than recovered from a composed sink,
+/// exactly as `deploymentVerificationSource` takes its settings and
+/// storage: `IAuditSink` exposes none of them, deliberately. Pass `None`
+/// to close an unsigned ledger — the marker still refuses appends and
+/// still binds the head, and a verifier reports the missing signature
+/// rather than absorbing it.
+let close
+    (settings: ChainedLedgerSettings)
+    (storage: IBlobStorage)
+    (signer: ILedgerHeadSigner option)
+    (request: LedgerClosureRequest)
+    : Async<Result<LedgerTerminalOp, string>> =
+    async {
+        match! readTerminalOp settings storage with
+        | Error message -> return Error message
+        | Ok(Some existing) ->
+            return
+                Error(
+                    sprintf
+                        "refusing to close the ledger twice: terminal op %s already closed the chain at %d/%s for deploy %s, by '%s' at %s"
+                        existing.Digest
+                        existing.RecordCount
+                        existing.HeadDigest
+                        existing.DeployId
+                        existing.ClosedBy
+                        existing.ClosedAt
+                )
+        | Ok None ->
+            match! read settings storage with
+            | Error message -> return Error message
+            | Ok stored ->
+                match verifyRecords stored.Records stored.TornTail with
+                | Error breakage ->
+                    return
+                        Error(
+                            sprintf
+                                "refusing to close the ledger: the chain breaks at position %d (%s)"
+                                breakage.Position
+                                breakage.Detail
+                        )
+                | Ok(recordCount, headDigest) ->
+                    match stored.Head with
+                    | None ->
+                        // Legitimate only on a ledger nothing was ever
+                        // written to. Refused rather than fabricated: a
+                        // terminal op over a synthesised head would be a
+                        // claim about a chain that does not exist.
+                        return Error "refusing to close the ledger: it has no head pointer"
+                    | Some head when head.RecordCount <> recordCount || head.HeadDigest <> headDigest ->
+                        return
+                            Error(
+                                sprintf
+                                    "refusing to close the ledger: the head pointer records %d/%s and the chain walks to %d/%s"
+                                    head.RecordCount
+                                    head.HeadDigest
+                                    recordCount
+                                    headDigest
+                            )
+                    | Some _ ->
+                        let closedAt =
+                            DateTime.UtcNow.ToString("o", Globalization.CultureInfo.InvariantCulture)
+
+                        let op =
+                            LedgerTerminalOp.create
+                                recordCount
+                                headDigest
+                                request.DeployRecordDigest
+                                request.DeployId
+                                request.ClosedBy
+                                closedAt
+                                request.Reason
+
+                        let! signedOp = async {
+                            match signer with
+                            | None -> return Ok op
+                            | Some signer ->
+                                match! signer.Sign(terminalBytes op) with
+                                | Error message ->
+                                    // A closure that silently did not get
+                                    // signed is worse than none: it reads
+                                    // as a decommission claim and carries
+                                    // no evidence for it.
+                                    return Error(sprintf "chained ledger closure signing failed: %s" message)
+                                | Ok signature ->
+                                    return
+                                        Ok {
+                                            op with
+                                                KeyId = Some signer.KeyId
+                                                Algorithm = Some signer.Algorithm
+                                                Signature = Some(Convert.ToBase64String signature)
+                                        }
+                        }
+
+                        match signedOp with
+                        | Error message -> return Error message
+                        | Ok op ->
+                            match! writeTerminalOp settings storage op with
+                            | Error message -> return Error message
+                            | Ok() -> return Ok op
+    }
 
 // ─── Phase 686 — the deployment verification report's ledger source ──
 //
