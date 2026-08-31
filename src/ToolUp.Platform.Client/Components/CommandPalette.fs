@@ -111,6 +111,10 @@ let private isTextEntryTarget (target: obj) : bool =
 let CommandPalette (props: CommandPaletteProps) =
     let inputRef = React.useRef<Browser.Types.HTMLInputElement option> None
     let listRef = React.useRef<Browser.Types.HTMLDivElement option> None
+    // Phase 444 — the overlay's own chrome. The entries themselves carry
+    // module and page names, which are consumer-supplied and stay as they
+    // were registered.
+    let msgs = (MessageCatalogProvider.useMessages ()).CommandPalette
 
     // The document listener is attached ONCE (deps `[||]`) so the
     // shortcut does not churn a listener per render. It therefore must
@@ -258,7 +262,7 @@ let CommandPalette (props: CommandPaletteProps) =
                     dataProp.custom "data-toolup-palette" "panel"
                     ariaProp.role "dialog"
                     ariaProp.modal true
-                    ariaProp.label "Command palette"
+                    ariaProp.label msgs.DialogLabel
                     prop.className [
                         "w-full max-w-xl overflow-hidden"
                         "bg-[var(--surface)] border border-border rounded-[var(--radius)] shadow-xl"
@@ -271,10 +275,10 @@ let CommandPalette (props: CommandPaletteProps) =
                                 Html.input [
                                     prop.ref inputRef
                                     dataProp.custom "data-toolup-palette" "input"
-                                    ariaProp.label "Search pages"
+                                    ariaProp.label msgs.SearchLabel
                                     prop.type' "text"
                                     prop.value props.Query
-                                    prop.placeholder "Jump to a page…"
+                                    prop.placeholder msgs.SearchPlaceholder
                                     prop.autoComplete "off"
                                     prop.className [
                                         "w-full bg-transparent px-4 py-3"
@@ -303,7 +307,7 @@ let CommandPalette (props: CommandPaletteProps) =
                                     Html.div [
                                         dataProp.custom "data-toolup-palette" "empty"
                                         prop.className "px-4 py-6 text-sm text-[var(--muted)] text-center"
-                                        prop.text "No pages match that."
+                                        prop.text msgs.NoMatches
                                     ]
                                 else
                                     for index, entry in List.indexed matches do
@@ -318,9 +322,9 @@ let CommandPalette (props: CommandPaletteProps) =
                                 "border-t border-border text-xs text-[var(--muted)]"
                             ]
                             prop.children [
-                                Html.span [ prop.text "↑↓ to move" ]
-                                Html.span [ prop.text "↵ to open" ]
-                                Html.span [ prop.text "esc to close" ]
+                                Html.span [ prop.text msgs.HintMove ]
+                                Html.span [ prop.text msgs.HintOpen ]
+                                Html.span [ prop.text msgs.HintClose ]
                             ]
                         ]
                     ]

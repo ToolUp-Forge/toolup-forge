@@ -269,6 +269,15 @@
              ModelFitJobHandler.fs, because the fit-enqueue path is the
              SECOND enforcement point and calls the same guard — a federated
              peer's fit submission reaches only that one, never Submit. -->
+        <!-- Phase 689 — the platform budget seam's storage half: the
+             IBudgetLedger seam + its blob layout, then the blob-backed and
+             in-process ledgers and the once-per-period warning latch.
+             BEFORE the Phase 451 files, whose store is re-expressed as a
+             budget blob plus a ledger and whose guard warns through the
+             latch. Server-tier because a ledger needs a backend and the
+             JSON codec is System.Text.Json. -->
+        <Compile Include="Server\IBudgetLedger.fs" />
+        <Compile Include="Server\BudgetLedger.fs" />
         <Compile Include="Server\IComputeBudgetStore.fs" />
         <Compile Include="Server\ComputeBudgetStore.fs" />
         <Compile Include="Server\BudgetedComputeDispatcher.fs" />

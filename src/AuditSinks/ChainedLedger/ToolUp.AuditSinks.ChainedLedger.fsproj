@@ -19,6 +19,13 @@
          dependency, no crypto, and the local seam plus the unsigned
          default are untouched. -->
     <Compile Include="LedgerHeadSigning.fs" />
+    <!-- Phase 677 — the per-party scoped export: the scope model, the
+         verified segment (filtered records plus digest-only witnesses
+         for the positions a party is not entitled to), the pure
+         verifier, and the DSSE statement wrapping. Adds no primitive:
+         SHA-256 and the statement seam both come from the envelope
+         family already reachable through ToolUp.Platform.Server. -->
+    <Compile Include="LedgerScopedExport.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

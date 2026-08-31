@@ -379,7 +379,7 @@ let update (msg: Msg) (model: Model) =
         if raw = "" then
             {
                 model with
-                    Error = Some "User ID or email can't be empty"
+                    Error = Some(MessageCatalog.english.TeamManager.IdentifierRequired)
             },
             Cmd.none
         // 0.5.7 — Detect email format and route through the
@@ -668,7 +668,7 @@ let update (msg: Msg) (model: Model) =
                     IssueByEmailModal =
                         Some {
                             m with
-                                SubmitError = Some "Email can't be empty"
+                                SubmitError = Some(MessageCatalog.english.TeamManager.EmailRequired)
                         }
             },
             Cmd.none
@@ -836,7 +836,13 @@ let update (msg: Msg) (model: Model) =
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private teamRow (team: TeamInfo) (isActive: bool) (onSelect: unit -> unit) (onSwitch: unit -> unit) =
+let private teamRow
+    (msgs: TeamManagerMessages)
+    (team: TeamInfo)
+    (isActive: bool)
+    (onSelect: unit -> unit)
+    (onSwitch: unit -> unit)
+    =
     Html.div [
         prop.className [
             "flex items-center justify-between p-4 border rounded-lg mb-2"
@@ -855,7 +861,7 @@ let private teamRow (team: TeamInfo) (isActive: bool) (onSelect: unit -> unit) (
                             if isActive then
                                 Html.span [
                                     prop.className "text-xs text-brand font-medium px-2 py-0.5 rounded bg-brand/10"
-                                    prop.text "active"
+                                    prop.text msgs.ActiveBadge
                                 ]
                         ]
                     ]
@@ -866,30 +872,25 @@ let private teamRow (team: TeamInfo) (isActive: bool) (onSelect: unit -> unit) (
                 prop.className "flex gap-2"
                 prop.children [
                     if not isActive then
-                        Forms.Button.secondary "Switch" onSwitch
-                    Forms.Button.secondary "Manage" onSelect
+                        Forms.Button.secondary msgs.Switch onSwitch
+                    Forms.Button.secondary msgs.Manage onSelect
                 ]
             ]
         ]
     ]
 
-/// Team creation moved to the Platform Management module — this
-/// surface only manages existing teams. Empty-state text points
-/// the operator at the right person to ask.
-let private noTeamsEmptyText =
-    "You're not a member of any team yet. Ask a Platform Admin to add you to one."
-
-let private myTeamsView (model: Model) (dispatch: Msg -> unit) =
+let private myTeamsView (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "space-y-4"
         prop.children [
-            Layout.Panel.panel "My teams" [
+            Layout.Panel.panel msgs.MyTeamsPanel [
                 if model.Teams.IsEmpty then
-                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text noTeamsEmptyText ]
+                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoTeamsYet ]
                 else
                     Html.div [
                         for team in model.Teams do
                             teamRow
+                                msgs
                                 team
                                 (model.ActiveTeamId = Some team.TeamId)
                                 (fun () -> dispatch (SelectTeam team.TeamId))
@@ -932,6 +933,7 @@ let private assignableRoles (callerRole: TeamRole) : TeamRole list =
     | Member -> []
 
 let private memberRow
+    (msgs: TeamManagerMessages)
     (teamId: string)
     (selfId: string)
     (callerRole: TeamRole option)
@@ -1024,29 +1026,31 @@ let private memberRow
                     else
                         roleBadge
                     if isSelf then
-                        Html.span [ prop.className "text-xs text-brand font-medium"; prop.text "(you)" ]
+                        Html.span [ prop.className "text-xs text-brand font-medium"; prop.text msgs.YouSuffix ]
                 ]
             ]
             if canManageTarget && not isSelf then
-                Forms.Button.secondary "Remove" (fun () -> dispatch (RemoveMember(teamId, membership.UserId)))
+                Forms.Button.secondary msgs.RemoveMember (fun () -> dispatch (RemoveMember(teamId, membership.UserId)))
         ]
     ]
 
-let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model: Model) (dispatch: Msg -> unit) =
+let private addMemberForm
+    (msgs: TeamManagerMessages)
+    (teamId: string)
+    (callerRole: TeamRole option)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    =
     let allowedRoles =
         match callerRole with
         | Some r -> assignableRoles r
         | None -> []
 
-    Layout.Panel.panel "Invite a member" [
+    Layout.Panel.panel msgs.InvitePanel [
         Html.div [
             prop.className "flex flex-col gap-3"
             prop.children [
-                Html.p [
-                    prop.className "text-xs text-muted"
-                    prop.text
-                        "Start typing a name or email — directory matches appear as you type. Select one, or enter an email manually to send a pending invite (the recipient is added when they next sign in). Advanced: paste a raw identity-provider user id (e.g. an Entra `oid`) to add the member directly without an invite step."
-                ]
+                Html.p [ prop.className "text-xs text-muted"; prop.text msgs.InviteHelp ]
 
                 UserDirectoryTypeahead.userTypeahead
                     model.AddMemberUserId
@@ -1057,7 +1061,7 @@ let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model:
                 Html.div [
                     prop.className "flex items-center gap-3 flex-wrap"
                     prop.children [
-                        Html.span [ prop.className "text-sm text-muted"; prop.text "Role:" ]
+                        Html.span [ prop.className "text-sm text-muted"; prop.text msgs.RoleLabel ]
                         for role in allowedRoles do
                             let isSelected = model.AddMemberRole = role
 
@@ -1091,10 +1095,10 @@ let private addMemberForm (teamId: string) (callerRole: TeamRole option) (model:
                                 "opacity-50"
                                 "cursor-not-allowed"
                             ]
-                            prop.text "Inviting…"
+                            prop.text msgs.Inviting
                         ]
                     else
-                        Forms.Button.primary "Invite member" (fun () -> dispatch (AddMember teamId))
+                        Forms.Button.primary msgs.InviteMember (fun () -> dispatch (AddMember teamId))
                 ]
             ]
         ]
@@ -1126,6 +1130,7 @@ let private displayNameForId (directory: Map<string, UserSummary>) (selfId: stri
 /// before the API fires. Rendered only for the real team Owner (the
 /// caller opening it), so the candidate list always excludes the caller.
 let private transferOwnershipModalView
+    (msgs: TeamManagerMessages)
     (teamId: string)
     (state: TransferOwnershipModalState)
     (model: Model)
@@ -1169,18 +1174,14 @@ let private transferOwnershipModalView
     match state.Step with
     | PickNewOwner ->
         modalShell [
-            Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Transfer ownership" ]
+            Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.TransferOwnership ]
             Html.p [
                 prop.className "text-sm text-muted"
-                prop.text (
-                    sprintf
-                        "Choose a current member of %s to become the new Owner. You'll be demoted to Admin once the transfer completes."
-                        teamName
-                )
+                prop.text (msgs.TransferOwnershipHelp teamName)
             ]
             Html.input [
                 prop.type' "text"
-                prop.placeholder "Filter members by name or email"
+                prop.placeholder msgs.TransferFilterPlaceholder
                 prop.value state.Query
                 prop.onChange (fun (v: string) -> dispatch (SetTransferQuery v))
                 prop.className [
@@ -1195,14 +1196,10 @@ let private transferOwnershipModalView
             if List.isEmpty candidates then
                 Html.p [
                     prop.className "text-sm text-muted py-2"
-                    prop.text
-                        "This team has no other members to transfer ownership to. Add a member first, then transfer."
+                    prop.text msgs.TransferNoOtherMembers
                 ]
             elif List.isEmpty filtered then
-                Html.p [
-                    prop.className "text-sm text-muted py-2"
-                    prop.text "No members match your filter."
-                ]
+                Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.TransferNoMatches ]
             else
                 Html.div [
                     prop.className "max-h-64 overflow-y-auto flex flex-col gap-1"
@@ -1226,7 +1223,9 @@ let private transferOwnershipModalView
                 ]
             Html.div [
                 prop.className "flex justify-end gap-3 pt-2"
-                prop.children [ Forms.Button.secondary "Cancel" (fun () -> dispatch CloseTransferOwnership) ]
+                prop.children [
+                    Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseTransferOwnership)
+                ]
             ]
         ]
     | ConfirmTransfer ->
@@ -1240,11 +1239,11 @@ let private transferOwnershipModalView
         modalShell [
             Html.h3 [
                 prop.className "text-lg font-semibold"
-                prop.text "Confirm ownership transfer"
+                prop.text msgs.TransferConfirmHeading
             ]
             Html.p [
                 prop.className "text-sm text-muted"
-                prop.text (sprintf "Transfer ownership of %s from %s (you) to %s?" teamName outgoingLabel newOwnerLabel)
+                prop.text (msgs.TransferConfirmPrompt teamName outgoingLabel newOwnerLabel)
             ]
             Html.p [
                 prop.className "text-sm text-muted"
@@ -1260,7 +1259,7 @@ let private transferOwnershipModalView
             Html.div [
                 prop.className "flex justify-end gap-3 pt-2"
                 prop.children [
-                    Forms.Button.secondary "Back" (fun () -> dispatch BackToTransferPick)
+                    Forms.Button.secondary msgs.Back (fun () -> dispatch BackToTransferPick)
                     Html.button [
                         prop.disabled state.Submitting
                         prop.className [
@@ -1272,9 +1271,9 @@ let private transferOwnershipModalView
                         ]
                         prop.text (
                             if state.Submitting then
-                                "Transferring…"
+                                msgs.Transferring
                             else
-                                "Confirm transfer"
+                                msgs.ConfirmTransfer
                         )
                         prop.onClick (fun _ -> dispatch SubmitTransferOwnership)
                     ]
@@ -1282,7 +1281,7 @@ let private transferOwnershipModalView
             ]
         ]
 
-let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> unit) =
+let private teamDetailsView (msgs: TeamManagerMessages) (teamId: string) (model: Model) (dispatch: Msg -> unit) =
     let teamOpt = model.Teams |> List.tryFind (fun t -> t.TeamId = teamId)
     let members = model.Members |> Map.tryFind teamId |> Option.defaultValue []
     let callerRole = effectiveCallerRole model teamId
@@ -1308,7 +1307,7 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
                 prop.children [
                     Html.button [
                         prop.className "text-sm text-brand hover:underline"
-                        prop.text "← My teams"
+                        prop.text msgs.BreadcrumbMyTeams
                         prop.onClick (fun _ -> dispatch BackToMyTeams)
                     ]
                     Html.span [ prop.className "text-muted"; prop.text "/" ]
@@ -1321,33 +1320,30 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
                             prop.className "ml-auto flex gap-2"
                             prop.children [
                                 if isRealOwner then
-                                    Forms.Button.secondary "Transfer ownership" (fun () ->
+                                    Forms.Button.secondary msgs.TransferOwnership (fun () ->
                                         dispatch (OpenTransferOwnership teamId))
-                                Forms.Button.secondary "Pending invites" (fun () ->
+                                Forms.Button.secondary msgs.PendingInvites (fun () ->
                                     dispatch (NavigatePendingInvites teamId))
                             ]
                         ]
                 ]
             ]
 
-            Layout.Panel.panel "Members" [
+            Layout.Panel.panel msgs.MembersPanel [
                 if members.IsEmpty then
-                    Html.p [
-                        prop.className "text-sm text-muted py-2"
-                        prop.text "No members (loading, or team was deleted)."
-                    ]
+                    Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.NoMembers ]
                 else
                     Html.div [
                         for m in members do
-                            memberRow teamId selfId callerRole model.Directory m dispatch
+                            memberRow msgs teamId selfId callerRole model.Directory m dispatch
                     ]
             ]
 
             if canManage then
-                addMemberForm teamId callerRole model dispatch
+                addMemberForm msgs teamId callerRole model dispatch
 
             match model.TransferOwnershipModal with
-            | Some state when state.TeamId = teamId -> transferOwnershipModalView teamId state model dispatch
+            | Some state when state.TeamId = teamId -> transferOwnershipModalView msgs teamId state model dispatch
             | _ -> Html.none
         ]
     ]
@@ -1359,7 +1355,13 @@ let private teamDetailsView (teamId: string) (model: Model) (dispatch: Msg -> un
 /// lands as a sibling here when the follow-on UI phase ships.
 type private PendingInvitesSubTab = EmailInvites
 
-let private pendingEmailRow (teamId: string) (email: string) (entry: PendingInviteByEmail) (dispatch: Msg -> unit) =
+let private pendingEmailRow
+    (msgs: TeamManagerMessages)
+    (teamId: string)
+    (email: string)
+    (entry: PendingInviteByEmail)
+    (dispatch: Msg -> unit)
+    =
     Html.div [
         prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2"
         prop.children [
@@ -1378,7 +1380,7 @@ let private pendingEmailRow (teamId: string) (email: string) (entry: PendingInvi
                     ]
                 ]
             ]
-            Forms.Button.secondary "Revoke" (fun () -> dispatch (OpenRevokeByEmailConfirm(teamId, email)))
+            Forms.Button.secondary msgs.RevokeInvite (fun () -> dispatch (OpenRevokeByEmailConfirm(teamId, email)))
         ]
     ]
 
@@ -1387,6 +1389,7 @@ let private pendingEmailRow (teamId: string) (email: string) (entry: PendingInvi
 /// re-calls `IssuePendingInviteByEmail` with the original role and the
 /// default expiry; the row then migrates back to the live list above.
 let private expiredInviteRow
+    (msgs: TeamManagerMessages)
     (teamId: string)
     (entry: TeamInviteExpiredPayload)
     (inFlight: bool)
@@ -1405,7 +1408,7 @@ let private expiredInviteRow
                             Html.span [ prop.className "font-medium text-muted"; prop.text entry.InviteeEmail ]
                             Html.span [
                                 prop.className "text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
-                                prop.text "Expired"
+                                prop.text msgs.Expired
                             ]
                         ]
                     ]
@@ -1429,20 +1432,17 @@ let private expiredInviteRow
                     else
                         "bg-white text-brand border-brand hover:bg-brand/10"
                 ]
-                prop.text (if inFlight then "Re-issuing…" else "Re-issue")
+                prop.text (if inFlight then msgs.Reissuing else msgs.Reissue)
                 prop.onClick (fun _ -> dispatch (ReissueExpiredInvite(teamId, entry.InviteeEmail, entry.Role)))
             ]
         ]
     ]
 
-let private emptyPendingEmailState =
-    Html.p [
-        prop.className "text-sm text-muted py-4"
-        prop.text
-            "No pending email invitations. Use 'Invite by email' to add one — the recipient will auto-join the team on their first sign-in matching the email."
-    ]
+let private emptyPendingEmailState (msgs: TeamManagerMessages) =
+    Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoPendingInvites ]
 
 let private issueByEmailModalView
+    (msgs: TeamManagerMessages)
     (callerRole: TeamRole option)
     (state: IssueByEmailModalState)
     (dispatch: Msg -> unit)
@@ -1473,15 +1473,8 @@ let private issueByEmailModalView
             Html.div [
                 prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
                 prop.children [
-                    Html.h3 [
-                        prop.className "text-lg font-semibold"
-                        prop.text "Invite by email (no link)"
-                    ]
-                    Html.p [
-                        prop.className "text-sm text-muted"
-                        prop.text
-                            "The recipient joins automatically on their first sign-in matching the email. No invitation link is generated."
-                    ]
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.InviteByEmailHeading ]
+                    Html.p [ prop.className "text-sm text-muted"; prop.text msgs.InviteByEmailHelp ]
                     // Plain `Html.input` (not `Forms.Input.text`) — the
                     // toolkit's text input commits on Enter / blur only,
                     // and the blur path resets the displayed value to the
@@ -1492,7 +1485,7 @@ let private issueByEmailModalView
                     // with the visible text.
                     Html.input [
                         prop.type' "email"
-                        prop.placeholder "Email address"
+                        prop.placeholder msgs.EmailPlaceholder
                         prop.value state.Email
                         prop.onChange (fun (v: string) -> dispatch (SetIssueByEmailEmail v))
                         prop.className [
@@ -1507,7 +1500,7 @@ let private issueByEmailModalView
                     Html.div [
                         prop.className "flex items-center gap-3 flex-wrap"
                         prop.children [
-                            Html.span [ prop.className "text-sm text-muted"; prop.text "Role:" ]
+                            Html.span [ prop.className "text-sm text-muted"; prop.text msgs.RoleLabel ]
                             // `Owner` is excluded everywhere — initial
                             // ownership is set via Platform Management at
                             // team-create time. `Admin` is offered only
@@ -1521,7 +1514,7 @@ let private issueByEmailModalView
                     Html.div [
                         prop.className "flex items-center gap-3"
                         prop.children [
-                            Html.label [ prop.className "text-sm text-muted"; prop.text "Expires in (days):" ]
+                            Html.label [ prop.className "text-sm text-muted"; prop.text msgs.ExpiresInDays ]
                             Html.input [
                                 prop.type' "number"
                                 prop.min 1
@@ -1541,7 +1534,7 @@ let private issueByEmailModalView
                     Html.div [
                         prop.className "flex justify-end gap-3 pt-2"
                         prop.children [
-                            Forms.Button.secondary "Cancel" (fun () -> dispatch CloseIssueByEmailModal)
+                            Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseIssueByEmailModal)
                             Html.button [
                                 prop.disabled state.Submitting
                                 prop.className [
@@ -1551,7 +1544,12 @@ let private issueByEmailModalView
                                     else
                                         "bg-brand text-brand-text hover:bg-brand-dark"
                                 ]
-                                prop.text (if state.Submitting then "Issuing…" else "Issue invitation")
+                                prop.text (
+                                    if state.Submitting then
+                                        msgs.Issuing
+                                    else
+                                        msgs.IssueInvitation
+                                )
                                 prop.onClick (fun _ -> dispatch SubmitIssueByEmail)
                             ]
                         ]
@@ -1561,7 +1559,13 @@ let private issueByEmailModalView
         ]
     ]
 
-let private revokeByEmailConfirmView (teamId: string) (email: string) (model: Model) (dispatch: Msg -> unit) =
+let private revokeByEmailConfirmView
+    (msgs: TeamManagerMessages)
+    (teamId: string)
+    (email: string)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    =
     let teamName =
         model.Teams
         |> List.tryFind (fun t -> t.TeamId = teamId)
@@ -1574,10 +1578,7 @@ let private revokeByEmailConfirmView (teamId: string) (email: string) (model: Mo
             Html.div [
                 prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-sm space-y-4"
                 prop.children [
-                    Html.h3 [
-                        prop.className "text-lg font-semibold"
-                        prop.text "Revoke pending invitation?"
-                    ]
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.RevokeInviteHeading ]
                     Html.p [
                         prop.className "text-sm text-muted"
                         prop.text (sprintf "%s will no longer auto-join %s on sign-in." email teamName)
@@ -1585,8 +1586,8 @@ let private revokeByEmailConfirmView (teamId: string) (email: string) (model: Mo
                     Html.div [
                         prop.className "flex justify-end gap-3 pt-2"
                         prop.children [
-                            Forms.Button.secondary "Cancel" (fun () -> dispatch CancelRevokeByEmail)
-                            Forms.Button.primary "Revoke" (fun () -> dispatch ConfirmRevokeByEmail)
+                            Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelRevokeByEmail)
+                            Forms.Button.primary msgs.RevokeInvite (fun () -> dispatch ConfirmRevokeByEmail)
                         ]
                     ]
                 ]
@@ -1594,7 +1595,7 @@ let private revokeByEmailConfirmView (teamId: string) (email: string) (model: Mo
         ]
     ]
 
-let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg -> unit) =
+let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (model: Model) (dispatch: Msg -> unit) =
     let teamName =
         model.Teams
         |> List.tryFind (fun t -> t.TeamId = teamId)
@@ -1614,36 +1615,36 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
                 prop.children [
                     Html.button [
                         prop.className "text-sm text-brand hover:underline"
-                        prop.text "← Members"
+                        prop.text msgs.BreadcrumbMembers
                         prop.onClick (fun _ -> dispatch (SelectTeam teamId))
                     ]
                     Html.span [ prop.className "text-muted"; prop.text "/" ]
                     Html.span [ prop.className "font-medium"; prop.text teamName ]
                     Html.span [ prop.className "text-muted"; prop.text "/" ]
-                    Html.span [ prop.className "font-medium"; prop.text "Pending invites" ]
+                    Html.span [ prop.className "font-medium"; prop.text msgs.PendingInvites ]
                 ]
             ]
 
-            Layout.Tabs.tabGroup [ EmailInvites, "Pending email invites" ] subTab (fun _ -> ())
+            Layout.Tabs.tabGroup [ EmailInvites, msgs.PendingInvitesPanel ] subTab (fun _ -> ())
 
-            Layout.Panel.panel "Pending email invites" [
+            Layout.Panel.panel msgs.PendingInvitesPanel [
                 Html.div [
                     prop.className "flex justify-end mb-3"
                     prop.children [
-                        Forms.Button.primary "Invite by email" (fun () -> dispatch (OpenIssueByEmailModal teamId))
+                        Forms.Button.primary msgs.InviteByEmail (fun () -> dispatch (OpenIssueByEmailModal teamId))
                     ]
                 ]
                 match entries with
                 | None ->
                     Html.p [
                         prop.className "text-sm text-muted py-2"
-                        prop.text "Loading pending invitations…"
+                        prop.text msgs.PendingInvitesLoading
                     ]
-                | Some [] -> emptyPendingEmailState
+                | Some [] -> emptyPendingEmailState msgs
                 | Some rows ->
                     Html.div [
                         for email, entry in rows do
-                            pendingEmailRow teamId email entry dispatch
+                            pendingEmailRow msgs teamId email entry dispatch
                     ]
 
                 // Phase 547.B — recently-expired invites (30-day window,
@@ -1658,7 +1659,7 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
                         prop.children [
                             Html.h4 [
                                 prop.className "text-sm font-medium text-muted mb-2"
-                                prop.text "Recently expired (last 30 days)"
+                                prop.text msgs.RecentlyExpired
                             ]
                             Html.div [
                                 for entry in expired do
@@ -1666,7 +1667,7 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
                                         model.ReissueInFlight
                                         |> Set.contains (sprintf "%s|%s" teamId entry.InviteeEmail)
 
-                                    expiredInviteRow teamId entry inFlight dispatch
+                                    expiredInviteRow msgs teamId entry inFlight dispatch
                             ]
                         ]
                     ]
@@ -1674,16 +1675,22 @@ let private pendingInvitesView (teamId: string) (model: Model) (dispatch: Msg ->
             ]
 
             match model.IssueByEmailModal with
-            | Some state when state.TeamId = teamId -> issueByEmailModalView callerRole state dispatch
+            | Some state when state.TeamId = teamId -> issueByEmailModalView msgs callerRole state dispatch
             | _ -> Html.none
 
             match model.RevokeByEmailConfirm with
-            | Some(tid, email) when tid = teamId -> revokeByEmailConfirmView tid email model dispatch
+            | Some(tid, email) when tid = teamId -> revokeByEmailConfirmView msgs tid email model dispatch
             | _ -> Html.none
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 444 — the module body as a React COMPONENT, so it has a hook
+/// site from which to read the resolved catalog. See `HealthMonitorUI`'s
+/// equivalent for why a module's `view` cannot hold the hook itself.
+[<ReactComponent>]
+let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamManager
+
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -1694,7 +1701,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     Html.span [ prop.text msg ]
                     Html.button [
                         prop.className "text-xs text-red-600 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -1703,14 +1710,16 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
     let body =
         match model.CurrentView with
-        | MyTeams -> myTeamsView model dispatch
-        | TeamDetails teamId -> teamDetailsView teamId model dispatch
-        | PendingInvites teamId -> pendingInvitesView teamId model dispatch
+        | MyTeams -> myTeamsView msgs model dispatch
+        | TeamDetails teamId -> teamDetailsView msgs teamId model dispatch
+        | PendingInvites teamId -> pendingInvitesView msgs teamId model dispatch
 
     // 0.5.6 — settings-shape FullWidth render. Error banner stacks
     // above the body so it's immediately above the user's current
     // context instead of in a separate squashed right pane.
     Html.div [ prop.className "flex flex-col gap-3"; prop.children [ errorBanner; body ] ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamManagerBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

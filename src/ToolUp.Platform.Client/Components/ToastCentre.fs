@@ -36,11 +36,12 @@ let private toastClasses (level: SystemMessageLevel) =
     | SystemMessageLevel.Warning -> "bg-amber-50 border-amber-400 text-amber-900"
     | SystemMessageLevel.Error -> "bg-red-50 border-red-400 text-red-900"
 
-let private levelLabel (level: SystemMessageLevel) =
+/// Phase 444 — the severity badge, from the resolved catalog.
+let private levelLabel (msgs: ToastMessages) (level: SystemMessageLevel) =
     match level with
-    | SystemMessageLevel.Info -> "Info"
-    | SystemMessageLevel.Warning -> "Warning"
-    | SystemMessageLevel.Error -> "Error"
+    | SystemMessageLevel.Info -> msgs.Info
+    | SystemMessageLevel.Warning -> msgs.Warning
+    | SystemMessageLevel.Error -> msgs.Error
 
 /// Defensive cap on a toast's body length. A `SystemMessage` is meant to
 /// be a short, human-readable line. An upstream bug or a verbose server
@@ -74,6 +75,10 @@ let ToastCentre () =
     // auto-dismiss interval both mutate the list from callbacks that
     // outlive the render they were created in.
     let toasts, setToasts = React.useStateWithUpdater<ActiveToast list> []
+    // Phase 444 — the severity badges. `ToastCentre` is mounted inside the
+    // shell's catalog provider, so the hook resolves the deployment's
+    // catalog; outside one it returns the built-in English default.
+    let toastMsgs = (MessageCatalogProvider.useMessages ()).Toast
 
     let dismiss (id: Guid) =
         setToasts (fun current -> current |> List.filter (fun t -> t.Id <> id))
@@ -144,7 +149,7 @@ let ToastCentre () =
                         prop.children [
                             Html.div [
                                 prop.className "text-xs font-semibold uppercase tracking-wide mb-1"
-                                prop.text (levelLabel toast.Level)
+                                prop.text (levelLabel toastMsgs toast.Level)
                             ]
                             Html.div [ prop.className "text-sm"; prop.text toast.Text ]
                         ]

@@ -75,6 +75,9 @@ let private baseModel: Client.Model = {
     // Phase 571 — the command palette's overlay state. Inert for these
     // arms (the fixture never opens it) but the field is not optional.
     CommandPalette = CommandPaletteNav.closed
+    // Phase 444 — no in-session locale choice; the shell resolves from
+    // `ClientConfig.Locale` alone, which defaults to `FixedLocale "en"`.
+    LocaleOverride = None
 }
 
 // `update`'s queryBus / modules parameters are untouched by the

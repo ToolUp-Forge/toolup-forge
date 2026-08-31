@@ -56,6 +56,26 @@
              downstream client files; placed early so every later
              compile unit can declare `let log = Logger.forCategory`. -->
         <Compile Include="Client\Logger.fs" />
+        <!-- Phase 444 — client-shell localization substrate. Three files,
+             in dependency order and placed this early for one reason: the
+             sweep reaches the sidebar and the toolkit-adjacent chrome,
+             which compile well before `SDK.ClientTypes.fs`, so the
+             catalog has to be readable from there.
+
+             `Shared\LocalizationTypes.fs` is pure type declarations
+             (FSharp.Core only) and must precede `SDK.ClientTypes.fs`,
+             which carries `ClientConfig.Locale` +
+             `ClientConfig.MessageCatalogOverride`. `MessageCatalog.fs`
+             (the English catalog, locale resolution, the switch-request
+             seam) is deliberately Feliz-free so the resolution stays
+             exercisable from the .NET in-process harness — the same
+             discipline `SidebarVisibility.fs` / `NoActiveTeamLanding.fs`
+             document below. `MessageCatalogProvider.fs` is where the
+             Feliz dependency starts (context + hook + the `Intl`
+             delegations). -->
+        <Compile Include="Shared\LocalizationTypes.fs" />
+        <Compile Include="Client\MessageCatalog.fs" />
+        <Compile Include="Client\MessageCatalogProvider.fs" />
         <Compile Include="Client\UI\AgChart.fs" />
         <!-- Phase 578 — capture a rendered AG chart as export-ready image
              bytes + package it as a report image placeholder. Sits

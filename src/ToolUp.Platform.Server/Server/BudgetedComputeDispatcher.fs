@@ -187,8 +187,9 @@ type ComputeBudgetGuard
     /// Fraction of the period allowance at which an admitted submission
     /// emits `ComputeBudgetWarning`. 0.8 — late enough not to cry wolf,
     /// early enough that an operator raising a budget still has a fifth
-    /// of it to do so in.
-    let warnThreshold = defaultArg warnThreshold 0.8M
+    /// of it to do so in. Phase 689: the seam's default, so every budget
+    /// domain warns at the same point unless a deployment says otherwise.
+    let warnThreshold = defaultArg warnThreshold BudgetPolicy.defaultWarnThreshold
 
     let record (scopeId: string) (event: AuditEvent) = async {
         match audit with
@@ -199,10 +200,11 @@ type ComputeBudgetGuard
     }
 
     /// Scopes already warned in a given period, so the crossing is
-    /// reported once rather than on every subsequent submission. Keyed by
-    /// `scope|period`, so it self-expires when the period rolls (the new
-    /// period is a new key that has never been warned).
-    let warned = ConcurrentDictionary<string, bool>()
+    /// reported once rather than on every subsequent submission. Phase
+    /// 689: the seam's latch, keyed by the whole ledger key, so it
+    /// self-expires when the period rolls (the new period is a key that
+    /// has never been latched).
+    let warned = BudgetWarningLatch()
 
     /// The denial as an `ExternalComputeError`, for the one seam whose
     /// signature predates this phase and cannot carry the typed shape.
@@ -264,51 +266,83 @@ type ComputeBudgetGuard
 
                 let periodKey = ComputeBudgetPeriod.key budget.Period (now ())
                 let cost = costModel.Admit hints
+                let ledgerKey = ComputeBudgetLayout.ledgerKey scopeId periodKey
 
                 let decide (usage: ComputeBudgetUsage) =
                     ComputeBudgetPolicy.admit scopeId submitter limits usage declaredDuration cost
 
-                match! store.Admit(scopeId, periodKey, cost, decide) with
-                | Error denial ->
-                    do!
-                        record
-                            scopeId
-                            (ComputeBudgetDenied {
-                                Denial = denial
-                                Surface = surface
-                                Kind = kind
-                                SubmittedBy = submittedBy
-                                RefusedAt = now ()
-                            })
+                // Phase 689 — the two accounting effects as data
+                // (`BudgetAccount`), closed over the surface and the
+                // submission facts the seam deliberately knows nothing
+                // about. What was inline branching in this method is now
+                // the shape a token or spend budget supplies its own
+                // version of.
+                let account: BudgetAccount = {
+                    OnRefused =
+                        fun denial -> async {
+                            let refusal = ComputeBudgetDenial.ofBudgetDenial denial
 
-                    match logger with
-                    | Some log -> log.Warn(ComputeBudgetDenial.describe denial)
-                    | None -> ()
+                            do!
+                                record
+                                    scopeId
+                                    (ComputeBudgetDenied {
+                                        Denial = refusal
+                                        Surface = surface
+                                        Kind = kind
+                                        SubmittedBy = submittedBy
+                                        RefusedAt = now ()
+                                    })
 
-                    return Error denial
-                | Ok usage ->
-                    // Threshold warning on the ADMITTED path — a leading
-                    // indicator, emitted once per scope+period crossing.
-                    if
-                        limits.PeriodAllowance > 0M
-                        && usage.Spent >= limits.PeriodAllowance * warnThreshold
-                    then
-                        let warnKey = scopeId + "|" + periodKey
-
-                        if warned.TryAdd(warnKey, true) then
+                            // The compute-shaped description, not the
+                            // seam's: this line is what an operator greps
+                            // for and it predates the seam.
+                            match logger with
+                            | Some log -> log.Warn(ComputeBudgetDenial.describe refusal)
+                            | None -> ()
+                        }
+                    OnNearLimit =
+                        fun warning -> async {
                             do!
                                 record
                                     scopeId
                                     (ComputeBudgetWarning {
-                                        ScopeId = scopeId
-                                        SubmitterClass = SubmitterClass.label submitter
-                                        PeriodKey = periodKey
-                                        Quota = limits.PeriodAllowance
-                                        Spent = usage.Spent
-                                        Threshold = warnThreshold
+                                        ScopeId = warning.ScopeId
+                                        SubmitterClass = warning.ClassLabel
+                                        PeriodKey = warning.PeriodKey
+                                        Quota = warning.Quota
+                                        Spent = warning.Spent
+                                        Threshold = warning.Threshold
                                         Surface = surface
                                         ObservedAt = now ()
                                     })
+                        }
+                }
+
+                match! store.Admit(scopeId, periodKey, cost, decide) with
+                | Error denial ->
+                    do! account.OnRefused(ComputeBudgetDenial.toBudgetDenial denial)
+                    return Error denial
+                | Ok usage ->
+                    // Threshold warning on the ADMITTED path — a leading
+                    // indicator, emitted once per scope+period crossing.
+                    // The consumption is the row the store handed back, so
+                    // the claim's `Spent` is already post-reservation and
+                    // `crossedThreshold` reads it directly.
+                    let allowanceClaim =
+                        BudgetClaim.create
+                            (ComputeBudgetDimension.label ComputeBudgetDimension.PeriodAllowance)
+                            limits.PeriodAllowance
+                            usage.Spent
+                            0M
+
+                    if
+                        BudgetPolicy.crossedThreshold warnThreshold allowanceClaim
+                        && warned.ShouldReport ledgerKey
+                    then
+                        let subject =
+                            BudgetSubject.create ComputeBudget.Domain scopeId (SubmitterClass.label submitter)
+
+                        do! account.OnNearLimit(BudgetPolicy.warn subject periodKey warnThreshold allowanceClaim)
 
                     return
                         Ok(

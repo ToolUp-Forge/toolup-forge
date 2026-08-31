@@ -203,7 +203,7 @@ let private statusPill (status: string) =
         prop.text status
     ]
 
-let private refreshButton (label: string) (onClick: unit -> unit) (loading: bool) =
+let private refreshButton (msgs: HealthMonitorMessages) (label: string) (onClick: unit -> unit) (loading: bool) =
     Html.button [
         prop.className [
             "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
@@ -213,7 +213,7 @@ let private refreshButton (label: string) (onClick: unit -> unit) (loading: bool
                 "bg-white text-gray-700 border-border hover:bg-gray-50"
         ]
         prop.disabled loading
-        prop.text (if loading then "Refreshing..." else label)
+        prop.text (if loading then msgs.Refreshing else label)
         prop.onClick (fun _ -> onClick ())
     ]
 
@@ -232,7 +232,7 @@ let private errorBanner (msg: string) =
 /// background jobs don't see a misleading zero counter. When a miss
 /// has been observed, the card pulls a warning border so operators
 /// scanning the page register the signal before reading the numbers.
-let private schedulerTelemetryCard (view: JobSchedulerTelemetryView) =
+let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSchedulerTelemetryView) =
     if not view.HasScheduler then
         Html.none
     else
@@ -266,26 +266,22 @@ let private schedulerTelemetryCard (view: JobSchedulerTelemetryView) =
                 Html.div [
                     prop.className "flex items-baseline justify-between mb-1"
                     prop.children [
-                        Html.h3 [ prop.className "text-sm font-semibold"; prop.text "Job scheduler tick drift" ]
+                        Html.h3 [ prop.className "text-sm font-semibold"; prop.text msgs.SchedulerDriftHeading ]
                         let generatedAtLabel = view.GeneratedAt.ToString "u"
 
                         Html.span [
                             prop.className "text-xs text-gray-500"
-                            prop.text $"as of {generatedAtLabel}"
+                            prop.text (msgs.AsOf generatedAtLabel)
                         ]
                     ]
                 ]
-                Html.p [
-                    prop.className "text-xs text-gray-600 mb-2"
-                    prop.text
-                        "Counts minute boundaries where the scheduler woke late (debugger pause, GC stall, container throttling). Healthy deployments stay at zero; recovers automatically once the process resumes."
-                ]
+                Html.p [ prop.className "text-xs text-gray-600 mb-2"; prop.text msgs.SchedulerLagHelp ]
                 Html.div [
                     prop.className "grid grid-cols-3 gap-x-4 gap-y-1"
                     prop.children [
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Missed (60-min)" ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Last drift" ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text "Last miss at" ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerMissed60m ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastDrift ]
+                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastMissAt ]
                         Html.div [
                             prop.className $"text-sm font-mono {countCls}"
                             prop.text (string view.TickMissedCount60Min)
@@ -306,7 +302,7 @@ let private schedulerTelemetryCard (view: JobSchedulerTelemetryView) =
 /// nothing, matching the byte-for-byte-unchanged `/health` payload. The
 /// red border signals this is a security/correctness degradation, not a
 /// transient probe blip.
-let private degradedCapabilitiesCard (entries: DegradedCapability list) =
+let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: DegradedCapability list) =
     if List.isEmpty entries then
         Html.none
     else
@@ -318,14 +314,13 @@ let private degradedCapabilitiesCard (entries: DegradedCapability list) =
                     prop.children [
                         Html.h3 [
                             prop.className "text-sm font-semibold text-red-800"
-                            prop.text $"Degraded capabilities ({entries.Length})"
+                            prop.text (msgs.DegradedCapabilities entries.Length)
                         ]
                     ]
                 ]
                 Html.p [
                     prop.className "text-xs text-red-700 mb-3"
-                    prop.text
-                        "A capability wired best-effort at startup and failed without crashing the deployment. The server is up, but the listed capability is down until remediated. Alert on a non-empty set."
+                    prop.text msgs.DegradedCapabilitiesHelp
                 ]
                 Html.div [
                     prop.className "flex flex-col gap-3"
@@ -344,20 +339,26 @@ let private degradedCapabilitiesCard (entries: DegradedCapability list) =
                                             ]
                                             Html.span [
                                                 prop.className "text-xs text-gray-500"
-                                                prop.text $"since {d.DegradedSince}"
+                                                prop.text (msgs.DegradedSince(string d.DegradedSince))
                                             ]
                                         ]
                                     ]
                                     Html.dl [
                                         prop.className "grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
                                         prop.children [
-                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Reason" ]
+                                            Html.dt [
+                                                prop.className "text-gray-500 font-medium"
+                                                prop.text msgs.DegradedReason
+                                            ]
                                             Html.dd [ prop.className "text-gray-700"; prop.text d.Reason ]
-                                            Html.dt [ prop.className "text-gray-500 font-medium"; prop.text "Impact" ]
+                                            Html.dt [
+                                                prop.className "text-gray-500 font-medium"
+                                                prop.text msgs.DegradedImpact
+                                            ]
                                             Html.dd [ prop.className "text-gray-700"; prop.text d.Impact ]
                                             Html.dt [
                                                 prop.className "text-gray-500 font-medium"
-                                                prop.text "Remediation"
+                                                prop.text msgs.Remediation
                                             ]
                                             Html.dd [ prop.className "text-gray-700"; prop.text d.Remediation ]
                                         ]
@@ -369,10 +370,10 @@ let private degradedCapabilitiesCard (entries: DegradedCapability list) =
             ]
         ]
 
-let private liveHealthHeader (snapshot: HealthSnapshot) =
+let private liveHealthHeader (msgs: HealthMonitorMessages) (snapshot: HealthSnapshot) =
     Html.div [
         prop.className "text-xs text-gray-500"
-        prop.text $"Generated at {snapshot.GeneratedAt} ({snapshot.Probes.Length} probes)"
+        prop.text (msgs.GeneratedAt (string snapshot.GeneratedAt) snapshot.Probes.Length)
     ]
 
 let private probeRow (recentlyFlipped: Set<string>) (row: HealthProbeView) =
@@ -400,13 +401,9 @@ let private probeRow (recentlyFlipped: Set<string>) (row: HealthProbeView) =
         ]
     ]
 
-let private probesTable (recentlyFlipped: Set<string>) (probes: HealthProbeView list) =
+let private probesTable (msgs: HealthMonitorMessages) (recentlyFlipped: Set<string>) (probes: HealthProbeView list) =
     if List.isEmpty probes then
-        Html.p [
-            prop.className "text-sm text-gray-500"
-            prop.text
-                "No health probes registered. Companions self-register via services.AddSingleton<IHealthCheck>(instance) — see TECHNICAL_GUIDE.md."
-        ]
+        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoProbes ]
     else
         Html.div [
             prop.className "border border-border rounded-lg overflow-hidden"
@@ -421,27 +418,27 @@ let private probesTable (recentlyFlipped: Set<string>) (probes: HealthProbeView 
                                     prop.children [
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Status"
+                                            prop.text msgs.ColumnStatus
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Probe"
+                                            prop.text msgs.ColumnProbe
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Kind"
+                                            prop.text msgs.ColumnKind
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Timeout"
+                                            prop.text msgs.ColumnTimeout
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Elapsed"
+                                            prop.text msgs.ColumnElapsed
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Message"
+                                            prop.text msgs.ColumnMessage
                                         ]
                                     ]
                                 ]
@@ -453,7 +450,7 @@ let private probesTable (recentlyFlipped: Set<string>) (probes: HealthProbeView 
             ]
         ]
 
-let private liveHealthTabView (model: Model) (dispatch: Msg -> unit) =
+let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     let isLoading =
         match model.Live with
         | Loading -> true
@@ -467,22 +464,18 @@ let private liveHealthTabView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Live health" ]
-                            Html.p [
-                                prop.className "text-xs text-gray-500"
-                                prop.text
-                                    "Each refresh re-runs every registered IHealthCheck in parallel. Probes are deployment-wide — no per-team filter applies."
-                            ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.LiveHealthHeading ]
+                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ProbesFootnote ]
                         ]
                     ]
-                    refreshButton "Refresh" (fun () -> dispatch RefreshLive) isLoading
+                    refreshButton msgs msgs.Refresh (fun () -> dispatch RefreshLive) isLoading
                 ]
             ]
             // Phase 118 — degraded capabilities first (most urgent: a
             // capability is down). Suppressed when the set is empty or
             // the load is in flight.
             match model.Degraded with
-            | Loaded entries -> degradedCapabilitiesCard entries
+            | Loaded entries -> degradedCapabilitiesCard msgs entries
             | _ -> Html.none
 
             // Phase 9b.A — surface scheduler drift above the probe
@@ -490,20 +483,20 @@ let private liveHealthTabView (model: Model) (dispatch: Msg -> unit) =
             // when the load is in flight (no point flashing "Loading..."
             // for a side-counter).
             match model.SchedulerTelemetry with
-            | Loaded view -> schedulerTelemetryCard view
+            | Loaded view -> schedulerTelemetryCard msgs view
             | _ -> Html.none
 
             match model.Live with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | LoadError msg -> errorBanner msg
             | Loaded snapshot ->
                 Html.div [
                     prop.children [
-                        liveHealthHeader snapshot
+                        liveHealthHeader msgs snapshot
                         Html.div [
                             prop.className "mt-3"
-                            prop.children [ probesTable model.RecentlyFlipped snapshot.Probes ]
+                            prop.children [ probesTable msgs model.RecentlyFlipped snapshot.Probes ]
                         ]
                     ]
                 ]
@@ -526,13 +519,9 @@ let private preflightRow (row: PreflightOutcomeView) =
         ]
     ]
 
-let private outcomesTable (outcomes: PreflightOutcomeView list) =
+let private outcomesTable (msgs: HealthMonitorMessages) (outcomes: PreflightOutcomeView list) =
     if List.isEmpty outcomes then
-        Html.p [
-            prop.className "text-sm text-gray-500"
-            prop.text
-                "No validators recorded. Either no IConfigValidator was registered at the most recent boot, or ServerConfig.SkipPreflight = true was set for an emergency boot."
-        ]
+        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoValidators ]
     else
         Html.div [
             prop.className "border border-border rounded-lg overflow-hidden"
@@ -547,19 +536,19 @@ let private outcomesTable (outcomes: PreflightOutcomeView list) =
                                     prop.children [
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Status"
+                                            prop.text msgs.ColumnStatus
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Validator"
+                                            prop.text msgs.ColumnValidator
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Elapsed"
+                                            prop.text msgs.ColumnElapsed
                                         ]
                                         Html.th [
                                             prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text "Message"
+                                            prop.text msgs.ColumnMessage
                                         ]
                                     ]
                                 ]
@@ -571,7 +560,7 @@ let private outcomesTable (outcomes: PreflightOutcomeView list) =
             ]
         ]
 
-let private preflightTabView (model: Model) (dispatch: Msg -> unit) =
+let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     let isLoading =
         match model.Preflight with
         | Loading -> true
@@ -585,33 +574,22 @@ let private preflightTabView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [
-                                prop.className "text-lg font-semibold"
-                                prop.text "Preflight (most recent boot)"
-                            ]
-                            Html.p [
-                                prop.className "text-xs text-gray-500"
-                                prop.text
-                                    "Snapshot from the most recent startup. Re-fetch to confirm a redeploy passed without a hard reload — validators do not re-run against this view."
-                            ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.PreflightHeading ]
+                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.PreflightFootnote ]
                         ]
                     ]
-                    refreshButton "Re-fetch" (fun () -> dispatch RefreshPreflight) isLoading
+                    refreshButton msgs msgs.Refetch (fun () -> dispatch RefreshPreflight) isLoading
                 ]
             ]
             match model.Preflight with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | LoadError msg -> errorBanner msg
             | Loaded snapshot ->
                 if not snapshot.HasSnapshot then
-                    Html.p [
-                        prop.className "text-sm text-gray-500"
-                        prop.text
-                            "Preflight snapshot is not available — this deployment was composed before Phase 9m landed, or no IPreflightSnapshot service is registered."
-                    ]
+                    Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.PreflightUnavailable ]
                 else
-                    outcomesTable snapshot.Outcomes
+                    outcomesTable msgs snapshot.Outcomes
         ]
     ]
 
@@ -630,28 +608,38 @@ let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private tabBar (model: Model) (dispatch: Msg -> unit) =
+let private tabBar (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
-            tabButton "Live health" (model.ActiveTab = LiveHealthTab) (fun () -> dispatch (SwitchTab LiveHealthTab))
-            tabButton "Preflight" (model.ActiveTab = PreflightTab) (fun () -> dispatch (SwitchTab PreflightTab))
+            tabButton msgs.LiveHealthTab (model.ActiveTab = LiveHealthTab) (fun () ->
+                dispatch (SwitchTab LiveHealthTab))
+            tabButton msgs.PreflightTab (model.ActiveTab = PreflightTab) (fun () -> dispatch (SwitchTab PreflightTab))
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 444 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the resolved
+/// catalog. A module's `view` is invoked inline by the shell's own render,
+/// where a hook would join the shell's hook order and break the moment the
+/// active module changed; a component of its own has a stable identity and
+/// its own. Same distinction `FileManagerUI.LoadingSlot` documents, applied
+/// to the whole body because every tab under it renders catalog strings.
+[<ReactComponent>]
+let private HealthMonitorBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).HealthMonitor
+
     let content =
         match model.ActiveTab with
-        | LiveHealthTab -> liveHealthTabView model dispatch
-        | PreflightTab -> preflightTabView model dispatch
+        | LiveHealthTab -> liveHealthTabView msgs model dispatch
+        | PreflightTab -> preflightTabView msgs model dispatch
 
-    let body =
-        Html.div [
-            prop.className "flex flex-col h-full"
-            prop.children [ tabBar model dispatch; content ]
-        ]
+    Html.div [
+        prop.className "flex flex-col h-full"
+        prop.children [ tabBar msgs model dispatch; content ]
+    ]
 
-    body
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = HealthMonitorBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 
