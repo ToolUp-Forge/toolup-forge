@@ -2073,6 +2073,15 @@
              rows, the Phase 9d metering integration, and the blob store's
              scope partitioning + concurrent-admission race. -->
         <Compile Include="InProcess\ComputeBudgetTests.fs" />
+        <!-- Phase 689 — the platform budget seam: the one predicate every
+             ceiling reduces to, the allowed / near-limit / refused verdict,
+             the period-as-storage-key rule, Phase 451's re-expression
+             asserted field for field (including that the shared ledger
+             reads and writes the blob that phase has always written), the
+             IBudgetLedger contract run against BOTH shipped ledgers, and a
+             worked hourly token budget — a domain compute is not, through
+             the same four parts. -->
+        <Compile Include="InProcess\BudgetSeamTests.fs" />
         <!-- Phase 7c — data-object orphan-blob sweep: a real Save severed
              between its content and metadata writes produces the orphan,
              then the grace window (deferred vs reclaimed, one stamp

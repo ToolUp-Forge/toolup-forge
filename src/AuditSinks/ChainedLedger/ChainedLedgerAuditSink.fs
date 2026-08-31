@@ -188,9 +188,26 @@ let buildSegmentName (settings: ChainedLedgerSettings) (firstSequence: int64) (c
 /// Blob name of the head pointer.
 let buildHeadName (settings: ChainedLedgerSettings) : string = root settings + headBlobName
 
-/// Project one audit envelope into an unchained record. `chain` fills in
-/// the sequence and the links.
-let recordOfEnvelope (envelope: AuditEnvelope) : LedgerRecord =
+/// Phase 677 — decides which scope facets an envelope is recorded under.
+///
+/// **Called at APPEND time, once, by the writer**, and the facets it
+/// returns are framed into the record's digest. That placement is the
+/// whole design: a per-party export then filters on a committed claim
+/// rather than re-deriving entitlement from record content at export
+/// time, which would make every export's filter a function of whatever
+/// code ran that day.
+///
+/// A plain function rather than an interface: it is pure classification
+/// over a value the caller already holds, with no lifecycle, no state
+/// between calls and nothing to dispose. The default — `fun _ -> []` —
+/// tags nothing, which is the shipped behaviour and is fail-closed at
+/// the far end (an untagged record is visible to no party).
+type LedgerScopeTagger = AuditEnvelope -> string list
+
+/// Project one audit envelope into an unchained record, tagged with the
+/// scope facets `tagger` assigns it. `chain` fills in the sequence and
+/// the links.
+let recordOfEnvelopeTagged (tagger: LedgerScopeTagger) (envelope: AuditEnvelope) : LedgerRecord =
     let payload: LedgerPayload = {
         Subject = envelope.Subject
         Event = envelope.Event
@@ -209,13 +226,21 @@ let recordOfEnvelope (envelope: AuditEnvelope) : LedgerRecord =
         SubjectKind = AuditEnvelope.subjectKindString envelope
         EventType = AuditEvent.eventTypeName envelope.Event
         Payload = payloadJson
+        ScopeFacets = envelope |> tagger |> LedgerRecord.normaliseFacets
     }
 
-/// Chain a batch of envelopes onto an existing head, returning the
-/// linked records and the new head digest. Pure — the sink calls this
-/// under its append lock, and tests call it directly to assert that the
-/// same envelopes always produce the same chain.
-let chainBatch
+/// Project one audit envelope into an unchained, untagged record — the
+/// pre-Phase-677 projection, unchanged and byte-identical.
+let recordOfEnvelope (envelope: AuditEnvelope) : LedgerRecord =
+    recordOfEnvelopeTagged (fun _ -> []) envelope
+
+/// Chain a batch of envelopes onto an existing head, tagging each with
+/// the scope facets `tagger` assigns, and returning the linked records
+/// and the new head digest. Pure — the sink calls this under its append
+/// lock, and tests call it directly to assert that the same envelopes
+/// always produce the same chain.
+let chainBatchTagged
+    (tagger: LedgerScopeTagger)
     (startSequence: int64)
     (previousDigest: string)
     (batch: AuditEnvelope list)
@@ -225,11 +250,22 @@ let chainBatch
         |> List.fold
             (fun (acc, previous) envelope ->
                 let sequence = startSequence + int64 (List.length acc)
-                let linked = envelope |> recordOfEnvelope |> chain sequence previous
+
+                let linked = envelope |> recordOfEnvelopeTagged tagger |> chain sequence previous
+
                 acc @ [ linked ], linked.Digest)
             ([], previousDigest)
 
     records, headDigest
+
+/// Chain a batch with no scope tagging — the pre-Phase-677 shape,
+/// unchanged.
+let chainBatch
+    (startSequence: int64)
+    (previousDigest: string)
+    (batch: AuditEnvelope list)
+    : LedgerRecord list * string =
+    chainBatchTagged (fun _ -> []) startSequence previousDigest batch
 
 let private serialiseRecords (records: LedgerRecord list) : byte[] =
     let lines =
@@ -294,13 +330,55 @@ let private readRecords (settings: ChainedLedgerSettings) (storage: IBlobStorage
                 for line in lines do
                     if Option.isNone torn.Value && not (String.IsNullOrWhiteSpace line) then
                         try
-                            records.Add(JsonSerializer.Deserialize<LedgerRecord>(line, ledgerJsonOptions))
+                            // Coerced on the way in: a record written
+                            // before scope facets existed omits the
+                            // field, which this converter set reads as
+                            // `null`. Every consumer downstream of here
+                            // sees the empty list it claims to be.
+                            records.Add(
+                                JsonSerializer.Deserialize<LedgerRecord>(line, ledgerJsonOptions)
+                                |> LedgerRecord.coerceFacets
+                            )
                         with ex ->
                             torn.Value <- Some(sprintf "unreadable ledger line in segment %s: %s" name ex.Message)
 
     match failure.Value with
     | Some message -> return Error message
     | None -> return Ok(List.ofSeq records, torn.Value)
+}
+
+/// Everything a reader gets out of stored ledger blobs, before any
+/// judgement is passed on it.
+///
+/// Exposed (Phase 677) because the scoped exporter needs exactly what
+/// `verify` needs and must not re-implement the read: two readers of one
+/// on-disk layout drift, and the one that drifts is the one a
+/// counterparty is holding.
+type StoredLedger = {
+    /// Records in chain order, facets coerced.
+    Records: LedgerRecord list
+    /// A read failure after the records that parsed — a truncated final
+    /// line. `None` when the ledger read cleanly to its end.
+    TornTail: string option
+    /// The head pointer, absent on a ledger that has never been written.
+    Head: LedgerHead option
+}
+
+/// Read the stored records and the head pointer. No verification — the
+/// caller decides what the bytes mean.
+let read (settings: ChainedLedgerSettings) (storage: IBlobStorage) : Async<Result<StoredLedger, string>> = async {
+    match! readRecords settings storage with
+    | Error message -> return Error message
+    | Ok(records, torn) ->
+        match! readHead settings storage with
+        | Error message -> return Error message
+        | Ok head ->
+            return
+                Ok {
+                    Records = records
+                    TornTail = torn
+                    Head = head
+                }
 }
 
 /// Verify a stored ledger: walk the chain, then check the head pointer
@@ -446,7 +524,13 @@ let verify
 /// still interleave two writes. Deployments needing multiple writers run
 /// one ledger per writer and verify each chain independently.
 type ChainedLedgerAuditSink
-    (name: string, settings: ChainedLedgerSettings, blobStorage: IBlobStorage, signer: ILedgerHeadSigner option) =
+    (
+        name: string,
+        settings: ChainedLedgerSettings,
+        blobStorage: IBlobStorage,
+        signer: ILedgerHeadSigner option,
+        tagger: LedgerScopeTagger
+    ) =
 
     let appendLock = new SemaphoreSlim(1, 1)
 
@@ -515,7 +599,7 @@ type ChainedLedgerAuditSink
                     | Some(count, digest) -> count, digest
                     | None -> 0L, genesisDigest
 
-                let records, headDigest = chainBatch startSequence previousDigest batch
+                let records, headDigest = chainBatchTagged tagger startSequence previousDigest batch
                 let content = serialiseRecords records
                 let segment = buildSegmentName settings startSequence (digestBytes content)
 
@@ -533,6 +617,15 @@ type ChainedLedgerAuditSink
                             known <- Some(recordCount, headDigest)
                             return Ok()
     }
+
+    /// The pre-Phase-677 shape, preserved as an explicit secondary
+    /// constructor rather than by defaulting the parameter. An optional
+    /// parameter would fold both arities into ONE widened constructor,
+    /// and the four-argument token would disappear from the public
+    /// surface — a genuine break for every existing caller, not a
+    /// baseline artefact.
+    new(name: string, settings: ChainedLedgerSettings, blobStorage: IBlobStorage, signer: ILedgerHeadSigner option) =
+        ChainedLedgerAuditSink(name, settings, blobStorage, signer, (fun _ -> []))
 
     interface IAuditSink with
         member _.Name = name
@@ -571,6 +664,37 @@ let createSigned
     (signer: ILedgerHeadSigner)
     : IAuditSink =
     ChainedLedgerAuditSink(name, settings, blobStorage, Some signer) :> _
+
+/// Construct an UNSIGNED chained ledger whose records are tagged with
+/// scope facets at append time, so a per-party scoped export can be
+/// taken from it later (Phase 677).
+///
+/// **Tagging is a decision taken once, at the writer.** A deployment
+/// that adds a tagger later does not re-tag what is already written —
+/// records keep the facets they were appended with, and they must, since
+/// the facets are inside the digest. The consequence is worth stating
+/// plainly: earlier records are visible to no party scope, and an
+/// exporter says so by withholding them rather than by omitting them.
+let createScoped
+    (name: string)
+    (settings: ChainedLedgerSettings)
+    (blobStorage: IBlobStorage)
+    (tagger: LedgerScopeTagger)
+    : IAuditSink =
+    ChainedLedgerAuditSink(name, settings, blobStorage, None, tagger) :> _
+
+/// Construct a scope-tagging chained ledger whose head is signed by
+/// `signer` after every append — the full shape a multi-party
+/// deployment composes: a chain a counterparty can verify, a head it
+/// cannot forge, and facets it can filter on.
+let createSignedScoped
+    (name: string)
+    (settings: ChainedLedgerSettings)
+    (blobStorage: IBlobStorage)
+    (signer: ILedgerHeadSigner)
+    (tagger: LedgerScopeTagger)
+    : IAuditSink =
+    ChainedLedgerAuditSink(name, settings, blobStorage, Some signer, tagger) :> _
 
 // ─── Phase 686 — the deployment verification report's ledger source ──
 //
