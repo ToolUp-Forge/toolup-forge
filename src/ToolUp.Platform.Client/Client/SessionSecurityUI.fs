@@ -167,9 +167,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // Reload rather than patching the local list: the server is the
         // authority on what is now revoked, and a locally-patched entry
         // would look revoked even if a concurrent change said otherwise.
+        //
+        // A pure reducer has no rendered tree and therefore no `msgs`
+        // hook to read — go straight to the English catalog value, per
+        // `TeamManagerUI.update`'s recorded pattern (Phase 751).
         {
             model with
-                Status = Some "Session signed out."
+                Status = Some MessageCatalog.english.SessionSecurity.RevokeSuccess
         },
         loadCmd ()
 
@@ -205,11 +209,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // Report the server's count rather than "done". Zero is a real
         // and useful answer — it means there was nothing left to sign
         // out, which is different from a revocation having happened.
-        let message =
-            match count with
-            | 0 -> "No active sessions to sign out."
-            | 1 -> "1 session signed out."
-            | n -> $"{n} sessions signed out."
+        // Same no-`msgs`-in-a-reducer reasoning as `RevokeCompleted`
+        // above; the singular/plural branching lives inside the
+        // catalog function itself so a translation owns its own
+        // pluralisation rule.
+        let message = MessageCatalog.english.SessionSecurity.RevokeAllResult count
 
         { model with Status = Some message }, loadCmd ()
 
@@ -231,23 +235,42 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 /// advanced at minute granularity or worse by design (GP 12 rule 6), so
 /// rendering a precise time would imply an accuracy the substrate does
 /// not promise.
-let lastSeenLabel (now: DateTimeOffset) (at: DateTimeOffset) : string =
+///
+/// Public non-component render helper (Phase 751) — the arity cannot
+/// widen without reading as a removal in the public-API approval
+/// baseline, so the message-catalog-aware body is the additive
+/// `…With` variant and this delegates with the English catalog,
+/// matching `BootDegradation.bannerWith` / `Components.ModuleBoundary.wrapWith`.
+let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at: DateTimeOffset) : string =
     let elapsed = now - at
 
     if elapsed < TimeSpan.Zero then
-        "Just now"
+        msgs.JustNow
     elif elapsed < TimeSpan.FromMinutes 2.0 then
-        "Just now"
+        msgs.JustNow
     elif elapsed < TimeSpan.FromHours 1.0 then
-        $"%d{int elapsed.TotalMinutes} minutes ago"
+        msgs.MinutesAgo(int elapsed.TotalMinutes)
     elif elapsed < TimeSpan.FromDays 1.0 then
-        $"%d{int elapsed.TotalHours} hours ago"
+        msgs.HoursAgo(int elapsed.TotalHours)
     elif elapsed < TimeSpan.FromDays 30.0 then
-        $"%d{int elapsed.TotalDays} days ago"
+        msgs.DaysAgo(int elapsed.TotalDays)
     else
+        // A .NET date format specifier, not translatable prose — see
+        // the Phase 751 sweep's "date/number format specifiers" scope
+        // note. Baking it into a translated template would make the
+        // date FORMAT a property of the language.
         at.ToString "d MMM yyyy"
 
-let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffset) (record: SessionRecord) =
+let lastSeenLabel (now: DateTimeOffset) (at: DateTimeOffset) : string =
+    lastSeenLabelWith MessageCatalog.english.SessionSecurity now at
+
+let private sessionRow
+    (msgs: SessionSecurityMessages)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    (now: DateTimeOffset)
+    (record: SessionRecord)
+    =
     let active = SessionRecord.isActive record
 
     let pending = model.PendingRevoke = Some record.SessionId
@@ -272,9 +295,9 @@ let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffs
                         prop.className "text-xs text-gray-500 mt-0.5"
                         prop.text (
                             if active then
-                                $"{record.AuthProvider} · last seen {lastSeenLabel now record.LastSeenAt}"
+                                msgs.DeviceLastSeen record.AuthProvider (lastSeenLabelWith msgs now record.LastSeenAt)
                             else
-                                $"{record.AuthProvider} · signed out"
+                                msgs.DeviceSignedOut record.AuthProvider
                         )
                     ]
                 ]
@@ -283,7 +306,7 @@ let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffs
                 prop.className "shrink-0"
                 prop.children [
                     if not active then
-                        Html.span [ prop.className "text-xs text-gray-400"; prop.text "Revoked" ]
+                        Html.span [ prop.className "text-xs text-gray-400"; prop.text msgs.Revoked ]
                     elif pending then
                         Html.div [
                             prop.className "flex gap-2"
@@ -291,12 +314,12 @@ let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffs
                                 Html.button [
                                     prop.className "text-xs px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50"
                                     prop.disabled model.Busy
-                                    prop.text "Confirm"
+                                    prop.text msgs.Confirm
                                     prop.onClick (fun _ -> dispatch (ConfirmRevoke record.SessionId))
                                 ]
                                 Html.button [
                                     prop.className "text-xs px-2 py-1 rounded border border-border"
-                                    prop.text "Cancel"
+                                    prop.text msgs.Cancel
                                     prop.onClick (fun _ -> dispatch CancelRevoke)
                                 ]
                             ]
@@ -306,7 +329,7 @@ let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffs
                             prop.className
                                 "text-xs px-2 py-1 rounded border border-border hover:bg-gray-50 disabled:opacity-50"
                             prop.disabled model.Busy
-                            prop.text "Sign out"
+                            prop.text msgs.SignOut
                             prop.onClick (fun _ -> dispatch (AskRevoke record.SessionId))
                         ]
                 ]
@@ -316,7 +339,16 @@ let private sessionRow (model: Model) (dispatch: Msg -> unit) (now: DateTimeOffs
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let view (model: Model) (dispatch: Msg -> unit) =
+/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the
+/// resolved catalog. `view` is invoked inline by the shell's own
+/// render, where a hook would join the shell's hook order and break the
+/// moment the active module changed; a component of its own has a
+/// stable identity and its own. Same distinction `HealthMonitorUI`
+/// documents at `HealthMonitorBody`.
+[<ReactComponent>]
+let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).SessionSecurity
     let now = DateTimeOffset.UtcNow
 
     let errorBanner =
@@ -329,7 +361,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
                     Html.span [ prop.text err ]
                     Html.button [
                         prop.className "ml-3 text-xs underline"
-                        prop.text "Dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -345,7 +377,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
                     Html.span [ prop.text status ]
                     Html.button [
                         prop.className "ml-3 text-xs underline"
-                        prop.text "Dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissStatus)
                     ]
                 ]
@@ -353,16 +385,13 @@ let view (model: Model) (dispatch: Msg -> unit) =
 
     let body =
         if not model.Loaded then
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
         elif List.isEmpty model.Sessions then
-            Html.p [
-                prop.className "text-sm text-gray-500"
-                prop.text "No sessions recorded yet. Sessions appear here after your next request."
-            ]
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.EmptyState ]
         else
             Html.div [
                 prop.className "border border-border rounded-lg overflow-hidden bg-white"
-                prop.children (model.Sessions |> List.map (sessionRow model dispatch now))
+                prop.children (model.Sessions |> List.map (sessionRow msgs model dispatch now))
             ]
 
     let signOutEverywhere =
@@ -374,8 +403,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.p [
                         prop.className "text-sm text-red-800 mb-2"
-                        prop.text
-                            "This signs out every device, including this one. You will need to sign in again to continue."
+                        prop.text msgs.SignOutEverywhereWarning
                     ]
                     Html.div [
                         prop.className "flex gap-2"
@@ -383,12 +411,12 @@ let view (model: Model) (dispatch: Msg -> unit) =
                             Html.button [
                                 prop.className "text-sm px-3 py-1.5 rounded bg-red-600 text-white disabled:opacity-50"
                                 prop.disabled model.Busy
-                                prop.text "Sign out everywhere"
+                                prop.text msgs.SignOutEverywhere
                                 prop.onClick (fun _ -> dispatch ConfirmRevokeAll)
                             ]
                             Html.button [
                                 prop.className "text-sm px-3 py-1.5 rounded border border-border"
-                                prop.text "Cancel"
+                                prop.text msgs.Cancel
                                 prop.onClick (fun _ -> dispatch CancelRevokeAll)
                             ]
                         ]
@@ -399,25 +427,23 @@ let view (model: Model) (dispatch: Msg -> unit) =
             Html.button [
                 prop.className "mt-4 text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 disabled:opacity-50"
                 prop.disabled model.Busy
-                prop.text "Sign out everywhere"
+                prop.text msgs.SignOutEverywhere
                 prop.onClick (fun _ -> dispatch AskRevokeAll)
             ]
 
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Session security" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text
-                    "Devices currently signed in as you. Sign out any you do not recognise — a signed-out session stops working within the deployment's revocation window."
-            ]
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
             errorBanner
             statusBanner
             body
             signOutEverywhere
         ]
     ]
+
+let view (model: Model) (dispatch: Msg -> unit) : ReactElement = SessionSecurityBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

@@ -865,7 +865,10 @@ let private teamRow
                                 ]
                         ]
                     ]
-                    Html.span [ prop.className "text-xs text-muted"; prop.text $"Team ID: {team.TeamId}" ]
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text (msgs.TeamIdLabel team.TeamId)
+                    ]
                 ]
             ]
             Html.div [
@@ -1055,7 +1058,7 @@ let private addMemberForm
                 UserDirectoryTypeahead.userTypeahead
                     model.AddMemberUserId
                     (fun v -> dispatch (SetAddMemberUserId v))
-                    "person@example.com"
+                    msgs.InviteIdentifierPlaceholder
                     UserDirectoryTypeahead.pickEmailPreferred
 
                 Html.div [
@@ -1247,11 +1250,7 @@ let private transferOwnershipModalView
             ]
             Html.p [
                 prop.className "text-sm text-muted"
-                prop.text (
-                    sprintf
-                        "%s becomes the Owner and you become an Admin. Only the new Owner can transfer it back."
-                        newOwnerLabel
-                )
+                prop.text (msgs.TransferRoleExplanation newOwnerLabel)
             ]
             match state.SubmitError with
             | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
@@ -1372,8 +1371,7 @@ let private pendingEmailRow
                     Html.span [
                         prop.className "text-xs text-muted"
                         prop.text (
-                            sprintf
-                                "%s · expires %s"
+                            msgs.InviteExpires
                                 (TeamRoles.displayName entry.Role)
                                 (entry.ExpiresAt.ToString "yyyy-MM-dd")
                         )
@@ -1415,8 +1413,7 @@ let private expiredInviteRow
                     Html.span [
                         prop.className "text-xs text-muted"
                         prop.text (
-                            sprintf
-                                "%s · expired %s"
+                            msgs.InviteExpired
                                 (TeamRoles.displayName entry.Role)
                                 (entry.ExpiredAt.ToString "yyyy-MM-dd")
                         )

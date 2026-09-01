@@ -32,6 +32,11 @@ open ToolUp.Platform
 
 [<ReactComponent>]
 let RateLimitedBanner (err: RateLimitedError) (onRetry: unit -> unit) =
+    // Phase 751 — a component, so it reads the catalog with the ordinary
+    // hook; no `…With` variant is needed and no arity changes. `render`
+    // below is a plain function but only DELEGATES to this component, so
+    // the hook still runs at a component boundary.
+    let msgs = (MessageCatalogProvider.useMessages ()).RateLimited
     let secondsLeft, setSecondsLeft = React.useState err.RetryAfterSeconds
 
     // Tick once per second. The effect re-runs whenever
@@ -55,38 +60,37 @@ let RateLimitedBanner (err: RateLimitedError) (onRetry: unit -> unit) =
 
     let canRetry = secondsLeft <= 0
 
+    // The DU cases stay wire-shaped; only the display label is localised.
     let windowLabel =
         match err.Window with
-        | PerSecond -> "second"
-        | PerMinute -> "minute"
-        | PerHour -> "hour"
-        | PerDay -> "day"
-        | SlidingWindow _ -> "window"
+        | PerSecond -> msgs.Windows.PerSecond
+        | PerMinute -> msgs.Windows.PerMinute
+        | PerHour -> msgs.Windows.PerHour
+        | PerDay -> msgs.Windows.PerDay
+        | SlidingWindow _ -> msgs.Windows.Sliding
 
     Html.div [
         prop.className "toolup-rate-limited-banner"
         prop.role "alert"
         prop.children [
-            Html.div [
-                prop.className "toolup-rate-limited-banner__heading"
-                prop.text "Too many requests"
-            ]
+            Html.div [ prop.className "toolup-rate-limited-banner__heading"; prop.text msgs.Heading ]
             Html.div [
                 prop.className "toolup-rate-limited-banner__body"
-                prop.text (
-                    sprintf "You've hit the limit of %d requests per %s. Please slow down." err.Limit windowLabel
-                )
+                prop.text (msgs.LimitExceeded err.Limit windowLabel)
             ]
             if canRetry then
                 Html.button [
                     prop.className "toolup-rate-limited-banner__retry"
-                    prop.text "Try again"
+                    prop.text msgs.TryAgain
                     prop.onClick (fun _ -> onRetry ())
                 ]
             else
+                // The countdown's plural rule moved INTO the catalog with
+                // the sentence. It used to be an English `"s"` appended at
+                // the call site, which no translation could have reached.
                 Html.div [
                     prop.className "toolup-rate-limited-banner__countdown"
-                    prop.text (sprintf "Try again in %d second%s" secondsLeft (if secondsLeft = 1 then "" else "s"))
+                    prop.text (msgs.TryAgainIn secondsLeft)
                 ]
         ]
     ]

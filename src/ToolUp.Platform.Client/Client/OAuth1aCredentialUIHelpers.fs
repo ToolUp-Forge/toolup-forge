@@ -42,18 +42,28 @@ module OAuth1aCredentialUIHelpers =
     let startUrl (flowName: string) (resourceId: string) : string =
         sprintf "/api/oauth1a/%s/start?resourceId=%s" flowName resourceId
 
-    /// Render the consumer-key/secret form + Save action + Authorize link.
-    let credentialForm (props: OAuth1aCredentialFormProps) : ReactElement =
+    /// Render the consumer-key/secret form + Save action + Authorize link,
+    /// with the resolved catalog section.
+    ///
+    /// Phase 751 — the additive form. `credentialForm` below keeps its
+    /// arity: it is a public non-component render function, so widening it
+    /// would read as a REMOVAL in the public-API approval baseline and
+    /// would break every connector companion that wires it into a
+    /// `DataSourceCredentialHandler` (444's recorded `…With` pattern).
+    /// A connector rendering inside `DataIngestionUI` is already under the
+    /// shell's catalog provider, so it can read the section with the hook
+    /// and call this form.
+    let credentialFormWith (msgs: OAuth1aCredentialMessages) (props: OAuth1aCredentialFormProps) : ReactElement =
         Html.div [
             prop.className "toolup-oauth1a-credential-form"
             prop.children [
-                Html.label [ prop.text "Consumer key" ]
+                Html.label [ prop.text msgs.ConsumerKeyLabel ]
                 Html.input [
                     prop.type' "text"
                     prop.value props.ConsumerKey
                     prop.onChange props.OnConsumerKeyChange
                 ]
-                Html.label [ prop.text "Consumer secret" ]
+                Html.label [ prop.text msgs.ConsumerSecretLabel ]
                 Html.input [
                     prop.type' "password"
                     prop.value props.ConsumerSecret
@@ -61,12 +71,16 @@ module OAuth1aCredentialUIHelpers =
                 ]
                 Html.button [
                     prop.type' "button"
-                    prop.text "Save"
+                    prop.text msgs.Save
                     prop.onClick (fun _ -> props.OnSave())
                 ]
                 Html.a [
                     prop.href (startUrl props.FlowName props.ResourceId)
-                    prop.text (if props.Connected then "Reconnect" else "Authorize")
+                    prop.text (if props.Connected then msgs.Reconnect else msgs.Authorize)
                 ]
             ]
         ]
+
+    /// Render the consumer-key/secret form + Save action + Authorize link.
+    let credentialForm (props: OAuth1aCredentialFormProps) : ReactElement =
+        credentialFormWith MessageCatalog.english.OAuth1aCredential props

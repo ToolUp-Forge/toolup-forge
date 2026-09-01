@@ -143,11 +143,61 @@ let pureTests =
                 Expect.notEqual a1 b "distinct scopes → distinct databases"
         ]
 
-        testCase "classifyError folds an unrecognised exception to StorageFailure (retry channel is data)"
-        <| fun _ ->
-            match CypherTranslation.classifyError (Exception "boom") with
-            | StorageFailure msg -> Expect.stringContains msg "boom" "message carried"
-            | other -> failtestf "expected StorageFailure, got %A" other
+        testList "error classification (GP 12 rule 3)" [
+
+            testCase "classifyError folds an unrecognised exception to StorageFailure (retry channel is data)"
+            <| fun _ ->
+                match CypherTranslation.classifyError (Exception "boom") with
+                | StorageFailure msg -> Expect.stringContains msg "boom" "message carried"
+                | other -> failtestf "expected StorageFailure, got %A" other
+
+            // ── The two Phase 752 defects, pinned negatively ────────
+            //
+            // Both were found by the FIRST-EVER live Neo4j run, and both are
+            // twins of defects Phase 607 found and fixed in the AGE binding.
+            // They are pinned here, in the always-on pack, so neither can
+            // return silently on a machine with no server.
+
+            testCase "an AggregateException is unwrapped before classification"
+            <| fun _ ->
+                // The store reaches the driver through Async.AwaitTask, which
+                // wraps a faulted task. Unwrapped, EVERY arm fell through to
+                // StorageFailure and the whole classification was dead code.
+                let inner = ServiceUnavailableException "leader unavailable"
+                let wrapped = AggregateException("One or more errors occurred.", inner) :> exn
+
+                match CypherTranslation.classifyError wrapped with
+                | TransientFailure msg -> Expect.stringContains msg "leader unavailable" "inner message carried"
+                | other ->
+                    failtestf "expected the wrapped transient fault to classify as TransientFailure, got %A" other
+
+            testCase "the whole Neo.ClientError.Statement family is a malformed query, not just SyntaxError"
+            <| fun _ ->
+                // Matching only "SyntaxError" is what made a missing parameter —
+                // the exact case the conformance pack asserts — read as a
+                // StorageFailure against a live server.
+                Expect.isTrue
+                    (CypherTranslation.isMalformedStatementCode "Neo.ClientError.Statement.SyntaxError")
+                    "syntax error"
+
+                Expect.isTrue
+                    (CypherTranslation.isMalformedStatementCode "Neo.ClientError.Statement.ParameterMissing")
+                    "missing parameter"
+
+                Expect.isTrue
+                    (CypherTranslation.isMalformedStatementCode "Neo.ClientError.Statement.TypeError")
+                    "type error"
+
+                Expect.isFalse
+                    (CypherTranslation.isMalformedStatementCode "Neo.ClientError.Security.Unauthorized")
+                    "a security error is not a malformed query"
+
+                Expect.isFalse
+                    (CypherTranslation.isMalformedStatementCode "Neo.TransientError.Transaction.DeadlockDetected")
+                    "a transient fault is not a malformed query"
+
+                Expect.isFalse (CypherTranslation.isMalformedStatementCode "") "an absent code is not malformed"
+        ]
     ]
 
 // ── Live conformance arm — env-gated ─────────────────────────────────
@@ -183,4 +233,10 @@ let liveTests =
             let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
             store, "team-a-" + suffix, "team-b-" + suffix
 
-        GraphStoreContract.tests "Neo4jGraphStore" factory
+        // Tier: `FullEngine` (Phase 752). Neo4j speaks full openCypher — it
+        // runs `CREATE` and multi-hop patterns rather than refusing them,
+        // and answers variable-length patterns with the path multiset. Until
+        // 752 this binding was held to the in-memory floor's subset laws, so
+        // it would have failed four cases the first time anyone ran it
+        // (recorded at Phase 607 before a server existed to prove it).
+        GraphStoreContract.tests "Neo4jGraphStore" GraphStoreContract.FullEngine factory

@@ -19,7 +19,11 @@ open SharedTypes
 /// Read one local file's bytes. Ephemeral view work — the same
 /// `FileReader` round-trip the single-file path has always done, lifted
 /// out so the bulk path can wait for several at once.
-let private readFileBytes (file: Browser.Types.File) : Async<byte[]> =
+///
+/// Phase 751 — plain helper, `msgs` first: the failure message ends up in
+/// `model.BulkImportError` and is rendered by `bulkImportPanel` below, so
+/// it is user-visible even though this function itself renders nothing.
+let private readFileBytes (msgs: KnowledgeMainMessages) (file: Browser.Types.File) : Async<byte[]> =
     Async.FromContinuations(fun (resolve, reject, _) ->
         let reader = Browser.Dom.FileReader.Create()
 
@@ -29,7 +33,7 @@ let private readFileBytes (file: Browser.Types.File) : Async<byte[]> =
                 let uint8 = Fable.Core.JS.Constructors.Uint8Array.Create(buf)
                 resolve (Array.init (int uint8.length) (fun i -> byte uint8[i]))
 
-        reader.onerror <- fun _ -> reject (exn (sprintf "Could not read '%s'" file.name))
+        reader.onerror <- fun _ -> reject (exn (msgs.CouldNotReadFile file.name))
 
         reader.readAsArrayBuffer file)
 
@@ -39,6 +43,7 @@ let private isArchiveName (name: string) : bool = name.ToLower().EndsWith ".zip"
 
 [<ReactComponent>]
 let private UploadZone (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Main
     // `dragActive` is ephemeral UI state — belongs in React, not the
     // Elmish model (per CLAUDE.md's "text inputs use React.useState"
     // rule, generalised: any state that's purely visual feedback for
@@ -75,7 +80,7 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
                     let! sources =
                         files
                         |> List.map (fun file -> async {
-                            let! bytes = readFileBytes file
+                            let! bytes = readFileBytes msgs file
 
                             // Phase 725.B — the browser composes the
                             // BASE64 cases, not the `byte[]` ones. A
@@ -133,24 +138,21 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
                 prop.className "text-sm font-medium text-gray-700 mb-1"
                 prop.text (
                     if dragActive && not (model.Uploading || model.BulkImporting) then
-                        "Drop files to upload"
+                        msgs.DropToUpload
                     else
-                        "Upload documents to your knowledge base"
+                        msgs.UploadPrompt
                 )
             ]
-            Html.p [
-                prop.className "text-xs text-gray-500 mb-4"
-                prop.text "PDF, PPTX, DOCX, XLSX, CSV, TXT — or a .zip to expand  ·  drop files here or click to choose"
-            ]
+            Html.p [ prop.className "text-xs text-gray-500 mb-4"; prop.text msgs.SupportedFormats ]
             Html.label [
                 prop.className
                     "inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 cursor-pointer"
                 prop.children [
                     Html.span [
                         prop.text (
-                            if model.BulkImporting then "Importing…"
-                            elif model.Uploading then "Uploading…"
-                            else "Choose files"
+                            if model.BulkImporting then msgs.Importing
+                            elif model.Uploading then msgs.Uploading
+                            else msgs.ChooseFiles
                         )
                     ]
                     Html.input [
@@ -199,7 +201,7 @@ let private errorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
 // its extraction / embedding lifecycle there, through the same status
 // badges every other upload uses.
 
-let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElement =
+let private bulkImportPanel (msgs: KnowledgeMainMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     match model.BulkImportError, model.BulkReport with
     | Some err, _ ->
         Html.div [
@@ -207,7 +209,7 @@ let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElemen
             prop.children [
                 Html.p [
                     prop.className "text-sm text-red-700 flex-1"
-                    prop.text (sprintf "Batch import failed: %s" err)
+                    prop.text (msgs.BatchImportFailed err)
                 ]
                 Html.button [
                     prop.className "text-red-400 hover:text-red-600 text-lg"
@@ -246,11 +248,7 @@ let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElemen
                         Html.p [
                             prop.className "text-sm font-medium text-gray-800 flex-1"
                             prop.text (
-                                sprintf
-                                    "Batch import complete — %d of %d item(s) imported, %d refused."
-                                    report.Imported
-                                    (List.length report.Items)
-                                    report.Refused
+                                msgs.BatchImportComplete report.Imported (List.length report.Items) report.Refused
                             )
                         ]
                         Html.button [
@@ -299,6 +297,7 @@ let private bulkImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElemen
 /// actually match, rather than what they typed.
 [<ReactComponent>]
 let private TagEditor (doc: KnowledgeDocument) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Main
     let editing, setEditing = React.useState false
     let draft, setDraft = React.useState (String.concat ", " doc.Tags)
 
@@ -318,7 +317,7 @@ let private TagEditor (doc: KnowledgeDocument) (dispatch: Msg -> unit) =
             prop.children [
                 Html.input [
                     prop.className "w-40 px-2 py-1 text-xs border border-gray-300 rounded"
-                    prop.placeholder "policy, 2024"
+                    prop.placeholder msgs.TagsPlaceholder
                     prop.value draft
                     prop.autoFocus true
                     prop.onChange setDraft
@@ -331,12 +330,12 @@ let private TagEditor (doc: KnowledgeDocument) (dispatch: Msg -> unit) =
                 ]
                 Html.button [
                     prop.className "text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    prop.text "Save"
+                    prop.text msgs.Save
                     prop.onClick (fun _ -> submit ())
                 ]
                 Html.button [
                     prop.className "text-xs text-gray-500 hover:text-gray-700"
-                    prop.text "Cancel"
+                    prop.text msgs.Cancel
                     prop.onClick (fun _ ->
                         setDraft (String.concat ", " doc.Tags)
                         setEditing false)
@@ -346,13 +345,22 @@ let private TagEditor (doc: KnowledgeDocument) (dispatch: Msg -> unit) =
     else
         Html.button [
             prop.className "text-xs text-gray-600 hover:text-gray-900 font-medium"
-            prop.text (if List.isEmpty doc.Tags then "Add tags" else "Edit tags")
+            prop.text (
+                if List.isEmpty doc.Tags then
+                    msgs.AddTags
+                else
+                    msgs.EditTags
+            )
             prop.onClick (fun _ ->
                 setDraft (String.concat ", " doc.Tags)
                 setEditing true)
         ]
 
-let private deleteRowAction (dispatch: Msg -> unit) (doc: KnowledgeDocument) : ReactElement =
+let private deleteRowAction
+    (msgs: KnowledgeMainMessages)
+    (dispatch: Msg -> unit)
+    (doc: KnowledgeDocument)
+    : ReactElement =
     Html.div [
         prop.className "inline-flex items-center gap-3"
         prop.children [
@@ -372,19 +380,19 @@ let private deleteRowAction (dispatch: Msg -> unit) (doc: KnowledgeDocument) : R
             if KnowledgeListView.hasVersionHistory doc then
                 Html.button [
                     prop.className "text-xs text-gray-600 hover:text-gray-900 font-medium"
-                    prop.text "History"
-                    prop.title (sprintf "Version %d — show this document's version history" doc.Version)
+                    prop.text msgs.History
+                    prop.title (msgs.HistoryTooltip doc.Version)
                     prop.onClick (fun _ -> dispatch (OpenVersionHistory(doc.Id, doc.FileName)))
                 ]
             Html.button [
                 prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-                prop.text "Delete"
+                prop.text msgs.Delete
                 prop.onClick (fun _ -> dispatch (DeleteRequested doc.Id))
             ]
         ]
     ]
 
-let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =
+let private documentList (msgs: KnowledgeMainMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let nonNote =
         model.Documents
         |> List.filter (fun d ->
@@ -393,8 +401,8 @@ let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =
             | _ -> true)
 
     let config: KnowledgeListView.KnowledgeListConfig = {
-        EmptyStateText = "No documents uploaded yet. Drop files into the upload zone above to get started."
-        RowAction = Some(deleteRowAction dispatch)
+        EmptyStateText = msgs.NoDocumentsYet
+        RowAction = Some(deleteRowAction msgs dispatch)
         InstanceKey = "team-documents"
     }
 
@@ -423,7 +431,12 @@ let private documentList (model: Model) (dispatch: Msg -> unit) : ReactElement =
 /// method fetches them. Offering a button that could only ever return
 /// the wrong version's bytes would be worse than offering none, so the
 /// row says plainly what is kept and why it cannot be fetched yet.
-let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (version: KnowledgeDocumentVersion) =
+let private versionRow
+    (msgs: KnowledgeMainMessages)
+    (state: VersionHistoryState)
+    (dispatch: Msg -> unit)
+    (version: KnowledgeDocumentVersion)
+    =
     let isCurrent = version.SupersededAt.IsNone
     let isDownloading = state.Downloading = Some version.Version
 
@@ -439,13 +452,13 @@ let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (ver
                         prop.children [
                             Html.span [
                                 prop.className "text-sm font-medium text-gray-900"
-                                prop.text (sprintf "v%d" version.Version)
+                                prop.text (msgs.VersionLabel version.Version)
                             ]
                             if isCurrent then
                                 Html.span [
                                     prop.className
                                         "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-                                    prop.text "Current"
+                                    prop.text msgs.Current
                                 ]
                             Html.span [ prop.className "text-xs text-gray-500 truncate"; prop.text version.FileName ]
                         ]
@@ -453,12 +466,10 @@ let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (ver
                     Html.p [
                         prop.className "text-xs text-gray-500"
                         prop.text (
-                            sprintf
-                                "%s · %s · %d chunk%s · by %s"
+                            msgs.VersionMeta
                                 (version.UploadedAt.ToString("yyyy-MM-dd HH:mm"))
                                 (KnowledgeListView.formatSize version.SizeBytes)
                                 version.ChunkCount
-                                (if version.ChunkCount = 1 then "" else "s")
                                 version.UploadedBy
                         )
                     ]
@@ -466,7 +477,7 @@ let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (ver
                     | Some supersededAt ->
                         Html.p [
                             prop.className "text-xs text-gray-400"
-                            prop.text (sprintf "Superseded %s" (supersededAt.ToString("yyyy-MM-dd HH:mm")))
+                            prop.text (msgs.Superseded(supersededAt.ToString("yyyy-MM-dd HH:mm")))
                         ]
                     | None -> Html.none
                 ]
@@ -479,16 +490,15 @@ let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (ver
                             prop.className
                                 "text-xs text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-300 disabled:cursor-not-allowed"
                             prop.disabled (state.Downloading.IsSome)
-                            prop.text (if isDownloading then "Opening…" else "Open original")
-                            prop.title "Fetch this version's original document"
+                            prop.text (if isDownloading then msgs.Opening else msgs.OpenOriginal)
+                            prop.title msgs.OpenOriginalTooltip
                             prop.onClick (fun _ -> dispatch (DownloadVersionRequested version))
                         ]
                     else
                         Html.span [
                             prop.className "text-xs text-gray-400"
-                            prop.title
-                                "This version's original bytes are preserved, but the API addresses a document rather than a version — there is no per-version fetch yet."
-                            prop.text "Original preserved"
+                            prop.title msgs.OriginalPreservedTooltip
+                            prop.text msgs.OriginalPreserved
                         ]
                 ]
             ]
@@ -497,26 +507,28 @@ let private versionRow (state: VersionHistoryState) (dispatch: Msg -> unit) (ver
 
 [<ReactComponent>]
 let private VersionHistoryDrawer (state: VersionHistoryState) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Main
+
     let body =
         match state.LoadError, state.Versions with
         | Some err, _ ->
             Html.p [
                 prop.className "px-4 py-6 text-sm text-red-700"
-                prop.text (sprintf "Couldn't load the version history: %s" err)
+                prop.text (msgs.LoadHistoryFailed err)
             ]
-        | None, None -> Html.p [ prop.className "px-4 py-6 text-sm text-gray-500"; prop.text "Loading…" ]
+        | None, None -> Html.p [ prop.className "px-4 py-6 text-sm text-gray-500"; prop.text msgs.Loading ]
         // An empty list is a real answer: the document is not visible in
         // this scope (the server returns `[]` rather than an existence
         // signal — GP 4). Say so in the same words either way.
         | None, Some [] ->
             Html.p [
                 prop.className "px-4 py-6 text-sm text-gray-500"
-                prop.text "No version history is available for this document."
+                prop.text msgs.NoVersionHistory
             ]
         | None, Some versions ->
             Html.div [
                 prop.className "divide-y divide-gray-100"
-                prop.children (versions |> List.map (versionRow state dispatch))
+                prop.children (versions |> List.map (versionRow msgs state dispatch))
             ]
 
     Html.div [
@@ -533,7 +545,7 @@ let private VersionHistoryDrawer (state: VersionHistoryState) (dispatch: Msg -> 
                 prop.className
                     "relative w-full max-w-md h-full bg-white border-l border-gray-200 shadow-xl overflow-y-auto"
                 prop.role "dialog"
-                prop.ariaLabel (sprintf "Version history for %s" state.FileName)
+                prop.ariaLabel (msgs.VersionHistoryAriaLabel state.FileName)
                 prop.children [
                     Html.div [
                         prop.className
@@ -544,14 +556,14 @@ let private VersionHistoryDrawer (state: VersionHistoryState) (dispatch: Msg -> 
                                 prop.children [
                                     Html.h3 [
                                         prop.className "text-sm font-semibold text-gray-900"
-                                        prop.text "Version history"
+                                        prop.text msgs.VersionHistoryHeading
                                     ]
                                     Html.p [ prop.className "text-xs text-gray-500 truncate"; prop.text state.FileName ]
                                 ]
                             ]
                             Html.button [
                                 prop.className "text-gray-400 hover:text-gray-600 text-lg leading-none"
-                                prop.ariaLabel "Close version history"
+                                prop.ariaLabel msgs.CloseVersionHistory
                                 prop.text "×"
                                 prop.onClick (fun _ -> dispatch CloseVersionHistory)
                             ]
@@ -585,6 +597,8 @@ let private VersionHistoryDrawer (state: VersionHistoryState) (dispatch: Msg -> 
 /// user would see a stale list.
 [<ReactComponent>]
 let private MainPanel (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Main
+
     React.useEffectOnce (fun () ->
         dispatch (LoadDocuments(Start()))
 
@@ -604,14 +618,8 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h1 [
-                                prop.className "text-xl font-semibold text-gray-900"
-                                prop.text "Knowledge Base"
-                            ]
-                            Html.p [
-                                prop.className "text-sm text-gray-500 mt-1"
-                                prop.text "Upload documents to make them searchable by the AI assistant"
-                            ]
+                            Html.h1 [ prop.className "text-xl font-semibold text-gray-900"; prop.text msgs.Heading ]
+                            Html.p [ prop.className "text-sm text-gray-500 mt-1"; prop.text msgs.Subheading ]
                         ]
                     ]
                     Html.div [
@@ -619,21 +627,20 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                         prop.children [
                             Html.button [
                                 prop.className "text-sm text-gray-500 hover:text-gray-700"
-                                prop.text "Reload"
-                                prop.title "Reload the document list from the server"
+                                prop.text msgs.Reload
+                                prop.title msgs.ReloadTooltip
                                 prop.onClick (fun _ -> dispatch (LoadDocuments(Start())))
                             ]
                             Html.button [
                                 prop.className
                                     "text-sm font-medium text-violet-600 hover:text-violet-800 disabled:text-gray-300 disabled:cursor-not-allowed"
                                 prop.disabled model.RefreshingAIContext
-                                prop.title
-                                    "Push the current document inventory to the AI assistant. Use after deleting or editing documents to ensure subsequent AI replies reflect only the current set."
+                                prop.title msgs.RefreshAIContextTooltip
                                 prop.text (
                                     if model.RefreshingAIContext then
-                                        "Syncing…"
+                                        msgs.Syncing
                                     else
-                                        "Refresh AI context"
+                                        msgs.RefreshAIContext
                                 )
                                 prop.onClick (fun _ -> dispatch RefreshAIContextRequested)
                             ]
@@ -641,23 +648,10 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                                 prop.className
                                     "text-sm font-medium text-red-600 hover:text-red-800 disabled:text-gray-300 disabled:cursor-not-allowed"
                                 prop.disabled (model.Resetting || model.Documents.IsEmpty)
-                                prop.text (if model.Resetting then "Resetting…" else "Reset index")
-                                prop.title
-                                    "Wipe every document, status, and embedded chunk in this scope. This cannot be undone."
+                                prop.text (if model.Resetting then msgs.Resetting else msgs.ResetIndex)
+                                prop.title msgs.ResetIndexTooltip
                                 prop.onClick (fun _ ->
-                                    let scopeLabel =
-                                        if model.Documents.IsEmpty then
-                                            ""
-                                        else
-                                            sprintf
-                                                " %d document%s will be permanently removed."
-                                                model.Documents.Length
-                                                (if model.Documents.Length = 1 then "" else "s")
-
-                                    let prompt =
-                                        "Reset the knowledge base?"
-                                        + scopeLabel
-                                        + " Other team members will lose access to these documents too."
+                                    let prompt = msgs.ResetConfirmPrompt model.Documents.Length
 
                                     if Browser.Dom.window.confirm prompt then
                                         dispatch ResetIndexRequested)
@@ -667,9 +661,9 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             errorBanner model dispatch
-            bulkImportPanel model dispatch
+            bulkImportPanel msgs model dispatch
             UploadZone model dispatch
-            documentList model dispatch
+            documentList msgs model dispatch
             // Phase 636 — absent unless a "History" action was clicked,
             // which itself only exists above version 1.
             match model.VersionHistory with
@@ -707,6 +701,8 @@ let private platformLibraryErrorBanner (model: Model) (dispatch: Msg -> unit) : 
 
 [<ReactComponent>]
 let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.PlatformLibrary
+
     React.useEffectOnce (fun () ->
         dispatch (LoadPlatformDocuments(Start()))
 
@@ -725,8 +721,7 @@ let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
         FsReact.createDisposable (fun () -> dispose ()))
 
     let config: KnowledgeListView.KnowledgeListConfig = {
-        EmptyStateText =
-            "No Platform Knowledge Base content yet. Platform Admins can add cross-team reference material from the Platform Admin section."
+        EmptyStateText = msgs.EmptyState
         RowAction = None
         InstanceKey = "platform-library"
     }
@@ -739,22 +734,20 @@ let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h1 [
-                                prop.className "text-xl font-semibold text-gray-900"
-                                prop.text "Platform Library"
-                            ]
-                            Html.p [
-                                prop.className "text-sm text-gray-500 mt-1"
-                                prop.text
-                                    "Cross-team reference material the AI assistant draws from. Read-only — managed by Platform Admins."
-                            ]
+                            Html.h1 [ prop.className "text-xl font-semibold text-gray-900"; prop.text msgs.Heading ]
+                            Html.p [ prop.className "text-sm text-gray-500 mt-1"; prop.text msgs.Subheading ]
                         ]
                     ]
                     Html.button [
                         prop.className "text-sm text-gray-500 hover:text-gray-700"
                         prop.disabled model.PlatformDocsLoading
-                        prop.text (if model.PlatformDocsLoading then "Loading…" else "Reload")
-                        prop.title "Re-fetch the Platform KB content from the server."
+                        prop.text (
+                            if model.PlatformDocsLoading then
+                                msgs.Loading
+                            else
+                                msgs.Reload
+                        )
+                        prop.title msgs.ReloadTooltip
                         prop.onClick (fun _ -> dispatch (LoadPlatformDocuments(Start())))
                     ]
                 ]
@@ -792,6 +785,7 @@ let private NoteEditor
     (saving: bool)
     (dispatch: Msg -> unit)
     =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Notes
     // Body isn't carried on `KnowledgeDocument` — when editing, the user
     // re-types the body. A future `GetNote` API could pre-fill it.
     let initialTitle =
@@ -810,8 +804,8 @@ let private NoteEditor
 
     let heading =
         match target with
-        | CreateNew -> "New note"
-        | EditExisting _ -> "Edit note"
+        | CreateNew -> msgs.NewNote
+        | EditExisting _ -> msgs.EditNote
 
     Html.div [
         prop.className "bg-white border border-gray-200 rounded-lg p-5 space-y-4"
@@ -820,11 +814,14 @@ let private NoteEditor
             Html.div [
                 prop.className "space-y-1"
                 prop.children [
-                    Html.label [ prop.className "block text-xs font-medium text-gray-600"; prop.text "Title" ]
+                    Html.label [
+                        prop.className "block text-xs font-medium text-gray-600"
+                        prop.text msgs.TitleLabel
+                    ]
                     Html.input [
                         prop.className
                             "w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                        prop.placeholder "What is this note about?"
+                        prop.placeholder msgs.TitlePlaceholder
                         prop.value titleDraft
                         prop.onChange setTitleDraft
                         prop.disabled saving
@@ -836,14 +833,13 @@ let private NoteEditor
                 prop.children [
                     Html.label [
                         prop.className "block text-xs font-medium text-gray-600"
-                        prop.text "Body (markdown)"
+                        prop.text msgs.BodyLabel
                     ]
                     Html.textarea [
                         prop.className
                             "w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
                         prop.rows 12
-                        prop.placeholder
-                            "Use blank lines between paragraphs — each paragraph becomes one retrievable chunk."
+                        prop.placeholder msgs.BodyPlaceholder
                         prop.value bodyDraft
                         prop.onChange setBodyDraft
                         prop.disabled saving
@@ -855,14 +851,14 @@ let private NoteEditor
                 prop.children [
                     Html.button [
                         prop.className "px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:text-gray-300"
-                        prop.text "Cancel"
+                        prop.text msgs.Cancel
                         prop.disabled saving
                         prop.onClick (fun _ -> dispatch CloseNoteEditor)
                     ]
                     Html.button [
                         prop.className
                             "px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        prop.text (if saving then "Saving…" else "Save note")
+                        prop.text (if saving then msgs.Saving else msgs.SaveNote)
                         prop.disabled (not canSave)
                         prop.onClick (fun _ -> dispatch (SaveNote(target, trimmedTitle, trimmedBody)))
                     ]
@@ -871,7 +867,12 @@ let private NoteEditor
         ]
     ]
 
-let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElement =
+let private noteRow
+    (msgs: KnowledgeNotesMessages)
+    (listMsgs: KnowledgeListMessages)
+    (doc: KnowledgeDocument)
+    (dispatch: Msg -> unit)
+    : ReactElement =
     let title, author, createdAt, lastEditedAt =
         match doc.Source with
         | Note src -> src.Title, src.Author, src.CreatedAt, src.LastEditedAt
@@ -879,9 +880,8 @@ let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElem
 
     let timestampLine =
         match lastEditedAt with
-        | Some t ->
-            sprintf "Created %s · edited %s" (createdAt.ToString("yyyy-MM-dd HH:mm")) (t.ToString("yyyy-MM-dd HH:mm"))
-        | None -> sprintf "Created %s" (createdAt.ToString("yyyy-MM-dd HH:mm"))
+        | Some t -> msgs.CreatedEdited (createdAt.ToString("yyyy-MM-dd HH:mm")) (t.ToString("yyyy-MM-dd HH:mm"))
+        | None -> msgs.Created(createdAt.ToString("yyyy-MM-dd HH:mm"))
 
     Html.div [
         prop.key doc.Id
@@ -900,12 +900,12 @@ let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElem
                                         prop.className "text-sm font-semibold text-gray-900 truncate"
                                         prop.text title
                                     ]
-                                    KnowledgeListView.Badges.statusBadge doc.Status
+                                    KnowledgeListView.Badges.statusBadgeWith listMsgs doc.Status
                                 ]
                             ]
                             Html.p [
                                 prop.className "text-xs text-gray-500"
-                                prop.text (sprintf "by %s · %s" author timestampLine)
+                                prop.text (msgs.ByAuthor author timestampLine)
                             ]
                         ]
                     ]
@@ -914,14 +914,14 @@ let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElem
                         prop.children [
                             Html.button [
                                 prop.className "text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                prop.text "Edit"
+                                prop.text msgs.Edit
                                 prop.onClick (fun _ -> dispatch (OpenNoteEditor(EditExisting doc.Id)))
                             ]
                             Html.button [
                                 prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-                                prop.text "Delete"
+                                prop.text msgs.Delete
                                 prop.onClick (fun _ ->
-                                    if Browser.Dom.window.confirm (sprintf "Delete note \"%s\"?" title) then
+                                    if Browser.Dom.window.confirm (msgs.ConfirmDeleteNote title) then
                                         dispatch (DeleteRequested doc.Id))
                             ]
                         ]
@@ -933,6 +933,9 @@ let private noteRow (doc: KnowledgeDocument) (dispatch: Msg -> unit) : ReactElem
 
 [<ReactComponent>]
 let private NotesPanel (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase
+    let notesMsgs = msgs.Notes
+
     React.useEffectOnce (fun () ->
         dispatch (LoadDocuments(Start()))
 
@@ -974,18 +977,17 @@ let private NotesPanel (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h1 [ prop.className "text-xl font-semibold text-gray-900"; prop.text "Notes" ]
-                            Html.p [
-                                prop.className "text-sm text-gray-500 mt-1"
-                                prop.text
-                                    "Free-form team prose — decisions, conventions, context. Each blank-line-separated paragraph becomes a retrievable chunk."
+                            Html.h1 [
+                                prop.className "text-xl font-semibold text-gray-900"
+                                prop.text notesMsgs.Heading
                             ]
+                            Html.p [ prop.className "text-sm text-gray-500 mt-1"; prop.text notesMsgs.Subheading ]
                         ]
                     ]
                     Html.button [
                         prop.className
                             "inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        prop.text "New note"
+                        prop.text notesMsgs.NewNote
                         prop.disabled (model.NoteEditor.IsSome)
                         prop.onClick (fun _ -> dispatch (OpenNoteEditor CreateNew))
                     ]
@@ -997,16 +999,13 @@ let private NotesPanel (model: Model) (dispatch: Msg -> unit) =
                  Html.div [
                      prop.className "bg-gray-50 border border-dashed border-gray-300 rounded-lg p-8 text-center"
                      prop.children [
-                         Html.p [
-                             prop.className "text-sm text-gray-600"
-                             prop.text "No notes yet. Click \"New note\" to capture team context for the AI assistant."
-                         ]
+                         Html.p [ prop.className "text-sm text-gray-600"; prop.text notesMsgs.EmptyState ]
                      ]
                  ]
              else
                  Html.div [
                      prop.className "space-y-3"
-                     prop.children (notes |> List.map (fun doc -> noteRow doc dispatch))
+                     prop.children (notes |> List.map (fun doc -> noteRow notesMsgs msgs.List doc dispatch))
                  ])
         ]
     ]
@@ -1034,6 +1033,7 @@ let private aiContextErrorBanner (model: Model) (dispatch: Msg -> unit) : ReactE
 
 [<ReactComponent>]
 let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.AIContext
     let bodyDraft, setBodyDraft = React.useState initialBody
 
     Html.div [
@@ -1044,22 +1044,18 @@ let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg 
                 prop.children [
                     Html.label [
                         prop.className "block text-xs font-medium text-gray-600"
-                        prop.text "Standing context (markdown)"
+                        prop.text msgs.StandingContextLabel
                     ]
                     Html.textarea [
                         prop.className
                             "w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
                         prop.rows 16
-                        prop.placeholder
-                            "Team mission, naming conventions, response style, constraints… The AI sees this on every message."
+                        prop.placeholder msgs.BodyPlaceholder
                         prop.value bodyDraft
                         prop.onChange setBodyDraft
                         prop.disabled saving
                     ]
-                    Html.p [
-                        prop.className "text-xs text-gray-500"
-                        prop.text "Leave empty and Save to clear the standing context."
-                    ]
+                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ClearHint ]
                 ]
             ]
             Html.div [
@@ -1067,14 +1063,14 @@ let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg 
                 prop.children [
                     Html.button [
                         prop.className "px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:text-gray-300"
-                        prop.text "Cancel"
+                        prop.text msgs.Cancel
                         prop.disabled saving
                         prop.onClick (fun _ -> dispatch CloseAIContextEditor)
                     ]
                     Html.button [
                         prop.className
                             "px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        prop.text (if saving then "Saving…" else "Save")
+                        prop.text (if saving then msgs.Saving else msgs.Save)
                         prop.disabled saving
                         prop.onClick (fun _ -> dispatch (SaveAIContext bodyDraft))
                     ]
@@ -1085,6 +1081,7 @@ let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg 
 
 [<ReactComponent>]
 let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.AIContext
     // Phase 66 Stream B.8 — read resolved subject kind directly;
     // `AnonymousKind` has no persistent scope so the standing-context
     // panel is unavailable. The retiring `getMode ()` call collapsed
@@ -1099,17 +1096,14 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
             Html.div [
                 prop.className "bg-gray-50 border border-dashed border-gray-300 rounded-lg p-8 text-center"
                 prop.children [
-                    Html.p [
-                        prop.className "text-sm text-gray-600"
-                        prop.text "Standing AI context is unavailable in anonymous mode — no persistent scope."
-                    ]
+                    Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.AnonymousUnavailable ]
                 ]
             ]
         | UserKind
         | TeamMemberKind
         | ClaimBearerKind ->
             match model.AIContext with
-            | None -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            | None -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | Some entryOpt ->
                 if model.AIContextEditorOpen then
                     let initialBody = entryOpt |> Option.map _.Body |> Option.defaultValue ""
@@ -1119,17 +1113,14 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
                     let header, content =
                         match entryOpt with
                         | None ->
-                            Html.p [
-                                prop.className "text-xs text-gray-500"
-                                prop.text "No standing context written yet."
-                            ],
+                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoContextYet ],
                             Html.div [
                                 prop.className
                                     "bg-gray-50 border border-dashed border-gray-300 rounded-lg p-8 text-center"
                                 prop.children [
                                     Html.p [
                                         prop.className "text-sm text-gray-600"
-                                        prop.text "The AI assistant has no team-curated standing context yet."
+                                        prop.text msgs.NoTeamCuratedContext
                                     ]
                                 ]
                             ]
@@ -1137,10 +1128,7 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
                             Html.p [
                                 prop.className "text-xs text-gray-500"
                                 prop.text (
-                                    sprintf
-                                        "Last updated %s by %s"
-                                        (entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm"))
-                                        entry.UpdatedBy
+                                    msgs.LastUpdated (entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm")) entry.UpdatedBy
                                 )
                             ],
                             Html.pre [
@@ -1160,7 +1148,7 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
             Html.button [
                 prop.className
                     "inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-                prop.text "Edit"
+                prop.text msgs.Edit
                 prop.onClick (fun _ -> dispatch OpenAIContextEditor)
             ]
 
@@ -1172,15 +1160,8 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h1 [
-                                prop.className "text-xl font-semibold text-gray-900"
-                                prop.text "Standing AI Context"
-                            ]
-                            Html.p [
-                                prop.className "text-sm text-gray-500 mt-1"
-                                prop.text
-                                    "Team-curated context the AI assistant sees on every message — like a CLAUDE.md for your team."
-                            ]
+                            Html.h1 [ prop.className "text-xl font-semibold text-gray-900"; prop.text msgs.Heading ]
+                            Html.p [ prop.className "text-sm text-gray-500 mt-1"; prop.text msgs.Subheading ]
                         ]
                     ]
                     editButton

@@ -170,7 +170,12 @@ let private errorBanner (message: string) =
 
 /// Per-row action for the shared KnowledgeListView: Delete button + any
 /// inline error from the most-recent delete attempt against this row.
-let private deleteRowAction (model: Model) (dispatch: Msg -> unit) (doc: KnowledgeDocument) =
+let private deleteRowAction
+    (msgs: KnowledgeAdminMessages)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    (doc: KnowledgeDocument)
+    =
     let deleteError = model.DeleteError |> Map.tryFind doc.Id
 
     Html.div [
@@ -178,7 +183,7 @@ let private deleteRowAction (model: Model) (dispatch: Msg -> unit) (doc: Knowled
         prop.children [
             Html.button [
                 prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-                prop.text "Delete"
+                prop.text msgs.Delete
                 prop.onClick (fun _ -> dispatch (RequestDelete doc.Id))
             ]
             match deleteError with
@@ -215,40 +220,39 @@ let private uploadInput (model: Model) (dispatch: Msg -> unit) =
                 target.value <- "")
     ]
 
-let private uploadPanel (model: Model) (dispatch: Msg -> unit) =
+let private uploadPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex flex-col gap-2 p-3 rounded border border-border bg-white"
         prop.children [
             Html.h3 [
                 prop.className "text-sm font-medium text-text-primary"
-                prop.text "Upload to Platform Knowledge Base"
+                prop.text msgs.UploadHeading
             ]
             Html.p [
                 prop.className "text-xs text-text-secondary"
-                prop.text
-                    "Documents uploaded here are available to every authenticated user across every team in the deployment when the Platform Knowledge Base is enabled. Use for cross-team reference content (regulatory PDFs, deployment-wide style guides, shared methodology)."
+                prop.text msgs.UploadDescription
             ]
             uploadInput model dispatch
             if model.Uploading then
-                Html.p [ prop.className "text-xs text-text-secondary"; prop.text "Uploading…" ]
+                Html.p [ prop.className "text-xs text-text-secondary"; prop.text msgs.Uploading ]
             match model.UploadError with
             | Some msg -> errorBanner msg
             | None -> Html.none
         ]
     ]
 
-let private documentsPanel (model: Model) (dispatch: Msg -> unit) =
+let private documentsPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let headerRow =
         Html.div [
             prop.className "flex items-center justify-between"
             prop.children [
                 Html.h3 [
                     prop.className "text-sm font-medium text-text-primary"
-                    prop.text "Platform Knowledge Base documents"
+                    prop.text msgs.DocumentsHeading
                 ]
                 Html.button [
                     prop.className "text-xs text-brand hover:underline"
-                    prop.text "Refresh"
+                    prop.text msgs.Refresh
                     prop.onClick (fun _ -> dispatch RefreshDocs)
                 ]
             ]
@@ -257,12 +261,12 @@ let private documentsPanel (model: Model) (dispatch: Msg -> unit) =
     let listBody =
         match model.Documents with
         | NotLoaded
-        | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading…" ]
+        | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
         | LoadError msg -> errorBanner msg
         | Loaded docs ->
             let config: KnowledgeListView.KnowledgeListConfig = {
-                EmptyStateText = "No documents in the Platform Knowledge Base yet."
-                RowAction = Some(deleteRowAction model dispatch)
+                EmptyStateText = msgs.EmptyState
+                RowAction = Some(deleteRowAction msgs model dispatch)
                 InstanceKey = "platform-admin"
             }
 
@@ -279,6 +283,8 @@ let private documentsPanel (model: Model) (dispatch: Msg -> unit) =
 /// covers the cross-session case.
 [<ReactComponent>]
 let private AdminPanel (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Admin
+
     React.useEffectOnce (fun () ->
         let dispose =
             NotificationClient.subscribe (fun envelope ->
@@ -290,7 +296,7 @@ let private AdminPanel (model: Model) (dispatch: Msg -> unit) =
 
     Html.div [
         prop.className "p-4 flex flex-col gap-4 h-full overflow-y-auto"
-        prop.children [ uploadPanel model dispatch; documentsPanel model dispatch ]
+        prop.children [ uploadPanel msgs model dispatch; documentsPanel msgs model dispatch ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =

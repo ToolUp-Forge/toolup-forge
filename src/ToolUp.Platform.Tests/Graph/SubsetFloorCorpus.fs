@@ -16,6 +16,14 @@ open ToolUp.Graph
 // The corpus is deliberately assertion-light on *values* (a set, not an
 // order, unless `ORDER BY` is present) so an engine that returns rows in a
 // different physical order still conforms.
+//
+// **Phase 752 — two cases are tier-split, none is tier-skipped.** Every
+// case still runs on every binding. Twenty of the twenty-two assert one
+// cardinality at both tiers (`AllTiers`); the two variable-length cases
+// assert the in-memory interpreter's node-set count on an interpreter-tier
+// binding and openCypher's path-multiset count on a full-engine binding
+// (`ByTier`), because those are two different correct answers to the same
+// query rather than one answer and one bug. See `CorpusRows` below.
 
 /// Build a node with string labels + a property list.
 let node (id: string) (labels: string list) (props: (string * PropertyValue) list) : GraphNode = {
@@ -69,13 +77,30 @@ let seed (store: IGraphStore) (scopeId: string) : Async<unit> = async {
         | Error err -> failwithf "fixture edge upsert failed: %s" (GraphError.message err)
 }
 
+/// The row cardinality a corpus case expects.
+///
+/// Most cases are tier-invariant: the in-memory interpreter and a full
+/// Cypher engine agree exactly, and `AllTiers` says so. The variable-length
+/// cases are NOT, and that difference is a *specified* property rather than
+/// an engine defect (Phase 752, the [Phase 607] residue): the in-memory
+/// interpreter returns the reachable NODE SET (each node once), while an
+/// engine answers openCypher's PATH MULTISET — one row per
+/// relationship-unique path. `ByTier` carries both, so a case that differs
+/// still runs on every binding and is asserted on every binding.
+type CorpusRows =
+    /// Every binding, at every tier, returns exactly this many rows.
+    | AllTiers of int
+    /// The in-memory interpreter's node-set count, then the engine tier's
+    /// openCypher path-multiset count. Both are asserted; neither is skipped.
+    | ByTier of interpreterRows: int * engineRows: int
+
 /// One corpus case: a query plus the shape every conforming store must
 /// return against the fixture.
 type CorpusCase = {
     Name: string
     Query: CypherQuery
     ExpectedColumns: string list
-    ExpectedRowCount: int
+    ExpectedRows: CorpusRows
 }
 
 let private q (text: string) : CypherQuery = CypherQuery.ofText text
@@ -90,141 +115,164 @@ let cases: CorpusCase list = [
         Name = "all nodes"
         Query = q "MATCH (n) RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 5
+        ExpectedRows = AllTiers 5
     }
     {
         Name = "label filter"
         Query = q "MATCH (n:Person) RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 4
+        ExpectedRows = AllTiers 4
     }
     {
         Name = "label + inline string prop"
         Query = q "MATCH (n:Person {city: 'London'}) RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "inline prop via parameter"
         Query = qp "MATCH (n:Person {city: $city}) RETURN n" [ "city", PString "Paris" ]
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 1
+        ExpectedRows = AllTiers 1
     }
     // ── RETURN projection ──────────────────────────────────────
     {
         Name = "return scalar property"
         Query = q "MATCH (n:Person) RETURN n.name"
         ExpectedColumns = [ "n.name" ]
-        ExpectedRowCount = 4
+        ExpectedRows = AllTiers 4
     }
     {
         Name = "return with alias"
         Query = q "MATCH (n:Person) RETURN n.name AS personName"
         ExpectedColumns = [ "personName" ]
-        ExpectedRowCount = 4
+        ExpectedRows = AllTiers 4
     }
     {
         Name = "return multiple items"
         Query = q "MATCH (n:Person) RETURN n.name AS name, n.city AS city"
         ExpectedColumns = [ "name"; "city" ]
-        ExpectedRowCount = 4
+        ExpectedRows = AllTiers 4
     }
     // ── WHERE comparisons ──────────────────────────────────────
     {
         Name = "where equality (string)"
         Query = q "MATCH (n:Person) WHERE n.city = 'London' RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "where greater-than (numeric)"
         Query = q "MATCH (n:Person) WHERE n.age > 30 RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "where greater-than-or-equal"
         Query = q "MATCH (n:Person) WHERE n.age >= 30 RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 3
+        ExpectedRows = AllTiers 3
     }
     {
         Name = "where not-equal"
         Query = q "MATCH (n:Person) WHERE n.city <> 'London' RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "where AND"
         Query = q "MATCH (n:Person) WHERE n.city = 'London' AND n.age > 30 RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 1
+        ExpectedRows = AllTiers 1
     }
     {
         Name = "where OR"
         Query = q "MATCH (n:Person) WHERE n.city = 'Paris' OR n.city = 'Berlin' RETURN n"
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "where via numeric parameter"
         Query = qp "MATCH (n:Person) WHERE n.age >= $minAge RETURN n" [ "minAge", PInt 35L ]
         ExpectedColumns = [ "n" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     // ── Single-hop relationships ───────────────────────────────
     {
         Name = "single-hop outgoing"
         Query = q "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS a, b.name AS b"
         ExpectedColumns = [ "a"; "b" ]
-        ExpectedRowCount = 5
+        ExpectedRows = AllTiers 5
     }
     {
         Name = "single-hop with endpoint WHERE"
         Query = q "MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.name = 'Alice' RETURN b.name AS friend"
         ExpectedColumns = [ "friend" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "single-hop incoming"
         Query = q "MATCH (a:Person)<-[:KNOWS]-(b:Person) WHERE a.name = 'Alice' RETURN b.name AS knower"
         ExpectedColumns = [ "knower" ]
-        ExpectedRowCount = 1
+        ExpectedRows = AllTiers 1
     }
     {
         Name = "single-hop to a different label"
         Query = q "MATCH (a:Person)-[:WORKS_AT]->(c:Company) RETURN a.name AS person, c.name AS company"
         ExpectedColumns = [ "person"; "company" ]
-        ExpectedRowCount = 1
+        ExpectedRows = AllTiers 1
     }
     // ── Variable-length paths ──────────────────────────────────
+    //
+    // These are the two TIER-SPLIT cases (Phase 752). Both tiers run both
+    // queries and both assert an exact cardinality — what differs is WHICH
+    // cardinality is correct, and each is derivable from the fixture:
+    //
+    //   interpreter (in-memory)  the reachable NODE SET, each node once
+    //   engine (openCypher)      the PATH MULTISET, one row per path whose
+    //                            relationships are pairwise distinct
+    //                            (openCypher relationship-uniqueness)
     {
+        // Interpreter: Alice reaches {Bob, Carol, Dave} = 3 nodes.
+        // Engine: 4 relationship-unique paths of length 1..2 —
+        //   [e1] Alice→Bob · [e4] Alice→Carol
+        //   [e1,e2] Alice→Bob→Carol · [e4,e3] Alice→Carol→Dave
         Name = "variable-length 1..2"
         Query = q "MATCH (a:Person {name: 'Alice'})-[:KNOWS*1..2]->(b:Person) RETURN b.name AS reachable"
         ExpectedColumns = [ "reachable" ]
-        ExpectedRowCount = 3
+        ExpectedRows = ByTier(3, 4)
     }
     {
-        // Within 5 hops Alice is reachable back to herself through the
-        // cycle (Alice→Carol→Dave→Alice = 3 hops), so the distinct
-        // reachable set is all four people. Terminates via the visited
-        // (node, depth) state guard.
+        // Interpreter: within 5 hops Alice is reachable back to herself
+        // through the cycle (Alice→Carol→Dave→Alice = 3 hops), so the
+        // distinct reachable set is all four people. Terminates via the
+        // visited (node, depth) state guard.
+        //
+        // Engine: 10 relationship-unique paths, two at each length 1..5 —
+        //   1  [e1] · [e4]
+        //   2  [e1,e2] · [e4,e3]
+        //   3  [e1,e2,e3] · [e4,e3,e5]
+        //   4  [e1,e2,e3,e5] · [e4,e3,e5,e1]
+        //   5  [e1,e2,e3,e5,e4] · [e4,e3,e5,e1,e2]
+        // Every longer walk repeats a relationship, which is what makes the
+        // engine's answer finite too — a different mechanism from the
+        // interpreter's visited-set, reaching the same guarantee.
         Name = "variable-length across a cycle (terminates)"
         Query = q "MATCH (a:Person {name: 'Alice'})-[:KNOWS*1..5]->(b:Person) RETURN b.name AS reachable"
         ExpectedColumns = [ "reachable" ]
-        ExpectedRowCount = 4
+        ExpectedRows = ByTier(4, 10)
     }
     // ── ORDER BY + LIMIT ───────────────────────────────────────
     {
         Name = "order by desc + limit"
         Query = q "MATCH (n:Person) RETURN n.name AS name ORDER BY n.age DESC LIMIT 2"
         ExpectedColumns = [ "name" ]
-        ExpectedRowCount = 2
+        ExpectedRows = AllTiers 2
     }
     {
         Name = "limit only"
         Query = q "MATCH (n:Person) RETURN n.name AS name LIMIT 3"
         ExpectedColumns = [ "name" ]
-        ExpectedRowCount = 3
+        ExpectedRows = AllTiers 3
     }
 ]

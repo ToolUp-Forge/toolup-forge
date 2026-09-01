@@ -102,22 +102,27 @@ let private csvEscape (s: string) : string =
 // chooses between "empty-state render" and "explicit
 // substrate-disabled banner".
 
-let inline private fetchJson<'T> (url: string) (fallbackOn503: 'T option) : Async<LoadState<'T>> = async {
-    try
-        let! response = Http.request url |> Http.method GET |> Http.send
+let inline private fetchJson<'T>
+    (fetchMsgs: PublicUtilityFetchMessages)
+    (url: string)
+    (fallbackOn503: 'T option)
+    : Async<LoadState<'T>> =
+    async {
+        try
+            let! response = Http.request url |> Http.method GET |> Http.send
 
-        match response.statusCode, fallbackOn503 with
-        | 200, _ ->
-            try
-                return Loaded(Json.parseAs<'T> response.responseText)
-            with ex ->
-                return LoadError(sprintf "Could not parse response: %s" ex.Message)
-        | 503, Some fallback -> return Loaded fallback
-        | 403, _ -> return LoadError "Access denied — platform-admin role required."
-        | code, _ -> return LoadError(sprintf "Request failed (HTTP %d)" code)
-    with ex ->
-        return LoadError(sprintf "Network error: %s" ex.Message)
-}
+            match response.statusCode, fallbackOn503 with
+            | 200, _ ->
+                try
+                    return Loaded(Json.parseAs<'T> response.responseText)
+                with ex ->
+                    return LoadError(fetchMsgs.ParseError ex.Message)
+            | 503, Some fallback -> return Loaded fallback
+            | 403, _ -> return LoadError fetchMsgs.AccessDenied
+            | code, _ -> return LoadError(fetchMsgs.RequestFailed code)
+        with ex ->
+            return LoadError(fetchMsgs.NetworkError ex.Message)
+    }
 
 // ─── Widget 1 — Traffic dashboard ─────────────────────────────────
 // The server-side `/api/_platform/admin/traffic` endpoint is the
@@ -126,12 +131,12 @@ let inline private fetchJson<'T> (url: string) (fallbackOn503: 'T option) : Asyn
 // renders the substrate stub the original body shipped — opt-in
 // surface, no broken fetches.
 
-let trafficDashboard (config: ClientConfig) : ReactElement =
-    let body =
-        substrateStub
-            "Traffic counters require the server-side /api/_platform/admin/traffic surface. Widget renders when that endpoint lands."
+let trafficDashboardWith (msgs: TrafficWidgetMessages) (config: ClientConfig) : ReactElement =
+    let body = substrateStub msgs.Stub
+    widgetCard msgs.Title msgs.Subtitle body
 
-    widgetCard "Traffic" "Request volume + error-rate + latency per route" body
+let trafficDashboard (config: ClientConfig) : ReactElement =
+    trafficDashboardWith MessageCatalog.english.PublicUtilityWidgets.Traffic config
 
 // ─── Widget 2 — Rate-limit event log ──────────────────────────────
 // GET /api/_platform/admin/rate-limits?count=100 → RateLimitDecisionEvent list
@@ -176,11 +181,30 @@ let private rateLimitsToCsv (events: RateLimitDecisionEvent list) : string =
     let rows = events |> List.map rateLimitToCsvRow
     String.Join("\n", header :: rows)
 
-let private rateLimitRow (event: RateLimitDecisionEvent) : ReactElement =
+let private rateLimitRow (msgs: RateLimitWidgetMessages) (event: RateLimitDecisionEvent) : ReactElement =
     let decisionClass =
         match event.Decision with
         | AllowWithRemaining _ -> "text-slate-700"
         | DenyWithError _ -> "text-red-700 font-medium"
+
+    let keyText =
+        match event.Key with
+        | IpAddressKey ip -> msgs.KeyIp ip
+        | UserIdKey uid -> msgs.KeyUser uid
+        | InboundComposite c -> msgs.KeyComposite c
+
+    let windowText =
+        match event.Window with
+        | PerSecond -> msgs.WindowPerSecond
+        | PerMinute -> msgs.WindowPerMinute
+        | PerHour -> msgs.WindowPerHour
+        | PerDay -> msgs.WindowPerDay
+        | SlidingWindow(duration, buckets) -> msgs.WindowSliding (sprintf "%.0fs" duration.TotalSeconds) buckets
+
+    let decisionText =
+        match event.Decision with
+        | AllowWithRemaining remaining -> msgs.DecisionAllow remaining
+        | DenyWithError _ -> msgs.DecisionDeny
 
     Html.tr [
         prop.className "border-t border-slate-200"
@@ -189,27 +213,21 @@ let private rateLimitRow (event: RateLimitDecisionEvent) : ReactElement =
                 prop.className "px-3 py-1.5 text-xs text-slate-500 font-mono whitespace-nowrap"
                 prop.text (event.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss"))
             ]
-            Html.td [
-                prop.className "px-3 py-1.5 text-xs font-mono"
-                prop.text (formatRateLimitKey event.Key)
-            ]
+            Html.td [ prop.className "px-3 py-1.5 text-xs font-mono"; prop.text keyText ]
             Html.td [ prop.className "px-3 py-1.5 text-xs text-slate-700"; prop.text event.Route ]
-            Html.td [
-                prop.className "px-3 py-1.5 text-xs text-slate-500"
-                prop.text (formatWindow event.Window)
-            ]
+            Html.td [ prop.className "px-3 py-1.5 text-xs text-slate-500"; prop.text windowText ]
             Html.td [
                 prop.className "px-3 py-1.5 text-xs text-slate-500 font-mono"
                 prop.text (string event.Threshold)
             ]
             Html.td [
                 prop.className (sprintf "px-3 py-1.5 text-xs %s" decisionClass)
-                prop.text (formatDecision event.Decision)
+                prop.text decisionText
             ]
         ]
     ]
 
-let private rateLimitsTable (events: RateLimitDecisionEvent list) : ReactElement =
+let private rateLimitsTable (msgs: RateLimitWidgetMessages) (events: RateLimitDecisionEvent list) : ReactElement =
     Html.div [
         prop.className "border border-slate-200 rounded overflow-hidden"
         prop.children [
@@ -223,33 +241,33 @@ let private rateLimitsTable (events: RateLimitDecisionEvent list) : ReactElement
                                 prop.children [
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Occurred"
+                                        prop.text msgs.ColumnOccurred
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Key"
+                                        prop.text msgs.ColumnKey
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Route"
+                                        prop.text msgs.ColumnRoute
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Window"
+                                        prop.text msgs.ColumnWindow
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Threshold"
+                                        prop.text msgs.ColumnThreshold
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Decision"
+                                        prop.text msgs.ColumnDecision
                                     ]
                                 ]
                             ]
                         ]
                     ]
-                    Html.tbody [ prop.children (events |> List.map rateLimitRow) ]
+                    Html.tbody [ prop.children (events |> List.map (rateLimitRow msgs)) ]
                 ]
             ]
         ]
@@ -257,6 +275,10 @@ let private rateLimitsTable (events: RateLimitDecisionEvent list) : ReactElement
 
 [<ReactComponent>]
 let RateLimitEventLogBody () : ReactElement =
+    let allMsgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
+    let msgs = allMsgs.RateLimits
+    let fetchMsgs = allMsgs.Fetch
+
     let state, setState =
         React.useState (Loading: LoadState<RateLimitDecisionEvent list>)
 
@@ -264,7 +286,7 @@ let RateLimitEventLogBody () : ReactElement =
         setState Loading
 
         async {
-            let! result = fetchJson<RateLimitDecisionEvent list> rateLimitsUrl (Some [])
+            let! result = fetchJson<RateLimitDecisionEvent list> fetchMsgs rateLimitsUrl (Some [])
             setState result
         }
         |> Async.StartImmediate
@@ -280,11 +302,11 @@ let RateLimitEventLogBody () : ReactElement =
         Html.div [
             prop.className "flex items-center gap-2 mb-3"
             prop.children [
-                smallButton (if isLoading then "Refreshing..." else "Refresh") load isLoading
+                smallButton (if isLoading then msgs.Refreshing else msgs.Refresh) load isLoading
                 match state with
                 | Loaded events when not (List.isEmpty events) ->
                     smallButton
-                        "Export CSV"
+                        msgs.ExportCsv
                         (fun () -> downloadCsv "rate-limit-events.csv" (rateLimitsToCsv events))
                         false
                 | _ -> Html.none
@@ -293,15 +315,18 @@ let RateLimitEventLogBody () : ReactElement =
 
     let body =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text "Loading..." ]
+        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
         | LoadError msg -> errorBanner msg
-        | Loaded [] -> substrateStub "Rate-limiting not configured for this deployment, or no decisions recorded yet."
-        | Loaded events -> rateLimitsTable events
+        | Loaded [] -> substrateStub msgs.EmptyState
+        | Loaded events -> rateLimitsTable msgs events
 
     Html.div [ prop.children [ controls; body ] ]
 
+let rateLimitEventLogWith (msgs: RateLimitWidgetMessages) (config: ClientConfig) : ReactElement =
+    widgetCard msgs.Title msgs.Subtitle (RateLimitEventLogBody())
+
 let rateLimitEventLog (config: ClientConfig) : ReactElement =
-    widgetCard "Rate-limit events" "Recent decisions by key + route (newest first)" (RateLimitEventLogBody())
+    rateLimitEventLogWith MessageCatalog.english.PublicUtilityWidgets.RateLimits config
 
 // ─── Widget 3 — Ad-unit configuration ─────────────────────────────
 // CRUD over /api/_platform/admin/ad-units. Skips entirely when
@@ -366,6 +391,7 @@ let private draftToConfig (draft: AdUnitDraft) : AdSlotConfig = {
 }
 
 let private sendAdUnitRequest
+    (msgs: AdUnitWidgetMessages)
     (httpMethod: HttpMethod)
     (url: string)
     (body: string option)
@@ -389,7 +415,7 @@ let private sendAdUnitRequest
             else
                 let reason =
                     if String.IsNullOrWhiteSpace response.responseText then
-                        sprintf "HTTP %d" response.statusCode
+                        msgs.EmptyResponseReason response.statusCode
                     else
                         response.responseText
 
@@ -400,6 +426,10 @@ let private sendAdUnitRequest
 
 [<ReactComponent>]
 let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
+    let allMsgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
+    let msgs = allMsgs.AdUnits
+    let fetchMsgs = allMsgs.Fetch
+
     let state, setState = React.useState (Loading: LoadState<AdSlotConfig list>)
     let draft, setDraft = React.useState (emptyDraft defaultAdClientId)
     let editingSlot, setEditingSlot = React.useState (None: string option)
@@ -410,7 +440,7 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
         setState Loading
 
         async {
-            let! result = fetchJson<AdSlotConfig list> adUnitsUrl (Some [])
+            let! result = fetchJson<AdSlotConfig list> fetchMsgs adUnitsUrl (Some [])
             setState result
         }
         |> Async.StartImmediate
@@ -429,7 +459,7 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
 
     let save () =
         if String.IsNullOrWhiteSpace draft.SlotId then
-            setWriteError (Some "Slot id is required.")
+            setWriteError (Some msgs.SlotIdRequired)
         else
             setSaving true
             setWriteError None
@@ -442,14 +472,14 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                 | None -> POST, adUnitsUrl
 
             async {
-                let! result = sendAdUnitRequest httpMethod url (Some payload)
+                let! result = sendAdUnitRequest msgs httpMethod url (Some payload)
                 setSaving false
 
                 match result with
                 | Ok _ ->
                     cancelEdit ()
                     load ()
-                | Error reason -> setWriteError (Some(sprintf "Save failed: %s" reason))
+                | Error reason -> setWriteError (Some(msgs.SaveFailed reason))
             }
             |> Async.StartImmediate
 
@@ -458,20 +488,20 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
         setWriteError None
 
         async {
-            let! result = sendAdUnitRequest DELETE (sprintf "%s/%s" adUnitsUrl slotId) None
+            let! result = sendAdUnitRequest msgs DELETE (sprintf "%s/%s" adUnitsUrl slotId) None
             setSaving false
 
             match result with
             | Ok _ -> load ()
-            | Error reason -> setWriteError (Some(sprintf "Delete failed: %s" reason))
+            | Error reason -> setWriteError (Some(msgs.DeleteFailed reason))
         }
         |> Async.StartImmediate
 
     let listSection =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text "Loading..." ]
+        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
         | LoadError msg -> errorBanner msg
-        | Loaded [] -> substrateStub "No ad units configured yet. Use the form below to create one."
+        | Loaded [] -> substrateStub msgs.EmptyState
         | Loaded configs ->
             Html.div [
                 prop.className "border border-slate-200 rounded overflow-hidden mb-3"
@@ -486,23 +516,23 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                                         prop.children [
                                             Html.th [
                                                 prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                                prop.text "Slot id"
+                                                prop.text msgs.ColumnSlotId
                                             ]
                                             Html.th [
                                                 prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                                prop.text "Ad-client id"
+                                                prop.text msgs.ColumnAdClientId
                                             ]
                                             Html.th [
                                                 prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                                prop.text "Format"
+                                                prop.text msgs.ColumnFormat
                                             ]
                                             Html.th [
                                                 prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                                prop.text "Style"
+                                                prop.text msgs.ColumnStyle
                                             ]
                                             Html.th [
                                                 prop.className "text-right px-3 py-2 font-medium text-slate-600"
-                                                prop.text "Actions"
+                                                prop.text msgs.ColumnActions
                                             ]
                                         ]
                                     ]
@@ -541,9 +571,12 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                                                         Html.div [
                                                             prop.className "flex items-center gap-1 justify-end"
                                                             prop.children [
-                                                                smallButton "Edit" (fun () -> beginEdit config) saving
                                                                 smallButton
-                                                                    "Delete"
+                                                                    msgs.Edit
+                                                                    (fun () -> beginEdit config)
+                                                                    saving
+                                                                smallButton
+                                                                    msgs.Delete
                                                                     (fun () -> delete config.SlotId)
                                                                     saving
                                                             ]
@@ -577,7 +610,7 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
         Html.label [
             prop.className "flex flex-col gap-1 text-xs"
             prop.children [
-                Html.span [ prop.className "font-medium text-slate-700"; prop.text "Format" ]
+                Html.span [ prop.className "font-medium text-slate-700"; prop.text msgs.FormatLabel ]
                 Html.select [
                     prop.className "border border-slate-300 rounded px-2 py-1 text-xs"
                     prop.value draft.Format
@@ -604,12 +637,12 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                             prop.className "text-xs font-semibold text-slate-700"
                             prop.text (
                                 match editingSlot with
-                                | Some slotId -> sprintf "Edit slot %s" slotId
-                                | None -> "Create slot"
+                                | Some slotId -> msgs.EditSlotHeading slotId
+                                | None -> msgs.CreateSlotHeading
                             )
                         ]
                         if editingSlot.IsSome then
-                            smallButton "Cancel" cancelEdit saving
+                            smallButton msgs.Cancel cancelEdit saving
                         else
                             Html.none
                     ]
@@ -617,15 +650,13 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                 Html.div [
                     prop.className "grid grid-cols-2 gap-3"
                     prop.children [
-                        labelledInput "Slot id" draft.SlotId "1234567890" (fun v -> setDraft { draft with SlotId = v })
-                        labelledInput "Ad-client id" draft.AdClientId "ca-pub-..." (fun v ->
+                        labelledInput msgs.SlotIdLabel draft.SlotId msgs.SlotIdPlaceholder (fun v ->
+                            setDraft { draft with SlotId = v })
+                        labelledInput msgs.AdClientIdLabel draft.AdClientId msgs.AdClientIdPlaceholder (fun v ->
                             setDraft { draft with AdClientId = v })
                         formatSelect
-                        labelledInput
-                            "Style CSS (optional)"
-                            draft.StyleCss
-                            "display:block; width:300px; height:250px;"
-                            (fun v -> setDraft { draft with StyleCss = v })
+                        labelledInput msgs.StyleCssLabel draft.StyleCss msgs.StyleCssPlaceholder (fun v ->
+                            setDraft { draft with StyleCss = v })
                     ]
                 ]
                 Html.div [
@@ -633,13 +664,13 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                     prop.children [
                         smallButton
                             (if saving then
-                                 "Saving..."
+                                 msgs.Saving
                              else
-                                 (if editingSlot.IsSome then "Update" else "Create"))
+                                 (if editingSlot.IsSome then msgs.Update else msgs.Create))
                             save
                             saving
                         smallButton
-                            "Refresh"
+                            msgs.Refresh
                             load
                             (saving
                              || (match state with
@@ -655,15 +686,14 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
 
     Html.div [ prop.children [ listSection; formSection ] ]
 
-let adUnitConfig (config: ClientConfig) : ReactElement =
+let adUnitConfigWith (msgs: AdUnitWidgetMessages) (config: ClientConfig) : ReactElement =
     match config.AdPanel with
-    | NoAdPanel ->
-        widgetCard
-            "Ad units"
-            "AdSense slot configuration"
-            (substrateStub "AdPanel is disabled (ClientConfig.AdPanel = NoAdPanel) — no ad units to configure.")
+    | NoAdPanel -> widgetCard msgs.Title msgs.Subtitle (substrateStub msgs.DisabledStub)
     | EnabledAdPanel panelConfig ->
-        widgetCard "Ad units" "AdSense slot configuration" (AdUnitConfigBody(panelConfig.DefaultAdClientId))
+        widgetCard msgs.Title msgs.Subtitle (AdUnitConfigBody(panelConfig.DefaultAdClientId))
+
+let adUnitConfig (config: ClientConfig) : ReactElement =
+    adUnitConfigWith MessageCatalog.english.PublicUtilityWidgets.AdUnits config
 
 // ─── Widget 4 — Premium-user list ─────────────────────────────────
 // GET /api/_platform/admin/premium-users → (string * PremiumStatus) list.
@@ -694,7 +724,7 @@ let private premiumUserRow (userId: string, status: PremiumStatus) : ReactElemen
         ]
     ]
 
-let private premiumUsersTable (users: (string * PremiumStatus) list) : ReactElement =
+let private premiumUsersTable (msgs: PremiumUserWidgetMessages) (users: (string * PremiumStatus) list) : ReactElement =
     Html.div [
         prop.className "border border-slate-200 rounded overflow-hidden"
         prop.children [
@@ -708,19 +738,19 @@ let private premiumUsersTable (users: (string * PremiumStatus) list) : ReactElem
                                 prop.children [
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "User id"
+                                        prop.text msgs.ColumnUserId
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Granted at"
+                                        prop.text msgs.ColumnGrantedAt
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Granted by"
+                                        prop.text msgs.ColumnGrantedBy
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-slate-600"
-                                        prop.text "Reason"
+                                        prop.text msgs.ColumnReason
                                     ]
                                 ]
                             ]
@@ -734,6 +764,10 @@ let private premiumUsersTable (users: (string * PremiumStatus) list) : ReactElem
 
 [<ReactComponent>]
 let PremiumUserListBody () : ReactElement =
+    let allMsgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
+    let msgs = allMsgs.PremiumUsers
+    let fetchMsgs = allMsgs.Fetch
+
     let state, setState =
         React.useState (Loading: LoadState<(string * PremiumStatus) list>)
 
@@ -741,7 +775,7 @@ let PremiumUserListBody () : ReactElement =
         setState Loading
 
         async {
-            let! result = fetchJson<(string * PremiumStatus) list> premiumUsersUrl (Some [])
+            let! result = fetchJson<(string * PremiumStatus) list> fetchMsgs premiumUsersUrl (Some [])
             setState result
         }
         |> Async.StartImmediate
@@ -757,43 +791,55 @@ let PremiumUserListBody () : ReactElement =
         Html.div [
             prop.className "flex items-center gap-2 mb-3"
             prop.children [
-                smallButton (if isLoading then "Refreshing..." else "Refresh") load isLoading
+                smallButton (if isLoading then msgs.Refreshing else msgs.Refresh) load isLoading
             ]
         ]
 
     let body =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text "Loading..." ]
+        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
         | LoadError msg -> errorBanner msg
-        | Loaded [] ->
-            substrateStub
-                "No premium users granted yet. Grant via POST /api/_platform/users/{userId}/premium (Phase 62)."
-        | Loaded users -> premiumUsersTable users
+        | Loaded [] -> substrateStub msgs.EmptyState
+        | Loaded users -> premiumUsersTable msgs users
 
     Html.div [ prop.children [ controls; body ] ]
 
-let premiumUserList (config: ClientConfig) : ReactElement =
+let premiumUserListWith (msgs: PremiumUserWidgetMessages) (config: ClientConfig) : ReactElement =
     match config.PremiumModel with
-    | AnonymousFirst -> widgetCard "Premium users" "Operator-granted premium claims" (PremiumUserListBody())
+    | AnonymousFirst -> widgetCard msgs.Title msgs.Subtitle (PremiumUserListBody())
+
+let premiumUserList (config: ClientConfig) : ReactElement =
+    premiumUserListWith MessageCatalog.english.PublicUtilityWidgets.PremiumUsers config
 
 // ─── Composition entry ────────────────────────────────────────────
 // Render every widget that applies under the current ClientConfig +
 // PlatformAdminProfile combination.
 
+/// Phase 751 — the composed page as a React COMPONENT, for the same
+/// reason `HealthMonitorUI.HealthMonitorBody` / `AdminHome.TileGrid`
+/// are: `render` is invoked inline by the shell's own render (via
+/// `PlatformAdminUI.viewWith`), so a hook there would join the shell's
+/// hook order and break the moment the active module changed. `render`
+/// itself keeps its existing signature and delegates here.
+[<ReactComponent>]
+let private PublicUtilityWidgetsBody (config: ClientConfig) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
+
+    Html.div [
+        prop.className "p-4"
+        prop.children [
+            Html.h2 [
+                prop.className "text-lg font-semibold text-slate-900 mb-4"
+                prop.text msgs.Heading
+            ]
+            trafficDashboardWith msgs.Traffic config
+            rateLimitEventLogWith msgs.RateLimits config
+            adUnitConfigWith msgs.AdUnits config
+            premiumUserListWith msgs.PremiumUsers config
+        ]
+    ]
+
 let render (config: ClientConfig) : ReactElement =
     match config.PlatformAdminProfile with
     | StandardPlatformAdminProfile -> Html.none
-    | PublicUtilityPlatformAdminProfile ->
-        Html.div [
-            prop.className "p-4"
-            prop.children [
-                Html.h2 [
-                    prop.className "text-lg font-semibold text-slate-900 mb-4"
-                    prop.text "Public utility"
-                ]
-                trafficDashboard config
-                rateLimitEventLog config
-                adUnitConfig config
-                premiumUserList config
-            ]
-        ]
+    | PublicUtilityPlatformAdminProfile -> PublicUtilityWidgetsBody config

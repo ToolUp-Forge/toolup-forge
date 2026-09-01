@@ -214,8 +214,11 @@ KnowledgeListView.hasVersionHistory(SharedTypes+KnowledgeDocument) : System.Bool
 KnowledgeListView+Badges (class)
 KnowledgeListView+Badges.fileTypeBadge(System.String) : Fable.React.ReactElement
 KnowledgeListView+Badges.sourceBadge(SharedTypes+KnowledgeSource) : Fable.React.ReactElement
+KnowledgeListView+Badges.sourceBadgeWith(ToolUp.Platform.KnowledgeListMessages, SharedTypes+KnowledgeSource) : Fable.React.ReactElement
 KnowledgeListView+Badges.statusBadge(SharedTypes+IngestionStatus) : Fable.React.ReactElement
+KnowledgeListView+Badges.statusBadgeWith(ToolUp.Platform.KnowledgeListMessages, SharedTypes+IngestionStatus) : Fable.React.ReactElement
 KnowledgeListView+Badges.versionBadge(System.Int32) : Fable.React.ReactElement
+KnowledgeListView+Badges.versionBadgeWith(ToolUp.Platform.KnowledgeListMessages, System.Int32) : Fable.React.ReactElement
 KnowledgeListView+DateRange (class)
 KnowledgeListView+DateRange.AllDates : KnowledgeListView+DateRange { get }
 KnowledgeListView+DateRange.IsAllDates : System.Boolean { get }

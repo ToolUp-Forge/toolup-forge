@@ -229,19 +229,43 @@ module CypherTranslation =
 
     // ── Transient-fault classification (GP 12 rule 3) ────────────────
 
+    /// True for a Neo4j status code in the `Neo.ClientError.Statement.*`
+    /// family — the query AS SUBMITTED is wrong (`SyntaxError`,
+    /// `ParameterMissing`, `TypeError`, `ArgumentError`, `SemanticError`).
+    ///
+    /// The whole family, deliberately, not one member of it: this is the Bolt
+    /// analogue of the AGE binding's Postgres class-`42` test, and matching a
+    /// single code is what made a missing parameter — the exact case the
+    /// conformance pack asserts — read as a `StorageFailure`. Security, schema
+    /// and transaction client-errors are NOT malformed queries and stay out.
+    let isMalformedStatementCode (code: string) : bool =
+        not (String.IsNullOrEmpty code)
+        && code.StartsWith("Neo.ClientError.Statement.", StringComparison.Ordinal)
+
     /// Classify a driver exception into the `IGraphStore` error channel.
     /// Retryable faults (a `Neo4jException` marked `IsRetriable` — connection
     /// blips, causal-cluster leader re-election, deadlocks) become
     /// `GraphError.TransientFailure` (retryable *data* the caller loops on),
-    /// never a thrown live exception across the async boundary. Everything else
-    /// maps to `StorageFailure`. A `ClientException` naming a syntax problem is
-    /// a `MalformedQuery`.
-    let classifyError (ex: exn) : GraphError =
+    /// never a thrown live exception across the async boundary. A
+    /// `ClientException` in the `Neo.ClientError.Statement.*` family is a
+    /// `MalformedQuery`. Everything else maps to `StorageFailure`.
+    ///
+    /// **The `AggregateException` unwrap is load-bearing (Phase 752).** The
+    /// store reaches the driver through `Async.AwaitTask`, which surfaces a
+    /// faulted task as an `AggregateException`, so before this the driver's
+    /// exception arrived WRAPPED and every arm below fell through to
+    /// `StorageFailure` — the entire classification, including the
+    /// retryable/non-retryable split GP 12 rule 3 requires callers to act on,
+    /// was silently dead. Phase 607 found and fixed exactly this in the AGE
+    /// binding and predicted the twin here; the first live Neo4j run
+    /// (Phase 752) confirmed it.
+    let rec classifyError (ex: exn) : GraphError =
         match ex with
+        | :? AggregateException as agg when not (isNull agg.InnerException) ->
+            classifyError (agg.Flatten().InnerException)
         | :? Neo4jException as nx when nx.IsRetriable -> TransientFailure(nx.Message)
         | :? ServiceUnavailableException as sx -> TransientFailure(sx.Message)
         | :? SessionExpiredException as sx -> TransientFailure(sx.Message)
-        | :? ClientException as cx when cx.Code |> Option.ofObj |> Option.exists (fun c -> c.Contains "SyntaxError") ->
-            MalformedQuery(cx.Message)
+        | :? ClientException as cx when isMalformedStatementCode cx.Code -> MalformedQuery(cx.Message)
         | :? Neo4jException as nx -> StorageFailure(nx.Message)
         | _ -> StorageFailure(ex.Message)

@@ -16,6 +16,7 @@ ToolUp.Graph.Neo4j.CypherTranslation.edgePropertyMap(Microsoft.FSharp.Core.FShar
 ToolUp.Graph.Neo4j.CypherTranslation.escapeIdent(System.String) : System.String
 ToolUp.Graph.Neo4j.CypherTranslation.graphValueOf(System.Object) : ToolUp.Graph.GraphValue
 ToolUp.Graph.Neo4j.CypherTranslation.injectScopeGuard(System.String) : System.String
+ToolUp.Graph.Neo4j.CypherTranslation.isMalformedStatementCode(System.String) : System.Boolean
 ToolUp.Graph.Neo4j.CypherTranslation.labelSuffix(Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : System.String
 ToolUp.Graph.Neo4j.CypherTranslation.nodeOf(Neo4j.Driver.INode) : ToolUp.Graph.GraphNode
 ToolUp.Graph.Neo4j.CypherTranslation.nodePropertyMap(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Graph.GraphNode) : System.Collections.Generic.Dictionary`2[System.String, System.Object]

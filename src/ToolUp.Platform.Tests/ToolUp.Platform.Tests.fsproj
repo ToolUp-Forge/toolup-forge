@@ -73,6 +73,11 @@
         <!-- Phase 442 — presence tracker + advisory soft-lock conformance. -->
         <Compile Include="Contracts\IPresenceTrackerContract.fs" />
         <Compile Include="Contracts\IEntityLockStoreContract.fs" />
+        <!-- Phase 535 — CRDT co-editing store conformance: append / diff /
+             snapshot / compaction, scope isolation, and the convergence
+             property (any permutation of the same update set yields the
+             same state vector and the same delivered payload set). -->
+        <Compile Include="Contracts\ICrdtDocumentStoreContract.fs" />
         <!-- Phase 26 — deploy-plane substrate contract packs. -->
         <Compile Include="Contracts\IBuildOrchestratorContract.fs" />
         <Compile Include="Contracts\ITenantFleetContract.fs" />

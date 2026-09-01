@@ -119,27 +119,35 @@ let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-let private statusLine (state: CheckState) : ReactElement =
+let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) : ReactElement =
     match state with
     | CheckState.Idle -> Html.none
-    | CheckState.Checking ->
-        Html.p [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "Checking for invitations…"
-        ]
+    | CheckState.Checking -> Html.p [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.Checking ]
     | CheckState.NothingPending ->
         Html.p [
             prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "No invitations are waiting for you yet."
+            prop.text msgs.NothingPending
         ]
     | CheckState.Joined teamName ->
         Html.p [
             prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text $"You've joined {teamName} — loading it now…"
+            prop.text (msgs.Joined teamName)
         ]
+    // The failure text is the server's own message, echoed — not a
+    // literal this file authors, so there is nothing here to translate.
     | CheckState.Failed message -> Html.p [ prop.className $"{Tokens.Colours.error} text-sm"; prop.text message ]
 
-let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — a component, so it has a hook site for the catalog. The
+/// heading, body and rail label stay `cfg`-supplied: they are the
+/// DEPLOYMENT's words about its own product, not SDK chrome.
+[<ReactComponent>]
+let private NoActiveTeamLandingBody
+    (cfg: NoActiveTeamLandingConfig)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).NoActiveTeamLanding
+
     Html.div [
         prop.className "flex items-center justify-center h-full p-8"
         prop.children [
@@ -148,10 +156,10 @@ let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatc
                 prop.children [
                     Html.h2 [ prop.className "text-xl font-semibold text-gray-800"; prop.text cfg.Title ]
                     Html.p [ prop.className "text-sm text-gray-600 leading-relaxed"; prop.text cfg.Body ]
-                    statusLine model.State
+                    statusLine msgs model.State
                     Html.button [
                         prop.className Tokens.Button.primary
-                        prop.text "Check for invitations"
+                        prop.text msgs.CheckForInvitations
                         prop.disabled (model.State = CheckState.Checking)
                         prop.onClick (fun _ -> dispatch CheckInvites)
                     ]
@@ -159,6 +167,9 @@ let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatc
             ]
         ]
     ]
+
+let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    NoActiveTeamLandingBody cfg model dispatch
 
 /// Build the SDK built-in no-active-team landing `ErasedModule` from its
 /// parameterized config. `cfg.Icon = None` falls back to `Icons.home`.

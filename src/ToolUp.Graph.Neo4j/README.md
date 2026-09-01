@@ -87,6 +87,25 @@ Cypher and missing parameters surface as `GraphError.MalformedQuery`; everything
 else as `GraphError.StorageFailure`. Pure reads (`GetNode` / `Neighbours`) model
 their only failure — absence — as `option` / empty list.
 
+**This paragraph was true of the design and false of the code until Phase 752,
+and the first live run is what found it.** Two defects, both twins of ones
+Phase 607 found in the AGE companion:
+
+- The store reaches the driver through `Async.AwaitTask`, which surfaces a
+  faulted task as an `AggregateException` — so the driver's exception arrived
+  **wrapped** and every classification arm fell through to `StorageFailure`.
+  The whole retryable/non-retryable split this section describes was silently
+  dead code. `classifyError` now unwraps first.
+- The malformed-query arm matched only a status code containing `SyntaxError`,
+  so a **missing parameter** — the exact case the conformance pack asserts —
+  read as `StorageFailure`. It now matches the whole
+  `Neo.ClientError.Statement.*` family (the Bolt analogue of the AGE binding's
+  Postgres class-`42` test), with security, schema and transaction client-errors
+  deliberately outside it.
+
+Both are pinned negatively in the always-on unit pack, so neither can return
+silently on a machine with no server.
+
 ## Connection config + causal-cluster routing
 
 `Neo4jGraphStoreConfig` exposes pool sizing and the retry window (all defaulted):
@@ -113,7 +132,19 @@ read replica would reject a write).
   refuses (`CREATE` / `MERGE` / aggregation / multi-hop) — they run here rather
   than throwing `CypherSubsetException`. Variable-length `RETURN` uses Cypher's
   path-multiset semantics (add `DISTINCT` for the in-memory floor's node-set
-  behaviour). This is the intended "engine exceeds the floor" property.
+  behaviour). This is the intended "engine exceeds the floor" property, and
+  since **Phase 752** the conformance pack knows it: this companion declares the
+  `FullEngine` tier at bind time, so `CREATE` executing, a multi-hop pattern
+  running, and the path-multiset row counts are asserted here as **full-engine
+  laws**, while the in-memory binding is held to the interpreter-subset laws it
+  actually implements. Before 752 the pack asserted the interpreter's laws on
+  every binding, so this arm would have reported four failures the first time
+  anyone ran it — which Phase 607 predicted from the AGE side, before a Neo4j
+  server existed to prove it.
+
+  Certified live at Phase 752 against `neo4j:5` in `PropertyPartition` mode:
+  **38 passed / 0 failed** — the first execution of this arm since it shipped at
+  Phase 68b.
 
 ## Out of scope
 

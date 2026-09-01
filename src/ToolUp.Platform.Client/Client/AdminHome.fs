@@ -91,14 +91,14 @@ let update (msg: Msg) (model: Model) =
 /// One tile. The header row is the click target (a single button, so a
 /// contributor body containing its own controls never nests inside one);
 /// the contributed body renders below it with the shared render context.
-let private renderTile (ctx: HomeWidgetContext) (onOpen: string -> unit) (tile: AdminTile) =
+let private renderTile (msgs: AdminHomeMessages) (ctx: HomeWidgetContext) (onOpen: string -> unit) (tile: AdminTile) =
     Html.div [
         prop.key tile.Widget.Id
         prop.className "p-4 bg-white border border-gray-200 rounded-lg space-y-2"
         prop.children [
             Html.button [
                 prop.className "w-full flex items-center gap-2 text-left group hover:text-blue-600 transition-colors"
-                prop.title (sprintf "Open %s" tile.Widget.Title)
+                prop.title (msgs.OpenTile tile.Widget.Title)
                 prop.onClick (fun _ -> onOpen tile.OwnerModuleId)
                 prop.children [
                     Html.span [ prop.className "text-gray-500"; prop.children [ tile.Widget.Icon ] ]
@@ -120,23 +120,21 @@ let private renderTile (ctx: HomeWidgetContext) (onOpen: string -> unit) (tile: 
 /// Operator-facing, because that is whose problem it is: it names the
 /// mechanism (contribution), the two ways a tile appears, and the fact
 /// that the rail is still the complete list in the meantime.
-let private renderNoTilesContributed () =
+let private renderNoTilesContributed (msgs: AdminHomeMessages) =
     Html.div [
         prop.className "p-8 border border-dashed border-gray-300 rounded-lg space-y-3 bg-gray-50"
         prop.children [
             Html.h3 [
                 prop.className "text-sm font-semibold text-gray-700"
-                prop.text "No administration tiles are contributed yet"
+                prop.text msgs.NoTilesContributedHeading
             ]
             Html.p [
                 prop.className "text-sm text-gray-600"
-                prop.text
-                    "Tiles are contributed by the modules they front, not by this page. Each administration module this deployment enables in its client configuration contributes one — a health monitor, a service status board, a usage dashboard, a team manager — and a module of your own contributes one by adding a tile contributor to the client handler registry."
+                prop.text msgs.NoTilesContributedBody
             ]
             Html.p [
                 prop.className "text-xs text-gray-500"
-                prop.text
-                    "Until then, the rail on the left is the complete list of administration surfaces you can reach."
+                prop.text msgs.NoTilesContributedFooter
             ]
         ]
     ]
@@ -145,22 +143,18 @@ let private renderNoTilesContributed () =
 /// Deliberately says nothing about how many exist or what they front —
 /// the reader cannot act on either, and enumerating administration
 /// surfaces to somebody who may not open them is a reconnaissance gift.
-let private renderNoTilesForSubject () =
+let private renderNoTilesForSubject (msgs: AdminHomeMessages) =
     Html.div [
         prop.className "p-8 border border-dashed border-gray-300 rounded-lg space-y-3 bg-gray-50"
         prop.children [
             Html.h3 [
                 prop.className "text-sm font-semibold text-gray-700"
-                prop.text "Nothing to show for your role"
+                prop.text msgs.NoTilesForSubjectHeading
             ]
-            Html.p [
-                prop.className "text-sm text-gray-600"
-                prop.text
-                    "A tile follows the same access rules as the surface it opens, so this page shows only what you could navigate to anyway — and right now that is nothing on this deployment."
-            ]
+            Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoTilesForSubjectBody ]
             Html.p [
                 prop.className "text-xs text-gray-500"
-                prop.text "If you expected more here, ask an administrator to review your role."
+                prop.text msgs.NoTilesForSubjectFooter
             ]
         ]
     ]
@@ -171,47 +165,50 @@ let private renderNoTilesForSubject () =
 /// grid and the two empty states (`AdminTiles.landingState`).
 [<ReactComponent>]
 let private TileGrid (data: Map<string, string>) (onOpen: string -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).AdminHome
     let visibleTiles = React.useContext AdminTileContext.Context
     let contributed = AdminTileRegistry.tiles () |> List.length
     let ctx: HomeWidgetContext = { Data = data }
 
     match AdminTiles.landingState contributed visibleTiles with
-    | AdminTiles.LandingState.NoTilesContributed -> renderNoTilesContributed ()
-    | AdminTiles.LandingState.NoTilesForSubject -> renderNoTilesForSubject ()
+    | AdminTiles.LandingState.NoTilesContributed -> renderNoTilesContributed msgs
+    | AdminTiles.LandingState.NoTilesForSubject -> renderNoTilesForSubject msgs
     | AdminTiles.LandingState.Tiles tiles ->
         Html.div [
             prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            prop.children (tiles |> List.map (renderTile ctx onOpen))
+            prop.children (tiles |> List.map (renderTile msgs ctx onOpen))
         ]
+
+/// Phase 751 — the page header as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook there would join the shell's
+/// hook order and break the moment the active module changed.
+[<ReactComponent>]
+let private AdminHomeHeader (onRefresh: unit -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).AdminHome
+
+    Html.div [
+        prop.className "flex items-center justify-between mb-4"
+        prop.children [
+            Html.div [
+                prop.children [
+                    Html.h2 [ prop.className "text-lg font-semibold text-gray-800"; prop.text msgs.Heading ]
+                    Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.Subheading ]
+                ]
+            ]
+            Html.button [
+                prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
+                prop.onClick (fun _ -> onRefresh ())
+                prop.text msgs.Refresh
+            ]
+        ]
+    ]
 
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-4"
         prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between mb-4"
-                prop.children [
-                    Html.div [
-                        prop.children [
-                            Html.h2 [
-                                prop.className "text-lg font-semibold text-gray-800"
-                                prop.text "Administration"
-                            ]
-                            Html.p [
-                                prop.className "text-sm text-gray-600"
-                                prop.text
-                                    "The administration surfaces this deployment runs, filtered to the ones your role can open."
-                            ]
-                        ]
-                    ]
-                    Html.button [
-                        prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                        prop.onClick (fun _ -> dispatch Refresh)
-                        prop.text "Refresh"
-                    ]
-                ]
-            ]
-
+            AdminHomeHeader(fun () -> dispatch Refresh)
             TileGrid model.Data (OpenModule >> dispatch)
         ]
     ]

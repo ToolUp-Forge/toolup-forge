@@ -190,7 +190,9 @@ let update (msg: Msg) (model: Model) =
     | StatusUpdateCompleted(id, Ok()) ->
         {
             model with
-                Status = model.Status |> Map.add id (Done "Status updated.")
+                Status =
+                    model.Status
+                    |> Map.add id (Done MessageCatalog.english.WebhookAdmin.StatusUpdated)
         },
         loadSubscriptionsCmd ()
 
@@ -260,7 +262,9 @@ let update (msg: Msg) (model: Model) =
                 // response reveals the new value transiently as `Some`.
                 NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
-                Status = model.Status |> Map.add id (Done "Secret rotated — copy the new value below.")
+                Status =
+                    model.Status
+                    |> Map.add id (Done MessageCatalog.english.WebhookAdmin.SecretRotated)
         },
         loadSubscriptionsCmd ()
 
@@ -283,13 +287,15 @@ let update (msg: Msg) (model: Model) =
         cmd
 
     | TestFireCompleted(id, Ok result) ->
+        let msgs = MessageCatalog.english.WebhookAdmin
+
         let label =
             match result.StatusCode with
-            | Some code -> $"Test fired — HTTP {code} in {result.LatencyMs} ms."
+            | Some code -> msgs.TestFiredHttp code result.LatencyMs
             | None ->
                 match result.Error with
-                | Some e -> $"Test fired — failed: {e}"
-                | None -> "Test fired."
+                | Some e -> msgs.TestFiredFailed e
+                | None -> msgs.TestFired
 
         {
             model with
@@ -333,29 +339,35 @@ let update (msg: Msg) (model: Model) =
 
 // ─── Helpers (display) ───────────────────────────────────────────────
 
-let private statusBadge (status: WebhookStatus) =
-    let cls, label =
+let private statusLabel (msgs: WebhookAdminMessages) (status: WebhookStatus) =
+    match status with
+    | WebhookStatus.Active -> msgs.StatusActive
+    | WebhookStatus.Paused -> msgs.StatusPaused
+    | WebhookStatus.Disabled -> msgs.StatusDisabled
+
+let private statusBadge (msgs: WebhookAdminMessages) (status: WebhookStatus) =
+    let cls =
         match status with
-        | WebhookStatus.Active -> "bg-green-100 text-green-700", "Active"
-        | WebhookStatus.Paused -> "bg-yellow-100 text-yellow-800", "Paused"
-        | WebhookStatus.Disabled -> "bg-red-100 text-red-700", "Disabled"
+        | WebhookStatus.Active -> "bg-green-100 text-green-700"
+        | WebhookStatus.Paused -> "bg-yellow-100 text-yellow-800"
+        | WebhookStatus.Disabled -> "bg-red-100 text-red-700"
 
     Html.span [
         prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
-        prop.text label
+        prop.text (statusLabel msgs status)
     ]
 
-let private outcomeLabel (outcome: WebhookDeliveryOutcome) =
+let private outcomeLabel (msgs: WebhookAdminMessages) (outcome: WebhookDeliveryOutcome) =
     match outcome with
-    | WebhookDeliveryOutcome.Success(code, ms) -> $"OK {code} ({ms} ms)", "text-green-700"
-    | WebhookDeliveryOutcome.Failure(Some code, err, ms) -> $"HTTP {code}: {err} ({ms} ms)", "text-yellow-700"
-    | WebhookDeliveryOutcome.Failure(None, err, ms) -> $"failed: {err} ({ms} ms)", "text-yellow-700"
-    | WebhookDeliveryOutcome.DeadLettered err -> $"dead-lettered: {err}", "text-red-700"
+    | WebhookDeliveryOutcome.Success(code, ms) -> msgs.OutcomeOk code ms, "text-green-700"
+    | WebhookDeliveryOutcome.Failure(Some code, err, ms) -> msgs.OutcomeHttpError code err ms, "text-yellow-700"
+    | WebhookDeliveryOutcome.Failure(None, err, ms) -> msgs.OutcomeFailed err ms, "text-yellow-700"
+    | WebhookDeliveryOutcome.DeadLettered err -> msgs.OutcomeDeadLettered err, "text-red-700"
 
-let private statusBanner (status: FormStatus) (onDismiss: unit -> unit) =
+let private statusBanner (msgs: WebhookAdminMessages) (status: FormStatus) (onDismiss: unit -> unit) =
     match status with
     | Idle -> Html.none
-    | Working -> Html.div [ prop.className "mt-2 text-sm text-gray-500"; prop.text "Working..." ]
+    | Working -> Html.div [ prop.className "mt-2 text-sm text-gray-500"; prop.text msgs.Working ]
     | Done msg ->
         Html.div [
             prop.className
@@ -364,7 +376,7 @@ let private statusBanner (status: FormStatus) (onDismiss: unit -> unit) =
                 Html.span [ prop.text msg ]
                 Html.button [
                     prop.className "text-xs text-green-700 hover:underline"
-                    prop.text "dismiss"
+                    prop.text msgs.Dismiss
                     prop.onClick (fun _ -> onDismiss ())
                 ]
             ]
@@ -377,7 +389,7 @@ let private statusBanner (status: FormStatus) (onDismiss: unit -> unit) =
                 Html.span [ prop.text err ]
                 Html.button [
                     prop.className "text-xs text-red-700 hover:underline"
-                    prop.text "dismiss"
+                    prop.text msgs.Dismiss
                     prop.onClick (fun _ -> onDismiss ())
                 ]
             ]
@@ -390,6 +402,7 @@ let private statusBanner (status: FormStatus) (onDismiss: unit -> unit) =
 /// `onSubmit` fires only on the Create button click.
 [<ReactComponent>]
 let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).WebhookAdmin
     let target, setTarget = React.useState ""
     let secret, setSecret = React.useState ""
     let eventTypes, setEventTypes = React.useState ""
@@ -429,19 +442,19 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4 mb-4"
         prop.children [
-            Html.h3 [ prop.className "text-sm font-semibold mb-3"; prop.text "Create subscription" ]
+            Html.h3 [ prop.className "text-sm font-semibold mb-3"; prop.text msgs.CreateHeading ]
 
             Html.div [
                 prop.className "mb-3"
                 prop.children [
                     Html.label [
                         prop.className "block text-xs font-medium text-gray-700 mb-1"
-                        prop.text "Target URL"
+                        prop.text msgs.TargetUrlLabel
                     ]
                     Html.input [
                         prop.type' "url"
                         prop.value target
-                        prop.placeholder "https://hooks.example.com/services/..."
+                        prop.placeholder msgs.TargetUrlPlaceholder
                         prop.onChange (fun (v: string) -> setTarget v)
                         prop.className
                             "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full"
@@ -454,7 +467,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                 prop.children [
                     Html.label [
                         prop.className "block text-xs font-medium text-gray-700 mb-1"
-                        prop.text "Secret (HMAC-SHA256 signing key)"
+                        prop.text msgs.SecretLabel
                     ]
                     Html.div [
                         prop.className "flex gap-2"
@@ -462,7 +475,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                             Html.input [
                                 prop.type' "text"
                                 prop.value secret
-                                prop.placeholder "≥ 32 char random string"
+                                prop.placeholder msgs.SecretPlaceholder
                                 prop.onChange (fun (v: string) -> setSecret v)
                                 prop.className
                                     "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand flex-1 font-mono text-xs"
@@ -470,16 +483,12 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                             Html.button [
                                 prop.className
                                     "px-3 py-2 text-xs rounded-lg border border-border hover:bg-gray-50 transition-colors"
-                                prop.text "Generate"
+                                prop.text msgs.Generate
                                 prop.onClick (fun _ -> generateSecret ())
                             ]
                         ]
                     ]
-                    Html.p [
-                        prop.className "text-xs text-gray-500 mt-1"
-                        prop.text
-                            "Copy this value into the receiving service. To replace it later, use Rotate secret on the subscription — no delete + recreate needed."
-                    ]
+                    Html.p [ prop.className "text-xs text-gray-500 mt-1"; prop.text msgs.SecretHelp ]
                 ]
             ]
 
@@ -488,7 +497,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                 prop.children [
                     Html.label [
                         prop.className "block text-xs font-medium text-gray-700 mb-1"
-                        prop.text "Event types (comma-separated, blank = all)"
+                        prop.text msgs.EventTypesLabel
                     ]
                     Html.input [
                         prop.type' "text"
@@ -513,7 +522,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                                 "bg-gray-300 cursor-not-allowed"
                         ]
                         prop.disabled (not canSubmit)
-                        prop.text "Create"
+                        prop.text msgs.Create
                         prop.onClick (fun _ -> submit ())
                     ]
                 ]
@@ -523,17 +532,22 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
 
 // ─── Detail pane ─────────────────────────────────────────────────────
 
-let private newlyCreatedBanner (sub: WebhookSubscription) (secret: string) (dispatch: Msg -> unit) =
+let private newlyCreatedBanner
+    (msgs: WebhookAdminMessages)
+    (sub: WebhookSubscription)
+    (secret: string)
+    (dispatch: Msg -> unit)
+    =
     Html.div [
         prop.className "mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded"
         prop.children [
             Html.h4 [
                 prop.className "text-sm font-semibold text-yellow-800 mb-1"
-                prop.text "Copy this secret now"
+                prop.text msgs.SecretRevealHeading
             ]
             Html.p [
                 prop.className "text-xs text-yellow-700 mb-2"
-                prop.text "This is the only time the secret will be shown. After dismiss, you cannot retrieve it."
+                prop.text msgs.SecretRevealBody
             ]
             Html.div [
                 prop.className "p-2 bg-white border border-yellow-200 rounded font-mono text-xs break-all mb-2"
@@ -541,13 +555,18 @@ let private newlyCreatedBanner (sub: WebhookSubscription) (secret: string) (disp
             ]
             Html.button [
                 prop.className "px-3 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
-                prop.text "I have copied this"
+                prop.text msgs.SecretRevealAck
                 prop.onClick (fun _ -> dispatch DismissCreatedSecret)
             ]
         ]
     ]
 
-let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispatch: Msg -> unit) =
+let private subscriptionDetail
+    (msgs: WebhookAdminMessages)
+    (model: Model)
+    (sub: WebhookSubscription)
+    (dispatch: Msg -> unit)
+    =
     let status =
         model.Status |> Map.tryFind sub.SubscriptionId |> Option.defaultValue Idle
 
@@ -556,7 +575,7 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
 
     let secretBanner =
         match model.NewlyCreatedSecret with
-        | Some(id, secret) when id = sub.SubscriptionId -> newlyCreatedBanner sub secret dispatch
+        | Some(id, secret) when id = sub.SubscriptionId -> newlyCreatedBanner msgs sub secret dispatch
         | _ -> Html.none
 
     let actionButtons =
@@ -565,19 +584,19 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
             | WebhookStatus.Active ->
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text "Pause"
+                    prop.text msgs.Pause
                     prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Paused)))
                 ]
             | WebhookStatus.Paused ->
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text "Resume"
+                    prop.text msgs.Resume
                     prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
                 ]
             | WebhookStatus.Disabled ->
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text "Re-enable"
+                    prop.text msgs.ReEnable
                     prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
                 ]
 
@@ -587,24 +606,21 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                 toggleStatusButton
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text "Test fire"
+                    prop.text msgs.TestFire
                     prop.onClick (fun _ -> dispatch (TestFireSubmit sub.SubscriptionId))
                 ]
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text "Rotate secret"
+                    prop.text msgs.RotateSecret
                     prop.onClick (fun _ ->
-                        if
-                            Browser.Dom.window.confirm
-                                "Rotate this subscription's signing secret? The new secret is shown once. The previous secret keeps verifying during a short grace window so deliveries are not missed."
-                        then
+                        if Browser.Dom.window.confirm msgs.RotateSecretConfirm then
                             dispatch (RotateSecretSubmit sub.SubscriptionId))
                 ]
                 Html.button [
                     prop.className "px-3 py-1.5 text-xs rounded-lg border border-red-300 text-red-700 hover:bg-red-50"
-                    prop.text "Delete"
+                    prop.text msgs.Delete
                     prop.onClick (fun _ ->
-                        if Browser.Dom.window.confirm "Delete this subscription? Delivery log will be pruned." then
+                        if Browser.Dom.window.confirm msgs.DeleteConfirm then
                             dispatch (DeleteSubmit sub.SubscriptionId))
                 ]
             ]
@@ -624,29 +640,31 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
             prop.className "text-sm"
             prop.children [
                 row
-                    "Subscription Id"
+                    msgs.SubscriptionIdLabel
                     (Html.span [ prop.className "font-mono text-xs"; prop.text (string sub.SubscriptionId) ])
-                row "Target" (Html.span [ prop.className "font-mono text-xs break-all"; prop.text sub.TargetUrl ])
                 row
-                    "Event types"
+                    msgs.TargetLabel
+                    (Html.span [ prop.className "font-mono text-xs break-all"; prop.text sub.TargetUrl ])
+                row
+                    msgs.EventTypesRowLabel
                     (Html.span [
                         prop.className "text-xs"
                         prop.text (
                             if List.isEmpty sub.EventTypes then
-                                "(all)"
+                                msgs.AllEvents
                             else
                                 String.concat ", " sub.EventTypes
                         )
                     ])
-                row "Status" (statusBadge sub.Status)
+                row msgs.StatusLabel (statusBadge msgs sub.Status)
                 row
-                    "Consecutive failures"
+                    msgs.ConsecutiveFailuresLabel
                     (Html.span [ prop.className "text-xs"; prop.text (string sub.ConsecutiveFailures) ])
                 row
-                    "Created"
+                    msgs.CreatedLabel
                     (Html.span [
                         prop.className "text-xs"
-                        prop.text (sub.CreatedAt.ToString("u") + " by " + sub.CreatedBy)
+                        prop.text (msgs.CreatedByLine (sub.CreatedAt.ToString("u")) sub.CreatedBy)
                     ])
             ]
         ]
@@ -655,12 +673,9 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
         Html.div [
             prop.className "mt-4"
             prop.children [
-                Html.h4 [ prop.className "text-sm font-semibold mb-2"; prop.text "Recent deliveries" ]
+                Html.h4 [ prop.className "text-sm font-semibold mb-2"; prop.text msgs.RecentDeliveries ]
                 if List.isEmpty deliveries then
-                    Html.p [
-                        prop.className "text-xs text-gray-500"
-                        prop.text "No deliveries yet. Use Test fire to send a synthetic event."
-                    ]
+                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoDeliveriesYet ]
                 else
                     Html.div [
                         prop.className "border border-border rounded-lg overflow-hidden"
@@ -675,19 +690,19 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                                                 prop.children [
                                                     Html.th [
                                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text "Attempted"
+                                                        prop.text msgs.ColumnAttempted
                                                     ]
                                                     Html.th [
                                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text "Attempt"
+                                                        prop.text msgs.ColumnAttempt
                                                     ]
                                                     Html.th [
                                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text "Outcome"
+                                                        prop.text msgs.ColumnOutcome
                                                     ]
                                                     Html.th [
                                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text "Event Id"
+                                                        prop.text msgs.ColumnEventId
                                                     ]
                                                 ]
                                             ]
@@ -696,7 +711,7 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                                     Html.tbody [
                                         prop.children [
                                             for row in deliveries ->
-                                                let label, cls = outcomeLabel row.Outcome
+                                                let label, cls = outcomeLabel msgs row.Outcome
 
                                                 Html.tr [
                                                     prop.className "border-t border-border"
@@ -738,7 +753,7 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
                 prop.className "mt-4"
                 prop.children [
                     actionButtons
-                    statusBanner status (fun () -> dispatch (DismissPerSubStatus sub.SubscriptionId))
+                    statusBanner msgs status (fun () -> dispatch (DismissPerSubStatus sub.SubscriptionId))
                 ]
             ]
             deliveryTable
@@ -747,7 +762,7 @@ let private subscriptionDetail (model: Model) (sub: WebhookSubscription) (dispat
 
 // ─── Sidebar (subscriptions list) ────────────────────────────────────
 
-let private sidebar (model: Model) (dispatch: Msg -> unit) =
+let private sidebar (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "w-72 border-r border-border bg-gray-50 p-4 overflow-y-auto"
         prop.children [
@@ -755,13 +770,13 @@ let private sidebar (model: Model) (dispatch: Msg -> unit) =
 
             Html.h3 [
                 prop.className "text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
-                prop.text "Subscriptions"
+                prop.text msgs.SubscriptionsHeading
             ]
 
             if not model.Loaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             elif List.isEmpty model.Subscriptions then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "No subscriptions yet." ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoSubscriptionsYet ]
             else
                 Html.div [
                     prop.className "flex flex-col gap-1"
@@ -788,12 +803,7 @@ let private sidebar (model: Model) (dispatch: Msg -> unit) =
                                             "text-xs"
                                             if isSelected then "text-white/80" else "text-gray-500"
                                         ]
-                                        prop.text (
-                                            match sub.Status with
-                                            | WebhookStatus.Active -> "Active"
-                                            | WebhookStatus.Paused -> "Paused"
-                                            | WebhookStatus.Disabled -> "Disabled"
-                                        )
+                                        prop.text (statusLabel msgs sub.Status)
                                     ]
                                 ]
                             ]
@@ -802,7 +812,7 @@ let private sidebar (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private detailPane (model: Model) (dispatch: Msg -> unit) =
+let private detailPane (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
@@ -812,23 +822,28 @@ let private detailPane (model: Model) (dispatch: Msg -> unit) =
                     prop.className "text-sm text-gray-500"
                     prop.text (
                         if model.Loaded then
-                            "Create a subscription, or select one to view details."
+                            msgs.CreateOrSelectPrompt
                         else
-                            "Loading subscriptions..."
+                            msgs.LoadingSubscriptions
                     )
                 ]
             | Some id ->
                 match model.Subscriptions |> List.tryFind (fun s -> s.SubscriptionId = id) with
-                | Some sub -> subscriptionDetail model sub dispatch
-                | None ->
-                    Html.p [
-                        prop.className "text-sm text-gray-500"
-                        prop.text "Subscription not found in this scope."
-                    ]
+                | Some sub -> subscriptionDetail msgs model sub dispatch
+                | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.SubscriptionNotFound ]
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the resolved
+/// catalog. A module's `view` is invoked inline by the shell's own render,
+/// where a hook would join the shell's hook order and break the moment the
+/// active module changed; a component of its own has a stable identity and
+/// its own. Same pattern as `HealthMonitorUI.HealthMonitorBody`.
+[<ReactComponent>]
+let private WebhookAdminBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).WebhookAdmin
+
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -839,7 +854,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     Html.span [ prop.text msg ]
                     Html.button [
                         prop.className "text-xs text-red-600 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -849,7 +864,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         Html.div [
             prop.className "flex h-full min-h-0"
-            prop.children [ sidebar model dispatch; detailPane model dispatch ]
+            prop.children [ sidebar msgs model dispatch; detailPane msgs model dispatch ]
         ]
 
     // 0.5.6 — FullWidth render. Error banner stacks above the body.
@@ -857,6 +872,8 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
         prop.className "flex flex-col gap-3 h-full"
         prop.children [ errorBanner; body ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = WebhookAdminBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

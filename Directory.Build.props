@@ -142,6 +142,20 @@
       newest tag, so 0.23.0 remains unpublished and 737 ships in that same
       artefact rather than asking for a fourth number.
 
+      And the same slot carries Phase 752, riding it for the same reason.
+      It adds one function to `ToolUp.Graph.Neo4j`'s `CypherTranslation`
+      (`isMalformedStatementCode`) — purely additive — and changes what
+      `classifyError` RETURNS for two inputs it was getting wrong: a
+      driver exception wrapped by `Async.AwaitTask` in an
+      `AggregateException` (previously `StorageFailure` for everything,
+      so the whole retryable/non-retryable split GP 12 rule 3 requires
+      was dead), and a `Neo.ClientError.Statement.ParameterMissing`
+      (previously `StorageFailure`, now `MalformedQuery`). Both are
+      corrections toward the interface's stated contract rather than a
+      contract change, and the newest tag is STILL `v0.22.0`, so 0.23.0
+      remains unpublished and this ships in the same artefact as the
+      phases above. Same rule, applied again: released, not per-phase.
+
       And the same slot ALSO carries Phase 749, which is the largest break
       in it: it DELETES two packages, `ToolUp.AuthProviders.EntraExternalId`
       and `ToolUp.AuthProviders.EntraExternalId.Client`, executing the

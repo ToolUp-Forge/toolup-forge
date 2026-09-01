@@ -251,12 +251,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ────────────────────────────────────────────────────
 
-let private permissionLabel (perm: ModulePermission) =
+let private permissionLabel (msgs: ServiceAccountMessages) (perm: ModulePermission) =
     match perm with
-    | ModulePermission.Read -> "Read"
-    | ModulePermission.Write -> "Write"
-    | ModulePermission.Admin -> "Admin"
-    | ModulePermission.SchemaOnly -> "Schema only"
+    | ModulePermission.Read -> msgs.PermissionRead
+    | ModulePermission.Write -> msgs.PermissionWrite
+    | ModulePermission.Admin -> msgs.PermissionAdmin
+    | ModulePermission.SchemaOnly -> msgs.PermissionSchemaOnly
 
 let private parsePermission (token: string) =
     match token with
@@ -271,25 +271,25 @@ let private pill (label: string) (cls: string) =
         prop.text label
     ]
 
-let private statusBadge (status: ServiceAccountStatus) =
+let private statusBadge (msgs: ServiceAccountMessages) (status: ServiceAccountStatus) =
     match status with
-    | ServiceAccountStatus.Active -> pill "Active" "bg-green-100 text-green-700"
-    | ServiceAccountStatus.Disabled -> pill "Disabled" "bg-red-100 text-red-700"
+    | ServiceAccountStatus.Active -> pill msgs.StatusActive "bg-green-100 text-green-700"
+    | ServiceAccountStatus.Disabled -> pill msgs.StatusDisabled "bg-red-100 text-red-700"
 
 /// A token's live state, as the operator needs to read it: revoked and
 /// expired are different facts with different remedies, and a token that
 /// is both should read as revoked (the deliberate act outranks the
 /// lapse) — the same ordering `ServiceAccountTypes.classifyToken`
 /// applies server-side.
-let private tokenBadge (token: ServiceAccountTokenView) =
+let private tokenBadge (msgs: ServiceAccountMessages) (token: ServiceAccountTokenView) =
     if token.Revoked then
-        pill "Revoked" "bg-red-100 text-red-700"
+        pill msgs.StatusRevoked "bg-red-100 text-red-700"
     elif token.ExpiresAt <= DateTimeOffset.UtcNow then
-        pill "Expired" "bg-yellow-100 text-yellow-800"
+        pill msgs.StatusExpired "bg-yellow-100 text-yellow-800"
     else
-        pill "Active" "bg-green-100 text-green-700"
+        pill msgs.StatusActive "bg-green-100 text-green-700"
 
-let private permissionSummary (permissions: Map<string, ModulePermission list>) =
+let private permissionSummary (msgs: ServiceAccountMessages) (permissions: Map<string, ModulePermission list>) =
     Html.div [
         prop.className "flex gap-1 flex-wrap"
         prop.children [
@@ -298,12 +298,12 @@ let private permissionSummary (permissions: Map<string, ModulePermission list>) 
                 // inline: F# forbids a string literal inside an
                 // interpolation hole in a single-quoted string (FS3373),
                 // and `String.concat` needs one.
-                let granted = perms |> List.map permissionLabel |> String.concat ", "
+                let granted = perms |> List.map (permissionLabel msgs) |> String.concat ", "
                 pill $"{moduleName}: {granted}" "bg-gray-100 text-gray-700 font-mono"
         ]
     ]
 
-let private errorBanner (model: Model) (dispatch: Msg -> unit) =
+let private errorBanner (msgs: ServiceAccountMessages) (model: Model) (dispatch: Msg -> unit) =
     match model.Error with
     | Some msg ->
         Html.div [
@@ -313,7 +313,7 @@ let private errorBanner (model: Model) (dispatch: Msg -> unit) =
                 Html.span [ prop.text msg ]
                 Html.button [
                     prop.className "text-xs text-red-600 hover:underline"
-                    prop.text "dismiss"
+                    prop.text msgs.Dismiss
                     prop.onClick (fun _ -> dispatch DismissError)
                 ]
             ]
@@ -323,18 +323,17 @@ let private errorBanner (model: Model) (dispatch: Msg -> unit) =
 /// The one-time secret panel. Deliberately loud, deliberately hard to
 /// dismiss by reflex: this value cannot be recovered, and the only
 /// remedy for losing it is minting a replacement and revoking this one.
-let private secretPanel (pending: PendingSecret) (dispatch: Msg -> unit) =
+let private secretPanel (msgs: ServiceAccountMessages) (pending: PendingSecret) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "mb-4 p-4 bg-amber-50 border-2 border-amber-400 rounded-lg"
         prop.children [
             Html.h3 [
                 prop.className "text-sm font-semibold text-amber-900 mb-1"
-                prop.text $"Copy the token for \"{pending.Token.DisplayName}\" now"
+                prop.text (msgs.CopyTokenHeading pending.Token.DisplayName)
             ]
             Html.p [
                 prop.className "text-xs text-amber-800 mb-3"
-                prop.text
-                    "This is the only time this secret is shown. The server stores only a salted hash of it, so it cannot be shown again — if it is lost, revoke this token and mint another."
+                prop.text msgs.SecretOneTimeBody
             ]
             Html.pre [
                 prop.className "bg-white border border-amber-300 rounded px-3 py-2 text-xs font-mono break-all mb-3"
@@ -342,7 +341,7 @@ let private secretPanel (pending: PendingSecret) (dispatch: Msg -> unit) =
             ]
             Html.button [
                 prop.className "px-4 py-2 text-sm rounded-lg text-white bg-amber-600 hover:bg-amber-700 cursor-pointer"
-                prop.text "I have copied this token"
+                prop.text msgs.AcknowledgeSecret
                 prop.onClick (fun _ -> dispatch AcknowledgeSecret)
             ]
         ]
@@ -355,6 +354,7 @@ let private secretPanel (pending: PendingSecret) (dispatch: Msg -> unit) =
 /// the pending list makes the whole set visible before submit.
 [<ReactComponent>]
 let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountRequest -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ServiceAccount
     let name, setName = React.useState ""
     let moduleName, setModuleName = React.useState ""
     let permission, setPermission = React.useState "Read"
@@ -378,16 +378,19 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4 mb-4"
         prop.children [
-            Html.h3 [ prop.className "text-sm font-semibold mb-3"; prop.text "New service account" ]
+            Html.h3 [
+                prop.className "text-sm font-semibold mb-3"
+                prop.text msgs.NewAccountHeading
+            ]
 
             Html.label [
                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text "Name"
+                prop.text msgs.NameLabel
             ]
             Html.input [
                 prop.type' "text"
                 prop.value name
-                prop.placeholder "e.g. nightly-export"
+                prop.placeholder msgs.NamePlaceholder
                 prop.onChange (fun (v: string) -> setName v)
                 prop.className
                     "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full text-sm mb-3"
@@ -395,7 +398,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
 
             Html.label [
                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text "Module permissions"
+                prop.text msgs.ModulePermissionsLabel
             ]
             Html.div [
                 prop.className "flex gap-2 mb-2"
@@ -403,7 +406,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
                     Html.input [
                         prop.type' "text"
                         prop.value moduleName
-                        prop.placeholder "module name"
+                        prop.placeholder msgs.ModuleNamePlaceholder
                         prop.onChange (fun (v: string) -> setModuleName v)
                         prop.onKeyDown (fun e ->
                             if e.key = "Enter" then
@@ -416,16 +419,16 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
                         prop.onChange (fun (v: string) -> setPermission v)
                         prop.className "border border-border rounded-lg px-3 py-2 text-xs"
                         prop.children [
-                            Html.option [ prop.value "Read"; prop.text "Read" ]
-                            Html.option [ prop.value "Write"; prop.text "Write" ]
-                            Html.option [ prop.value "Admin"; prop.text "Admin" ]
-                            Html.option [ prop.value "SchemaOnly"; prop.text "Schema only" ]
+                            Html.option [ prop.value "Read"; prop.text msgs.PermissionRead ]
+                            Html.option [ prop.value "Write"; prop.text msgs.PermissionWrite ]
+                            Html.option [ prop.value "Admin"; prop.text msgs.PermissionAdmin ]
+                            Html.option [ prop.value "SchemaOnly"; prop.text msgs.PermissionSchemaOnly ]
                         ]
                     ]
                     Html.button [
                         prop.className
                             "px-3 py-2 text-xs rounded-lg border border-border hover:bg-gray-50 cursor-pointer"
-                        prop.text "Add"
+                        prop.text msgs.AddPermission
                         prop.onClick (fun _ -> addPermission ())
                     ]
                 ]
@@ -434,11 +437,10 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
             if permissions.IsEmpty then
                 Html.p [
                     prop.className "text-xs text-gray-500 mb-3"
-                    prop.text
-                        "Add at least one module permission. An account with no declared permissions is refused — an empty set would grant unrestricted access, not none."
+                    prop.text msgs.NoPermissionsHint
                 ]
             else
-                Html.div [ prop.className "mb-3"; prop.children [ permissionSummary permissions ] ]
+                Html.div [ prop.className "mb-3"; prop.children [ permissionSummary msgs permissions ] ]
 
             Html.button [
                 prop.className [
@@ -449,7 +451,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
                         "bg-gray-300 cursor-not-allowed"
                 ]
                 prop.disabled (not canSubmit)
-                prop.text (if busy then "Working…" else "Create account")
+                prop.text (if busy then msgs.Working else msgs.CreateAccount)
                 prop.onClick (fun _ ->
                     if canSubmit then
                         onSubmit {
@@ -468,6 +470,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
 /// this live", and the default is the substrate's own 90 days.
 [<ReactComponent>]
 let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServiceAccountTokenRequest -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ServiceAccount
     let label, setLabel = React.useState ""
     let days, setDays = React.useState "90"
 
@@ -491,14 +494,14 @@ let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServic
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4 mb-4"
         prop.children [
-            Html.h3 [ prop.className "text-sm font-semibold mb-3"; prop.text "Mint a token" ]
+            Html.h3 [ prop.className "text-sm font-semibold mb-3"; prop.text msgs.MintTokenHeading ]
             Html.div [
                 prop.className "flex gap-2"
                 prop.children [
                     Html.input [
                         prop.type' "text"
                         prop.value label
-                        prop.placeholder "label, e.g. CI deploy key"
+                        prop.placeholder msgs.MintLabelPlaceholder
                         prop.onChange (fun (v: string) -> setLabel v)
                         prop.onKeyDown (fun e ->
                             if e.key = "Enter" then
@@ -512,7 +515,7 @@ let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServic
                         prop.onChange (fun (v: string) -> setDays v)
                         prop.className "border border-border rounded-lg px-3 py-2 w-24 text-sm"
                     ]
-                    Html.span [ prop.className "self-center text-xs text-gray-500"; prop.text "days" ]
+                    Html.span [ prop.className "self-center text-xs text-gray-500"; prop.text msgs.Days ]
                     Html.button [
                         prop.className [
                             "px-4 py-2 text-sm rounded-lg text-white transition-colors"
@@ -522,7 +525,7 @@ let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServic
                                 "bg-gray-300 cursor-not-allowed"
                         ]
                         prop.disabled (not canSubmit)
-                        prop.text "Mint"
+                        prop.text msgs.Mint
                         prop.onClick (fun _ -> submit ())
                     ]
                 ]
@@ -530,17 +533,13 @@ let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServic
         ]
     ]
 
-let private accountsTable (model: Model) (dispatch: Msg -> unit) =
+let private accountsTable (msgs: ServiceAccountMessages) (model: Model) (dispatch: Msg -> unit) =
     if List.isEmpty model.Accounts then
         Html.div [
             prop.className "bg-white rounded-lg border border-border p-6 text-center"
             prop.children [
-                Html.p [ prop.className "text-sm text-gray-600"; prop.text "No service accounts yet." ]
-                Html.p [
-                    prop.className "text-xs text-gray-400 mt-1"
-                    prop.text
-                        "A service account is a machine identity — a CI job, a partner integration, an agent host — that authenticates as itself rather than borrowing a person's account."
-                ]
+                Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoAccountsHeading ]
+                Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoAccountsBody ]
             ]
         ]
     else
@@ -561,14 +560,14 @@ let private accountsTable (model: Model) (dispatch: Msg -> unit) =
                                                 prop.className "text-sm font-semibold"
                                                 prop.text account.DisplayName
                                             ]
-                                            statusBadge account.Status
+                                            statusBadge msgs account.Status
                                             Html.span [
                                                 prop.className "text-xs text-gray-400 font-mono break-all"
                                                 prop.text account.AccountId
                                             ]
                                         ]
                                     ]
-                                    permissionSummary account.Permissions
+                                    permissionSummary msgs account.Permissions
                                 ]
                             ]
                             Html.div [
@@ -577,7 +576,7 @@ let private accountsTable (model: Model) (dispatch: Msg -> unit) =
                                     Html.button [
                                         prop.className
                                             "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50 cursor-pointer"
-                                        prop.text "Tokens"
+                                        prop.text msgs.Tokens
                                         prop.onClick (fun _ -> dispatch (SelectAccount account.AccountId))
                                     ]
                                     Html.button [
@@ -586,8 +585,8 @@ let private accountsTable (model: Model) (dispatch: Msg -> unit) =
                                         prop.disabled model.Busy
                                         prop.text (
                                             match account.Status with
-                                            | ServiceAccountStatus.Active -> "Disable"
-                                            | ServiceAccountStatus.Disabled -> "Enable"
+                                            | ServiceAccountStatus.Active -> msgs.Disable
+                                            | ServiceAccountStatus.Disabled -> msgs.Enable
                                         )
                                         prop.onClick (fun _ ->
                                             let next =
@@ -604,12 +603,9 @@ let private accountsTable (model: Model) (dispatch: Msg -> unit) =
             ]
         ]
 
-let private tokensTable (model: Model) (dispatch: Msg -> unit) =
+let private tokensTable (msgs: ServiceAccountMessages) (model: Model) (dispatch: Msg -> unit) =
     if List.isEmpty model.Tokens then
-        Html.p [
-            prop.className "text-sm text-gray-500"
-            prop.text "This account has no tokens yet."
-        ]
+        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoTokensYet ]
     else
         Html.div [
             prop.className "bg-white rounded-lg border border-border divide-y divide-border"
@@ -633,12 +629,12 @@ let private tokensTable (model: Model) (dispatch: Msg -> unit) =
                                                 prop.className "text-sm font-medium"
                                                 prop.text token.DisplayName
                                             ]
-                                            tokenBadge token
+                                            tokenBadge msgs token
                                         ]
                                     ]
                                     Html.p [
                                         prop.className "text-xs text-gray-500"
-                                        prop.text $"issued {issuedOn} by {token.IssuedBy} · expires {expiresOn}"
+                                        prop.text (msgs.TokenIssuedSummary issuedOn token.IssuedBy expiresOn)
                                     ]
                                 ]
                             ]
@@ -647,7 +643,7 @@ let private tokensTable (model: Model) (dispatch: Msg -> unit) =
                                     prop.className
                                         "px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-700 hover:bg-red-50 cursor-pointer shrink-0"
                                     prop.disabled model.Busy
-                                    prop.text "Revoke"
+                                    prop.text msgs.Revoke
                                     prop.onClick (fun _ -> dispatch (RevokeToken token.TokenId))
                                 ]
                             else
@@ -657,7 +653,16 @@ let private tokensTable (model: Model) (dispatch: Msg -> unit) =
             ]
         ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the resolved
+/// catalog. A module's `view` is invoked inline by the shell's own render,
+/// where a hook would join the shell's hook order and break the moment the
+/// active module changed; a component of its own has a stable identity of
+/// its own. Same distinction `HealthMonitorUI.HealthMonitorBody` documents.
+[<ReactComponent>]
+let private ServiceAccountBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ServiceAccount
+
     let body =
         match model.SelectedAccountId with
         | None ->
@@ -665,9 +670,9 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 prop.children [
                     CreateAccountForm model.Busy (fun request -> dispatch (CreateAccount request))
                     if not model.Loaded then
-                        Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+                        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
                     else
-                        accountsTable model dispatch
+                        accountsTable msgs model dispatch
                 ]
             ]
         | Some accountId ->
@@ -677,38 +682,36 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 prop.children [
                     Html.button [
                         prop.className "text-xs text-gray-600 hover:underline mb-3"
-                        prop.text "← All service accounts"
+                        prop.text msgs.BackToList
                         prop.onClick (fun _ -> dispatch BackToList)
                     ]
                     Html.h3 [
                         prop.className "text-sm font-semibold mb-3"
                         prop.text (
                             match account with
-                            | Some a -> $"Tokens — {a.DisplayName}"
-                            | None -> "Tokens"
+                            | Some a -> msgs.TokensForAccount a.DisplayName
+                            | None -> msgs.Tokens
                         )
                     ]
                     MintTokenForm accountId model.Busy (fun request -> dispatch (MintToken request))
-                    tokensTable model dispatch
+                    tokensTable msgs model dispatch
                 ]
             ]
 
     Html.div [
         prop.className "p-6 max-w-4xl"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Service accounts" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text
-                    "Machine identities owned by this scope. Each mints scoped, expiring API tokens that authenticate as the account — never as a person."
-            ]
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
             (match model.PendingSecret with
-             | Some pending -> secretPanel pending dispatch
+             | Some pending -> secretPanel msgs pending dispatch
              | None -> Html.none)
-            errorBanner model dispatch
+            errorBanner msgs model dispatch
             body
         ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = ServiceAccountBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

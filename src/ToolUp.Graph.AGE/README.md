@@ -182,7 +182,9 @@ reads (`GetNode` / `Neighbours`) model their only failure — absence — as
 
 ## Safe parameter binding
 
-Parameters ride a **single bound Npgsql parameter** (`@p`, cast `::agtype`) — an
+Parameters ride a **single bound Npgsql parameter** (`@p`, passed BARE — AGE
+rejects a cast third argument to `cypher(...)` with `22023`, so the `::agtype`
+this line used to claim was removed at Phase 607 and is pinned absent) — an
 agtype map the Cypher body reads via `$name`. Parameter *values* are never
 string-interpolated into the `cypher(…)` body, so an injection-attempt value
 (`'; DROP TABLE …`) is a literal map entry, never executed (covered by the
@@ -211,16 +213,27 @@ scope text), so it is injection-safe by construction too.
   throws-case and variable-length row counts) encode in-memory-specific
   semantics.
 
-  **This paragraph used to end "they are handled by the shared conformance pack,
-  not by editing the frozen corpus". They are not.** Phase 607 ran
-  `GraphStoreContract` against a live AGE server for the first time and those
-  exact cases failed: the pack asserts the in-memory laws unconditionally on
-  every binding, with no engine-tier exemption. Four cases fail here — the
-  `CREATE`-throws case and three variable-length row-count cases — and the Neo4j
-  tier, which binds the same pack behind its own never-run env gate
-  (`TOOLUP_TEST_NEO4J_URI`), will fail them identically the day it is run. The
-  exemption mechanism this bullet described has to be built; until it is, an AGE
-  live run is expected to report those four, and they are **not** AGE defects.
+  **These cases ARE handled by the shared conformance pack now — since Phase
+  752, and not before.** The history matters because the README asserted it for
+  a year while it was false. Phase 607 ran `GraphStoreContract` against a live
+  AGE server for the first time and four cases failed: the pack asserted the
+  in-memory interpreter's *subset* laws unconditionally on every binding, with
+  no engine-tier exemption, so AGE was scored as failing for supporting full
+  Cypher. Phase 752 built the mechanism the sentence had been describing. A
+  binding now **declares a `StoreTier`** at bind time — this companion declares
+  `FullEngine` — and the pack splits into shared laws (every binding) plus
+  per-tier laws. `CREATE` executing, a multi-hop pattern running, and
+  variable-length returning the openCypher path multiset are asserted here as
+  **full-engine laws**; the interpreter's throws-and-node-set behaviour is
+  asserted on the in-memory binding as interpreter-subset laws. Nothing was
+  deleted and nothing is skipped: the pack asserts its per-tier case counts, so
+  a law that stopped running would fail by name.
+
+  Certified live at Phase 752 against `apache/age` on PostgreSQL 17:
+  **38 passed / 0 failed**, including all four cases 607 recorded red. The
+  Neo4j tier — which binds the same pack behind `TOOLUP_TEST_NEO4J_URI` and
+  which 607 predicted would fail the same four — was provisioned and run for
+  the first time in the same phase and is green at the same tier.
 
 ## Out of scope
 
