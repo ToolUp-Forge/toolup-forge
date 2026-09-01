@@ -387,6 +387,25 @@ module MessageCatalog =
                 Register = "Register a passkey"
             }
         }
+        RateLimited = {
+            Heading = "Too many requests"
+            LimitExceeded =
+                fun limit window -> $"You've hit the limit of {limit} requests per {window}. Please slow down."
+            TryAgain = "Try again"
+            TryAgainIn =
+                fun seconds ->
+                    if seconds = 1 then
+                        "Try again in 1 second"
+                    else
+                        $"Try again in {seconds} seconds"
+            Windows = {
+                PerSecond = "second"
+                PerMinute = "minute"
+                PerHour = "hour"
+                PerDay = "day"
+                Sliding = "window"
+            }
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

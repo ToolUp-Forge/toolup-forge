@@ -455,6 +455,32 @@ type AuthMessages = {
     Passkey: PasskeyAuthMessages
 }
 
+/// Display labels for the rate-limit windows. Distinct from the
+/// `RateLimitWindow` DU cases themselves, which are wire-shaped.
+type RateLimitWindowMessages = {
+    PerSecond: string
+    PerMinute: string
+    PerHour: string
+    PerDay: string
+    /// Shown for `SlidingWindow _`, whose duration is already in the
+    /// limit sentence.
+    Sliding: string
+}
+
+/// The Phase 56 rate-limit banner (`Components.RateLimitedBanner`).
+type RateLimitedMessages = {
+    Heading: string
+    /// Takes the request limit and the window label from `Windows`.
+    LimitExceeded: int -> string -> string
+    TryAgain: string
+    /// Takes the seconds remaining. A FUNCTION rather than a template
+    /// with a bolted-on "s", because the plural rule is a property of
+    /// the language: English needs two forms here, Welsh needs six, and
+    /// Japanese needs one.
+    TryAgainIn: int -> string
+    Windows: RateLimitWindowMessages
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -484,4 +510,5 @@ type MessageCatalog = {
     DataIngestion: DataIngestionMessages
     AdminHome: AdminHomeMessages
     Auth: AuthMessages
+    RateLimited: RateLimitedMessages
 }
