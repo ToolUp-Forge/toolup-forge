@@ -942,6 +942,34 @@ module MessageCatalog =
                 "Each module declares the schema version it reads. Objects stored at an older version are upgraded forward through the module's migrators; a failed object stays at its old version and is retried on the next pass."
             LoadingDataTypes = "Loading data types..."
         }
+        SessionSecurity = {
+            Heading = "Session security"
+            Subheading =
+                "Devices currently signed in as you. Sign out any you do not recognise — a signed-out session stops working within the deployment's revocation window."
+            Loading = "Loading…"
+            EmptyState = "No sessions recorded yet. Sessions appear here after your next request."
+            JustNow = "Just now"
+            MinutesAgo = fun n -> $"{n} minutes ago"
+            HoursAgo = fun n -> $"{n} hours ago"
+            DaysAgo = fun n -> $"{n} days ago"
+            DeviceLastSeen = fun provider lastSeen -> $"{provider} · last seen {lastSeen}"
+            DeviceSignedOut = fun provider -> $"{provider} · signed out"
+            Revoked = "Revoked"
+            Confirm = "Confirm"
+            Cancel = "Cancel"
+            SignOut = "Sign out"
+            SignOutEverywhere = "Sign out everywhere"
+            SignOutEverywhereWarning =
+                "This signs out every device, including this one. You will need to sign in again to continue."
+            RevokeSuccess = "Session signed out."
+            RevokeAllResult =
+                fun count ->
+                    match count with
+                    | 0 -> "No active sessions to sign out."
+                    | 1 -> "1 session signed out."
+                    | n -> $"{n} sessions signed out."
+            Dismiss = "Dismiss"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

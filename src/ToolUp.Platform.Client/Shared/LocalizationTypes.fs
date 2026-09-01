@@ -1419,6 +1419,61 @@ type MigrationStatusMessages = {
     LoadingDataTypes: string
 }
 
+/// The built-in session-security module (`SessionSecurityUI`, Phase 528).
+type SessionSecurityMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Shown while the first load is still in flight.
+    Loading: string
+    /// Empty state: no sessions have been recorded yet.
+    EmptyState: string
+    /// `lastSeenLabelWith`'s near-term reading — covers both "in the
+    /// future" (clock skew) and "under two minutes ago".
+    JustNow: string
+    /// Takes whole elapsed minutes.
+    MinutesAgo: int -> string
+    /// Takes whole elapsed hours.
+    HoursAgo: int -> string
+    /// Takes whole elapsed days.
+    DaysAgo: int -> string
+    /// Takes the session's auth provider and the formatted "last seen"
+    /// reading (`JustNow` / `MinutesAgo` / `HoursAgo` / `DaysAgo`) for
+    /// an active session.
+    DeviceLastSeen: string -> string -> string
+    /// Takes the session's auth provider, for a revoked session.
+    DeviceSignedOut: string -> string
+    /// Badge on a revoked session row.
+    Revoked: string
+    /// Confirm a single-session revoke.
+    Confirm: string
+    /// Cancel either the single-session or the sign-out-everywhere
+    /// confirm step — one field, since both read as plain "Cancel" in
+    /// English.
+    Cancel: string
+    /// Ask to revoke a single session.
+    SignOut: string
+    /// "Sign out everywhere" — serves both the initial action button
+    /// and its own confirm step, matching the English original.
+    SignOutEverywhere: string
+    /// Warning prose shown once sign-out-everywhere is pending confirm.
+    SignOutEverywhereWarning: string
+    /// Status banner after a single-session revoke completes. Read
+    /// directly from `update` via `MessageCatalog.english.SessionSecurity`
+    /// — there is no rendered tree at that point, per `TeamManagerUI`'s
+    /// recorded pattern.
+    RevokeSuccess: string
+    /// Status banner after sign-out-everywhere completes, given the
+    /// server's revoked-session count. Also read directly from
+    /// `update`. The none/singular/plural branching lives inside the
+    /// catalog function itself so a translation owns its own
+    /// pluralisation rule.
+    RevokeAllResult: int -> string
+    /// Dismiss action shared by the error and status banners.
+    Dismiss: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1463,4 +1518,5 @@ type MessageCatalog = {
     TenantLifecycleAdmin: TenantLifecycleAdminMessages
     ModuleVisibilityAdmin: ModuleVisibilityAdminMessages
     MigrationStatus: MigrationStatusMessages
+    SessionSecurity: SessionSecurityMessages
 }
