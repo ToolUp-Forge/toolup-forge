@@ -550,6 +550,54 @@ module FactsCompose =
     //   * **Collusion is out of scope.** Two contributing parties that
     //     share answers are one adversary with two budgets.
 
+    /// Register a declassification-budget config the deployment built
+    /// itself, arming the gate's budget facet. The general form of the
+    /// helper below, and — since Phase 679 — the one entry point that
+    /// can carry the AMENDMENT facet, because a countersigned amendment
+    /// needs a registry and a roster the two-argument helper has no way
+    /// to receive:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withDeclassificationBudgetConfig (
+    ///        DeclassificationBudgetConfig.create
+    ///            (BlobPrivacyBudgetLedger blob)
+    ///            [ DeclassificationBudget.countedCrossings "aggregate-over-k" 500 ]
+    ///        |> DeclassificationBudgetConfig.withAmendments amendments)
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// A separate entry point rather than a widened
+    /// `withDeclassificationBudgets`: that signature is public surface a
+    /// consumer binds against, and adding a parameter to it would delete
+    /// the existing token for every deployment already composing
+    /// budgets. The two share one body, so there is no second
+    /// registration path to drift.
+    ///
+    /// A `NoFactStore` deployment is byte-for-byte unchanged (GP 11 /
+    /// GP 13).
+    let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.AddSingleton<DeclassificationBudgetConfig>(config)
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
     /// Compose declassification budgets (Phase 675): register the
     /// declared budgets + the ledger they account through, so the gate
     /// factory above arms the budget facet. Each declaration names a
@@ -595,29 +643,10 @@ module FactsCompose =
         (budgets: DeclassificationBudget list)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
-            // Validated HERE, at compose, not inside the DI factory: a
-            // factory throws at first resolve, which is after the
-            // deployment believes it booted clean.
-            let config = DeclassificationBudgetConfig.create ledger budgets
-
-            let register (s: IServiceCollection) =
-                s.AddSingleton<DeclassificationBudgetConfig>(config)
-
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+        // Validated HERE, at compose, not inside the DI factory: a
+        // factory throws at first resolve, which is after the deployment
+        // believes it booted clean.
+        withDeclassificationBudgetConfig (DeclassificationBudgetConfig.create ledger budgets) app
 
     // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
     //

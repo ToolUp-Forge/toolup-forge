@@ -4,6 +4,7 @@
 namespace ToolUp.Platform
 
 open System
+open System.Globalization
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json
@@ -799,4 +800,163 @@ module CountersignatureQueue =
                 Actions = enrolled |> List.map (fun partyId -> partyId, latest partyId)
                 Status = Countersignature.status skew enrolled subject asOf group
             })
-        |> List.sortBy (fun e -> e.Subject.Kind, e.Subject.SubjectId, e.Subject.ContentHash, String.concat " " e.Roster)
+        |> List.sortBy (fun e ->
+            e.Subject.Kind, e.Subject.SubjectId, e.Subject.ContentHash, String.concat "\u0000" e.Roster)
+
+// ─── Phase 679 — the budget-amendment subject kind ───────────────────
+//
+// A declared budget ceiling is a term of an agreement, and the term a
+// party is most often asked to move mid-engagement: the analysis needed
+// one more crossing than anyone estimated. Renegotiating the whole
+// agreement to move one number is expensive enough that the practical
+// alternative is raising it out of band — which is exactly the act the
+// countersignature exists to make impossible.
+//
+// So the raise itself becomes a countersigned subject. This is the first
+// subject kind declared over the Phase 676 core beyond the bilateral
+// specialisation it generalised, and it is declared HERE, in the
+// registry, for the same reason the domain separators are: a subject
+// kind is a wire tag, and a wire tag written out at its use site is one
+// nobody can find when they need to know what has been agreed.
+//
+// **The amendment carries a DELTA against the ceiling it was agreed
+// against, not a replacement.** Both halves matter:
+//
+//   * The delta is what the parties actually discussed ("five hundred
+//     more crossings"), and putting it in the signed bytes means the
+//     signature covers the change rather than a number whose meaning
+//     depends on a baseline nobody recorded.
+//   * `PriorCeiling` pins that baseline INTO the hash, so an amendment
+//     agreed against 500 cannot be silently re-applied to a budget that
+//     has since moved. Applying it is therefore a compare-and-set
+//     against the ceiling in force, and a chain of amendments composes
+//     in exactly one order — see `DeclassificationAmendments` at the
+//     grounding tier, which is where the chain is folded.
+//
+// **`SubjectId` is a digest, deliberately, and this is not indifference
+// to readability.** Both coordinates are free-form: a template id is a
+// namespaced key (`declassify:aggregate-over-k` at the grounding tier)
+// and a party id is whatever the agreement calls a party. Neither is
+// constrained to the blob-name alphabet `IdentitySanitiser` enforces,
+// and folding two free-form strings into one sanitised path segment
+// would let two different pairs land in one folder — an amendment to
+// party A's ceiling reading as evidence about party B's. A digest over
+// the length-prefixed pair is injective, always well-formed, and stable;
+// the readable pair rides the amendment record and the audit event,
+// which is where an operator reads it.
+//
+// This tier declares the subject and nothing else. It does not know what
+// a ceiling means, cannot read a ledger, and takes no view on whether an
+// amendment may be applied — that is the accounting tier's business and
+// lives with the accounting.
+
+/// A countersigned change to one budget ceiling: which budget, whose
+/// allowance, the ceiling it was agreed against, and by how much it
+/// moves.
+///
+/// Value-typed and immutable (GP 5 / GP 12 rule 1) — it is hashed,
+/// signed over, and persisted on every side of the agreement.
+type BudgetAmendment = {
+    /// The budget's `BudgetScope.TemplateId` — the key the ledger
+    /// accounts under. The grounding tier's declassification budgets
+    /// spell it `declassify:{operationId}`.
+    TemplateId: string
+    /// The party whose ceiling this amends. Budgets are accounted per
+    /// party, so an amendment is too: raising one party's allowance must
+    /// never raise another's.
+    PartyId: string
+    /// The effective ceiling this amendment was agreed AGAINST. Signed
+    /// into the subject hash, and checked against the ceiling in force
+    /// when the amendment is applied — an amendment is a
+    /// compare-and-set, never a blind overwrite.
+    PriorCeiling: decimal
+    /// The signed change to it. Positive raises. A negative delta is
+    /// admissible and is bounded at APPLICATION time by spend already
+    /// recorded, because a ceiling retroactively below what has already
+    /// been spent would declare a breach that never happened.
+    CeilingDelta: decimal
+}
+
+[<RequireQualifiedAccess>]
+module BudgetAmendment =
+
+    /// The stable wire tag for this subject kind. Written out, never
+    /// derived from the F# type name: renaming the record must not be
+    /// able to invalidate signatures already minted.
+    [<Literal>]
+    let Kind = "budget-amendment"
+
+    /// The ceiling this amendment puts in force, if applied.
+    let amendedCeiling (amendment: BudgetAmendment) : decimal =
+        amendment.PriorCeiling + amendment.CeilingDelta
+
+    /// The invariant, trailing-zero-free rendering of a decimal used in
+    /// the canonical encoding.
+    ///
+    /// Both properties are load-bearing. Culture-sensitive formatting
+    /// would make a subject hash depend on the machine that computed it,
+    /// so two parties on differently-configured hosts would sign
+    /// different bytes for one agreement. And .NET preserves a decimal's
+    /// scale through `ToString`, so `500m` and `500.00m` — equal values,
+    /// and equal under every comparison this substrate makes — would
+    /// otherwise hash differently and read as two different amendments.
+    let canonicalDecimal (value: decimal) : string =
+        if value = 0m then
+            "0"
+        else
+            value.ToString("0.############################", CultureInfo.InvariantCulture)
+
+    /// The blob-safe identity of the (budget, party) pair an amendment
+    /// chain belongs to. A digest over the length-prefixed triple — see
+    /// the section header for why this is not the readable join it looks
+    /// like it should be.
+    let subjectId (amendment: BudgetAmendment) : string =
+        let sb = StringBuilder()
+        CountersignatureCanonical.field sb Kind
+        CountersignatureCanonical.field sb amendment.TemplateId
+        CountersignatureCanonical.field sb amendment.PartyId
+
+        CountersignatureCanonical.sha256Hex (Encoding.UTF8.GetBytes(sb.ToString()))
+
+    /// The canonical payload the subject hash is taken over: the pair
+    /// the amendment belongs to, the baseline, and the delta. Emitted
+    /// through the registry's own length-prefixed encoder, so no value
+    /// can impersonate a field boundary.
+    let canonicalBytes (amendment: BudgetAmendment) : byte[] =
+        let sb = StringBuilder()
+        CountersignatureCanonical.field sb amendment.TemplateId
+        CountersignatureCanonical.field sb amendment.PartyId
+        CountersignatureCanonical.field sb (canonicalDecimal amendment.PriorCeiling)
+        CountersignatureCanonical.field sb (canonicalDecimal amendment.CeilingDelta)
+        Encoding.UTF8.GetBytes(sb.ToString())
+
+    /// The countersignature subject for this amendment. Two amendments
+    /// differing in ANY field — including the delta alone — are different
+    /// subjects, so an approval of one carries nothing for the other.
+    let subject (amendment: BudgetAmendment) : CountersignatureSubject =
+        CountersignatureSubject.ofCanonicalBytes Kind (subjectId amendment) (canonicalBytes amendment)
+
+    /// Every way an amendment declaration is unenforceable, as data
+    /// rather than an exception (GP 12 rule 3). Empty on a healthy
+    /// declaration.
+    ///
+    /// These are the refusals decidable from the declaration ALONE. The
+    /// one that needs the ledger — a ceiling lowered below spend already
+    /// recorded — is decidable only against live accounting, and is
+    /// refused at application time where the reading is real.
+    let validate (amendment: BudgetAmendment) : string list = [
+        if String.IsNullOrWhiteSpace amendment.TemplateId then
+            "a budget amendment must name the budget template it amends"
+
+        if String.IsNullOrWhiteSpace amendment.PartyId then
+            $"the budget amendment to '{amendment.TemplateId}' names no party; budgets are accounted per party, so an amendment naming none would move an allowance nobody holds"
+
+        if amendment.PriorCeiling < 0m then
+            $"the budget amendment to '{amendment.TemplateId}' was agreed against a prior ceiling of {canonicalDecimal amendment.PriorCeiling}; a negative ceiling is not a baseline any budget ever had"
+
+        if amendment.CeilingDelta = 0m then
+            $"the budget amendment to '{amendment.TemplateId}' moves the ceiling by zero; an amendment that changes nothing is a signature ceremony over a no-op, and applying it would put a row in the trail asserting a change that did not happen"
+
+        if amendedCeiling amendment <= 0m then
+            $"the budget amendment to '{amendment.TemplateId}' would put the ceiling at {canonicalDecimal (amendedCeiling amendment)}; a ceiling at or below zero admits nothing and seals the budget by accident — withdraw the routine deliberately instead"
+    ]
