@@ -515,6 +515,18 @@ type OAuth1aCredentialMessages = {
     Reconnect: string
 }
 
+/// The SDK's built-in no-active-team landing (`NoActiveTeamLandingUI`).
+/// Its heading, body and rail label are NOT here — they come from the
+/// deployment's own `NoActiveTeamLandingConfig`, which is where a
+/// deployment already words them.
+type NoActiveTeamLandingMessages = {
+    CheckForInvitations: string
+    Checking: string
+    NothingPending: string
+    /// Takes the joined team's display name.
+    Joined: string -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -547,4 +559,5 @@ type MessageCatalog = {
     RateLimited: RateLimitedMessages
     Consent: ConsentMessages
     OAuth1aCredential: OAuth1aCredentialMessages
+    NoActiveTeamLanding: NoActiveTeamLandingMessages
 }

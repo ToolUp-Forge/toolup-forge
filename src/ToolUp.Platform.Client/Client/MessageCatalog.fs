@@ -428,6 +428,12 @@ module MessageCatalog =
             Authorize = "Authorize"
             Reconnect = "Reconnect"
         }
+        NoActiveTeamLanding = {
+            CheckForInvitations = "Check for invitations"
+            Checking = "Checking for invitations…"
+            NothingPending = "No invitations are waiting for you yet."
+            Joined = fun teamName -> $"You've joined {teamName} — loading it now…"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
