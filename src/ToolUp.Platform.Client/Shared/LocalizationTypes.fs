@@ -731,6 +731,104 @@ type PlatformUsersMessages = {
     TokenRequired: string
 }
 
+/// The built-in permissions-admin module (`PermissionsAdminUI`, Tidy-Up
+/// sweep #3). Covers the three tabs — Team Defaults, Members, Modules —
+/// plus the shared permission-matrix chrome (`permTable`) they render
+/// through.
+type PermissionsAdminMessages = {
+    /// Display label for `ModulePermission.Read` wherever a permission
+    /// matrix renders it — the Team Defaults / Members grids and the
+    /// Modules tab's summary column.
+    PermRead: string
+    PermWrite: string
+    PermAdmin: string
+    /// Display label for `ModulePermission.SchemaOnly`. Distinct from
+    /// the stable wire token `ModulePermission.toToken` emits for audit
+    /// rows — this one is UI-only.
+    PermSchemaOnly: string
+    /// Snapshot-load error shown when the caller has no active team.
+    /// Read directly off `MessageCatalog.english` inside
+    /// `loadSnapshotAsync`, which runs before any component mounts.
+    NoActiveTeam: string
+    /// Tab-bar labels.
+    TabTeamDefaults: string
+    TabMembers: string
+    TabModules: string
+    /// Shared permission-matrix header — `permTable`'s leading column,
+    /// reused by the Team Defaults grid, the Members override editor,
+    /// and the Modules summary table.
+    ColumnModule: string
+    /// Empty state for `permTable` and for the Modules tab when the
+    /// deployment has no managed modules.
+    NoManagedModules: string
+    /// Per-column "grant everywhere" / "clear everywhere" toggle labels
+    /// on `permTable`'s column-action links.
+    SelectAll: string
+    ClearAll: string
+    /// Team Defaults tab.
+    TeamDefaultsHeading: string
+    TeamDefaultsSubheading: string
+    /// Shared "discard uncommitted edits" action — the Team Defaults and
+    /// Members tabs both use it.
+    Reset: string
+    /// Shared in-flight save-button label — Team Defaults ("Save
+    /// defaults" → this while saving) and Members ("Update" → this
+    /// while saving) both use it.
+    Saving: string
+    SaveDefaultsLabel: string
+    TeamDefaultsSaved: string
+    /// Takes the server error message.
+    SaveFailed: string -> string
+    /// Badge on a member's list entry when they carry at least one
+    /// explicit per-module override.
+    OverrideBadge: string
+    /// Members tab.
+    NoMembersYet: string
+    /// Section label above the member list (distinct from the tab-bar
+    /// "Members" label, which reads `TabMembers`).
+    MembersListLabel: string
+    SelectMemberPrompt: string
+    /// Takes the selected member's display label.
+    OverridesHeading: string -> string
+    OverridesHelp: string
+    /// Takes the comma-joined list of module names carrying an explicit
+    /// override for the selected member.
+    ActiveOverridesOn: string -> string
+    Update: string
+    /// Takes the saved module name, then the member's user id.
+    SavedModuleForUser: string -> string -> string
+    /// Takes the member's user id.
+    SavedPermissionsFor: string -> string
+    /// Takes the member's user id, the module name, then the server
+    /// error message.
+    OverrideSaveFailed: string -> string -> string -> string
+    /// Modules tab.
+    ModulesHeading: string
+    ModulesSubheading: string
+    ColumnExposure: string
+    ColumnTeamDefault: string
+    ColumnOverrides: string
+    NoDefaultPermission: string
+    /// Exposure-selector button labels — `ModuleExposure`'s three cases.
+    ExposureAvailable: string
+    ExposureHidden: string
+    ExposureUnavailable: string
+    /// Confirmation-banner sentences after a successful
+    /// `SetModuleExposure` round-trip. One whole sentence per case
+    /// rather than a composed "{moduleName} is now {verb}." template,
+    /// so a translation is never assembled from independently-ordered
+    /// fragments. Each takes the module name.
+    ExposureNowAvailable: string -> string
+    ExposureNowHidden: string -> string
+    ExposureNowUnavailable: string -> string
+    /// Takes the module name, then the server error message.
+    ExposureChangeFailed: string -> string -> string
+    /// Shared chrome.
+    Retry: string
+    Loading: string
+    Dismiss: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -766,4 +864,5 @@ type MessageCatalog = {
     NoActiveTeamLanding: NoActiveTeamLandingMessages
     PlatformAdmin: PlatformAdminMessages
     PlatformUsers: PlatformUsersMessages
+    PermissionsAdmin: PermissionsAdminMessages
 }

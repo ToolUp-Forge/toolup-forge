@@ -563,6 +563,60 @@ module MessageCatalog =
             ReasonRequired = "A reason is required for the audit trail."
             TokenRequired = "Enter or request a confirmation token to proceed."
         }
+        PermissionsAdmin = {
+            PermRead = "Read"
+            PermWrite = "Write"
+            PermAdmin = "Admin"
+            PermSchemaOnly = "Schema-only"
+            NoActiveTeam = "No active team selected. Switch into a team before managing permissions."
+            TabTeamDefaults = "Team Defaults"
+            TabMembers = "Members"
+            TabModules = "Modules"
+            ColumnModule = "Module"
+            NoManagedModules = "No managed modules. Modules are registered server-side via `ServerConfig.ModuleNames`."
+            SelectAll = "Select all"
+            ClearAll = "Clear all"
+            TeamDefaultsHeading = "Team defaults"
+            TeamDefaultsSubheading =
+                "Per-module permissions applied to every team member who has no explicit override. Empty rows mean the module is unreachable for that member."
+            Reset = "Reset"
+            Saving = "Saving..."
+            SaveDefaultsLabel = "Save defaults"
+            TeamDefaultsSaved = "Team defaults saved."
+            SaveFailed = fun msg -> $"Save failed: {msg}"
+            OverrideBadge = "override"
+            NoMembersYet =
+                "This team has no members yet. Add members from Team Manager before configuring per-member overrides."
+            MembersListLabel = "Members"
+            SelectMemberPrompt = "Select a member to view and edit their overrides."
+            OverridesHeading = fun displayLabel -> $"Overrides — {displayLabel}"
+            OverridesHelp =
+                "Toggle any cell to stage an explicit per-member override. Use the column \"Select all\" links to grant or clear a level across every module. Effective permissions resolve to the override if present, otherwise the team default. Setting every level off for a module clears the override (member falls back to defaults)."
+            ActiveOverridesOn = fun joined -> $"Active overrides on: {joined}"
+            Update = "Update"
+            SavedModuleForUser = fun moduleName userId -> $"Saved {moduleName} for {userId}."
+            SavedPermissionsFor = fun userId -> $"Saved permissions for {userId}."
+            OverrideSaveFailed = fun userId moduleName msg -> $"Override save failed for {userId} / {moduleName}: {msg}"
+            ModulesHeading = "Modules"
+            ModulesSubheading =
+                "Set each module's exposure for this team. Available shows it in the sidebar + Home; Hidden removes it from both but keeps its data formats mappable in Import & Map; Unavailable removes it AND blocks mapping any data into it (\"not cleared for this team\"). Exposure is orthogonal to permission levels, which you set on the Team Defaults and Members tabs. The Overrides column counts members carrying an explicit per-module permission override."
+            ColumnExposure = "Exposure"
+            ColumnTeamDefault = "Team default"
+            ColumnOverrides = "Overrides"
+            NoDefaultPermission = "No default permission"
+            ExposureAvailable = "Available"
+            ExposureHidden = "Hidden"
+            ExposureUnavailable = "Unavailable"
+            ExposureNowAvailable = fun moduleName -> $"{moduleName} is now available in this team."
+            ExposureNowHidden =
+                fun moduleName -> $"{moduleName} is now hidden — off the sidebar and Home, data still mappable."
+            ExposureNowUnavailable =
+                fun moduleName -> $"{moduleName} is now unavailable — off the sidebar and Home, data mapping blocked."
+            ExposureChangeFailed = fun moduleName msg -> $"Could not change exposure for {moduleName}: {msg}"
+            Retry = "Retry"
+            Loading = "Loading..."
+            Dismiss = "Dismiss"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
