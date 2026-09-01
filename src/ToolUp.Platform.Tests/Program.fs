@@ -928,6 +928,15 @@ let private registeredTests =
         DisclosureTaintTests.tests
         MultiPartyDisclosureTests.tests
         DeclassificationBudgetTests.tests
+        // Phase 679 — the co-signed budget amendment: the subject binds
+        // to the exact delta, application needs a live-complete
+        // countersignature, a retroactive breach is refused, and the
+        // exhaustion → amendment → resumption arc is audited.
+        DeclassificationBudgetAmendmentTests.subjectTests
+        DeclassificationBudgetAmendmentTests.applicationTests
+        DeclassificationBudgetAmendmentTests.loweringTests
+        DeclassificationBudgetAmendmentTests.arcTests
+        DeclassificationBudgetAmendmentTests.costTests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests

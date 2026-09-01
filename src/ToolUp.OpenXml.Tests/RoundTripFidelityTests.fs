@@ -356,23 +356,38 @@ let private trackedChangesTests =
                 Goldens.check "tracked-changes-redline.package.txt" (Goldens.renderPackage (Emit.toBytes (redlined ())))
             )
 
-        testCase "PINNED DEFECT — the redline inherits the duplicated paragraph marks"
+        testCase "the redlined package validates against the OOXML schema"
         <| fun () ->
-            // `applyTracked` is not implicated: the redline is emitted
-            // from a model imported through the same lossy path, so it
-            // carries the fixture's own pinned defect forward. The
-            // violations are pinned as a golden for the reason the
-            // per-fixture case gives — a NEW violation appearing beside
-            // the known ones must not read as "still invalid".
+            // Phase 736. This case pinned the OPPOSITE until the
+            // paragraph-mark duplication was fixed: the redline is
+            // emitted from a model imported through the same path, so
+            // it inherited the fixture's defect and its violations were
+            // themselves a committed golden. `applyTracked` was never
+            // implicated — layering new marks over pre-existing ones is
+            // now schema-valid because the import no longer leaves the
+            // pre-existing mark in two places.
             let errors = validationErrors (Emit.toBytes (redlined ()))
 
-            Expect.isNonEmpty
+            Expect.isEmpty
                 errors
-                (sprintf
-                    "The redline validated cleanly, so the paragraph-mark duplication was fixed. Update this case and the tracked-changes fixture's `KnownDefect` declaration together.\n\nThe pinned defect:\n%s"
-                    (trackedFixture.KnownDefect |> Option.defaultValue "(none declared)"))
+                (sprintf "no OOXML validation errors in the redlined package, got:\n%s" (String.concat "\n" errors))
 
-            expectGolden (Goldens.check "tracked-changes-redline.validation.txt" (String.concat "\n" errors + "\n"))
+        testCase "the redline is a fixpoint — re-importing and re-emitting changes nothing"
+        <| fun () ->
+            // The duplication grew by one element per pass, so a
+            // SECOND pass was where it became unbounded rather than
+            // merely wrong. Asserting stability over the redline (a
+            // model carrying marks from all three reviewers, both
+            // pre-existing and freshly applied) is the strongest
+            // statement the corpus can make that the carrier is single.
+            let model = redlined ()
+            let once = Emit.toBytes model
+            let twice = Emit.toBytes (Import.fromBytes once).Model
+
+            Expect.equal
+                (Goldens.renderPackage twice)
+                (Goldens.renderPackage once)
+                "emit → import → emit leaves the redlined package's elements unchanged"
     ]
 
 // ─── The regeneration switch ─────────────────────────────────────

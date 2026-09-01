@@ -721,17 +721,14 @@ let all: Fixture list = [
         KnownDefect = None
     }
     {
+        // Carried a `KnownDefect` from Phase 206 until Phase 736: a
+        // pre-existing paragraph-mark revision was emitted twice,
+        // because import left it in the verbatim `w:pPr` as well as
+        // capturing it on `MarkRevision`. Import now strips the
+        // captured element, so this fixture is clean like the rest —
+        // see docs/migrations/736-openxml-emit-paragraph-mark-revision-duplication-fix.md.
         Name = "tracked-changes"
         Build = trackedChanges
-        KnownDefect =
-            Some
-                "A PRE-EXISTING paragraph-mark revision is emitted TWICE. Import captures the mark on \
-                 `ParagraphModel.MarkRevision` and ALSO leaves it inside the verbatim `w:pPr` it carries on \
-                 `RawProperties` (`paragraphRawProperties` strips only `w:sectPr`). Emission then re-attaches that \
-                 verbatim payload and prepends a second element from `MarkRevision`, so `w:pPr/w:rPr` ends up with \
-                 two `w:ins` (or two `w:del`) where the source had one. Two consequences: the package fails OOXML \
-                 schema validation, and the round trip is not a fixpoint — each pass adds another duplicate, \
-                 unbounded. Runs are unaffected (a run's mark is not inside its `w:rPr`), which is why every \
-                 fixture before this one round-tripped clean and nothing in the suite caught it."
+        KnownDefect = None
     }
 ]

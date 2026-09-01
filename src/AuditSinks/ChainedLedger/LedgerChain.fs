@@ -389,3 +389,209 @@ module LedgerRecord =
             Ok(JsonSerializer.Deserialize<'T>(record.Payload, options))
         with ex ->
             Error(sprintf "ledger payload decode failed at sequence %d: %s" record.Sequence ex.Message)
+
+// ─── Phase 678 — the terminal op ─────────────────────────────────
+//
+// A chain is open for as long as anything can append to it. That is the
+// right default and it is also why an ended engagement has, until now,
+// no artefact at all: the ledger simply stops growing, which is
+// indistinguishable from a quiet week. Nothing says the deployment is
+// over, and nothing refuses the next append.
+//
+// The **terminal op** is that missing statement: one record-shaped value
+// binding the chain's final head to the deploy record it belonged to, the
+// actor who decommissioned it, and the moment they did. Signed under the
+// same seam Phase 658 signs the head with, it is a decommission claim a
+// counterparty can check with public key material alone.
+//
+// **It is NOT a ledger record, and that is deliberate.** A closing record
+// appended into the chain would need an `AuditEvent` case to carry it —
+// widening a domain union every deployment compiles against, for a
+// statement that is about the chain rather than about anything that
+// happened inside it. As its own value, stored beside the chain and
+// digesting over the head the chain walks to, it binds exactly as
+// tightly and costs an existing deployment nothing (GP 11 / GP 13).
+//
+// **What closing does and does not do.** It refuses further appends and
+// gives a relying party a signed end-marker. It does not, and cannot,
+// make the stored records immutable — that is the destination's
+// retention policy, exactly as it is for the chain itself. A closed
+// ledger still verifies as a chain; closure is evidence beside the
+// chain, never a change to it.
+
+/// Phase 678 — the record-shaped value that closes a ledger.
+///
+/// Signature fields are optional for the same reason `LedgerHead`'s are:
+/// an unsigned chain is a large improvement on no chain, and a
+/// deployment that has stood up no key material must still be able to
+/// mark its ledger closed. A verifier reports the difference rather than
+/// absorbing it.
+type LedgerTerminalOp = {
+    /// Wire version of this shape, so a reader refuses a document it was
+    /// not written to interpret rather than parsing it hopefully.
+    SchemaVersion: int
+    /// The chain's length at closure — signed alongside the digest, so a
+    /// ledger truncated after closing contradicts the terminal op.
+    RecordCount: int64
+    /// The final head digest: the digest of the last record in the chain.
+    HeadDigest: string
+    /// Lowercase-hex digest of the canonical bytes of the deploy record
+    /// this ledger belonged to. Opaque here — the ledger does not know
+    /// what a deploy record is, only how to carry its identity.
+    DeployRecordDigest: string
+    /// The deploy's own identifier, carried for operator-facing display
+    /// beside the digest that does the binding.
+    DeployId: string
+    /// The decommissioning actor, as the deployment names it.
+    ClosedBy: string
+    /// When the ledger was closed, as an invariant round-trip string.
+    ClosedAt: string
+    /// Why, in the operator's own words. Framed into the digest, so it
+    /// cannot be rewritten after the fact under a signature that still
+    /// verifies.
+    Reason: string
+    /// SHA-256, lowercase hex, over this op's canonical bytes — its own
+    /// identity, and what a retirement reference names.
+    Digest: string
+    /// Key that signed this op, when signed.
+    KeyId: string option
+    /// Algorithm the signature was taken under, when signed.
+    Algorithm: string option
+    /// Base64 detached signature over `LedgerChain.terminalBytes`.
+    Signature: string option
+}
+
+/// Why an append to a ledger was refused.
+///
+/// Typed, and emphatically not a `LedgerBreak`: a closed ledger is
+/// intact — its chain walks, its head verifies, its records are exactly
+/// what was written — and reporting the refusal in the vocabulary of
+/// tampering would send an operator hunting for an attacker when what
+/// happened is that the deployment ended. The two are different
+/// questions with opposite responses, and nothing here lets a caller
+/// read one as the other.
+type LedgerAppendRefusal =
+    /// The ledger carries a terminal op. Appending would extend a chain
+    /// whose end has already been signed, which no later verifier could
+    /// reconcile with the signature.
+    | LedgerClosed of terminalOp: LedgerTerminalOp
+    /// The stored head moved beneath this writer between the read and the
+    /// append — another writer is appending to the same ledger. Phase
+    /// 658's optimistic guard, given a name so a caller can tell it from
+    /// a closure without reading a message.
+    | LedgerHeadMoved of expectedCount: int64 * expectedDigest: string * foundCount: int64 * foundDigest: string
+
+module LedgerAppendRefusal =
+    /// `true` only for a closed ledger — the terminal, permanent refusal.
+    /// A moved head is transient and a retry may succeed; a closure never
+    /// clears.
+    let isClosed =
+        function
+        | LedgerClosed _ -> true
+        | LedgerHeadMoved _ -> false
+
+    /// The operator-facing account. Carried into the sink's `Error`
+    /// string, so a deployment reading only `IAuditSink.Deliver`'s result
+    /// still learns which refusal it hit.
+    let describe =
+        function
+        | LedgerClosed op ->
+            sprintf
+                "chained ledger is closed: terminal op %s closed the chain at %d/%s for deploy %s, by '%s' at %s — no further append is possible"
+                op.Digest
+                op.RecordCount
+                op.HeadDigest
+                op.DeployId
+                op.ClosedBy
+                op.ClosedAt
+        | LedgerHeadMoved(expectedCount, expectedDigest, foundCount, foundDigest) ->
+            sprintf
+                "chained ledger head moved beneath this writer (expected %d/%s, found %d/%s) — another writer is appending to the same ledger"
+                expectedCount
+                expectedDigest
+                foundCount
+                foundDigest
+
+/// Wire version this build writes and reads for a terminal op.
+[<Literal>]
+let terminalSchemaVersion = 1
+
+/// The exact bytes a terminal op's digest and signature are taken over:
+/// every field except the digest and the signature themselves, each
+/// length-framed, in a fixed order.
+///
+/// `RecordCount` and `HeadDigest` are both inside the framing, which is
+/// what makes the op bind a specific chain rather than a specific last
+/// record — the same reason `headBytes` frames the pair.
+let terminalBytes (op: LedgerTerminalOp) : byte[] =
+    use buffer = new MemoryStream()
+    let frame = Canonical.frame buffer
+
+    frame "toolup.ledgerterminalop.v1"
+    frame (string op.SchemaVersion)
+    frame (string op.RecordCount)
+    frame op.HeadDigest
+    frame op.DeployRecordDigest
+    frame op.DeployId
+    frame op.ClosedBy
+    frame op.ClosedAt
+    frame op.Reason
+
+    buffer.ToArray()
+
+/// Recompute a terminal op's digest from its content. Deterministic in
+/// the same strong sense as `computeDigest`: nothing about the ambient
+/// machine reaches the bytes.
+let computeTerminalDigest (op: LedgerTerminalOp) : string = op |> terminalBytes |> digestBytes
+
+module LedgerTerminalOp =
+    /// An unsigned terminal op over a verified head, with its digest
+    /// filled in. Signing is a separate act layered on top, so the same
+    /// construction serves a deployment with key material and one
+    /// without.
+    let create
+        (recordCount: int64)
+        (headDigest: string)
+        (deployRecordDigest: string)
+        (deployId: string)
+        (closedBy: string)
+        (closedAt: string)
+        (reason: string)
+        : LedgerTerminalOp =
+        let unsigned = {
+            SchemaVersion = terminalSchemaVersion
+            RecordCount = recordCount
+            HeadDigest = headDigest
+            DeployRecordDigest = deployRecordDigest
+            DeployId = deployId
+            ClosedBy = closedBy
+            ClosedAt = closedAt
+            Reason = reason
+            Digest = ""
+            KeyId = None
+            Algorithm = None
+            Signature = None
+        }
+
+        {
+            unsigned with
+                Digest = computeTerminalDigest unsigned
+        }
+
+    /// Whether the op's stored digest is the digest of its own content.
+    let digestHolds (op: LedgerTerminalOp) : bool =
+        String.Equals(op.Digest, computeTerminalDigest op, StringComparison.OrdinalIgnoreCase)
+
+    /// Whether the op carries a complete signature triple. Presence
+    /// only — checking it needs public key material and is the
+    /// verifier's job, not this predicate's.
+    let isSigned (op: LedgerTerminalOp) : bool =
+        match op.Signature, op.KeyId, op.Algorithm with
+        | Some _, Some _, Some _ -> true
+        | _ -> false
+
+    /// Whether the op closes the chain that walks to `headDigest` after
+    /// `recordCount` records.
+    let closesChain (recordCount: int64) (headDigest: string) (op: LedgerTerminalOp) : bool =
+        op.RecordCount = recordCount
+        && String.Equals(op.HeadDigest, headDigest, StringComparison.OrdinalIgnoreCase)
