@@ -1544,6 +1544,143 @@ type InviteAcceptMessages = {
     NetworkError: string -> string
 }
 
+/// Fetch-failure sentences shared by every live-data widget on this
+/// page — the traffic, rate-limit-event, ad-unit and premium-user
+/// widgets all resolve their loads through the same generic
+/// `fetchJson` helper.
+type PublicUtilityFetchMessages = {
+    /// A 2xx response body failed to deserialise. Takes the underlying
+    /// exception message.
+    ParseError: string -> string
+    /// A 403 from a platform-admin-gated endpoint.
+    AccessDenied: string
+    /// Any other non-2xx, non-503 status. Takes the HTTP status code.
+    RequestFailed: int -> string
+    /// The request itself threw (offline, DNS, CORS). Takes the
+    /// underlying exception message.
+    NetworkError: string
+}
+
+/// Widget 1 — the traffic-dashboard stub. The server-side
+/// `/api/_platform/admin/traffic` endpoint is a follow-up that has not
+/// landed yet, so this renders a substrate stub in its place.
+type TrafficWidgetMessages = {
+    Title: string
+    Subtitle: string
+    /// Rendered in place of the (not-yet-built) traffic chart.
+    Stub: string
+}
+
+/// Widget 2 — the rate-limit event log.
+type RateLimitWidgetMessages = {
+    Title: string
+    Subtitle: string
+    /// `InboundRateLimitKey.IpAddressKey` display prefix. Takes the ip.
+    KeyIp: string -> string
+    /// `InboundRateLimitKey.UserIdKey` display prefix. Takes the user id.
+    KeyUser: string -> string
+    /// `InboundRateLimitKey.InboundComposite` display prefix. Takes the
+    /// composite key text.
+    KeyComposite: string -> string
+    WindowPerSecond: string
+    WindowPerMinute: string
+    WindowPerHour: string
+    WindowPerDay: string
+    /// `RateLimitWindow.SlidingWindow` display. Takes the already
+    /// call-site-formatted duration (e.g. "30s") and the bucket count —
+    /// the decimal rounding of the duration is a format-specifier
+    /// concern and happens before this function is called, not inside
+    /// the translated template.
+    WindowSliding: string -> int -> string
+    /// `InboundRateLimitDecision.AllowWithRemaining` display. Takes the
+    /// remaining-request count.
+    DecisionAllow: int -> string
+    DecisionDeny: string
+    ColumnOccurred: string
+    ColumnKey: string
+    ColumnRoute: string
+    ColumnWindow: string
+    ColumnThreshold: string
+    ColumnDecision: string
+    Refresh: string
+    Refreshing: string
+    ExportCsv: string
+    Loading: string
+    /// Empty state: rate-limiting not configured, or nothing recorded yet.
+    EmptyState: string
+}
+
+/// Widget 3 — ad-unit CRUD.
+type AdUnitWidgetMessages = {
+    Title: string
+    Subtitle: string
+    /// Rendered when `ClientConfig.AdPanel = NoAdPanel`.
+    DisabledStub: string
+    Loading: string
+    /// Empty state: no ad units configured yet.
+    EmptyState: string
+    ColumnSlotId: string
+    ColumnAdClientId: string
+    ColumnFormat: string
+    ColumnStyle: string
+    ColumnActions: string
+    Edit: string
+    Delete: string
+    /// Form heading while editing an existing slot. Takes the slot id.
+    EditSlotHeading: string -> string
+    /// Form heading while creating a new slot.
+    CreateSlotHeading: string
+    Cancel: string
+    SlotIdLabel: string
+    SlotIdPlaceholder: string
+    AdClientIdLabel: string
+    AdClientIdPlaceholder: string
+    FormatLabel: string
+    StyleCssLabel: string
+    StyleCssPlaceholder: string
+    Saving: string
+    Update: string
+    Create: string
+    Refresh: string
+    /// Client-side validation: the slot id field was left blank.
+    SlotIdRequired: string
+    /// The create/update request failed. Takes the failure reason.
+    SaveFailed: string -> string
+    /// The delete request failed. Takes the failure reason.
+    DeleteFailed: string -> string
+    /// Fallback failure reason when the server returned an empty body.
+    /// Takes the HTTP status code.
+    EmptyResponseReason: int -> string
+}
+
+/// Widget 4 — premium-user list.
+type PremiumUserWidgetMessages = {
+    Title: string
+    Subtitle: string
+    ColumnUserId: string
+    ColumnGrantedAt: string
+    ColumnGrantedBy: string
+    ColumnReason: string
+    Refresh: string
+    Refreshing: string
+    Loading: string
+    /// Empty state: no premium users granted yet.
+    EmptyState: string
+}
+
+/// The Phase 61 public-utility PlatformAdmin widgets
+/// (`PublicUtilityWidgets`) surfaced under
+/// `ClientConfig.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
+type PublicUtilityWidgetsMessages = {
+    /// Page heading above all four widgets.
+    Heading: string
+    Fetch: PublicUtilityFetchMessages
+    Traffic: TrafficWidgetMessages
+    RateLimits: RateLimitWidgetMessages
+    AdUnits: AdUnitWidgetMessages
+    PremiumUsers: PremiumUserWidgetMessages
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1591,4 +1728,5 @@ type MessageCatalog = {
     SessionSecurity: SessionSecurityMessages
     Home: HomeMessages
     InviteAccept: InviteAcceptMessages
+    PublicUtilityWidgets: PublicUtilityWidgetsMessages
 }

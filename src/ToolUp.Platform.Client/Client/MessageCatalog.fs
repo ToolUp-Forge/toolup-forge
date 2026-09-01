@@ -1000,6 +1000,91 @@ module MessageCatalog =
             GoToHome = "Go to home"
             NetworkError = fun detail -> $"Network error: {detail}"
         }
+        PublicUtilityWidgets = {
+            Heading = "Public utility"
+            Fetch = {
+                ParseError = fun msg -> $"Could not parse response: {msg}"
+                AccessDenied = "Access denied — platform-admin role required."
+                RequestFailed = fun code -> $"Request failed (HTTP {code})"
+                NetworkError = fun msg -> $"Network error: {msg}"
+            }
+            Traffic = {
+                Title = "Traffic"
+                Subtitle = "Request volume + error-rate + latency per route"
+                Stub =
+                    "Traffic counters require the server-side /api/_platform/admin/traffic surface. Widget renders when that endpoint lands."
+            }
+            RateLimits = {
+                Title = "Rate-limit events"
+                Subtitle = "Recent decisions by key + route (newest first)"
+                KeyIp = fun ip -> $"ip:{ip}"
+                KeyUser = fun uid -> $"user:{uid}"
+                KeyComposite = fun c -> $"composite:{c}"
+                WindowPerSecond = "1s"
+                WindowPerMinute = "1m"
+                WindowPerHour = "1h"
+                WindowPerDay = "1d"
+                WindowSliding = fun duration buckets -> $"sliding {duration}/{buckets}"
+                DecisionAllow = fun remaining -> $"Allow (rem {remaining})"
+                DecisionDeny = "Deny"
+                ColumnOccurred = "Occurred"
+                ColumnKey = "Key"
+                ColumnRoute = "Route"
+                ColumnWindow = "Window"
+                ColumnThreshold = "Threshold"
+                ColumnDecision = "Decision"
+                Refresh = "Refresh"
+                Refreshing = "Refreshing..."
+                ExportCsv = "Export CSV"
+                Loading = "Loading..."
+                EmptyState = "Rate-limiting not configured for this deployment, or no decisions recorded yet."
+            }
+            AdUnits = {
+                Title = "Ad units"
+                Subtitle = "AdSense slot configuration"
+                DisabledStub = "AdPanel is disabled (ClientConfig.AdPanel = NoAdPanel) — no ad units to configure."
+                Loading = "Loading..."
+                EmptyState = "No ad units configured yet. Use the form below to create one."
+                ColumnSlotId = "Slot id"
+                ColumnAdClientId = "Ad-client id"
+                ColumnFormat = "Format"
+                ColumnStyle = "Style"
+                ColumnActions = "Actions"
+                Edit = "Edit"
+                Delete = "Delete"
+                EditSlotHeading = fun slotId -> $"Edit slot {slotId}"
+                CreateSlotHeading = "Create slot"
+                Cancel = "Cancel"
+                SlotIdLabel = "Slot id"
+                SlotIdPlaceholder = "1234567890"
+                AdClientIdLabel = "Ad-client id"
+                AdClientIdPlaceholder = "ca-pub-..."
+                FormatLabel = "Format"
+                StyleCssLabel = "Style CSS (optional)"
+                StyleCssPlaceholder = "display:block; width:300px; height:250px;"
+                Saving = "Saving..."
+                Update = "Update"
+                Create = "Create"
+                Refresh = "Refresh"
+                SlotIdRequired = "Slot id is required."
+                SaveFailed = fun reason -> $"Save failed: {reason}"
+                DeleteFailed = fun reason -> $"Delete failed: {reason}"
+                EmptyResponseReason = fun code -> $"HTTP {code}"
+            }
+            PremiumUsers = {
+                Title = "Premium users"
+                Subtitle = "Operator-granted premium claims"
+                ColumnUserId = "User id"
+                ColumnGrantedAt = "Granted at"
+                ColumnGrantedBy = "Granted by"
+                ColumnReason = "Reason"
+                Refresh = "Refresh"
+                Refreshing = "Refreshing..."
+                Loading = "Loading..."
+                EmptyState =
+                    "No premium users granted yet. Grant via POST /api/_platform/users/{userId}/premium (Phase 62)."
+            }
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
