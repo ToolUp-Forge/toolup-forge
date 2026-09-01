@@ -5,7 +5,9 @@
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI (class)
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI.ErrorScreen(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.AuthProviders.Passkey.PasskeyAuthUI.ErrorScreenWith(ToolUp.Platform.AuthMessages, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI.LoadingScreen() : Fable.React.ReactElement
+ToolUp.AuthProviders.Passkey.PasskeyAuthUI.LoadingScreenWith(ToolUp.Platform.AuthMessages) : Fable.React.ReactElement
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI.PasskeyShell(ToolUp.Platform.PasskeyUIConfig, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI.SignInScreen(ToolUp.Platform.PasskeyUIConfig, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 ToolUp.AuthProviders.Passkey.PasskeyAuthUI.UserMenu() : Fable.React.ReactElement

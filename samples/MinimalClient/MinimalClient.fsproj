@@ -32,6 +32,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Client.fs" />
+    <!-- Phase 535 — the co-editing reference wiring. Lives in the sample
+         rather than the SDK because the CRDT library (yjs, MIT) is the
+         CONSUMING app's npm dependency: Platform.Client imports nothing
+         from it, so a deployment that never co-edits carries no vendor
+         bundle weight (GP 1 / GP 2 / GP 13). Compiling it here puts the
+         whole client-tier co-editing surface through the Fable gate. -->
+    <Compile Include="CrdtCoEditSample.fs" />
   </ItemGroup>
   <ItemGroup>
     <!-- ProjectReference to ToolUp.Platform.Client drives the full

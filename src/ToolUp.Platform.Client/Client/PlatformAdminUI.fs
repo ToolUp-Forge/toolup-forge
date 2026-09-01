@@ -300,7 +300,7 @@ let update (msg: Msg) (model: Model) =
         if String.length trimmed = 0 then
             {
                 model with
-                    AssignError = Some "Enter a user id."
+                    AssignError = Some(MessageCatalog.english.PlatformAdmin.EnterUserId)
             },
             Cmd.none
         else
@@ -404,13 +404,13 @@ let update (msg: Msg) (model: Model) =
         if String.length name = 0 then
             {
                 model with
-                    CreateTeamError = Some "Team name can't be empty."
+                    CreateTeamError = Some(MessageCatalog.english.PlatformAdmin.TeamNameRequired)
             },
             Cmd.none
         elif String.length ownerId = 0 then
             {
                 model with
-                    CreateTeamError = Some "Pick an initial owner (or use \"Self\")."
+                    CreateTeamError = Some(MessageCatalog.english.PlatformAdmin.OwnerRequired)
             },
             Cmd.none
         else
@@ -579,7 +579,7 @@ let private userEmailLabel (model: Model) (userId: string) =
             | _ -> userId
     | None -> userId
 
-let private adminRow (model: Model) (dispatch: Msg -> unit) (userId: string) =
+let private adminRow (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) (userId: string) =
     let revokeError = model.RevokeError |> Map.tryFind userId
     let label = userEmailLabel model userId
 
@@ -604,7 +604,7 @@ let private adminRow (model: Model) (dispatch: Msg -> unit) (userId: string) =
                     Html.button [
                         prop.className
                             "px-3 py-1 text-xs font-medium rounded border border-red-300 text-red-700 hover:bg-red-50"
-                        prop.text "Revoke"
+                        prop.text msgs.Revoke
                         prop.onClick (fun _ -> dispatch (RequestRevoke userId))
                     ]
                 ]
@@ -615,7 +615,7 @@ let private adminRow (model: Model) (dispatch: Msg -> unit) (userId: string) =
         ]
     ]
 
-let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
+let private adminsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "p-4 flex flex-col gap-4"
         prop.children [
@@ -625,13 +625,9 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-medium text-text-primary"
-                        prop.text "Assign Platform Admin"
+                        prop.text msgs.AssignHeading
                     ]
-                    Html.p [
-                        prop.className "text-xs text-text-secondary"
-                        prop.text
-                            "Start typing a name or email — directory matches appear as you type. Pick one to capture their stable identity-provider user id. Advanced: paste a raw user id (e.g. an Entra `oid`) to assign directly."
-                    ]
+                    Html.p [ prop.className "text-xs text-text-secondary"; prop.text msgs.AssignHelp ]
                     Html.div [
                         prop.className "flex gap-2 items-start"
                         prop.children [
@@ -641,14 +637,14 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
                                     UserDirectoryTypeahead.userTypeahead
                                         model.AssignInput
                                         (fun v -> dispatch (UpdateAssignInput v))
-                                        "Name, email, or user id"
+                                        msgs.UserPickerPlaceholder
                                         UserDirectoryTypeahead.pickUserId
                                 ]
                             ]
                             Html.button [
                                 prop.className
                                     "px-3 py-1 text-sm font-medium rounded bg-brand text-white hover:bg-brand-dark"
-                                prop.text "Assign"
+                                prop.text msgs.Assign
                                 prop.onClick (fun _ -> dispatch RequestAssignConfirm)
                             ]
                         ]
@@ -668,28 +664,24 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
                         prop.children [
                             Html.h3 [
                                 prop.className "text-sm font-medium text-text-primary"
-                                prop.text "Current Platform Admins"
+                                prop.text msgs.CurrentAdminsHeading
                             ]
                             Html.button [
                                 prop.className "text-xs text-brand hover:underline"
-                                prop.text "Refresh"
+                                prop.text msgs.Refresh
                                 prop.onClick (fun _ -> dispatch RefreshAdmins)
                             ]
                         ]
                     ]
                     match model.Admins with
                     | NotLoaded
-                    | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading..." ]
+                    | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
                     | LoadError msg -> errorBanner msg
-                    | Loaded [] ->
-                        Html.p [
-                            prop.className "text-sm text-text-secondary p-3"
-                            prop.text "No Platform Admins configured."
-                        ]
+                    | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoAdmins ]
                     | Loaded admins ->
                         Html.div [
                             prop.className "divide-y divide-border"
-                            prop.children (admins |> List.map (adminRow model dispatch))
+                            prop.children (admins |> List.map (adminRow msgs model dispatch))
                         ]
                 ]
             ]
@@ -701,7 +693,12 @@ let private adminsTabView (model: Model) (dispatch: Msg -> unit) =
 /// already used the new role to mutate deployment configuration),
 /// so the confirm step is a deliberate brake on accidental fires —
 /// e.g. an operator typing-Enter on the wrong autocomplete row.
-let private assignConfirmModalView (model: Model) (targetUserId: string) (dispatch: Msg -> unit) =
+let private assignConfirmModalView
+    (msgs: PlatformAdminMessages)
+    (model: Model)
+    (targetUserId: string)
+    (dispatch: Msg -> unit)
+    =
     let label = userEmailLabel model targetUserId
     let resolved = label <> targetUserId
 
@@ -711,18 +708,14 @@ let private assignConfirmModalView (model: Model) (targetUserId: string) (dispat
             Html.div [
                 prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
                 prop.children [
-                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Grant Platform Admin?" ]
-                    Html.p [
-                        prop.className "text-sm text-text-secondary"
-                        prop.text
-                            "Platform Admins can change deployment-wide configuration, manage every team, and assign / revoke other Platform Admins. The grant takes effect immediately and the recipient retains any team-level roles they already hold."
-                    ]
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.GrantHeading ]
+                    Html.p [ prop.className "text-sm text-text-secondary"; prop.text msgs.GrantBody ]
                     Html.div [
                         prop.className "rounded border border-border bg-gray-50 px-3 py-2"
                         prop.children [
                             Html.span [
                                 prop.className "text-xs text-text-secondary"
-                                prop.text (if resolved then "User: " else "User id: ")
+                                prop.text (if resolved then msgs.UserLabel else msgs.UserIdLabel)
                             ]
                             Html.span [
                                 prop.className (
@@ -748,13 +741,13 @@ let private assignConfirmModalView (model: Model) (targetUserId: string) (dispat
                             Html.button [
                                 prop.className
                                     "px-4 py-2 rounded text-sm font-medium border border-border text-text-primary hover:bg-gray-50"
-                                prop.text "Cancel"
+                                prop.text msgs.Cancel
                                 prop.onClick (fun _ -> dispatch CancelAssignConfirm)
                             ]
                             Html.button [
                                 prop.className
                                     "px-4 py-2 rounded text-sm font-medium bg-brand text-white hover:bg-brand-dark"
-                                prop.text "Grant Platform Admin"
+                                prop.text msgs.GrantConfirm
                                 prop.onClick (fun _ -> dispatch ConfirmAssign)
                             ]
                         ]
@@ -811,7 +804,7 @@ let private teamActionButton (label: string) (disabled: bool) (extraClass: strin
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
+let private teamRow (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
     let pending = model.TeamActionPending |> Set.contains team.TeamId
     let rowError = model.TeamActionError |> Map.tryFind team.TeamId
 
@@ -835,7 +828,7 @@ let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
                                         Html.span [
                                             prop.className
                                                 "px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-amber-100 text-amber-800"
-                                            prop.text "Archived"
+                                            prop.text msgs.ArchivedBadge
                                         ]
                                 ]
                             ]
@@ -869,19 +862,19 @@ let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
                                 prop.children [
                                     if team.Archived then
                                         teamActionButton
-                                            "Restore"
+                                            msgs.Restore
                                             pending
                                             "bg-white text-brand border-brand hover:bg-brand/5"
                                             (fun () -> dispatch (SetTeamArchived(team.TeamId, false)))
 
                                         teamActionButton
-                                            "Delete"
+                                            msgs.Delete
                                             pending
                                             "bg-white text-red-700 border-red-300 hover:bg-red-50"
                                             (fun () -> dispatch (RequestDeleteTeam team.TeamId))
                                     else
                                         teamActionButton
-                                            "Archive"
+                                            msgs.Archive
                                             pending
                                             "bg-white text-text-primary border-border hover:bg-gray-50"
                                             (fun () -> dispatch (SetTeamArchived(team.TeamId, true)))
@@ -906,7 +899,7 @@ let private teamRow (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
         ]
     ]
 
-let private teamsTableView (model: Model) (dispatch: Msg -> unit) =
+let private teamsTableView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let headerCell (label: string) (extra: string) =
         Html.th [
             prop.className (
@@ -924,20 +917,24 @@ let private teamsTableView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-medium text-text-primary"
-                        prop.text "All teams"
+                        prop.text msgs.AllTeamsHeading
                     ]
                     Html.button [
                         prop.className "text-xs text-brand hover:underline"
-                        prop.text "Refresh"
+                        prop.text msgs.Refresh
                         prop.onClick (fun _ -> dispatch RefreshTeams)
                     ]
                 ]
             ]
             match model.Teams with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "Loading teams…" ]
+            | Loading ->
+                Html.p [
+                    prop.className "text-sm text-text-secondary p-3"
+                    prop.text msgs.LoadingTeams
+                ]
             | LoadError msg -> Html.div [ prop.className "p-3"; prop.children [ errorBanner msg ] ]
-            | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text "No teams yet." ]
+            | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoTeamsYet ]
             | Loaded teams ->
                 Html.div [
                     prop.className "overflow-x-auto"
@@ -950,17 +947,17 @@ let private teamsTableView (model: Model) (dispatch: Msg -> unit) =
                                     prop.children [
                                         Html.tr [
                                             prop.children [
-                                                headerCell "Team" ""
-                                                headerCell "Created" ""
-                                                headerCell "Members" "text-center"
-                                                headerCell "Owners" ""
-                                                headerCell "Admins" ""
-                                                headerCell "Actions" "text-right"
+                                                headerCell msgs.ColumnTeam ""
+                                                headerCell msgs.ColumnCreated ""
+                                                headerCell msgs.ColumnMembers "text-center"
+                                                headerCell msgs.ColumnOwners ""
+                                                headerCell msgs.ColumnAdmins ""
+                                                headerCell msgs.ColumnActions "text-right"
                                             ]
                                         ]
                                     ]
                                 ]
-                                yield! teams |> List.map (teamRow model dispatch)
+                                yield! teams |> List.map (teamRow msgs model dispatch)
                             ]
                         ]
                     ]
@@ -971,7 +968,7 @@ let private teamsTableView (model: Model) (dispatch: Msg -> unit) =
 /// Delete-team confirm overlay — only reachable from an archived row.
 /// Echoes the team name as a brake on accidental destruction; the
 /// purge removes the team record AND every membership row.
-let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -> unit) =
+let private deleteTeamModalView (msgs: PlatformAdminMessages) (model: Model) (teamId: string) (dispatch: Msg -> unit) =
     let teamName =
         match model.Teams with
         | Loaded teams ->
@@ -987,16 +984,12 @@ let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -
             Html.div [
                 prop.className "bg-white rounded-lg shadow-lg p-6 w-full max-w-md space-y-4"
                 prop.children [
-                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text "Delete this team?" ]
-                    Html.p [
-                        prop.className "text-sm text-text-secondary"
-                        prop.text
-                            "This permanently removes the team record and every member's membership of it. It cannot be undone — restore is not possible after deletion."
-                    ]
+                    Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.DeleteTeamHeading ]
+                    Html.p [ prop.className "text-sm text-text-secondary"; prop.text msgs.DeleteTeamBody ]
                     Html.div [
                         prop.className "rounded border border-border bg-gray-50 px-3 py-2"
                         prop.children [
-                            Html.span [ prop.className "text-xs text-text-secondary"; prop.text "Team: " ]
+                            Html.span [ prop.className "text-xs text-text-secondary"; prop.text msgs.TeamLabel ]
                             Html.span [ prop.className "text-sm font-medium text-text-primary"; prop.text teamName ]
                         ]
                     ]
@@ -1006,13 +999,13 @@ let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -
                             Html.button [
                                 prop.className
                                     "px-4 py-2 rounded text-sm font-medium border border-border text-text-primary hover:bg-gray-50"
-                                prop.text "Cancel"
+                                prop.text msgs.Cancel
                                 prop.onClick (fun _ -> dispatch CancelDeleteTeam)
                             ]
                             Html.button [
                                 prop.className
                                     "px-4 py-2 rounded text-sm font-medium bg-red-600 text-white hover:bg-red-700"
-                                prop.text "Delete team"
+                                prop.text msgs.DeleteTeam
                                 prop.onClick (fun _ -> dispatch ConfirmDeleteTeam)
                             ]
                         ]
@@ -1022,7 +1015,7 @@ let private deleteTeamModalView (model: Model) (teamId: string) (dispatch: Msg -
         ]
     ]
 
-let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
+let private teamsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let selfId = UserSession.getUserId ()
 
     // Prefer the operator's email for the "Self" affordance; fall back to
@@ -1043,24 +1036,20 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-medium text-text-primary"
-                        prop.text "Create a team"
+                        prop.text msgs.CreateTeamHeading
                     ]
-                    Html.p [
-                        prop.className "text-xs text-text-secondary"
-                        prop.text
-                            "Spin up a new team and name its initial Owner. The Owner is the only role that can add or remove Team Admins; everything else (Members, Admins, ownership transfer) is managed within the team or by another Platform Admin."
-                    ]
+                    Html.p [ prop.className "text-xs text-text-secondary"; prop.text msgs.CreateTeamHelp ]
 
                     Html.div [
                         prop.className "flex flex-col gap-1"
                         prop.children [
                             Html.label [
                                 prop.className "text-xs font-medium text-text-secondary"
-                                prop.text "Team name"
+                                prop.text msgs.TeamNameLabel
                             ]
                             Html.input [
                                 prop.className "px-2 py-1 text-sm border border-border rounded"
-                                prop.placeholder "e.g. Marketing Analytics"
+                                prop.placeholder msgs.TeamNamePlaceholder
                                 prop.value model.NewTeamName
                                 prop.onChange (fun (v: string) -> dispatch (SetNewTeamName v))
                             ]
@@ -1072,7 +1061,7 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                         prop.children [
                             Html.label [
                                 prop.className "text-xs font-medium text-text-secondary"
-                                prop.text "Initial owner"
+                                prop.text msgs.InitialOwnerLabel
                             ]
                             Html.div [
                                 prop.className "flex gap-2 items-start"
@@ -1083,7 +1072,7 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                                             UserDirectoryTypeahead.userTypeahead
                                                 model.NewTeamOwnerUserId
                                                 (fun v -> dispatch (SetNewTeamOwnerUserId v))
-                                                "Name, email, or user id"
+                                                msgs.UserPickerPlaceholder
                                                 UserDirectoryTypeahead.pickUserId
                                         ]
                                     ]
@@ -1095,8 +1084,8 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                                             else
                                                 "bg-white text-text-primary border-border hover:bg-gray-50"
                                         ]
-                                        prop.title (sprintf "Make yourself (%s) the owner" selfDisplay)
-                                        prop.text (if ownerIsSelf then "Self ✓" else "Self")
+                                        prop.title (msgs.SelfTooltip selfDisplay)
+                                        prop.text (if ownerIsSelf then msgs.SelfChecked else msgs.SelfUnchecked)
                                         prop.onClick (fun _ -> dispatch UseSelfAsTeamOwner)
                                     ]
                                 ]
@@ -1109,7 +1098,7 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                             if ownerIsSelf then
                                 Html.span [
                                     prop.className "text-xs text-text-secondary"
-                                    prop.text (sprintf "You (%s) will become the team's initial Owner." selfDisplay)
+                                    prop.text (msgs.SelfOwnerConfirm selfDisplay)
                                 ]
                             elif ownerEntered <> "" then
                                 let label = userEmailLabel model ownerEntered
@@ -1117,7 +1106,7 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                                 if label <> ownerEntered then
                                     Html.span [
                                         prop.className "text-xs text-text-secondary"
-                                        prop.text (sprintf "%s will become the team's initial Owner." label)
+                                        prop.text (msgs.OwnerConfirm label)
                                     ]
                                 else
                                     Html.none
@@ -1138,9 +1127,9 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                                 ]
                                 prop.text (
                                     if model.CreateTeamInFlight then
-                                        "Creating…"
+                                        msgs.Creating
                                     else
-                                        "Create team"
+                                        msgs.CreateTeam
                                 )
                                 prop.onClick (fun _ -> dispatch SubmitCreateTeam)
                             ]
@@ -1152,16 +1141,16 @@ let private teamsTabView (model: Model) (dispatch: Msg -> unit) =
                     | None -> Html.none
                 ]
             ]
-            teamsTableView model dispatch
+            teamsTableView msgs model dispatch
         ]
     ]
 
-let private platformKnowledgeBaseLabel (mode: PlatformKnowledgeBaseMode) =
+let private platformKnowledgeBaseLabel (msgs: PlatformAdminMessages) (mode: PlatformKnowledgeBaseMode) =
     match mode with
-    | EnabledPlatformKnowledgeBase -> "Enabled"
-    | NoPlatformKnowledgeBase -> "Disabled"
+    | EnabledPlatformKnowledgeBase -> msgs.Enabled
+    | NoPlatformKnowledgeBase -> msgs.Disabled
 
-let private platformKnowledgeBaseToggle (model: Model) (dispatch: Msg -> unit) =
+let private platformKnowledgeBaseToggle (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let renderToggle (current: PlatformKnowledgeBaseMode) =
         let other =
             match current with
@@ -1170,8 +1159,8 @@ let private platformKnowledgeBaseToggle (model: Model) (dispatch: Msg -> unit) =
 
         let buttonLabel =
             match current with
-            | EnabledPlatformKnowledgeBase -> "Disable"
-            | NoPlatformKnowledgeBase -> "Enable"
+            | EnabledPlatformKnowledgeBase -> msgs.DisableAction
+            | NoPlatformKnowledgeBase -> msgs.EnableAction
 
         let buttonClass =
             match current with
@@ -1187,15 +1176,11 @@ let private platformKnowledgeBaseToggle (model: Model) (dispatch: Msg -> unit) =
                     prop.children [
                         Html.span [
                             prop.className "text-sm font-medium text-text-primary"
-                            prop.text "Platform Knowledge Base"
+                            prop.text msgs.PlatformKnowledgeBaseHeading
                         ]
                         Html.span [
                             prop.className "text-xs text-text-secondary"
-                            prop.text (
-                                sprintf
-                                    "Currently %s. When enabled, platform-scope KB content is universally readable for authenticated users; when disabled, RAG retrieval filters it out (admin uploads still work)."
-                                    (platformKnowledgeBaseLabel current)
-                            )
+                            prop.text (msgs.KnowledgeBaseStatus(platformKnowledgeBaseLabel msgs current))
                         ]
                     ]
                 ]
@@ -1212,14 +1197,14 @@ let private platformKnowledgeBaseToggle (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h3 [
                 prop.className "text-sm font-medium text-text-primary mb-3"
-                prop.text "Platform Knowledge Base"
+                prop.text msgs.PlatformKnowledgeBaseHeading
             ]
             match model.PlatformKnowledgeBase with
             | NotLoaded
             | Loading ->
                 Html.p [
                     prop.className "text-sm text-text-secondary"
-                    prop.text "Loading current state…"
+                    prop.text msgs.LoadingCurrentState
                 ]
             | LoadError msg -> errorBanner msg
             | Loaded current -> renderToggle current
@@ -1229,22 +1214,21 @@ let private platformKnowledgeBaseToggle (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private settingsTabView (model: Model) (dispatch: Msg -> unit) =
+let private settingsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "p-4 flex flex-col gap-4"
         prop.children [
-            platformKnowledgeBaseToggle model dispatch
+            platformKnowledgeBaseToggle msgs model dispatch
             Html.div [
                 prop.className "rounded border border-border bg-white p-4"
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-medium text-text-primary mb-2"
-                        prop.text "Other Settings"
+                        prop.text msgs.OtherSettingsHeading
                     ]
                     Html.p [
                         prop.className "text-sm text-text-secondary"
-                        prop.text
-                            "Additional runtime-mutable deployment knobs land here as future Phase 4b follow-ups expose them. Today: PlatformKnowledgeBase only."
+                        prop.text msgs.OtherSettingsBody
                     ]
                 ]
             ]
@@ -1266,13 +1250,47 @@ let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private tabBar (model: Model) (dispatch: Msg -> unit) =
+let private tabBar (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
-            tabButton "Admins" (model.ActiveTab = AdminsTab) (fun () -> dispatch (SwitchTab AdminsTab))
-            tabButton "Teams" (model.ActiveTab = TeamsTab) (fun () -> dispatch (SwitchTab TeamsTab))
-            tabButton "Settings" (model.ActiveTab = SettingsTab) (fun () -> dispatch (SwitchTab SettingsTab))
+            tabButton msgs.AdminsTab (model.ActiveTab = AdminsTab) (fun () -> dispatch (SwitchTab AdminsTab))
+            tabButton msgs.TeamsTab (model.ActiveTab = TeamsTab) (fun () -> dispatch (SwitchTab TeamsTab))
+            tabButton msgs.SettingsTab (model.ActiveTab = SettingsTab) (fun () -> dispatch (SwitchTab SettingsTab))
+        ]
+    ]
+
+/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render (via `withFullWidthView`), so a hook
+/// called there would join the shell's hook order and break the moment the
+/// active module changed. A component of its own has a stable identity and
+/// its own hook order.
+[<ReactComponent>]
+let private PlatformAdminBody (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).PlatformAdmin
+
+    let content =
+        match model.ActiveTab with
+        | AdminsTab -> adminsTabView msgs model dispatch
+        | TeamsTab -> teamsTabView msgs model dispatch
+        | SettingsTab -> settingsTabView msgs model dispatch
+
+    let publicUtilitySection =
+        ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render config
+
+    Html.div [
+        prop.className "flex flex-col h-full"
+        prop.children [
+            tabBar msgs model dispatch
+            content
+            publicUtilitySection
+            match model.AssignConfirm with
+            | Some targetUserId -> assignConfirmModalView msgs model targetUserId dispatch
+            | None -> Html.none
+            match model.ConfirmDeleteTeam with
+            | Some teamId -> deleteTeamModalView msgs model teamId dispatch
+            | None -> Html.none
         ]
     ]
 
@@ -1288,29 +1306,7 @@ let private tabBar (model: Model) (dispatch: Msg -> unit) =
 /// "controls left / output right" affordance and were being squashed
 /// into the left third of the shell by the SplitPanel wrap.
 let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let content =
-        match model.ActiveTab with
-        | AdminsTab -> adminsTabView model dispatch
-        | TeamsTab -> teamsTabView model dispatch
-        | SettingsTab -> settingsTabView model dispatch
-
-    let publicUtilitySection =
-        ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render config
-
-    Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [
-            tabBar model dispatch
-            content
-            publicUtilitySection
-            match model.AssignConfirm with
-            | Some targetUserId -> assignConfirmModalView model targetUserId dispatch
-            | None -> Html.none
-            match model.ConfirmDeleteTeam with
-            | Some teamId -> deleteTeamModalView model teamId dispatch
-            | None -> Html.none
-        ]
-    ]
+    PlatformAdminBody config model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

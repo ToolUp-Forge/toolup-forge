@@ -54,6 +54,13 @@ type NotificationStack = {
     /// `ServerConfig.Presence = NoPresence` (the default): no DI
     /// registration, no allocation, byte-for-byte unchanged (GP 13).
     PresenceSubstrate: (IPresenceTracker * IEntityLockStore) option
+    /// Phase 535 — opt-in CRDT co-editing store. `None` when
+    /// `ServerConfig.CrdtDocuments = NoCrdtDocuments` (the default): no
+    /// DI registration, no allocation, byte-for-byte unchanged (GP 13).
+    /// Constructed here rather than in `ComposeStores` because the
+    /// notifying relay needs the resolved (dispatcher-wrapped)
+    /// notification channel, exactly as the presence substrate does.
+    CrdtDocumentStore: ICrdtDocumentStore option
     NarrativeStore: INarrativeStore
 }
 
@@ -299,6 +306,23 @@ let buildNotificationStack
                 InMemoryEntityLockStore(resolvedNotificationChannel) :> IEntityLockStore
             )
 
+    // Phase 535 — opt-in CRDT co-editing document store, the merge-free
+    // tier above the awareness floor above. The in-memory log is wrapped
+    // in `NotifyingCrdtDocumentStore` so appends and compactions fan out
+    // on the reserved `_platform.crdt` key over the SAME per-scope SSE
+    // pipeline presence and locks ride — no new transport (Phase 6a).
+    // The relay is a decorator rather than folded into the log so a
+    // deployment that replaces the single-instance default with a
+    // durable / distributed implementation inherits fan-out unchanged.
+    let crdtDocumentStore: ICrdtDocumentStore option =
+        match config.CrdtDocuments with
+        | NoCrdtDocuments -> None
+        | EnabledCrdtDocuments ->
+            Some(
+                NotifyingCrdtDocumentStore(InMemoryCrdtDocumentStore(), resolvedNotificationChannel)
+                :> ICrdtDocumentStore
+            )
+
     // Narrative store. Default to the blob-backed persistent
     // implementation so narratives survive process restarts — the
     // in-memory variant lost everything on every reboot, which left AI
@@ -335,6 +359,7 @@ let buildNotificationStack
         TransactionalDispatcher = transactionalDispatcher
         ResolvedNotificationChannel = resolvedNotificationChannel
         PresenceSubstrate = presenceSubstrate
+        CrdtDocumentStore = crdtDocumentStore
         NarrativeStore = narrativeStore
     }
 
@@ -362,6 +387,18 @@ let registerPresenceSubstrate
     | Some(tracker, lockStore) ->
         services.AddSingleton<IPresenceTracker>(tracker) |> ignore
         services.AddSingleton<IEntityLockStore>(lockStore) |> ignore
+
+/// Phase 535 — register the CRDT co-editing store when
+/// `ServerConfig.CrdtDocuments = EnabledCrdtDocuments`. The relay-wrapped
+/// instance was constructed in `buildNotificationStack` (over the
+/// resolved notification channel); only the DI registration happens here.
+/// `NoCrdtDocuments` registers nothing — a module that resolves the
+/// interface then receives `null` and must handle absence explicitly
+/// (same contract as `IShareTokenStore` / the presence substrate).
+let registerCrdtDocumentStore (services: IServiceCollection) (crdtDocumentStore: ICrdtDocumentStore option) : unit =
+    match crdtDocumentStore with
+    | None -> ()
+    | Some store -> services.AddSingleton<ICrdtDocumentStore>(store) |> ignore
 
 /// Phase 6f — transactional dispatcher hosted service. Registered only
 /// when at least one `INotificationSink` was supplied (the dispatcher is

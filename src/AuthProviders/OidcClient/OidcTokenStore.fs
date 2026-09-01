@@ -36,6 +36,7 @@ module ToolUp.AuthProviders.Oidc.OidcTokenStore
 // only ever sees short-lived access tokens. This BFF flow is a
 // tracked follow-up, not yet shipped.
 
+open ToolUp.Platform
 open ToolUp.AuthProviders.Oidc.OidcTypes
 
 // `UserSession` in the core SDK exposes `setAuthToken` / `clearAuthToken`
@@ -158,23 +159,37 @@ let clearAll () : unit =
 
 // ─── Error formatting helper ─────────────────────────────────────────
 
-let describeError (err: AuthError) : string =
+/// Phase 751 — the localised form. One arm per `AuthError` case, each
+/// reading the sentence from the resolved catalog rather than authoring
+/// it here, so a non-English deployment's sign-in failure is not the one
+/// screen that stays in English.
+///
+/// The opaque branches stay opaque: `AuthErrorMessages` documents that a
+/// translation must not name the withheld sub-cause either.
+let describeErrorWith (msgs: AuthErrorMessages) (err: AuthError) : string =
     match err with
-    | DiscoveryFailed m -> sprintf "Could not reach the identity provider (%s)." m
-    | InvalidState -> "Sign-in state mismatch. Please try again."
-    | MissingCode -> "No authorization code received from the identity provider."
+    | DiscoveryFailed m -> msgs.DiscoveryFailed m
+    | InvalidState -> msgs.InvalidState
+    | MissingCode -> msgs.MissingCode
     | IssuerError(code, desc) ->
         match desc with
-        | Some d -> sprintf "Identity provider returned %s: %s." code d
-        | None -> sprintf "Identity provider returned %s." code
-    | TokenExchangeFailed m -> sprintf "Token exchange failed (%s)." m
-    | NetworkError m -> sprintf "Network error (%s)." m
-    | NonceMismatch -> "Sign-in token did not match the original request. Please try again."
-    | MalformedIdToken -> "Sign-in token was malformed. Please try again."
-    | IdTokenSignatureInvalid -> "Sign-in token signature could not be verified. Please try again."
-    | IdTokenIssuerInvalid -> "Sign-in token came from an unexpected identity provider. Please try again."
-    | IdTokenAudienceInvalid -> "Sign-in token was not issued for this application. Please try again."
-    | IdTokenExpired -> "Sign-in token has expired. Please try again."
+        | Some d -> msgs.IssuerErrorDescribed code d
+        | None -> msgs.IssuerError code
+    | TokenExchangeFailed m -> msgs.TokenExchangeFailed m
+    | NetworkError m -> msgs.NetworkError m
+    | NonceMismatch -> msgs.NonceMismatch
+    | MalformedIdToken -> msgs.MalformedIdToken
+    | IdTokenSignatureInvalid -> msgs.SignatureInvalid
+    | IdTokenIssuerInvalid -> msgs.IssuerInvalid
+    | IdTokenAudienceInvalid -> msgs.AudienceInvalid
+    | IdTokenExpired -> msgs.Expired
+
+/// The pre-751 entry point, unchanged in arity and behaviour — a widened
+/// arity would read as a REMOVAL in the public-API approval baseline and
+/// would break every caller, for a parameter only a catalog-resolving
+/// caller can supply (444's recorded `...With` pattern).
+let describeError (err: AuthError) : string =
+    describeErrorWith MessageCatalog.english.Auth.Errors err
 
 // ─── Developer-facing diagnostic ─────────────────────────────────────
 //

@@ -1246,15 +1246,17 @@ ToolUp.Platform.ComposeModelExecution+ModelExecutionComposeOptionsModule.withSco
 ToolUp.Platform.ComposeNotifications (class)
 ToolUp.Platform.ComposeNotifications.buildNotificationStack(ToolUp.Platform.ServerConfig, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.ComposeNotifications+NotificationStack
 ToolUp.Platform.ComposeNotifications.registerAuditFallbackReplay(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeNotifications.registerCrdtDocumentStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerPresenceSubstrate(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerShareTokenStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerTransactionalDispatcher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink]) : System.Void
 ToolUp.Platform.ComposeNotifications+NotificationStack (class)
-ToolUp.Platform.ComposeNotifications+NotificationStack..ctor(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IConfigStore, ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]], ToolUp.Platform.INarrativeStore)
+ToolUp.Platform.ComposeNotifications+NotificationStack..ctor(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IConfigStore, ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore], ToolUp.Platform.INarrativeStore)
 ToolUp.Platform.ComposeNotifications+NotificationStack.AuditLog : ToolUp.Platform.IAuditLog { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.BaseNotificationChannel : ToolUp.Platform.INotificationChannel { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ConfigMigrationSupport : ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ConfigStoreInstance : ToolUp.Platform.IConfigStore { get }
+ToolUp.Platform.ComposeNotifications+NotificationStack.CrdtDocumentStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.NarrativeStore : ToolUp.Platform.INarrativeStore { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.PresenceSubstrate : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ResolvedNotificationChannel : ToolUp.Platform.INotificationChannel { get }
@@ -4768,6 +4770,12 @@ ToolUp.Platform.ICountersignatureRegistry.Status(Microsoft.FSharp.Collections.FS
 ToolUp.Platform.ICountersignatureSigner (interface)
 ToolUp.Platform.ICountersignatureSigner.Sign(System.String, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
 ToolUp.Platform.ICountersignatureSigner.Verify(System.String, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.ICrdtDocumentStore (interface)
+ToolUp.Platform.ICrdtDocumentStore.Append(ToolUp.Platform.CrdtDocRef, System.Byte[], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CrdtUpdate]
+ToolUp.Platform.ICrdtDocumentStore.Compact(ToolUp.Platform.CrdtDocRef, System.Byte[], ToolUp.Platform.StateVector) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CrdtSnapshot]
+ToolUp.Platform.ICrdtDocumentStore.GetDiff(ToolUp.Platform.CrdtDocRef, ToolUp.Platform.StateVector) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate]]
+ToolUp.Platform.ICrdtDocumentStore.GetStateVector(ToolUp.Platform.CrdtDocRef) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.StateVector]
+ToolUp.Platform.ICrdtDocumentStore.Snapshot(ToolUp.Platform.CrdtDocRef) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CrdtSnapshot]
 ToolUp.Platform.ICspContributor (interface)
 ToolUp.Platform.ICspContributor.RequiredSources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CspSourceDirective] { get }
 ToolUp.Platform.IDataCatalog (interface)
@@ -5529,6 +5537,8 @@ ToolUp.Platform.InMemoryBudgetLedger (class)
 ToolUp.Platform.InMemoryBudgetLedger..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryComputeBudgetStore (class)
 ToolUp.Platform.InMemoryComputeBudgetStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.InMemoryCrdtDocumentStore (class)
+ToolUp.Platform.InMemoryCrdtDocumentStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.InMemoryDataSource (class)
 ToolUp.Platform.InMemoryDataSource.create() : ToolUp.Platform.InMemoryDataSource+InMemoryDataSource
 ToolUp.Platform.InMemoryDataSource+InMemoryDataSource (class)
@@ -6920,6 +6930,8 @@ ToolUp.Platform.NotificationChannelInstanceValidator+NotificationChannelInstance
 ToolUp.Platform.NotificationChannelInstanceValidator+NotificationChannelInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.NotificationHandler (class)
 ToolUp.Platform.NotificationHandler.notificationHandler(ToolUp.Platform.INotificationChannel, ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.Platform.NotifyingCrdtDocumentStore (class)
+ToolUp.Platform.NotifyingCrdtDocumentStore..ctor(ToolUp.Platform.ICrdtDocumentStore, ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.NotifyingNarrativeStore (class)
 ToolUp.Platform.NotifyingNarrativeStore..ctor(ToolUp.Platform.INarrativeStore, ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.OAuth1aFlowContext (class)

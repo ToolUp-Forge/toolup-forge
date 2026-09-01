@@ -119,7 +119,7 @@ let private formatCount (n: int) : string = n.ToString "N0"
 /// a sidebar id — `onOpen` navigates (and, when recents is on, records
 /// the visit) through the shell's NavigationRequest hook, the same path
 /// a sidebar click takes.
-let private renderToolCard (onOpen: string -> unit) (tool: ToolSummary) =
+let private renderToolCard (msgs: HomeMessages) (onOpen: string -> unit) (tool: ToolSummary) =
     Html.button [
         prop.className
             "text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition w-full"
@@ -136,10 +136,7 @@ let private renderToolCard (onOpen: string -> unit) (tool: ToolSummary) =
                 ]
             ]
             if List.isEmpty tool.DataCounts || tool.TotalRecords = 0 then
-                Html.p [
-                    prop.className "text-xs text-gray-400"
-                    prop.text "No data yet — open this tool to add some."
-                ]
+                Html.p [ prop.className "text-xs text-gray-400"; prop.text msgs.NoDataYet ]
             else
                 Html.div [
                     prop.className "space-y-1"
@@ -161,13 +158,13 @@ let private renderToolCard (onOpen: string -> unit) (tool: ToolSummary) =
         ]
     ]
 
-let private renderActiveAi (ai: ActiveAiSummary option) =
+let private renderActiveAi (msgs: HomeMessages) (ai: ActiveAiSummary option) =
     Html.div [
         prop.className "p-4 bg-white border border-gray-200 rounded-lg"
         prop.children [
             Html.div [
                 prop.className "text-xs uppercase tracking-wider text-gray-500 mb-1"
-                prop.text "Active AI"
+                prop.text msgs.ActiveAiHeading
             ]
             match ai with
             | Some a ->
@@ -182,21 +179,17 @@ let private renderActiveAi (ai: ActiveAiSummary option) =
                         | None -> Html.none
                     ]
                 ]
-            | None ->
-                Html.div [
-                    prop.className "text-sm text-gray-400"
-                    prop.text "No AI provider configured."
-                ]
+            | None -> Html.div [ prop.className "text-sm text-gray-400"; prop.text msgs.NoAiProvider ]
         ]
     ]
 
-let private renderContext (ctx: DeploymentContext) =
+let private renderContext (msgs: HomeMessages) (ctx: DeploymentContext) =
     Html.div [
         prop.className "flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-500"
         prop.children [
-            Html.span [ prop.text (sprintf "Mode: %s" ctx.Mode) ]
+            Html.span [ prop.text (msgs.Mode ctx.Mode) ]
             match ctx.Health with
-            | Some h -> Html.span [ prop.text (sprintf "Health: %s" h) ]
+            | Some h -> Html.span [ prop.text (msgs.Health h) ]
             | None -> Html.none
         ]
     ]
@@ -207,7 +200,7 @@ let private renderContext (ctx: DeploymentContext) =
 /// background data fetch lands — so the home reflects loaded data without a
 /// Data Manager visit, even though the server overview's catalog count is 0.
 [<ReactComponent>]
-let private ToolsGrid (onOpen: string -> unit) (tools: ToolSummary list) =
+let private ToolsGrid (msgs: HomeMessages) (onOpen: string -> unit) (tools: ToolSummary list) =
     let processed = React.useContext ProcessedDataContext.Context
 
     let fileCountFor typeId =
@@ -233,7 +226,7 @@ let private ToolsGrid (onOpen: string -> unit) (tools: ToolSummary list) =
 
     Html.div [
         prop.className "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-        prop.children (augmented |> List.map (renderToolCard onOpen))
+        prop.children (augmented |> List.map (renderToolCard msgs onOpen))
     ]
 
 /// One module-contributed widget (Phase 217). A titled card whose body
@@ -278,7 +271,12 @@ let private renderContributedWidgets (ov: HomeOverview) =
 /// a recents-off (or empty) deployment is byte-for-byte Phase 171
 /// (GP 13). Tool ids resolve to names via the overview's tool list;
 /// an id with no matching tool falls back to the raw id.
-let private renderRecentsPinned (dispatch: Msg -> unit) (pinning: HomePinningState) (tools: ToolSummary list) =
+let private renderRecentsPinned
+    (msgs: HomeMessages)
+    (dispatch: Msg -> unit)
+    (pinning: HomePinningState)
+    (tools: ToolSummary list)
+    =
     let nameOf (moduleId: string) =
         tools
         |> List.tryFind (fun t -> t.ModuleId = moduleId)
@@ -298,7 +296,7 @@ let private renderRecentsPinned (dispatch: Msg -> unit) (pinning: HomePinningSta
                 ]
                 Html.button [
                     prop.className "px-1 text-gray-400 hover:text-amber-500"
-                    prop.title (if pinned then "Unpin" else "Pin")
+                    prop.title (if pinned then msgs.Unpin else msgs.Pin)
                     prop.onClick (fun _ -> dispatch (TogglePin(moduleId, not pinned)))
                     prop.text (if pinned then "★" else "☆")
                 ]
@@ -317,7 +315,7 @@ let private renderRecentsPinned (dispatch: Msg -> unit) (pinning: HomePinningSta
             prop.children [
                 Html.div [
                     prop.className "text-xs uppercase tracking-wider text-gray-500"
-                    prop.text "Pinned & recent"
+                    prop.text msgs.PinnedAndRecent
                 ]
                 if not (List.isEmpty pinning.Pinned) then
                     Html.div [
@@ -332,7 +330,7 @@ let private renderRecentsPinned (dispatch: Msg -> unit) (pinning: HomePinningSta
             ]
         ]
 
-let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverview) =
+let private renderOverview (msgs: HomeMessages) (model: Model) (dispatch: Msg -> unit) (ov: HomeOverview) =
     let onOpen (moduleId: string) = dispatch (OpenTool moduleId)
 
     Html.div [
@@ -342,10 +340,13 @@ let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverv
             Html.div [
                 prop.className "grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch"
                 prop.children [
-                    Html.div [ prop.className "md:col-span-1"; prop.children [ renderActiveAi ov.ActiveAi ] ]
+                    Html.div [
+                        prop.className "md:col-span-1"
+                        prop.children [ renderActiveAi msgs ov.ActiveAi ]
+                    ]
                     Html.div [
                         prop.className "md:col-span-2 flex items-end"
-                        prop.children [ renderContext ov.Deployment ]
+                        prop.children [ renderContext msgs ov.Deployment ]
                     ]
                 ]
             ]
@@ -353,7 +354,7 @@ let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverv
             // Phase 217 — built-in "Pinned / Recent" widget. `Html.none`
             // unless recents is on with something to show (GP 13).
             if model.Recents then
-                renderRecentsPinned dispatch model.Pinning ov.Tools
+                renderRecentsPinned msgs dispatch model.Pinning ov.Tools
             else
                 Html.none
 
@@ -362,16 +363,16 @@ let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverv
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-semibold text-gray-700 mb-3"
-                        prop.text "Your tools"
+                        prop.text msgs.YourTools
                     ]
                     if List.isEmpty ov.Tools then
                         Html.div [
                             prop.className
                                 "p-8 text-center text-sm text-gray-500 border border-dashed border-gray-200 rounded"
-                            prop.text "No data-producing tools are registered in this deployment yet."
+                            prop.text msgs.NoTools
                         ]
                     else
-                        ToolsGrid onOpen ov.Tools
+                        ToolsGrid msgs onOpen ov.Tools
                 ]
             ]
 
@@ -382,7 +383,16 @@ let private renderOverview (model: Model) (dispatch: Msg -> unit) (ov: HomeOverv
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the view body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` / `AdminHome.AdminHomeHeader` are
+/// one: `view` is invoked inline by the shell's own render, so a hook
+/// called there would join the shell's hook order and break the moment
+/// the active module changed. `view` keeps its exact public signature
+/// and delegates.
+[<ReactComponent>]
+let private HomeBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).Home
+
     Html.div [
         prop.className "p-4"
         prop.children [
@@ -391,24 +401,21 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold text-gray-800"; prop.text "Home" ]
-                            Html.p [
-                                prop.className "text-sm text-gray-600"
-                                prop.text "An overview of your tools, the data in each, and the active AI."
-                            ]
+                            Html.h2 [ prop.className "text-lg font-semibold text-gray-800"; prop.text msgs.Heading ]
+                            Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.Subheading ]
                         ]
                     ]
                     Html.button [
                         prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
                         prop.onClick (fun _ -> dispatch Refresh)
-                        prop.text "Refresh"
+                        prop.text msgs.Refresh
                     ]
                 ]
             ]
 
             match model.Overview with
-            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
-            | Loaded ov -> renderOverview model dispatch ov
+            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Loaded ov -> renderOverview msgs model dispatch ov
             | LoadError err ->
                 Html.div [
                     prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
@@ -416,6 +423,8 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 ]
         ]
     ]
+
+let view (model: Model) (dispatch: Msg -> unit) : ReactElement = HomeBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────
 

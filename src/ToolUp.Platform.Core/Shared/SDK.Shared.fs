@@ -3430,6 +3430,17 @@ type ServerConfig = {
     /// mounts `PresenceContext.provider` client-side (awareness only —
     /// not co-editing).
     Presence: PresenceMode
+    /// Phase 535 — CRDT co-editing substrate selection, the merge-free
+    /// tier above Phase 442's awareness floor. Default `NoCrdtDocuments`
+    /// — no `ICrdtDocumentStore` in DI, no allocation, no
+    /// `_platform.crdt` fan-out; an existing deployment that upgrades
+    /// stays byte-for-byte identical until it opts in (GP 11 + GP 13).
+    /// `EnabledCrdtDocuments` registers the single-instance in-memory
+    /// log, wrapped in the notification-channel relay. Substrate only:
+    /// the deployment exposes its own API over the resolved store, and
+    /// the CRDT library itself is a client-side npm dependency of the
+    /// consuming app — the server carries none.
+    CrdtDocuments: CrdtDocumentMode
     /// Phase 637 — server-authoritative module-visibility profiles.
     /// Default `NoModuleVisibility` — no store in DI, no admin API
     /// mounted, no profile read on the accessible-modules path, and the
@@ -3892,6 +3903,7 @@ module ServerConfig =
         RegisteredLocales = [ LocaleCode.en ]
         I18nCoverageMode = NoCoverageCheck
         Presence = NoPresence
+        CrdtDocuments = NoCrdtDocuments
         ModuleVisibility = NoModuleVisibility
         AdminMutationPolicy = AdminMutationPolicy.SingleAdmin
         GrantConsent = NoGrantConsentStore

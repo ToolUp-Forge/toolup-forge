@@ -361,7 +361,8 @@ let private remediationSteps (conversion: Conversion) : string list =
 
     let derived =
         conversion.Derived
-        |> List.map (fun d -> "derived " + ColumnMapping.describeDerivedColumn d)
+        |> List.map (fun d ->
+            MessageCatalog.english.MappingDataManager.DerivedRemediationStep(ColumnMapping.describeDerivedColumn d))
 
     remediation @ derived
 
@@ -511,7 +512,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | RetryIngestionDone(Error msg) ->
         {
             model with
-                Error = Some(sprintf "Re-ingestion failed: %s" msg)
+                Error = Some(MessageCatalog.english.MappingDataManager.ReingestionFailed msg)
         },
         Cmd.none
 
@@ -544,7 +545,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
 
             reader.onerror <-
-                fun _ -> dispatch (ApiError(sprintf "Couldn't read '%s' — the file may be unreadable." file.name))
+                fun _ -> dispatch (ApiError(MessageCatalog.english.MappingDataManager.FileReadFailed file.name))
 
             reader.readAsText file)
 
@@ -733,7 +734,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             | None ->
                 {
                     model with
-                        Error = Some "The selected data type publishes no schema, so it can't be mapped."
+                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaCannotMap
                 },
                 Cmd.none
         | None -> model, Cmd.none
@@ -836,7 +837,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             | _ ->
                 {
                     model with
-                        Error = Some "The selected data type publishes no schema."
+                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaPublished
                 },
                 Cmd.none
         | _ -> model, Cmd.none
@@ -897,7 +898,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             | _ ->
                 {
                     model with
-                        Error = Some "The selected data type publishes no schema."
+                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaPublished
                 },
                 Cmd.none
         | _ -> model, Cmd.none
@@ -937,7 +938,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | Reprocessed(Error msg) ->
         {
             model with
-                Error = Some(sprintf "Reprocess failed: %s" msg)
+                Error = Some(MessageCatalog.english.MappingDataManager.ReprocessFailed msg)
         },
         Cmd.none
 
@@ -956,7 +957,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | ResetDone(Error msg) ->
         {
             model with
-                Error = Some(sprintf "Reset failed: %s" msg)
+                Error = Some(MessageCatalog.english.MappingDataManager.ResetFailed msg)
         },
         Cmd.none
 
@@ -981,13 +982,13 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
 // ─── View ─────────────────────────────────────────────────────────
 
-let private formatSize (bytes: int64) =
+let private formatSize (msgs: MappingDataManagerMessages) (bytes: int64) =
     if bytes < 1024L then
-        $"{bytes} B"
+        $"{bytes} {msgs.UnitBytes}"
     elif bytes < 1024L * 1024L then
-        sprintf "%.1f KB" (float bytes / 1024.0)
+        sprintf "%.1f %s" (float bytes / 1024.0) msgs.UnitKilobytes
     else
-        sprintf "%.1f MB" (float bytes / (1024.0 * 1024.0))
+        sprintf "%.1f %s" (float bytes / (1024.0 * 1024.0)) msgs.UnitMegabytes
 
 let private labelFor (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
     displays
@@ -997,29 +998,31 @@ let private labelFor (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
 
 /// File-list "Data Type" column label — renders the detect sentinel as a
 /// readable "Unrecognised" rather than the raw `UnrecognisedData` id.
-let private dataTypeLabel (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
+/// File-list "Data Type" column label — renders the detect sentinel as a
+/// readable localised label rather than the raw `UnrecognisedData` id.
+let private dataTypeLabel (msgs: MappingDataManagerMessages) (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
     if dataTypeId = "UnrecognisedData" then
-        "Unrecognised"
+        msgs.UnrecognisedLabel
     else
         labelFor displays dataTypeId
 
-let private columnTypeName =
+let private columnTypeName (msgs: MappingDataManagerMessages) =
     function
-    | StringColumn -> "Text"
-    | NumberColumn -> "Number"
-    | DateColumn -> "Date"
-    | BooleanColumn -> "Boolean"
+    | StringColumn -> msgs.TypeText
+    | NumberColumn -> msgs.TypeNumber
+    | DateColumn -> msgs.TypeDate
+    | BooleanColumn -> msgs.TypeBoolean
 
 /// (badge text, tailwind colour classes, is-warning) for a match flag.
-let private flagBadge =
+let private flagBadge (msgs: MappingDataManagerMessages) =
     function
-    | Confident -> "OK", "text-green-700 bg-green-50 border-green-200", false
-    | LowConfidence -> "Low confidence", "text-amber-700 bg-amber-50 border-amber-200", true
-    | TypeMismatch -> "Type mismatch", "text-amber-700 bg-amber-50 border-amber-200", true
-    | Ambiguous -> "Ambiguous", "text-amber-700 bg-amber-50 border-amber-200", true
-    | Unmatched -> "Unmatched", "text-red-700 bg-red-50 border-red-200", true
+    | Confident -> msgs.MatchConfident, "text-green-700 bg-green-50 border-green-200", false
+    | LowConfidence -> msgs.MatchLowConfidence, "text-amber-700 bg-amber-50 border-amber-200", true
+    | TypeMismatch -> msgs.MatchTypeMismatch, "text-amber-700 bg-amber-50 border-amber-200", true
+    | Ambiguous -> msgs.MatchAmbiguous, "text-amber-700 bg-amber-50 border-amber-200", true
+    | Unmatched -> msgs.MatchUnmatched, "text-red-700 bg-red-50 border-red-200", true
 
-let private columnSelect (w: Wizard) (field: FieldSuggestion) dispatch =
+let private columnSelect (msgs: MappingDataManagerMessages) (w: Wizard) (field: FieldSuggestion) dispatch =
     let current = chosenColumn w field |> Option.defaultValue ""
 
     Html.select [
@@ -1029,7 +1032,7 @@ let private columnSelect (w: Wizard) (field: FieldSuggestion) dispatch =
             let col = if v = "" then None else Some v
             dispatch (OverrideColumn(field.Field.Name, col)))
         prop.children [
-            Html.option [ prop.value ""; prop.text "— not mapped —" ]
+            Html.option [ prop.value ""; prop.text msgs.NotMappedOption ]
             for h in w.Headers do
                 Html.option [ prop.value h; prop.text (columnLabel w.Profiles h) ]
         ]
@@ -1037,13 +1040,13 @@ let private columnSelect (w: Wizard) (field: FieldSuggestion) dispatch =
 
 // ─── ReviewData step ──────────────────────────────────────────────
 
-let private dateOrderName =
+let private dateOrderName (msgs: MappingDataManagerMessages) =
     function
-    | DayFirst -> "Day first (DD/MM)"
-    | MonthFirst -> "Month first (MM/DD)"
-    | YearFirst -> "ISO (YYYY-MM-DD)"
+    | DayFirst -> msgs.DateOrderDayFirst
+    | MonthFirst -> msgs.DateOrderMonthFirst
+    | YearFirst -> msgs.DateOrderYearFirst
 
-let private reviewDataView (w: Wizard) dispatch =
+let private reviewDataView (msgs: MappingDataManagerMessages) (w: Wizard) dispatch =
     let problemColumns = w.Profiles |> List.filter (fun p -> not p.Issues.IsEmpty)
     let blockers = unresolvedDates w
 
@@ -1068,7 +1071,7 @@ let private reviewDataView (w: Wizard) dispatch =
                                 | Some u ->
                                     Html.span [
                                         prop.className "ml-2 text-xs text-gray-500"
-                                        prop.text $"unit {u} → kept in label"
+                                        prop.text (msgs.UnitKeptInLabel u)
                                     ]
                                 | None -> ()
                             ]
@@ -1083,7 +1086,7 @@ let private reviewDataView (w: Wizard) dispatch =
                                         prop.isChecked enabled
                                         prop.onChange (fun (_: bool) -> dispatch (ToggleColumnFixes p.Column))
                                     ]
-                                    Html.span [ prop.text "Apply fixes" ]
+                                    Html.span [ prop.text msgs.ApplyFixes ]
                                 ]
                             ]
                     ]
@@ -1106,7 +1109,7 @@ let private reviewDataView (w: Wizard) dispatch =
                                 Html.span [
                                     prop.className "ml-1 text-gray-400"
                                     prop.text (
-                                        sprintf "e.g. %s" (String.concat ", " (issue.Examples |> List.truncate 3))
+                                        msgs.ExampleValues(String.concat ", " (issue.Examples |> List.truncate 3))
                                     )
                                 ]
                         ]
@@ -1129,7 +1132,7 @@ let private reviewDataView (w: Wizard) dispatch =
                                             prop.isChecked selected
                                             prop.onChange (fun (_: bool) -> dispatch (SetDateOrder(p.Column, order)))
                                         ]
-                                        Html.span [ prop.text (dateOrderName order) ]
+                                        Html.span [ prop.text (dateOrderName msgs order) ]
                                     ]
                                 ]
                         ]
@@ -1143,7 +1146,7 @@ let private reviewDataView (w: Wizard) dispatch =
                     if after <> raw then
                         Html.div [
                             prop.className "text-xs text-gray-500"
-                            prop.text $"preview: \"{raw}\" → \"{after}\""
+                            prop.text (msgs.PreviewBeforeAfter raw after)
                         ]
                 | None -> ()
             ]
@@ -1152,18 +1155,14 @@ let private reviewDataView (w: Wizard) dispatch =
     Html.div [
         prop.className "space-y-3"
         prop.children [
-            Html.p [
-                prop.className "text-sm text-gray-600"
-                prop.text
-                    "We scanned the data for problems before mapping. Safe fixes are pre-selected; ambiguous dates need a choice."
-            ]
+            Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.ReviewDataIntro ]
             for p in problemColumns do
                 columnCard p
 
             if not blockers.IsEmpty then
                 Html.div [
                     prop.className "text-sm text-amber-700"
-                    prop.text ("Choose a date order for: " + String.concat ", " blockers)
+                    prop.text (msgs.ChooseDateOrderFor(String.concat ", " blockers))
                 ]
 
             Html.button [
@@ -1179,7 +1178,7 @@ let private reviewDataView (w: Wizard) dispatch =
                         "bg-gray-200 text-gray-500 cursor-not-allowed"
                 ]
                 prop.disabled (not blockers.IsEmpty)
-                prop.text "Continue to mapping"
+                prop.text msgs.ContinueToMapping
                 prop.onClick (fun _ ->
                     if blockers.IsEmpty then
                         dispatch ProceedToMapping)
@@ -1187,7 +1186,7 @@ let private reviewDataView (w: Wizard) dispatch =
         ]
     ]
 
-let private reviewListView (suggestion: MappingSuggestion) =
+let private reviewListView (msgs: MappingDataManagerMessages) (suggestion: MappingSuggestion) =
     let flagged = suggestion.Fields |> List.filter (fun f -> f.Flag <> Confident)
 
     if flagged.IsEmpty then
@@ -1198,18 +1197,18 @@ let private reviewListView (suggestion: MappingSuggestion) =
             prop.children [
                 Html.div [
                     prop.className "text-sm font-semibold text-amber-800 mb-1"
-                    prop.text "⚠ Auto-mapped — please double-check these fields"
+                    prop.text msgs.AutoMappedWarningHeading
                 ]
                 Html.ul [
                     prop.className "list-disc list-inside text-sm text-amber-800 space-y-0.5"
                     prop.children [
                         for f in flagged do
-                            let label, _, _ = flagBadge f.Flag
+                            let label, _, _ = flagBadge msgs f.Flag
 
                             let detail =
                                 match f.SuggestedColumn with
-                                | Some c -> $"→ guessed \"{c}\""
-                                | None -> "→ no column found"
+                                | Some c -> msgs.GuessedColumn c
+                                | None -> msgs.NoColumnFound
 
                             Html.li [ prop.text $"{f.Field.Name} ({label}) {detail}" ]
                     ]
@@ -1217,7 +1216,7 @@ let private reviewListView (suggestion: MappingSuggestion) =
             ]
         ]
 
-let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch =
+let private mappingGridView (msgs: MappingDataManagerMessages) (w: Wizard) (suggestion: MappingSuggestion) dispatch =
     Html.div [
         prop.className "overflow-x-auto"
         prop.children [
@@ -1228,17 +1227,17 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                         Html.tr [
                             prop.className "text-left text-gray-600 border-b border-gray-200"
                             prop.children [
-                                Html.th [ prop.className "py-2 pr-3"; prop.text "Target field" ]
-                                Html.th [ prop.className "py-2 pr-3"; prop.text "Type" ]
-                                Html.th [ prop.className "py-2 pr-3"; prop.text "CSV column" ]
-                                Html.th [ prop.className "py-2 pr-3"; prop.text "Match" ]
+                                Html.th [ prop.className "py-2 pr-3"; prop.text msgs.TargetField ]
+                                Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnType ]
+                                Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnCsvColumn ]
+                                Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnMatch ]
                             ]
                         ]
                     ]
                     Html.tbody [
                         prop.children [
                             for f in suggestion.Fields do
-                                let badgeText, badgeClass, _ = flagBadge f.Flag
+                                let badgeText, badgeClass, _ = flagBadge msgs f.Flag
 
                                 let derivedFor = w.Derived |> List.tryFind (fun d -> d.Field = f.Field.Name)
 
@@ -1252,14 +1251,14 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                                                 if f.Field.Required then
                                                     Html.span [
                                                         prop.className "text-red-600 ml-0.5"
-                                                        prop.title "Required"
+                                                        prop.title msgs.RequiredTooltip
                                                         prop.text "*"
                                                     ]
                                             ]
                                         ]
                                         Html.td [
                                             prop.className "py-2 pr-3 text-gray-500"
-                                            prop.text (columnTypeName f.Field.Type)
+                                            prop.text (columnTypeName msgs f.Field.Type)
                                         ]
                                         Html.td [
                                             prop.className "py-2 pr-3 min-w-48"
@@ -1270,7 +1269,7 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                                                         prop.className "text-xs font-mono text-blue-800"
                                                         prop.text (ColumnMapping.describeColumnExpr d.Expr)
                                                     ]
-                                                | None -> columnSelect w f dispatch
+                                                | None -> columnSelect msgs w f dispatch
                                             ]
                                         ]
                                         Html.td [
@@ -1281,7 +1280,7 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
                                                     Html.span [
                                                         prop.className
                                                             "inline-block px-2 py-0.5 rounded border text-xs text-blue-700 bg-blue-50 border-blue-200"
-                                                        prop.text "Derived"
+                                                        prop.text msgs.DerivedBadge
                                                     ]
                                                 | None ->
                                                     Html.span [
@@ -1306,15 +1305,21 @@ let private mappingGridView (w: Wizard) (suggestion: MappingSuggestion) dispatch
 /// columns only (leaves are `SourceColumn` / `Constant`) — the persisted
 /// `ColumnExpr` supports nesting, but the builder keeps to the flat common
 /// cases (split a "Full Name", join a composite key, a literal column).
-let private derivedKinds = [
-    "concat", "Join columns"
-    "splittake", "Split & take part"
-    "substring", "Substring"
-    "constant", "Constant value"
+/// The keys are the `kind` state's machine values and stay unlocalised;
+/// only the paired label is.
+let private derivedKinds (msgs: MappingDataManagerMessages) = [
+    "concat", msgs.DerivedKindConcat
+    "splittake", msgs.DerivedKindSplitTake
+    "substring", msgs.DerivedKindSubstring
+    "constant", msgs.DerivedKindConstant
 ]
 
+/// Phase 751 — the builder is already a `[<ReactComponent>]` (it holds
+/// `React.useState` hooks), so the catalog hook joins the existing hook
+/// order rather than needing a wrapper of its own.
 [<ReactComponent>]
 let private DerivedColumnBuilder (fields: string list) (headers: string list) (onAdd: DerivedColumn -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).MappingDataManager
     let field, setField = React.useState ""
     let kind, setKind = React.useState "concat"
     let colA, setColA = React.useState ""
@@ -1383,28 +1388,28 @@ let private DerivedColumnBuilder (fields: string list) (headers: string list) (o
         prop.children [
             Html.div [
                 prop.className "text-sm font-medium text-gray-700"
-                prop.text "Add a derived column"
+                prop.text msgs.AddDerivedColumnHeading
             ]
             Html.div [
                 prop.className "flex flex-wrap items-end gap-3"
                 prop.children [
-                    labelledSelect "Target field" field "— field —" fields setField
-                    labelledSelect "From" kind "" (derivedKinds |> List.map fst) setKind
+                    labelledSelect msgs.TargetField field msgs.FieldPlaceholder fields setField
+                    labelledSelect msgs.DerivedFromLabel kind "" (derivedKinds msgs |> List.map fst) setKind
                     // Per-kind inputs.
                     match kind with
-                    | "constant" -> textInput "Value" constValue setConstValue
+                    | "constant" -> textInput msgs.ValueLabel constValue setConstValue
                     | "concat" ->
-                        labelledSelect "Column A" colA "— column —" headers setColA
-                        labelledSelect "Column B" colB "— column —" headers setColB
-                        textInput "Separator" textParam setTextParam
+                        labelledSelect msgs.ColumnALabel colA msgs.ColumnPlaceholder headers setColA
+                        labelledSelect msgs.ColumnBLabel colB msgs.ColumnPlaceholder headers setColB
+                        textInput msgs.SeparatorLabel textParam setTextParam
                     | "splittake" ->
-                        labelledSelect "Column" colA "— column —" headers setColA
-                        textInput "Delimiter" textParam setTextParam
-                        textInput "Part #" numA setNumA
+                        labelledSelect msgs.ColumnLabel colA msgs.ColumnPlaceholder headers setColA
+                        textInput msgs.DelimiterLabel textParam setTextParam
+                        textInput msgs.PartNumberLabel numA setNumA
                     | "substring" ->
-                        labelledSelect "Column" colA "— column —" headers setColA
-                        textInput "Start" numA setNumA
-                        textInput "Length" numB setNumB
+                        labelledSelect msgs.ColumnLabel colA msgs.ColumnPlaceholder headers setColA
+                        textInput msgs.StartLabel numA setNumA
+                        textInput msgs.LengthLabel numB setNumB
                     | _ -> Html.none
 
                     Html.button [
@@ -1420,7 +1425,7 @@ let private DerivedColumnBuilder (fields: string list) (headers: string list) (o
                                 "bg-gray-200 text-gray-500 cursor-not-allowed"
                         ]
                         prop.disabled (not canAdd)
-                        prop.text "Add"
+                        prop.text msgs.AddButton
                         prop.onClick (fun _ ->
                             match field, buildExpr () with
                             | f, Some expr when f <> "" ->
@@ -1436,14 +1441,14 @@ let private DerivedColumnBuilder (fields: string list) (headers: string list) (o
             ]
             Html.div [
                 prop.className "text-xs text-gray-400"
-                prop.text "Derived columns draw from source columns only and re-derive automatically on re-import."
+                prop.text msgs.DerivedColumnsFootnote
             ]
         ]
     ]
 
 /// Lists the derived columns already added (with a remove affordance) and
 /// the builder. Shown on the mapping-review step beneath the field grid.
-let private derivedColumnsView (w: Wizard) (suggestion: MappingSuggestion) dispatch =
+let private derivedColumnsView (msgs: MappingDataManagerMessages) (w: Wizard) (suggestion: MappingSuggestion) dispatch =
     let fieldNames = suggestion.Fields |> List.map _.Field.Name
 
     Html.div [
@@ -1464,7 +1469,7 @@ let private derivedColumnsView (w: Wizard) (suggestion: MappingSuggestion) dispa
                                     ]
                                     Html.button [
                                         prop.className "text-xs text-red-600 hover:text-red-800 hover:underline"
-                                        prop.text "Remove"
+                                        prop.text msgs.RemoveButton
                                         prop.onClick (fun _ -> dispatch (RemoveDerivedColumn d.Field))
                                     ]
                                 ]
@@ -1485,27 +1490,16 @@ let private derivedColumnsView (w: Wizard) (suggestion: MappingSuggestion) dispa
 /// proceed at your discretion), and a clean report reads as `Safe`
 /// (green). Errors are grouped by column to match the mapping-review
 /// surface.
-let private validationView (report: DryRunReport) (saving: bool) dispatch =
+let private validationView (msgs: MappingDataManagerMessages) (report: DryRunReport) (saving: bool) dispatch =
     let hasFailures = report.FailedRows > 0 || not report.RowIssues.IsEmpty
 
     let summaryBadge =
         if not hasFailures then
-            "border-green-200 bg-green-50 text-green-800",
-            sprintf "All %d row%s validated cleanly." report.TotalRows (if report.TotalRows = 1 then "" else "s")
+            "border-green-200 bg-green-50 text-green-800", msgs.AllRowsValidatedCleanly report.TotalRows
         elif report.CommitBlocked then
-            "border-red-200 bg-red-50 text-red-800",
-            sprintf
-                "%d of %d row%s would fail — commit is blocked until the mapping or source is fixed."
-                report.FailedRows
-                report.TotalRows
-                (if report.TotalRows = 1 then "" else "s")
+            "border-red-200 bg-red-50 text-red-800", msgs.RowsFailBlocked report.FailedRows report.TotalRows
         else
-            "border-amber-200 bg-amber-50 text-amber-800",
-            sprintf
-                "%d of %d row%s would fail. You can fix the mapping or import anyway."
-                report.FailedRows
-                report.TotalRows
-                (if report.TotalRows = 1 then "" else "s")
+            "border-amber-200 bg-amber-50 text-amber-800", msgs.RowsFailWarn report.FailedRows report.TotalRows
 
     let badgeClass, summaryText = summaryBadge
 
@@ -1517,19 +1511,17 @@ let private validationView (report: DryRunReport) (saving: bool) dispatch =
             prop.children [
                 Html.div [
                     prop.className "text-sm font-medium text-amber-800"
-                    prop.text (
-                        sprintf "%s — %d failing cell%s" column issues.Length (if issues.Length = 1 then "" else "s")
-                    )
+                    prop.text (msgs.FailingCellsHeading column issues.Length)
                 ]
                 for issue in issues |> List.truncate 5 do
                     let reason =
                         match issue.Violation with
                         | Some v -> v
-                        | None -> sprintf "expected %s" issue.Expected
+                        | None -> msgs.ExpectedValue issue.Expected
 
                     Html.div [
                         prop.className "text-xs text-amber-700"
-                        prop.text (sprintf "row %d: \"%s\" — %s" issue.Row issue.Actual reason)
+                        prop.text (msgs.RowIssueDetail issue.Row issue.Actual reason)
                     ]
             ]
         ]
@@ -1549,10 +1541,7 @@ let private validationView (report: DryRunReport) (saving: bool) dispatch =
                 columnCard group
 
             if report.Truncated then
-                Html.div [
-                    prop.className "text-xs text-gray-500"
-                    prop.text "Showing a sample of the failing cells — more exist than are listed here."
-                ]
+                Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.TruncatedCellsNote ]
 
             Html.div [
                 prop.className "flex items-center gap-3 pt-1"
@@ -1570,7 +1559,7 @@ let private validationView (report: DryRunReport) (saving: bool) dispatch =
                                 "bg-gray-200 text-gray-500 cursor-not-allowed"
                         ]
                         prop.disabled (report.CommitBlocked || saving)
-                        prop.text (if saving then "Importing…" else "Import")
+                        prop.text (if saving then msgs.Importing else msgs.ImportButton)
                         prop.onClick (fun _ ->
                             if (not report.CommitBlocked) && not saving then
                                 dispatch CommitConversion)
@@ -1578,7 +1567,7 @@ let private validationView (report: DryRunReport) (saving: bool) dispatch =
                     Html.button [
                         prop.className "text-sm text-gray-600 hover:text-gray-900 hover:underline"
                         prop.disabled saving
-                        prop.text "Back to mapping"
+                        prop.text msgs.BackToMapping
                         prop.onClick (fun _ ->
                             if not saving then
                                 dispatch BackToMapping)
@@ -1588,15 +1577,21 @@ let private validationView (report: DryRunReport) (saving: bool) dispatch =
         ]
     ]
 
-let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<DataTypeId> option) (w: Wizard) dispatch =
+let private wizardView
+    (msgs: MappingDataManagerMessages)
+    (displays: DataTypeDisplay list)
+    (allowedTypeIds: Set<DataTypeId> option)
+    (w: Wizard)
+    dispatch
+    =
     let header =
         Html.div [
             prop.className "flex items-center justify-between"
             prop.children [
-                Typography.subheading $"Map: {w.FileName}"
+                Typography.subheading (msgs.MapFileNameHeading w.FileName)
                 Html.button [
                     prop.className "text-sm text-gray-600 hover:text-gray-900 hover:underline"
-                    prop.text "Cancel"
+                    prop.text msgs.CancelButton
                     prop.onClick (fun _ -> dispatch CancelWizard)
                 ]
             ]
@@ -1606,9 +1601,9 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
         match w.Step with
         | ReviewValidation ->
             match w.Validation with
-            | Some report -> validationView report w.Saving dispatch
+            | Some report -> validationView msgs report w.Saving dispatch
             | None -> Html.none
-        | ReviewData -> reviewDataView w dispatch
+        | ReviewData -> reviewDataView msgs w dispatch
         | PickTarget ->
             // Schema-bearing types only, and — once the availability-filtered
             // catalog has loaded — only those whose owning module is mappable
@@ -1626,13 +1621,13 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                 prop.children [
                     Html.p [
                         prop.className "text-sm text-gray-600"
-                        prop.text $"Detected {w.Headers.Length} columns. Choose the data format to map this CSV into:"
+                        prop.text (msgs.DetectedColumnsPrompt w.Headers.Length)
                     ]
                     match tabular with
                     | [] ->
                         Html.p [
                             prop.className "text-sm text-gray-500"
-                            prop.text "No schema-bearing data types are registered in this deployment."
+                            prop.text msgs.NoSchemaTypesRegistered
                         ]
                     | ds ->
                         Html.div [
@@ -1677,11 +1672,11 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                             prop.children [
                                 Html.div [
                                     prop.className "text-sm text-gray-600"
-                                    prop.text $"Mapping to: {labelFor displays suggestion.TargetTypeId}"
+                                    prop.text (msgs.MappingToLabel(labelFor displays suggestion.TargetTypeId))
                                 ]
                                 Html.button [
                                     prop.className "text-xs text-gray-500 hover:underline"
-                                    prop.text "Change format"
+                                    prop.text msgs.ChangeFormatButton
                                     prop.onClick (fun _ -> dispatch ChangeFormat)
                                 ]
                             ]
@@ -1690,28 +1685,23 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                         if w.ReusedSaved then
                             Html.div [
                                 prop.className "p-2 rounded border border-blue-200 bg-blue-50 text-sm text-blue-800"
-                                prop.text "Reused a saved mapping for this column structure. Review before confirming."
+                                prop.text msgs.ReusedSavedMappingNote
                             ]
 
-                        reviewListView suggestion
-                        mappingGridView w suggestion dispatch
-                        derivedColumnsView w suggestion dispatch
+                        reviewListView msgs suggestion
+                        mappingGridView msgs w suggestion dispatch
+                        derivedColumnsView msgs w suggestion dispatch
 
                         if not blockers.IsEmpty then
                             Html.div [
                                 prop.className "text-sm text-red-700"
-                                prop.text (
-                                    "Required field"
-                                    + (if blockers.Length = 1 then "" else "s")
-                                    + " still unmapped: "
-                                    + String.concat ", " blockers
-                                )
+                                prop.text (msgs.RequiredFieldsUnmapped blockers.Length (String.concat ", " blockers))
                             ]
 
                         for e in derivedErrors do
                             Html.div [
                                 prop.className "text-sm text-red-700"
-                                prop.text (sprintf "Derived column %s %s" e.Field e.Detail)
+                                prop.text (msgs.DerivedColumnError e.Field e.Detail)
                             ]
 
                         Html.div [
@@ -1730,21 +1720,26 @@ let private wizardView (displays: DataTypeDisplay list) (allowedTypeIds: Set<Dat
                                             "bg-gray-200 text-gray-500 cursor-not-allowed"
                                     ]
                                     prop.disabled (not canConfirm)
-                                    prop.text (if w.Validating then "Validating…" else "Confirm & validate")
+                                    prop.text (
+                                        if w.Validating then
+                                            msgs.Validating
+                                        else
+                                            msgs.ConfirmAndValidateButton
+                                    )
                                     prop.onClick (fun _ ->
                                         if canConfirm then
                                             dispatch ConfirmMapping)
                                 ]
                                 Html.span [
                                     prop.className "text-xs text-gray-500"
-                                    prop.text "We check every row against the format before importing."
+                                    prop.text msgs.ValidateEveryRowNote
                                 ]
                             ]
                         ]
                     ]
                 ]
 
-    Layout.Panel.panel "Column Mapping" [ Layout.Panel.panelSection "" [ header; Misc.divider; body ] ]
+    Layout.Panel.panel msgs.ColumnMappingPanelTitle [ Layout.Panel.panelSection "" [ header; Misc.divider; body ] ]
 
 let private processedDataSection (displays: DataTypeDisplay list) (entries: ProcessedFileEntry list) =
     let grouped =
@@ -1771,26 +1766,26 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
 
 /// Per-file ingestion-status badge (Phase 173) — parity with the
 /// built-in `FileManagerUI` and KB. `NotIngested` renders nothing.
-let private ingestionBadge (status: FileIngestionStatus) =
+let private ingestionBadge (msgs: MappingDataManagerMessages) (status: FileIngestionStatus) =
     match status with
     | FileIngestionStatus.Indexed ->
         Html.span [
             prop.className
                 "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-            prop.title "Indexed — searchable from the knowledge base."
-            prop.text "Indexed"
+            prop.title msgs.IndexedTooltip
+            prop.text msgs.IndexedBadge
         ]
     | FileIngestionStatus.Pending ->
         Html.span [
             prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-            prop.title "Vectorisation in progress — not yet searchable."
-            prop.text "Indexing…"
+            prop.title msgs.IndexingTooltip
+            prop.text msgs.IndexingBadge
         ]
     | FileIngestionStatus.Failed reason ->
         Html.span [
             prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
             prop.title reason
-            prop.text "Not indexed"
+            prop.text msgs.NotIndexedBadge
         ]
     | FileIngestionStatus.NotIngested -> Html.none
 
@@ -1816,37 +1811,37 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
     Html.none
 
 /// Phase 220 — status-filter dropdown over the file list.
-let private filterLabel =
+let private filterLabel (msgs: MappingDataManagerMessages) =
     function
-    | AllFiles -> "All"
-    | OnlyIndexed -> "Indexed"
-    | OnlyPending -> "Indexing"
-    | OnlyFailed -> "Not indexed"
-    | OnlyNotIndexed -> "Not attempted"
+    | AllFiles -> msgs.FilterAll
+    | OnlyIndexed -> msgs.IndexedBadge
+    | OnlyPending -> msgs.FilterIndexing
+    | OnlyFailed -> msgs.NotIndexedBadge
+    | OnlyNotIndexed -> msgs.FilterNotAttempted
 
 let private allFilters = [ AllFiles; OnlyIndexed; OnlyPending; OnlyFailed; OnlyNotIndexed ]
 
-let private statusFilterControl (model: Model) dispatch =
+let private statusFilterControl (msgs: MappingDataManagerMessages) (model: Model) dispatch =
     Html.div [
         prop.className "flex items-center gap-2 mb-3"
         prop.children [
-            Html.span [ prop.className "text-sm text-gray-600"; prop.text "Filter by index status:" ]
+            Html.span [ prop.className "text-sm text-gray-600"; prop.text msgs.FilterByIndexStatus ]
             Html.select [
                 prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                prop.value (filterLabel model.StatusFilter)
+                prop.value (filterLabel msgs model.StatusFilter)
                 prop.onChange (fun (v: string) ->
-                    match allFilters |> List.tryFind (fun f -> filterLabel f = v) with
+                    match allFilters |> List.tryFind (fun f -> filterLabel msgs f = v) with
                     | Some f -> dispatch (SetStatusFilter f)
                     | None -> ())
                 prop.children [
                     for f in allFilters do
-                        Html.option [ prop.value (filterLabel f); prop.text (filterLabel f) ]
+                        Html.option [ prop.value (filterLabel msgs f); prop.text (filterLabel msgs f) ]
                 ]
             ]
         ]
     ]
 
-let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
+let private filesView (msgs: MappingDataManagerMessages) (displays: DataTypeDisplay list) (model: Model) dispatch =
     // Show genuine uploads only — a confirmed mapping uploads its rewritten
     // CSV as a produced file (`X__Type.csv`); that belongs in the data-object
     // section beneath, not as another row here. So the file count tracks
@@ -1865,19 +1860,16 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
             FileIngestionStatus.matchesFilter model.StatusFilter (model.IngestionStatus |> Map.tryFind f.FileName))
 
     match rawFiles with
-    | [] -> Html.p [ prop.className "text-gray-500"; prop.text "No files imported yet." ]
+    | [] -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesImportedYet ]
     | _ ->
         Html.div [
             prop.className "space-y-4"
             prop.children [
                 if not (Map.isEmpty model.IngestionStatus) then
-                    statusFilterControl model dispatch
+                    statusFilterControl msgs model dispatch
 
                 if displayFiles.IsEmpty then
-                    Html.p [
-                        prop.className "text-gray-500"
-                        prop.text "No files match the selected index-status filter."
-                    ]
+                    Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesMatchFilter ]
 
                 Html.table [
                     prop.className "w-full text-sm border-collapse"
@@ -1886,14 +1878,14 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                             Html.tr [
                                 prop.className "text-left text-gray-600 border-b border-gray-200"
                                 prop.children [
-                                    Html.th [ prop.className "py-2 pr-3"; prop.text "Data Type" ]
-                                    Html.th [ prop.className "py-2 pr-3"; prop.text "File Name" ]
-                                    Html.th [ prop.className "py-2 pr-3"; prop.text "Rows" ]
-                                    Html.th [ prop.className "py-2 pr-3"; prop.text "Size" ]
+                                    Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnDataType ]
+                                    Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnFileName ]
+                                    Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnRows ]
+                                    Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnSize ]
                                     // Ingestion-status column header — only when
                                     // RAG is composed (the snapshot carries status).
                                     if not (Map.isEmpty model.IngestionStatus) then
-                                        Html.th [ prop.className "py-2 pr-3"; prop.text "Search index" ]
+                                        Html.th [ prop.className "py-2 pr-3"; prop.text msgs.ColumnSearchIndex ]
                                     Html.th [ prop.className "py-2 pr-3"; prop.text "" ]
                                 ]
                             ]
@@ -1922,7 +1914,7 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                         prop.children [
                                             Html.td [
                                                 prop.className "py-2 pr-3"
-                                                prop.text (dataTypeLabel displays f.DataType)
+                                                prop.text (dataTypeLabel msgs displays f.DataType)
                                             ]
                                             Html.td [
                                                 prop.className "py-2 pr-3"
@@ -1936,23 +1928,26 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                                         let tip =
                                                             let steps =
                                                                 if r.RemediationSteps.IsEmpty then
-                                                                    "no remediation"
+                                                                    msgs.NoRemediationLabel
                                                                 else
                                                                     String.concat "; " r.RemediationSteps
 
-                                                            sprintf "Converted from %s — %s" r.SourceFile steps
+                                                            msgs.ConvertedFromTooltip r.SourceFile steps
 
                                                         Html.span [
                                                             prop.className
                                                                 "ml-2 inline-block px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs"
                                                             prop.title tip
-                                                            prop.text "Converted"
+                                                            prop.text msgs.ConvertedBadge
                                                         ]
                                                     | None -> ()
                                                 ]
                                             ]
                                             Html.td [ prop.className "py-2 pr-3"; prop.text (string f.RowCount) ]
-                                            Html.td [ prop.className "py-2 pr-3"; prop.text (formatSize f.SizeBytes) ]
+                                            Html.td [
+                                                prop.className "py-2 pr-3"
+                                                prop.text (formatSize msgs f.SizeBytes)
+                                            ]
                                             if not (Map.isEmpty model.IngestionStatus) then
                                                 let status = model.IngestionStatus |> Map.tryFind f.FileName
 
@@ -1963,16 +1958,15 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                                             prop.className "flex items-center gap-2"
                                                             prop.children [
                                                                 match status with
-                                                                | Some s -> ingestionBadge s
+                                                                | Some s -> ingestionBadge msgs s
                                                                 | None -> Html.none
                                                                 // Phase 220 — one-click re-ingest on Failed.
                                                                 if FileIngestionStatus.isRetryable status then
                                                                     Html.button [
                                                                         prop.className
                                                                             "text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                                                                        prop.title
-                                                                            "Re-run vectorisation for this file's persisted bytes."
-                                                                        prop.text "Retry"
+                                                                        prop.title msgs.RetryIngestionTooltip
+                                                                        prop.text msgs.RetryButton
                                                                         prop.onClick (fun _ ->
                                                                             dispatch (RetryIngestionMsg f.FileName))
                                                                     ]
@@ -1988,30 +1982,25 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                                                         prop.children [
                                                             Html.button [
                                                                 prop.className "text-sm text-brand hover:underline"
-                                                                prop.title
-                                                                    "Map this file's columns to a known format to produce a data object. Available for every file — map an unrecognised file for the first time, or spawn an additional data object from an already-mapped one."
-                                                                prop.text "New Mapping"
+                                                                prop.title msgs.NewMappingTooltip
+                                                                prop.text msgs.NewMappingButton
                                                                 prop.onClick (fun _ ->
                                                                     dispatch (StartMapping f.FileName))
                                                             ]
                                                             Html.button [
                                                                 prop.className
                                                                     "text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                                                                prop.title
-                                                                    "Re-run processing on this file's persisted bytes. Use this when the file's processed summary is missing or shows a stale-DataType error after a deploy."
-                                                                prop.text "Reprocess"
+                                                                prop.title msgs.ReprocessTooltip
+                                                                prop.text msgs.ReprocessButton
                                                                 prop.onClick (fun _ ->
                                                                     dispatch (ReprocessFile f.FileName))
                                                             ]
                                                             Html.button [
                                                                 prop.className
                                                                     "text-sm text-red-600 hover:text-red-800 hover:underline"
-                                                                prop.text "Delete"
+                                                                prop.text msgs.DeleteButton
                                                                 prop.onClick (fun _ ->
-                                                                    let prompt =
-                                                                        sprintf
-                                                                            "Delete %s? Any data objects mapped from it are removed too, and analyses depending on them will lose access."
-                                                                            f.FileName
+                                                                    let prompt = msgs.DeleteFileConfirm f.FileName
 
                                                                     if Browser.Dom.window.confirm prompt then
                                                                         dispatch (DeleteFile f.FileName))
@@ -2042,23 +2031,14 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
                 Html.div [
                     prop.className "flex items-center justify-between gap-4"
                     prop.children [
-                        Html.div [
-                            prop.className "text-sm text-gray-600"
-                            prop.text
-                                "Reset removes every imported file and its derived data from this scope. Owner / Admin only on team deployments."
-                        ]
+                        Html.div [ prop.className "text-sm text-gray-600"; prop.text msgs.ResetScopeNote ]
                         Html.button [
                             prop.className
                                 "text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 transition-colors whitespace-nowrap"
-                            prop.title
-                                "Wipe every file, processed-data summary, and entry sidecar in this scope. This cannot be undone."
-                            prop.text "Reset data store"
+                            prop.title msgs.ResetDataStoreTooltip
+                            prop.text msgs.ResetDataStoreButton
                             prop.onClick (fun _ ->
-                                let prompt =
-                                    sprintf
-                                        "Reset the data store? This permanently deletes %d file%s and every derived summary in this scope. This cannot be undone."
-                                        totalFileCount
-                                        (if totalFileCount = 1 then "" else "s")
+                                let prompt = msgs.ResetConfirm totalFileCount
 
                                 if Browser.Dom.window.confirm prompt then
                                     dispatch ResetDataStore)
@@ -2068,80 +2048,96 @@ let private filesView (displays: DataTypeDisplay list) (model: Model) dispatch =
             ]
         ]
 
-let private view (displays: DataTypeDisplay list) (model: Model) dispatch =
-    let inputPanel =
-        Layout.Panel.panel "Import CSV" [
-            Layout.Panel.panelSection "Upload a file" [
-                Html.div [
-                    prop.className "flex items-center gap-4 flex-nowrap"
-                    prop.children [
-                        FilePicker.FilePicker(
-                            true,
-                            ".csv",
-                            (fun files -> files |> List.iter (fun file -> dispatch (SelectFile file))),
-                            Html.span [
-                                prop.className [
-                                    "cursor-pointer"
-                                    Tokens.Colours.brand
-                                    Tokens.Colours.brandText
-                                    "px-6 py-2.5"
-                                    Tokens.Typography.buttonText
-                                    "rounded-lg"
-                                    "hover:bg-brand-dark"
-                                    "transition-colors"
-                                    "inline-block"
-                                    "text-center"
-                                    "whitespace-nowrap"
-                                    "flex-shrink-0"
-                                ]
-                                prop.text "CHOOSE CSV"
-                            ]
-                        )
+// ─── Module body panes (Phase 751) ─────────────────────────────────
+//
+// `view` returns a `ReactElement * ReactElement` tuple (input pane, output
+// pane) rather than a single tree, so unlike `HealthMonitorUI`'s
+// single-component wrapper, each pane needs its OWN React component —
+// `[<ReactComponent>]` requires a single `ReactElement` return, so one
+// component cannot own both halves of the tuple. `view` itself stays a
+// plain (non-hook) function invoked inline by the shell's own render, and
+// each pane's component calls `useMessages ()` independently.
+
+[<ReactComponent>]
+let private ImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).MappingDataManager
+
+    Layout.Panel.panel msgs.ImportCsvPanelTitle [
+        Layout.Panel.panelSection msgs.UploadFileSectionTitle [
+            Html.div [
+                prop.className "flex items-center gap-4 flex-nowrap"
+                prop.children [
+                    FilePicker.FilePicker(
+                        true,
+                        ".csv",
+                        (fun files -> files |> List.iter (fun file -> dispatch (SelectFile file))),
                         Html.span [
-                            prop.className "text-base text-gray-500"
-                            prop.text (
-                                if model.Busy then
-                                    "Checking for a known structure…"
-                                else
-                                    "Upload one or more CSVs. Known structures re-import automatically; unrecognised ones land below — use New Mapping to map them."
-                            )
+                            prop.className [
+                                "cursor-pointer"
+                                Tokens.Colours.brand
+                                Tokens.Colours.brandText
+                                "px-6 py-2.5"
+                                Tokens.Typography.buttonText
+                                "rounded-lg"
+                                "hover:bg-brand-dark"
+                                "transition-colors"
+                                "inline-block"
+                                "text-center"
+                                "whitespace-nowrap"
+                                "flex-shrink-0"
+                            ]
+                            prop.text msgs.ChooseCsvButton
                         ]
+                    )
+                    Html.span [
+                        prop.className "text-base text-gray-500"
+                        prop.text (
+                            if model.Busy then
+                                msgs.CheckingKnownStructure
+                            else
+                                msgs.UploadHelpText
+                        )
                     ]
                 ]
             ]
         ]
+    ]
 
-    let outputPanel =
-        Html.div [
-            prop.children [
-                // Owns the ingestion-status live-update subscription (renders
-                // nothing); mounted unconditionally so it subscribes even
-                // while the wizard is open or the list is empty.
-                IngestionStatusSubscriber dispatch
+[<ReactComponent>]
+let private FilesOrWizardPanel (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).MappingDataManager
 
-                match model.Wizard with
-                | Some w -> wizardView displays model.AllowedTypeIds w dispatch
-                | None -> Layout.Panel.panel "Imported Files" [ filesView displays model dispatch ]
+    Html.div [
+        prop.children [
+            // Owns the ingestion-status live-update subscription (renders
+            // nothing); mounted unconditionally so it subscribes even
+            // while the wizard is open or the list is empty.
+            IngestionStatusSubscriber dispatch
 
-                match model.Error with
-                | Some msg ->
-                    Html.div [
-                        prop.className
-                            "mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                        prop.children [
-                            Html.span [ prop.text msg ]
-                            Html.button [
-                                prop.className "text-red-500 hover:text-red-700 ml-3"
-                                prop.text "✕"
-                                prop.onClick (fun _ -> dispatch DismissError)
-                            ]
+            match model.Wizard with
+            | Some w -> wizardView msgs displays model.AllowedTypeIds w dispatch
+            | None -> Layout.Panel.panel msgs.ImportedFilesPanelTitle [ filesView msgs displays model dispatch ]
+
+            match model.Error with
+            | Some msg ->
+                Html.div [
+                    prop.className
+                        "mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
+                    prop.children [
+                        Html.span [ prop.text msg ]
+                        Html.button [
+                            prop.className "text-red-500 hover:text-red-700 ml-3"
+                            prop.text "✕"
+                            prop.onClick (fun _ -> dispatch DismissError)
                         ]
                     ]
-                | None -> ()
-            ]
+                ]
+            | None -> ()
         ]
+    ]
 
-    inputPanel, outputPanel
+let private view (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+    ImportPanel model dispatch, FilesOrWizardPanel displays model dispatch
 
 // ─── Module creation ──────────────────────────────────────────────
 

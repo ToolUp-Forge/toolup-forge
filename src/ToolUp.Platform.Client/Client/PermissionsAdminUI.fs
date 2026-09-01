@@ -185,12 +185,12 @@ let private allPermLevels: ModulePermission list = [
     ModulePermission.SchemaOnly
 ]
 
-let private permLabel (p: ModulePermission) =
+let private permLabel (msgs: PermissionsAdminMessages) (p: ModulePermission) =
     match p with
-    | ModulePermission.Read -> "Read"
-    | ModulePermission.Write -> "Write"
-    | ModulePermission.Admin -> "Admin"
-    | ModulePermission.SchemaOnly -> "Schema-only"
+    | ModulePermission.Read -> msgs.PermRead
+    | ModulePermission.Write -> msgs.PermWrite
+    | ModulePermission.Admin -> msgs.PermAdmin
+    | ModulePermission.SchemaOnly -> msgs.PermSchemaOnly
 
 let private toggleInList (p: ModulePermission) (current: ModulePermission list) =
     if List.contains p current then
@@ -240,7 +240,7 @@ let private loadSnapshotAsync () = async {
     let! activeTeamOpt = teamApi.GetActiveTeam()
 
     match activeTeamOpt with
-    | None -> return Error "No active team selected. Switch into a team before managing permissions."
+    | None -> return Error MessageCatalog.english.PermissionsAdmin.NoActiveTeam
     | Some teamId ->
         let! members = teamApi.GetTeamMembers teamId
         let! permsResult = permissionApi.GetTeamPermissions teamId
@@ -408,7 +408,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model' with
                 SaveInFlight = false
-                Banner = Some(false, "Team defaults saved.")
+                Banner = Some(false, MessageCatalog.english.PermissionsAdmin.TeamDefaultsSaved)
         },
         Cmd.none
 
@@ -416,7 +416,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 SaveInFlight = false
-                Banner = Some(true, $"Save failed: {msg}")
+                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.SaveFailed msg)
         },
         Cmd.none
 
@@ -543,7 +543,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     EditingMembers = editing'
-                    Banner = Some(false, $"Saved {moduleName} for {userId}.")
+                    Banner = Some(false, MessageCatalog.english.PermissionsAdmin.SavedModuleForUser moduleName userId)
             },
             Cmd.none
         else
@@ -551,7 +551,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     EditingMembers = editing'
                     SaveInFlight = false
-                    Banner = Some(false, $"Saved permissions for {userId}.")
+                    Banner = Some(false, MessageCatalog.english.PermissionsAdmin.SavedPermissionsFor userId)
             },
             loadSnapshotCmd ()
 
@@ -559,7 +559,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 SaveInFlight = false
-                Banner = Some(true, $"Override save failed for {userId} / {moduleName}: {msg}")
+                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.OverrideSaveFailed userId moduleName msg)
         },
         Cmd.none
 
@@ -585,11 +585,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             setExposureCmd snap.TeamId moduleName previous next
 
     | ExposureResult(moduleName, _previous, attempted, Ok()) ->
-        let verb =
+        // 751 — one whole sentence per case rather than a composed
+        // "{moduleName} is now {verb}." template, so a translation is
+        // never assembled from independently-ordered fragments.
+        let bannerText =
             match attempted with
-            | ModuleExposure.Available -> "available in this team"
-            | ModuleExposure.Hidden -> "hidden — off the sidebar and Home, data still mappable"
-            | ModuleExposure.Unavailable -> "unavailable — off the sidebar and Home, data mapping blocked"
+            | ModuleExposure.Available -> MessageCatalog.english.PermissionsAdmin.ExposureNowAvailable moduleName
+            | ModuleExposure.Hidden -> MessageCatalog.english.PermissionsAdmin.ExposureNowHidden moduleName
+            | ModuleExposure.Unavailable -> MessageCatalog.english.PermissionsAdmin.ExposureNowUnavailable moduleName
 
         // Tell the shell to re-fetch its accessible-modules list so the
         // sidebar (and the admin "show hidden modules" toggle) reflect
@@ -599,7 +602,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model with
-                Banner = Some(true, $"{moduleName} is now {verb}.")
+                Banner = Some(true, bannerText)
         },
         Cmd.none
 
@@ -622,7 +625,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model' with
-                Banner = Some(false, $"Could not change exposure for {moduleName}: {msg}")
+                Banner = Some(false, MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg)
         },
         Cmd.none
 
@@ -630,7 +633,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ────────────────────────────────────────────────────
 
-let private banner (model: Model) (dispatch: Msg -> unit) =
+let private banner (msgs: PermissionsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     match model.Banner with
     | None -> Html.none
     | Some(isError, msg) ->
@@ -646,7 +649,7 @@ let private banner (model: Model) (dispatch: Msg -> unit) =
                 Html.span [ prop.text msg ]
                 Html.button [
                     prop.className "text-xs text-gray-500 hover:text-gray-700 px-2"
-                    prop.text "Dismiss"
+                    prop.text msgs.Dismiss
                     prop.onClick (fun _ -> dispatch DismissBanner)
                 ]
             ]
@@ -665,15 +668,15 @@ let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private tabBar (model: Model) (dispatch: Msg -> unit) =
+let private tabBar (msgs: PermissionsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
-            tabButton "Team Defaults" (model.ActiveTab = TeamDefaultsTab) (fun () ->
+            tabButton msgs.TabTeamDefaults (model.ActiveTab = TeamDefaultsTab) (fun () ->
                 dispatch (SwitchTab TeamDefaultsTab))
 
-            tabButton "Members" (model.ActiveTab = MembersTab) (fun () -> dispatch (SwitchTab MembersTab))
-            tabButton "Modules" (model.ActiveTab = ModulesTab) (fun () -> dispatch (SwitchTab ModulesTab))
+            tabButton msgs.TabMembers (model.ActiveTab = MembersTab) (fun () -> dispatch (SwitchTab MembersTab))
+            tabButton msgs.TabModules (model.ActiveTab = ModulesTab) (fun () -> dispatch (SwitchTab ModulesTab))
         ]
     ]
 
@@ -693,6 +696,7 @@ let private permCheckbox (label: string) (granted: bool) (disabled: bool) (onTog
     ]
 
 let private permRow
+    (msgs: PermissionsAdminMessages)
     (moduleName: string)
     (perms: ModulePermission list)
     (disabled: bool)
@@ -706,7 +710,8 @@ let private permRow
                 Html.td [
                     prop.className "px-3 py-2"
                     prop.children [
-                        permCheckbox (permLabel level) (List.contains level perms) disabled (fun () -> onToggle level)
+                        permCheckbox (permLabel msgs level) (List.contains level perms) disabled (fun () ->
+                            onToggle level)
                     ]
                 ]
         ]
@@ -723,11 +728,16 @@ type private PermColumnAction = {
     onToggle: ModulePermission * bool -> unit
 }
 
-let private permTable (header: string) (rows: ReactElement list) (columnAction: PermColumnAction option) =
+let private permTable
+    (msgs: PermissionsAdminMessages)
+    (header: string)
+    (rows: ReactElement list)
+    (columnAction: PermColumnAction option)
+    =
     if List.isEmpty rows then
         Html.p [
             prop.className "text-sm text-gray-500 italic"
-            prop.text "No managed modules. Modules are registered server-side via `ServerConfig.ModuleNames`."
+            prop.text msgs.NoManagedModules
         ]
     else
         Html.div [
@@ -752,7 +762,7 @@ let private permTable (header: string) (rows: ReactElement list) (columnAction: 
                                                     Html.div [
                                                         prop.className "flex flex-col gap-0.5"
                                                         prop.children [
-                                                            Html.span [ prop.text (permLabel level) ]
+                                                            Html.span [ prop.text (permLabel msgs level) ]
                                                             match columnAction with
                                                             | Some action ->
                                                                 let on = action.allOn level
@@ -760,7 +770,9 @@ let private permTable (header: string) (rows: ReactElement list) (columnAction: 
                                                                 Html.button [
                                                                     prop.className
                                                                         "text-[10px] text-brand hover:underline self-start"
-                                                                    prop.text (if on then "Clear all" else "Select all")
+                                                                    prop.text (
+                                                                        if on then msgs.ClearAll else msgs.SelectAll
+                                                                    )
                                                                     prop.onClick (fun _ ->
                                                                         action.onToggle (level, not on))
                                                                 ]
@@ -781,7 +793,7 @@ let private permTable (header: string) (rows: ReactElement list) (columnAction: 
 
 // ─── Team defaults tab ───────────────────────────────────────────────
 
-let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> unit) =
+let private teamDefaultsView (msgs: PermissionsAdminMessages) (model: Model) (snap: TeamView) (dispatch: Msg -> unit) =
     let edits = model.EditingDefaults |> Option.defaultValue snap.Permissions.Defaults
 
     let dirty = edits <> snap.Permissions.Defaults
@@ -790,7 +802,7 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
         snap.Managed
         |> List.map (fun m ->
             let perms = Map.tryFind m edits |> Option.defaultValue []
-            permRow m perms model.SaveInFlight (fun level -> dispatch (ToggleDefault(m, level))))
+            permRow msgs m perms model.SaveInFlight (fun level -> dispatch (ToggleDefault(m, level))))
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -800,11 +812,10 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Team defaults" ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.TeamDefaultsHeading ]
                             Html.p [
                                 prop.className "text-xs text-gray-500"
-                                prop.text
-                                    "Per-module permissions applied to every team member who has no explicit override. Empty rows mean the module is unreachable for that member."
+                                prop.text msgs.TeamDefaultsSubheading
                             ]
                         ]
                     ]
@@ -820,7 +831,7 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
                                         "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                                 ]
                                 prop.disabled (not dirty || model.SaveInFlight)
-                                prop.text "Reset"
+                                prop.text msgs.Reset
                                 prop.onClick (fun _ -> dispatch ResetDefaults)
                             ]
                             Html.button [
@@ -832,7 +843,12 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
                                         "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                                 ]
                                 prop.disabled (not dirty || model.SaveInFlight)
-                                prop.text (if model.SaveInFlight then "Saving..." else "Save defaults")
+                                prop.text (
+                                    if model.SaveInFlight then
+                                        msgs.Saving
+                                    else
+                                        msgs.SaveDefaultsLabel
+                                )
                                 prop.onClick (fun _ -> dispatch SaveDefaults)
                             ]
                         ]
@@ -860,13 +876,19 @@ let private teamDefaultsView (model: Model) (snap: TeamView) (dispatch: Msg -> u
                                 dispatch (ToggleDefault(m, level))
             }
 
-            permTable "Module" rows (Some columnAction)
+            permTable msgs msgs.ColumnModule rows (Some columnAction)
         ]
     ]
 
 // ─── Members tab ─────────────────────────────────────────────────────
 
-let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (dispatch: Msg -> unit) =
+let private memberListItem
+    (msgs: PermissionsAdminMessages)
+    (model: Model)
+    (snap: TeamView)
+    (m: TeamMembership)
+    (dispatch: Msg -> unit)
+    =
     let selected = model.SelectedMember = Some m.UserId
     let hasOver = hasOverride snap.Permissions m.UserId
 
@@ -903,7 +925,7 @@ let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (
                         Html.span [
                             prop.className
                                 "inline-block text-[10px] px-1.5 py-0.5 rounded border bg-purple-100 border-purple-200 text-purple-700"
-                            prop.text "override"
+                            prop.text msgs.OverrideBadge
                         ]
                 ]
             ]
@@ -914,7 +936,13 @@ let private memberListItem (model: Model) (snap: TeamView) (m: TeamMembership) (
         ]
     ]
 
-let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string) (dispatch: Msg -> unit) =
+let private memberOverrideEditor
+    (msgs: PermissionsAdminMessages)
+    (model: Model)
+    (snap: TeamView)
+    (userId: string)
+    (dispatch: Msg -> unit)
+    =
     // 0.5.7 — Read effective cell value from the overlay first
     // (operator's in-progress local edits), then the persisted
     // override, then the team default.
@@ -930,7 +958,8 @@ let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string
         snap.Managed
         |> List.map (fun m ->
             let perms = effectivePerms m
-            permRow m perms model.SaveInFlight (fun level -> dispatch (ToggleMemberPermission(userId, m, level))))
+
+            permRow msgs m perms model.SaveInFlight (fun level -> dispatch (ToggleMemberPermission(userId, m, level))))
 
     let overrideKeys =
         match Map.tryFind userId snap.Permissions.Members with
@@ -964,17 +993,13 @@ let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string
                         prop.children [
                             Html.h2 [
                                 prop.className "text-lg font-semibold"
-                                prop.text $"Overrides — {displayLabel}"
+                                prop.text (msgs.OverridesHeading displayLabel)
                             ]
-                            Html.p [
-                                prop.className "text-xs text-gray-500"
-                                prop.text
-                                    "Toggle any cell to stage an explicit per-member override. Use the column \"Select all\" links to grant or clear a level across every module. Effective permissions resolve to the override if present, otherwise the team default. Setting every level off for a module clears the override (member falls back to defaults)."
-                            ]
+                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.OverridesHelp ]
                             if not (List.isEmpty overrideKeys) then
                                 Html.p [
                                     prop.className "text-xs text-gray-500 mt-1"
-                                    prop.text (sprintf "Active overrides on: %s" (String.concat ", " overrideKeys))
+                                    prop.text (msgs.ActiveOverridesOn(String.concat ", " overrideKeys))
                                 ]
                         ]
                     ]
@@ -993,7 +1018,7 @@ let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string
                                         "border-gray-200 text-gray-400 cursor-not-allowed"
                                 ]
                                 prop.disabled (not dirty || model.SaveInFlight)
-                                prop.text "Reset"
+                                prop.text msgs.Reset
                                 prop.onClick (fun _ -> dispatch (ResetMembers userId))
                             ]
                             Html.button [
@@ -1005,27 +1030,23 @@ let private memberOverrideEditor (model: Model) (snap: TeamView) (userId: string
                                         "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                                 ]
                                 prop.disabled (not dirty || model.SaveInFlight)
-                                prop.text (if model.SaveInFlight then "Saving..." else "Update")
+                                prop.text (if model.SaveInFlight then msgs.Saving else msgs.Update)
                                 prop.onClick (fun _ -> dispatch (SaveMembers userId))
                             ]
                         ]
                     ]
                 ]
             ]
-            permTable "Module" rows (Some columnAction)
+            permTable msgs msgs.ColumnModule rows (Some columnAction)
         ]
     ]
 
-let private membersView (model: Model) (snap: TeamView) (dispatch: Msg -> unit) =
+let private membersView (msgs: PermissionsAdminMessages) (model: Model) (snap: TeamView) (dispatch: Msg -> unit) =
     if List.isEmpty snap.Members then
         Html.div [
             prop.className "flex-1 p-6 overflow-y-auto"
             prop.children [
-                Html.p [
-                    prop.className "text-sm text-gray-500 italic"
-                    prop.text
-                        "This team has no members yet. Add members from Team Manager before configuring per-member overrides."
-                ]
+                Html.p [ prop.className "text-sm text-gray-500 italic"; prop.text msgs.NoMembersYet ]
             ]
         ]
     else
@@ -1037,10 +1058,10 @@ let private membersView (model: Model) (snap: TeamView) (dispatch: Msg -> unit) 
                     prop.children [
                         Html.div [
                             prop.className "px-3 py-2 text-xs font-medium text-gray-500 uppercase"
-                            prop.text "Members"
+                            prop.text msgs.MembersListLabel
                         ]
                         for m in snap.Members do
-                            memberListItem model snap m dispatch
+                            memberListItem msgs model snap m dispatch
                     ]
                 ]
                 Html.div [
@@ -1050,9 +1071,9 @@ let private membersView (model: Model) (snap: TeamView) (dispatch: Msg -> unit) 
                         | None ->
                             Html.div [
                                 prop.className "p-6 text-sm text-gray-500 italic"
-                                prop.text "Select a member to view and edit their overrides."
+                                prop.text msgs.SelectMemberPrompt
                             ]
-                        | Some uid -> memberOverrideEditor model snap uid dispatch
+                        | Some uid -> memberOverrideEditor msgs model snap uid dispatch
                     ]
                 ]
             ]
@@ -1060,7 +1081,12 @@ let private membersView (model: Model) (snap: TeamView) (dispatch: Msg -> unit) 
 
 // ─── Modules tab (read-only summary) ─────────────────────────────────
 
-let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleName: string) =
+let private moduleSummaryRow
+    (msgs: PermissionsAdminMessages)
+    (snap: TeamView)
+    (dispatch: Msg -> unit)
+    (moduleName: string)
+    =
     let defaults =
         Map.tryFind moduleName snap.Permissions.Defaults |> Option.defaultValue []
 
@@ -1069,11 +1095,15 @@ let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleNam
 
     let renderPerms (ps: ModulePermission list) =
         if List.isEmpty ps then
-            Html.span [ prop.className "text-xs text-gray-400"; prop.text "No default permission" ]
+            Html.span [ prop.className "text-xs text-gray-400"; prop.text msgs.NoDefaultPermission ]
         else
             Html.span [
                 prop.className "text-xs"
-                prop.text (ps |> List.map permLabel |> String.concat " · ")
+                // The middot separator is UI furniture joining already-
+                // localized labels, not translatable content itself —
+                // out of scope, same class as the other typographic
+                // glyphs 444 recorded.
+                prop.text (ps |> List.map (permLabel msgs) |> String.concat " · ")
             ]
 
     // Exposure selector — a 3-way segmented control, visibility/
@@ -1102,9 +1132,15 @@ let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleNam
         Html.div [
             prop.className "inline-flex rounded overflow-hidden"
             prop.children [
-                exposureOption ModuleExposure.Available "Available" "border-green-200 bg-green-50 text-green-700"
-                exposureOption ModuleExposure.Hidden "Hidden" "border-gray-300 bg-gray-100 text-gray-600"
-                exposureOption ModuleExposure.Unavailable "Unavailable" "border-red-200 bg-red-50 text-red-700"
+                exposureOption
+                    ModuleExposure.Available
+                    msgs.ExposureAvailable
+                    "border-green-200 bg-green-50 text-green-700"
+                exposureOption ModuleExposure.Hidden msgs.ExposureHidden "border-gray-300 bg-gray-100 text-gray-600"
+                exposureOption
+                    ModuleExposure.Unavailable
+                    msgs.ExposureUnavailable
+                    "border-red-200 bg-red-50 text-red-700"
             ]
         ]
 
@@ -1126,25 +1162,21 @@ let private moduleSummaryRow (snap: TeamView) (dispatch: Msg -> unit) (moduleNam
         ]
     ]
 
-let private modulesView (snap: TeamView) (dispatch: Msg -> unit) =
+let private modulesView (msgs: PermissionsAdminMessages) (snap: TeamView) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
             Html.div [
                 prop.className "mb-4"
                 prop.children [
-                    Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Modules" ]
-                    Html.p [
-                        prop.className "text-xs text-gray-500"
-                        prop.text
-                            "Set each module's exposure for this team. Available shows it in the sidebar + Home; Hidden removes it from both but keeps its data formats mappable in Import & Map; Unavailable removes it AND blocks mapping any data into it (\"not cleared for this team\"). Exposure is orthogonal to permission levels, which you set on the Team Defaults and Members tabs. The Overrides column counts members carrying an explicit per-module permission override."
-                    ]
+                    Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.ModulesHeading ]
+                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ModulesSubheading ]
                 ]
             ]
             if List.isEmpty snap.Managed then
                 Html.p [
                     prop.className "text-sm text-gray-500 italic"
-                    prop.text "No managed modules. Modules are registered server-side via `ServerConfig.ModuleNames`."
+                    prop.text msgs.NoManagedModules
                 ]
             else
                 Html.div [
@@ -1160,25 +1192,27 @@ let private modulesView (snap: TeamView) (dispatch: Msg -> unit) =
                                             prop.children [
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Module"
+                                                    prop.text msgs.ColumnModule
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Exposure"
+                                                    prop.text msgs.ColumnExposure
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Team default"
+                                                    prop.text msgs.ColumnTeamDefault
                                                 ]
                                                 Html.th [
                                                     prop.className "text-right px-3 py-2 font-medium text-gray-600 w-32"
-                                                    prop.text "Overrides"
+                                                    prop.text msgs.ColumnOverrides
                                                 ]
                                             ]
                                         ]
                                     ]
                                 ]
-                                Html.tbody [ prop.children (snap.Managed |> List.map (moduleSummaryRow snap dispatch)) ]
+                                Html.tbody [
+                                    prop.children (snap.Managed |> List.map (moduleSummaryRow msgs snap dispatch))
+                                ]
                             ]
                         ]
                     ]
@@ -1188,7 +1222,7 @@ let private modulesView (snap: TeamView) (dispatch: Msg -> unit) =
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private errorPane (msg: string) (dispatch: Msg -> unit) =
+let private errorPane (msgs: PermissionsAdminMessages) (msg: string) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
@@ -1199,32 +1233,44 @@ let private errorPane (msg: string) (dispatch: Msg -> unit) =
             Html.button [
                 prop.className
                     "mt-3 px-3 py-1.5 text-sm font-medium bg-white text-gray-700 border border-border rounded hover:bg-gray-50"
-                prop.text "Retry"
+                prop.text msgs.Retry
                 prop.onClick (fun _ -> dispatch RefreshSnapshot)
             ]
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the resolved
+/// catalog. A module's `view` is invoked inline by the shell's own render,
+/// where a hook would join the shell's hook order and break the moment the
+/// active module changed; a component of its own has a stable identity and
+/// its own. Same distinction `HealthMonitorUI.HealthMonitorBody` documents,
+/// applied here because every tab under it renders catalog strings.
+[<ReactComponent>]
+let private PermissionsAdminBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).PermissionsAdmin
+
     let content =
         match model.Snapshot with
         | NotLoaded
         | Loading ->
             Html.div [
                 prop.className "flex-1 p-6 overflow-y-auto"
-                prop.children [ Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ] ]
+                prop.children [ Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ] ]
             ]
-        | LoadError msg -> errorPane msg dispatch
+        | LoadError msg -> errorPane msgs msg dispatch
         | Loaded snap ->
             match model.ActiveTab with
-            | TeamDefaultsTab -> teamDefaultsView model snap dispatch
-            | MembersTab -> membersView model snap dispatch
-            | ModulesTab -> modulesView snap dispatch
+            | TeamDefaultsTab -> teamDefaultsView msgs model snap dispatch
+            | MembersTab -> membersView msgs model snap dispatch
+            | ModulesTab -> modulesView msgs snap dispatch
 
     Html.div [
         prop.className "flex flex-col h-full"
-        prop.children [ tabBar model dispatch; banner model dispatch; content ]
+        prop.children [ tabBar msgs model dispatch; banner msgs model dispatch; content ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = PermissionsAdminBody model dispatch
 
 // ─── Module registration ─────────────────────────────────────────────
 

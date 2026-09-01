@@ -441,6 +441,7 @@ let private SaveToKBButton (doc: NarrativeDocument) =
     | None, _
     | _, None -> Html.none
     | Some handler, Some _ ->
+        let msgs = (MessageCatalogProvider.useMessages ()).NarrativeRenderer
         let status, setStatus = React.useState Idle
 
         let duplicate, setDuplicate =
@@ -459,8 +460,7 @@ let private SaveToKBButton (doc: NarrativeDocument) =
                 | NarrativeCommitResult.Duplicate(fileName, generatedAt) ->
                     setDuplicate (Some(fileName, generatedAt))
                     setStatus Idle
-                | NarrativeCommitResult.MissingProvenance ->
-                    setStatus (Failed "This narrative has no provenance and cannot be saved.")
+                | NarrativeCommitResult.MissingProvenance -> setStatus (Failed msgs.NoProvenance)
                 | NarrativeCommitResult.Failed reason -> setStatus (Failed reason)
             }
             |> Async.StartImmediate
@@ -490,10 +490,10 @@ let private SaveToKBButton (doc: NarrativeDocument) =
 
         let iconColourClass, titleText, isSubmitting =
             match status with
-            | Succeeded -> "text-green-500", "Saved to Knowledge Base", false
+            | Succeeded -> "text-green-500", msgs.Saved, false
             | Failed reason -> "text-red-500", reason, false
-            | Submitting -> "text-gray-300", "Saving…", true
-            | Idle -> "text-gray-400 hover:text-brand", "Save to Knowledge Base", false
+            | Submitting -> "text-gray-300", msgs.Saving, true
+            | Idle -> "text-gray-400 hover:text-brand", msgs.SaveToKnowledgeBase, false
 
         Html.div [
             prop.className "relative"
@@ -557,23 +557,17 @@ let private SaveToKBButton (doc: NarrativeDocument) =
                                         prop.children [
                                             Html.h3 [
                                                 prop.className "text-lg font-semibold text-gray-900"
-                                                prop.text "Narrative already saved"
+                                                prop.text msgs.DuplicateHeading
                                             ]
                                         ]
                                     ]
                                     Html.div [
                                         prop.className "px-6 py-4 text-sm text-gray-700 space-y-2"
                                         prop.children [
-                                            Html.p [
-                                                prop.text (
-                                                    sprintf
-                                                        "A previous version was saved to the Knowledge Base on %s."
-                                                        when'
-                                                )
-                                            ]
+                                            Html.p [ prop.text (msgs.DuplicateBody when') ]
                                             Html.p [
                                                 prop.className "font-medium"
-                                                prop.text "Overwrite it with the current version?"
+                                                prop.text msgs.DuplicateConfirmPrompt
                                             ]
                                         ]
                                     ]
@@ -583,13 +577,13 @@ let private SaveToKBButton (doc: NarrativeDocument) =
                                             Html.button [
                                                 prop.className
                                                     "px-4 py-2 rounded bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 text-sm font-medium"
-                                                prop.text "Cancel"
+                                                prop.text msgs.Cancel
                                                 prop.onClick (fun _ -> setDuplicate None)
                                             ]
                                             Html.button [
                                                 prop.className
                                                     "px-4 py-2 rounded bg-brand hover:bg-brand/80 text-white text-sm font-semibold"
-                                                prop.text "Overwrite"
+                                                prop.text msgs.Overwrite
                                                 prop.onClick (fun _ ->
                                                     setDuplicate None
                                                     submit true)
@@ -606,6 +600,7 @@ let private SaveToKBButton (doc: NarrativeDocument) =
 
 [<ReactComponent>]
 let private CopyMarkdownButton (markdown: string) =
+    let msgs = (MessageCatalogProvider.useMessages ()).NarrativeRenderer
     let copied, setCopied = React.useState false
 
     React.useEffect (
@@ -631,7 +626,7 @@ let private CopyMarkdownButton (markdown: string) =
               else
                   "text-gray-400 hover:text-brand"
         )
-        prop.title (if copied then "Copied!" else "Copy as Markdown")
+        prop.title (if copied then msgs.Copied else msgs.CopyAsMarkdown)
         prop.onClick (fun _ ->
             Dom.window?navigator?clipboard?writeText (markdown) |> ignore
             setCopied true)

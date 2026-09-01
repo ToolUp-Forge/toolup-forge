@@ -334,12 +334,12 @@ let private deliverOriginal (docId: string) : Async<Result<unit, string>> = asyn
         return Ok()
     | Ok(PreviewContent.SignedUrl(url, _)) ->
         if isNull (openOriginalTab url) then
-            return Error "Your browser blocked the download window. Allow pop-ups for this site and try again."
+            return Error MessageCatalog.english.KnowledgeBase.Errors.PopupBlocked
         else
             return Ok()
-    | Error NotInScope -> return Error "This document isn't available."
-    | Error NoOriginalAvailable -> return Error "This version has no stored original to download."
-    | Error(OriginalRetrievalFailed _) -> return Error "Couldn't fetch the original. Please try again."
+    | Error NotInScope -> return Error MessageCatalog.english.KnowledgeBase.Errors.DocumentNotAvailable
+    | Error NoOriginalAvailable -> return Error MessageCatalog.english.KnowledgeBase.Errors.NoOriginalForVersion
+    | Error(OriginalRetrievalFailed _) -> return Error MessageCatalog.english.KnowledgeBase.Errors.OriginalFetchFailed
 }
 
 let update (msg: Msg) (model: Model) =
@@ -398,7 +398,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Uploading = false
-                UploadError = Some "Upload failed"
+                UploadError = Some MessageCatalog.english.KnowledgeBase.Errors.UploadFailed
         },
         Cmd.none
 
@@ -583,7 +583,7 @@ let update (msg: Msg) (model: Model) =
     | SetTagsFailed reason ->
         {
             model with
-                LoadError = Some(sprintf "Couldn't update the document's tags: %s" reason)
+                LoadError = Some(MessageCatalog.english.KnowledgeBase.Errors.TagsUpdateFailed reason)
         },
         Cmd.none
 
@@ -598,7 +598,7 @@ let update (msg: Msg) (model: Model) =
     | DeleteFailed reason ->
         {
             model with
-                LoadError = Some(sprintf "Couldn't delete the document: %s" reason)
+                LoadError = Some(MessageCatalog.english.KnowledgeBase.Errors.DeleteFailed reason)
         },
         Cmd.none
 
@@ -651,7 +651,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Resetting = false
-                UploadError = Some(sprintf "Reset failed: %s" reason)
+                UploadError = Some(MessageCatalog.english.KnowledgeBase.Errors.ResetFailed reason)
         },
         Cmd.none
 
@@ -892,7 +892,8 @@ let originalDocumentOpener: ToolUp.Platform.OriginalDocumentBridge.OriginalDocum
             return Ok()
         // Out-of-scope is deliberately indistinguishable from absent —
         // no existence oracle (GP 4).
-        | Error NotInScope -> return Error "This source isn't available."
-        | Error NoOriginalAvailable -> return Error "This source has no original document to open."
-        | Error(OriginalRetrievalFailed _) -> return Error "Couldn't open the original document. Please try again."
+        | Error NotInScope -> return Error MessageCatalog.english.KnowledgeBase.Errors.SourceNotAvailable
+        | Error NoOriginalAvailable -> return Error MessageCatalog.english.KnowledgeBase.Errors.SourceHasNoOriginal
+        | Error(OriginalRetrievalFailed _) ->
+            return Error MessageCatalog.english.KnowledgeBase.Errors.OriginalOpenFailed
     }
