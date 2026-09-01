@@ -1,34 +1,39 @@
 # ToolUp.BrandKit — CSS variable contract
 
-**Phase 81.** `ToolUp.BrandKit` is an app-neutral set of Giraffe.ViewEngine helpers that emit brand-shaped semantic markup. The package ships **zero opinionated styling** — only structural HTML + class hooks + a small set of inline-style references to canonical CSS custom properties. Consumers define values for those properties in their `:root` declaration (and optionally per-class rules) to brand the output.
+**Phase 81; corrected at [Phase 738](migrations/738-brandkit-token-doc-contract-correction.md).** `ToolUp.BrandKit` is an app-neutral set of Giraffe.ViewEngine helpers that emit brand-shaped semantic markup. The package ships **zero opinionated styling** — only structural HTML and `bk-*` class hooks.
 
-This doc enumerates every CSS variable BrandKit reads. The canonical names are also encoded as `[<Literal>]` constants in `ToolUp.BrandKit.Tokens` so consumer code can reference them programmatically.
+**The theming contract is class hooks, not emitted variable references.** BrandKit emits **no** `var(--bk-…)` reference and no token-bearing inline style anywhere. The `--bk-*` names below are the vocabulary the contract is written in: a consumer defines a value for each in its own `:root` declaration and attaches it, in its own stylesheet, to the class hook that carries it. The only inline styles the package emits are the two per-call literal values recorded under [Inline-style references](#inline-style-references) below, and neither references a token.
+
+This doc enumerates every CSS variable BrandKit's contract names, and the class hook each is carried by. The canonical names are also encoded as `[<Literal>]` constants in `ToolUp.BrandKit.Tokens` so consumer code can reference them programmatically. [Phase 197](migrations/197-brandkit-visual-snapshot-theming-contract.md)'s contract pack makes this table executable — every row's hook is asserted to be emitted by the primitive named, a token declared with no row here fails a parity case, and a `var(--bk-` reference appearing in any rendered markup fails a case of its own.
 
 ## Variable reference
 
-| Variable | Used by | Purpose |
-|---|---|---|
-| `--bk-font-display` | Display headings, wordmark | Display font family (typically a serif italic) |
-| `--bk-font-ui` | (consumer body) | UI / body sans-serif |
-| `--bk-font-mono` | Eyebrow, mono labels, timestamps | Monospaced family |
-| `--bk-ink` | (consumer body) | Body text colour on light surfaces |
-| `--bk-ink-mute` | Eyebrow-mute, secondary labels | Secondary text colour |
-| `--bk-paper` | (consumer body) | Base surface background |
-| `--bk-panel` | `cardDeep` | Raised surface background — "elevated" card variant |
-| `--bk-rule` | `hRule`, `cardOutlined`, dividers | Border / divider colour |
-| `--bk-accent` | `eyebrow`, `pillOn`, links | Brand accent / interactive colour |
-| `--bk-on-dark-text` | Wordmark on-dark contexts | Text colour on accent / dark surfaces |
-| `--bk-positive` | `pillSeverity Positive` | Semantic success colour |
-| `--bk-priority` | `pillSeverity Priority`, `Critical` | Semantic alert / warning colour |
-| `--bk-info` | `pillSeverity Info` | Semantic informational colour (typically same as `--bk-accent`) |
-| `--bk-radius-md` | `pill`, small cards | Small-radius corner |
-| `--bk-radius-lg` | `card`, panels | Large-radius corner |
-| `--bk-shadow-card` | `card` elevation | Card box-shadow |
+| Variable | Carried by (class hook) | Emitted by | Purpose |
+|---|---|---|---|
+| `--bk-font-display` | `.bk-display`, `.bk-wordmark` | Display headings, wordmark | Display font family (typically a serif italic) |
+| `--bk-font-ui` | `.bk-page` | `LayoutShell` body (Phase 92) | UI / body sans-serif |
+| `--bk-font-mono` | `.bk-eyebrow`, `.bk-mono` | Eyebrow, mono labels, timestamps | Monospaced family |
+| `--bk-ink` | `.bk-page` | `LayoutShell` body (Phase 92) | Body text colour on light surfaces |
+| `--bk-ink-mute` | `.bk-eyebrow-mute` | Eyebrow-mute, secondary labels | Secondary text colour |
+| `--bk-paper` | `.bk-page` | `LayoutShell` body (Phase 92) | Base surface background |
+| `--bk-panel` | `.bk-card-deep` | `cardDeep` | Raised surface background — "elevated" card variant |
+| `--bk-rule` | `.bk-rule`, `.bk-card-outlined` | `hRule`, `cardOutlined`, dividers | Border / divider colour |
+| `--bk-accent` | `.bk-eyebrow`, `.bk-tag-on` | `eyebrow`, `pillOn` (and consumer link rules) | Brand accent / interactive colour |
+| `--bk-on-dark-text` | `.bk-wordmark` | Wordmark on-dark contexts | Text colour on accent / dark surfaces |
+| `--bk-positive` | `.bk-tag-positive` | `pillSeverity Positive` | Semantic success colour |
+| `--bk-priority` | `.bk-tag-priority`, `.bk-tag-critical` | `pillSeverity Priority`, `Critical` | Semantic alert / warning colour |
+| `--bk-info` | `.bk-tag-info` | `pillSeverity Info` | Semantic informational colour (typically same as `--bk-accent`) |
+| `--bk-radius-md` | `.bk-tag`, `.bk-card-tight` | `pill`, small cards | Small-radius corner |
+| `--bk-radius-lg` | `.bk-card` | `card`, panels | Large-radius corner |
+| `--bk-shadow-card` | `.bk-card` | `card` elevation | Card box-shadow |
 
-## Class hooks (no inline style)
+`--bk-font-ui`, `--bk-ink` and `--bk-paper` read "(consumer body)" here until Phase 738. That was accurate at Phase 81; [Phase 92](platform/layouts.md)'s `LayoutShell` gave the document body the BrandKit-emitted `.bk-page` hook, so all three are carried by a hook the package emits rather than by a body the consumer has to class itself.
 
-Every BrandKit element carries a class hook the consumer styles independently. The class names follow a strict `bk-<primitive>[-<modifier>]` convention:
+## Class hooks (the whole theming contract)
 
+Every BrandKit element carries a class hook the consumer styles independently — this is the *only* channel through which a `--bk-*` value reaches rendered output. The class names follow a strict `bk-<primitive>[-<modifier>]` convention:
+
+- **Page shell:** `.bk-page` (the `LayoutShell` document body, Phase 92), `.bk-skip-link`
 - **Text:** `.bk-display`, `.bk-display-lg`, `.bk-display-md`, `.bk-display-sm`, `.bk-eyebrow`, `.bk-eyebrow-mute`, `.bk-mono`, `.bk-mono-sm`, `.bk-mono-md`, `.bk-mono-lg`, `.bk-mono-body`, `.bk-rule`, `.bk-rule-soft`, `.bk-divider-v`
 - **Wordmark:** `.bk-wordmark`, `.bk-wordmark-emphasis`
 - **Card:** `.bk-card`, `.bk-card-tight`, `.bk-card-deep`, `.bk-card-outlined`
@@ -41,6 +46,7 @@ A minimal consumer stylesheet wiring the variables + a few hook rules:
 ```css
 :root {
   --bk-font-display: 'Newsreader', Georgia, serif;
+  --bk-font-ui:      'Inter', system-ui, sans-serif;
   --bk-font-mono:    'IBM Plex Mono', monospace;
   --bk-ink:          #2B2638;
   --bk-ink-mute:     #6C6478;
@@ -57,6 +63,8 @@ A minimal consumer stylesheet wiring the variables + a few hook rules:
   --bk-shadow-card:  0 18px 40px -28px rgba(62, 51, 112, 0.40);
 }
 
+.bk-page { font-family: var(--bk-font-ui); color: var(--bk-ink);
+           background: var(--bk-paper); margin: 0; min-height: 100vh; }
 .bk-display { font-family: var(--bk-font-display); font-style: italic; }
 .bk-display-lg { font-size: 46px; line-height: 1.05; }
 .bk-eyebrow { font-family: var(--bk-font-mono); text-transform: uppercase;
@@ -107,7 +115,7 @@ Worked examples of the variable + class shape in practice live in:
 
 ## Inline-style references
 
-A handful of primitives apply inline styles when the value is per-call rather than per-brand:
+Two primitives apply an inline style when the value is per-call rather than per-brand. **Both carry a literal value supplied by the caller — neither references a `--bk-*` token**, and these are the only inline styles the package emits:
 
 - **`Wordmark`** applies `style="color:<EmphasisColour>;"` on the emphasis span — emphasis colour varies per wordmark instance (on-dark variants typically swap colour), so it can't be encoded as a single class hook.
 - **`Persona`** applies `style="object-fit:cover;object-position:center 12%;[border:2px solid <RingColour>;]"` on the `<img>` — the face-crop convention is universal across consumers, and the ring colour is per-call.
