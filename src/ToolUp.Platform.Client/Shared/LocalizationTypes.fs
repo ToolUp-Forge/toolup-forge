@@ -481,6 +481,29 @@ type RateLimitedMessages = {
     Windows: RateLimitWindowMessages
 }
 
+/// Display labels for the consent categories the banner toggles. The
+/// `ConsentCategory` DU cases themselves are wire-shaped — they are
+/// persisted in `ConsentState` and compared by `ConsentState.hasAll` —
+/// so only the label is localised.
+type ConsentCategoryMessages = {
+    Necessary: string
+    Functional: string
+    Analytics: string
+    Marketing: string
+    Personalisation: string
+    ThirdPartyEmbeds: string
+}
+
+/// The SDK's own category-toggle consent banner (Phase 159).
+type ConsentMessages = {
+    /// The banner's explanatory sentence.
+    Body: string
+    RejectAll: string
+    AcceptAll: string
+    SavePreferences: string
+    Categories: ConsentCategoryMessages
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -511,4 +534,5 @@ type MessageCatalog = {
     AdminHome: AdminHomeMessages
     Auth: AuthMessages
     RateLimited: RateLimitedMessages
+    Consent: ConsentMessages
 }

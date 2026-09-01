@@ -142,18 +142,23 @@ let update (now: DateTimeOffset) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View ──────────────────────────────────────────────────────────
 
-/// Human label for a managed category.
-let private categoryLabel =
+/// Human label for a managed category. The DU case is the persisted,
+/// compared value; only this projection is localised.
+let private categoryLabel (msgs: ConsentCategoryMessages) =
     function
-    | Necessary -> "Strictly necessary"
-    | Functional -> "Functional"
-    | Analytics -> "Analytics"
-    | Marketing -> "Marketing"
-    | Personalisation -> "Personalisation"
-    | ThirdPartyEmbeds -> "Third-party embeds"
+    | Necessary -> msgs.Necessary
+    | Functional -> msgs.Functional
+    | Analytics -> msgs.Analytics
+    | Marketing -> msgs.Marketing
+    | Personalisation -> msgs.Personalisation
+    | ThirdPartyEmbeds -> msgs.ThirdPartyEmbeds
 
 [<ReactComponent>]
 let ConsentBanner (managed: ConsentCategory list) : ReactElement =
+    // Phase 751 — a component, so the ordinary hook applies and no
+    // `…With` variant is needed. Read before the `NoOpConsentProvider`
+    // short-circuit so the hook order is unconditional.
+    let msgs = (MessageCatalogProvider.useMessages ()).Consent
     let provider = ConsentProvider.current ()
 
     // GP 13 — no consent provider composed ⇒ no banner. The default
@@ -195,11 +200,7 @@ let ConsentBanner (managed: ConsentCategory list) : ReactElement =
                     Html.div [
                         prop.className "max-w-4xl mx-auto flex flex-col gap-3"
                         prop.children [
-                            Html.p [
-                                prop.className "text-sm text-[var(--muted)]"
-                                prop.text
-                                    "We use cookies and similar technologies. Choose which categories to allow. Strictly necessary cookies are always on."
-                            ]
+                            Html.p [ prop.className "text-sm text-[var(--muted)]"; prop.text msgs.Body ]
                             Html.div [
                                 prop.className "flex flex-wrap gap-4"
                                 prop.children [
@@ -214,7 +215,7 @@ let ConsentBanner (managed: ConsentCategory list) : ReactElement =
                                                     prop.isChecked isOn
                                                     prop.onChange (fun (_: bool) -> dispatch (ToggleCategory category))
                                                 ]
-                                                Html.span [ prop.text (categoryLabel category) ]
+                                                Html.span [ prop.text (categoryLabel msgs.Categories category) ]
                                             ]
                                         ]
                                 ]
@@ -225,18 +226,18 @@ let ConsentBanner (managed: ConsentCategory list) : ReactElement =
                                     Html.button [
                                         prop.className
                                             "px-3 py-1.5 text-sm rounded-[var(--radius)] border border-border bg-transparent hover:bg-[var(--surface)]"
-                                        prop.text "Reject all"
+                                        prop.text msgs.RejectAll
                                         prop.onClick (fun _ -> dispatch RejectAll)
                                     ]
                                     Html.button [
                                         prop.className
                                             "px-3 py-1.5 text-sm rounded-[var(--radius)] border border-border bg-transparent hover:bg-[var(--surface)]"
-                                        prop.text "Accept all"
+                                        prop.text msgs.AcceptAll
                                         prop.onClick (fun _ -> dispatch AcceptAll)
                                     ]
                                     Html.button [
                                         prop.className "px-3 py-1.5 text-sm rounded-[var(--radius)] bg-brand text-white"
-                                        prop.text "Save preferences"
+                                        prop.text msgs.SavePreferences
                                         prop.onClick (fun _ -> dispatch SavePreferences)
                                     ]
                                 ]

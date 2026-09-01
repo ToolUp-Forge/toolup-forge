@@ -406,6 +406,21 @@ module MessageCatalog =
                 Sliding = "window"
             }
         }
+        Consent = {
+            Body =
+                "We use cookies and similar technologies. Choose which categories to allow. Strictly necessary cookies are always on."
+            RejectAll = "Reject all"
+            AcceptAll = "Accept all"
+            SavePreferences = "Save preferences"
+            Categories = {
+                Necessary = "Strictly necessary"
+                Functional = "Functional"
+                Analytics = "Analytics"
+                Marketing = "Marketing"
+                Personalisation = "Personalisation"
+                ThirdPartyEmbeds = "Third-party embeds"
+            }
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
