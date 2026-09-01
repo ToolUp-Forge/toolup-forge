@@ -408,7 +408,10 @@ jobs:
       # and the repository name is free to change without touching this.
       # Operator setup: repository variable `FEDERATION_SPEC_REPO` (`owner/name`
       # of the specification home) and repository secret
-      # `FEDERATION_SPEC_READ_TOKEN` (a token with read access to it).
+      # `FEDERATION_SPEC_APP_PRIVATE_KEY` (the private key of a GitHub App,
+      # app id 4797768, installed on that repository with read access — a
+      # short-lived installation token is minted per run; no long-lived
+      # token is stored).
       #
       # The name goes through a VARIABLE rather than a literal because that
       # repository is private and this one is public — a literal would publish
@@ -424,9 +427,10 @@ jobs:
       # skips when it cannot reach its corpus reports green while certifying
       # nothing.
       - name: Check the federation-spec configuration is present
+        id: spec-config
         env:
           SPEC_REPO: ${{ vars.FEDERATION_SPEC_REPO }}
-          SPEC_TOKEN: ${{ secrets.FEDERATION_SPEC_READ_TOKEN }}
+          SPEC_APP_KEY: ${{ secrets.FEDERATION_SPEC_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           missing=0
@@ -434,21 +438,32 @@ jobs:
             echo "::error::Repository variable FEDERATION_SPEC_REPO is unset. It must hold the owner/name of the federation-seam specification home."
             missing=1
           fi
-          if [ -z "${SPEC_TOKEN}" ]; then
-            echo "::error::Repository secret FEDERATION_SPEC_READ_TOKEN is unset. It must hold a token with read access to that repository. (A pull request from a fork cannot read repository secrets; this job fails there by design rather than skipping.)"
+          if [ -z "${SPEC_APP_KEY}" ]; then
+            echo "::error::Repository secret FEDERATION_SPEC_APP_PRIVATE_KEY is unset. It must hold the private key of a GitHub App (app id 4797768) installed on the specification home with read access; a short-lived installation token is minted per run. (A pull request from a fork cannot read repository secrets; this job fails there by design rather than skipping.)"
             missing=1
           fi
           if [ "${missing}" -ne 0 ]; then
             echo "::error::The federation-seam conformance leg cannot run without its specification home, and a conformance run without its corpus certifies nothing."
             exit 1
           fi
+          echo "owner=${SPEC_REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "name=${SPEC_REPO##*/}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a specification-home read token
+        id: spec-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: 4797768 # the specification home's read-only App
+          private-key: ${{ secrets.FEDERATION_SPEC_APP_PRIVATE_KEY }}
+          owner: ${{ steps.spec-config.outputs.owner }}
+          repositories: ${{ steps.spec-config.outputs.name }}
 
       - name: Check out the federation-seam specification home
         uses: actions/checkout@v6
         with:
           repository: ${{ vars.FEDERATION_SPEC_REPO }}
           ref: 480c03b2ca74e8493bfbb1e005fb30293f4c7078
-          token: ${{ secrets.FEDERATION_SPEC_READ_TOKEN }}
+          token: ${{ steps.spec-token.outputs.token }}
           path: fuaran-federation-spec
           persist-credentials: false
 

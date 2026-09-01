@@ -22,6 +22,10 @@ release.sh
 *.fsproj.user
 *.DotSettings.user
 secrets.json
+# …but the REPO-ROOT secrets.json is the Actions-secrets MANIFEST (names and
+# levels only, never values) and is deliberately tracked; the bare pattern
+# above keeps any deeper, value-bearing secrets.json out.
+!/secrets.json
 
 # Vite dotenv files (sample apps).
 **/.env.local
