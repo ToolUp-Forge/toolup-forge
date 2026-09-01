@@ -675,6 +675,19 @@ module MessageCatalog =
             LoadingSubscriptions = "Loading subscriptions..."
             SubscriptionNotFound = "Subscription not found in this scope."
         }
+        NarrativeRenderer = {
+            SaveToKnowledgeBase = "Save to Knowledge Base"
+            Saving = "Saving…"
+            Saved = "Saved to Knowledge Base"
+            NoProvenance = "This narrative has no provenance and cannot be saved."
+            DuplicateHeading = "Narrative already saved"
+            DuplicateBody = fun when' -> $"A previous version was saved to the Knowledge Base on {when'}."
+            DuplicateConfirmPrompt = "Overwrite it with the current version?"
+            Cancel = "Cancel"
+            Overwrite = "Overwrite"
+            Copied = "Copied!"
+            CopyAsMarkdown = "Copy as Markdown"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

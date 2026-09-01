@@ -957,6 +957,43 @@ type WebhookAdminMessages = {
     SubscriptionNotFound: string
 }
 
+/// The `NarrativeDocument` renderer's own chrome (`NarrativeRenderer.fs`,
+/// Phase 751) — the "Save to Knowledge Base" control (including its
+/// duplicate-save confirmation dialog) and the "Copy as Markdown" control.
+/// Everything else the renderer draws is document content (headings,
+/// table cells, block bodies) sourced from the `NarrativeDocument` itself,
+/// not chrome the renderer authors.
+type NarrativeRendererMessages = {
+    /// Title of the "Save to Knowledge Base" control at rest.
+    SaveToKnowledgeBase: string
+    /// Title of the control while a save request is in flight.
+    Saving: string
+    /// Title of the control immediately after a save succeeds, before it
+    /// reverts to its resting state.
+    Saved: string
+    /// Title set when the narrative carries no `Provenance` and therefore
+    /// has no dedup key to save under.
+    NoProvenance: string
+    /// Heading of the dialog raised when a save collides with an
+    /// existing Knowledge Base entry.
+    DuplicateHeading: string
+    /// Body sentence naming when the previous version was saved. Takes
+    /// the already-formatted timestamp — the format is a call-site
+    /// concern, never baked into the translated template.
+    DuplicateBody: string -> string
+    /// Prompt asking whether to overwrite the previous version.
+    DuplicateConfirmPrompt: string
+    /// Dismisses the overwrite dialog without saving.
+    Cancel: string
+    /// Confirms the overwrite.
+    Overwrite: string
+    /// Title of the "Copy as Markdown" control immediately after a
+    /// successful copy.
+    Copied: string
+    /// Title of the "Copy as Markdown" control at rest.
+    CopyAsMarkdown: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -994,4 +1031,5 @@ type MessageCatalog = {
     PlatformUsers: PlatformUsersMessages
     PermissionsAdmin: PermissionsAdminMessages
     WebhookAdmin: WebhookAdminMessages
+    NarrativeRenderer: NarrativeRendererMessages
 }
