@@ -112,6 +112,27 @@
 
     <!-- Metrics + UI -->
     <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+
+    <!-- Phase 344 — AG Grid / AG Charts Feliz bindings.
+
+         `Feliz.AgGrid` + `Feliz.AgCharts` are the Community bindings,
+         promoted out of ToolUp.Platform.Client into standalone Apache-2.0
+         packages so a consumer that renders no grid pays for none of it
+         (GP 13) and a consumer that wants only the binding can take it
+         without the SDK. `ToolUp.Platform.Client` still depends on both,
+         so an existing consumer needs no fsproj change: they arrive
+         transitively, and the compat re-export keeps
+         `open ToolUp.Platform.AgGrid` / `.AgChart` compiling (GP 11).
+
+         `Feliz.AgGrid.Enterprise` is the RENAMED `ToolUp.AgGridEnterprise`
+         — same opt-in companion, same licensing posture (GP 2). A consumer
+         on the old id changes exactly one PackageReference. The old id is
+         deliberately NOT retained here: nothing produces a package by that
+         name any more, and a PackageVersion for an id no feed can serve
+         resolves to NU1101 at restore rather than to anything useful. The
+         rename is recorded in ToolUp/SDK-ADOPTION.md. -->
+    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
   </ItemGroup>
 </Project>

@@ -108,19 +108,32 @@ let private tokenEmissionTest = test "every client-toolkit theming token is refe
 /// Phase 222 drift guard: the brand hex must not be frozen anywhere under
 /// Client/UI except AgChart.fs, where it is the sanctioned ChartPalette
 /// fallback (equal to the brand default) behind `refreshFromTheme`.
+///
+/// Phase 344 moved the AG Grid / AG Charts bindings out of `Client/UI` into
+/// the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages — taking the
+/// only sanctioned occurrence of the hex with them. Scanning `Client/UI`
+/// alone would still be GREEN and would be measuring nothing: the guard
+/// therefore follows the code, and the two binding directories are scanned
+/// alongside it. The exemption is still `AgChart.fs` by NAME, so the
+/// sanctioned fallback is exempt wherever the file lives and every other
+/// binding file is covered.
 let private brandHexGuardTest = test "brand hex #59229D appears only in AgChart's ChartPalette fallback" {
-    let uiDir =
+    let scanned = [
         Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "UI")
+        Path.Combine(repoRoot (), "src", "Feliz.AgGrid")
+        Path.Combine(repoRoot (), "src", "Feliz.AgCharts")
+    ]
 
     let offenders = [
-        for f in Directory.EnumerateFiles(uiDir, "*.fs", SearchOption.AllDirectories) do
-            let name = Path.GetFileName f
+        for dir in scanned do
+            for f in Directory.EnumerateFiles(dir, "*.fs", SearchOption.AllDirectories) do
+                let name = Path.GetFileName f
 
-            if name <> "AgChart.fs" then
-                let code = File.ReadAllText f |> codeOnly
+                if name <> "AgChart.fs" then
+                    let code = File.ReadAllText f |> codeOnly
 
-                if Regex.IsMatch(code, "#59229[Dd]") then
-                    yield name
+                    if Regex.IsMatch(code, "#59229[Dd]") then
+                        yield name
     ]
 
     Expect.equal

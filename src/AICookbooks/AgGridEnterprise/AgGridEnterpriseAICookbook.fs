@@ -50,8 +50,9 @@ let candidatePaths (fileName: string) : string list =
         | p -> if Directory.Exists p then Path.Combine(p, fileName) else p
 
         Path.Combine(asmDir, fileName)
-        // dev: bin/Debug/net10.0 -> repo src/AgGridEnterprise/COOKBOOK.md
-        Path.Combine(asmDir, "..", "..", "..", "..", "AgGridEnterprise", "COOKBOOK.md")
+        // dev: bin/Debug/net10.0 -> repo src/Feliz.AgGrid.Enterprise/COOKBOOK.md
+        // (Phase 344 renamed the companion directory from AgGridEnterprise/.)
+        Path.Combine(asmDir, "..", "..", "..", "..", "Feliz.AgGrid.Enterprise", "COOKBOOK.md")
     ]
 
 /// Build the Enterprise builder from an explicit cookbook path (test seam).

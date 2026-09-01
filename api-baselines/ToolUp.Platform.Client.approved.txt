@@ -2119,122 +2119,29 @@ ToolUp.Platform.AdminTiles+LandingState`1+Tags.Tiles : System.Int32 (literal)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles (class)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles.Item : Microsoft.FSharp.Collections.FSharpList`1[t] { get }
 ToolUp.Platform.AgChart (class)
-ToolUp.Platform.AgChart.MemoizedChart(System.Object) : Fable.React.ReactElement
+ToolUp.Platform.AgChart.Area : Feliz.AgCharts+SeriesKind { get }
+ToolUp.Platform.AgChart.Bar : Feliz.AgCharts+SeriesKind { get }
+ToolUp.Platform.AgChart.Bottom : Feliz.AgCharts+ChartPosition { get }
+ToolUp.Platform.AgChart.Circle : Feliz.AgCharts+MarkerShape { get }
+ToolUp.Platform.AgChart.Cross : Feliz.AgCharts+MarkerShape { get }
+ToolUp.Platform.AgChart.Diamond : Feliz.AgCharts+MarkerShape { get }
+ToolUp.Platform.AgChart.Histogram : Feliz.AgCharts+SeriesKind { get }
+ToolUp.Platform.AgChart.Left : Feliz.AgCharts+ChartPosition { get }
+ToolUp.Platform.AgChart.Line : Feliz.AgCharts+SeriesKind { get }
+ToolUp.Platform.AgChart.Marker(Feliz.AgCharts+MarkerShape, System.Int32, System.String, System.String) : Feliz.AgCharts+SeriesMarker
+ToolUp.Platform.AgChart.MemoizedChart`1(a) : Fable.React.ReactElement
+ToolUp.Platform.AgChart.NoMarker : Feliz.AgCharts+SeriesMarker { get }
+ToolUp.Platform.AgChart.Plus : Feliz.AgCharts+MarkerShape { get }
+ToolUp.Platform.AgChart.Right : Feliz.AgCharts+ChartPosition { get }
+ToolUp.Platform.AgChart.Scatter : Feliz.AgCharts+SeriesKind { get }
+ToolUp.Platform.AgChart.Square : Feliz.AgCharts+MarkerShape { get }
+ToolUp.Platform.AgChart.Top : Feliz.AgCharts+ChartPosition { get }
+ToolUp.Platform.AgChart.Triangle : Feliz.AgCharts+MarkerShape { get }
 ToolUp.Platform.AgChart.agChart : System.Object { get }
 ToolUp.Platform.AgChart.ensureChartsModulesRegistered() : System.Void
 ToolUp.Platform.AgChart.setChartsModulesRegistered() : System.Void
-ToolUp.Platform.AgChart+AgChart (class)
-ToolUp.Platform.AgChart+AgChart.animation(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.animation(System.Boolean, System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.autoSize : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+AgChart.axes(System.Collections.Generic.IEnumerable`1[System.Object]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.background(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.backgroundImage(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.caption(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.caption(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.chartTheme(ToolUp.Platform.AgChart+ChartThemeBuilder) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.chart`1(a) : Fable.React.ReactElement
-ToolUp.Platform.AgChart+AgChart.crosshair(System.Boolean, System.Boolean, System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.data`1(System.Collections.Generic.IEnumerable`1[c]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.footnote(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.footnote(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.height(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.legend(System.Boolean, System.Int32, ToolUp.Platform.AgChart+ChartPosition) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.legend(ToolUp.Platform.AgChart+LegendOptions) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.listeners(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.locale(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.minHeight(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.minWidth(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.navigator : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+AgChart.onClick(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.onDoubleClick(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.onLegendItemClick(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.onSeriesNodeClick(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.options(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : Feliz.IReactProperty
-ToolUp.Platform.AgChart+AgChart.padding(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.padding(System.Int32, System.Int32, System.Int32, System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.series`1(System.Collections.Generic.IEnumerable`1[b]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.subtitle(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.sync(System.String, System.String, System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.title(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.tooltip(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.tooltip(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.tooltipRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartTooltipParams`1[datum], ToolUp.Platform.AgChart+ChartTooltipContent]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AgChart.width(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis (class)
-ToolUp.Platform.AgChart+Axis.axisKind(ToolUp.Platform.AgChart+AxisKind) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+Axis.crossAt(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.crosshair(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.crosslines(System.Collections.Generic.IEnumerable`1[System.Double]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.crosslines(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgChart+CrosslineRange]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.gridLine(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.gridLine(System.Boolean, System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.interval(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.interval(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.inverted(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.keys(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.label(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.label(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.label(ToolUp.Platform.AgChart+AxisLabel) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.line(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.max(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.min(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.nice(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.position(ToolUp.Platform.AgChart+ChartPosition) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.reverse(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.tick(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.tick(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Axis.title(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+AxisKind (class)
-ToolUp.Platform.AgChart+AxisKind.Category : ToolUp.Platform.AgChart+AxisKind { get }
-ToolUp.Platform.AgChart+AxisKind.IsCategory : System.Boolean { get }
-ToolUp.Platform.AgChart+AxisKind.IsNumber : System.Boolean { get }
-ToolUp.Platform.AgChart+AxisKind.IsTime : System.Boolean { get }
-ToolUp.Platform.AgChart+AxisKind.Number : ToolUp.Platform.AgChart+AxisKind { get }
-ToolUp.Platform.AgChart+AxisKind.Tag : System.Int32 { get }
-ToolUp.Platform.AgChart+AxisKind.Time : ToolUp.Platform.AgChart+AxisKind { get }
-ToolUp.Platform.AgChart+AxisKind+Tags (class)
-ToolUp.Platform.AgChart+AxisKind+Tags.Category : System.Int32 (literal)
-ToolUp.Platform.AgChart+AxisKind+Tags.Number : System.Int32 (literal)
-ToolUp.Platform.AgChart+AxisKind+Tags.Time : System.Int32 (literal)
-ToolUp.Platform.AgChart+AxisLabel (class)
-ToolUp.Platform.AgChart+AxisLabel..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartFormatterParams, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])
-ToolUp.Platform.AgChart+AxisLabel.autoRotate : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgChart+AxisLabel.autoRotateAngle : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+AxisLabel.avoidCollisions : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgChart+AxisLabel.color : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgChart+AxisLabel.enabled : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgChart+AxisLabel.fontFamily : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgChart+AxisLabel.fontSize : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+AxisLabel.fontWeight : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgChart+AxisLabel.format : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgChart+AxisLabel.formatter : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartFormatterParams, System.String]] { get }
-ToolUp.Platform.AgChart+AxisLabel.fractionDigits : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+AxisLabel.minSpacing : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+AxisLabel.padding : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+AxisLabel.rotation : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.AgChart+AxisLabelModule (class)
-ToolUp.Platform.AgChart+AxisLabelModule.empty : ToolUp.Platform.AgChart+AxisLabel { get }
-ToolUp.Platform.AgChart+BubbleSeries (class)
-ToolUp.Platform.AgChart+BubbleSeries.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+BubbleSeries.data`1(System.Collections.Generic.IEnumerable`1[a]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.fill(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.fillOpacity(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.labelKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.marker(ToolUp.Platform.AgChart+SeriesMarker) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.seriesType : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+BubbleSeries.showInLegend(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.sizeDomain(System.Double, System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.sizeKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.sizeName(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.stroke(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.title(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.tooltipRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartTooltipParams`1[datum], ToolUp.Platform.AgChart+ChartTooltipContent]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.xKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.xName(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.yKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+BubbleSeries.yName(System.String) : System.Tuple`2[System.String, System.Object]
+ToolUp.Platform.AgChart+AxisLabelModule.empty : Feliz.AgCharts+AxisLabel { get }
 ToolUp.Platform.AgChart+ChartPalette (class)
 ToolUp.Platform.AgChart+ChartPalette.accentColor : System.String { get; set }
 ToolUp.Platform.AgChart+ChartPalette.fills : System.String[] { get; set }
@@ -2243,214 +2150,11 @@ ToolUp.Platform.AgChart+ChartPalette.markerFill : System.String { get; set }
 ToolUp.Platform.AgChart+ChartPalette.markerStroke : System.String { get; set }
 ToolUp.Platform.AgChart+ChartPalette.refreshFromTheme() : System.Void
 ToolUp.Platform.AgChart+ChartPalette.strokes : System.String[] { get; set }
-ToolUp.Platform.AgChart+ChartPosition (class)
-ToolUp.Platform.AgChart+ChartPosition.Bottom : ToolUp.Platform.AgChart+ChartPosition { get }
-ToolUp.Platform.AgChart+ChartPosition.IsBottom : System.Boolean { get }
-ToolUp.Platform.AgChart+ChartPosition.IsLeft : System.Boolean { get }
-ToolUp.Platform.AgChart+ChartPosition.IsRight : System.Boolean { get }
-ToolUp.Platform.AgChart+ChartPosition.IsTop : System.Boolean { get }
-ToolUp.Platform.AgChart+ChartPosition.Left : ToolUp.Platform.AgChart+ChartPosition { get }
-ToolUp.Platform.AgChart+ChartPosition.Right : ToolUp.Platform.AgChart+ChartPosition { get }
-ToolUp.Platform.AgChart+ChartPosition.Tag : System.Int32 { get }
-ToolUp.Platform.AgChart+ChartPosition.Top : ToolUp.Platform.AgChart+ChartPosition { get }
-ToolUp.Platform.AgChart+ChartPosition+Tags (class)
-ToolUp.Platform.AgChart+ChartPosition+Tags.Bottom : System.Int32 (literal)
-ToolUp.Platform.AgChart+ChartPosition+Tags.Left : System.Int32 (literal)
-ToolUp.Platform.AgChart+ChartPosition+Tags.Right : System.Int32 (literal)
-ToolUp.Platform.AgChart+ChartPosition+Tags.Top : System.Int32 (literal)
-ToolUp.Platform.AgChart+ChartThemeBuilder (class)
-ToolUp.Platform.AgChart+ChartThemeBuilder..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Object])
-ToolUp.Platform.AgChart+ChartThemeBuilder.baseTheme : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgChart+ChartThemeBuilder.overrides : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgChart+ChartThemeBuilder.palette : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgChart+ChartThemeBuilder.params : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
 ToolUp.Platform.AgChart+ChartThemeBuilderModule (class)
-ToolUp.Platform.AgChart+ChartThemeBuilderModule.empty : ToolUp.Platform.AgChart+ChartThemeBuilder { get }
-ToolUp.Platform.AgChart+ChartThemeBuilderModule.toTheme(ToolUp.Platform.AgChart+ChartThemeBuilder) : System.Object
-ToolUp.Platform.AgChart+ChartTooltipContent (class)
-ToolUp.Platform.AgChart+ChartTooltipContent..ctor(System.String, System.String, System.String, System.String)
-ToolUp.Platform.AgChart+ChartTooltipContent.backgroundColor : System.String { get }
-ToolUp.Platform.AgChart+ChartTooltipContent.color : System.String { get }
-ToolUp.Platform.AgChart+ChartTooltipContent.content : System.String { get }
-ToolUp.Platform.AgChart+ChartTooltipContent.title : System.String { get }
-ToolUp.Platform.AgChart+CrosslineRange (class)
-ToolUp.Platform.AgChart+CrosslineRange..ctor(System.Double, System.Double, System.String, System.Double)
-ToolUp.Platform.AgChart+CrosslineRange.colour : System.String { get }
-ToolUp.Platform.AgChart+CrosslineRange.fillOpacity : System.Double { get }
-ToolUp.Platform.AgChart+CrosslineRange.high : System.Double { get }
-ToolUp.Platform.AgChart+CrosslineRange.low : System.Double { get }
-ToolUp.Platform.AgChart+ErrorBar (class)
-ToolUp.Platform.AgChart+ErrorBar.cap(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+ErrorBar.stroke(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.strokeWidth(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.visible(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.xLowerKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.xUpperKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.yLowerKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBar.yUpperKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBarCap (class)
-ToolUp.Platform.AgChart+ErrorBarCap.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+ErrorBarCap.length(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBarCap.lengthRatio(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBarCap.stroke(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+ErrorBarCap.strokeWidth(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+IChartFormatterParams (class)
-ToolUp.Platform.AgChart+IChartFormatterParams..ctor(System.Object, System.Int32, System.Int32, System.Object)
-ToolUp.Platform.AgChart+IChartFormatterParams.fractionDigits : System.Int32 { get }
-ToolUp.Platform.AgChart+IChartFormatterParams.index : System.Int32 { get }
-ToolUp.Platform.AgChart+IChartFormatterParams.tickInterval : System.Object { get }
-ToolUp.Platform.AgChart+IChartFormatterParams.value : System.Object { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1 (class)
-ToolUp.Platform.AgChart+IChartTooltipParams`1..ctor(datum, System.String, System.String, System.Object, System.Object, System.String, System.String)
-ToolUp.Platform.AgChart+IChartTooltipParams`1.color : System.String { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.datum : datum { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.title : System.String { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.xKey : System.String { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.xValue : System.Object { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.yKey : System.String { get }
-ToolUp.Platform.AgChart+IChartTooltipParams`1.yValue : System.Object { get }
-ToolUp.Platform.AgChart+IMarkerParams`1 (class)
-ToolUp.Platform.AgChart+IMarkerParams`1..ctor(T, System.String, System.String, System.Int32, System.Int32, System.Boolean, System.String, System.String)
-ToolUp.Platform.AgChart+IMarkerParams`1.datum : T { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.fill : System.String { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.highlighted : System.Boolean { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.size : System.Int32 { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.stroke : System.String { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.strokeWidth : System.Int32 { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.xKey : System.String { get }
-ToolUp.Platform.AgChart+IMarkerParams`1.yKey : System.String { get }
-ToolUp.Platform.AgChart+LegendOptions (class)
-ToolUp.Platform.AgChart+LegendOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgChart+ChartPosition], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
-ToolUp.Platform.AgChart+LegendOptions.enabled : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgChart+LegendOptions.item : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgChart+LegendOptions.listeners : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgChart+LegendOptions.maxHeight : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+LegendOptions.maxWidth : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgChart+LegendOptions.pagination : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgChart+LegendOptions.position : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgChart+ChartPosition] { get }
-ToolUp.Platform.AgChart+LegendOptions.reverseOrder : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgChart+LegendOptions.spacing : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.AgChart+ChartThemeBuilderModule.empty : Feliz.AgCharts+ChartThemeBuilder { get }
+ToolUp.Platform.AgChart+ChartThemeBuilderModule.toTheme(Feliz.AgCharts+ChartThemeBuilder) : System.Object
 ToolUp.Platform.AgChart+LegendOptionsModule (class)
-ToolUp.Platform.AgChart+LegendOptionsModule.empty : ToolUp.Platform.AgChart+LegendOptions { get }
-ToolUp.Platform.AgChart+MarkerShape (class)
-ToolUp.Platform.AgChart+MarkerShape.Circle : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape.Cross : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape.Diamond : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape.IsCircle : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.IsCross : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.IsDiamond : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.IsPlus : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.IsSquare : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.IsTriangle : System.Boolean { get }
-ToolUp.Platform.AgChart+MarkerShape.Plus : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape.Square : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape.Tag : System.Int32 { get }
-ToolUp.Platform.AgChart+MarkerShape.Triangle : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+MarkerShape+Tags (class)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Circle : System.Int32 (literal)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Cross : System.Int32 (literal)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Diamond : System.Int32 (literal)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Plus : System.Int32 (literal)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Square : System.Int32 (literal)
-ToolUp.Platform.AgChart+MarkerShape+Tags.Triangle : System.Int32 (literal)
-ToolUp.Platform.AgChart+PieSeries (class)
-ToolUp.Platform.AgChart+PieSeries.angleKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.angleName(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.calloutLabel(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.calloutLabelKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+PieSeries.data`1(System.Collections.Generic.IEnumerable`1[a]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.donut : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+PieSeries.fillOpacity(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.fills(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.innerRadius(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.innerRadiusRatio(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.legendItemKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.pie : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+PieSeries.radiusKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.radiusName(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.rotation(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.sectorLabel(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.sectorLabelKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.showInLegend(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.strokeWidth(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.strokes(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.title(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+PieSeries.tooltipRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartTooltipParams`1[datum], ToolUp.Platform.AgChart+ChartTooltipContent]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series (class)
-ToolUp.Platform.AgChart+Series.aggregation(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.areaPlot(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.binCount(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.bins(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.Double, System.Double]]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.connectMissingData(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.cornerRadius(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.create(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Object]]) : System.Object
-ToolUp.Platform.AgChart+Series.data`1(System.Collections.Generic.IEnumerable`1[a]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.errorBar(System.Object) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.fill(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.fillOpacity(System.Double) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.fills(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.grouped(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.highlight(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.id(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.interpolation : System.Tuple`2[System.String, System.Object] { get }
-ToolUp.Platform.AgChart+Series.label(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.labelFormatter(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartFormatterParams, System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.labelKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.marker(ToolUp.Platform.AgChart+SeriesMarker) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.normalizedTo(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.seriesKind(ToolUp.Platform.AgChart+SeriesKind) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.showInLegend(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.stackGroup(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.stacked(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.stroke(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.strokeWidth(System.Int32) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.strokes(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.title(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.tooltipEnabled(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.tooltipRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgChart+IChartTooltipParams`1[datum], ToolUp.Platform.AgChart+ChartTooltipContent]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.visible(System.Boolean) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.xKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.xKey`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.xName`1(b) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.yKey(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.yKeys(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.yKeys`2(Microsoft.FSharp.Core.FSharpFunc`2[a, a]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.yName(System.String) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+Series.yNames(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.String, System.Object]
-ToolUp.Platform.AgChart+SeriesKind (class)
-ToolUp.Platform.AgChart+SeriesKind.Area : ToolUp.Platform.AgChart+SeriesKind { get }
-ToolUp.Platform.AgChart+SeriesKind.Bar : ToolUp.Platform.AgChart+SeriesKind { get }
-ToolUp.Platform.AgChart+SeriesKind.Histogram : ToolUp.Platform.AgChart+SeriesKind { get }
-ToolUp.Platform.AgChart+SeriesKind.IsArea : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesKind.IsBar : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesKind.IsHistogram : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesKind.IsLine : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesKind.IsScatter : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesKind.Line : ToolUp.Platform.AgChart+SeriesKind { get }
-ToolUp.Platform.AgChart+SeriesKind.Scatter : ToolUp.Platform.AgChart+SeriesKind { get }
-ToolUp.Platform.AgChart+SeriesKind.SeriesKindText : System.String { get }
-ToolUp.Platform.AgChart+SeriesKind.Tag : System.Int32 { get }
-ToolUp.Platform.AgChart+SeriesKind+Tags (class)
-ToolUp.Platform.AgChart+SeriesKind+Tags.Area : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesKind+Tags.Bar : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesKind+Tags.Histogram : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesKind+Tags.Line : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesKind+Tags.Scatter : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesMarker (class)
-ToolUp.Platform.AgChart+SeriesMarker.IsMarker : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesMarker.IsNoMarker : System.Boolean { get }
-ToolUp.Platform.AgChart+SeriesMarker.NoMarker : ToolUp.Platform.AgChart+SeriesMarker { get }
-ToolUp.Platform.AgChart+SeriesMarker.Tag : System.Int32 { get }
-ToolUp.Platform.AgChart+SeriesMarker+Marker (class)
-ToolUp.Platform.AgChart+SeriesMarker+Marker.Item1 : ToolUp.Platform.AgChart+MarkerShape { get }
-ToolUp.Platform.AgChart+SeriesMarker+Marker.Item2 : System.Int32 { get }
-ToolUp.Platform.AgChart+SeriesMarker+Marker.Item3 : System.String { get }
-ToolUp.Platform.AgChart+SeriesMarker+Marker.Item4 : System.String { get }
-ToolUp.Platform.AgChart+SeriesMarker+Tags (class)
-ToolUp.Platform.AgChart+SeriesMarker+Tags.Marker : System.Int32 (literal)
-ToolUp.Platform.AgChart+SeriesMarker+Tags.NoMarker : System.Int32 (literal)
+ToolUp.Platform.AgChart+LegendOptionsModule.empty : Feliz.AgCharts+LegendOptions { get }
 ToolUp.Platform.AgChartExport (class)
 ToolUp.Platform.AgChartExport.asPlaceholder`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.String, System.Byte[], System.String) : System.Tuple`2[System.String, value]
 ToolUp.Platform.AgChartExport.asPlaceholders`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Tuple`2[System.Byte[], System.String]]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, value]
@@ -2507,652 +2211,60 @@ ToolUp.Platform.AgChartExport+Sizing (class)
 ToolUp.Platform.AgChartExport+Sizing.requested(ToolUp.Platform.AgChartExport+CaptureOptions, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
 ToolUp.Platform.AgChartExport+Sizing.scaleDimension(System.Double, System.Int32) : System.Int32
 ToolUp.Platform.AgGrid (class)
-ToolUp.Platform.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement], ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value]) : Fable.React.ReactElement
-ToolUp.Platform.AgGrid.MemoizedGrid(System.Object) : Fable.React.ReactElement
+ToolUp.Platform.AgGrid.Asc : Feliz.AgGrid+SortDirection { get }
+ToolUp.Platform.AgGrid.AutoHeight : Feliz.AgGrid+DOMLayout { get }
+ToolUp.Platform.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement], Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value]) : Fable.React.ReactElement
+ToolUp.Platform.AgGrid.Desc : Feliz.AgGrid+SortDirection { get }
+ToolUp.Platform.AgGrid.MemoizedGrid`1(a) : Fable.React.ReactElement
+ToolUp.Platform.AgGrid.Multiple : Feliz.AgGrid+RowSelection { get }
+ToolUp.Platform.AgGrid.Normal : Feliz.AgGrid+DOMLayout { get }
+ToolUp.Platform.AgGrid.NumericColumn : Feliz.AgGrid+ColumnType { get }
+ToolUp.Platform.AgGrid.Print : Feliz.AgGrid+DOMLayout { get }
+ToolUp.Platform.AgGrid.RightAligned : Feliz.AgGrid+ColumnType { get }
+ToolUp.Platform.AgGrid.Single : Feliz.AgGrid+RowSelection { get }
 ToolUp.Platform.AgGrid.agGrid : System.Object { get }
-ToolUp.Platform.AgGrid.agGridProp`1(System.Object) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid.columnDefProp`2() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]]
-ToolUp.Platform.AgGrid.columnDef`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Platform.AgGrid+IColumnDef`1[row]]
-ToolUp.Platform.AgGrid.columnGroupDefProp`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], ToolUp.Platform.AgGrid+IColumnGroupDefProp`1[row]]
+ToolUp.Platform.AgGrid.agGridProp`1(System.Object) : Feliz.AgGrid+IAgGridProp`1[row]
+ToolUp.Platform.AgGrid.columnDefProp`2() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnDefProp`2[row, value]]
+ToolUp.Platform.AgGrid.columnDef`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Feliz.AgGrid+IColumnDef`1[row]]
+ToolUp.Platform.AgGrid.columnGroupDefProp`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnGroupDefProp`1[row]]
 ToolUp.Platform.AgGrid.ensureGridModulesRegistered() : System.Void
 ToolUp.Platform.AgGrid.openClosed(System.Boolean) : System.String
-ToolUp.Platform.AgGrid.provider(ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
+ToolUp.Platform.AgGrid.provider(Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 ToolUp.Platform.AgGrid.setGridModulesRegistered() : System.Void
-ToolUp.Platform.AgGrid+AgCellEditor (class)
-ToolUp.Platform.AgGrid+AgCellEditor.CellEditorText : System.String { get }
-ToolUp.Platform.AgGrid+AgCellEditor.CheckboxCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.DateCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.DateStringCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsCheckboxCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsDateCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsDateStringCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsLargeTextCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsNumberCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsSelectCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.IsTextCellEditor : System.Boolean { get }
-ToolUp.Platform.AgGrid+AgCellEditor.LargeTextCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.NumberCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.SelectCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+AgCellEditor.TextCellEditor : ToolUp.Platform.AgGrid+AgCellEditor { get }
-ToolUp.Platform.AgGrid+AgCellEditor+Tags (class)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.CheckboxCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.DateCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.DateStringCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.LargeTextCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.NumberCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.SelectCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgCellEditor+Tags.TextCellEditor : System.Int32 (literal)
-ToolUp.Platform.AgGrid+AgGridModuleConfig (class)
-ToolUp.Platform.AgGrid+AgGridModuleConfig..ctor(System.Object[], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.AgGrid+AgGridModuleConfig.LicenseKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+AgGridModuleConfig.Modules : System.Object[] { get }
 ToolUp.Platform.AgGrid+AgGridModuleConfigModule (class)
-ToolUp.Platform.AgGrid+AgGridModuleConfigModule.community : ToolUp.Platform.AgGrid+AgGridModuleConfig { get }
-ToolUp.Platform.AgGrid+AgGrid`1 (class)
-ToolUp.Platform.AgGrid+AgGrid`1.alwaysShowVerticalScroll(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.animateRows(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.cacheQuickFilter(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.columnDefs(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IColumnDef`1[row]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.dataTypeDefinitions(System.Object) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.debug(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.defaultColDef`1(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.domLayout(ToolUp.Platform.AgGrid+DOMLayout) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.enableBrowserTooltips(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.enableCellTextSelection(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.enableCharts(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.enableRtl(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.ensureDomOrder(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.enterNavigatesVertically(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowClass(Microsoft.FSharp.Core.FSharpFunc`2[row, System.String[]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowClass(Microsoft.FSharp.Core.FSharpFunc`2[row, System.String]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowHeight(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+IRowHeightParameters`1[row], Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowId(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1[row], System.String]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowId(Microsoft.FSharp.Core.FSharpFunc`2[row, System.String]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.getRowStyle(Microsoft.FSharp.Core.FSharpFunc`2[row, System.Object]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.grid(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IAgGridProp`1[row]]) : Fable.React.ReactElement
-ToolUp.Platform.AgGrid+AgGrid`1.groupHeaderHeight`1(a) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.headerHeight`1(a) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.isRowSelectable(Microsoft.FSharp.Core.FSharpFunc`2[row, System.Boolean]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.key(System.Guid) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.key(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.key(System.String) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.loadingOverlayComponent(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.localeText(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.localeText(ToolUp.Platform.AgGrid+LocaleText) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.multiSortKey(System.String) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.noRowsOverlayComponent(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onBodyScroll(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellClicked`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellContextMenu`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellDoubleClicked`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellEditRequest(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellEditingStarted`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellEditingStopped`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellFocused`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1[row], a]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellKeyDown`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellMouseDown`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellMouseOut`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellMouseOver`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onCellValueChanged`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnEverythingChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnGroupOpened(Microsoft.FSharp.Core.FSharpFunc`2[<>f__AnonymousType1831441435`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnMoved(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnPinned(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnPivotChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnResized(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnRowGroupChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnValueChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onColumnVisible(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onFilterChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+IGridApi`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onFirstDataRendered(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onGridReady`1(Microsoft.FSharp.Core.FSharpFunc`2[<>f__AnonymousType2249526704`4[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IGridReadyEvent`1[row], a], a], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onGridSizeChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onModelUpdated(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onPaginationChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onPasteEnd(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onPasteStart(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowClicked`1(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDataUpdated(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDoubleClicked(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDragEnd(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDragEnter(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDragLeave(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowDragMove(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowEditingStarted(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowEditingStopped(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onRowSelected(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onSelectionChanged(Microsoft.FSharp.Core.FSharpFunc`2[row[], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onSortChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onToolPanelVisibleChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.onViewportChanged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1[row], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.overlayLoadingTemplate(System.String) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.overlayNoRowsTemplate(System.String) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.pagination(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.paginationAutoPageSize(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.paginationPageSize(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.pinnedBottomRowData(row[]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.pinnedTopRowData(row[]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.popupParent`1(a) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.quickFilterText(System.String) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.readOnlyEdit(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowClassRules(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[row, System.Boolean]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowData(System.Collections.Generic.IEnumerable`1[row]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowData(row[]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowDeselection(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowDragManaged(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowHeight(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowSelection(ToolUp.Platform.AgGrid+RowSelection) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.rowStyle(System.Object) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.singleClickEdit(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.stopEditingWhenCellsLoseFocus(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressAutoSize(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressDragLeaveHidesColumns(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressMovableColumns(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressMultiSort(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressNoRowsOverlay(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressRowClickSelection(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressRowHoverHighlight(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.suppressScrollOnNewData(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.theme(System.Object) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.tooltipHideDelay(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.tooltipInteraction(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.tooltipMouseTrack(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid+AgGrid`1.tooltipShowDelay(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
+ToolUp.Platform.AgGrid+AgGridModuleConfigModule.community : Feliz.AgGrid+AgGridModuleConfig { get }
 ToolUp.Platform.AgGrid+CallbackParams (class)
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1 (class)
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1..ctor(ToolUp.Platform.AgGrid+IGridApi`1[row], System.Int32, ToolUp.Platform.AgGrid+IColumn, System.Boolean)
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1.column : ToolUp.Platform.AgGrid+IColumn { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1.isFullWidthCell : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellFocusedEvent`1.rowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2 (class)
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2..ctor(Microsoft.FSharp.Core.FSharpOption`1[value], Microsoft.FSharp.Core.FSharpOption`1[row], ToolUp.Platform.AgGrid+IRowNode`1[row], ToolUp.Platform.AgGrid+IColumnDef`1[row], ToolUp.Platform.AgGrid+IColumn, ToolUp.Platform.AgGrid+IGridApi`1[row], System.Int32)
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.colDef : ToolUp.Platform.AgGrid+IColumnDef`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.column : ToolUp.Platform.AgGrid+IColumn { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.rowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2.value : Microsoft.FSharp.Core.FSharpOption`1[value] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1..ctor(row, System.Int32, System.String[], ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object)
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1.data : row { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1.level : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGetRowIdParams`1.parentKeys : System.String[] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IGridReadyEvent`1 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IGridReadyEvent`1..ctor(ToolUp.Platform.AgGrid+IGridApi`1[row])
-ToolUp.Platform.AgGrid+CallbackParams+IGridReadyEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1..ctor(System.String, ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.String)
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1.source : System.String { get }
-ToolUp.Platform.AgGrid+CallbackParams+IPasteEvent`1.type : System.String { get }
-ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1..ctor(System.String[][], ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object)
-ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1.data : System.String[][] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2 (class)
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2..ctor(ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation, Microsoft.FSharp.Core.FSharpOption`1[value], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IRowNode`1[row]], Microsoft.FSharp.Core.FSharpOption`1[row], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.Unit]], ToolUp.Platform.AgGrid+IGridApi`1[row])
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.hideTooltipCallback : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.location : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.node : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IRowNode`1[row]] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.rowIndex : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.value : Microsoft.FSharp.Core.FSharpOption`1[value] { get }
-ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2.valueFormatted : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2..ctor(value, value, ToolUp.Platform.AgGrid+IRowNode`1[row], row, ToolUp.Platform.AgGrid+IColumn, ToolUp.Platform.AgGrid+IColumnDef`1[row], ToolUp.Platform.AgGrid+IGridApi`1[row])
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.colDef : ToolUp.Platform.AgGrid+IColumnDef`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.column : ToolUp.Platform.AgGrid+IColumn { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.data : row { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.newValue : value { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.oldValue : value { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2.rowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2 (class)
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2..ctor(Microsoft.FSharp.Core.FSharpOption`1[value], Microsoft.FSharp.Core.FSharpOption`1[row], ToolUp.Platform.AgGrid+IRowNode`1[row], ToolUp.Platform.AgGrid+IColumnDef`1[row], ToolUp.Platform.AgGrid+IColumn, ToolUp.Platform.AgGrid+IGridApi`1[row], System.Int32)
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.colDef : ToolUp.Platform.AgGrid+IColumnDef`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.column : ToolUp.Platform.AgGrid+IColumn { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.rowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2.value : Microsoft.FSharp.Core.FSharpOption`1[value] { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation (class)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.AdvancedFilter : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.Cell : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.ColumnToolPanelColumn : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.ColumnToolPanelColumnGroup : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.FilterToolPanelColumnGroup : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.FullWidthRow : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.Header : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.HeaderGroup : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsAdvancedFilter : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsCell : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsColumnToolPanelColumn : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsColumnToolPanelColumnGroup : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsFilterToolPanelColumnGroup : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsFullWidthRow : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsHeader : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsHeaderGroup : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsMenu : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsPivotColumnsList : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsRowGroupColumnsList : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsSetFilterValue : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.IsValueColumnsList : System.Boolean { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.Menu : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.PivotColumnsList : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.RowGroupColumnsList : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.SetFilterValue : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation.ValueColumnsList : ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags (class)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.AdvancedFilter : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.Cell : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.ColumnToolPanelColumn : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.ColumnToolPanelColumnGroup : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.FilterToolPanelColumnGroup : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.FullWidthRow : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.Header : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.HeaderGroup : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.Menu : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.PivotColumnsList : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.RowGroupColumnsList : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.SetFilterValue : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CallbackParams+TooltipLocation+Tags.ValueColumnsList : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType (class)
-ToolUp.Platform.AgGrid+CellDataType.Boolean : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType.CellDataTypeText : System.String { get }
-ToolUp.Platform.AgGrid+CellDataType.Date : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType.DateString : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType.IsBoolean : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsCustom : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsDate : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsDateString : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsNumber : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsObject : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.IsText : System.Boolean { get }
-ToolUp.Platform.AgGrid+CellDataType.Number : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType.Object : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+CellDataType.Text : ToolUp.Platform.AgGrid+CellDataType { get }
-ToolUp.Platform.AgGrid+CellDataType+Custom (class)
-ToolUp.Platform.AgGrid+CellDataType+Custom.Item : System.String { get }
-ToolUp.Platform.AgGrid+CellDataType+Tags (class)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Boolean : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Custom : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Date : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.DateString : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Number : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Object : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CellDataType+Tags.Text : System.Int32 (literal)
-ToolUp.Platform.AgGrid+ColumnDef`1 (class)
-ToolUp.Platform.AgGrid+ColumnDef`1.autoComparator`1() : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.autoHeaderHeight`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellClassRules`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, System.Boolean]]]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellClassRules`1(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[row, System.Boolean]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellClass`2(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, a]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellDataType`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellDataType`1(ToolUp.Platform.AgGrid+CellDataType) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditorParams`1(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditorParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditorPopupPosition`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditorPopup`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditorSelector`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], System.Object]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditor`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditor`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellEditor`1(ToolUp.Platform.AgGrid+AgCellEditor) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFadeDuration`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFilterParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFilterParams`1(ToolUp.Platform.AgGrid+DateFilterParams) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFilterParams`1(ToolUp.Platform.AgGrid+NumberFilterParams) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFilterParams`1(ToolUp.Platform.AgGrid+TextFilterParams) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellFlashDuration`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellRendererPopup`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellRendererSelector`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], System.Object]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.cellStyle`2(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, a]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.checkboxSelection`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.colId`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.columnGroupShow`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.columnType`1(ToolUp.Platform.AgGrid+ColumnType) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.comparator`2(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.create`1(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]]) : ToolUp.Platform.AgGrid+IColumnDef`1[row]
-ToolUp.Platform.AgGrid+ColumnDef`1.editable`1(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, System.Boolean]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.editable`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.enableCellChangeFlash`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.equals`1(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[value, System.Boolean]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.field`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.field`2(Microsoft.FSharp.Core.FSharpFunc`2[row, a]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.filter`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.filter`1(ToolUp.Platform.AgGrid+RowFilter) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.flex`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.floatingFilterComponentParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.floatingFilterComponent`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.floatingFilter`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerCheckboxSelection`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerClass`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerComponentParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerComponent`3(Microsoft.FSharp.Core.FSharpFunc`2[colId, Microsoft.FSharp.Core.FSharpFunc`2[props, Fable.React.ReactElement]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerName`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.headerTooltip`2(a) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.hide`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.loadingCellRendererParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.loadingCellRenderer`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.lockPinned`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.lockPosition`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.lockPosition`1(System.String) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.lockVisible`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.mainMenuItems`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String[]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.mainMenuItems`1(System.String[]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.maxWidth`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.minWidth`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.onCellClicked`1(Microsoft.FSharp.Core.FSharpFunc`2[value, Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.pinned`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.resizable`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.rowDrag`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.singleClickEdit`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.sort`1(ToolUp.Platform.AgGrid+SortDirection) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.sortable`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressColumnsToolPanel`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressFiltersToolPanel`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressFloatingFilterButton`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressHeaderMenuButton`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressKeyboardEvent`3(Microsoft.FSharp.Core.FSharpFunc`2[a, b]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.suppressMovable`1() : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.tooltipComponentParams`1(System.Object) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.tooltipComponent`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2[row, value], Fable.React.ReactElement]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.tooltipValueGetter`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+ITooltipParams`2[row, value], Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.useValueFormatterForExport`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.useValueParserForImport`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.valueFormatter`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IValueParams`2[row, value], System.String]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.valueGetter`1(Microsoft.FSharp.Core.FSharpFunc`2[row, value]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.valueParser`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2[row, value], System.Object]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.valueSetter`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2[row, value], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.valueSetter`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IValueChangedParams`2[row, value], System.Boolean]) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.width`1(System.Int32) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnDef`1.wrapHeaderText`1(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGrid+ColumnGroup`1 (class)
-ToolUp.Platform.AgGrid+ColumnGroup`1.create(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IColumnGroupDefProp`1[row]], System.Collections.Generic.IEnumerable`1[ToolUp.Platform.AgGrid+IColumnDef`1[row]]) : ToolUp.Platform.AgGrid+IColumnDef`1[row]
-ToolUp.Platform.AgGrid+ColumnGroup`1.headerName(System.String) : ToolUp.Platform.AgGrid+IColumnGroupDefProp`1[row]
-ToolUp.Platform.AgGrid+ColumnGroup`1.marryChildren(System.Boolean) : ToolUp.Platform.AgGrid+IColumnGroupDefProp`1[row]
-ToolUp.Platform.AgGrid+ColumnGroup`1.openByDefault(System.Boolean) : ToolUp.Platform.AgGrid+IColumnGroupDefProp`1[row]
-ToolUp.Platform.AgGrid+ColumnType (class)
-ToolUp.Platform.AgGrid+ColumnType.IsNumericColumn : System.Boolean { get }
-ToolUp.Platform.AgGrid+ColumnType.IsRightAligned : System.Boolean { get }
-ToolUp.Platform.AgGrid+ColumnType.NumericColumn : ToolUp.Platform.AgGrid+ColumnType { get }
-ToolUp.Platform.AgGrid+ColumnType.RightAligned : ToolUp.Platform.AgGrid+ColumnType { get }
-ToolUp.Platform.AgGrid+ColumnType.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+ColumnType+Tags (class)
-ToolUp.Platform.AgGrid+ColumnType+Tags.NumericColumn : System.Int32 (literal)
-ToolUp.Platform.AgGrid+ColumnType+Tags.RightAligned : System.Int32 (literal)
-ToolUp.Platform.AgGrid+CsvExportParams (class)
-ToolUp.Platform.AgGrid+CsvExportParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]])
-ToolUp.Platform.AgGrid+CsvExportParams.allColumns : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.appendContent : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.columnKeys : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.columnSeparator : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.fileName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.onlySelected : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.onlySelectedAllPages : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.prependContent : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.processCellCallback : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.processHeaderCallback : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.skipColumnGroupHeaders : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.skipColumnHeaders : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.skipPinnedBottom : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.skipPinnedTop : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.skipRowGroups : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+CsvExportParams.suppressQuotes : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
+ToolUp.Platform.AgGrid+CallbackParams.AdvancedFilter : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.Cell : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.ColumnToolPanelColumn : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.ColumnToolPanelColumnGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.FilterToolPanelColumnGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.FullWidthRow : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.Header : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.HeaderGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.Menu : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.PivotColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.RowGroupColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.SetFilterValue : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
+ToolUp.Platform.AgGrid+CallbackParams.ValueColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
 ToolUp.Platform.AgGrid+CsvExportParamsModule (class)
-ToolUp.Platform.AgGrid+CsvExportParamsModule.empty : ToolUp.Platform.AgGrid+CsvExportParams { get }
-ToolUp.Platform.AgGrid+DOMLayout (class)
-ToolUp.Platform.AgGrid+DOMLayout.AutoHeight : ToolUp.Platform.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid+DOMLayout.IsAutoHeight : System.Boolean { get }
-ToolUp.Platform.AgGrid+DOMLayout.IsNormal : System.Boolean { get }
-ToolUp.Platform.AgGrid+DOMLayout.IsPrint : System.Boolean { get }
-ToolUp.Platform.AgGrid+DOMLayout.LayoutText : System.String { get }
-ToolUp.Platform.AgGrid+DOMLayout.Normal : ToolUp.Platform.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid+DOMLayout.Print : ToolUp.Platform.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid+DOMLayout.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+DOMLayout+Tags (class)
-ToolUp.Platform.AgGrid+DOMLayout+Tags.AutoHeight : System.Int32 (literal)
-ToolUp.Platform.AgGrid+DOMLayout+Tags.Normal : System.Int32 (literal)
-ToolUp.Platform.AgGrid+DOMLayout+Tags.Print : System.Int32 (literal)
-ToolUp.Platform.AgGrid+DateFilterParams (class)
-ToolUp.Platform.AgGrid+DateFilterParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Int32]]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.AgGrid+DateFilterParams.browserDatePicker : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.buttons : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.closeOnApply : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.comparator : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Int32]]] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.dateFormat : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.debounceMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.defaultOption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.filterOptions : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.inRangeInclusive : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.maxNumConditions : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.maxValidYear : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+DateFilterParams.minValidYear : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.AgGrid+CsvExportParamsModule.empty : Feliz.AgGrid+CsvExportParams { get }
 ToolUp.Platform.AgGrid+DateFilterParamsModule (class)
-ToolUp.Platform.AgGrid+DateFilterParamsModule.empty : ToolUp.Platform.AgGrid+DateFilterParams { get }
+ToolUp.Platform.AgGrid+DateFilterParamsModule.empty : Feliz.AgGrid+DateFilterParams { get }
 ToolUp.Platform.AgGrid+GridApiRegistry (class)
 ToolUp.Platform.AgGrid+GridApiRegistry.listKeys() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Platform.AgGrid+GridApiRegistry.publish`1(System.String, ToolUp.Platform.AgGrid+IGridApi`1[row]) : System.Void
+ToolUp.Platform.AgGrid+GridApiRegistry.publish`1(System.String, Feliz.AgGrid+IGridApi`1[row]) : System.Void
 ToolUp.Platform.AgGrid+GridApiRegistry.remove(System.String) : System.Void
-ToolUp.Platform.AgGrid+GridApiRegistry.tryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IGridApi`1[System.Object]]
+ToolUp.Platform.AgGrid+GridApiRegistry.tryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+IGridApi`1[System.Object]]
 ToolUp.Platform.AgGrid+GridEvents (class)
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2 (class)
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2..ctor(Microsoft.FSharp.Core.FSharpOption`1[value], Microsoft.FSharp.Core.FSharpOption`1[row], ToolUp.Platform.AgGrid+IRowNode`1[row], ToolUp.Platform.AgGrid+IColumnDef`1[row], ToolUp.Platform.AgGrid+IColumn, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.Object)
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.colDef : ToolUp.Platform.AgGrid+IColumnDef`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.column : ToolUp.Platform.AgGrid+IColumn { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.context : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.event : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.rowIndex : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.rowPinned : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+GridEvents+ICellEvent`2.value : Microsoft.FSharp.Core.FSharpOption`1[value] { get }
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1 (class)
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IColumn], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IColumn[]], ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.String)
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1.column : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IColumn] { get }
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1.columns : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+IColumn[]] { get }
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+IColumnEvent`1.source : System.String { get }
-ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1 (class)
-ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1..ctor(ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.Object)
-ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+IGridDisplayEvent`1.event : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1 (class)
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1..ctor(Microsoft.FSharp.Core.FSharpOption`1[row], ToolUp.Platform.AgGrid+IRowNode`1[row], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.Object)
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.event : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.rowIndex : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+GridEvents+IRowEvent`1.rowPinned : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1 (class)
-ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1..ctor(ToolUp.Platform.AgGrid+IGridApi`1[row], System.Object, System.String)
-ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1.context : System.Object { get }
-ToolUp.Platform.AgGrid+GridEvents+ISortChangedEvent`1.source : System.String { get }
-ToolUp.Platform.AgGrid+IAgGridProp`1 (interface)
-ToolUp.Platform.AgGrid+ICellRange (class)
-ToolUp.Platform.AgGrid+ICellRange..ctor(System.String, System.Object, System.Object)
-ToolUp.Platform.AgGrid+ICellRange.endRow : System.Object { get }
-ToolUp.Platform.AgGrid+ICellRange.endRowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+ICellRange.id : System.String { get }
-ToolUp.Platform.AgGrid+ICellRange.startRow : System.Object { get }
-ToolUp.Platform.AgGrid+ICellRange.startRowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+IColumn (class)
-ToolUp.Platform.AgGrid+IColumn..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String])
-ToolUp.Platform.AgGrid+IColumn.getColId : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String] { get }
-ToolUp.Platform.AgGrid+IColumnDefProp`2 (interface)
-ToolUp.Platform.AgGrid+IColumnDef`1 (interface)
-ToolUp.Platform.AgGrid+IColumnGroupDefProp`1 (interface)
-ToolUp.Platform.AgGrid+IFilterModelEntry (class)
-ToolUp.Platform.AgGrid+IFilterModelEntry..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object[]], Microsoft.FSharp.Core.FSharpOption`1[System.Object[]])
-ToolUp.Platform.AgGrid+IFilterModelEntry.conditions : Microsoft.FSharp.Core.FSharpOption`1[System.Object[]] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.dateFrom : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.dateTo : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.filter : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.filterTo : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.filterType : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.operator : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.type : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IFilterModelEntry.values : Microsoft.FSharp.Core.FSharpOption`1[System.Object[]] { get }
 ToolUp.Platform.AgGrid+IFilterModelEntryModule (class)
-ToolUp.Platform.AgGrid+IFilterModelEntryModule.empty : ToolUp.Platform.AgGrid+IFilterModelEntry { get }
-ToolUp.Platform.AgGrid+IGridApi`1 (interface)
-ToolUp.Platform.AgGrid+IGridApi`1.autoSizeColumns(System.String[]) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.deselectAll() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.deselectAllFiltered() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.destroyFilter(System.String) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.ensureNodeVisible(ToolUp.Platform.AgGrid+IRowNode`1[row], System.Object) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.exportDataAsCsv(System.Object) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.forEachNodeAfterFilter(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+IRowNode`1[row], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.Unit]]) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.getCellEditorInstances(System.Object) : System.Object[]
-ToolUp.Platform.AgGrid+IGridApi`1.getCellRanges() : ToolUp.Platform.AgGrid+ICellRange[]
-ToolUp.Platform.AgGrid+IGridApi`1.getCellRendererInstances(System.Object) : System.Object[]
-ToolUp.Platform.AgGrid+IGridApi`1.getColumns() : ToolUp.Platform.AgGrid+IColumn[]
-ToolUp.Platform.AgGrid+IGridApi`1.getFilterModel() : System.Object
-ToolUp.Platform.AgGrid+IGridApi`1.getRowNode(System.String) : ToolUp.Platform.AgGrid+IRowNode`1[row]
-ToolUp.Platform.AgGrid+IGridApi`1.getSelectedNodes() : ToolUp.Platform.AgGrid+IRowNode`1[row][]
-ToolUp.Platform.AgGrid+IGridApi`1.getSelectedRows() : row[]
-ToolUp.Platform.AgGrid+IGridApi`1.isAnyFilterPresent() : System.Boolean
-ToolUp.Platform.AgGrid+IGridApi`1.isDestroyed() : System.Boolean
-ToolUp.Platform.AgGrid+IGridApi`1.moveColumnByIndex(System.Int32, System.Int32) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.redrawRows() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.refreshCells() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.selectAll() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.selectAllFiltered() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.selectAllFilteredAndCurrentPage() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.selectAllOnCurrentPage() : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.setFilterModel(System.Object) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.setGridOption(System.String, System.Object) : System.Void
-ToolUp.Platform.AgGrid+IGridApi`1.setNodesSelected(System.Object) : System.Void
-ToolUp.Platform.AgGrid+IRowHeightParameters`1 (class)
-ToolUp.Platform.AgGrid+IRowHeightParameters`1..ctor(Microsoft.FSharp.Core.FSharpOption`1[row], ToolUp.Platform.AgGrid+IRowNode`1[row], ToolUp.Platform.AgGrid+IGridApi`1[row])
-ToolUp.Platform.AgGrid+IRowHeightParameters`1.api : ToolUp.Platform.AgGrid+IGridApi`1[row] { get }
-ToolUp.Platform.AgGrid+IRowHeightParameters`1.data : Microsoft.FSharp.Core.FSharpOption`1[row] { get }
-ToolUp.Platform.AgGrid+IRowHeightParameters`1.node : ToolUp.Platform.AgGrid+IRowNode`1[row] { get }
-ToolUp.Platform.AgGrid+IRowNode`1 (class)
-ToolUp.Platform.AgGrid+IRowNode`1..ctor(System.String, row, Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit], System.Int32, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.AgGrid+IRowNode`1.data : row { get }
-ToolUp.Platform.AgGrid+IRowNode`1.displayed : System.Boolean { get }
-ToolUp.Platform.AgGrid+IRowNode`1.id : System.String { get }
-ToolUp.Platform.AgGrid+IRowNode`1.isFullWidthCell : System.Boolean { get }
-ToolUp.Platform.AgGrid+IRowNode`1.isHovered : System.Boolean { get }
-ToolUp.Platform.AgGrid+IRowNode`1.isSelected : System.Boolean { get }
-ToolUp.Platform.AgGrid+IRowNode`1.level : System.Int32 { get }
-ToolUp.Platform.AgGrid+IRowNode`1.rowIndex : System.Int32 { get }
-ToolUp.Platform.AgGrid+IRowNode`1.rowPinned : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+IRowNode`1.rowTop : System.Int32 { get }
-ToolUp.Platform.AgGrid+IRowNode`1.setData : Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit] { get }
-ToolUp.Platform.AgGrid+IRowNode`1.setSelected : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit] { get }
-ToolUp.Platform.AgGrid+IRowNode`1.updateData : Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.Unit] { get }
-ToolUp.Platform.AgGrid+LocaleText (class)
-ToolUp.Platform.AgGrid+LocaleText..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.AgGrid+LocaleText.applyFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.autosizeAllColumns : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.autosizeThisColumn : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.average : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.blank : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.clearFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.contains : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.count : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.endsWith : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.equals : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.filterOoo : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.greaterThan : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.inRange : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.lessThan : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.loadingOoo : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.max : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.min : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.noRowsToShow : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.notBlank : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.notContains : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.notEqual : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.of : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.page : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.pinColumn : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.resetColumns : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.resetFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.startsWith : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.sum : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+LocaleText.to : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AgGrid+IFilterModelEntryModule.empty : Feliz.AgGrid+IFilterModelEntry { get }
 ToolUp.Platform.AgGrid+LocaleTextModule (class)
-ToolUp.Platform.AgGrid+LocaleTextModule.empty : ToolUp.Platform.AgGrid+LocaleText { get }
-ToolUp.Platform.AgGrid+NumberFilterParams (class)
-ToolUp.Platform.AgGrid+NumberFilterParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Double]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])
-ToolUp.Platform.AgGrid+NumberFilterParams.allowedCharPattern : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.buttons : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.closeOnApply : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.debounceMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.defaultOption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.filterOptions : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.inRangeInclusive : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.includeBlanksInEquals : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.includeBlanksInRange : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.maxNumConditions : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+NumberFilterParams.numberParser : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Double]] { get }
+ToolUp.Platform.AgGrid+LocaleTextModule.empty : Feliz.AgGrid+LocaleText { get }
 ToolUp.Platform.AgGrid+NumberFilterParamsModule (class)
-ToolUp.Platform.AgGrid+NumberFilterParamsModule.empty : ToolUp.Platform.AgGrid+NumberFilterParams { get }
-ToolUp.Platform.AgGrid+RowFilter (class)
-ToolUp.Platform.AgGrid+RowFilter.Date : ToolUp.Platform.AgGrid+RowFilter { get }
-ToolUp.Platform.AgGrid+RowFilter.FilterText : System.String { get }
-ToolUp.Platform.AgGrid+RowFilter.IsDate : System.Boolean { get }
-ToolUp.Platform.AgGrid+RowFilter.IsNumber : System.Boolean { get }
-ToolUp.Platform.AgGrid+RowFilter.IsText : System.Boolean { get }
-ToolUp.Platform.AgGrid+RowFilter.Number : ToolUp.Platform.AgGrid+RowFilter { get }
-ToolUp.Platform.AgGrid+RowFilter.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+RowFilter.Text : ToolUp.Platform.AgGrid+RowFilter { get }
-ToolUp.Platform.AgGrid+RowFilter+Tags (class)
-ToolUp.Platform.AgGrid+RowFilter+Tags.Date : System.Int32 (literal)
-ToolUp.Platform.AgGrid+RowFilter+Tags.Number : System.Int32 (literal)
-ToolUp.Platform.AgGrid+RowFilter+Tags.Text : System.Int32 (literal)
-ToolUp.Platform.AgGrid+RowSelection (class)
-ToolUp.Platform.AgGrid+RowSelection.IsMultiple : System.Boolean { get }
-ToolUp.Platform.AgGrid+RowSelection.IsSingle : System.Boolean { get }
-ToolUp.Platform.AgGrid+RowSelection.Multiple : ToolUp.Platform.AgGrid+RowSelection { get }
-ToolUp.Platform.AgGrid+RowSelection.Single : ToolUp.Platform.AgGrid+RowSelection { get }
-ToolUp.Platform.AgGrid+RowSelection.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+RowSelection+Tags (class)
-ToolUp.Platform.AgGrid+RowSelection+Tags.Multiple : System.Int32 (literal)
-ToolUp.Platform.AgGrid+RowSelection+Tags.Single : System.Int32 (literal)
-ToolUp.Platform.AgGrid+SortDirection (class)
-ToolUp.Platform.AgGrid+SortDirection.Asc : ToolUp.Platform.AgGrid+SortDirection { get }
-ToolUp.Platform.AgGrid+SortDirection.Desc : ToolUp.Platform.AgGrid+SortDirection { get }
-ToolUp.Platform.AgGrid+SortDirection.IsAsc : System.Boolean { get }
-ToolUp.Platform.AgGrid+SortDirection.IsDesc : System.Boolean { get }
-ToolUp.Platform.AgGrid+SortDirection.Tag : System.Int32 { get }
-ToolUp.Platform.AgGrid+SortDirection+Tags (class)
-ToolUp.Platform.AgGrid+SortDirection+Tags.Asc : System.Int32 (literal)
-ToolUp.Platform.AgGrid+SortDirection+Tags.Desc : System.Int32 (literal)
-ToolUp.Platform.AgGrid+TextFilterParams (class)
-ToolUp.Platform.AgGrid+TextFilterParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String[]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Boolean]])
-ToolUp.Platform.AgGrid+TextFilterParams.buttons : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.caseSensitive : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.closeOnApply : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.debounceMs : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.defaultOption : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.filterOptions : Microsoft.FSharp.Core.FSharpOption`1[System.String[]] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.maxNumConditions : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.textMatcher : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Boolean]] { get }
-ToolUp.Platform.AgGrid+TextFilterParams.trimInput : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
+ToolUp.Platform.AgGrid+NumberFilterParamsModule.empty : Feliz.AgGrid+NumberFilterParams { get }
 ToolUp.Platform.AgGrid+TextFilterParamsModule (class)
-ToolUp.Platform.AgGrid+TextFilterParamsModule.empty : ToolUp.Platform.AgGrid+TextFilterParams { get }
+ToolUp.Platform.AgGrid+TextFilterParamsModule.empty : Feliz.AgGrid+TextFilterParams { get }
 ToolUp.Platform.AgGrid+Theme (class)
 ToolUp.Platform.AgGrid+Theme.colorSchemeDark : System.Object { get }
 ToolUp.Platform.AgGrid+Theme.colorSchemeDarkBlue : System.Object { get }
@@ -3165,7 +2277,7 @@ ToolUp.Platform.AgGrid+Theme.themeBalham : System.Object { get }
 ToolUp.Platform.AgGrid+Theme.themeMaterial : System.Object { get }
 ToolUp.Platform.AgGrid+Theme.themeQuartz : System.Object { get }
 ToolUp.Platform.AgGrid+Theme.withCustomCss(System.Object, System.Object) : System.Object
-ToolUp.Platform.AgGrid+Theme.withParams(ToolUp.Platform.AgGrid+ThemeParams, System.Object) : System.Object
+ToolUp.Platform.AgGrid+Theme.withParams(Feliz.AgGrid+ThemeParams, System.Object) : System.Object
 ToolUp.Platform.AgGrid+Theme.withPart(System.Object, System.Object) : System.Object
 ToolUp.Platform.AgGrid+Theme.withoutPart(System.String, System.Object) : System.Object
 ToolUp.Platform.AgGrid+ThemeClass (class)
@@ -3174,41 +2286,8 @@ ToolUp.Platform.AgGrid+ThemeClass.AlpineDark : System.String { get }
 ToolUp.Platform.AgGrid+ThemeClass.Balham : System.String { get }
 ToolUp.Platform.AgGrid+ThemeClass.BalhamDark : System.String { get }
 ToolUp.Platform.AgGrid+ThemeClass.Material : System.String { get }
-ToolUp.Platform.AgGrid+ThemeParams (class)
-ToolUp.Platform.AgGrid+ThemeParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
-ToolUp.Platform.AgGrid+ThemeParams.accentColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.backgroundColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.borderColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.borderRadius : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+ThemeParams.fontFamily : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.fontSize : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+ThemeParams.foregroundColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.headerBackgroundColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.headerHeight : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+ThemeParams.headerTextColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.oddRowBackgroundColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AgGrid+ThemeParams.rowHeight : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+ThemeParams.spacing : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
-ToolUp.Platform.AgGrid+ThemeParams.wrapperBorderRadius : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.AgGrid+ThemeParamsModule (class)
-ToolUp.Platform.AgGrid+ThemeParamsModule.empty : ToolUp.Platform.AgGrid+ThemeParams { get }
-ToolUp.Platform.AgGridEnterprise (class)
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.copyHeadersToClipboard.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.enableFillHandle.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.enableRangeHandle.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.enableRangeSelection.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.onRangeSelectionChanged.Static`6(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.FSharpFunc`2[c, Microsoft.FSharp.Core.FSharpFunc`2[d, e]]]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.processDataFromClipboard.Static`1(Microsoft.FSharp.Core.FSharpFunc`2[System.String[][], System.String[][]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.processDataFromClipboard.Static`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AgGrid+CallbackParams+IProcessDataFromClipboardParams`1[row], System.String[][]]) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.suppressAggFuncInHeader.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.suppressClipboardApi.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.suppressCopyRowsToClipboard.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.suppressCopySingleCellRanges.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.suppressMultiRangeSelection.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.undoRedoCellEditing.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.AgGrid`1.undoRedoCellEditingLimit.Static`1(System.Int32) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGridEnterprise.ColumnDef`1.enableRowGroup.Static`2(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
-ToolUp.Platform.AgGridEnterprise.ColumnDef`1.rowGroup.Static`2(System.Boolean) : ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]
+ToolUp.Platform.AgGrid+ThemeParamsModule.empty : Feliz.AgGrid+ThemeParams { get }
 ToolUp.Platform.Api (class)
 ToolUp.Platform.Api.makeProxy`1(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.RemoteBuilderOptions, ToolUp.Remoting.Client.RemoteBuilderOptions]]) : TApi
 ToolUp.Platform.AriaProp (class)
@@ -3382,8 +2461,8 @@ ToolUp.Platform.BundleConstants.teamConfig : System.String { get }
 ToolUp.Platform.BundleConstants.teamManager : System.String { get }
 ToolUp.Platform.BundleConstants.toastCentre : System.String { get }
 ToolUp.Platform.CellProvenance (class)
-ToolUp.Platform.CellProvenance.AgGrid`1.showProvenanceOverlay.Static`1(System.Boolean) : ToolUp.Platform.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.CellProvenance.ColumnDef`1.provenance.Static`2(Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CellProvenance+CellProvenance]]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AgGrid+IColumnDefProp`2[row, value]]
+ToolUp.Platform.CellProvenance.AgGrid`1.showProvenanceOverlay.Static`1(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
+ToolUp.Platform.CellProvenance.ColumnDef`1.provenance.Static`2(Microsoft.FSharp.Core.FSharpFunc`2[row, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CellProvenance+CellProvenance]]]) : Microsoft.FSharp.Collections.FSharpList`1[Feliz.AgGrid+IColumnDefProp`2[row, value]]
 ToolUp.Platform.CellProvenance.ProvenanceOverlay(System.Object) : Fable.React.ReactElement
 ToolUp.Platform.CellProvenance.isProvenanceOverlayEnabled() : System.Boolean
 ToolUp.Platform.CellProvenance.provenanceClickKey : System.String (literal)
@@ -3632,7 +2711,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]])
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]])
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3650,7 +2729,7 @@ ToolUp.Platform.ClientConfig.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOpti
 ToolUp.Platform.ClientConfig.EnableElmishConsoleTrace : System.Boolean { get }
 ToolUp.Platform.ClientConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.ClientConfig.GlobalOverlays : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]] { get }
-ToolUp.Platform.ClientConfig.GridModules : ToolUp.Platform.AgGrid+AgGridModuleConfig { get }
+ToolUp.Platform.ClientConfig.GridModules : Feliz.AgGrid+AgGridModuleConfig { get }
 ToolUp.Platform.ClientConfig.Handlers : ToolUp.Platform.ClientHandlerRegistry { get }
 ToolUp.Platform.ClientConfig.HealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
 ToolUp.Platform.ClientConfig.HomeModule : ToolUp.Platform.HomeModuleMode { get }
@@ -3695,7 +2774,7 @@ ToolUp.Platform.ClientConfigDefaults.fromBundleConstants(ToolUp.Platform.ClientC
 ToolUp.Platform.ClientConfigDefaults.parseCaseToken`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, T]]) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.Platform.ClientConfigDefaults.parseNoDefault`1(System.String, T, T) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides (class)
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode])
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode], Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode])
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.AppLogo : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.AppName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -3704,7 +2783,7 @@ ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataIngestionAdmin : 
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataManager : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.EnableElmishConsoleTrace : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+AgGridModuleConfig] { get }
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules : Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.Handlers : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.PublicEntryDispatchers : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.ShowDebugOnlyModules : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
@@ -5104,6 +4183,12 @@ ToolUp.Platform.TeamManagerMode+Tags.ConfiguredTeamManager : System.Int32 (liter
 ToolUp.Platform.TeamManagerMode+Tags.DefaultTeamManager : System.Int32 (literal)
 ToolUp.Platform.TeamManagerMode+Tags.ExternalTeamManager : System.Int32 (literal)
 ToolUp.Platform.TeamManagerMode+Tags.NoTeamManager : System.Int32 (literal)
+ToolUp.Platform.Telemetry (class)
+ToolUp.Platform.Telemetry.EndpointPath : System.String (literal)
+ToolUp.Platform.Telemetry.isPermitted(ToolUp.Platform.ConsentDecision) : System.Boolean
+ToolUp.Platform.Telemetry.track(ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Telemetry.trackNow(ToolUp.Platform.TelemetryEvent) : System.Void
+ToolUp.Platform.Telemetry.trackVia(ToolUp.Platform.Consent.IConsentProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TelemetryEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ToastCentreMode (class)
 ToolUp.Platform.ToastCentreMode.DefaultToastCentre : ToolUp.Platform.ToastCentreMode { get }
 ToolUp.Platform.ToastCentreMode.IsCustomToastCentre : System.Boolean { get }

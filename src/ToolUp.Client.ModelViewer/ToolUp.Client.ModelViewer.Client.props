@@ -1,6 +1,6 @@
 <Project>
   <!-- Phase 125 — retained as an empty marker per the client-only
-       companion convention (see AgGridEnterprise.Client.props): source
+       companion convention (see Feliz.AgGrid.Enterprise.Client.props): source
        files ship as <Compile> items in ToolUp.Client.ModelViewer.fsproj
        and reach consumers via <ProjectReference> (in-tree) or the
        fable/ source-in-nupkg path (package consumers). -->

@@ -41,5 +41,5 @@ A read failure or an empty extraction produces a single startup `Warn` and a no-
 
 ## See also
 
-- `src/AgGridEnterprise/COOKBOOK.md` — the Enterprise authoring reference this reads.
+- `src/Feliz.AgGrid.Enterprise/COOKBOOK.md` — the Enterprise authoring reference this reads.
 - `ToolUp.AICookbooks.AgChart` — the Community companion, whose parse and token bound this reuses.

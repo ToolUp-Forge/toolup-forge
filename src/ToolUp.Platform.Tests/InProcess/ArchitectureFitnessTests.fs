@@ -28,7 +28,7 @@ open ToolUp.Platform.Tests.Contracts.ArchitectureFitness
 let private coreAsm = "ToolUp.Platform.Core"
 let private serverAsm = "ToolUp.Platform.Server"
 let private clientAsm = "ToolUp.Platform.Client"
-let private enterpriseAsm = "ToolUp.AgGridEnterprise"
+let private enterpriseAsm = "Feliz.AgGrid.Enterprise"
 
 // ─── Live: assembly-graph direction ───────────────────────────────────
 

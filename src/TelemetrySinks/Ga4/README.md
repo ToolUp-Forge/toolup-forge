@@ -33,10 +33,12 @@ across the boundary), so telemetry never breaks the request that emitted it.
 
 ## Consent
 
-Analytics consent gating belongs **client-side**: gate `Telemetry.track`
-against the client-tier `IConsentProvider` before an event leaves the
-browser, so analytics that never ships can never breach consent. This
-server sink ships whatever reaches it.
+Analytics consent gating is **client-side**: the client-tier
+`Telemetry.track` helper asks the composed `IConsentProvider` for
+`ConsentCategory.Analytics` and dispatches only on an explicit `Granted`,
+so an un-consented event never leaves the browser and can never reach this
+sink. `Denied`, `NotYetDecided` and a provider that throws all suppress.
+This server sink ships whatever reaches it.
 
 ## Verification
 
