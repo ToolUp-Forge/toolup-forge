@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <!-- Pure unit pack for ToolUp.Offline: the Core retry / status /
+         drain-selection model, and the replay handler's three guards
+         (scope, conflict, audit stamping) asserted against a fake
+         IEntityStore. No browser, no network, no credentials — green on
+         a fresh checkout. The IndexedDB and Feliz surfaces are
+         browser-only and are covered by the Fable compile gate, not
+         here. -->
+    <ItemGroup>
+        <Compile Include="OfflineTypesTests.fs" />
+        <Compile Include="OfflineSyncHandlerTests.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Offline.Core\ToolUp.Offline.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Offline.Server\ToolUp.Offline.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+    </ItemGroup>
+</Project>

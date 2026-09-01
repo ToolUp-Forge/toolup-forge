@@ -325,6 +325,13 @@
              asserted as a control. -->
         <Compile Include="InProcess\WebhookSecretRotationBroadcastTests.fs" />
         <Compile Include="InProcess\WebhookSecretMigrationTests.fs" />
+        <!-- Phase 16a — the dispatcher's failure-state read-modify-write
+             under an IDistributedLock lease, with the two-replica lost
+             update asserted as a control. After IDistributedLock.fs +
+             InProcessDistributedLock.fs (Server tier) and after
+             Contracts\InMemoryBlobStorage.fs, whose in-memory storage the
+             shared registry is built over. -->
+        <Compile Include="InProcess\WebhookFailureStateLeaseTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 622 — presence + lock platform API: scope isolation
