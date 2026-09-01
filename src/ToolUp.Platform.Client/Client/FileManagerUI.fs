@@ -121,7 +121,7 @@ let update msg model =
                         dispatch (SelectFile(Finished upload))
 
                 reader.onerror <-
-                    fun _ -> dispatch (ApiError(sprintf "Couldn't read '%s' — the file may be unreadable." file.name))
+                    fun _ -> dispatch (ApiError(MessageCatalog.english.FileManager.FileReadError file.name))
 
                 reader.readAsText file)
 
@@ -192,7 +192,7 @@ let update msg model =
     | DeleteFile(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(sprintf "Delete failed: %s" msg)
+                ErrorMessage = Some(MessageCatalog.english.FileManager.DeleteFailed msg)
         },
         Cmd.none
 
@@ -215,7 +215,7 @@ let update msg model =
     | ReprocessFile(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(sprintf "Reprocess failed: %s" msg)
+                ErrorMessage = Some(MessageCatalog.english.FileManager.ReprocessFailed msg)
         },
         Cmd.none
 
@@ -238,7 +238,7 @@ let update msg model =
     | ResetDataStore(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(sprintf "Reset failed: %s" msg)
+                ErrorMessage = Some(MessageCatalog.english.FileManager.ResetFailed msg)
         },
         Cmd.none
 
@@ -261,7 +261,7 @@ let update msg model =
     | RetryIngestion(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(sprintf "Re-ingestion failed: %s" msg)
+                ErrorMessage = Some(MessageCatalog.english.FileManager.RetryFailed msg)
         },
         Cmd.none
 
@@ -293,13 +293,13 @@ type private UploadedFileRow = {
     Info: UploadedFileInfo
 }
 
-let private formatSize (bytes: int64) =
+let private formatSize (msgs: FileManagerMessages) (bytes: int64) =
     if bytes < 1024L then
-        $"{bytes} B"
+        msgs.SizeBytes bytes
     elif bytes < 1024L * 1024L then
-        sprintf "%.1f KB" (float bytes / 1024.0)
+        msgs.SizeKilobytes(sprintf "%.1f" (float bytes / 1024.0))
     else
-        sprintf "%.1f MB" (float bytes / (1024.0 * 1024.0))
+        msgs.SizeMegabytes(sprintf "%.1f" (float bytes / (1024.0 * 1024.0)))
 
 let private labelFor (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
     displays
@@ -307,7 +307,11 @@ let private labelFor (displays: DataTypeDisplay list) (dataTypeId: DataTypeId) =
     |> Option.map _.Info.DisplayName
     |> Option.defaultValue dataTypeId
 
-let private processedDataSection (displays: DataTypeDisplay list) (entries: ProcessedFileEntry list) =
+let private processedDataSection
+    (msgs: FileManagerMessages)
+    (displays: DataTypeDisplay list)
+    (entries: ProcessedFileEntry list)
+    =
     let grouped =
         entries
         |> List.choose (fun e ->
@@ -334,14 +338,17 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
                 display.RenderSummary infos
 
             if errors.Length > 0 then
-                Typography.subheading "Processing Errors"
+                Typography.subheading msgs.ProcessingErrorsHeading
 
                 for (fileName, error) in errors do
                     Html.div [
                         prop.className "flex items-center gap-2 py-1"
                         prop.children [
                             Html.span [ prop.className "text-red-600 text-sm"; prop.text "✗" ]
-                            Html.span [ prop.className "text-sm text-gray-700"; prop.text $"{fileName}: {error}" ]
+                            Html.span [
+                                prop.className "text-sm text-gray-700"
+                                prop.text (msgs.ProcessingErrorLine fileName error)
+                            ]
                         ]
                     ]
         ]
@@ -351,26 +358,28 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
 /// Base's per-document badge so a Data Manager file that isn't
 /// searchable shows *why*. `NotIngested` renders nothing (absence ⇒
 /// no badge), which is also the no-RAG case.
-let private ingestionBadge (status: FileIngestionStatus) =
+let private ingestionBadge (msgs: FileManagerMessages) (status: FileIngestionStatus) =
     match status with
     | FileIngestionStatus.Indexed ->
         Html.span [
             prop.className
                 "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-            prop.title "Indexed — searchable from the knowledge base."
-            prop.text "Indexed"
+            prop.title msgs.IndexedTooltip
+            prop.text msgs.IndexedLabel
         ]
     | FileIngestionStatus.Pending ->
         Html.span [
             prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-            prop.title "Vectorisation in progress — not yet searchable."
-            prop.text "Indexing…"
+            prop.title msgs.IndexingTooltip
+            prop.text msgs.IndexingLabel
         ]
     | FileIngestionStatus.Failed reason ->
         Html.span [
             prop.className "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
+            // The server's own reason — a diagnostic detail, not a
+            // catalog string (out of scope: wire-shaped / server-echoed).
             prop.title reason
-            prop.text "Not indexed"
+            prop.text msgs.NotIndexedLabel
         ]
     | FileIngestionStatus.NotIngested -> Html.none
 
@@ -398,283 +407,273 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
 
 /// Phase 220 — status-filter dropdown over the file list. Labels match
 /// the badge vocabulary so the filter reads the same as what it selects.
-let private filterLabel =
-    function
-    | AllFiles -> "All"
-    | OnlyIndexed -> "Indexed"
-    | OnlyPending -> "Indexing"
-    | OnlyFailed -> "Not indexed"
-    | OnlyNotIndexed -> "Not attempted"
+let private filterLabel (msgs: FileManagerMessages) status =
+    match status with
+    | AllFiles -> msgs.FilterAll
+    | OnlyIndexed -> msgs.FilterIndexed
+    | OnlyPending -> msgs.FilterIndexing
+    | OnlyFailed -> msgs.FilterNotIndexed
+    | OnlyNotIndexed -> msgs.FilterNotAttempted
 
 let private allFilters = [ AllFiles; OnlyIndexed; OnlyPending; OnlyFailed; OnlyNotIndexed ]
 
-let private statusFilterControl (model: Model) dispatch =
+let private statusFilterControl (msgs: FileManagerMessages) (model: Model) dispatch =
     Html.div [
         prop.className "flex items-center gap-2 mb-3"
         prop.children [
-            Html.span [ prop.className "text-sm text-gray-600"; prop.text "Filter by index status:" ]
+            Html.span [ prop.className "text-sm text-gray-600"; prop.text msgs.FilterByStatusLabel ]
             Html.select [
                 prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                prop.value (filterLabel model.StatusFilter)
+                prop.value (filterLabel msgs model.StatusFilter)
                 prop.onChange (fun (v: string) ->
-                    match allFilters |> List.tryFind (fun f -> filterLabel f = v) with
+                    match allFilters |> List.tryFind (fun f -> filterLabel msgs f = v) with
                     | Some f -> dispatch (SetStatusFilter f)
                     | None -> ())
                 prop.children [
                     for f in allFilters do
-                        Html.option [ prop.value (filterLabel f); prop.text (filterLabel f) ]
+                        Html.option [ prop.value (filterLabel msgs f); prop.text (filterLabel msgs f) ]
                 ]
             ]
         ]
     ]
 
-let private view (displays: DataTypeDisplay list) model dispatch =
-    let inputPanel =
-        Layout.Panel.panel "Data Upload" [
-            Layout.Panel.panelSection "Upload Files" [
-                Html.div [
-                    prop.className "flex items-center gap-4 flex-nowrap"
-                    prop.children [
-                        FilePicker.FilePicker(
-                            true,
-                            ".csv",
-                            (fun files ->
-                                for file in files do
-                                    dispatch (SelectFile(Start file))),
-                            Html.span [
-                                prop.className [
-                                    "cursor-pointer"
-                                    Tokens.Colours.brand
-                                    Tokens.Colours.brandText
-                                    "px-6 py-2.5"
-                                    Tokens.Typography.buttonText
-                                    "rounded-lg"
-                                    "hover:bg-brand-dark"
-                                    "transition-colors"
-                                    "inline-block"
-                                    "text-center"
-                                    "whitespace-nowrap"
-                                    "flex-shrink-0"
-                                ]
-                                prop.text "CHOOSE FILES"
-                            ]
-                        )
+/// Phase 751 — the input (upload) panel as a React COMPONENT, for the
+/// same hook-site reason `HealthMonitorUI.HealthMonitorBody` documents:
+/// `view` is invoked inline by the shell's own render and returns a
+/// *pair* of elements mounted at two separate points, so neither half
+/// can call a hook directly — each half needs its own stable component
+/// identity to read the catalog from.
+[<ReactComponent>]
+let private FileManagerInputPanel (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).FileManager
 
+    Layout.Panel.panel msgs.UploadPanelTitle [
+        Layout.Panel.panelSection msgs.UploadSectionTitle [
+            Html.div [
+                prop.className "flex items-center gap-4 flex-nowrap"
+                prop.children [
+                    FilePicker.FilePicker(
+                        true,
+                        ".csv",
+                        (fun files ->
+                            for file in files do
+                                dispatch (SelectFile(Start file))),
                         Html.span [
-                            prop.className "text-base text-gray-500"
-                            prop.text "Select CSV files to upload — file types are detected automatically"
+                            prop.className [
+                                "cursor-pointer"
+                                Tokens.Colours.brand
+                                Tokens.Colours.brandText
+                                "px-6 py-2.5"
+                                Tokens.Typography.buttonText
+                                "rounded-lg"
+                                "hover:bg-brand-dark"
+                                "transition-colors"
+                                "inline-block"
+                                "text-center"
+                                "whitespace-nowrap"
+                                "flex-shrink-0"
+                            ]
+                            prop.text msgs.ChooseFilesButton
                         ]
-                    ]
+                    )
+
+                    Html.span [ prop.className "text-base text-gray-500"; prop.text msgs.UploadHint ]
                 ]
             ]
         ]
+    ]
 
-    let outputPanel =
-        let allFiles =
-            model.UploadedFiles
-            |> Map.toList
-            |> List.collect (fun (dataType, files) ->
-                files |> List.map (fun info -> { DataType = dataType; Info = info }))
-            |> Array.ofList
+/// Phase 751 — the output (uploaded-files) panel as a React COMPONENT.
+/// Same reasoning as `FileManagerInputPanel` above.
+[<ReactComponent>]
+let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).FileManager
 
-        // Phase 220 — client-side status filter over the already-fetched
-        // status set (no round trip). `AllFiles` (and the no-RAG case,
-        // where every status is `None`) passes everything through.
-        let filteredFiles =
-            allFiles
-            |> Array.filter (fun row ->
-                FileIngestionStatus.matchesFilter
-                    model.StatusFilter
-                    (model.IngestionStatus |> Map.tryFind row.Info.FileName))
+    let allFiles =
+        model.UploadedFiles
+        |> Map.toList
+        |> List.collect (fun (dataType, files) -> files |> List.map (fun info -> { DataType = dataType; Info = info }))
+        |> Array.ofList
 
-        Layout.Panel.panel "Uploaded Files" [
-            // Owns the ingestion-status live-update subscription (renders
-            // nothing); mounted unconditionally so it subscribes even when
-            // the file list is momentarily empty.
-            IngestionStatusSubscriber dispatch
+    // Phase 220 — client-side status filter over the already-fetched
+    // status set (no round trip). `AllFiles` (and the no-RAG case,
+    // where every status is `None`) passes everything through.
+    let filteredFiles =
+        allFiles
+        |> Array.filter (fun row ->
+            FileIngestionStatus.matchesFilter
+                model.StatusFilter
+                (model.IngestionStatus |> Map.tryFind row.Info.FileName))
 
-            // Phase 220 — status filter (only when RAG is composed and there
-            // is at least one file to filter).
-            if not (Map.isEmpty model.IngestionStatus) && allFiles.Length > 0 then
-                statusFilterControl model dispatch
+    Layout.Panel.panel msgs.UploadedFilesPanelTitle [
+        // Owns the ingestion-status live-update subscription (renders
+        // nothing); mounted unconditionally so it subscribes even when
+        // the file list is momentarily empty.
+        IngestionStatusSubscriber dispatch
 
-            match filteredFiles with
-            | [||] when model.FilesLoading -> LoadingSlot()
-            | [||] when allFiles.Length = 0 ->
-                Html.p [ prop.className "text-gray-500"; prop.text "No files uploaded yet." ]
-            | [||] ->
-                Html.p [
-                    prop.className "text-gray-500"
-                    prop.text "No files match the selected index-status filter."
-                ]
-            | rows ->
-                Html.div [
-                    prop.className ThemeClass.Balham
-                    prop.children [
-                        AgGrid.grid [
-                            !!(prop.custom ("theme", "legacy"))
-                            AgGrid.domLayout AutoHeight
-                            AgGrid.columnDefs [
-                                ColumnDef.create [
-                                    ColumnDef.headerName "Data Type"
-                                    ColumnDef.valueGetter (fun r -> labelFor displays r.DataType)
-                                ]
-                                ColumnDef.create [
-                                    ColumnDef.headerName "File Name"
-                                    ColumnDef.valueGetter _.Info.FileName
-                                ]
-                                ColumnDef.create [
-                                    ColumnDef.headerName "Uploaded"
-                                    ColumnDef.valueGetter _.Info.UploadedAt
-                                    ColumnDef.valueFormatter (fun p ->
-                                        match p.value with
-                                        | Some dt -> dt.ToString("yyyy/MM/dd HH:mm")
-                                        | None -> "")
-                                ]
-                                ColumnDef.create [
-                                    ColumnDef.headerName "Rows"
-                                    ColumnDef.valueGetter _.Info.RowCount
-                                    ColumnDef.columnType NumericColumn
-                                ]
-                                ColumnDef.create [
-                                    ColumnDef.headerName "Size"
-                                    ColumnDef.valueGetter _.Info.SizeBytes
-                                    ColumnDef.valueFormatter (fun p ->
-                                        match p.value with
-                                        | Some bytes -> formatSize bytes
-                                        | None -> "")
-                                ]
-                                // Ingestion-status column (Phase 173) — only
-                                // when the deployment composes RAG (the snapshot
-                                // then carries status). Absent ⇒ no column, so a
-                                // non-RAG deployment renders exactly as before.
-                                if not (Map.isEmpty model.IngestionStatus) then
-                                    ColumnDef.create [
-                                        ColumnDef.headerName "Search index"
-                                        ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->
-                                            match p.data with
-                                            | Some row ->
-                                                let status = model.IngestionStatus |> Map.tryFind row.Info.FileName
+        // Phase 220 — status filter (only when RAG is composed and there
+        // is at least one file to filter).
+        if not (Map.isEmpty model.IngestionStatus) && allFiles.Length > 0 then
+            statusFilterControl msgs model dispatch
 
-                                                Html.div [
-                                                    prop.className "flex items-center gap-2"
-                                                    prop.children [
-                                                        match status with
-                                                        | Some s -> ingestionBadge s
-                                                        | None -> Html.none
-                                                        // Phase 220 — one-click re-ingest on a Failed file.
-                                                        if FileIngestionStatus.isRetryable status then
-                                                            Html.button [
-                                                                prop.className
-                                                                    "text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                                                                prop.title
-                                                                    "Re-run vectorisation for this file's persisted bytes."
-                                                                prop.text "Retry"
-                                                                prop.onClick (fun _ ->
-                                                                    dispatch (RetryIngestion(Start row.Info.FileName)))
-                                                            ]
-                                                    ]
-                                                ]
-                                            | None -> Html.none)
-                                    ]
+        match filteredFiles with
+        | [||] when model.FilesLoading -> LoadingSlot()
+        | [||] when allFiles.Length = 0 -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesUploaded ]
+        | [||] -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesMatchFilter ]
+        | rows ->
+            Html.div [
+                prop.className ThemeClass.Balham
+                prop.children [
+                    AgGrid.grid [
+                        !!(prop.custom ("theme", "legacy"))
+                        AgGrid.domLayout AutoHeight
+                        AgGrid.columnDefs [
+                            ColumnDef.create [
+                                ColumnDef.headerName msgs.ColumnDataType
+                                ColumnDef.valueGetter (fun r -> labelFor displays r.DataType)
+                            ]
+                            ColumnDef.create [
+                                ColumnDef.headerName msgs.ColumnFileName
+                                ColumnDef.valueGetter _.Info.FileName
+                            ]
+                            ColumnDef.create [
+                                ColumnDef.headerName msgs.ColumnUploaded
+                                ColumnDef.valueGetter _.Info.UploadedAt
+                                ColumnDef.valueFormatter (fun p ->
+                                    match p.value with
+                                    | Some dt -> dt.ToString("yyyy/MM/dd HH:mm")
+                                    | None -> "")
+                            ]
+                            ColumnDef.create [
+                                ColumnDef.headerName msgs.ColumnRows
+                                ColumnDef.valueGetter _.Info.RowCount
+                                ColumnDef.columnType NumericColumn
+                            ]
+                            ColumnDef.create [
+                                ColumnDef.headerName msgs.ColumnSize
+                                ColumnDef.valueGetter _.Info.SizeBytes
+                                ColumnDef.valueFormatter (fun p ->
+                                    match p.value with
+                                    | Some bytes -> formatSize msgs bytes
+                                    | None -> "")
+                            ]
+                            // Ingestion-status column (Phase 173) — only
+                            // when the deployment composes RAG (the snapshot
+                            // then carries status). Absent ⇒ no column, so a
+                            // non-RAG deployment renders exactly as before.
+                            if not (Map.isEmpty model.IngestionStatus) then
                                 ColumnDef.create [
-                                    ColumnDef.headerName ""
+                                    ColumnDef.headerName msgs.ColumnSearchIndex
                                     ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->
                                         match p.data with
                                         | Some row ->
-                                            Html.div [
-                                                prop.className "flex items-center gap-3"
-                                                prop.children [
-                                                    Html.button [
-                                                        prop.className
-                                                            "text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                                                        prop.title
-                                                            "Re-run processing on this file's persisted bytes. Use this when the file's processed summary is missing or shows a stale-DataType error after a deploy."
-                                                        prop.text "Reprocess"
-                                                        prop.onClick (fun _ ->
-                                                            dispatch (ReprocessFile(Start row.Info.FileName)))
-                                                    ]
-                                                    Html.button [
-                                                        prop.className
-                                                            "text-sm text-red-600 hover:text-red-800 hover:underline"
-                                                        prop.title
-                                                            "Delete this file. The processed data is removed from this scope and the underlying blob is purged."
-                                                        prop.text "Delete"
-                                                        prop.onClick (fun _ ->
-                                                            let prompt =
-                                                                sprintf
-                                                                    "Delete %s? This removes the file from this scope and any analyses that depend on it will lose access."
-                                                                    row.Info.FileName
+                                            let status = model.IngestionStatus |> Map.tryFind row.Info.FileName
 
-                                                            if Browser.Dom.window.confirm prompt then
-                                                                dispatch (DeleteFile(Start row.Info.FileName)))
-                                                    ]
+                                            Html.div [
+                                                prop.className "flex items-center gap-2"
+                                                prop.children [
+                                                    match status with
+                                                    | Some s -> ingestionBadge msgs s
+                                                    | None -> Html.none
+                                                    // Phase 220 — one-click re-ingest on a Failed file.
+                                                    if FileIngestionStatus.isRetryable status then
+                                                        Html.button [
+                                                            prop.className
+                                                                "text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                                            prop.title msgs.RetryTooltip
+                                                            prop.text msgs.RetryButton
+                                                            prop.onClick (fun _ ->
+                                                                dispatch (RetryIngestion(Start row.Info.FileName)))
+                                                        ]
                                                 ]
                                             ]
                                         | None -> Html.none)
                                 ]
+                            ColumnDef.create [
+                                ColumnDef.headerName ""
+                                ColumnDef.cellRenderer (fun (p: ICellRendererParams<UploadedFileRow, obj>) ->
+                                    match p.data with
+                                    | Some row ->
+                                        Html.div [
+                                            prop.className "flex items-center gap-3"
+                                            prop.children [
+                                                Html.button [
+                                                    prop.className
+                                                        "text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                                                    prop.title msgs.ReprocessTooltip
+                                                    prop.text msgs.ReprocessButton
+                                                    prop.onClick (fun _ ->
+                                                        dispatch (ReprocessFile(Start row.Info.FileName)))
+                                                ]
+                                                Html.button [
+                                                    prop.className
+                                                        "text-sm text-red-600 hover:text-red-800 hover:underline"
+                                                    prop.title msgs.DeleteTooltip
+                                                    prop.text msgs.DeleteButton
+                                                    prop.onClick (fun _ ->
+                                                        let prompt = msgs.ConfirmDelete row.Info.FileName
+
+                                                        if Browser.Dom.window.confirm prompt then
+                                                            dispatch (DeleteFile(Start row.Info.FileName)))
+                                                ]
+                                            ]
+                                        ]
+                                    | None -> Html.none)
                             ]
-                            AgGrid.rowData rows
-                            AgGrid.onGridReady _.AutoSizeAllColumns()
-                            AgGrid.enableCellTextSelection true
-                            AgGrid.ensureDomOrder true
-                            AgGrid.getRowId (fun r -> $"{r.DataType}-{r.Info.FileName}")
                         ]
+                        AgGrid.rowData rows
+                        AgGrid.onGridReady _.AutoSizeAllColumns()
+                        AgGrid.enableCellTextSelection true
+                        AgGrid.ensureDomOrder true
+                        AgGrid.getRowId (fun r -> $"{r.DataType}-{r.Info.FileName}")
                     ]
                 ]
+            ]
 
-                if model.ProcessedData.Length > 0 then
-                    Misc.divider
-                    processedDataSection displays model.ProcessedData
-
-                // Owner / Admin escape hatch. Shown only when there's
-                // something to reset; non-Owner-Admin clicks land on
-                // the server-side gate and surface the resulting
-                // `Error` in `ErrorMessage`. The dialog's file count
-                // matches what the server will actually wipe — both
-                // numbers come from the same `UploadedFiles` map.
-                let totalFileCount =
-                    model.UploadedFiles |> Map.toList |> List.sumBy (fun (_, fs) -> fs.Length)
-
+            if model.ProcessedData.Length > 0 then
                 Misc.divider
+                processedDataSection msgs displays model.ProcessedData
 
-                Html.div [
-                    prop.className "flex items-center justify-between gap-4"
-                    prop.children [
-                        Html.div [
-                            prop.className "text-sm text-gray-600"
-                            prop.text
-                                "Reset removes every uploaded file and its derived data from this scope. Owner / Admin only on team deployments."
-                        ]
-                        Html.button [
-                            prop.className
-                                "text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 transition-colors whitespace-nowrap"
-                            prop.title
-                                "Wipe every file, processed-data summary, and entry sidecar in this scope. This cannot be undone."
-                            prop.text "Reset data store"
-                            prop.onClick (fun _ ->
-                                let prompt =
-                                    sprintf
-                                        "Reset the data store? This permanently deletes %d file%s and every derived summary in this scope. Analyses depending on this data will lose access. This cannot be undone."
-                                        totalFileCount
-                                        (if totalFileCount = 1 then "" else "s")
+            // Owner / Admin escape hatch. Shown only when there's
+            // something to reset; non-Owner-Admin clicks land on
+            // the server-side gate and surface the resulting
+            // `Error` in `ErrorMessage`. The dialog's file count
+            // matches what the server will actually wipe — both
+            // numbers come from the same `UploadedFiles` map.
+            let totalFileCount =
+                model.UploadedFiles |> Map.toList |> List.sumBy (fun (_, fs) -> fs.Length)
 
-                                if Browser.Dom.window.confirm prompt then
-                                    dispatch (ResetDataStore(Start())))
-                        ]
+            Misc.divider
+
+            Html.div [
+                prop.className "flex items-center justify-between gap-4"
+                prop.children [
+                    Html.div [ prop.className "text-sm text-gray-600"; prop.text msgs.ResetHelp ]
+                    Html.button [
+                        prop.className
+                            "text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 transition-colors whitespace-nowrap"
+                        prop.title msgs.ResetTooltip
+                        prop.text msgs.ResetButton
+                        prop.onClick (fun _ ->
+                            let prompt = msgs.ConfirmReset totalFileCount
+
+                            if Browser.Dom.window.confirm prompt then
+                                dispatch (ResetDataStore(Start())))
                     ]
                 ]
+            ]
 
-            match model.ErrorMessage with
-            | Some msg ->
-                Html.div [
-                    prop.className "mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-                    prop.text msg
-                ]
-            | None -> ()
-        ]
+        match model.ErrorMessage with
+        | Some msg ->
+            Html.div [
+                prop.className "mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
+                prop.text msg
+            ]
+        | None -> ()
+    ]
 
-    inputPanel, outputPanel
+let private view (displays: DataTypeDisplay list) model dispatch =
+    FileManagerInputPanel dispatch, FileManagerOutputPanel displays model dispatch
 
 // ─── Module creation ──────────────────────────────────────────────
 

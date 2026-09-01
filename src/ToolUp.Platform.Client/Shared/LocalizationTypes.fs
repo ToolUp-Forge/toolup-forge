@@ -1681,6 +1681,84 @@ type PublicUtilityWidgetsMessages = {
     PremiumUsers: PremiumUserWidgetMessages
 }
 
+/// The built-in file-upload / data-manager module (`FileManagerUI`).
+type FileManagerMessages = {
+    /// `FileReader.onerror` — the local file couldn't be read at all
+    /// (browser-side, before any request reaches the server). Takes the
+    /// file's own name.
+    FileReadError: string -> string
+    /// `DeleteFile` server error. Takes the server's error string.
+    DeleteFailed: string -> string
+    /// `ReprocessFile` server error. Takes the server's error string.
+    ReprocessFailed: string -> string
+    /// `ResetDataStore` server error. Takes the server's error string.
+    ResetFailed: string -> string
+    /// `RetryIngestion` server error. Takes the server's error string.
+    RetryFailed: string -> string
+    /// File size under 1024 bytes — the exact byte count needs no
+    /// locale-sensitive formatting.
+    SizeBytes: int64 -> string
+    /// File size in kibibytes. Takes the value ALREADY formatted to one
+    /// decimal place at the call site (444's date/number decision: the
+    /// format is a property of the call site, not of the language).
+    SizeKilobytes: string -> string
+    /// File size in mebibytes. Same pre-formatted-value convention as
+    /// `SizeKilobytes`.
+    SizeMegabytes: string -> string
+    /// Subheading over the per-file processing-error list.
+    ProcessingErrorsHeading: string
+    /// One processing-error row. Takes the file name and the server's
+    /// error string.
+    ProcessingErrorLine: string -> string -> string
+    /// Ingestion-status badge text/tooltip — searchable.
+    IndexedLabel: string
+    IndexedTooltip: string
+    /// Ingestion-status badge text/tooltip — vectorisation in flight.
+    IndexingLabel: string
+    IndexingTooltip: string
+    /// Ingestion-status badge text for `Failed` (the tooltip carries the
+    /// server's own reason instead — left untranslated, see the view).
+    NotIndexedLabel: string
+    /// Phase 220 status-filter dropdown options. Kept as separate fields
+    /// from the badge text above even where the English wording
+    /// coincides — the dropdown and the badge are different surfaces and
+    /// a translation is free to diverge between them.
+    FilterAll: string
+    FilterIndexed: string
+    FilterIndexing: string
+    FilterNotIndexed: string
+    FilterNotAttempted: string
+    FilterByStatusLabel: string
+    UploadPanelTitle: string
+    UploadSectionTitle: string
+    ChooseFilesButton: string
+    UploadHint: string
+    UploadedFilesPanelTitle: string
+    NoFilesUploaded: string
+    NoFilesMatchFilter: string
+    ColumnDataType: string
+    ColumnFileName: string
+    ColumnUploaded: string
+    ColumnRows: string
+    ColumnSize: string
+    ColumnSearchIndex: string
+    RetryTooltip: string
+    RetryButton: string
+    ReprocessTooltip: string
+    ReprocessButton: string
+    DeleteTooltip: string
+    DeleteButton: string
+    /// The native `window.confirm` prompt before a delete. Takes the
+    /// file's name.
+    ConfirmDelete: string -> string
+    ResetHelp: string
+    ResetTooltip: string
+    ResetButton: string
+    /// The native `window.confirm` prompt before a full reset. Takes the
+    /// file count being deleted.
+    ConfirmReset: int -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1729,4 +1807,5 @@ type MessageCatalog = {
     Home: HomeMessages
     InviteAccept: InviteAcceptMessages
     PublicUtilityWidgets: PublicUtilityWidgetsMessages
+    FileManager: FileManagerMessages
 }

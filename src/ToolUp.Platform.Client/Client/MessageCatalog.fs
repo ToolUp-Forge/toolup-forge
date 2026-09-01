@@ -1085,6 +1085,64 @@ module MessageCatalog =
                     "No premium users granted yet. Grant via POST /api/_platform/users/{userId}/premium (Phase 62)."
             }
         }
+        FileManager = {
+            FileReadError = fun fileName -> $"Couldn't read '{fileName}' — the file may be unreadable."
+            DeleteFailed = fun msg -> $"Delete failed: {msg}"
+            ReprocessFailed = fun msg -> $"Reprocess failed: {msg}"
+            ResetFailed = fun msg -> $"Reset failed: {msg}"
+            RetryFailed = fun msg -> $"Re-ingestion failed: {msg}"
+            SizeBytes = fun bytes -> $"{bytes} B"
+            SizeKilobytes = fun value -> $"{value} KB"
+            SizeMegabytes = fun value -> $"{value} MB"
+            ProcessingErrorsHeading = "Processing Errors"
+            ProcessingErrorLine = fun fileName error -> $"{fileName}: {error}"
+            IndexedLabel = "Indexed"
+            IndexedTooltip = "Indexed — searchable from the knowledge base."
+            IndexingLabel = "Indexing…"
+            IndexingTooltip = "Vectorisation in progress — not yet searchable."
+            NotIndexedLabel = "Not indexed"
+            FilterAll = "All"
+            FilterIndexed = "Indexed"
+            FilterIndexing = "Indexing"
+            FilterNotIndexed = "Not indexed"
+            FilterNotAttempted = "Not attempted"
+            FilterByStatusLabel = "Filter by index status:"
+            UploadPanelTitle = "Data Upload"
+            UploadSectionTitle = "Upload Files"
+            ChooseFilesButton = "CHOOSE FILES"
+            UploadHint = "Select CSV files to upload — file types are detected automatically"
+            UploadedFilesPanelTitle = "Uploaded Files"
+            NoFilesUploaded = "No files uploaded yet."
+            NoFilesMatchFilter = "No files match the selected index-status filter."
+            ColumnDataType = "Data Type"
+            ColumnFileName = "File Name"
+            ColumnUploaded = "Uploaded"
+            ColumnRows = "Rows"
+            ColumnSize = "Size"
+            ColumnSearchIndex = "Search index"
+            RetryTooltip = "Re-run vectorisation for this file's persisted bytes."
+            RetryButton = "Retry"
+            ReprocessTooltip =
+                "Re-run processing on this file's persisted bytes. Use this when the file's processed summary is missing or shows a stale-DataType error after a deploy."
+            ReprocessButton = "Reprocess"
+            DeleteTooltip =
+                "Delete this file. The processed data is removed from this scope and the underlying blob is purged."
+            DeleteButton = "Delete"
+            ConfirmDelete =
+                fun fileName ->
+                    $"Delete {fileName}? This removes the file from this scope and any analyses that depend on it will lose access."
+            ResetHelp =
+                "Reset removes every uploaded file and its derived data from this scope. Owner / Admin only on team deployments."
+            ResetTooltip =
+                "Wipe every file, processed-data summary, and entry sidecar in this scope. This cannot be undone."
+            ResetButton = "Reset data store"
+            ConfirmReset =
+                fun n ->
+                    if n = 1 then
+                        "Reset the data store? This permanently deletes 1 file and every derived summary in this scope. Analyses depending on this data will lose access. This cannot be undone."
+                    else
+                        $"Reset the data store? This permanently deletes {n} files and every derived summary in this scope. Analyses depending on this data will lose access. This cannot be undone."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
