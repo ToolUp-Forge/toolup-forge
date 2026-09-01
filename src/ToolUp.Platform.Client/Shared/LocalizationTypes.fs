@@ -504,6 +504,17 @@ type ConsentMessages = {
     Categories: ConsentCategoryMessages
 }
 
+/// The Phase 10g OAuth 1.0a credential-form helper.
+type OAuth1aCredentialMessages = {
+    ConsumerKeyLabel: string
+    ConsumerSecretLabel: string
+    Save: string
+    /// The authorize link's text before any token is held.
+    Authorize: string
+    /// …and after one is (the connection is being re-authorised).
+    Reconnect: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -535,4 +546,5 @@ type MessageCatalog = {
     Auth: AuthMessages
     RateLimited: RateLimitedMessages
     Consent: ConsentMessages
+    OAuth1aCredential: OAuth1aCredentialMessages
 }

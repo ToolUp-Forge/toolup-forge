@@ -421,6 +421,13 @@ module MessageCatalog =
                 ThirdPartyEmbeds = "Third-party embeds"
             }
         }
+        OAuth1aCredential = {
+            ConsumerKeyLabel = "Consumer key"
+            ConsumerSecretLabel = "Consumer secret"
+            Save = "Save"
+            Authorize = "Authorize"
+            Reconnect = "Reconnect"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
