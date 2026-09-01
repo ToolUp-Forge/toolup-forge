@@ -903,6 +903,45 @@ module MessageCatalog =
             SaveProfile = "Save profile"
             ClearProfile = "Clear profile"
         }
+        MigrationStatus = {
+            NotYetRun = "Not yet run"
+            InProgressLabel = "In progress"
+            UpToDate = "Up to date"
+            CompletedWithFailures = "Completed with failures"
+            Blocked = "Blocked"
+            NoPassRecorded = "No pass recorded yet."
+            InProgressText =
+                fun name targetVersion done' total -> $"Migrating {name} to V{targetVersion}: {done'}/{total} objects"
+            CompleteText = fun total targetVersion -> $"{total} objects at V{targetVersion}"
+            CompleteWithFailuresText =
+                fun done' total targetVersion failed ->
+                    $"{done'}/{total} objects at V{targetVersion}; {failed} left behind"
+            Dismiss = "Dismiss"
+            NoFailuresRecorded = "No failures recorded for the last pass."
+            FailuresSummary =
+                fun count ->
+                    $"{count} most recent failure(s). Each object is still at its pre-migration version; fix the migrator and run again to retry only these."
+            FailureLine = fun objectId atVersion error -> $"{objectId} (v{atVersion}) — {error}"
+            DeclaredVersion = fun version -> $"V{version}"
+            ChainIncomplete = "Migrator chain incomplete"
+            Migrating = "Migrating…"
+            MigrateNow = "Migrate now"
+            HideFailures = "Hide failures"
+            FailuresButton = fun count -> $"Failures ({count})"
+            NoDataTypes =
+                "No data types are registered, or data migrations are not enabled server-side (ServerConfig.DataMigrations)."
+            ColumnDataType = "Data type"
+            ColumnDeclared = "Declared"
+            ColumnProgress = "Progress"
+            ColumnState = "State"
+            ColumnActions = "Actions"
+            Refreshing = "Refreshing…"
+            Refresh = "Refresh"
+            Heading = "Data migrations"
+            Subheading =
+                "Each module declares the schema version it reads. Objects stored at an older version are upgraded forward through the module's migrators; a failed object stays at its old version and is retried on the next pass."
+            LoadingDataTypes = "Loading data types..."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

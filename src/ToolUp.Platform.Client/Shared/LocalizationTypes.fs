@@ -1346,6 +1346,79 @@ type ModuleVisibilityAdminMessages = {
     ClearProfile: string
 }
 
+/// The built-in data-migration admin module (`MigrationStatusUI`, Phase 10a).
+type MigrationStatusMessages = {
+    /// `MigrationRunState.MigrationIdle` status-pill label.
+    NotYetRun: string
+    /// `MigrationRunState.MigrationInProgress` status-pill label.
+    InProgressLabel: string
+    /// `MigrationRunState.MigrationComplete` status-pill label.
+    UpToDate: string
+    /// `MigrationRunState.MigrationCompleteWithFailures` status-pill label.
+    CompletedWithFailures: string
+    /// `MigrationRunState.MigrationChainBlocked` status-pill label.
+    Blocked: string
+    /// Progress-column text when no pass has ever been recorded for a data
+    /// type — both the no-status case and `MigrationIdle`.
+    NoPassRecorded: string
+    /// Progress-column text while a pass is running. Takes the data type's
+    /// display name, the target schema version, the migrated-so-far count,
+    /// and the total object count.
+    InProgressText: string -> int -> int -> int -> string
+    /// Progress-column text once a pass has finished cleanly. Takes the
+    /// total object count and the target schema version.
+    CompleteText: int -> int -> string
+    /// Progress-column text once a pass has finished with some objects left
+    /// behind. Takes the migrated-so-far count, the total object count, the
+    /// target schema version, and the failed-object count.
+    CompleteWithFailuresText: int -> int -> int -> int -> string
+    /// Dismiss action on the trigger-error banner.
+    Dismiss: string
+    /// Empty state of the expanded failure log.
+    NoFailuresRecorded: string
+    /// Heading prose above the failure log. Takes the failure count.
+    FailuresSummary: int -> string
+    /// One failure-log line. Takes the object id, the version it failed at,
+    /// and the recorded error text.
+    FailureLine: string -> int -> string -> string
+    /// The "Declared" column value. Takes the data type's declared schema
+    /// version.
+    DeclaredVersion: int -> string
+    /// Tooltip on a data type whose migrator chain has a gap.
+    ChainIncomplete: string
+    /// Migrate-now button label while a trigger is in flight.
+    Migrating: string
+    /// Migrate-now button label at rest.
+    MigrateNow: string
+    /// Failures-toggle button label while the failure log is expanded.
+    HideFailures: string
+    /// Failures-toggle button label while collapsed. Takes the failure
+    /// count.
+    FailuresButton: int -> string
+    /// Empty state of the data-types table.
+    NoDataTypes: string
+    /// "Data type" column header.
+    ColumnDataType: string
+    /// "Declared" column header.
+    ColumnDeclared: string
+    /// "Progress" column header.
+    ColumnProgress: string
+    /// "State" column header.
+    ColumnState: string
+    /// "Actions" column header.
+    ColumnActions: string
+    /// Refresh button label while a refresh is in flight.
+    Refreshing: string
+    /// Refresh button label at rest.
+    Refresh: string
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Loading placeholder shown before the first data-types response.
+    LoadingDataTypes: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1389,4 +1462,5 @@ type MessageCatalog = {
     TeamConfig: TeamConfigMessages
     TenantLifecycleAdmin: TenantLifecycleAdminMessages
     ModuleVisibilityAdmin: ModuleVisibilityAdminMessages
+    MigrationStatus: MigrationStatusMessages
 }
