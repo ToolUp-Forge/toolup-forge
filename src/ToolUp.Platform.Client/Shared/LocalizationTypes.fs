@@ -1507,6 +1507,43 @@ type HomeMessages = {
     Unpin: string
 }
 
+/// The standalone team-invitation accept page (`InviteAccept`, Phase 3d /
+/// Phase 751). Mounted OUTSIDE the shell — a `PublicEntryDispatchers`
+/// entry renders it to its own React root before the shell's `program`
+/// (and therefore before any `MessageCatalogProvider.provider` mount)
+/// exists, so this surface can render before a team, and today before any
+/// catalog provider, is in place.
+type InviteAcceptMessages = {
+    /// Rendered when the URL carries no invitation-token segment at all —
+    /// the earliest failure, raised before any request fires.
+    NoToken: string
+    /// Heading of the "please sign in first" panel.
+    SignInHeading: string
+    /// Body prose of the "please sign in first" panel.
+    SignInBody: string
+    /// Link back to the deployment's home page, where the shell's own
+    /// AuthUI flow signs the visitor in.
+    GoToSignIn: string
+    /// Shown while `AcceptInvite` is in flight.
+    Joining: string
+    /// Success-panel heading — takes the joined team's display name.
+    WelcomeHeading: string -> string
+    /// Success-panel prose — takes the accepted role's display name
+    /// (`TeamRoles.displayName`).
+    JoinedAs: string -> string
+    /// Success-panel link back into the app.
+    ContinueToApp: string
+    /// Terminal-failure heading. The failure body text itself is NOT a
+    /// catalog field — it is either the handler's own error message or a
+    /// transport exception's message, rendered verbatim.
+    FailedHeading: string
+    /// Failure-panel link back to the home page.
+    GoToHome: string
+    /// Network-layer failure prefix — takes the underlying exception
+    /// message. Mirrors `Auth.Errors.NetworkError`.
+    NetworkError: string -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1553,4 +1590,5 @@ type MessageCatalog = {
     MigrationStatus: MigrationStatusMessages
     SessionSecurity: SessionSecurityMessages
     Home: HomeMessages
+    InviteAccept: InviteAcceptMessages
 }

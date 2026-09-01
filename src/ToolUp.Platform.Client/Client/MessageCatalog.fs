@@ -986,6 +986,20 @@ module MessageCatalog =
             Pin = "Pin"
             Unpin = "Unpin"
         }
+        InviteAccept = {
+            NoToken = "No invitation token in URL."
+            SignInHeading = "Sign in to accept"
+            SignInBody =
+                "You'll need to sign in before you can join the team. Sign in at the home page, then re-open this invitation link."
+            GoToSignIn = "Go to sign in"
+            Joining = "Joining the team…"
+            WelcomeHeading = fun teamName -> $"Welcome to {teamName}"
+            JoinedAs = fun roleName -> $"You've joined as {roleName}."
+            ContinueToApp = "Continue to the app"
+            FailedHeading = "Could not accept invitation"
+            GoToHome = "Go to home"
+            NetworkError = fun detail -> $"Network error: {detail}"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
