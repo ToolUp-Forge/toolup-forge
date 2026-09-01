@@ -32,14 +32,14 @@ section 1 blocks=5
     style -
     mark [ins author="Reviewer A" date=2026-06-02T14:30:00Z]
     comments []
-    pPr <w:pPr><w:rPr><w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="3" /><w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="102" /></w:rPr></w:pPr>
+    pPr <w:pPr><w:rPr /></w:pPr>
     run 1 text="A wholly new paragraph." fmt=- rStyle=- rev=[ins author="Reviewer A" date=2026-06-02T14:30:00Z]
       rPr -
   block 5 paragraph
     style -
     mark [del author="Reviewer B" date=2026-06-03T09:15:00Z]
     comments []
-    pPr <w:pPr><w:rPr><w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="5" /><w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="104" /></w:rPr></w:pPr>
+    pPr <w:pPr><w:rPr /></w:pPr>
     run 1 text="This paragraph is struck out." fmt=- rStyle=- rev=[del author="Reviewer B" date=2026-06-03T09:15:00Z]
       rPr -
 styles 4

@@ -1167,4 +1167,150 @@ let tests =
                     "a declaring backend is not refused — a control nobody can satisfy is a control nobody leaves on"
             }
         ]
+
+        // ─── Phase 678 — a retired deployment refuses to serve ────────
+        //
+        // The claim is narrow and each half is probed against its own
+        // opposite: a retirement that BINDS this record stops the boot
+        // under the most permissive policy there is, a retirement that
+        // does not bind it stops nothing and is reported as the
+        // mis-presentation it is, and a deployment supplying no
+        // retirement reaches exactly the verdict it reached before this
+        // phase existed.
+
+        testList "retirement" [
+
+            test "a bound retirement retires the record and refuses the start under log-and-serve" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                let digest = baseRecord |> DeployRecords.canonicalBytes |> DeployRecords.digestBytes
+
+                let retirement =
+                    DeployRetirement.create
+                        digest
+                        "terminal-op-digest"
+                        "head-digest"
+                        7L
+                        "ops@example.com"
+                        "2026-08-31T09:00:00.0000000Z"
+                        "engagement closed"
+
+                // The unretired control: this exact pair verifies, so the
+                // refusal below is caused by the retirement and by
+                // nothing else.
+                Expect.equal
+                    (BootVerificationPreflight.verifyWithRetirement options None composition
+                     |> Async.RunSynchronously)
+                    BootVerificationVerdict.Verified
+                    "without a retirement this deployment verifies — the control the refusal is measured against"
+
+                let verdict =
+                    BootVerificationPreflight.verifyWithRetirement options (Some retirement) composition
+                    |> Async.RunSynchronously
+
+                match verdict with
+                | BootVerificationVerdict.Retired found ->
+                    Expect.equal found retirement "the verdict carries the retirement it acted on"
+                | other -> failtestf "expected a retired verdict, got %A" other
+
+                Expect.equal (BootVerificationVerdict.label verdict) "retired" "its own label, not 'unverified'"
+
+                Expect.isFalse
+                    (BootVerificationVerdict.isAffirmative verdict)
+                    "a decommissioned deployment is not an affirmative verdict"
+
+                Expect.stringContains
+                    (BootVerificationVerdict.findings verdict |> String.concat " | ")
+                    "ops@example.com"
+                    "the finding names who decommissioned it"
+
+                match
+                    BootVerificationPreflight.runWithRetirement options (Some retirement) composition
+                    |> Async.RunSynchronously
+                with
+                | Error result ->
+                    Expect.isTrue result.RefusedStart "log-and-serve is no grace period for a signed decommission"
+                | Ok _ ->
+                    failtest
+                        "a retired deployment must refuse to start under EVERY policy — serving one makes the certificate a lie"
+            }
+
+            test "a retirement for a different record retires nothing and is reported as mis-presented" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.RefuseOnDrift
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                let retirement =
+                    DeployRetirement.create
+                        "0000000000000000000000000000000000000000000000000000000000000000"
+                        "terminal-op-digest"
+                        "head-digest"
+                        7L
+                        "ops@example.com"
+                        "2026-08-31T09:00:00.0000000Z"
+                        "a different engagement"
+
+                match
+                    BootVerificationPreflight.verifyWithRetirement options (Some retirement) composition
+                    |> Async.RunSynchronously
+                with
+                | BootVerificationVerdict.VerificationFailed(_, findings) ->
+                    Expect.isTrue
+                        (findings
+                         |> List.exists (fun finding -> finding.Contains "retirement was supplied for a different"))
+                        "the finding says the retirement belongs to another deploy, which is what an operator acts on"
+                | BootVerificationVerdict.Retired _ ->
+                    failtest
+                        "a retirement naming another record must never retire this one — that is a swap the digest exists to stop"
+                | other -> failtestf "expected the mis-presentation to be a binding finding, got %A" other
+            }
+
+            test "supplying no retirement leaves every verdict exactly as it was" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None
+
+                let drifted = {
+                    composition with
+                        Modules =
+                            composition.Modules
+                            @ [ CompositionManifest.moduleEntry ("Extra", ComponentId.ofModule "extra") ]
+                }
+
+                // Both arms, because a delegation that only preserved the
+                // happy path would be a regression nobody's green test
+                // could see.
+                Expect.equal
+                    (verdictOf options composition)
+                    (BootVerificationPreflight.verifyWithRetirement options None composition
+                     |> Async.RunSynchronously)
+                    "verify is verifyWithRetirement with None — the verified arm"
+
+                Expect.equal
+                    (verdictOf options drifted)
+                    (BootVerificationPreflight.verifyWithRetirement options None drifted
+                     |> Async.RunSynchronously)
+                    "verify is verifyWithRetirement with None — the drifted arm"
+            }
+        ]
     ]

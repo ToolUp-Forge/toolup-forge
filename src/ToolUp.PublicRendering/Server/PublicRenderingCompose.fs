@@ -219,6 +219,17 @@ type PublicRenderingServerApp = {
     /// (default) → deterministic numeric slices past the threshold. Set via
     /// `withSitemapClusterKey`.
     SitemapClusterKey: (Slug -> string) option
+    /// Phase 737 — opt in to honouring the Phase 152 `robots` frontmatter
+    /// key when building the sitemap universe: a page whose directive list
+    /// resolves to noindex is not advertised in `sitemap.xml` (nor pushed
+    /// by the Phase 109 IndexNow channel, nor written into the static
+    /// export's sitemap — the three read one universe). `false` (default)
+    /// → the `robots` key is not consulted and the universe is
+    /// byte-for-byte pre-737, so the body and its Phase 149 ETag are
+    /// unchanged (GP 11 / GP 13). The `sitemap: exclude` key and this flag
+    /// are a UNION of exclusions, never alternatives. Set via
+    /// `withSitemapNoindexExclusion`.
+    SitemapExcludeNoindex: bool
     /// Phase 157 — opt-in static client-search index endpoint. `None`
     /// (default) → no endpoint mounted, byte-for-byte pre-157 (GP 11 /
     /// GP 13). `Some config` mounts a compact content-versioned JSON index
@@ -266,6 +277,7 @@ module PublicRenderingServerApp =
         SitemapDefaultLastmod = None
         SitemapShardThreshold = 50_000
         SitemapClusterKey = None
+        SitemapExcludeNoindex = false
         SearchIndex = None
         RenderCoalescer = None
     }
@@ -306,6 +318,7 @@ module PublicRenderingServerApp =
         SitemapDefaultLastmod = None
         SitemapShardThreshold = 50_000
         SitemapClusterKey = None
+        SitemapExcludeNoindex = false
         SearchIndex = None
         RenderCoalescer = None
     }
@@ -863,6 +876,32 @@ module PublicRenderingServerApp =
             SitemapClusterKey = Some keyOf
     }
 
+    /// Phase 737 — opt in to excluding `robots: noindex` pages from the
+    /// sitemap universe. A page whose Phase 152 `robots` directive list
+    /// resolves to noindex (or `none`) stops being advertised in
+    /// `sitemap.xml` and its shards, stops being pushed by the Phase 109
+    /// IndexNow channel, and stops appearing in the static export's
+    /// `sitemap.xml` — the three read one universe, so they cannot
+    /// disagree. The page itself is still served and still rendered into
+    /// the export: what changes is only whether it is ADVERTISED for
+    /// crawling.
+    ///
+    /// Off by default (GP 11 / GP 13): a pipeline that never calls this
+    /// gets the pre-737 universe byte-for-byte, so its sitemap body and
+    /// Phase 149 ETag are unchanged. Calling it moves the ETag exactly
+    /// once — with the body, at opt-in — after which conditional `304`s
+    /// resume on the next poll.
+    ///
+    /// Closes the "Submitted URL marked 'noindex'" Search Console coverage
+    /// error: the sitemap asks for indexing and the page refuses it. The
+    /// pre-737 workaround (`sitemap: exclude` alongside `robots: noindex`)
+    /// keeps working — the two mechanisms are a union of exclusions, so
+    /// adopting the flag needs no content edit.
+    let withSitemapNoindexExclusion (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            SitemapExcludeNoindex = true
+    }
+
     /// Phase 157 — mount the static client-search index endpoint with the
     /// default config (`/search-index.json` over the file-backed universe).
     /// Off by default → no endpoint (GP 11 / GP 13). Per-site aware: under a
@@ -1031,6 +1070,17 @@ module PublicRenderingServerApp =
                 Threshold = app.SitemapShardThreshold
                 ClusterKey = app.SitemapClusterKey
                 DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
+            }
+
+            // Phase 737 — the universe knobs, shared by the runtime
+            // sitemap/shard handlers AND the IndexNow universe thunks
+            // below. Both must read the same options: IndexNow does not
+            // merely expose the universe, it PUSHES it, so a universe that
+            // excluded a noindex page from the sitemap while still pushing
+            // it for indexing would restate the very contradiction the flag
+            // exists to close.
+            let sitemapUniverse: SitemapGenerator.SitemapUniverseOptions = {
+                ExcludeNoindex = app.SitemapExcludeNoindex
             }
 
             let searchIndexConfig = app.SearchIndex // Phase 157
@@ -1407,7 +1457,7 @@ module PublicRenderingServerApp =
                                         let now = System.DateTimeOffset.UtcNow
                                         let! pages = api.ListPagesPublic(now, "")
                                         let! dyn = ContentSource.enumerateAll contentSources
-                                        return SitemapGenerator.entriesAt now pages dyn
+                                        return SitemapGenerator.entriesAtWith sitemapUniverse now pages dyn
                                     }
 
                                     IndexNowService(
@@ -1477,7 +1527,7 @@ module PublicRenderingServerApp =
                                             let universe () = async {
                                                 let now = System.DateTimeOffset.UtcNow
                                                 let! pages = site.Api.ListPagesPublic(now, "")
-                                                return SitemapGenerator.entriesAt now pages []
+                                                return SitemapGenerator.entriesAtWith sitemapUniverse now pages []
                                             }
 
                                             let svc =
@@ -1525,6 +1575,7 @@ module PublicRenderingServerApp =
                         else
                             None
                     Sharding = sitemapSharding // Phase 150
+                    Universe = sitemapUniverse // Phase 737
             }
 
             // Phase 150 — per-site base carries the sharding knobs even when
@@ -1533,6 +1584,7 @@ module PublicRenderingServerApp =
             let siteSitemapBaseOptions: SitemapGenerator.SitemapHandlerOptions = {
                 SitemapGenerator.SitemapHandlerOptions.defaults with
                     Sharding = sitemapSharding
+                    Universe = sitemapUniverse // Phase 737
             }
 
             let siteSitemapOptions: Map<string, SitemapGenerator.SitemapHandlerOptions> =
@@ -1860,6 +1912,13 @@ module PublicRenderingServerApp =
         DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
     }
 
+    /// Phase 737 — the compose-level sitemap universe knob
+    /// (`withSitemapNoindexExclusion`) as a `SitemapUniverseOptions`, so
+    /// the static export advertises exactly what the runtime handler would.
+    let private appSitemapUniverse (app: PublicRenderingServerApp) : SitemapGenerator.SitemapUniverseOptions = {
+        ExcludeNoindex = app.SitemapExcludeNoindex
+    }
+
     let exportStaticWith
         (options: StaticExportOptions)
         (outputDir: string)
@@ -1868,8 +1927,9 @@ module PublicRenderingServerApp =
         StaticExport.runWith
             {
                 options with
-                    SitemapSharding = appSitemapSharding app
-            } // Phase 150
+                    SitemapSharding = appSitemapSharding app // Phase 150
+                    SitemapUniverse = appSitemapUniverse app // Phase 737
+            }
             app.Redirects
             app.Base.Config
             app.Layouts
@@ -1916,8 +1976,9 @@ module PublicRenderingServerApp =
                     StaticExport.runWith
                         {
                             options with
-                                SitemapSharding = appSitemapSharding app
-                        } // Phase 150
+                                SitemapSharding = appSitemapSharding app // Phase 150
+                                SitemapUniverse = appSitemapUniverse app // Phase 737
+                        }
                         site.Redirects
                         siteConfig
                         siteLayouts

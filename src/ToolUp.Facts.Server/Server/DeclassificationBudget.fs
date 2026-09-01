@@ -4,6 +4,8 @@
 namespace ToolUp.Facts
 
 open System
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
 // ─── Phase 675 — declassification budgets at the grounding tier ──────
@@ -89,6 +91,55 @@ open ToolUp.Platform
 //     the total lifetime disclosure through a routine; `DailyBudget` /
 //     `MonthlyBudget` let a patient counterparty spend it again.
 //
+// ── Phase 679 — the ceiling moves only by countersigned amendment ──
+//
+// A ceiling declared above is a term of an agreement, and it is the term
+// most often asked to move mid-engagement — the analysis needed one more
+// crossing than anyone estimated. Everything above makes exhaustion
+// enforced; nothing above says how it may be relieved, and the practical
+// answer in the absence of a mechanism is that somebody edits the
+// declaration and redeploys. That is a change to what a deployment may
+// disclose, made by one party alone, which is precisely the act the
+// clean-room's D2 principle forbids.
+//
+// So the raise itself is a countersigned subject (Phase 676's
+// `BudgetAmendment`, declared beside the registry) and the ceiling in
+// force is DERIVED rather than stored:
+//
+//   effective ceiling = declared ceiling, folded through every declared
+//   amendment for that (routine, party) whose countersignature is
+//   live-complete at the moment of the crossing.
+//
+// Four consequences follow from the construction rather than from
+// policy, and each is why this is not a stored flag or a config edit:
+//
+//   * **An amendment applies only WHILE its countersignature is live.**
+//     The status is evaluated per crossing, so a revocation takes effect
+//     on the next disclosure — there is nothing to remember to undo,
+//     because nothing was written down.
+//   * **The signature covers the exact delta.** `BudgetAmendment`'s hash
+//     spans the routine, the party, the baseline and the change, so an
+//     approval of "+500 against 500" is worth nothing for "+5000", and
+//     nothing at all for a budget whose ceiling has since moved.
+//   * **A chain composes in exactly one order.** Each amendment names
+//     the ceiling it was agreed against, so applying one is a
+//     compare-and-set: an amendment whose baseline has moved is INERT
+//     and named, never silently re-based onto a number its signatories
+//     never saw.
+//   * **A retroactive breach is unrepresentable.** A lowering amendment
+//     is refused at application time when the ceiling it proposes is
+//     below spend the ledger has already recorded. The alternative —
+//     admitting it — would make a deployment that had spent 400 of 500
+//     instantly, and retroactively, in breach of a 300 ceiling for
+//     disclosures that were permitted when they happened.
+//
+// **Application is audited, and the audit is the effective history.**
+// Every application (and every refused retroactive lowering) writes a
+// row carrying the subject hash, the roster, and the ceiling before and
+// after, so the ceiling in force at any past instant is reconstructable
+// from the trail plus the declared budget — no second store, and no
+// mutable ceiling anywhere to disagree with it.
+//
 // ── Cost when unused (GP 13) ──
 //
 // Nothing here is reachable unless a composition calls
@@ -97,6 +148,13 @@ open ToolUp.Platform
 // matched an option, reads no ledger and allocates nothing — the
 // disclosure verdict, the event count and every audit payload are
 // byte-for-byte the Phase 674 gate's (GP 11).
+//
+// The amendment facet is a second, narrower opt-in inside that one: a
+// budget config declaring no amendments consults no registry, reads no
+// ledger reading, writes no audit row and reserves against the declared
+// ceiling — byte-for-byte the Phase 675 path (GP 11 / GP 13). So is a
+// crossing whose (routine, party) pair has no declared amendment, which
+// is the common case in a deployment that has amended one budget.
 
 /// What a declassification routine's budget accounts — and, which is the
 /// entire reason this is a discriminated union rather than two numbers,
@@ -181,6 +239,13 @@ module DeclassificationBudget =
     /// share a document.
     [<Literal>]
     let ScopePrefix = "declassify:"
+
+    /// The `BudgetScope.TemplateId` for one routine. Exposed (Phase 679)
+    /// because an amendment is keyed on the template id, and a caller
+    /// that concatenated the prefix itself would be one typo away from
+    /// amending a budget nothing accounts under — silently, since an
+    /// amendment naming an unknown template is simply never applied.
+    let templateIdFor (operationId: string) : string = ScopePrefix + operationId
 
     /// The `FactNotDisclosable` policy ref for a disclosure refused
     /// because a routine's budget is spent. Stable and greppable; it
@@ -326,6 +391,289 @@ module DeclassificationBudget =
         | [] -> [ UnscopedParty ]
         | parties -> parties
 
+// ─── Phase 679 — countersigned amendment, at the grounding tier ──────
+
+/// What one declared amendment did when the ceiling was resolved.
+///
+/// A DU rather than a boolean-plus-message because the three ways an
+/// amendment fails to apply have three different remedies, and only one
+/// of them is a defect: an un-countersigned amendment is waiting for a
+/// party, a moved baseline needs a fresh agreement, and a lowering below
+/// recorded spend is the refusal that keeps a retroactive breach
+/// unrepresentable.
+type DeclassificationAmendmentOutcome =
+    /// The roster's countersignature over this exact delta was live and
+    /// complete, and the ceiling moved. `effectiveFrom` is the instant
+    /// the agreement became complete — the latest of the parties'
+    /// `NotBefore` instants, from `Countersigned`.
+    | AmendmentApplied of effectiveFrom: DateTimeOffset
+    /// No live, complete countersignature over this exact delta. Carries
+    /// the registry's own verdict, so the row says who is missing (or who
+    /// withdrew) rather than only that something is.
+    ///
+    /// **This is also the unreadable-registry case**, and deliberately
+    /// so: `ICountersignatureRegistry.Status` collapses a store failure
+    /// to pending, and the effect here is that the DECLARED ceiling
+    /// stands. That is not failing open — it is falling back to the
+    /// baseline every party already agreed to, which is the only number
+    /// available that anyone signed.
+    | AmendmentNotCountersigned of status: CountersignatureStatus
+    /// The amendment names a baseline the budget has left — usually
+    /// because an earlier amendment in the chain applied, or did not.
+    /// Inert and named, never re-based: a delta re-based onto a
+    /// different baseline is a change nobody signed.
+    | AmendmentBaselineMoved of inForce: decimal
+    /// The amendment would put the ceiling below spend the ledger has
+    /// already recorded, retroactively declaring a breach for
+    /// disclosures that were permitted when they happened. Refused.
+    | AmendmentBelowRecordedSpend of proposed: decimal * recorded: decimal
+
+/// One amendment's resolution against the ceiling in force. The unit the
+/// audit trail records, and the unit a diagnostic surface renders.
+type DeclassificationAmendmentResolution = {
+    Amendment: BudgetAmendment
+    /// `sha256:{hex}` over the exact bytes the roster countersigned —
+    /// the join key between this row and the countersignature records.
+    SubjectHash: string
+    /// The canonical roster the amendment was evaluated against.
+    Roster: string list
+    Outcome: DeclassificationAmendmentOutcome
+    /// The ceiling in force before this amendment was considered.
+    CeilingBefore: decimal
+    /// The ceiling in force after. Equal to `CeilingBefore` on every
+    /// outcome but `AmendmentApplied`.
+    CeilingAfter: decimal
+    /// When the resolution was taken — the crossing's instant, not the
+    /// agreement's.
+    ResolvedAt: DateTimeOffset
+}
+
+/// The ceiling in force for one (routine, party), plus how it got there.
+type DeclassificationCeiling = {
+    /// What the reservation is taken against.
+    Ceiling: decimal
+    /// Every declared amendment for this pair, in chain order, with what
+    /// each one did. Empty when none is declared.
+    Resolutions: DeclassificationAmendmentResolution list
+}
+
+/// Reserved event-type discriminators for the amendment trail. They ride
+/// the same `_facts` source module the disclosure trail does, so one
+/// `IEventStore.ReadBySource scope FactEvents.SourceModule` recovers the
+/// disclosures AND the ceilings they were judged against.
+module DeclassificationBudgetEvents =
+
+    /// A countersigned amendment moved a ceiling.
+    [<Literal>]
+    let AmendedType = "DeclassificationBudgetAmended"
+
+    /// An amendment was refused because it would have put the ceiling
+    /// below spend already recorded.
+    [<Literal>]
+    let AmendmentRefusedType = "DeclassificationBudgetAmendmentRefused"
+
+    /// The stable wire name of an outcome. Written out rather than
+    /// derived from the DU case name, so renaming a case in F# source
+    /// cannot silently change what a persisted audit row says.
+    let outcomeName (outcome: DeclassificationAmendmentOutcome) : string =
+        match outcome with
+        | AmendmentApplied _ -> "Applied"
+        | AmendmentNotCountersigned _ -> "NotCountersigned"
+        | AmendmentBaselineMoved _ -> "BaselineMoved"
+        | AmendmentBelowRecordedSpend _ -> "BelowRecordedSpend"
+
+/// Payload of an amendment audit event (JSON-serialised into
+/// `ModuleEvent.Payload`). PII-free: identifiers, a digest and
+/// quantities the deployment itself declared.
+///
+/// **`CeilingBefore` / `CeilingAfter` are the whole point.** A trail of
+/// applications carrying both is enough to replay the effective ceiling
+/// at any past instant from the declared budget alone, which is what
+/// makes the derived ceiling auditable without a second store to
+/// disagree with it.
+type DeclassificationAmendmentEvent = {
+    /// The budget template — `declassify:{operationId}`.
+    TemplateId: string
+    /// The party whose allowance moved.
+    PartyId: string
+    /// The countersigned subject hash.
+    SubjectHash: string
+    /// The roster that agreed it.
+    Roster: string list
+    /// The stable outcome name — `DeclassificationBudgetEvents.outcomeName`.
+    Outcome: string
+    CeilingBefore: decimal
+    CeilingAfter: decimal
+    /// The delta the parties signed over. Recorded beside the ceilings
+    /// because a refused amendment moves neither, and the trail would
+    /// otherwise not say what was refused.
+    CeilingDelta: decimal
+    OccurredAt: DateTimeOffset
+}
+
+/// Where an amendment resolution is recorded.
+///
+/// A seam rather than a hard-wired `IEventStore` write for one reason
+/// that is not symmetry: an amendment is a governance act between the
+/// parties to an agreement, not a per-request act by a tenant, so the
+/// scope it is filed under is a composition decision. Binding it to
+/// whichever request happened to trigger the crossing would scatter one
+/// agreement's history across every tenant that touched it.
+///
+/// Async at the boundary and stateless between calls (GP 12 rules 2 + 4).
+type IDeclassificationAmendmentAudit =
+    /// Record one resolution. Called only for outcomes that CHANGED
+    /// something or REFUSED something — an amendment merely awaiting a
+    /// signature is the default state of a declared amendment, and a row
+    /// per crossing saying so would bury the two that matter.
+    abstract Record: resolution: DeclassificationAmendmentResolution -> Async<unit>
+
+/// The shipped default: one `IEventStore` row per resolution, under the
+/// reserved `_facts` source module and the composition-declared scope.
+type EventStoreAmendmentAudit(events: IEventStore, scopeId: string) =
+
+    static let jsonOptions = FableConverters.create ()
+
+    interface IDeclassificationAmendmentAudit with
+        member _.Record(resolution: DeclassificationAmendmentResolution) = async {
+            let payload: DeclassificationAmendmentEvent = {
+                TemplateId = resolution.Amendment.TemplateId
+                PartyId = resolution.Amendment.PartyId
+                SubjectHash = resolution.SubjectHash
+                Roster = resolution.Roster
+                Outcome = DeclassificationBudgetEvents.outcomeName resolution.Outcome
+                CeilingBefore = resolution.CeilingBefore
+                CeilingAfter = resolution.CeilingAfter
+                CeilingDelta = resolution.Amendment.CeilingDelta
+                OccurredAt = resolution.ResolvedAt
+            }
+
+            let eventType =
+                match resolution.Outcome with
+                | AmendmentApplied _ -> DeclassificationBudgetEvents.AmendedType
+                | _ -> DeclassificationBudgetEvents.AmendmentRefusedType
+
+            // Best-effort, matching the disclosure trail: an audit-write
+            // failure must never turn a permitted disclosure into an
+            // exception on the answer path.
+            try
+                do!
+                    events.Write {
+                        Id = Guid.NewGuid()
+                        OccurredAt = DateTime.UtcNow
+                        ScopeId = scopeId
+                        SourceModule = FactEvents.SourceModule
+                        EventType = eventType
+                        Payload = JsonSerializer.Serialize(payload, jsonOptions)
+                    }
+            with _ ->
+                ()
+        }
+
+/// The declared amendments to a deployment's declassification budgets,
+/// plus the registry that says which of them the parties have agreed.
+///
+/// The amendments are DECLARED here rather than discovered from the
+/// registry, and that is not redundancy. A countersignature record
+/// carries only the subject hash, which is opaque by construction — the
+/// registry can say "this roster agreed these bytes" and can never say
+/// what the bytes meant. So the deployment states the deltas it holds,
+/// and the registry decides which of them are in force. Neither half can
+/// move a ceiling alone.
+type DeclassificationAmendmentConfig = {
+    /// The registry the roster's agreement is read from. **Clock-skew
+    /// tolerance is the registry's**, declared where it is constructed —
+    /// this config deliberately holds no second opinion about how far
+    /// apart two clocks may be.
+    Registry: ICountersignatureRegistry
+    /// The parties every amendment here is agreed under. Signed into
+    /// each record and part of the evaluation key, so adding a party
+    /// re-opens approval rather than inheriting it (Phase 676).
+    Roster: string list
+    /// The declared amendments, in the order the chain folds.
+    Amendments: BudgetAmendment list
+    /// Where applications and retroactive-lowering refusals are
+    /// recorded. `None` leaves the ceiling derived and the trail silent
+    /// — legal, and a deliberate choice a deployment makes rather than a
+    /// default it falls into.
+    Audit: IDeclassificationAmendmentAudit option
+}
+
+[<RequireQualifiedAccess>]
+module DeclassificationAmendmentConfig =
+
+    /// Build the config, or every reason it is unenforceable.
+    ///
+    /// An EMPTY roster is refused rather than accepted-and-inert. Phase
+    /// 676 evaluates an empty roster as pending — "everyone has agreed"
+    /// must not be satisfiable by there being no one — so an empty roster
+    /// here would produce a config whose every amendment silently never
+    /// applies, which reads at the composition site exactly like one that
+    /// works.
+    ///
+    /// Two amendments with the same signed bytes are likewise refused: a
+    /// duplicate cannot chain (the second always finds the baseline
+    /// moved) and its presence suggests an author expected the delta to
+    /// apply twice.
+    let tryCreate
+        (registry: ICountersignatureRegistry)
+        (roster: string list)
+        (amendments: BudgetAmendment list)
+        : Result<DeclassificationAmendmentConfig, string list> =
+
+        let enrolled = Countersignature.roster roster
+
+        let rosterErrors = [
+            if List.isEmpty enrolled then
+                "a budget-amendment roster names no parties; an empty roster is never countersigned, so every amendment declared under it would be silently inert"
+        ]
+
+        let duplicates =
+            amendments
+            |> List.countBy (fun a -> BudgetAmendment.subject a)
+            |> List.filter (fun (_, n) -> n > 1)
+            |> List.map (fun (subject, n) ->
+                $"the budget amendment {subject.ContentHash} is declared {n} times; a duplicate can never chain, because the second copy always finds the baseline it names already moved")
+
+        match
+            (amendments |> List.collect BudgetAmendment.validate)
+            @ rosterErrors
+            @ duplicates
+        with
+        | [] ->
+            Ok {
+                Registry = registry
+                Roster = enrolled
+                Amendments = amendments
+                Audit = None
+            }
+        | errors -> Error errors
+
+    /// `tryCreate`, raising on an unenforceable declaration. Loud at
+    /// compose time rather than at the first crossing — the posture the
+    /// budget declaration itself takes, for the same reason.
+    let create
+        (registry: ICountersignatureRegistry)
+        (roster: string list)
+        (amendments: BudgetAmendment list)
+        : DeclassificationAmendmentConfig =
+        match tryCreate registry roster amendments with
+        | Ok config -> config
+        | Error errors -> invalidArg "amendments" (String.Join("; ", errors))
+
+    /// Record applications and retroactive-lowering refusals through the
+    /// given sink.
+    let withAudit (audit: IDeclassificationAmendmentAudit) (config: DeclassificationAmendmentConfig) = {
+        config with
+            Audit = Some audit
+    }
+
+    /// The declared amendments for one (template, party) pair, in chain
+    /// order.
+    let chainFor (templateId: string) (party: string) (config: DeclassificationAmendmentConfig) =
+        config.Amendments
+        |> List.filter (fun a -> a.TemplateId = templateId && a.PartyId = party)
+
 /// One open reservation, paired with the declaration it was taken under
 /// so settlement can read that routine's own `WithholdCharge` without a
 /// second lookup.
@@ -348,6 +696,12 @@ type DeclassificationBudgetConfig = {
     /// without waiting for one. Production passes
     /// `DateTimeOffset.UtcNow`.
     Now: unit -> DateTimeOffset
+    /// Phase 679 — the countersigned amendments that may move a declared
+    /// ceiling. `None` (the default, and what every pre-679 composition
+    /// produces) leaves every ceiling exactly as declared: no registry
+    /// is consulted, no ledger reading taken, no audit row written
+    /// (GP 11 / GP 13).
+    Amendments: DeclassificationAmendmentConfig option
 }
 
 [<RequireQualifiedAccess>]
@@ -378,6 +732,7 @@ module DeclassificationBudgetConfig =
                 Ledger = ledger
                 Budgets = budgets |> List.map (fun b -> b.OperationId, b) |> Map.ofList
                 Now = fun () -> DateTimeOffset.UtcNow
+                Amendments = None
             }
         | errors -> Error errors
 
@@ -402,6 +757,177 @@ module DeclassificationBudgetConfig =
     /// The budget declared for an operation id, when any.
     let budgetFor (config: DeclassificationBudgetConfig) (operationId: string) : DeclassificationBudget option =
         config.Budgets.TryFind operationId
+
+    /// Phase 679 — arm the amendment facet: declared ceilings may be
+    /// moved by an amendment the roster has countersigned over the exact
+    /// delta. Refuses at compose time on an amendment declaring nothing
+    /// enforceable (`DeclassificationAmendmentConfig.create`).
+    ///
+    /// An amendment naming a routine no budget declares is inert rather
+    /// than refused — the same posture a budget naming a routine no
+    /// catalog declares takes, and for the same reason: nothing can ever
+    /// cross it, so it enforces and relieves nothing.
+    let withAmendments
+        (amendments: DeclassificationAmendmentConfig)
+        (config: DeclassificationBudgetConfig)
+        : DeclassificationBudgetConfig =
+        {
+            config with
+                Amendments = Some amendments
+        }
+
+/// Phase 679 — folding a declared ceiling through its countersigned
+/// amendments.
+///
+/// Pure with respect to the ceiling: nothing is stored, so the answer is
+/// a function of the declaration, the registry's records and the ledger's
+/// current reading at the instant of the crossing. A revocation
+/// therefore takes effect on the next disclosure with nothing to undo.
+[<RequireQualifiedAccess>]
+module DeclassificationAmendments =
+
+    /// Spend the ledger has already recorded against one scope:
+    /// committed charges plus reservations that are open and unexpired.
+    ///
+    /// Open reservations count. A hold is a crossing in flight, and a
+    /// ceiling lowered underneath one would either strand it or admit a
+    /// disclosure past the new ceiling — both worse than refusing the
+    /// lowering until the hold settles or expires.
+    let private recordedSpend (config: DeclassificationBudgetConfig) (scope: BudgetScope) (ceiling: decimal) = async {
+        let! reading = config.Ledger.RemainingBudget(scope, ceiling)
+        return reading.EpsilonCommitted + reading.EpsilonReserved
+    }
+
+    /// The ceiling in force for one (routine, party) at `now`, and how it
+    /// got there.
+    ///
+    /// The chain folds in declaration order and each step is a
+    /// compare-and-set against the running ceiling, so the result is a
+    /// deterministic function of the declaration — an amendment cannot
+    /// apply "sometimes" depending on evaluation order.
+    let resolve
+        (config: DeclassificationBudgetConfig)
+        (budget: DeclassificationBudget)
+        (party: string)
+        (now: DateTimeOffset)
+        : Async<DeclassificationCeiling> =
+        async {
+            let declared = DeclassificationBudget.ceilingOf budget
+
+            match config.Amendments with
+            // No amendment facet composed ⇒ the declared ceiling, with
+            // no registry read and no ledger reading (GP 11 / GP 13).
+            | None -> return { Ceiling = declared; Resolutions = [] }
+            | Some amendments ->
+                let templateId = DeclassificationBudget.templateIdFor budget.OperationId
+
+                let chain = DeclassificationAmendmentConfig.chainFor templateId party amendments
+
+                // No amendment declared for THIS pair ⇒ the same
+                // zero-cost path. The common case in a deployment that
+                // has amended one budget.
+                if List.isEmpty chain then
+                    return { Ceiling = declared; Resolutions = [] }
+                else
+                    let scope = DeclassificationBudget.scopeFor budget party now
+                    let mutable running = declared
+                    let mutable resolved: DeclassificationAmendmentResolution list = []
+                    let mutable remaining = chain
+
+                    while not (List.isEmpty remaining) do
+                        let amendment = List.head remaining
+                        remaining <- List.tail remaining
+
+                        let subject = BudgetAmendment.subject amendment
+                        let! status = amendments.Registry.Status(amendments.Roster, subject, now)
+
+                        let! outcome =
+                            match status with
+                            | Countersigned effectiveFrom when amendment.PriorCeiling = running ->
+                                if amendment.CeilingDelta > 0m then
+                                    // A RAISE can never fall below spend
+                                    // already recorded: the ledger refuses
+                                    // a reservation that would carry spend
+                                    // past the ceiling, so recorded spend
+                                    // is bounded by the ceiling in force
+                                    // and a strictly higher one bounds it
+                                    // too. No reading is taken — which is
+                                    // also why the commonest amendment
+                                    // costs one registry read and nothing
+                                    // else.
+                                    async.Return(AmendmentApplied effectiveFrom)
+                                else
+                                    async {
+                                        let! recorded = recordedSpend config scope running
+                                        let proposed = BudgetAmendment.amendedCeiling amendment
+
+                                        return
+                                            if proposed < recorded then
+                                                AmendmentBelowRecordedSpend(proposed, recorded)
+                                            else
+                                                AmendmentApplied effectiveFrom
+                                    }
+                            // Agreed, but against a baseline the budget
+                            // has left. Inert and named — a delta re-based
+                            // onto a different baseline is a change nobody
+                            // signed.
+                            | Countersigned _ -> async.Return(AmendmentBaselineMoved running)
+                            | incomplete -> async.Return(AmendmentNotCountersigned incomplete)
+
+                        let after =
+                            match outcome with
+                            | AmendmentApplied _ -> BudgetAmendment.amendedCeiling amendment
+                            | _ -> running
+
+                        resolved <-
+                            {
+                                Amendment = amendment
+                                SubjectHash = subject.ContentHash
+                                Roster = amendments.Roster
+                                Outcome = outcome
+                                CeilingBefore = running
+                                CeilingAfter = after
+                                ResolvedAt = now
+                            }
+                            :: resolved
+
+                        running <- after
+
+                    let resolutions = List.rev resolved
+
+                    match amendments.Audit with
+                    | None -> ()
+                    | Some audit ->
+                        for resolution in resolutions do
+                            match resolution.Outcome with
+                            | AmendmentApplied _
+                            | AmendmentBelowRecordedSpend _ -> do! audit.Record resolution
+                            // An amendment merely awaiting a signature,
+                            // or naming a baseline that has moved, is the
+                            // resting state of a declared amendment. A
+                            // row per crossing saying so would bury the
+                            // two outcomes that changed something.
+                            | AmendmentNotCountersigned _
+                            | AmendmentBaselineMoved _ -> ()
+
+                    return {
+                        Ceiling = running
+                        Resolutions = resolutions
+                    }
+        }
+
+    /// `resolve`, keeping only the number the reservation is taken
+    /// against.
+    let effectiveCeiling
+        (config: DeclassificationBudgetConfig)
+        (budget: DeclassificationBudget)
+        (party: string)
+        (now: DateTimeOffset)
+        : Async<decimal> =
+        async {
+            let! resolution = resolve config budget party now
+            return resolution.Ceiling
+        }
 
 /// The outcome of asking the ledger to afford a disclosure's crossings.
 type DeclassificationBudgetOutcome =
@@ -446,12 +972,22 @@ module DeclassificationBudgetGate =
                 match DeclassificationBudgetConfig.budgetFor config crossing.OperationId with
                 | None -> ()
                 | Some budget ->
-                    let ceiling = DeclassificationBudget.ceilingOf budget
                     let mutable parties = DeclassificationBudget.chargedParties crossing.AcceptedScopes
 
                     while refusal.IsNone && not (List.isEmpty parties) do
                         let party = List.head parties
                         parties <- List.tail parties
+
+                        // Phase 679 — the ceiling in force for THIS
+                        // party, which is the declared one folded
+                        // through every amendment the roster has
+                        // countersigned and that still chains. Resolved
+                        // per party because an amendment names a party:
+                        // raising one party's allowance must never raise
+                        // another's. With no amendment facet composed
+                        // this is `DeclassificationBudget.ceilingOf` and
+                        // one option match.
+                        let! ceiling = DeclassificationAmendments.effectiveCeiling config budget party now
 
                         let spend = DeclassificationBudget.spendFor budget party now
                         let! decision = config.Ledger.ReserveBudget(spend, ceiling)

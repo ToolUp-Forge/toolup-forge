@@ -4,16 +4,20 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Platform.AuditSinks.ChainedLedger (class)
+ToolUp.Platform.AuditSinks.ChainedLedger.appendRefusal(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal], System.String]]
+ToolUp.Platform.AuditSinks.ChainedLedger.buildClosureName(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings) : System.String
 ToolUp.Platform.AuditSinks.ChainedLedger.buildHeadName(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings) : System.String
 ToolUp.Platform.AuditSinks.ChainedLedger.buildSegmentName(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, System.Int64, System.String) : System.String
 ToolUp.Platform.AuditSinks.ChainedLedger.chainBatch(System.Int64, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEnvelope]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord], System.String]
 ToolUp.Platform.AuditSinks.ChainedLedger.chainBatchTagged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditEnvelope, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.Int64, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEnvelope]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord], System.String]
+ToolUp.Platform.AuditSinks.ChainedLedger.close(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner], ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp, System.String]]
 ToolUp.Platform.AuditSinks.ChainedLedger.create(System.String, ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IAuditSink
 ToolUp.Platform.AuditSinks.ChainedLedger.createScoped(System.String, ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditEnvelope, Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.Platform.IAuditSink
 ToolUp.Platform.AuditSinks.ChainedLedger.createSigned(System.String, ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner) : ToolUp.Platform.IAuditSink
 ToolUp.Platform.AuditSinks.ChainedLedger.createSignedScoped(System.String, ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditEnvelope, Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.Platform.IAuditSink
 ToolUp.Platform.AuditSinks.ChainedLedger.deploymentVerificationSource(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier], Microsoft.FSharp.Core.Unit) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]
 ToolUp.Platform.AuditSinks.ChainedLedger.read(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditSinks.ChainedLedger+StoredLedger, System.String]]
+ToolUp.Platform.AuditSinks.ChainedLedger.readTerminalOp(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp], System.String]]
 ToolUp.Platform.AuditSinks.ChainedLedger.recordOfEnvelope(ToolUp.Platform.AuditEnvelope) : ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord
 ToolUp.Platform.AuditSinks.ChainedLedger.recordOfEnvelopeTagged(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditEnvelope, Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.AuditEnvelope) : ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord
 ToolUp.Platform.AuditSinks.ChainedLedger.toLedgerIntegrity(ToolUp.Platform.AuditSinks.ChainedLedger+LedgerVerification) : ToolUp.Platform.LedgerIntegrity
@@ -54,6 +58,12 @@ ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner.KeyId : System.String
 ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner.Sign(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]
 ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier (interface)
 ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier.Verify(System.String, System.String, System.Byte[], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, System.String]]
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest (class)
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest.ClosedBy : System.String { get }
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest.DeployId : System.String { get }
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest.DeployRecordDigest : System.String { get }
+ToolUp.Platform.AuditSinks.ChainedLedger+LedgerClosureRequest.Reason : System.String { get }
 ToolUp.Platform.AuditSinks.ChainedLedger+LedgerHead (class)
 ToolUp.Platform.AuditSinks.ChainedLedger+LedgerHead..ctor(System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.AuditSinks.ChainedLedger+LedgerHead.Algorithm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -95,11 +105,31 @@ ToolUp.Platform.AuditSinks.LedgerChain.canonicalBytes(ToolUp.Platform.AuditSinks
 ToolUp.Platform.AuditSinks.LedgerChain.canonicaliseJson(System.String) : System.String
 ToolUp.Platform.AuditSinks.LedgerChain.chain(System.Int64, System.String, ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord
 ToolUp.Platform.AuditSinks.LedgerChain.computeDigest(ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : System.String
+ToolUp.Platform.AuditSinks.LedgerChain.computeTerminalDigest(ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : System.String
 ToolUp.Platform.AuditSinks.LedgerChain.digestBytes(System.Byte[]) : System.String
 ToolUp.Platform.AuditSinks.LedgerChain.facetsOf(ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.AuditSinks.LedgerChain.genesisDigest : System.String (literal)
 ToolUp.Platform.AuditSinks.LedgerChain.headBytes(System.Int64, System.String) : System.Byte[]
+ToolUp.Platform.AuditSinks.LedgerChain.terminalBytes(ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : System.Byte[]
+ToolUp.Platform.AuditSinks.LedgerChain.terminalSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.AuditSinks.LedgerChain.verifyRecords(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Int64, System.String], ToolUp.Platform.AuditSinks.LedgerChain+LedgerBreak]
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal.IsLedgerClosed : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal.IsLedgerHeadMoved : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerClosed (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerClosed.terminalOp : ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerHeadMoved (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerHeadMoved.expectedCount : System.Int64 { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerHeadMoved.expectedDigest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerHeadMoved.foundCount : System.Int64 { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+LedgerHeadMoved.foundDigest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+Tags (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+Tags.LedgerClosed : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal+Tags.LedgerHeadMoved : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusalModule (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusalModule.describe(ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal) : System.String
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusalModule.isClosed(ToolUp.Platform.AuditSinks.LedgerChain+LedgerAppendRefusal) : System.Boolean
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerBreak (class)
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerBreak..ctor(System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.AuditSinks.LedgerChain+LedgerBreakKind, System.String)
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerBreak.Detail : System.String { get }
@@ -140,6 +170,79 @@ ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule (class)
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule.coerceFacets(ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule.decodePayload`1(System.Text.Json.JsonSerializerOptions, ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecord) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
 ToolUp.Platform.AuditSinks.LedgerChain+LedgerRecordModule.normaliseFacets(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp..ctor(System.Int32, System.Int64, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.Algorithm : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.ClosedAt : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.ClosedBy : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.DeployId : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.DeployRecordDigest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.Digest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.HeadDigest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.KeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.Reason : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.RecordCount : System.Int64 { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp.Signature : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOpModule (class)
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOpModule.closesChain(System.Int64, System.String, ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : System.Boolean
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOpModule.create(System.Int64, System.String, System.String, System.String, System.String, System.String, System.String) : ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOpModule.digestHolds(ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : System.Boolean
+ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOpModule.isSigned(ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : System.Boolean
+ToolUp.Platform.AuditSinks.LedgerDecommission (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission.PredicateType : System.String (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission.SubjectName : System.String (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission.canonicalBytes(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : System.Byte[]
+ToolUp.Platform.AuditSinks.LedgerDecommission.canonicalForm(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : System.String
+ToolUp.Platform.AuditSinks.LedgerDecommission.certificateFor(ToolUp.Platform.AuditSinks.ChainedLedger+ChainedLedgerSettings, ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate, System.String]]
+ToolUp.Platform.AuditSinks.LedgerDecommission.contentId(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : System.String
+ToolUp.Platform.AuditSinks.LedgerDecommission.expectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Platform.AuditSinks.LedgerDecommission.predicateJson(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : System.String
+ToolUp.Platform.AuditSinks.LedgerDecommission.readCertificate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate, ToolUp.Platform.EnvelopeVerdict]
+ToolUp.Platform.AuditSinks.LedgerDecommission.retirementFor(ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp) : ToolUp.Platform.DeployRetirement
+ToolUp.Platform.AuditSinks.LedgerDecommission.sign(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DsseEnvelope, System.String]]
+ToolUp.Platform.AuditSinks.LedgerDecommission.statementJson(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : System.String
+ToolUp.Platform.AuditSinks.LedgerDecommission.subjectFor(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : ToolUp.Platform.InTotoSubject
+ToolUp.Platform.AuditSinks.LedgerDecommission.verifyCertificate(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier], ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification]
+ToolUp.Platform.AuditSinks.LedgerDecommission.verifyDocument(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification]
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate..ctor(System.Int32, ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp, ToolUp.Platform.AuditSinks.ChainedLedger+LedgerHead, ToolUp.Platform.DeployRetirement)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate.Head : ToolUp.Platform.AuditSinks.ChainedLedger+LedgerHead { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate.Retirement : ToolUp.Platform.DeployRetirement { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionCertificate.TerminalOp : ToolUp.Platform.AuditSinks.LedgerChain+LedgerTerminalOp { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.IsDecommissionNotClosed : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.IsDecommissionUnbound : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.IsDecommissionUnproven : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.IsDecommissionUnreadable : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.IsDecommissionVerified : System.Boolean { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification.Tag : System.Int32 { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionNotClosed (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionNotClosed.detail : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnbound (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnbound.detail : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnproven (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnproven.headSignature : ToolUp.Platform.AuditSinks.ChainedLedger+HeadSignatureStatus { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnproven.opSignature : ToolUp.Platform.AuditSinks.ChainedLedger+HeadSignatureStatus { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnreadable (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnreadable.position : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionUnreadable.reason : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionVerified (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionVerified.deployId : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionVerified.headDigest : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionVerified.keyId : System.String { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+DecommissionVerified.recordCount : System.Int64 { get }
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags.DecommissionNotClosed : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags.DecommissionUnbound : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags.DecommissionUnproven : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags.DecommissionUnreadable : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification+Tags.DecommissionVerified : System.Int32 (literal)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerificationModule (class)
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerificationModule.describe(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification) : System.String
+ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerificationModule.isVerified(ToolUp.Platform.AuditSinks.LedgerDecommission+DecommissionVerification) : System.Boolean
 ToolUp.Platform.AuditSinks.LedgerHeadSigning (class)
 ToolUp.Platform.AuditSinks.LedgerHeadSigning.ofKeyedSigner(ToolUp.Platform.IKeyedByteSigner) : ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadSigner
 ToolUp.Platform.AuditSinks.LedgerHeadSigning.verifierOfKeyed(ToolUp.Platform.IKeyedByteVerifier) : ToolUp.Platform.AuditSinks.ChainedLedger+ILedgerHeadVerifier

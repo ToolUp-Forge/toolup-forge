@@ -135,6 +135,17 @@ type InMemoryVectorStore
     // the original `VectorScope` for `blobName` round-tripping.
     let dirty = ConcurrentDictionary<string, VectorScope>()
 
+    // Scope keys whose persisted snapshot has been read into memory.
+    //
+    // Phase 726 — loadedness is tracked EXPLICITLY; it is never inferred from
+    // whether `store` currently holds anything for the scope. Emptiness is a
+    // legitimate state: `DeleteByScope` leaves a scope loaded-and-EMPTY while
+    // the persisted snapshot survives until the next flush, so reading "holds
+    // nothing" as "not yet loaded" made the very next read re-hydrate
+    // everything the wipe had just removed — a tenant wipe that silently
+    // un-wipes itself, and with it the Phase 9h erasure guarantee.
+    let loadedScopes = ConcurrentDictionary<string, byte>()
+
     let cts = new CancellationTokenSource()
 
     // Signals the flush loop that the chunk-count threshold has been crossed.
@@ -237,10 +248,14 @@ type InMemoryVectorStore
     let ragContainer = "_rag"
 
     // Scopes whose corrupt load has already been reported this process.
-    // Keyed by scopeKey so a lazily-loaded team scope re-probed on every
-    // `Search` (the corrupt load leaves it empty, so `ensureScopeLoaded`
-    // re-attempts each time) emits telemetry + audit + a SystemMessage
-    // exactly once, not once per query — the storm guard.
+    // Keyed by scopeKey so a scope whose load is attempted more than once
+    // emits telemetry + audit + a SystemMessage exactly once, not once per
+    // attempt — the storm guard. Since Phase 726 a completed corrupt load
+    // marks the scope loaded (it started empty, deliberately), so the
+    // per-query re-probe that originally motivated this guard no longer
+    // happens; under the fail-loud toggle below, however, `handleCorruption`
+    // raises before reaching here and every read re-attempts, so the guard
+    // still has a live re-entry path.
     let reportedCorruptions = ConcurrentDictionary<string, byte>()
 
     // Compliance-grade fail-loud toggle. When set, a corrupt-index load is
@@ -332,6 +347,14 @@ type InMemoryVectorStore
                     |> ignore
             | Error reason -> do! handleCorruption scope bytes.Length reason
         | Error _ -> ()
+
+        // Phase 726 — mark loaded only after a COMPLETED attempt, and only
+        // here, so every load path agrees on what "loaded" means. Under the
+        // fail-loud toggle `handleCorruption` raises, so a refused scope is
+        // never marked and every subsequent read re-attempts and re-refuses.
+        // A scope whose blob is absent is loaded-and-empty, which is exactly
+        // right: there is nothing at rest for a later read to resurrect.
+        loadedScopes[scopeToKey scope] <- 0uy
     }
 
     // Load Platform and Deployment scopes eagerly at construction.
@@ -374,19 +397,17 @@ type InMemoryVectorStore
         else
             Team(sk.Substring("team:".Length))
 
+    /// Guarantee this scope's persisted snapshot has been read into memory.
+    ///
+    /// Team AND User scopes are lazy-loaded on first access — neither id is
+    /// known at construction time, so only Platform/Deployment are loaded
+    /// eagerly (see the eager `do` block above). Phase 726 removed the
+    /// special-casing: the eager loads mark themselves loaded like any other,
+    /// so one uniform lookup answers for every scope and there is no second
+    /// place encoding which scopes are lazy.
     let ensureScopeLoaded (scope: VectorScope) = async {
-        // Team AND User scopes are lazy-loaded on first access — neither id
-        // is known at construction time, so only Platform/Deployment are
-        // loaded eagerly (see the eager `do` block above).
-        match scope with
-        | Team _
-        | User _ ->
-            let scopeKey = scopeToKey scope
-            let hasAny = store.Keys |> Seq.exists (fun (sk, _) -> sk = scopeKey)
-
-            if not hasAny then
-                do! loadScope scope
-        | _ -> ()
+        if not (loadedScopes.ContainsKey(scopeToKey scope)) then
+            do! loadScope scope
     }
 
     interface IVectorStore with
@@ -479,6 +500,13 @@ type InMemoryVectorStore
         }
 
         member _.DeleteByScope scope = async {
+            // Phase 726 — hydrate BEFORE deleting. A wipe issued on a fresh
+            // process before anything has read this scope would otherwise
+            // remove nothing from an unloaded (empty) map, leave the scope
+            // unloaded, and let the very next read bring the whole persisted
+            // corpus back. The caller was told the scope was deleted; the
+            // data came back.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
             let toRemove = store.Keys |> Seq.filter (fun (sk, _) -> sk = scopeKey) |> Seq.toList
 
@@ -492,6 +520,12 @@ type InMemoryVectorStore
             // Tombstone-write: stamp `_deletedAt` and keep the entry. Vacuum
             // is the path that hard-removes tombstoned entries past their
             // retention window.
+            //
+            // Phase 726 — hydrate first, for the same reason `DeleteByScope`
+            // does: a tombstone written before this scope has ever been read
+            // would find no entry to stamp, report success, and leave the
+            // chunk in the snapshot to reappear on the next read.
+            do! ensureScopeLoaded scope
             let key = makeKey scope chunkId
 
             match store.TryGetValue key with

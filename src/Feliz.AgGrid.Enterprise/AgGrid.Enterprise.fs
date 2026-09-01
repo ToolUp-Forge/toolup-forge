@@ -4,8 +4,8 @@
 [<AutoOpen>]
 module ToolUp.Platform.AgGridEnterprise
 
-// Phase 15d.5 — Enterprise inline static members extracted from
-// `module ToolUp.Platform.AgGrid` (AgGrid.fs) via cross-file type
+// Phase 15d.5 — Enterprise inline static members extracted from the
+// Community grid binding (`module Feliz.AgGrid`) via cross-file type
 // augmentation on the [<Erase>] grid types. Members here gate AG Grid
 // Enterprise features:
 //   - Range Selection / Fill Handle / Clipboard API (~9 members)
@@ -15,7 +15,11 @@ module ToolUp.Platform.AgGridEnterprise
 //
 // `[<AutoOpen>]` under `namespace ToolUp.Platform` makes the augmented
 // members visible to any caller that has `open ToolUp.Platform` in
-// scope — no consumer source edits.
+// scope — no consumer source edits. Phase 344 moved the file out of
+// ToolUp.Platform.Client into this opt-in package (GP 2), which is what
+// makes the Enterprise-gated members opt-in rather than always present;
+// the module NAME is deliberately unchanged so a consumer that already
+// referenced the companion sees no source break.
 //
 // Module name is `AgGridEnterprise` (sibling to `AgGrid`) rather than
 // `AgGrid.Enterprise` because F# rejects `module X` and `module X.Sub`
@@ -29,7 +33,7 @@ module ToolUp.Platform.AgGridEnterprise
 // consumer JS imports remain unchanged.
 
 open Fable.Core.JsInterop
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 #nowarn "1182"
 
