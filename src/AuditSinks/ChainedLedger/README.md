@@ -24,7 +24,7 @@ Stated plainly, because a reader who believes the chain alone is sufficient is w
 
 2. Construct the sink and register it. The unsigned form needs no key material at all:
 
-   ```fsharp skip=fragment
+   ```fsharp
    open ToolUp.Platform.AuditSinks.ChainedLedger
 
    let settings = {
@@ -38,7 +38,7 @@ Stated plainly, because a reader who believes the chain alone is sufficient is w
 
 3. To sign the head, implement `ILedgerHeadSigner` against whatever signing substrate the deployment runs, and use `createSigned`:
 
-   ```fsharp skip=fragment
+   ```fsharp
    let sink = createSigned "ledger-prod" settings blobStorage signer
    ```
 
@@ -121,7 +121,7 @@ let sink =
 
 **An export is the whole chain, not a filtered list.** Filtering records out would break every link across the elision, leaving the recipient unable to distinguish a legitimate omission from a deletion. So every position appears in order: an in-scope position in full, an out-of-scope position as a *witness* carrying its sequence, its digest and its facet labels — enough to walk the links through it, and not the record.
 
-```fsharp
+```fsharp skip=fragment
 let scope = LedgerScopedExport.PartyScope.create "acme" [ "scope:team-acme" ]
 
 match! LedgerScopedExport.exportFor settings blobStorage scope with

@@ -137,7 +137,7 @@ The `JobNotifyEventStore` decorator stacks above `HookedEventStore` so `OnEvent`
 
 For a job to react to "module X published event Y", register:
 
-```fsharp skip=fragment
+```fsharp
 let myJob = {
     Handler = "my-handler"
     Trigger = OnEvent "EventY"
@@ -145,11 +145,12 @@ let myJob = {
     Idempotency = None
     ShardKey = None
     Precision = Minute
-    Payload = ...
-    ScopeId = ...
-    CreatedBy = ...
+    Payload = payloadJson   // pre-serialised JSON, a string
+    ScopeId = scopeId       // the caller's resolved scope
+    CreatedBy = userId      // audit only; the server overwrites it
     Tags = Map.empty
 }
+
 scheduler.Schedule(myJob)
 ```
 
@@ -157,9 +158,13 @@ scheduler.Schedule(myJob)
 
 `Manual`-triggered jobs sit in the registry without an automatic fire path. Trigger explicitly:
 
-```fsharp skip=fragment
-scheduler.TriggerOnce(myJobId)
+```fsharp
+scheduler.TriggerOnce(scopeId, myJobId, userId)
 ```
+
+`TriggerOnce` takes the same `scopeId` every other scheduler method does (a
+`JobId` is only meaningful inside its scope) plus the acting user, which the
+scheduler records as `TriggerSource.ScheduledManually` on the resulting run.
 
 Common pattern: the data-ingestion subsystem schedules a `Manual` job on `IDataIngestionApi.TriggerRefresh` and immediately calls `TriggerOnce`.
 
@@ -197,8 +202,11 @@ A sixth type, `JobProgressCheckpoint`, joins them under the same `SourceModule` 
 
 A handler with a long body reports intermediate progress through `ctx.Progress`:
 
-```fsharp skip=fragment
-do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
+```fsharp
+async {
+    // … part-way through the handler's `Execute` body …
+    do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
+}
 ```
 
 Off by default (`ServerConfig.JobProgress = NoJobProgress`), in which case the call is a no-op costing one interface dispatch (GP 13). The checkpoint model, the reserved `_platform.jobs.progress` notification key, and the coalescing rule that never sheds the terminal checkpoint are documented in [`external-compute.md`](external-compute.md#progress-checkpoints), alongside the reconciliation poll that gives externally-run jobs progress with no handler code.
@@ -255,15 +263,15 @@ type MyJobHandler() =
 
 Declare handlers on the module that owns them; the composition root only has to enable the scheduler:
 
-```fsharp skip=fragment
-ServerModule.create "my-module"
-|> ServerModule.withJobHandler ("my-handler", MyJobHandler() :> IJobHandler, Manual)
-|> ...
+```fsharp
+let myModule =
+    ServerModule.create "my-module"
+    |> ServerModule.withJobHandler ("my-handler", MyJobHandler() :> IJobHandler, Manual)
 
 ServerApp.empty
 |> ServerApp.withConfig { ServerConfig.defaults with JobScheduler = InProcessJobScheduler }
 |> ServerApp.addModule myModule
-|> ...
+|> ServerApp.run
 ```
 
 The handler registry is keyed by the registered name. Handler lookup at trigger time uses `JobDefinition.Handler`; if the lookup fails, the job is marked failed immediately (no retry — the deployment can't suddenly grow a missing handler).
@@ -272,7 +280,7 @@ The handler registry is keyed by the registered name. Handler lookup at trigger 
 
 ### Daily summary email
 
-```fsharp skip=fragment
+```fsharp
 let summaryJob = {
     Handler = "summary-email"
     Trigger = CronTrigger "0 8 * * *"  // 08:00 UTC every day
@@ -286,8 +294,8 @@ let summaryJob = {
     ShardKey = None
     Precision = Minute
     Payload = serialiseTeamPayload teamId   // Payload is pre-serialised JSON, a string
-    ScopeId = ...
-    CreatedBy = ...
+    ScopeId = scopeId
+    CreatedBy = userId
     Tags = Map.empty
 }
 ```
@@ -296,7 +304,7 @@ The handler resolves recipients via `ITeamStore`, builds a summary via the relev
 
 ### On-event index refresh
 
-```fsharp skip=fragment
+```fsharp
 let reindexJob = {
     Handler = "reindex-handler"
     Trigger = OnEvent "DocumentUploaded"
@@ -305,8 +313,8 @@ let reindexJob = {
     ShardKey = None
     Precision = Minute
     Payload = ""  // empty; handler reads from the event store
-    ScopeId = ...
-    CreatedBy = ...
+    ScopeId = scopeId
+    CreatedBy = userId
     Tags = Map.empty
 }
 ```
@@ -315,7 +323,7 @@ The handler reads recent `DocumentUploaded` events from `IEventStore` and chunks
 
 ### Stale-record cleanup
 
-```fsharp skip=fragment
+```fsharp
 let cleanupJob = {
     Handler = "stale-cleanup"
     Trigger = CronTrigger "0 3 * * 0"  // 03:00 UTC every Sunday
@@ -323,9 +331,9 @@ let cleanupJob = {
     Idempotency = None
     ShardKey = None
     Precision = Minute
-    Payload = ...
-    ScopeId = ...
-    CreatedBy = ...
+    Payload = payloadJson
+    ScopeId = scopeId
+    CreatedBy = userId
     Tags = Map.empty
 }
 ```
@@ -336,10 +344,15 @@ The handler walks `IEntityStore` for records older than N days and soft-deletes 
 
 The data-ingestion subsystem registers `DataIngestionJobHandler` with `HandlerName = "_platform.dataingestion.run"`. Triggered + scheduled `IDataIngestor.Run` calls flow through this handler — refresh on schedule, refresh on demand, refresh on event, all through the same machinery.
 
-```fsharp skip=fragment
-// Triggered refresh:
-let! _ = dataIngestionApi.TriggerRefresh datasourceId
-// Internally schedules a Manual job + calls TriggerOnce.
+```fsharp
+async {
+    // Triggered refresh of ONE table — the argument is a tuple of
+    // (data-source id, table name).
+    let! result = dataIngestionApi.TriggerRefresh(datasourceId, "orders")
+    // Internally schedules a Manual job + calls TriggerOnce; `result` is
+    // `Ok jobId` for the attempt it queued.
+    return result
+}
 ```
 
 ## Limits
@@ -362,9 +375,14 @@ Five-field, `*` / values / commas / `*/N`. Not POSIX cron, not Quartz cron. For 
 
 ## Configuration
 
-```fsharp skip=fragment
-ServerConfig.JobScheduler = NoJobScheduler | InProcessJobScheduler
-ServerConfig.JobProgress = NoJobProgress | EnabledJobProgress
+```fsharp
+let config = {
+    ServerConfig.defaults with
+        // NoJobScheduler (the default) | InProcessJobScheduler
+        JobScheduler = InProcessJobScheduler
+        // NoJobProgress (the default) | EnabledJobProgress
+        JobProgress = EnabledJobProgress
+}
 ```
 
 Environment variables:

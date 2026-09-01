@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Offline Client — offline-first browser tier (Fable + Feliz): service-worker + PWA-manifest boot, an IndexedDB-backed mutation queue, a drain-on-reconnect coordinator with exponential backoff, and built-in conflict-resolver / status-badge components. Depends on ToolUp.Platform.Client + ToolUp.Offline.Core.</Description>
+        <PackageTags>fsharp;fable;feliz;sdk;client;offline;pwa;sync;indexeddb</PackageTags>
+        <!-- Fable ecosystem (Feliz, the in-tree Elmish + ToolUp.Remoting
+             runtimes) pre-dates F# 10's nullable reference types; per the
+             repo CLAUDE.md rule, nullness stays disabled on every
+             Fable-touching project. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <ProjectReference Include="..\ToolUp.Offline.Core\ToolUp.Offline.Core.fsproj" />
+    </ItemGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under
+         fable/. The reference service worker rides along so a consumer
+         can copy it out of the package rather than transcribe it. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <None Include="..\ToolUp.Offline\examples\offline-sw.js" Pack="true" PackagePath="contentFiles\any\any\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Offline\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Compile order: the service-worker boot depends on nothing in
+             this package; the queue is the substrate the coordinator
+             drains; the two components read the types both produce. -->
+        <Compile Include="Client\ServiceWorkerRegistration.fs" />
+        <Compile Include="Client\OfflineQueue.fs" />
+        <Compile Include="Client\SyncCoordinator.fs" />
+        <Compile Include="Client\OfflineConflictResolver.fs" />
+        <Compile Include="Client\OfflineStatusBadge.fs" />
+    </ItemGroup>
+    <!-- Fable.* / Feliz / FSharp.Core resolved transitively via
+         ToolUp.Platform.Client + the .NET SDK. -->
+</Project>

@@ -601,7 +601,8 @@ jobs:
           # it in the same commit. Raised 19 → 20 by Phase 574
           # (OpenXmlSpreadsheet). Raised 20 → 21 by Phase 576
           # (SvgRasterizerSkia). Raised 21 → 22 by Phase 534 (Reporting).
-          EXPECTED_PACKS: 22
+          # Raised 22 → 23 by Phase 24 (Offline).
+          EXPECTED_PACKS: 23
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded

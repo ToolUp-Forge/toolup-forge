@@ -15,7 +15,7 @@ What stays in core:
 
 - **`VectorKnowledgeTypes`** (`src/ToolUp.Platform.Core/Shared/Types/VectorKnowledgeTypes.fs`) — `VectorScope`, `TextChunk`, `VectorMatch`, `MergeStrategy`, `RetrievalRequest`. Shared by server and Fable-compiled code.
 - **`VectorisationHandler`** (`src/ToolUp.Platform.Core/Shared/Types/VectorisationTypes.fs`) — per-module declaration: "this is how to turn my processed data into chunks for indexing." Modules declare one without referencing `ToolUp.RAG`.
-- **`IEmbeddingProvider`** (`src/ToolUp.Platform.Server/Server/Rag/IEmbeddingProvider.fs`) — extension-point interface (`GenerateEmbedding`, `Dimensions`, `ProviderId`, `ModelId`). Also defines `EmbeddingVersion` (the `(ProviderId, ModelId, Dimensions)` triple stamped onto chunk metadata at upsert time). Implementations live in `src/EmbeddingProviders/<Name>/`.
+- **`IEmbeddingProvider`** (`src/ToolUp.Platform.Server/Server/Rag/IEmbeddingProvider.fs`) — extension-point interface with **five** members (`GenerateEmbedding`, `GenerateEmbeddings`, `Dimensions`, `ProviderId`, `ModelId`). `GenerateEmbeddings` is the batch leg — implementations with a native batch API issue one HTTP call for N inputs; the rest delegate to `IEmbeddingProvider.batchedFallback`. Also defines `EmbeddingVersion` (the `(ProviderId, ModelId, Dimensions)` triple stamped onto chunk metadata at upsert time). Implementations live in `src/EmbeddingProviders/<Name>/`.
 - **`IEmbeddingCache`** (`src/ToolUp.Platform.Server/Server/IEmbeddingCache.fs`) — extension-point interface for caching `text → float32 array` lookups. The in-memory LRU implementation is in this companion; a distributed companion (Redis, blob-backed) can replace it without touching call sites.
 - **`IVectorStore`** (`src/ToolUp.Platform.Server/Server/Rag/IVectorStore.fs`) — extension-point interface. The in-memory implementation is in this companion; a distributed companion (Qdrant, pgvector, …) can replace it without touching module code. Soft-delete contract: `DeleteChunk` writes `_deletedAt` tombstones; `Vacuum` hard-removes past the retention window; `DeleteByScope` is a config-grade reset that bypasses tombstone semantics.
 - **`IRetrievalPipeline`** (`src/ToolUp.Platform.Server/Server/Rag/IRetrievalPipeline.fs`) — high-level facade that `SystemPromptBuilder` implementations and modules call into. The *runtime* (pipeline, vector store, background ingestion, reembedding service) lives in this companion.
@@ -81,7 +81,7 @@ Deployments that use OpenAI embeddings swap `LocalEmbeddingProvider` for `OpenAI
 
 In the server entry point:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform
 open ToolUp.Platform.Server
 open ToolUp.AI
@@ -115,7 +115,7 @@ Deployments that don't want RAG use `AIServerApp.run` directly (no `RAGServerApp
 
 `RAGServerApp` exposes per-deployment knobs that tune retrieval behaviour without touching code. Compose them onto the pipeline before `run`:
 
-```fsharp skip=fragment
+```fsharp
 RAGServerApp.create aiProviderFactory providerProfile embedder
 // — Throughput (Phase 14n) —
 |> RAGServerApp.withIngestionConcurrency 16          // documents in flight per slot
@@ -215,7 +215,7 @@ With `AIConfig = None` (the default on `AIServerApp.empty`), `RAGServerApp.run` 
 
 Deployments that want custom prompt composition supply their own `aiConfig` and compose `withRetrieval` explicitly:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.RAG.RAGPromptBuilder
 
@@ -223,9 +223,19 @@ let ragAwarePrompt pipeline =
     SystemPromptBuilder.compose [
         SystemPromptBuilder.fromStatic "You are ToolUp, an analytics assistant..."
         SystemPromptBuilder.activeModuleContext
-        withRetrieval pipeline    // from ToolUp.RAG
+        // `withRetrieval` (from ToolUp.RAG) takes the retrieval-shape
+        // defaults, an optional IRagTelemetry and an optional
+        // IRetrievalTracer ahead of the pipeline.
+        withRetrieval RetrievalDefaults.defaults None None pipeline
     ]
 ```
+
+`RetrievalDefaults.defaults` is the same record `RAGServerApp` starts from, so a
+deployment that has tuned the knobs above passes the tuned value here instead —
+this is the builder-factory variant, not a hard-coded `TopK = 5`. Passing `None`
+for telemetry and the tracer opts out of both; `composeWithRAG` supplies its own
+when it installs the builder for you.
+
 
 Retrieval runs per request and reads `PromptContext.CurrentMessage` as the query. Access is scope-validated: a `Team teamId` request from a user whose `AccessContext.TeamId ≠ Some teamId` returns an empty result, not an error.
 
@@ -235,7 +245,7 @@ The `ToolUp.RAG.Chunking` module is the canonical way to slice content before ha
 
 **Two entry points:**
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.RAG.Chunking
 
 // Prose: token-budgeted, sentence-aware, overlap-preserving.
@@ -295,7 +305,7 @@ The reembedding service drains a `ReembeddingQueue` (unbounded `Channel<VectorSc
 
 > **Production deployments must enable `JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) *and* `RAGServerApp.withVacuumSchedule` for memory to stabilise.** With the schedule set but no scheduler, the sweep can never fire; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call. The `VacuumScheduleValidator` warns at startup in both cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel).
 
-```fsharp skip=fragment
+```fsharp
 RAGServerApp.create factory providerProfile embedder
 |> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
 |> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
@@ -309,17 +319,22 @@ Deployments that want a bespoke cadence use `withVacuumScheduleCron "<5-field cr
 
 Modules declare handlers — nothing in `ToolUp.RAG` names a module.
 
-```fsharp skip=fragment
+```fsharp
 // In SkuAnalysis/Server.fs
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.VectorKnowledgeTypes
 
 let salesVectorisation: VectorisationHandler = {
     DataTypeId = salesDataTypeId          // your module's own constant
-    Vectorise = fun processed ->
-        match processed with
-        | :? SalesSummary as s ->
-            s.RowGroups
+    // Synchronous, and it takes the `ProcessedData` that `DataType.Process`
+    // returned — a `{ TypeName; Payload }` pair whose `Payload` carries your
+    // module's own serialised summary. Only the module knows that shape, so
+    // only the module can read it back.
+    Vectorise =
+        fun processed ->
+            let summary = deserialiseSalesSummary processed.Payload
+
+            summary.RowGroups
             |> List.map (fun group -> {
                 Content = $"{group.Brand} {group.Category}: {group.Insights}"
                 Metadata =
@@ -328,13 +343,15 @@ let salesVectorisation: VectorisationHandler = {
                         "brand", group.Brand
                     ]
             })
-        | _ -> []
+    // `Some f` adds one document-level summary chunk, indexed under
+    // `_isSummary = "true"` and score-boosted at retrieval. `None` skips it.
+    Summarise = None
 }
 ```
 
 The app attaches each module's vectorisation handler(s) via `ServerModule.withVectorisation` when assembling the module list. Modules that don't vectorise simply don't call the helper:
 
-```fsharp skip=fragment
+```fsharp
 let skuAnalysisModule =
     ServerModule.create "SkuAnalysis"
     |> ServerModule.withGuardedApi skuAnalysisApi
@@ -355,9 +372,11 @@ Principles:
 
 Follow the pattern in [`src/EmbeddingProviders/Local/`](../EmbeddingProviders/Local/) and [`src/EmbeddingProviders/OpenAI/`](../EmbeddingProviders/OpenAI/). Minimum:
 
-1. Implement `IEmbeddingProvider` (in `src/ToolUp.Platform.Server/Server/Rag/IEmbeddingProvider.fs`):
+1. Implement `IEmbeddingProvider` (in `src/ToolUp.Platform.Server/Server/Rag/IEmbeddingProvider.fs`). All **five** members are required — F# will not let you stop at the first two:
    - `GenerateEmbedding: string -> Async<float32 array>` — pure-per-call for distributed implementations; the `LocalEmbeddingProvider` is the documented exception (see its file-level comment about Rule 4).
+   - `GenerateEmbeddings: string seq -> Async<float32 array array>` — same length and order as the input. Issue one batched call if the upstream API has one; otherwise delegate to `IEmbeddingProvider.batchedFallback`, which fans out to N parallel `GenerateEmbedding` calls.
    - `Dimensions: int` — constant for the provider's lifetime.
+   - `ProviderId: string` / `ModelId: string` — the identity half of the `EmbeddingVersion` stamp and of the `IEmbeddingCache` key. Constant for the instance's lifetime.
 2. Expose a factory function, typically `create (secretStore: ISecretStore) : IEmbeddingProvider` for API-backed providers or `create () : IEmbeddingProvider` for local / offline ones. API-backed providers read the key from the injected `ISecretStore` on each call, never hardcoded.
 3. Create a `.fsproj` and `.Server.props` in `src/EmbeddingProviders/<Name>/`. Deployments swap providers by changing the props import and the `embeddingProvider` binding — no other wiring changes.
 
@@ -394,7 +413,7 @@ The `InMemoryVectorStore` source is the reference implementation for the contrac
 
 The plaintext query never leaves request memory. Admin UIs and replay tooling read traces by `QueryHash`. To opt out, register a `NoOpRetrievalTracer` ahead of `RAGServerApp.run`:
 
-```fsharp skip=fragment
+```fsharp
 services.AddSingleton<IRetrievalTracer>(ToolUp.RAG.RetrievalTracers.createNoOp ())
 ```
 
@@ -440,7 +459,7 @@ Each helper delegates through `AIServerApp` to `ServerApp` — see [`src/ToolUp.
 
 ## Deferred follow-ups
 
-- **Configurable `withRetrieval` parameters.** `TopK = 5` and `Merge = Interleaved` are hard-coded. A builder-factory variant `withRetrievalOptions { TopK; Merge; MinScore }` would let deployments tune this without rewriting the builder.
+- **Configurable `withRetrieval` parameters.** ✅ Shipped — `withRetrieval` takes a `RetrievalDefaults` record (`TopK` / `MinScore` / `Merge` / `SnippetCharLimit` / `OriginFilter` / `Filters`), and `RAGServerApp.withRetrievalDefaults` plus the targeted `withTopK` / `withMinScore` / … setters above tune it without rewriting the builder.
 - **Distributed vector store companion.** The HNSW companion ([`src/VectorStores/Hnsw/`](../VectorStores/Hnsw/)) is the first concrete in-process alternative to `InMemoryVectorStore`. The next rung is an external implementation (Pgvector / Qdrant) — the `IVectorStore` contract supports it; deferred follow-ups beyond Phase 14k.
 - **Auto-vacuum scheduler.** ✅ Shipped (Phase 14w) — `RAGServerApp.withVacuumSchedule` + `withTombstoneRetention` register a `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope on a cron (default daily 03:00 UTC). See the "Steady-state memory" contract above.
 - **CI integration for the eval harness.** The repo has no CI pipeline yet; once one exists, a step running `dotnet run --project src/ToolUp.RAG.Evaluation -- --baseline baseline.json --out latest.json` against a tracked baseline would fail PRs that regress recall by more than 5%.

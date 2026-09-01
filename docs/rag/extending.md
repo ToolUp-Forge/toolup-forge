@@ -4,12 +4,18 @@ How to write a new embedding provider, vector store, retrieval tracer, OCR provi
 
 ## Writing a new `IEmbeddingProvider`
 
-A new provider goes in `ToolUp.EmbeddingProviders.<VendorName>`. Implement the interface, expose a `create` function.
+A new provider goes in `ToolUp.EmbeddingProviders.<VendorName>`
+(`src/EmbeddingProviders/<VendorName>/`), as one flat module. Implement the
+interface, expose a `create` function.
 
-```fsharp skip=fragment
-module MyVendor.EmbeddingProvider
+Note the two opens. `IEmbeddingProvider` and `ISecretStore` each live in
+their own module beneath the `ToolUp.Platform` namespace, so `open
+ToolUp.Platform` alone does **not** bring either type into scope — the
+shipped providers open both explicitly.
 
-open ToolUp.Platform
+```fsharp
+open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Secrets
 
 type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
     let dimensions =
@@ -24,6 +30,11 @@ type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
             // Translate to vendor wire format, POST, parse result
             return [| 0.0f |]  // ...
         }
+
+        member this.GenerateEmbeddings(texts) =
+            // No native batch endpoint — fan out to N parallel single calls.
+            batchedFallback (this :> IEmbeddingProvider).GenerateEmbedding texts
+
         member _.ProviderId = "myvendor"
         member _.ModelId = model
         member _.Dimensions = dimensions
@@ -38,18 +49,20 @@ module MyVendorEmbeddingProvider =
 - **Receive `ISecretStore` through the `create` function.** Never read env vars / config files directly.
 - **`ProviderId` must be globally unique.** Used as a discriminator on `EmbeddingVersion` stamps; collisions break re-embedding logic.
 - **`Dimensions` must be honest.** The vector store validates incoming vectors against the provider's declared dimensions; mismatches throw.
+- **Implement the batch member as well.** `GenerateEmbeddings` is part of the interface, not an optional extra: a vendor with a native batch endpoint issues one HTTP call for N inputs (a 100-chunk document goes from ~15 s of sequential calls to ~150 ms), and one without delegates to `batchedFallback`, which fans out to N parallel `GenerateEmbedding` calls. The returned array must match the input sequence in length and order.
 - **Async at every boundary.** No sync `GenerateEmbedding` — vendor API calls are I/O.
 - **Stateless between calls.** Distributed-ready providers must be stateless (portability rule 4). `LocalEmbeddingProvider` is the documented exception (in-process IDF state); mark any new stateful provider as dev-only in its file header.
 
 ### Wire into a consumer
 
-```fsharp skip=fragment
-open MyVendor.EmbeddingProvider
+`RAGServerApp.create` is curried, and its second argument is the
+`IProviderProfile` that resolves which model a scope gets — not a config
+store:
 
+```fsharp
 let embedder = MyVendorEmbeddingProvider.create secretStore "myvendor-large"
 
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
-|> ...
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.run
 ```
 
@@ -61,13 +74,14 @@ Vector store impls are larger — they handle storage, indexing, search, soft-de
 - `InMemoryVectorStore` (in `ToolUp.RAG.Server`) — coarse-locked dictionaries, pre-normalised vectors, debounced blob persistence. ~600 lines.
 - `ToolUp.VectorStores.Hnsw` — HNSW index with blob-backed persistence. ~400 lines.
 
-Key contract requirements (from `IVectorStoreContract` test pack):
+Key contract requirements, read off `IVectorStore` itself
+([`src/ToolUp.Platform.Server/Server/Rag/IVectorStore.fs`](../../src/ToolUp.Platform.Server/Server/Rag/IVectorStore.fs)):
 
 ### Soft-delete semantics
 
-`DeleteChunk` writes a `_deletedAt` tombstone. The chunk persists physically but is filtered from `Search` results. `Vacuum scope retainTombstones` hard-removes tombstones older than the retention window. `DeleteByScope` is a config-grade reset — bypasses tombstone semantics entirely (e.g., for crypto-shred).
+`DeleteChunk scope chunkId` writes a `_deletedAt` tombstone. The chunk persists physically but is filtered from `Search` results. `Vacuum scope olderThan` hard-removes tombstones older than the supplied `DateTimeOffset` and returns how many it took. `DeleteByScope` is a config-grade reset — bypasses tombstone semantics entirely (e.g., for crypto-shred).
 
-The retention window matters because operators may need to recover a soft-deleted chunk within the window. The audit log records the delete as `KnowledgeChunkDeleted`; recovery is "find the tombstone, mark it un-deleted, rebuild the index entry".
+The retention window matters because operators may need to recover a soft-deleted chunk within it. The audit log records the delete as `KnowledgeChunkDeleted`; recovery is `RestoreChunk scope chunkId`, which clears the tombstone and rebuilds the index entry — implement it, or a vacuum window is the only thing standing between a mistaken delete and permanent loss.
 
 ### Scope isolation
 
@@ -75,43 +89,62 @@ The retention window matters because operators may need to recover a soft-delete
 
 ### Pre-normalisation
 
-For cosine similarity (the standard), pre-normalise vectors at `Index` time so search reduces to a dot product. Faster than per-query normalisation.
+For cosine similarity (the standard), pre-normalise vectors at `Upsert` time so search reduces to a dot product. Faster than per-query normalisation.
 
 ### Persistence
 
 Some impls (in-memory, HNSW) persist their state to `IBlobStorage` for warm restart. Decide between:
-- **Sync persistence** — flush on every `Index`. Simple; slow.
+- **Sync persistence** — flush on every `Upsert`. Simple; slow.
 - **Debounced persistence** — flush after N seconds of idle. The shipped impl uses 5s. Need to handle `IDisposable` to flush on shutdown so no chunks are lost.
 - **No persistence** — re-build from `IEventStore` history on restart. Heavy startup; lightest steady-state. Most distributed vector stores (Qdrant, Pinecone) handle persistence themselves.
 
 ### Conformance test
 
-Bind your impl into the `IVectorStoreContract` test pack:
+**There is no shipped `IVectorStore` conformance pack.** `ToolUp.Platform.Tests`
+ships contract packs for many SDK seams (`src/ToolUp.Platform.Tests/Contracts/`),
+but the vector-store seam is not one of them — the requirements above are the
+contract, and the suites that hold the shipped implementations to it are
+per-implementation:
 
-```fsharp skip=fragment
-testList "MyVectorStore conformance" [
-    yield! IVectorStoreContract.tests
-        (fun () -> MyVectorStore.create()  :> IVectorStore)
-]
-```
+- [`InProcess/HnswVectorStoreTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/HnswVectorStoreTests.fs) — scope isolation (a query against the wrong scope must return zero, and a multi-scope query only the scopes asked for), tombstone exclusion + `RestoreChunk`, and deterministic ordering of equal-score matches.
+- [`InProcess/PgvectorVectorStoreTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/PgvectorVectorStoreTests.fs) — the same properties asserted structurally, over the emitted SQL: every chunk-touching statement binds the scope column, and search filters tombstones.
 
-Run in CI. Failing tests indicate semantic violations; passing means drop-in compatibility.
+Model your own Expecto suite on those and run it in CI. Scope isolation and
+soft-delete are the two worth pinning first: a violation of either is silent
+at compose time and expensive afterwards.
 
 ## Writing a new `IRetrievalTracer`
 
-Trivial interface; wire to whatever observability sink you want:
+Two members, both curried over `(payload, ctx)`: `Trace` takes a
+`RetrievalTrace`, and `Miss` takes a `RetrievalMiss` — a separate record, so
+an admin UI can surface "queries that fall through" without scanning every
+trace.
 
-```fsharp skip=fragment
+```fsharp
+open ToolUp.Platform.IRetrievalTracer
+
 type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
     interface IRetrievalTracer with
-        member _.Trace(trace, accessCtx) = async {
-            let payload = {| (* trace fields *) |}
+        member _.Trace trace ctx = async {
+            let payload = {|
+                queryHash = trace.QueryHash
+                latencyMs = trace.LatencyMs
+                topScore = trace.TopScore
+            |}
+
             do! httpClient.PostAsJsonAsync("https://api.datadoghq.com/api/v2/...", payload)
                 |> Async.AwaitTask
                 |> Async.Ignore
         }
-        member _.Miss(scope, queryHash) = async {
+
+        member _.Miss miss ctx = async {
             // record miss metric
+            do! httpClient.PostAsJsonAsync(
+                    "https://api.datadoghq.com/api/v2/...",
+                    {| queryHash = miss.QueryHash
+                       matchesAboveMinScore = miss.MatchesAboveMinScore |})
+                |> Async.AwaitTask
+                |> Async.Ignore
         }
 ```
 
@@ -120,7 +153,7 @@ for an already-registered `IRetrievalTracer` and falls back to the default
 only when it finds none, so registration is the whole of the wiring — there
 is no `RAGServerApp` pipeline step for it:
 
-```fsharp skip=fragment
+```fsharp
 services.AddSingleton<IRetrievalTracer>(DatadogRetrievalTracer(httpClient, apiKey))
 ```
 
@@ -148,7 +181,7 @@ type AzureDocIntelligenceOcrProvider(client: DocumentAnalysisClient) =
             return
                 result.Value.Pages
                 |> Seq.map (fun page -> {
-                    Page = page.PageNumber
+                    PageNumber = page.PageNumber
                     Text = page.Lines |> Seq.map _.Content |> String.concat "\n"
                 })
                 |> List.ofSeq
@@ -159,10 +192,18 @@ OCR is expensive — typical pricing is ~$1.50 per 1000 pages. Use sparingly; pa
 
 ## Writing a new `ITableExtractor`
 
-```fsharp skip=fragment
-type CamelotTableExtractor(...) =
+Same shape as `IOcrProvider`: `ExtractTables` is curried and takes the MIME
+type alongside the bytes, and the extractor declares a `Name` for
+diagnostics.
+
+```fsharp
+open ToolUp.Platform.ITableExtractor
+
+type CamelotTableExtractor() =
     interface ITableExtractor with
-        member _.ExtractTables(documentBytes) = async {
+        member _.Name = "camelot-lattice"
+
+        member _.ExtractTables documentBytes mimeType = async {
             // Call out to a Python sidecar running Camelot/Tabula/etc.
             // Or use a cloud API.
             return extractedTables
@@ -175,7 +216,9 @@ Output shape (`ExtractedTable`) is deliberately compatible with `Chunking.SheetD
 
 `EmbedImage` is curried and takes the image's MIME type; both methods return `float[]`, not `float32[]`.
 
-```fsharp skip=fragment
+```fsharp
+open ToolUp.Platform.IImageEmbedder
+
 type ClipImageEmbedder(httpClient: HttpClient, apiKey: string) =
     let dimensions = 512
 
@@ -207,7 +250,9 @@ Cross-encoder rerankers (BGE Reranker, Cohere Rerank, Mixedbread Reranker):
 
 `Rerank` is curried over query and candidates and takes no `topK` — it reorders the pool it is given, and the caller truncates. The batch ceiling is declared as `MaxBatchSize` so the pipeline can chunk the pool for you:
 
-```fsharp skip=fragment
+```fsharp
+open ToolUp.Platform.IReranker
+
 type CohereReranker(httpClient: HttpClient, apiKey: string) =
     interface IReranker with
         member _.Name = "cohere-rerank"
@@ -217,7 +262,7 @@ type CohereReranker(httpClient: HttpClient, apiKey: string) =
             let payload = {|
                 model = "rerank-english-v2.0"
                 query = query
-                documents = candidates |> List.map (fun m -> m.Chunk.Content)
+                documents = candidates |> List.map _.Content
             |}
 
             let! response =
@@ -238,27 +283,32 @@ Optional. Used by `Chunking.withContextualHeader` to prepend a one-sentence summ
 
 `Summarise` receives the document context AND the chunk, curried — the point is a chunk-level summary written with the whole document in view:
 
-```fsharp skip=fragment
+`IAIProvider.SendMessage` takes a five-part tuple — messages, tools, an
+optional system prompt, an optional per-delta streaming callback, and a
+`RetryPolicy` — and returns `Result<AIProviderResponse, AIProviderError>`.
+There is no request record and no `MaxTokens` / `Temperature` knob on the
+call: model parameters belong to the provider's own configuration.
+
+```fsharp
+open ToolUp.Platform.AI
+open ToolUp.Platform.ITextSummariser
+
 type ClaudeTextSummariser(aiProvider: IAIProvider) =
     interface ITextSummariser with
         member _.Name = "claude-summariser"
 
         member _.Summarise documentContext chunk = async {
-            let! response =
-                aiProvider.SendMessage {
-                    SystemPrompt = "Summarise the chunk in one sentence, using the document context."
-                    Messages = [
-                        { Role = "user"
-                          Content = $"Document:\n{documentContext}\n\nChunk:\n{chunk}"
-                          Parts = [] }
-                    ]
-                    Tools = []
-                    MaxTokens = 100
-                    Temperature = 0.0
-                    Stream = false
-                }
-
-            return response.Messages |> List.last |> _.Content
+            match!
+                aiProvider.SendMessage(
+                    [ AIProviderMessage.text "user" $"Document:\n{documentContext}\n\nChunk:\n{chunk}" ],
+                    [],
+                    Some "Summarise the chunk in one sentence, using the document context.",
+                    None,
+                    RetryPolicy.defaults
+                )
+            with
+            | Ok response -> return response.Content
+            | Error err -> return failwithf "summariser: %A" err
         }
 ```
 
@@ -292,21 +342,17 @@ The `.Server.props` extension contract injects source into the consuming server 
 
 ## Testing
 
-Bind your impl into the contract test pack:
-
-```fsharp skip=fragment
-open Expecto
-open ToolUp.Platform.Tests.Contracts
-
-[<Tests>]
-let tests =
-    testList "MyEmbeddingProvider conformance" [
-        yield! IEmbeddingProviderContract.tests
-            (fun () -> MyEmbeddingProvider.create secretStore "default-model")
-    ]
-```
-
-For vector stores, similarly bind into `IVectorStoreContract`. For retrieval pipelines, `IRetrievalPipelineContract`.
+`ToolUp.Platform.Tests` ships reusable Expecto contract packs for many SDK
+seams — see `src/ToolUp.Platform.Tests/Contracts/`, where each pack is a
+`module ToolUp.Platform.Tests.Contracts.IXxxContract` exposing
+`tests (name: string) (factory: unit -> IXxx)`. **None of the RAG seams on
+this page has one.** There is no `IEmbeddingProviderContract`, no
+`IVectorStoreContract` and no `IRetrievalPipelineContract`; those seams are
+held to their contracts by per-implementation suites under
+`src/ToolUp.Platform.Tests/InProcess/` (`HnswVectorStoreTests.fs`,
+`PgvectorVectorStoreTests.fs`, `LocalEmbeddingHashingTests.fs`,
+`LocalEmbeddingScopeTests.fs`, `EmbeddingProviderEnvTests.fs`). Model your
+own suite on the one nearest your seam and run it in CI.
 
 For higher-level integration tests, use the SDK's `InMemoryVectorStore` + `LocalEmbeddingProvider` as the dev substrate; build test fixtures over them; verify your higher-level code works end-to-end.
 

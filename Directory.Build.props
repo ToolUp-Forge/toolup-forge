@@ -130,8 +130,20 @@
       artefact as 739's and 741's. A version is bumped when the slot has
       been RELEASED, not once per phase that touches it.
 
-      The same slot ALSO carries Phase 749, which is the largest break of
-      the four: it DELETES two packages, `ToolUp.AuthProviders.EntraExternalId`
+      The same slot ALSO carries Phase 737, on that last sentence. It
+      widens three `ToolUp.PublicRendering` records —
+      `SitemapGenerator.SitemapHandlerOptions` (a `Universe` field),
+      `StaticExportOptions` (`SitemapUniverse`) and
+      `PublicRenderingCompose.PublicRenderingServerApp`
+      (`SitemapExcludeNoindex`) — under the same 2026-08-04 dispensation,
+      breaking only a consumer constructing one as a full record literal.
+      Everything else it adds is additive, and the new field defaults
+      reproduce the pre-737 sitemap byte for byte. `v0.22.0` is still the
+      newest tag, so 0.23.0 remains unpublished and 737 ships in that same
+      artefact rather than asking for a fourth number.
+
+      And the same slot ALSO carries Phase 749, which is the largest break
+      in it: it DELETES two packages, `ToolUp.AuthProviders.EntraExternalId`
       and `ToolUp.AuthProviders.EntraExternalId.Client`, executing the
       removal their 0.4.0 soft deprecation scheduled as `0.Y.0`. It also
       removes seven now-unreachable public literals from
@@ -140,11 +152,12 @@
       deleted companion was the only reader and only emitter of.
 
       MINOR is where this repo's SemVer-on-0.x policy puts a break, and
-      the fourth-bump reasoning is 743's verbatim: the newest tag is still
-      `v0.22.0`, so 0.23.0 has never been published and this removal ships
-      in the same artefact as the other three. A consumer pinned to 0.22.0
-      is untouched and keeps both packages; the migration recipe for the
-      one that upgrades is `docs/migrations/0.23.0-entra-external-id-removal.md`.
+      the no-further-bump reasoning is 743's and 737's verbatim: the newest
+      tag is still `v0.22.0`, so 0.23.0 has never been published and this
+      removal ships in the same artefact as the others. A consumer pinned
+      to 0.22.0 is untouched and keeps both packages; the migration recipe
+      for the one that upgrades is
+      `docs/migrations/0.23.0-entra-external-id-removal.md`.
 
       A package that STOPS being produced is worth stating explicitly,
       because it is the one shape a version number cannot express: there

@@ -356,6 +356,11 @@
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 307 — the UI toolkit, promoted out of ToolUp.Platform.Client
+         into its own package so a consumer that wants the components
+         without the SDK client tier can take it alone. Versions with the
+         rest of the repo off $(ToolUpSdkVersion). -->
+    <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Sdk" Version="$(ToolUpSdkVersion)" />
 

@@ -29,6 +29,16 @@
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 307 — the `Toolup.UIToolkit` component set, the icon
+         primitives and the typed prop-helper family, promoted out of
+         ToolUp.Platform.Client into a standalone package (same move, same
+         reasons as Phase 344's Feliz.AgGrid split below).
+         `ToolUp.Platform.Client` still depends on it, so an existing
+         consumer needs no fsproj change — it arrives transitively, and
+         every namespace is preserved, so unlike 344 no compat re-export
+         was needed (GP 11). Declared here so a consumer that wants the
+         toolkit ALONE can add one PackageReference with no version. -->
+    <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
 
     <!-- Cross-tier companions -->

@@ -70,7 +70,9 @@
     gap rather than doc drift — add the ProjectReference here.
   -->
   <ItemGroup>
-    <ProjectReference Include="../src/AgGridEnterprise/AgGridEnterprise.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgCharts/Feliz.AgCharts.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgGrid/Feliz.AgGrid.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgGrid.Enterprise/Feliz.AgGrid.Enterprise.fsproj" />
     <ProjectReference Include="../src/AI.Samples/ToolUp.AI.SampleClientTool.Client/ToolUp.AI.SampleClientTool.Client.fsproj" />
     <ProjectReference Include="../src/AI.Samples/ToolUp.AI.SampleClientTool.Server/ToolUp.AI.SampleClientTool.Server.fsproj" />
     <ProjectReference Include="../src/AICookbooks/AgChart/AgChartAICookbook.fsproj" />
@@ -90,6 +92,7 @@
     <ProjectReference Include="../src/AuthProviders/EntraDirectory/EntraDirectory.fsproj" />
     <ProjectReference Include="../src/AuthProviders/GitHub/GitHubAuth.fsproj" />
     <ProjectReference Include="../src/AuthProviders/GoogleDirectory/GoogleDirectory.fsproj" />
+    <ProjectReference Include="../src/AuthProviders/GoogleIdentityClient/GoogleIdentityClient.fsproj" />
     <ProjectReference Include="../src/AuthProviders/LdapActiveDirectory/LdapActiveDirectory.fsproj" />
     <ProjectReference Include="../src/AuthProviders/Oidc/OidcAuthProvider.fsproj" />
     <ProjectReference Include="../src/AuthProviders/OidcClient/OidcClient.fsproj" />
@@ -125,12 +128,16 @@
     <ProjectReference Include="../src/Hosts/GoogleCloudFunctions/ToolUp.Hosts.GoogleCloudFunctions.fsproj" />
     <ProjectReference Include="../src/IngestionQueues/Redis/ToolUp.IngestionQueues.Redis.fsproj" />
     <ProjectReference Include="../src/InterPlatform/InterPlatform.fsproj" />
+    <ProjectReference Include="../src/Media/CloudTranscode/ToolUp.Media.CloudTranscode.fsproj" />
+    <ProjectReference Include="../src/Media/FFmpeg/ToolUp.Media.FFmpeg.fsproj" />
     <ProjectReference Include="../src/Media/MediaLibrary/ToolUp.MediaLibrary.fsproj" />
     <ProjectReference Include="../src/Metrics/OpenTelemetry/ToolUp.Metrics.OpenTelemetry.fsproj" />
     <ProjectReference Include="../src/ModelProviders/Reference/ToolUp.ModelProviders.Reference.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Email/SendGrid/ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Email/Smtp/ToolUp.NotificationChannels.Email.Smtp.fsproj" />
+    <ProjectReference Include="../src/NotificationChannels/Push/WebPush/ToolUp.NotificationChannels.Push.WebPush.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj" />
+    <ProjectReference Include="../src/NotificationChannels/Sms/Twilio/ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
     <ProjectReference Include="../src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj" />
     <ProjectReference Include="../src/RateLimit/AzureTableStorage/ToolUp.RateLimit.AzureTableStorage.fsproj" />
     <ProjectReference Include="../src/RateLimit/Redis/ToolUp.RateLimit.Redis.fsproj" />

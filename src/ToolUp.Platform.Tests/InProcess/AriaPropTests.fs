@@ -29,7 +29,7 @@ let private ariaPropSource () =
     let repoRoot =
         Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-    Path.Combine(repoRoot, "src", "ToolUp.Platform.Client", "Client", "UI", "AriaProp.fs")
+    Path.Combine(repoRoot, "src", "ToolUp.Platform.UI", "AriaProp.fs")
 
 /// Each helper the module must expose, paired with the attribute
 /// name it must wrap. Drift between the helper name and the

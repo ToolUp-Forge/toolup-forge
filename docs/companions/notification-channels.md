@@ -25,14 +25,17 @@ TOOLUP_REDIS_CONNECTION=localhost:6379
 
 The reference deployment reads these env vars at startup and registers the Redis channel:
 
-```fsharp skip=fragment
+```fsharp
+open ToolUp.Platform.NotificationChannels.Redis
+
 let notificationChannel =
     RedisNotificationChannel.fromConnectionString "localhost:6379" None
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withNotifications notificationChannel
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Per-scope topic isolation is structural — one topic per `ScopeId`. There's no cross-tenant subscribe path. Subscribers receive events for their scope only.
@@ -52,6 +55,8 @@ Built into `ToolUp.Platform.Server`. Used when no companion is wired. Works for 
 
 Three categories: email, SMS, push. Each has one or more vendor companions.
 
+> **The package id is not the module path.** The headings below name the **NuGet package** (`ToolUp.NotificationChannels.Email.Smtp`); the **F# module you `open`** carries an extra segment — `ToolUp.Platform.NotificationChannels.Email.Smtp`. Same for the Redis channel above. Copying the heading into an `open` is the mistake to avoid; take the `open` from the code block.
+
 ### Email — `ToolUp.NotificationChannels.Email.Smtp`
 
 Generic SMTP via MailKit. Vendor-agnostic (works with Mailgun, Postmark, Amazon SES, in-house mail relay, etc.).
@@ -63,21 +68,25 @@ TOOLUP_TRANSACTIONAL_EMAIL=smtp
 TOOLUP_SMTP_HOST=smtp.example.com
 TOOLUP_SMTP_PORT=587
 TOOLUP_SMTP_USERNAME=...
+TOOLUP_SMTP_PASSWORD=...
 TOOLUP_SMTP_FROM_EMAIL=noreply@example.com
 TOOLUP_SMTP_FROM_NAME="My App"
 ```
 
-Password stored in `ISecretStore` under `_platform`, key `SMTP_PASSWORD`.
+**This is the one shipped sink that does not take an `ISecretStore`.** The SASL password is a field on `SmtpSettings` (`Password: string option`), and `SmtpSettings.fromEnv ()` reads it from `TOOLUP_SMTP_PASSWORD`. A deployment that wants the password out of the environment builds the record itself — read the value from `ISecretStore` at compose time and set `Password`. Unlike the API-keyed sinks below, rotation is therefore not per-call: a rotated SMTP password needs the settings rebuilt.
 
-```fsharp skip=fragment
-open ToolUp.NotificationChannels.Email.Smtp
+```fsharp
+open ToolUp.Platform.NotificationChannels.Email.Smtp
 
-let sink = SmtpNotificationSink.create smtpSettings secretStore :> INotificationSink
+// `create` takes the address book first and already returns
+// `INotificationSink`; `SmtpSettings.fromEnv ()` reads the variables above.
+let sink = SmtpNotificationSink.create addressBook (SmtpSettings.fromEnv ()) logger
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withTransactionalSink sink
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Use when:
@@ -98,15 +107,17 @@ TOOLUP_SENDGRID_FROM_NAME="My App"
 
 API key in `ISecretStore`, key `SENDGRID_API_KEY`.
 
-```fsharp skip=fragment
-open ToolUp.NotificationChannels.Email.SendGrid
+```fsharp
+open ToolUp.Platform.NotificationChannels.Email.SendGrid
 
-let sink = SendGridNotificationSink.create sendGridSettings secretStore :> INotificationSink
+let sink =
+    SendGridNotificationSink.create addressBook secretStore (SendGridSettings.fromEnv ()) logger
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withTransactionalSink sink
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Use when:
@@ -131,15 +142,17 @@ TOOLUP_TWILIO_FROM_NUMBER=+14155551234
 
 Auth token in `ISecretStore`, key `TWILIO_AUTH_TOKEN`.
 
-```fsharp skip=fragment
-open ToolUp.NotificationChannels.Sms.Twilio
+```fsharp
+open ToolUp.Platform.NotificationChannels.Sms.Twilio
 
-let sink = TwilioNotificationSink.create twilioSettings secretStore :> INotificationSink
+let sink =
+    TwilioNotificationSink.create addressBook secretStore (TwilioSettings.fromEnv ()) logger
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withTransactionalSink sink
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 ### Push — `ToolUp.NotificationChannels.Push.WebPush`
@@ -156,15 +169,17 @@ TOOLUP_VAPID_PUBLIC_KEY=...   # generated once; safe to expose
 
 Private key in `ISecretStore`, key `VAPID_PRIVATE_KEY`.
 
-```fsharp skip=fragment
-open ToolUp.NotificationChannels.Push.WebPush
+```fsharp
+open ToolUp.Platform.NotificationChannels.Push.WebPush
 
-let sink = WebPushNotificationSink.create webPushSettings secretStore :> INotificationSink
+let sink =
+    WebPushNotificationSink.create addressBook secretStore (WebPushSettings.fromEnv ()) logger
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withTransactionalSink sink
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Browser side: register a Service Worker (`examples/sw.js` template ships with the companion). The Service Worker handles `push` events and shows OS notifications.
@@ -176,8 +191,8 @@ Browser side: register a Service Worker (`examples/sw.js` template ships with th
 1. Looks up the user's contact details via `INotificationAddressBook` (default: blob-backed `BlobBackedNotificationAddressBook` reads from `_platform/contacts/{scopeId}/{userId}.json`).
 2. Resolves the vendor-neutral address (`EmailAddress` / `PhoneNumber` / `PushToken`).
 3. Checks the per-team `_platform.notification_prefs` kill switches.
-4. Routes by `Kind` (`Email` / `Sms` / `Push`) to the matching registered `INotificationSink`.
-5. Calls `sink.Send envelope`.
+4. Routes by `Kind` (`SinkKind.Email` / `SinkKind.Sms` / `SinkKind.Push of PushVariant`) to the matching registered `INotificationSink`.
+5. Calls `sink.Send(scopeId, envelope)` and reads the returned `SinkResult` — `Delivered` / `Skipped` / `TransientFailure` / `PermanentFailure`.
 6. Emits `NotificationSent` or `NotificationDeliveryFailed` audit event under `_platform.notifications`.
 
 PII (email addresses, phone numbers, push tokens) NEVER crosses pub/sub topics — only `userId`s flow through the channel; addresses resolve at dispatch time via the address book.
@@ -266,37 +281,48 @@ For a vendor not covered (Postmark, Mailgun, AWS SNS, Firebase Cloud Messaging, 
 ```fsharp skip=fragment
 module MyVendor.NotificationSink
 
+open System.Net.Http
 open ToolUp.Platform
 
 type MyVendorEmailSink(settings: MyVendorSettings, secretStore: ISecretStore, httpClient: HttpClient) =
     interface INotificationSink with
-        member _.Kind = NotificationKind.TransactionalEmail
-        member _.Send(envelope) = async {
+        // A `SinkKind` DU case, not a `NotificationKind` wire string.
+        member _.Kind = NotificationKind.SinkKind.Email
+        // Free-form vendor label, surfaced in audit and /dev/inspect.
+        member _.Provider = "MyVendor"
+        member _.Send(scopeId, envelope) = async {
             let payload =
                 match envelope.Notification with
                 | TransactionalEmail emailPayload -> emailPayload
                 | _ -> failwith "Wrong kind routed to email sink"
+            // `GetSecret` returns `string option`.
             let! apiKey = secretStore.GetSecret("_platform", "MYVENDOR_API_KEY")
             // POST to vendor API; parse response
-            let! response = httpClient.PostAsJsonAsync(vendorUrl, ...) |> Async.AwaitTask
-            response.EnsureSuccessStatusCode() |> ignore
-            return Result.Ok ()
+            let! response = httpClient.PostAsJsonAsync(settings.Endpoint, payload) |> Async.AwaitTask
+
+            if response.IsSuccessStatusCode then
+                return SinkResult.Delivered None
+            else
+                // 4xx is the caller's fault and will not improve on retry;
+                // 5xx / timeout is what `TransientFailure` is for.
+                return SinkResult.PermanentFailure $"{int response.StatusCode}"
         }
 ```
 
 Wire:
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withTransactionalSink (MyVendorEmailSink(settings, secretStore, httpClient) :> INotificationSink)
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Rules:
-- `Kind` discriminates routing — exactly one sink registered per `Kind`. Duplicate `Kind` registration is rejected at compose time.
-- API keys / tokens come through `ISecretStore`. Rotation is the operator's lever; the sink reads per-call so rotated values flow through immediately.
-- Sinks should be idempotent across retries — the dispatcher retries on `Result.Error`. Use vendor dedup keys (Message-ID, idempotency tokens, etc.).
+- `Kind` discriminates routing — exactly one sink registered per `Kind`, and the compose-time uniqueness check keys on `SinkKind.toWireString`, so `Push PushVariant.WebPush` and `Push PushVariant.Fcm` register side by side without colliding. Duplicate registration of the same wire string is rejected at compose time.
+- API keys / tokens come through `ISecretStore`. Rotation is the operator's lever; the sink reads per-call so rotated values flow through immediately. (The SMTP sink is the exception — see its section above.)
+- Sinks should be idempotent across retries — the dispatcher retries on `TransientFailure` only; `PermanentFailure` goes straight to the audit trail, and `Skipped` emits nothing. Use vendor dedup keys (Message-ID, idempotency tokens, etc.).
 - Author an `IHealthCheck` + `IConfigValidator` for self-registration.
 
 For HTTP-shaped sinks, use BCL `HttpClient` rather than a vendor SDK where the API is permissive. This minimises the dep graph.
@@ -316,6 +342,6 @@ For HTTP-shaped sinks, use BCL `HttpClient` rather than a vendor SDK where the A
 
 `INotificationChannel` satisfies all six portability rules — Identity by value, async at every boundary, no callback/supervision hooks, stateless per invocation, structural per-scope topic isolation, minute-precision floor documented.
 
-`INotificationSink` is sync-by-design *only at the `Kind` discriminator method*; `Send` is async. The sink's compose-time `Kind` is identity-by-value (a `NotificationKind` DU case); no live framework handles cross the interface.
+`INotificationSink` is sync-by-design *only at its two compose-time properties*, `Kind` and `Provider`; `Send` is async. The sink's `Kind` is identity-by-value (a `NotificationKind.SinkKind` DU case); no live framework handles cross the interface.
 
 Conformance: `INotificationChannelContract` test pack covers per-scope topic isolation + delivery ordering within a scope. Drop-in alternatives validate against the same pack.
