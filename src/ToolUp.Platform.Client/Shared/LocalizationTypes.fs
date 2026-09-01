@@ -829,6 +829,134 @@ type PermissionsAdminMessages = {
     Dismiss: string
 }
 
+/// The built-in webhook-subscription admin module (`WebhookAdminUI`).
+type WebhookAdminMessages = {
+    /// Per-subscription status-banner text after `UpdateStatusSubmit` succeeds.
+    StatusUpdated: string
+    /// Per-subscription status-banner text after a secret rotation succeeds.
+    SecretRotated: string
+    /// Test-fire result banner when the target returned neither a status
+    /// code nor an error (a legal but unusual `WebhookTestResult`).
+    TestFired: string
+    /// Test-fire result banner on an HTTP response. Takes the status code
+    /// and the round-trip latency in milliseconds.
+    TestFiredHttp: int -> int64 -> string
+    /// Test-fire result banner on a transport-level failure. Takes the
+    /// error text.
+    TestFiredFailed: string -> string
+    /// `WebhookStatus.Active` display label — shared by the status badge
+    /// and the sidebar row.
+    StatusActive: string
+    /// `WebhookStatus.Paused` display label.
+    StatusPaused: string
+    /// `WebhookStatus.Disabled` display label.
+    StatusDisabled: string
+    /// Delivery-outcome label for `WebhookDeliveryOutcome.Success`. Takes
+    /// the HTTP status code and the latency in milliseconds.
+    OutcomeOk: int -> int64 -> string
+    /// Delivery-outcome label for a `Failure` carrying a status code.
+    /// Takes the status code, the error text, and the latency in
+    /// milliseconds.
+    OutcomeHttpError: int -> string -> int64 -> string
+    /// Delivery-outcome label for a `Failure` with no status code (a
+    /// transport-level failure). Takes the error text and the latency in
+    /// milliseconds.
+    OutcomeFailed: string -> int64 -> string
+    /// Delivery-outcome label for `WebhookDeliveryOutcome.DeadLettered`.
+    /// Takes the final error text.
+    OutcomeDeadLettered: string -> string
+    /// Transient "in flight" text under the per-subscription action row.
+    Working: string
+    /// Dismiss action shared by the per-subscription status banner (both
+    /// its Done and Failed states) and the list-level error banner.
+    Dismiss: string
+    /// Heading of the create-subscription form.
+    CreateHeading: string
+    /// Label of the target-URL field.
+    TargetUrlLabel: string
+    /// Placeholder of the target-URL field.
+    TargetUrlPlaceholder: string
+    /// Label of the signing-secret field.
+    SecretLabel: string
+    /// Placeholder of the signing-secret field.
+    SecretPlaceholder: string
+    /// Generate-a-random-secret button.
+    Generate: string
+    /// Help text under the signing-secret field.
+    SecretHelp: string
+    /// Label of the event-types field.
+    EventTypesLabel: string
+    /// Create-subscription submit button.
+    Create: string
+    /// Heading of the one-time secret-reveal banner.
+    SecretRevealHeading: string
+    /// Body prose of the secret-reveal banner.
+    SecretRevealBody: string
+    /// Acknowledge-and-dismiss button on the secret-reveal banner.
+    SecretRevealAck: string
+    /// Pause action (shown while the subscription is Active).
+    Pause: string
+    /// Resume action (shown while the subscription is Paused).
+    Resume: string
+    /// Re-enable action (shown while the subscription is Disabled).
+    ReEnable: string
+    /// Test-fire action.
+    TestFire: string
+    /// Rotate-secret action.
+    RotateSecret: string
+    /// `window.confirm` prompt shown before rotating a secret.
+    RotateSecretConfirm: string
+    /// Delete action.
+    Delete: string
+    /// `window.confirm` prompt shown before deleting a subscription.
+    DeleteConfirm: string
+    /// Metadata row label — the subscription's id.
+    SubscriptionIdLabel: string
+    /// Metadata row label — the target URL.
+    TargetLabel: string
+    /// Metadata row label — the subscribed event types.
+    EventTypesRowLabel: string
+    /// Value shown in the event-types row when the subscription is
+    /// subscribed to every event type (an empty `EventTypes` list).
+    AllEvents: string
+    /// Metadata row label — the subscription status.
+    StatusLabel: string
+    /// Metadata row label — the consecutive-failure counter.
+    ConsecutiveFailuresLabel: string
+    /// Metadata row label — creation provenance.
+    CreatedLabel: string
+    /// Creation-provenance value. Takes the already-formatted creation
+    /// timestamp and the creator's identifier.
+    CreatedByLine: string -> string -> string
+    /// Heading of the per-subscription delivery log.
+    RecentDeliveries: string
+    /// Empty state of the delivery log.
+    NoDeliveriesYet: string
+    /// Delivery-log column header — attempt timestamp.
+    ColumnAttempted: string
+    /// Delivery-log column header — attempt number.
+    ColumnAttempt: string
+    /// Delivery-log column header — outcome label.
+    ColumnOutcome: string
+    /// Delivery-log column header — source event id.
+    ColumnEventId: string
+    /// Heading above the subscription list in the sidebar.
+    SubscriptionsHeading: string
+    /// Generic "in flight" text — the sidebar list while loading.
+    Loading: string
+    /// Empty state of the subscription list.
+    NoSubscriptionsYet: string
+    /// Detail-pane placeholder when nothing is selected but the list has
+    /// finished loading.
+    CreateOrSelectPrompt: string
+    /// Detail-pane placeholder when nothing is selected and the list is
+    /// still loading.
+    LoadingSubscriptions: string
+    /// Detail-pane placeholder when the selected id no longer resolves to
+    /// a subscription in this scope.
+    SubscriptionNotFound: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -865,4 +993,5 @@ type MessageCatalog = {
     PlatformAdmin: PlatformAdminMessages
     PlatformUsers: PlatformUsersMessages
     PermissionsAdmin: PermissionsAdminMessages
+    WebhookAdmin: WebhookAdminMessages
 }
