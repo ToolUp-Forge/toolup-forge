@@ -37,9 +37,73 @@ open Microsoft.AspNetCore.Http
 /// polls within a content generation skip rebuilding the (potentially
 /// large) XML body; off → the handler rebuilds per request exactly as
 /// pre-149. The body is byte-identical with or without the cache.
+///
+/// ─── Phase 737 — opt-in `robots: noindex` exclusion ──────────────────
+///
+/// `SitemapUniverseOptions.ExcludeNoindex` (compose flag, default off —
+/// GP 11) additionally drops a page whose Phase 152 `robots` key resolves
+/// to noindex, closing the "Submitted URL marked 'noindex'" contradiction
+/// between the crawl invitation and the page's own directive. It is a
+/// UNION with `sitemap = "exclude"`, never a replacement: the documented
+/// pre-737 workaround of setting both keys keeps working untouched. Absent
+/// the flag the universe — and therefore the body and its ETag — is
+/// byte-for-byte pre-737.
 module SitemapGenerator =
     let private xmlEscape (s: string) =
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&apos;")
+
+    // ─── Phase 737 — opt-in `robots: noindex` sitemap exclusion ──────
+
+    /// Universe-construction knobs (Phase 737). `defaults` reproduces the
+    /// pre-737 universe byte-for-byte, so a deployment that never opts in
+    /// sees the identical `<urlset>` — and therefore the identical Phase
+    /// 149 ETag — it saw before (GP 11 / GP 13).
+    type SitemapUniverseOptions = {
+        /// Opt in to honouring the Phase 152 `robots` frontmatter key: a
+        /// page whose directive list resolves to noindex is not
+        /// advertised in `sitemap.xml`. `false` (default) → the `robots`
+        /// key is not consulted at all and a `robots: noindex` page is
+        /// still advertised, exactly as every deployment already sees it.
+        ///
+        /// Closing that contradiction is what the flag buys: a sitemap
+        /// asks a crawler to index a URL the page itself refuses, which
+        /// Search Console reports as the "Submitted URL marked 'noindex'"
+        /// coverage error.
+        ///
+        /// **The two exclusion mechanisms are a UNION, not alternatives.**
+        /// `sitemap = "exclude"` drops a page whatever its `robots` key
+        /// and whatever this flag says; opted in, a noindex `robots` key
+        /// drops a page whatever its `sitemap` key. So the documented
+        /// pre-737 workaround — setting both keys on the same page —
+        /// keeps working unchanged, and a deployment can adopt the flag
+        /// without first unpicking that workaround from its content.
+        ///
+        /// Opting in changes the sitemap body, and therefore the Phase 149
+        /// ETag, exactly once: the universe moves at opt-in and is stable
+        /// thereafter, so conditional `304`s resume on the very next poll.
+        ExcludeNoindex: bool
+    }
+
+    module SitemapUniverseOptions =
+        let defaults: SitemapUniverseOptions = { ExcludeNoindex = false }
+
+    /// Does a page's Phase 152 `robots` frontmatter directive list resolve
+    /// to noindex? The value is a comma-separated directive list, so it is
+    /// split, trimmed and compared case-insensitively; both `noindex` and
+    /// `none` count — `none` is the documented shorthand for
+    /// `noindex, nofollow`, and a reader that only matched the literal
+    /// `noindex` would advertise a page that is just as firmly excluded.
+    /// An absent, blank, or index-permitting key is `false`.
+    let resolvesToNoindex (page: PublicPage) : bool =
+        match page.Frontmatter |> Map.tryFind "robots" with
+        | None -> false
+        | Some value ->
+            value.Split(',')
+            |> Array.exists (fun token ->
+                let directive = token.Trim()
+
+                directive.Equals("noindex", StringComparison.OrdinalIgnoreCase)
+                || directive.Equals("none", StringComparison.OrdinalIgnoreCase))
 
     /// The public URL universe as a deduped `(Slug * lastmod)` list — the
     /// single source of truth shared by `sitemap.xml` and the Phase 109
@@ -48,15 +112,19 @@ module SitemapGenerator =
     /// `Public` (gated) pages, and pages not yet publicly visible at `now`
     /// (Phase 38 — `Draft` / `Archived` / future-`Scheduled`) are dropped;
     /// a crawler must not discover an authenticated / tenant-private slug,
-    /// nor an unpublished one. The surviving pages carry their
+    /// nor an unpublished one. Phase 737 adds a fourth, OPT-IN reason —
+    /// `universeOptions.ExcludeNoindex` drops a page whose `robots` key
+    /// resolves to noindex — off by default, so the default universe is
+    /// byte-for-byte pre-737. The surviving pages carry their
     /// `PublishedAt` (formatted `yyyy-MM-dd`) as the lastmod. Phase 95
     /// `dynamicSlugs` (content-source-enumerated routes — e.g. `/tag/{x}`)
     /// are appended with no lastmod, deduped against the page slugs.
     /// Order: pages first (input order), then dynamic routes.
     ///
-    /// `entries` is this function at the current wall clock; take this
-    /// overload to pin `now` (deterministic tests, a build-time export).
-    let entriesAt
+    /// `entriesAt` is this function at `SitemapUniverseOptions.defaults`;
+    /// `entries` is `entriesAt` at the current wall clock.
+    let entriesAtWith
+        (universeOptions: SitemapUniverseOptions)
         (now: DateTimeOffset)
         (pages: PublicPage list)
         (dynamicSlugs: Slug list)
@@ -69,6 +137,9 @@ module SitemapGenerator =
                     || page.Frontmatter
                        |> Map.tryFind "sitemap"
                        |> Option.exists (fun v -> v.Equals("exclude", StringComparison.OrdinalIgnoreCase))
+                    // Phase 737 — opt-in, and a UNION with the key above:
+                    // neither mechanism weakens the other.
+                    || (universeOptions.ExcludeNoindex && resolvesToNoindex page)
 
                 if excluded then
                     None
@@ -83,6 +154,16 @@ module SitemapGenerator =
             |> List.distinct
 
         pageEntries @ dynamicEntries
+
+    /// `entriesAtWith` at `SitemapUniverseOptions.defaults` — the pinned-
+    /// clock shape every pre-737 caller uses. Signature and output
+    /// unchanged from Phase 149 (GP 11).
+    let entriesAt
+        (now: DateTimeOffset)
+        (pages: PublicPage list)
+        (dynamicSlugs: Slug list)
+        : (Slug * string option) list =
+        entriesAtWith SitemapUniverseOptions.defaults now pages dynamicSlugs
 
     /// `entriesAt` at the current wall clock — the shape every existing
     /// caller (sitemap handler + shards, search index, static export, the
@@ -342,6 +423,11 @@ module SitemapGenerator =
         /// the threshold reproduce the single-`<urlset>` behaviour
         /// byte-for-byte (GP 11).
         Sharding: SitemapShardingOptions
+        /// Phase 737 — universe-construction knobs (the opt-in
+        /// `robots: noindex` exclusion). Defaults reproduce the pre-737
+        /// universe byte-for-byte, so the body and its ETag are unchanged
+        /// for a deployment that does not opt in (GP 11).
+        Universe: SitemapUniverseOptions
     }
 
     module SitemapHandlerOptions =
@@ -349,6 +435,7 @@ module SitemapGenerator =
             ResponseCache = None
             CacheControl = "public, max-age=0, must-revalidate"
             Sharding = SitemapShardingOptions.defaults
+            Universe = SitemapUniverseOptions.defaults
         }
 
     /// Conditional-GET sitemap handler (Phase 149). Walks the universe,
@@ -378,8 +465,15 @@ module SitemapGenerator =
             // digest so the ETag rolls when the fallback date changes; the
             // signature + Last-Modified are taken over the post-applied
             // universe.
+            //
+            // Phase 737 — the universe knobs are applied HERE, upstream of
+            // the digest, so opting the noindex exclusion in moves the ETag
+            // once (honestly, with the body) rather than serving a stale
+            // validator over a changed body.
             let universe =
-                applyDefaultLastmod options.Sharding.DefaultLastmod (entriesAt now pages dynamicSlugs)
+                applyDefaultLastmod
+                    options.Sharding.DefaultLastmod
+                    (entriesAtWith options.Universe now pages dynamicSlugs)
 
             let signature = IndexNow.computeSignature universe
 
@@ -440,7 +534,9 @@ module SitemapGenerator =
                 let! dynamicSlugs = enumerate ()
 
                 let universe =
-                    applyDefaultLastmod options.Sharding.DefaultLastmod (entriesAt now pages dynamicSlugs)
+                    applyDefaultLastmod
+                        options.Sharding.DefaultLastmod
+                        (entriesAtWith options.Universe now pages dynamicSlugs)
 
                 if List.length universe <= options.Sharding.Threshold then
                     return! skipPipeline

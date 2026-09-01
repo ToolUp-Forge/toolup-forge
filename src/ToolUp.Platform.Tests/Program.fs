@@ -202,6 +202,9 @@ let private registeredTests =
         // Carried `[<Tests>]` but was never in `allTests` — wired in by the
         // 2026-07-20 orphaned-pack audit.
         WebhookSecretMigrationTests.tests
+        // Phase 16a — the dispatcher's failure-state lease, paired with a
+        // two-replica control that must observe the lost update.
+        WebhookFailureStateLeaseTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 622 — presence + lock platform API (scope isolation,
@@ -925,6 +928,15 @@ let private registeredTests =
         DisclosureTaintTests.tests
         MultiPartyDisclosureTests.tests
         DeclassificationBudgetTests.tests
+        // Phase 679 — the co-signed budget amendment: the subject binds
+        // to the exact delta, application needs a live-complete
+        // countersignature, a retroactive breach is refused, and the
+        // exhaustion → amendment → resumption arc is audited.
+        DeclassificationBudgetAmendmentTests.subjectTests
+        DeclassificationBudgetAmendmentTests.applicationTests
+        DeclassificationBudgetAmendmentTests.loweringTests
+        DeclassificationBudgetAmendmentTests.arcTests
+        DeclassificationBudgetAmendmentTests.costTests
         // Phase 558 — fact-resolver compose wiring: the IFactStore-backed
         // resolver, the one-knob DI registration, the composed Stage-1 loop.
         FactResolverComposeTests.tests

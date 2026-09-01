@@ -33,19 +33,27 @@ let private repoRoot () =
 
     Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-let private clientUi rel =
-    Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "UI", rel)
+/// A `src/`-relative path, written with `/` separators.
+let private srcFile (rel: string) =
+    Path.Combine(repoRoot (), "src", rel.Replace('/', Path.DirectorySeparatorChar))
 
 /// The toolkit files converted to the token contract in Phase 221.
+///
+/// Phase 307 promoted the seven `Toolup.UIToolkit` component modules into the
+/// standalone `ToolUp.Platform.UI` package; `Layout.fs` (shell composition)
+/// and `Sidebar.fs` (shell chrome) stayed in the client tier. The contract is
+/// about these FILES, not their address, so each entry now carries its own
+/// `src/`-relative path and the guard follows the code — the same correction
+/// Phase 344 forced on the brand-hex guard below.
 let private tokenisedFiles = [
-    "Toolkit/Tokens.fs"
-    "Toolkit/Kpi.fs"
-    "Toolkit/Data.fs"
-    "Toolkit/StateViews.fs"
-    "Toolkit/Forms.fs"
-    "Toolkit/Typography.fs"
-    "Toolkit/Layout.fs"
-    "Sidebar.fs"
+    "ToolUp.Platform.UI/Toolkit/Tokens.fs"
+    "ToolUp.Platform.UI/Toolkit/Kpi.fs"
+    "ToolUp.Platform.UI/Toolkit/Data.fs"
+    "ToolUp.Platform.UI/Toolkit/StateViews.fs"
+    "ToolUp.Platform.UI/Toolkit/Forms.fs"
+    "ToolUp.Platform.UI/Toolkit/Typography.fs"
+    "ToolUp.Platform.Client/Client/UI/Toolkit/Layout.fs"
+    "ToolUp.Platform.Client/Client/UI/Sidebar.fs"
 ]
 
 /// Strip line comments so documentation examples don't trip the scan.
@@ -57,7 +65,7 @@ let private codeOnly (contents: string) =
     |> String.concat "\n"
 
 let private readCode rel =
-    clientUi rel |> File.ReadAllText |> codeOnly
+    srcFile rel |> File.ReadAllText |> codeOnly
 
 /// Hardcoded utilities that must NOT survive in a tokenised file — each
 /// should now be a `text-[var(--…)]` / `rounded-[var(--radius)]` /
@@ -117,9 +125,14 @@ let private tokenEmissionTest = test "every client-toolkit theming token is refe
 /// alongside it. The exemption is still `AgChart.fs` by NAME, so the
 /// sanctioned fallback is exempt wherever the file lives and every other
 /// binding file is covered.
+///
+/// Phase 307 did the same thing again for the toolkit itself, so
+/// `ToolUp.Platform.UI` joins the list for the same reason: the components
+/// most likely to freeze a brand hex now live there.
 let private brandHexGuardTest = test "brand hex #59229D appears only in AgChart's ChartPalette fallback" {
     let scanned = [
         Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "UI")
+        Path.Combine(repoRoot (), "src", "ToolUp.Platform.UI")
         Path.Combine(repoRoot (), "src", "Feliz.AgGrid")
         Path.Combine(repoRoot (), "src", "Feliz.AgCharts")
     ]
@@ -142,9 +155,9 @@ let private brandHexGuardTest = test "brand hex #59229D appears only in AgChart'
         "brand colour must be themed via --color-brand, not a frozen #59229D literal (Phase 222 drift guard)"
 }
 
-let private filesExistTest = test "tokenised toolkit files exist at the canonical client-UI path" {
+let private filesExistTest = test "tokenised toolkit files exist at their declared paths" {
     for rel in tokenisedFiles do
-        Expect.isTrue (File.Exists(clientUi rel)) $"expected {rel} under Client/UI"
+        Expect.isTrue (File.Exists(srcFile rel)) $"expected {rel} under src/"
 }
 
 [<Tests>]

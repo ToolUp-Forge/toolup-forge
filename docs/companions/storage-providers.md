@@ -15,6 +15,8 @@ This page is a cross-cutting overview of the shipped storage companions. For ful
 
 All implement the same `IBlobStorage` interface. The choice is operational (where do your blobs live? what's your cloud?), not architectural.
 
+> **The package id is not the module path.** The table names the **NuGet package** (`ToolUp.Storage.AwsS3`); the **F# module you `open`** is `ToolUp.Storage.AwsS3Storage` — likewise `ToolUp.Storage.AzureBlob` → `…AzureBlobStorage` and `ToolUp.Storage.GoogleCloud` → `…GoogleCloudStorage`. Take the `open` from the code block, never from the table.
+
 ## Picking a backend
 
 ### `LocalFileStorage` (dev / CI / single-instance)
@@ -30,19 +32,22 @@ Don't use when:
 
 Setup:
 
-```fsharp skip=fragment
+```fsharp
 // Default — no withStorage call needed
 ServerApp.empty
 |> ServerApp.withConfig config
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
 |> ServerApp.run
 
-// Explicit
-let storage = LocalFileStorage("./data") :> IBlobStorage
+// Explicit. `LocalFileStorage` is a top-level MODULE containing a type of
+// the same name, so the constructor is reached through the module.
+let storage = LocalFileStorage.LocalFileStorage("./data") :> IBlobStorage
+
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withStorage storage
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 `LocalFileStorageEncryptionAtRestValidator` emits a `Warning` when local storage is configured without the encryption-at-rest decorator — flags that disk encryption is your responsibility (OS-level, not SDK-level).
@@ -56,21 +61,29 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
-open ToolUp.Storage.AwsS3
+`ToolUp.Storage.AwsS3Storage` is the module itself, so `create` is called unqualified after the open, and it already returns `IBlobStorage`:
+
+```fsharp
+open ToolUp.Storage.AwsS3Storage
 
 let storage =
-    AwsS3Storage.create {
+    create {
         BucketName = "my-app-data"
         Region = "eu-west-2"
-        Prefix = Some "tenant-blobs/"   // optional path prefix in the bucket
-    } :> IBlobStorage
+        // `None` uses the region's default AWS endpoint. `Some url` points
+        // at an S3-compatible store (MinIO, Cloudflare R2, Backblaze B2)
+        // and switches the client to path-style addressing.
+        EndpointUrl = None
+    }
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withStorage storage
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
+
+There is no per-deployment key prefix knob: ToolUp's logical containers are *themselves* the S3 key prefix (`{container}/{blobName}`), so one bucket holds every scope. See [Cloud provider mapping](#cloud-provider-mapping) below.
 
 Configuration via standard AWS SDK resolution: env vars (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), `~/.aws/credentials` profile, or IMDS on EC2 / ECS task roles.
 
@@ -79,23 +92,28 @@ Configuration via standard AWS SDK resolution: env vars (`AWS_ACCESS_KEY_ID`, `A
 ### `ToolUp.Storage.AzureBlob` (Azure Blob)
 
 Use when:
-- Deployment runs on Azure, authenticating via Managed Identity / Service Principal / Workload Identity.
+- Deployment runs on Azure and holds a Storage connection string (account key, or a SAS).
 - Azure-native deployment topology.
 
 Setup:
 
 `ToolUp.Storage.AzureBlobStorage` is the module itself, so `create` is called unqualified after the open, and it already returns `IBlobStorage`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Storage.AzureBlobStorage
 
 let storage =
     create {
-        AccountName = "myappdata"
-        ContainerName = "tenant-blobs"
-        // Authentication via DefaultAzureCredential (env vars, managed identity, etc.)
+        AzureBlobStorageConfig.defaults with
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=myappdata;AccountKey=..."
+            // ONE Azure container holds every ToolUp scope as a blob-name
+            // prefix — Azure's 3-63-char lowercase container naming rules
+            // cannot express `_platform`. Defaults to "toolup".
+            RootContainer = "tenant-blobs"
     }
 ```
+
+**This companion authenticates by connection string, not `DefaultAzureCredential`.** For out-of-band rotation (a regenerated account key or SAS) set `ConnectionStringProvider = Some f`: `f` is called per operation and the client is rebuilt only when the resolved string changes, so the closure typically wraps an `ISecretStore.GetSecret` read. `UseDevelopmentStorage=true` targets Azurite.
 
 `AzureBlobEncryptionAtRestValidator` calls `GetServiceProperties`; emits `Warning` if encryption isn't enabled.
 
@@ -107,13 +125,18 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
+`ToolUp.Storage.GoogleCloudStorage` follows the same shape — the module *is* the companion, and `create` returns `IBlobStorage`:
+
+```fsharp
 open ToolUp.Storage.GoogleCloudStorage
 
 let storage =
     create {
-        ProjectId = "my-gcp-project"
-        BucketName = "my-app-data"
+        // `CredentialsJson = None` (the default) follows the Application
+        // Default Credentials chain. There is no project id: GCS bucket
+        // names are globally unique, so the bucket alone locates the data.
+        GoogleCloudStorageConfig.defaults with
+            BucketName = "my-app-data"
     }
 ```
 
@@ -138,20 +161,29 @@ Module code never writes to `_platform` directly. Other containers are accessed 
 - **Azure Blob**: containers map to Azure blob containers (1:1). Object names are the relative path.
 - **GCS**: containers map to prefixes within one bucket (similar to S3).
 
-All providers expose `Save` / `Load` / `Delete` / `List` / `Exists` over the unified `IBlobStorage` interface. Internally, each translates the SDK's `container` + `objectId` arguments to the underlying provider's storage path.
+All providers expose `Upload` / `Download` / `Delete` / `List` / `Exists` / `GetMetadata` over the unified `IBlobStorage` interface (plus the optional `DownloadRange` / `ComposeFrom` / `Erase` legs). Internally, each translates the SDK's `container` + `blobName` arguments to the underlying provider's storage path. `Upload` returns `Async<Result<string, string>>` — the `Ok` payload is the backend-native locator it wrote (e.g. `s3://my-bucket/team-acme/report.json`), not `unit`; `Download` returns `Async<Result<byte[], string>>`, not an option.
+
+Blob names are `/`-delimited on this interface **on every platform** — a backend returning an OS-native separator from `List` breaks callers that strip a container prefix to recover an id. The `IBlobStorage` contract pack pins this.
 
 ## Encryption-at-rest decorator
 
 The `EncryptedBlobStorage` decorator wraps any `IBlobStorage` and applies AES-GCM envelope encryption transparently. Layer it on top of the cloud companion for application-tier crypto:
 
-```fsharp skip=fragment
-let resolver = PerScopeKeyResolver(secretStore, blobStorage) :> IBlobEncryptionKeyResolver
+```fsharp
+// `PerScopeKeyResolver` is a top-level module containing a type of the
+// same name. The constructor takes the secret backend the key material
+// lives in, an IMemoryCache for the resolved per-scope keys, and an
+// `IAuditLog option` for the key-lifecycle trail — not an IBlobStorage.
+let resolver =
+    PerScopeKeyResolver.PerScopeKeyResolver(secretStore, memoryCache, Some auditLog)
+    :> IBlobEncryptionKeyResolver
 
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withStorage cloudStorage
 |> ServerApp.withEncryptedBlobStorage resolver
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Use cases:
@@ -168,38 +200,44 @@ For a backend not covered (Cloudflare R2, MinIO, S3-compatible object store, etc
 ```fsharp skip=fragment
 type MinioStorage(client: AmazonS3Client, bucket: string) =
     interface IBlobStorage with
-        member _.Save(container, objectId, contents) = async {
-            let key = $"{container}/{objectId}"
+        member _.Upload(container, blobName, content) = async {
+            let key = $"{container}/{blobName}"
             let request =
                 PutObjectRequest(
                     BucketName = bucket,
                     Key = key,
-                    InputStream = new MemoryStream(contents))
+                    InputStream = new MemoryStream(content))
             let! _ = client.PutObjectAsync(request) |> Async.AwaitTask
-            return ()
+            return Ok $"s3://{bucket}/{key}"
         }
-        member _.Load(container, objectId) = async {
-            let key = $"{container}/{objectId}"
+        member _.Download(container, blobName) = async {
+            let key = $"{container}/{blobName}"
             try
                 let request = GetObjectRequest(BucketName = bucket, Key = key)
                 use! response = client.GetObjectAsync(request) |> Async.AwaitTask
                 use ms = new MemoryStream()
                 do! response.ResponseStream.CopyToAsync(ms) |> Async.AwaitTask
-                return Some (ms.ToArray())
+                return Ok(ms.ToArray())
             with
+            // NOTE: the AWS SDK surfaces exceptions here wrapped in
+            // AggregateException, so this `:? AmazonS3Exception` test never
+            // fires as written — the shipped AwsS3Storage companion matches
+            // through an `(|Unwrapped|)` active pattern that flattens first.
             | :? AmazonS3Exception as ex when ex.StatusCode = HttpStatusCode.NotFound ->
-                return None
+                return Error $"not found: {key}"
         }
-        // ... other members
+        // ... Delete / List / Exists / GetMetadata, plus the optional
+        //     DownloadRange / CanComposeFrom / ComposeFrom / Erase legs
 ```
 
 Wire:
 
 ```fsharp skip=fragment
 ServerApp.empty
-|> ...
+|> ServerApp.withConfig config
 |> ServerApp.withStorage (MinioStorage(client, bucket) :> IBlobStorage)
-|> ...
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
 ```
 
 Author an `IHealthCheck` probe + an `IConfigValidator` for preflight verification.

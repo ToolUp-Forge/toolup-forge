@@ -22,7 +22,7 @@ let blockListValidator : CustomValidator =
 
 Register on `FormsServerApp`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.FormsCompose
 
 let app =
@@ -82,17 +82,11 @@ Run in order. The validator engine accumulates every failure across every rule a
 
 Predicates that veto a transition. Receive a `WorkflowContext`; return `Async<Result<unit, string>>`. `Ok ()` allows the transition; `Error reason` surfaces as `FormError.TransitionDenied reason`.
 
-The context bundles the submission, the caller's `AccessContext`, and a freshly-resolved `IServiceProvider` — so a guard reaches DI per invocation instead of capturing services at compose time:
+The SDK's `WorkflowContext` bundles the submission (`Submission`), the caller's `AccessContext`, and a freshly-resolved `IServiceProvider` (`Services`) — so a guard reaches DI per invocation instead of capturing services at compose time:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IWorkflowEngine
-
-type WorkflowContext = {
-    Submission: Submission
-    AccessContext: AccessContext
-    Services: IServiceProvider
-}
 
 let hasProposalAttached: WorkflowGuard =
     fun ctx -> async {
@@ -121,7 +115,7 @@ let creditCheckPassed: WorkflowGuard =
 
 Register on `FormsServerApp`:
 
-```fsharp skip=fragment
+```fsharp
 let app =
     FormsServerApp.create ()
     // ...
@@ -160,7 +154,7 @@ let approvalGuard (proposalGuard: WorkflowGuard) (creditGuard: WorkflowGuard) : 
 
 Side-effects fired after a successful transition. Receive a `WorkflowContext`; return `Async<unit>`. The engine wraps every invocation in the `IActionLedger` lifecycle (exactly-once invocation across replays) and applies the per-action `ActionFailurePolicy` registered via `withActionPolicy` to decide what happens on exception. Without an explicit policy the engine defaults to `DeadLetter` — see [concepts.md](concepts.md) "Action ledger and failure policy" for the full table.
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IWorkflowEngine
 
@@ -187,26 +181,43 @@ let sendWelcomeEmail: WorkflowAction =
 let kickoffOnboardingJob: WorkflowAction =
     fun ctx -> async {
         let jobs = ctx.Services.GetService(typeof<IJobScheduler>) :?> IJobScheduler
-        do! jobs.TriggerOnce("onboarding-" + ctx.Submission.Id)
+        let scopeId = ctx.AccessContext.TeamId |> Option.defaultValue ctx.AccessContext.UserId
+
+        // A `JobId` is a Guid the scheduler MINTED at registration — not a
+        // natural key you can compose from a submission id. Find the
+        // registered job by its handler name instead.
+        let! scoped = jobs.ListJobs scopeId
+
+        match scoped |> List.tryFind (fun job -> job.Handler = "onboarding") with
+        | None -> return failwith "no onboarding job is registered in this scope"
+        | Some job ->
+            // TriggerOnce answers with a Result rather than throwing.
+            match! jobs.TriggerOnce(scopeId, job.JobId, ctx.AccessContext.UserId) with
+            | Ok() -> return ()
+            // Throwing is how an action defers to its registered
+            // `ActionFailurePolicy` — see below.
+            | Error reason -> return failwith reason
     }
 ```
 
-`IEmailService` is not an SDK interface — email delivery rides `INotificationChannel` / `INotificationSink`, or your own service registered in DI.
+`IMyEmailService` is not an SDK interface — email delivery rides `INotificationChannel` / `INotificationSink`, or your own service registered in DI.
 
 Register:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
 
 let app =
     FormsServerApp.create ()
     // ...
-    |> FormsServerApp.withAction "send-welcome-email" (sendWelcomeEmail emailService)
-    |> FormsServerApp.withAction "kickoff-onboarding" (kickoffOnboardingJob jobs)
-    // Best-effort observability beacon: use LogOnly.
+    // The actions are registered as-is: each resolves its own collaborators
+    // from ctx.Services, so there is nothing to partially apply here.
+    |> FormsServerApp.withAction "send-welcome-email" sendWelcomeEmail
+    |> FormsServerApp.withAction "kickoff-onboarding" kickoffOnboardingJob
+    // Best-effort courtesy mail: a lost send is not worth a dead-letter row.
     |> FormsServerApp.withActionPolicy "send-welcome-email" LogOnly
-    // Load-bearing payment capture: abort transition if it throws.
+    // Load-bearing downstream work: abort the transition if it throws.
     |> FormsServerApp.withActionPolicy "kickoff-onboarding" FailSubmission
 ```
 
@@ -370,7 +381,7 @@ type PostgresActionLedger(connectionString: string) =
 
 Register on `FormsServerApp`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.FormsCompose
 
 let app =
@@ -396,14 +407,14 @@ Passing the pack is the conformance bar — the engine relies on these lifecycle
 
 `FormRenderer` is generic; sometimes you need custom UX (multi-step wizards, mobile-specific layouts, branded look-and-feel). Write your own renderer against the same `FormSchema`:
 
-```fsharp skip=fragment
-module MyCustomFormRenderer
-
+```fsharp
 open Feliz
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 
-let render
+// `let rec … and …`: the renderer and its per-field helper are mutually
+// visible, so the field cases can be written after the form that uses them.
+let rec render
     (props:
         {| Schema : FormSchema
            InitialValues : Map<string, FieldValue>
@@ -426,7 +437,10 @@ let render
         ]
     ]
 
-and renderField field values setValues =
+// The return annotation is load-bearing: without it the `for … do` above is
+// read as a statement, `renderField` infers as `unit`, and every arm below
+// then conflicts with it.
+and renderField (field: FieldSchema) values setValues : ReactElement =
     // Render per-FieldKind.
     match field.Kind with
     | TextField _ -> Html.text "..."
@@ -447,37 +461,43 @@ Skeleton for a custom analyser:
 
 `IAIProvider` lives in `ToolUp.Platform.AI`, so a server-side analyser that calls a model needs that open:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform.AI
+open ToolUp.Forms.AggregationTypes
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormSubmissionAnalyser
 
 type ClaudeBasedAnalyser(aiProvider: IAIProvider) =
     interface IFormSubmissionAnalyser with
-        member _.Analyse (scopeId, schema, submissions) = async {
-            // Extract long free-text fields by inspecting Kind on
-            // each FieldSchema (e.g. TextField with a large maxLength).
-            let textFieldKeys =
-                schema.Fields
-                |> List.filter (fun f ->
-                    match f.Kind with
-                    | TextField (Some n) when n >= 500 -> true
-                    | TextField None -> true
-                    | _ -> false)
-                |> List.map _.Key
+        // Echoed onto every produced AnalyserOutput and used as the
+        // deduplication key, so it must be unique in the deployment.
+        member _.Name = "sentiment-claude"
 
-            let texts =
-                submissions
-                |> List.collect (fun s ->
-                    textFieldKeys
-                    |> List.choose (fun key ->
-                        match Map.tryFind key s.Values with
-                        | Some (TextValue text) -> Some text
-                        | _ -> None))
+        // The engine calls this once PER FIELD, so the analyser decides per
+        // FieldKind whether it has anything to say — `None` for a field it
+        // does not apply to, which is never treated as a failure.
+        member _.Analyse(schema, field, submissions) = async {
+            match field.Kind with
+            | TextField(Some maxLength) when maxLength < 500 -> return None
+            | TextField _ ->
+                let texts =
+                    submissions
+                    |> List.choose (fun s ->
+                        match Map.tryFind field.Key s.Values with
+                        | Some(TextValue text) -> Some text
+                        | _ -> None)
 
-            // Run sentiment + clustering via the LLM ...
-            return analysisResult
+                // Run sentiment + clustering via the LLM ...
+                let! payload = summariseSentiment aiProvider texts
+
+                return
+                    Some {
+                        AnalyserName = "sentiment-claude"
+                        FieldKey = field.Key
+                        Payload = payload
+                    }
+            | _ -> return None
         }
 ```
 
@@ -546,19 +566,28 @@ type IShareTokenRateLimiter =
     abstract Admit:
         scopeId: string * tokenId: string * rate: ShareTokenRateLimit ->
             Async<Result<unit, ShareTokenError>>
+
+    /// The limiter's partition guarantee, declared as data rather than
+    /// inferred from the runtime type (GP 12). `false` ⇒ window state is
+    /// per-process, so a multi-replica deployment grants N × MaxUses per
+    /// window and the declared limit is silently the PER-REPLICA one.
+    /// `true` ⇒ the window is shared across replicas.
+    /// `ShareTokenRateLimiterDistributionValidator` reads this at startup
+    /// to refuse / warn on the scale-out misconfiguration.
+    abstract IsDistributed: bool
 ```
 
 The interface is six-rule-portable by construction — identity by value, async at boundary, retry as data (the DU `Result` return), stateless handlers (window state lives in the implementation, not the caller), per-key ordering only, and precision documented at the 1-second lower bound enforced by `ShareTokenTypes.validateRateLimit`.
 
 ### Wiring a custom limiter
 
-```fsharp skip=fragment
-let myRedisLimiter : IShareTokenRateLimiter =
+```fsharp
+let myRedisLimiter: IShareTokenRateLimiter =
     MyCompany.RedisShareTokenRateLimiter(redisConnString) :> _
 
 FormsServerApp.create ()
 |> FormsServerApp.withShareTokenRateLimiter myRedisLimiter
-|> // ...rest of pipeline
+// ...rest of pipeline
 |> FormsServerApp.run
 ```
 
@@ -568,7 +597,7 @@ Without `withShareTokenRateLimiter`, the compose step auto-builds a fresh `InMem
 
 `ToolUp.Forms.Tests/Contracts/IShareTokenRateLimiterContract.fs` ships a framework-agnostic test pack. Any drop-in implementation MUST pass it:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.Tests.Contracts
 
 let myLimiterTests =

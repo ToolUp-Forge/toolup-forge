@@ -341,6 +341,18 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
     let scopes = ConcurrentDictionary<string, ScopeIndex>()
 
+    // Scope keys whose persisted snapshot has been read into memory.
+    //
+    // Phase 726 — loadedness is tracked EXPLICITLY, never inferred from
+    // `scopes.ContainsKey`. Emptiness is a legitimate state: `DeleteByScope`
+    // drops the scope's index while the persisted `bm25.json` survives until
+    // the next flush, so reading "holds nothing for this scope" as "not yet
+    // loaded" made the very next `Search` re-hydrate the whole deleted corpus
+    // — full chunk text included — and the following flush wrote it back.
+    // Deliberately a separate map from `scopes`: a wiped scope must stay
+    // LOADED while holding no index at all, which one map cannot express.
+    let loadedScopes = ConcurrentDictionary<string, byte>()
+
     let dirty = ConcurrentDictionary<string, VectorScope>()
 
     let cts = new CancellationTokenSource()
@@ -427,6 +439,22 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             with ex ->
                 log.Warn $"[InMemoryBM25Index] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
         | Error _ -> ()
+
+        // Phase 726 — mark loaded after a completed attempt, on every path.
+        // A corrupt or absent snapshot leaves the scope loaded-and-empty,
+        // which is the honest state: there is nothing readable at rest for a
+        // later read to resurrect.
+        loadedScopes[scopeToKey scope] <- 0uy
+    }
+
+    /// Guarantee this scope's persisted snapshot has been read into memory.
+    /// Team and User scopes hydrate lazily (neither id is known at
+    /// construction); Platform and Deployment are loaded eagerly below and
+    /// mark themselves loaded like any other, so this one lookup answers for
+    /// every scope and no caller re-encodes which scopes are lazy.
+    let ensureScopeLoaded (scope: VectorScope) = async {
+        if not (loadedScopes.ContainsKey(scopeToKey scope)) then
+            do! loadScope scope
     }
 
     do
@@ -463,16 +491,10 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
         member _.Search scopes' query topK = async {
             // Lazy-load Team and User scopes on first access. Platform/
-            // Deployment are already loaded at construction.
+            // Deployment are already loaded at construction, and say so
+            // through the same `loadedScopes` map.
             for scope in scopes' do
-                match scope with
-                | Team _
-                | User _ ->
-                    let scopeKey = scopeToKey scope
-
-                    if not (scopes.ContainsKey scopeKey) then
-                        do! loadScope scope
-                | _ -> ()
+                do! ensureScopeLoaded scope
 
             // The SAME `analyse` the index-time path uses — one binding, one
             // analyzer, no way to reach the postings with anything else.
@@ -507,11 +529,24 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         }
 
         member _.DeleteByScope scope = async {
+            // Phase 726 — hydrate BEFORE dropping the scope. A wipe issued on
+            // a fresh process before anything has read this scope would
+            // otherwise remove nothing, leave the scope unloaded, and let the
+            // very next `Search` re-hydrate the corpus the wipe claimed to
+            // have deleted. Hydrating first also means the scope is recorded
+            // as loaded, so the read after the wipe sees the empty state
+            // rather than reaching for the snapshot again.
+            do! ensureScopeLoaded scope
             scopes.TryRemove(scopeToKey scope) |> ignore
             markDirty scope
         }
 
         member _.DeleteChunk scope chunkId = async {
+            // Same reason as `DeleteByScope` above: a per-chunk delete issued
+            // before this scope has ever been read would find no index, no-op,
+            // and leave the chunk in the persisted snapshot.
+            do! ensureScopeLoaded scope
+
             match scopes.TryGetValue(scopeToKey scope) with
             | true, idx ->
                 idx.Delete chunkId
@@ -539,12 +574,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                 // Team and User scopes are lazy-loaded on first access (same
                 // as `Search`) — erasure must see the persisted corpus even
                 // when this process has never searched the scope.
-                match scope with
-                | Team _
-                | User _ ->
-                    if not (scopes.ContainsKey(scopeToKey scope)) then
-                        do! loadScope scope
-                | _ -> ()
+                do! ensureScopeLoaded scope
 
                 match scopes.TryGetValue(scopeToKey scope) with
                 | false, _ ->

@@ -553,21 +553,29 @@ type IWorkflowEngine =
             Async<Transition list>
 ```
 
-Default impl: `WorkflowEngine`. Constructor parameters (immutable for process lifetime):
+Default impl: `WorkflowEngine`, the type inside `module ToolUp.Forms.WorkflowEngine`. Ten constructor dependencies, all immutable for the process lifetime:
 
-```fsharp skip=fragment
-new WorkflowEngine(
-    formStore: IFormStore,
-    auditLog: IAuditLog,
-    ledger: IActionLedger,
-    metricsSink: IMetricsSink,
-    warn: WorkflowWarn,                      // string -> unit
-    workflows: Map<WorkflowId, WorkflowDefinition>,
-    guards: Map<string, WorkflowGuard>,
-    actions: Map<string, WorkflowAction>,
-    actionPolicies: Map<string, ActionFailurePolicy>
-)
+```fsharp
+open ToolUp.Forms.WorkflowEngine    // the module; `WorkflowEngine` is the type in it
+
+let engine =
+    WorkflowEngine(
+        formStore,                  // IFormStore
+        auditLog,                   // IAuditLog
+        ledger,                     // IActionLedger
+        metricsSink,                // IMetricsSink
+        warn,                       // WorkflowWarn = string -> unit
+        workflows,                  // Map<WorkflowId, WorkflowDefinition>
+        guards,                     // Map<string, WorkflowGuard>
+        actions,                    // Map<string, WorkflowAction>
+        actionPolicies,             // Map<string, ActionFailurePolicy>
+        services                    // IServiceProvider
+    )
 ```
+
+`services` is the last parameter and is what every `WorkflowContext.Services` is
+built from — the engine holds the provider, not a snapshot of resolved services,
+so a guard or action resolves fresh on each `Apply`.
 
 ### `FormValidator` (`module ToolUp.Forms.FormValidator`)
 
@@ -693,7 +701,7 @@ No default impl ships. Consumers register custom analysers in the DI container; 
 
 ### `FormRenderer`
 
-```fsharp skip=fragment
+```fsharp
 FormRenderer.FormRenderer schema onSubmit
 // schema   : FormSchema
 // onSubmit : Map<string, FieldValue> -> unit
@@ -703,7 +711,7 @@ Feliz component. Uses `React.useState` for in-flight values. Dispatches `OnSubmi
 
 ### `WorkflowBadge`
 
-```fsharp skip=fragment
+```fsharp
 WorkflowBadge.WorkflowBadge state
 // state : SubmissionState
 ```
@@ -712,7 +720,7 @@ Renders a state pill with hover for the available-transitions list.
 
 ### `FormSubmissionsList`
 
-```fsharp skip=fragment
+```fsharp
 FormSubmissionsList.FormSubmissionsList submissions
 // submissions : Submission list
 ```
@@ -721,23 +729,23 @@ Table of submissions with optional per-row transition buttons (filtered by avail
 
 ### `PublicEmbed`
 
-```fsharp skip=fragment
-PublicEmbed.PublicEmbed token
-// token : string — from the URL parameter
+```fsharp
+PublicEmbed.PublicEmbed appName
+// appName : string — shown in the standalone header
 ```
 
-Standalone Feliz component. Renders the form with no app shell — meant to be embedded in a minimal `index.html` at `/r/{token}`.
+Standalone Feliz component. Renders the form with no app shell — meant to be embedded in a minimal `index.html` at `/r/{token}`. The share **token is not a parameter**: the component reads it off `window.location` itself via `PublicEmbed.extractToken path search`, and `PublicEmbed.isEmbedUrl path search` is the matching predicate a host uses to decide whether to mount it at all.
 
 ### `SurveyDashboardView` + `SurveyListView`
 
-```fsharp skip=fragment
+```fsharp
 SurveyDashboardView.SurveyDashboardView schema aggregations
 // schema       : FormSchema
 // aggregations : AggregationSummary
 
-SurveyListView.SurveyListView surveys onSelect
-// surveys  : SurveyOverviewRow list
-// onSelect : string -> unit
+SurveyListView.SurveyListView surveys onOpen
+// surveys : SurveyOverviewRow list
+// onOpen  : FormSchemaId -> unit
 ```
 
 Apps wire these into their own admin module.
@@ -751,11 +759,16 @@ val PublicFormsClient.proxy : IPublicFormApi
 
 Use directly in Elmish commands:
 
-```fsharp skip=fragment
-open Elmish
+```fsharp
+open ToolUp.Elmish
 
 Cmd.OfAsync.either FormsClient.proxy.Submit request SubmitSucceeded SubmitFailed
 ```
+
+The in-tree Elmish fork lives under `namespace ToolUp.Elmish` (and
+`ToolUp.Elmish.React`), not `Elmish`. `SubmitSucceeded` receives the
+`Result<Submission, FormError>` the call returned; `SubmitFailed` receives the
+`exn`, per `Cmd.OfAsync.either`'s error arm.
 
 ## Audit events emitted to `_platform.audit`
 

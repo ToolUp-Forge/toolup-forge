@@ -89,11 +89,15 @@ let echoRoutine (input: string) : string = sprintf "echo: %s" input
 // Server.fs (in the app's server composition root)
 open HelloWorld
 
-let helloApiFactory (ctx: HttpContext) : HelloApi =
-    let scope = ctx.GetScope()
-    {
-        DoThing = fun input -> async { return HelloWorld.Server.echoRoutine input }
-    }
+let helloApiFactory (ctx: HttpContext) : HelloApi = {
+    DoThing =
+        fun input -> async {
+            // `ctx` is what makes per-request substrate reachable —
+            // e.g. `ScopeRequestExtractor.resolveForContext ctx` for
+            // the caller's `StorageScope`.
+            return HelloWorld.Server.echoRoutine input
+        }
+}
 
 let helloModule =
     ServerModule.create "HelloWorld"
@@ -108,20 +112,21 @@ A module registers itself via `ClientModule.register` (client) and is added to t
 
 The full server-side registration:
 
-```fsharp skip=fragment
+```fsharp
 let helloModule =
     ServerModule.create "HelloWorld"
     |> ServerModule.withGuardedApi helloApiFactory       // ToolUp.Remoting API
     |> ServerModule.withDataTypes [ helloDataType ]      // data type detection + processing
     |> ServerModule.withConfig helloConfigSchema         // per-module config
-    |> ServerModule.withAITools [ helloTool ]            // AI-callable tools
+    |> ServerModule.withAITools [ helloTool, helloToolExecutor ]   // AI-callable tools
     |> ServerModule.withDefaultSurfaceRequirement
            SurfaceRequirement.userOrTeam                 // default per-route requirement
     |> ServerModule.withRoutePrefix "/api/hello/"        // optional — required only when
                                                          // other modules in the deployment
                                                          // share a path prefix
     |> ServerModule.withRouteSurfaceRequirement
-           ("POST", "/api/hello/public/submit")
+           "POST"
+           "/api/hello/public/submit"
            SurfaceRequirement.claimBearerOnly            // per-route override
 ```
 
@@ -137,12 +142,12 @@ The strict global default (when no module or route declaration applies) is `user
 
 The client module registration carries a `Visibility: SubjectKind -> bool` predicate. The shell's sidebar filter hides modules whose predicate returns `false` for the current `Subject`. Four smart constructors cover the common shapes:
 
-`Init` receives a `ClientModuleContext` (the module's resolved config plus the platform config), so a module that needs none of it wraps its nullary init with `ClientModule.withUnitInit`:
+`ClientModuleSpec.Init` is nullary (`unit -> 'Model * Cmd<'Msg>`) — `create` adapts it to the `ClientModuleContext -> 'Model * Cmd<'Msg>` shape the shell calls, so the common case carries no ceremony. A module that *does* need the context (its resolved config plus the platform config) chains `ClientModule.withContextInit` after `create`.
 
-```fsharp skip=fragment
+```fsharp
 let registerSalesAnalysis () : ErasedModule =
     ClientModule.create {
-        Init = ClientModule.withUnitInit init
+        Init = init
         Update = update
         Name = "Sales Analysis"
         Icon = Icon.ofUrl "/svg/sales.svg"
@@ -165,25 +170,27 @@ A **module** is one Elmish MVU (one `Model` / `Msg` / `init` / `update`). A **pa
 
 Single-page modules (the default) keep the legacy `View: 'Model -> ('Msg -> unit) -> ReactElement * ReactElement` contract — the shell wraps the tuple in `SplitPanel(l, r)`.
 
-Multi-page modules opt in with `ClientModule.withPages`, declaring one view per page keyed by `PageConfig.Route`. Each page view returns a `PageContent` value directly (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`), picking its own layout shape:
+Multi-page modules opt in with `ClientModule.withPages`, which takes one `(PageConfig, view)` pair per page — the `PageConfig` supplies the sidebar `Route` / `Title` / `Icon`, and the view returns a `PageContent` value directly (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`), picking its own layout shape:
 
-```fsharp skip=fragment
+```fsharp
 let datasetView model dispatch : PageContent =
     SplitPanel(leftPanel model dispatch, rightPanel model dispatch)
 
 let analyseView model dispatch : PageContent =
-    FullWidth (analysisGrid model dispatch)
+    FullWidth(analysisGrid model dispatch)
 
 let registerSalesAnalysis () : ErasedModule =
+    let icon = Icon.ofUrl "/svg/sales.svg"
+
     ClientModule.create {
         Init = init
         Update = update
         Name = "Sales Analysis"
-        Icon = Icon.ofUrl "/svg/sales.svg"
+        Icon = icon
     }
     |> ClientModule.withPages [
-        { Route = "/dataset";  Label = "Dataset"; View = datasetView }
-        { Route = "/analyse";  Label = "Analyse"; View = analyseView }
+        { Route = "/dataset"; Title = "Dataset"; Icon = icon }, datasetView
+        { Route = "/analyse"; Title = "Analyse"; Icon = icon }, analyseView
     ]
     |> ClientModule.register
 ```
@@ -199,13 +206,17 @@ Adding pages doesn't change storage, event, or notification wiring — pages are
 Modules that handle file data declare `DataType` records in `Server.fs`. Each `DataType` has:
 
 - **`Info`** — `DataTypeInfo` with `Id` (string constant), `DisplayName`, and optional `Schema`.
-- **`Detect: string -> bool`** — given file contents, returns true if this `DataType` applies.
-- **`Process: string * string -> obj * ProcessedFileEntry`** — given `(fileName, contents)`, returns a boxed result + a `ProcessedFileEntry` for the file manager.
+- **`Detect: string -> Async<bool>`** — given file contents, returns true if this `DataType` applies.
+- **`Process: string * string -> Async<ProcessedData * ProcessedFileEntry>`** — given `(fileName, contents)`, returns the tagged JSON payload (`ProcessedData` = `TypeName` + serialised `Payload`) plus a `ProcessedFileEntry` for the file manager.
+- **`SchemaVersion` / `Migrations`** — the module-owned schema version this type reads and writes, and the forward migrators it ships. A type that has never evolved declares `DataTypes.initialSchemaVersion` and `[]`.
+
+Both `Detect` and `Process` are async so an implementation may be I/O-bound (a classifier service, remote parsing); in-process logic wraps itself in `async { return … }`.
 
 ```fsharp skip=fragment
 module MyModule.DataType
 
 open ToolUp.Platform
+open ToolUp.Platform.FileProcessor
 
 [<Literal>]
 let MyDataTypeId = "MyDataType"
@@ -219,12 +230,16 @@ let myDataTypeInfo : DataTypeInfo = {
 let myDataType : DataType = {
     Info = myDataTypeInfo
     Id = MyDataTypeId
-    Detect = fun contents ->
+    Detect = fun contents -> async {
         let headers = CsvHeaders.parse contents
-        headers |> CsvHeaders.containsAll ["required"; "headers"]
-    Process = fun (fileName, contents) ->
-        // parse, return (box result, ProcessedFileEntry)
+        return headers |> CsvHeaders.containsAll ["required"; "headers"]
+    }
+    Process = fun (fileName, contents) -> async {
+        // parse, then return (ProcessedData, ProcessedFileEntry)
         ...
+    }
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
 }
 ```
 
@@ -238,14 +253,15 @@ Client-side, modules render summaries of their processed data via `DataTypeDispl
 
 Modules consume processed data from upstream modules via the `ProcessedDataContext`:
 
-```fsharp skip=fragment
+```fsharp
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
-    let processed = React.useContext ProcessedDataContext
-    let salesData = processed |> ProcessedData.tryGet<SalesEntry> "SalesData"
-    // render against salesData
+    let salesEntries = ProcessedDataContext.ProcessedData.forType "SalesData"
+    let summaries = salesEntries |> List.choose _.Info
+
+    Html.none, Html.div [ Html.text $"{summaries.Length} sales files" ]
 ```
 
-`processed` is a `Map<DataTypeId, obj list>`. Use `ProcessedData.tryGet<'T>` to unbox to the typed value. This is the only sanctioned cross-module data flow — modules consume what other modules produce, declared via `withNeedsData` and `withProvidesProcessedData`.
+`ProcessedDataContext.Context` is a React context carrying the shell's aggregated `ProcessedFileEntry list`; `ProcessedData.forType` is the hook over it, filtering to one `DataTypeId` and dropping entries whose processing failed. Each entry's `Info: obj option` is the summary the producing module's `DataType.Process` boxed, and the consuming module casts it to its own known type — the symmetric same-module erasure boundary. This is the only sanctioned cross-module data flow — modules consume what other modules produce, declared via `ClientModule.withNeedsData` and `ClientModule.withProcessedData`.
 
 Modules NEVER reach into another module's namespace or call another module's `update` function directly.
 
@@ -288,7 +304,7 @@ let myTool: AIToolDefinition = {
 
 The executor is a separate `HttpContext -> string -> Async<string>` function, registered **as a pair** with the definition:
 
-```fsharp skip=fragment
+```fsharp
 ServerModule.create "MyModule"
 |> ServerModule.withAITools [ myTool, myToolExecutor ]
 ```
@@ -371,11 +387,14 @@ let serverModule =
     })
 ```
 
-```fsharp skip=fragment
+```fsharp
 // any other module — the caller asks it
-let! result =
-    ModuleQueryBus.askContract bus access Reports.SharedTypes.latest { DatasetId = id; Top = 5 }
-// result : Result<LatestResp, ModuleQueryError> option
+let latestForDataset (bus: IModuleQueryBus) (access: AccessContext) (datasetId: string) = async {
+    let! result =
+        ModuleQueryBus.askContract bus access Reports.SharedTypes.latest { DatasetId = datasetId; Top = 5 }
+    // result : Result<LatestResp, ModuleQueryError> option
+    return result
+}
 ```
 
 The caller never spells the key, and `handle`'s parameter and return types come from the contract
@@ -431,7 +450,7 @@ gathers that into one read-only descriptor — **the module's label.** It is wha
 (an admin dashboard, a scaffolding tool, a conformance check, a composition-time graph rule)
 can rely on without reading the module's source.
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform
 
 let surface = ModuleSurface.describe MyModule.Server.serverModule
@@ -564,21 +583,21 @@ JSON, so an external authoring tool consumes it as a pinned snapshot **without l
 assembly**. Every list is emitted in a stable sort order and record fields serialise in
 declaration order, so the same composition always yields byte-identical output.
 
-```fsharp skip=fragment
+```fsharp
 // In the deployment (an admin endpoint, a CLI target, a test):
 System.IO.File.WriteAllText("envelope.staging.json", HostEnvelope.describeJson (app, modules))
 ```
 
 Pin the stamp beside whatever you generated from it:
 
-```fsharp skip=fragment
+```fsharp
 let stamp = HostEnvelope.stampOf envelope
 // { StampSchemaVersion = 1; StampPlatformVersion = "0.9.4.0"; StampContentHash = "8f3c…" }
 ```
 
 Later, against a live app, ask whether the snapshot is still true:
 
-```fsharp skip=fragment
+```fsharp
 match HostEnvelope.staleness pinnedStamp (HostEnvelope.describe (app, modules)) with
 | [] -> () // still exactly true of this deployment
 | reasons -> printfn "envelope stale: %s" (String.concat ", " reasons)
@@ -756,7 +775,7 @@ The same check binds in the module's own test project. `assertConformant` raises
 report on any violation and is silent when conformant, so it needs no test-framework dependency
 (the Build package carries none):
 
-```fsharp skip=fragment
+```fsharp
 test "the packaged layout is conformant" {
     PackagedModuleConformance.assertConformant layout
 }

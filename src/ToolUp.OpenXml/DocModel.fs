@@ -93,13 +93,21 @@ type ParagraphModel = {
     Runs: Run list
     /// `w:pStyle` paragraph style id, when present.
     StyleId: string option
-    /// Verbatim `w:pPr` outer XML (with any `w:sectPr` stripped —
-    /// section properties live on `Section.RawProperties`); `None`
-    /// for paragraphs authored programmatically.
+    /// Verbatim `w:pPr` outer XML; `None` for paragraphs authored
+    /// programmatically.
+    ///
+    /// **Invariant: this payload never carries a fact the model also
+    /// carries typed.** Emission re-attaches it verbatim and then
+    /// lowers the typed fields on top, so anything present in both
+    /// places is written twice. Import therefore strips `w:sectPr`
+    /// (modelled on `Section.RawProperties`) and the `w:pPr/w:rPr`
+    /// revision element `MarkRevision` names.
     RawProperties: string option
     /// Revision mark on the paragraph mark itself (`w:pPr/w:rPr/
     /// w:ins|w:del`) — set when a whole paragraph is inserted or
-    /// deleted as a tracked change.
+    /// deleted as a tracked change. This field is the mark's SOLE
+    /// carrier: the corresponding element is absent from
+    /// `RawProperties` (see the invariant above).
     MarkRevision: RevisionMark option
     /// Ids of comments anchored on this paragraph. Anchoring is
     /// paragraph-grained: emission wraps the paragraph's runs in

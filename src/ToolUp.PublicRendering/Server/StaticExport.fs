@@ -82,6 +82,12 @@ type StaticExportOptions = {
     /// past it, the export writes a `<sitemapindex>` + `sitemap-<name>.xml`
     /// shard files instead of one oversized file.
     SitemapSharding: SitemapGenerator.SitemapShardingOptions
+    /// Phase 737 — universe-construction knobs applied to the emitted
+    /// `sitemap.xml` (the opt-in `robots: noindex` exclusion). Defaults
+    /// reproduce the pre-737 export byte-for-byte (GP 11). Opted in, a
+    /// noindex page is still RENDERED into the tree — it is a real page —
+    /// and only stops being advertised in the sitemap.
+    SitemapUniverse: SitemapGenerator.SitemapUniverseOptions
 }
 
 module StaticExportOptions =
@@ -91,6 +97,7 @@ module StaticExportOptions =
         CachePolicy = CachePolicy.NoCache
         CheckLinks = false
         SitemapSharding = SitemapGenerator.SitemapShardingOptions.defaults
+        SitemapUniverse = SitemapGenerator.SitemapUniverseOptions.defaults
     }
 
     let withLocales (locales: string list) (o: StaticExportOptions) : StaticExportOptions = { o with Locales = locales }
@@ -115,6 +122,19 @@ module StaticExportOptions =
         (o: StaticExportOptions)
         : StaticExportOptions =
         { o with SitemapSharding = sharding }
+
+    /// Phase 737 — set the sitemap universe knobs for the export (mirrors
+    /// the runtime `withSitemapNoindexExclusion` compose knob), so the
+    /// exported `sitemap.xml` advertises exactly what the runtime handler
+    /// would.
+    let withSitemapUniverse
+        (universeOptions: SitemapGenerator.SitemapUniverseOptions)
+        (o: StaticExportOptions)
+        : StaticExportOptions =
+        {
+            o with
+                SitemapUniverse = universeOptions
+        }
 
 /// Pure generators for static-host config files. Each takes the public
 /// redirect map (gated slugs already excluded by the caller) + the
@@ -236,6 +256,7 @@ module StaticExport =
         (locale: string)
         (troot: string)
         (sharding: SitemapGenerator.SitemapShardingOptions)
+        (universeOptions: SitemapGenerator.SitemapUniverseOptions)
         (logger: ILogger)
         : Async<int> =
         async {
@@ -294,10 +315,14 @@ module StaticExport =
             // file; below it, a single `<urlset>` byte-for-byte pre-150.
             // The universal-lastmod fallback (when set) applies to either
             // shape.
+            // Phase 737 — the same universe options the runtime handler
+            // uses, so the exported sitemap advertises exactly what a
+            // served one would. Note this filters only the SITEMAP: every
+            // page above was written to the tree regardless.
             let sitemapUniverse =
                 SitemapGenerator.applyDefaultLastmod
                     sharding.DefaultLastmod
-                    (SitemapGenerator.entries pages dynamicSlugs)
+                    (SitemapGenerator.entriesAtWith universeOptions System.DateTimeOffset.UtcNow pages dynamicSlugs)
 
             if List.length sitemapUniverse <= sharding.Threshold then
                 File.WriteAllText(
@@ -481,6 +506,7 @@ module StaticExport =
                             locale
                             troot
                             options.SitemapSharding
+                            options.SitemapUniverse
                             logger
 
                     total <- total + n

@@ -9,8 +9,12 @@ open Feliz
 open Feliz.AgCharts
 
 AgChart.chart [
-    AgChart.data points
-    AgChart.series [ Series.bar [ Series.xKey "month"; Series.yKey "revenue" ] ]
+    AgChart.options [
+        AgChart.data points
+        AgChart.series [
+            Series.create [ Series.seriesKind Bar; Series.xKey "month"; Series.yKey "revenue" ]
+        ]
+    ]
 ]
 ```
 

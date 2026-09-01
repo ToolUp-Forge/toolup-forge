@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Offline Server — the offline-sync replay handler: the IOfflineSyncApi Fable.Remoting handler routing queued mutations through IEntityStore.Save with last-writer-wins conflict detection, per-entity-type replay adapters, and opt-in audit emission stamped with the mutation's original enqueue time.</Description>
+        <PackageTags>fsharp;sdk;server;offline;pwa;sync</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.Offline.Core\ToolUp.Offline.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Parent companion README packed into each tier's nupkg. -->
+        <None Include="..\ToolUp.Offline\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\OfflineSyncHandler.fs" />
+    </ItemGroup>
+    <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
+         FSharp.Core is implicit via the .NET SDK. -->
+</Project>

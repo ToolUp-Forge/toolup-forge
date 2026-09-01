@@ -11,15 +11,20 @@ For full details on `IEmbeddingProvider`, the chunking layer, retrieval pipeline
 | `ToolUp.EmbeddingProviders.Local` | 512 | Free (in-process) | Dev / CI / offline. TF-IDF; low quality. |
 | `ToolUp.EmbeddingProviders.OpenAI` | 1536 | ~$0.02 per 1M tokens | Production. `text-embedding-3-small`. |
 
+> **The package id is not the module path.** The table names the **NuGet package** (`ToolUp.EmbeddingProviders.Local`); the code inside it is a namespace-less top-level module, `LocalEmbeddingProvider` — so there is nothing to `open` at all, and `open ToolUp.EmbeddingProviders.Local` does not resolve. Same for the OpenAI companion.
+
 The interface is the same:
 
 ```fsharp
 type IEmbeddingProvider =
-    abstract GenerateEmbedding: text: string -> Async<float32[]>
+    abstract GenerateEmbedding: text: string -> Async<float32 array>
+    abstract GenerateEmbeddings: texts: string seq -> Async<float32 array array>
+    abstract Dimensions: int
     abstract ProviderId: string
     abstract ModelId: string
-    abstract Dimensions: int
 ```
+
+`GenerateEmbeddings` is the batch leg, and it is **not optional**. A provider with a native batch endpoint (OpenAI, Cohere, Voyage) issues one HTTP call for N inputs — a 100-chunk document goes from ~15s of sequential calls to ~150ms. A provider without one delegates to the shipped `IEmbeddingProvider.batchedFallback`, which fans out to parallel single-text calls and reassembles them in input order.
 
 `EmbeddingVersion` is the `(ProviderId, ModelId, Dimensions)` triple. Stamped onto every indexed chunk's metadata so model swaps are detectable.
 
@@ -39,13 +44,14 @@ Don't use when:
 
 Setup:
 
-```fsharp skip=fragment
-open ToolUp.EmbeddingProviders.Local
+```fsharp
+// `LocalEmbeddingProvider` is a top-level module — there is no
+// enclosing namespace to open — and `create` already returns
+// `IEmbeddingProvider`.
+let embedder = LocalEmbeddingProvider.create ()
 
-let embedder = LocalEmbeddingProvider.create() :> IEmbeddingProvider
-
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
-|> ...
+RAGServerApp.create aiProviderFactory providerProfile embedder
+// ... the deployment's other RAGServerApp.with* calls ...
 |> RAGServerApp.run
 ```
 
@@ -62,13 +68,13 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
-open ToolUp.EmbeddingProviders.OpenAI
+```fsharp
+// `OpenAIEmbeddingProvider` is a top-level module, like its Local
+// sibling, and `create` already returns `IEmbeddingProvider`.
+let embedder = OpenAIEmbeddingProvider.create secretStore
 
-let embedder = OpenAIEmbeddingProvider.create secretStore :> IEmbeddingProvider
-
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
-|> ...
+RAGServerApp.create aiProviderFactory providerProfile embedder
+// ... the deployment's other RAGServerApp.with* calls ...
 |> RAGServerApp.run
 ```
 
@@ -113,11 +119,13 @@ Cache hits matter most when:
 
 Replace the in-memory cache with a Redis-backed companion:
 
-```fsharp skip=fragment
-RAGServerApp.create (...)
-|> ...
+```fsharp
+open ToolUp.RAG.EmbeddingCaches.Redis
+
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
-|> ...
+// ... the deployment's other RAGServerApp.with* calls ...
+|> RAGServerApp.run
 ```
 
 `RedisEmbeddingCache.create : string -> ILogger option -> IEmbeddingCache` connects with the shipped defaults and owns the multiplexer. Use `fromMultiplexer` to share a connection pool the deployment already owns (the same `IConnectionMultiplexer` backing `RedisNotificationChannel` / `RedisDistributedLock`), or `createWith` to override `RedisEmbeddingCacheOptions`.
@@ -135,9 +143,15 @@ Every indexed chunk carries `EmbeddingVersion` metadata:
 
 When you swap providers (or models), enqueue the affected scopes for re-embedding:
 
-```fsharp skip=fragment
+```fsharp
+open Microsoft.Extensions.DependencyInjection
+open ToolUp.RAG.ReembeddingService
+
 let queue = serviceProvider.GetRequiredService<ReembeddingQueue>()
-do! queue.Enqueue(Team teamId)
+
+// `Enqueue` is synchronous and returns `false` when the scope is already
+// in flight in this process — enqueueing twice is a no-op, not an error.
+queue.Enqueue(Team teamId) |> ignore
 ```
 
 The `ReembeddingBackgroundService`:
@@ -153,7 +167,7 @@ Mixing providers within one corpus is structurally allowed but degrades retrieva
 
 All providers receive `ISecretStore` through their `create` function:
 
-```fsharp skip=fragment
+```fsharp
 // The provider package is a top-level module, and `create` already returns
 // IEmbeddingProvider.
 let embedder = OpenAIEmbeddingProvider.create secretStore
@@ -165,7 +179,7 @@ The provider reads the API key per call from `ISecretStore` under the `_platform
 
 A deployment that would otherwise `#if DEBUG` between the two companions can dispatch on `TOOLUP_EMBEDDING_PROVIDER` instead, through the same resolver-list helper `ISecretStore` and `IBlobStorage` use:
 
-```fsharp skip=fragment
+```fsharp
 let embedder =
     EmbeddingProviderEnv.fromEnv logger [
         { Name = "local"; Resolve = fun () -> LocalEmbeddingProvider.fromEnv (Some blobStorage) }
@@ -186,9 +200,6 @@ For a vendor not covered (Cohere, Voyage, BGE, in-house):
 ```fsharp skip=fragment
 module MyVendor.EmbeddingProvider
 
-let create (secretStore: ISecretStore) (model: string) : IEmbeddingProvider =
-    MyVendorEmbeddingProvider(secretStore, model) :> _
-
 type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
     let dimensions =
         match model with
@@ -196,23 +207,35 @@ type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
         | "myvendor-large" -> 1536
         | _ -> failwith $"Unknown model: {model}"
 
+    let embedOne (text: string) : Async<float32 array> = async {
+        // `GetSecret` returns `string option` — a missing key is a
+        // configuration fault, not an empty string.
+        let! apiKey = secretStore.GetSecret("_platform", "MYVENDOR_API_KEY")
+        // Translate, POST, parse, return float32 array
+        return [| 0.0f |]
+    }
+
     interface IEmbeddingProvider with
-        member _.GenerateEmbedding(text) = async {
-            let! apiKey = secretStore.GetSecret("_platform", "MYVENDOR_API_KEY")
-            // Translate, POST, parse, return float32[]
-            return [| 0.0f |]
-        }
+        member _.GenerateEmbedding(text) = embedOne text
+        // No native batch endpoint yet, so delegate to the shipped
+        // fan-out helper. A vendor with a batch API issues one call here.
+        member _.GenerateEmbeddings(texts) = IEmbeddingProvider.batchedFallback embedOne texts
+        member _.Dimensions = dimensions
         member _.ProviderId = "myvendor"
         member _.ModelId = model
-        member _.Dimensions = dimensions
+
+let create (secretStore: ISecretStore) (model: string) : IEmbeddingProvider =
+    MyVendorEmbeddingProvider(secretStore, model) :> _
 ```
 
 Wire:
 
-```fsharp skip=fragment
+```fsharp
 let embedder = MyVendor.EmbeddingProvider.create secretStore "myvendor-large"
-RAGServerApp.create (aiProviderFactory, aiConfigStore, embedder)
-|> ...
+
+RAGServerApp.create aiProviderFactory providerProfile embedder
+// ... the deployment's other RAGServerApp.with* calls ...
+|> RAGServerApp.run
 ```
 
 Author an `IHealthCheck` + `IConfigValidator` for self-registration.

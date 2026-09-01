@@ -500,7 +500,8 @@ All Enterprise imports and module registration calls are at module top level in 
 | File | Purpose |
 |------|---------|
 | `Feliz.AgCharts/AgChart.fs` / `AgGrid.fs` | Chart and grid Fable bindings (Community) |
-| `Client/UI/Toolkit/*.fs` | Design system — split into 6 sub-modules (`OutputFormatting`, `Tokens`, `Typography`, `Layout` with `AppShell` / `Panel` / `Tabs`, `Forms`, `Data`); all under `namespace Toolup.UIToolkit` |
+| `ToolUp.Platform.UI/Toolkit/*.fs` | Design system, in the standalone `ToolUp.Platform.UI` package since Phase 307 (`OutputFormatting`, `Tokens`, `Typography`, `Forms`, `Data`, `StateViews`, `Kpi`), alongside `ToolUp.Platform.{Icon,Icons}` and the `{Svg,Data,Aria}Prop` helpers. All under `namespace Toolup.UIToolkit`; `ToolUp.Platform.Client` depends on the package, so they arrive transitively for an existing consumer |
+| `Client/UI/Toolkit/Layout.fs` | The shell half of the same namespace — `AppShell` / `Panel` / `Tabs` / `renderPageContent` / `loadingIndicator`. Stayed in the client tier at Phase 307: it composes `Toolup.Sidebar` and is written against `SDK.ClientTypes` |
 | `Client/UserSession.fs` | User-ID + auth-token storage, mode-aware Remoting headers |
 | `Client/SDK.ClientTypes.fs` | `ErasedModule`, `ClientModule.register` / `withUnitInit`, `ClientConfig`, `DataManagerMode`, `TeamManagerMode`, `TeamConfigMode`, `ToastCentreMode`, `AuthUIMode` (+ `OidcUIConfig` / `ClerkUIConfig` / `CustomAuthUI`), `ClientModuleContext` |
 | `Client/AuthUIProvider.fs` | Delegate registry for companion-supplied sign-in UI (`OidcClient`, `ClerkUI`); `register tag handler` + `gate authUI mode shell` dispatch |
