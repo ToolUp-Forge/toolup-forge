@@ -105,7 +105,7 @@ Set-Location C:\repos\ToolUp\toolup-forge
 & "C:\Program Files\Git\usr\bin\grep.exe" -rn "^let mutable " src/
 ```
 
-Filter to server-tier paths under `src/ToolUp.Platform.Server/`, `src/AuthProviders/Oidc/`, `src/AuthProviders/EntraExternalId/` — client-tier paths fall under the Fable-tier (a)-class by construction.
+Filter to server-tier paths under `src/ToolUp.Platform.Server/` and `src/AuthProviders/Oidc/` — client-tier paths fall under the Fable-tier (a)-class by construction.
 
 ## Every Expecto pack runs sequenced by default
 

@@ -129,6 +129,30 @@
       never been published and 743's surface will ship in the same
       artefact as 739's and 741's. A version is bumped when the slot has
       been RELEASED, not once per phase that touches it.
+
+      The same slot ALSO carries Phase 749, which is the largest break of
+      the four: it DELETES two packages, `ToolUp.AuthProviders.EntraExternalId`
+      and `ToolUp.AuthProviders.EntraExternalId.Client`, executing the
+      removal their 0.4.0 soft deprecation scheduled as `0.Y.0`. It also
+      removes seven now-unreachable public literals from
+      `ToolUp.Platform.Core` (the six `ConfigKeys.Names.entraExternalId*`
+      env-var names and `AuthMetrics.EntraClaimParseFailed`), which the
+      deleted companion was the only reader and only emitter of.
+
+      MINOR is where this repo's SemVer-on-0.x policy puts a break, and
+      the fourth-bump reasoning is 743's verbatim: the newest tag is still
+      `v0.22.0`, so 0.23.0 has never been published and this removal ships
+      in the same artefact as the other three. A consumer pinned to 0.22.0
+      is untouched and keeps both packages; the migration recipe for the
+      one that upgrades is `docs/migrations/0.23.0-entra-external-id-removal.md`.
+
+      A package that STOPS being produced is worth stating explicitly,
+      because it is the one shape a version number cannot express: there
+      is no 0.23.0 of either companion to resolve, so a consumer that
+      raises its pin without dropping the `PackageReference` fails at
+      RESTORE (`NU1101`) rather than at compile. That is the intended
+      failure — loud, early, and naming the package — and it is why the
+      removal is a minor rather than something quieter.
     -->
     <Version>0.23.0</Version>
     <!--

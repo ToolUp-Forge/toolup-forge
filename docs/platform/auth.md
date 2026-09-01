@@ -140,15 +140,17 @@ Client.run
 
 `OidcUIConfig.defaults issuer clientId redirectUri` fills the last three fields with `[ "openid"; "profile"; "email" ]` / `None` / `None` if you would rather not spell the record out. For a first-class preset per IdP (Entra workforce, Entra External ID, Auth0, Google) see `OidcPresets` in the same companion, and the [preset table](../companions/auth-providers.md#provider-presets).
 
-### `ToolUp.AuthProviders.EntraExternalId{,.Client}` (Microsoft Entra External ID)
+### Microsoft Entra External ID
 
-Opinionated wrapper around the generic OIDC pair for Microsoft Entra External ID (the customer-facing CIAM tier). The server companion constructs the v2.0 issuer URL from a tenant identifier (plus optional custom domain), applies the **`oid` > `sub` claim convention** (External ID's `oid` is constant per user per tenant; `sub` varies per app registration, so mapping `sub` -> `UserId` produces a different id every time the consumer adds a second app registration), and projects `tid` -> `TenantId`. The federated-IdP claim (`idp` — `google.com` / `apple.com` / `live.com` / `local` for the tenant's own user pool) is readable via `EntraExternalIdAuthProvider.readIdpClaim` for audit decorators that want per-IdP attribution.
+Served by the generic OIDC pair plus `OidcPresets.entraExternalId` (or `entraExternalIdWithDomain`): the preset constructs the v2.0 issuer URL from a tenant subdomain and optional custom domain, and adds `offline_access` to the default scope set (External ID requires it for refresh-token issuance).
 
-The browser companion adds `offline_access` to the default scope set (External ID requires it for refresh-token issuance) and routes sign-up / sign-in through the configured user-flow policies when supplied.
+Two things sit on top of the preset rather than inside it. The **`oid` > `sub` claim convention** — External ID's `oid` is constant per user per tenant where `sub` varies per app registration, so mapping `sub` -> `UserId` produces a different id every time the consumer adds a second app registration — is `AuthConfig.ClaimMapping = Some { UserIdClaim = Some "oid"; TenantIdClaim = Some "tid" }`, which is **fail-closed**: a validated token that does not carry a named claim is rejected rather than resolving a different identity. And the sign-up user flow is `OidcPresets.withEntraSignUpUserFlow <policyId>`, which puts a "Sign up" button beside "Sign in" on the standard shell.
+
+The federated-IdP claim (`idp` — `google.com` / `apple.com` / `live.com` / `local` for the tenant's own user pool) is emitted on issued tokens; a deployment wanting per-IdP audit attribution reads it from the request's bearer token in its own audit decorator.
 
 The SSE auth caveat below applies unchanged to External-ID-issued tokens — the access token still rides in the `Authorization` header on the standard API path, and the SSE handshake follows whichever cookie/query-string fallback the deployment configured.
 
-See [`docs/companions/auth-providers.md`](../companions/auth-providers.md) and the [Entra External ID invitations migration](../migrations/3d-entra-external-id-invitations.md) for the full operator playbook.
+The dedicated `ToolUp.AuthProviders.EntraExternalId{,.Client}` companions were **removed in 0.23.0** after a soft deprecation at 0.4.0 — see [the removal migration](../migrations/0.23.0-entra-external-id-removal.md). For the full operator playbook see [`docs/companions/auth-providers.md`](../companions/auth-providers.md) and the [Entra External ID invitations migration](../migrations/3d-entra-external-id-invitations.md).
 
 ### `ToolUp.AuthProviders.ClerkUI` (client-side)
 

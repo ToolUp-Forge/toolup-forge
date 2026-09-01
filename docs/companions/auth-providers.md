@@ -12,8 +12,6 @@ This page is a cross-cutting overview of the shipped provider companions. For fu
 | `StaticJwtAuthProvider` (built into `ToolUp.Platform.Server`) | Server | Validates HS256 JWTs. BCL-only, no external NuGet deps. |
 | `ToolUp.AuthProviders.Oidc` | Server | Generic OIDC server-side validator. JWKS discovery + JWS signature verification (RS256 by default; opt in to RS384 / RS512 / ES256 / PS256 via `AuthConfig.AcceptedAlgorithms`). |
 | `ToolUp.AuthProviders.Oidc.Client` | Client | OIDC sign-in UI: Authorization Code + PKCE flow. |
-| `ToolUp.AuthProviders.EntraExternalId` | Server | Microsoft Entra External ID (CIAM): wraps `Oidc` with tenant-aware issuer construction + `oid`/`tid` claim mapping. |
-| `ToolUp.AuthProviders.EntraExternalId.Client` | Client | Entra External ID sign-in UI: wraps `OidcClient` with `offline_access` scope default + sign-up / sign-in user-flow policy routing. |
 | `ToolUp.AuthProviders.GoogleIdentity.Client` | Client | Google Identity Services: the branded sign-in button and opt-in One Tap. A UX layer over the Google OIDC preset, not a second way to sign in. |
 | `ToolUp.AuthProviders.ClerkUI` | Client | Clerk sign-in UI; commercial product integration. |
 
@@ -154,7 +152,7 @@ Either field may be set alone. `ClaimMapping = None` (the default, and what both
 
 #### Wiring `IMetricsSink`
 
-When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` (or `provider=entra-external-id`) alongside the SDK's other observability metrics:
+When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` alongside the SDK's other observability metrics:
 
 ```fsharp skip=fragment
 open ToolUp.Platform.Metrics
@@ -461,7 +459,7 @@ let cfg =
 
 **The keys must be provider-specific.** The client emits `response_type`, `client_id`, `redirect_uri`, `scope`, `state`, `nonce`, `code_challenge` and `code_challenge_method` itself; extras are *appended*, never merged, so repeating one of those emits it twice and an issuer's handling of a duplicate is undefined — for `redirect_uri` or `code_challenge` that is the callback's security. The coherence validator's **rule 16** refuses such a config at preflight (Error), and warns on a flow that is declared but inert: a blank label, or no extra parameters at all (two buttons issuing one request).
 
-**This replaces the `EntraExternalIdClient` companion's dual-button shell.** That companion existed partly because the generic shell had no sign-up affordance; the authorize request its "Sign up" button issued (`p=<policyId>` alongside the full OAuth / PKCE set) is the request the preset path issues now, parameter for parameter, and the SDK test pack asserts the exact set. See [the deprecation note](../migrations/0.4.0-entra-external-id-deprecation.md) and [the migration](../migrations/748-oidc-secondary-flow.md).
+**This replaced the dual-button shell of the client-side Entra External ID companion, which is removed as of 0.23.0.** That companion existed partly because the generic shell had no sign-up affordance; the authorize request its "Sign up" button issued (`p=<policyId>` alongside the full OAuth / PKCE set) is the request the preset path issues now, parameter for parameter, and the SDK test pack asserts the exact set. See [the removal migration](../migrations/0.23.0-entra-external-id-removal.md), the earlier [deprecation note](../migrations/0.4.0-entra-external-id-deprecation.md) and [the secondary-flow migration](../migrations/748-oidc-secondary-flow.md).
 
 #### Client-side `id_token` validation (opt-in)
 
@@ -484,94 +482,40 @@ The pipeline is defence-in-depth — the server's `OidcAuthProvider.ValidateRequ
 
 See [migration: 3b-A-oidc-id-token-validation](../migrations/3b-A-oidc-id-token-validation.md) for the consumer-side rollout.
 
-### `ToolUp.AuthProviders.EntraExternalId` (Microsoft Entra External ID)
+### Entra External ID (Microsoft's customer-facing CIAM tier)
 
-Opinionated wrapper around `ToolUp.AuthProviders.Oidc` for the Microsoft Entra External ID identity service (the customer-facing CIAM tier — distinct from workforce Entra ID / Azure AD). Bakes in three pieces of External-ID-specific knowledge that are easy to get wrong with raw OIDC config:
+Entra External ID is served by the **generic OIDC pair plus a preset** — `ToolUp.AuthProviders.Oidc` on the server, `ToolUp.AuthProviders.Oidc.Client` on the browser, and `OidcPresets.entraExternalId` (or `entraExternalIdWithDomain` for a custom CIAM host) supplying the External-ID-specific knowledge that is easy to get wrong with raw config:
 
-1. **Issuer URL construction.** Built from a `tenant` parameter (plus an optional `customDomain` override) as `https://<tenant>.ciamlogin.com/<tenant>/v2.0`. Always v2.0 — the v1.0 endpoint exists but rejects the bound audience format used by current app registrations.
-2. **Claim mapping.** Projects `oid` -> `AuthenticatedUser.UserId` (more stable than `sub` in External ID; `sub` varies per app registration, `oid` is constant per user per tenant) and `tid` -> `AuthenticatedUser.TenantId`. The federated-IdP claim (`idp`) is readable via `EntraExternalIdAuthProvider.readIdpClaim` for audit decorators that want per-IdP attribution.
-3. **User-flow policies.** Optional `signUpPolicyId` / `signInPolicyId` route the corresponding affordances through External ID's policy endpoints (`oauth2/v2.0/authorize?p=<policyId>`); absent, the default authorize endpoint is used.
-
-Use when:
-- Targeting Entra External ID for customer-facing sign-in.
-- You want refresh-token issuance (`offline_access` is in the default scope set; the generic OIDC defaults omit it).
-
-Setup:
+1. **Issuer URL construction.** `https://<tenantSubdomain>.ciamlogin.com/<tenantSubdomain>/v2.0`, or `https://<customDomain>/<tenantSubdomain>/v2.0` with a custom domain. Always v2.0 — the v1.0 endpoint exists but rejects the bound audience format current app registrations use, and the resulting `InvalidAudience` is hard to diagnose from logs.
+2. **Scopes.** `offline_access` is in the preset's default set (the generic OIDC defaults omit it; External ID requires it for refresh-token issuance).
+3. **`ValidateIdToken = Some true`.** Client-side id_token validation (signature + `iss` + `aud` + `exp` via WebCrypto) runs on every callback. The generic `OidcUIConfig.defaults` leaves this `None`; a customer-facing CIAM surface is where defence-in-depth at the boundary is worth the WebCrypto verify per sign-in.
 
 ```fsharp skip=fragment
-open ToolUp.AuthProviders
-
-// Inline:
-let config = {
-    Tenant = "contoso"
-    CustomDomain = None
-    Audience = "5e2c1f...client-id"
-    ClockSkewSeconds = None
-    SignUpPolicyId = Some "B2C_SignUp"
-    SignInPolicyId = None
-}
-
-let authProvider = EntraExternalIdAuthProvider.create None config
-
-// Or from env vars (see below):
-let authProvider =
-    EntraExternalIdAuthProvider.fromEnv None
-    |> Option.defaultWith (fun () -> failwith "TOOLUP_ENTRA_EXTERNAL_ID_TENANT not set")
-
-ServerApp.empty
-|> ServerApp.withAuth authProvider
-|> ...
-```
-
-Configuration via environment variables:
-- `TOOLUP_ENTRA_EXTERNAL_ID_TENANT` — required.
-- `TOOLUP_ENTRA_EXTERNAL_ID_AUDIENCE` — required.
-- `TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN` — optional.
-- `TOOLUP_ENTRA_EXTERNAL_ID_SIGN_UP_POLICY` — optional.
-- `TOOLUP_ENTRA_EXTERNAL_ID_SIGN_IN_POLICY` — optional.
-- `TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS` — optional; default 60.
-
-`EntraExternalIdAuthValidator` `IConfigValidator` probes `<issuer>/.well-known/openid-configuration` at preflight; refuses startup if unreachable. `ServerConfig.SkipPreflight = true` bypasses (same posture as `OidcAuthValidator`).
-
-The generic OIDC pair remains independently usable — consumers wanting raw OIDC for non-Entra providers don't import this companion.
-
-Pair with `ToolUp.AuthProviders.EntraExternalId.Client` for the browser-side sign-in flow.
-
-### `ToolUp.AuthProviders.EntraExternalId.Client` (Entra External ID sign-in UI)
-
-Browser-side counterpart to the External ID server provider. Wraps `ToolUp.AuthProviders.Oidc.Client` with Entra-aware defaults:
-
-- `openid profile email offline_access` scope set (the OIDC defaults omit `offline_access`; External ID requires it for refresh-token issuance).
-- Optional "Sign up" affordance routed through the configured sign-up policy when `SignUpPolicyId` is set. **The generic shell now offers this too** — `OidcPresets.entraExternalId |> OidcPresets.withEntraSignUpUserFlow policyId` issues the identical authorize request without the companion (see [Secondary flow](#secondary-flow--the-sign-up-affordance)), which retires the last client-side reason to stay on this wrapper.
-- `ValidateIdToken = Some true` — client-side id_token validation (signature + iss + aud + exp via WebCrypto) runs on every callback. The generic `OidcUIConfig.defaults` leaves this `None` for back-compat with pre-3b.A consumers; Entra is a customer-facing CIAM surface where defence-in-depth at the boundary is worth the small cost of the WebCrypto verify per sign-in. Opt out via `ValidateIdToken = Some false` on the projected `OidcUIConfig` (regression investigation, intentional fallback during a JWKS-fetch outage).
-
-Wired via the SDK's `CustomAuthUI` extension point (no edit to `AuthUIMode` required):
-
-```fsharp skip=fragment
-open ToolUp.AuthProviders.EntraExternalId
-
-let entraConfig =
-    EntraExternalIdClientConfig.create
-        "<tenant>"          // External ID tenant
-        "<client-id>"       // App-registration client id
+let cfg =
+    OidcPresets.entraExternalId
+        "<tenant-subdomain>"
+        "<client-id>"
         "https://app.example.com/auth/callback"
-
-Client.run
-    { ClientConfig.defaults with
-        AppName = "MyApp"
-        AuthUI = CustomAuthUI { Wrap = EntraExternalIdAuthUI.wrap entraConfig } }
-    modules
 ```
 
-Setup walkthrough — Entra portal:
+Two further pieces of External-ID behaviour are configured on top of the preset rather than baked into it, because neither is a provider property:
+
+- **`oid` -> `UserId` / `tid` -> `TenantId` claim mapping.** External ID's `oid` is constant per user per tenant where `sub` varies per app registration, so most deployments want it. Set `AuthConfig.ClaimMapping = Some { UserIdClaim = Some "oid"; TenantIdClaim = Some "tid" }` on the server provider — see [Claim mapping](#claim-mapping-mapping-a-non-sub-identity), and note it is **fail-closed**: a validated token that does not carry the named claim is rejected rather than silently resolving a different identity.
+- **The sign-up user flow.** `OidcPresets.withEntraSignUpUserFlow "<policyId>"` adds the "Sign up" button beside "Sign in" and routes it through that policy — see [Secondary flow](#secondary-flow--the-sign-up-affordance).
+
+> **Removed in 0.23.0 — the `ToolUp.AuthProviders.EntraExternalId` and `ToolUp.AuthProviders.EntraExternalId.Client` companions.** Both were soft-deprecated at 0.4.0 in favour of the preset path above, and the two capabilities that kept them alive — the claim remapping and the dual-button sign-up affordance — are now substrate. The migration is mechanical and needs no Entra-side configuration change: [`docs/migrations/0.23.0-entra-external-id-removal.md`](../migrations/0.23.0-entra-external-id-removal.md). One capability did **not** move: routing the *primary* "Sign in" button through its own user-flow policy (the old `SignInPolicyId`) has no generic equivalent, because the secondary-flow slot is by definition a second journey and the primary flow carries no extras. A deployment that relies on it needs a `CustomAuthUI` wrapper of its own.
+
+#### Entra portal setup
+
+Unchanged by the companion removal — the preset path runs against the same tenant and app registration.
 
 1. **Create an External ID tenant.** Entra portal -> External Identities -> Create external tenant. Note the tenant name (the short form, not the GUID).
 2. **Register the app.** External Identities -> Applications -> New registration. Single-page application; redirect URI matches the `RedirectUri` you wire client-side.
 3. **Enable ID + access tokens** in the app registration's Authentication blade.
-4. **User-flow policies.** Identity providers -> User flows -> create separate sign-up and sign-in flows if you want them split. Note the policy id for `SignUpPolicyId` / `SignInPolicyId`.
+4. **User-flow policies.** Identity providers -> User flows -> create separate sign-up and sign-in flows if you want them split. Note the sign-up policy id — it is what `OidcPresets.withEntraSignUpUserFlow` takes. (A policy for the *primary* sign-in button has no preset-path equivalent; see the removal note above.)
 5. **Federated identity providers** (optional) — Identity providers -> add Google / Apple / Facebook / Microsoft consumer accounts. The federated provider's identifier surfaces as the `idp` claim on issued tokens.
 6. **API permissions.** Application -> API permissions -> add at least `openid` / `profile` / `email` / `offline_access` (Microsoft Graph delegated).
-7. **Claim mapping.** Under the user-flow blade, ensure `oid`, `tid`, `email`, and `idp` are emitted on the issued tokens (External ID emits these by default).
+7. **Claim mapping.** Under the user-flow blade, ensure `oid`, `tid` and `email` are emitted on the issued tokens (External ID emits these by default) — `AuthConfig.ClaimMapping` is fail-closed, so a token missing a claim it names is rejected. `idp` is emitted alongside them for a deployment that reads it from the bearer token in its own audit decorator; the SDK exposes no helper for it.
 
 For the full operator playbook including federated-IdP wiring and the invitation flow, see [`docs/migrations/3d-entra-external-id-invitations.md`](../migrations/3d-entra-external-id-invitations.md).
 

@@ -155,8 +155,8 @@ let entraWorkforce (tenantId: string) (clientId: string) (redirectUri: string) :
 /// `withEntraSignUpUserFlow` — the standard `OidcAuthUI` shell then
 /// renders the dual-button "Sign in / Sign up" screen, with the
 /// sign-up button carrying `p=<policyId>` on its authorize request.
-/// The `EntraExternalIdClient` companion is no longer needed for
-/// that.
+/// The dedicated client-side Entra companion (removed at 0.23.0) is
+/// no longer needed for that.
 let entraExternalId (tenantSubdomain: string) (clientId: string) (redirectUri: string) : OidcAppConfig = {
     Issuer = sprintf "https://%s.ciamlogin.com/%s/v2.0" tenantSubdomain tenantSubdomain
     Audience = clientId
@@ -311,8 +311,8 @@ let withSecondaryFlow
 
 /// The authorize-request parameter Entra External ID (and Azure AD
 /// B2C before it) routes user flows on. Named here rather than spelled
-/// inline so the parity test against the `EntraExternalIdClient`
-/// companion's shell — which passes `[ "p", policyId ]` to
+/// inline so the parity test against the removed Entra client
+/// companion's shell — which passed `[ "p", policyId ]` to
 /// `beginSignInWithExtras` — has one value to pin.
 [<Literal>]
 let EntraUserFlowParameter = "p"
@@ -321,7 +321,7 @@ let EntraUserFlowParameter = "p"
 /// screen's secondary affordance: a "Sign up" button beside "Sign in"
 /// that routes through the named user-flow policy.
 ///
-/// This is the preset-path replacement for the `EntraExternalIdClient`
+/// This is the preset-path replacement for the removed Entra client
 /// companion's dual-button shell. The parameter shape is ported from
 /// that shell verbatim (`p=<policyId>` alongside the full OAuth / PKCE
 /// param set), so the authorize request the sign-up button issues is
