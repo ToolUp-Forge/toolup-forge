@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Feliz.AgCharts — standalone Feliz bindings for AG Charts Community.
+
+    Phase 344 lifted `AgChart.fs` out of ToolUp.Platform.Client, where it
+    had lived as `module ToolUp.Platform.AgChart`. Same argument as the
+    grid binding beside it: the file opens only Fable.Core /
+    Fable.Core.JsInterop / Feliz (plus Browser.Dom, for reading the
+    deployment's CSS custom properties when a palette is themed), so it is
+    a domain-agnostic wrapper rather than SDK substrate.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>Feliz.AgCharts</PackageId>
+    <AssemblyName>Feliz.AgCharts</AssemblyName>
+    <RootNamespace>Feliz.AgCharts</RootNamespace>
+    <Description>Feliz bindings for AG Charts Community — typed series, axes, legends, tooltips, markers and the chart theme builder, plus the deferred module-registration guard the Enterprise companion pre-empts. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly.</Description>
+    <PackageTags>fsharp;fable;feliz;react;ag-charts;charts;bindings</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AgChart.fs" />
+    <Content Include="package.json" />
+  </ItemGroup>
+  <!-- Client-tier closure: pack source for Fable consumers under fable/.
+       See the companion note in Feliz.AgGrid.fsproj. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Browser.Dom" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

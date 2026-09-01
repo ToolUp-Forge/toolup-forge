@@ -434,7 +434,14 @@
 
     <!-- Metrics + UI -->
     <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 344 — the AG Grid / AG Charts bindings are standalone
+         Apache-2.0 Feliz packages now, and ToolUp.AgGridEnterprise was
+         renamed Feliz.AgGrid.Enterprise to join them. They version with the
+         rest of the repo (one <Version> in Directory.Build.props), so they
+         resolve off $(ToolUpSdkVersion) like every other package here. -->
+    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
 
     <!-- Phase 16c — Cloud umbrella packages. One PackageReference per
          cloud transitively pulls Storage + Secrets + AuditSinks +

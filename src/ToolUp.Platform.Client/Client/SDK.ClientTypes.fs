@@ -1831,7 +1831,7 @@ type ClientConfig = {
     /// AG Grid module configuration for the AgGridProvider (Variant B).
     /// When set, the SDK wraps the app in AgGridProvider with these modules.
     /// Default: Community modules (no license key required).
-    GridModules: ToolUp.Platform.AgGrid.AgGridModuleConfig
+    GridModules: Feliz.AgGrid.AgGridModuleConfig
     /// Optional case-insensitive substring filter over
     /// `ErasedModule.Definition.Name` — modules whose name doesn't
     /// contain the filter as a substring (whitespace ignored) are
@@ -2177,7 +2177,7 @@ module ClientConfig =
         AuthUI = NoAuthUI
         AuthTokenStorage = ClientCookieAndLocalStorage
         Surfaces = Surfaces.anonymous
-        GridModules = ToolUp.Platform.AgGrid.AgGridModuleConfig.community
+        GridModules = Feliz.AgGrid.AgGridModuleConfig.community
         ModuleFilter = None
         GlobalOverlays = []
         OnError = None
