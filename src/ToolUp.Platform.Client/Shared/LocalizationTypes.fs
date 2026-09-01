@@ -1474,6 +1474,39 @@ type SessionSecurityMessages = {
     Dismiss: string
 }
 
+type HomeMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Reload action.
+    Refresh: string
+    /// Shown while the overview is fetching.
+    Loading: string
+    /// One tool card's empty state — no records of any type yet.
+    NoDataYet: string
+    /// "Active AI" strip heading.
+    ActiveAiHeading: string
+    /// Shown when no AI provider is composed / resolvable.
+    NoAiProvider: string
+    /// Deployment-context strip: the coarse mode label — takes the
+    /// server-derived mode string (e.g. "Team", "Individual").
+    Mode: string -> string
+    /// Deployment-context strip: the health summary, shown only to
+    /// platform admins — takes the server-derived health string.
+    Health: string -> string
+    /// Tools-grid section heading.
+    YourTools: string
+    /// Tools-grid empty state — no data-producing tools registered.
+    NoTools: string
+    /// "Pinned / Recent" widget heading.
+    PinnedAndRecent: string
+    /// Pin-toggle tooltip when the tool is not currently pinned.
+    Pin: string
+    /// Pin-toggle tooltip when the tool is currently pinned.
+    Unpin: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1519,4 +1552,5 @@ type MessageCatalog = {
     ModuleVisibilityAdmin: ModuleVisibilityAdminMessages
     MigrationStatus: MigrationStatusMessages
     SessionSecurity: SessionSecurityMessages
+    Home: HomeMessages
 }

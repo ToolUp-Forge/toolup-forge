@@ -970,6 +970,22 @@ module MessageCatalog =
                     | n -> $"{n} sessions signed out."
             Dismiss = "Dismiss"
         }
+        Home = {
+            Heading = "Home"
+            Subheading = "An overview of your tools, the data in each, and the active AI."
+            Refresh = "Refresh"
+            Loading = "Loading…"
+            NoDataYet = "No data yet — open this tool to add some."
+            ActiveAiHeading = "Active AI"
+            NoAiProvider = "No AI provider configured."
+            Mode = fun m -> $"Mode: {m}"
+            Health = fun h -> $"Health: {h}"
+            YourTools = "Your tools"
+            NoTools = "No data-producing tools are registered in this deployment yet."
+            PinnedAndRecent = "Pinned & recent"
+            Pin = "Pin"
+            Unpin = "Unpin"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
