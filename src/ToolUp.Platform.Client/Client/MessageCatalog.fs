@@ -868,6 +868,41 @@ module MessageCatalog =
             ColumnElapsed = "Elapsed"
             ElapsedMsLabel = fun ms -> $"{ms} ms"
         }
+        ModuleVisibilityAdmin = {
+            Heading = "Module visibility"
+            Subheading = "Curate which of this deployment's registered modules are surfaced at your scope."
+            Dismiss = "dismiss"
+            ProfileSaved = "Profile saved."
+            ProfileCleared = "Profile cleared — this scope no longer contributes a layer."
+            Loading = "Loading…"
+            NoResolutionYet =
+                "No layer declares a profile, so every registered module is surfaced. Saving a profile below makes this scope the first contributing layer."
+            NoItems = "none"
+            GovernedModules = fun n -> $"Governed modules ({n})"
+            SelectedAfterEveryLayer = fun n -> $"Selected after every layer ({n})"
+            ExcludedEntries = fun n -> $"Excluded pages / entries ({n})"
+            ContributingScopes = fun n -> $"Contributing scopes ({n})"
+            ResolvedForYouHeading = "Resolved for you"
+            ResolvedForYouHelp =
+                "Composed platform → team → user; each layer may only remove. An outer layer can already have narrowed what your profile allows."
+            VisibleNow = "visible now"
+            HiddenNow = "hidden now"
+            NoCuratableModules =
+                "This deployment registers no curatable modules. The SDK's own admin surfaces are deliberately absent from the governed set, so a profile can never hide the surface it is administered from."
+            RegisteredModulesHeader = fun registered selected -> $"Registered modules ({registered}) — {selected} named"
+            YourProfileHeading = "Your profile"
+            YourProfileHelp =
+                "Stored at your admin scope — the active team in team mode, your own scope otherwise. Modules this deployment does not register are ignored."
+            AllowLabel = "Allow"
+            AllowDescription = "Surface only the modules named below."
+            DenyLabel = "Deny"
+            DenyDescription = "Surface everything except the modules named below."
+            NoteLabel = "Note (why this profile exists)"
+            NotePlaceholder = "e.g. this deployment ships the finance family only"
+            Working = "Working…"
+            SaveProfile = "Save profile"
+            ClearProfile = "Clear profile"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

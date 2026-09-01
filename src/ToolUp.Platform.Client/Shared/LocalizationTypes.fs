@@ -1277,6 +1277,75 @@ type TenantLifecycleAdminMessages = {
     ElapsedMsLabel: int -> string
 }
 
+/// The built-in module-visibility profile editor (`ModuleVisibilityAdminUI`).
+type ModuleVisibilityAdminMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Dismiss action on the error / status banners.
+    Dismiss: string
+    /// Transient confirmation after a successful save.
+    ProfileSaved: string
+    /// Transient confirmation after a successful clear.
+    ProfileCleared: string
+    /// Generic "still fetching" state, shared by the resolved-answer pane
+    /// and the editor while their respective loads are in flight.
+    Loading: string
+    /// Prose shown when no layer declares a profile yet.
+    NoResolutionYet: string
+    /// Empty-list placeholder inside each of the resolved-answer pane's
+    /// four module-id lists.
+    NoItems: string
+    /// Takes the list's item count — heading of the "governed modules"
+    /// list in the resolved-answer pane.
+    GovernedModules: int -> string
+    /// Takes the list's item count — heading of the "selected after every
+    /// layer" list.
+    SelectedAfterEveryLayer: int -> string
+    /// Takes the list's item count — heading of the "excluded pages /
+    /// entries" list.
+    ExcludedEntries: int -> string
+    /// Takes the list's item count — heading of the "contributing scopes"
+    /// list.
+    ContributingScopes: int -> string
+    /// Heading of the resolved-answer pane.
+    ResolvedForYouHeading: string
+    /// Sub-heading prose under the resolved-answer pane's heading.
+    ResolvedForYouHelp: string
+    /// Badge on a candidate row the resolution currently admits.
+    VisibleNow: string
+    /// Badge on a candidate row the resolution currently hides.
+    HiddenNow: string
+    /// Empty state: this deployment registers no curatable modules.
+    NoCuratableModules: string
+    /// Takes the registered-module count and the selected-module count —
+    /// header of the candidate list.
+    RegisteredModulesHeader: int -> int -> string
+    /// Heading of the editable-profile card.
+    YourProfileHeading: string
+    /// Sub-heading prose under the editable-profile card's heading.
+    YourProfileHelp: string
+    /// The Allow rule-kind button's label.
+    AllowLabel: string
+    /// The Allow rule-kind button's description.
+    AllowDescription: string
+    /// The Deny rule-kind button's label.
+    DenyLabel: string
+    /// The Deny rule-kind button's description.
+    DenyDescription: string
+    /// Label of the free-text note field.
+    NoteLabel: string
+    /// Placeholder of the free-text note field.
+    NotePlaceholder: string
+    /// Save button label while a save / clear is in flight.
+    Working: string
+    /// Save button label at rest.
+    SaveProfile: string
+    /// Clear button label.
+    ClearProfile: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1319,4 +1388,5 @@ type MessageCatalog = {
     DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
     TeamConfig: TeamConfigMessages
     TenantLifecycleAdmin: TenantLifecycleAdminMessages
+    ModuleVisibilityAdmin: ModuleVisibilityAdminMessages
 }
