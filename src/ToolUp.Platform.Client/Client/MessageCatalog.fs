@@ -502,6 +502,67 @@ module MessageCatalog =
             OtherSettingsBody =
                 "Additional runtime-mutable deployment knobs land here as future Phase 4b follow-ups expose them. Today: PlatformKnowledgeBase only."
         }
+        PlatformUsers = {
+            Heading = "Users"
+            Subheading =
+                "Every principal the platform has evidence for — memberships, personal scopes, and sign-in audit. Flag team-less accounts and offboard them end-to-end."
+            TeamLessOnly = "Team-less only"
+            Refresh = "Refresh"
+            LoadingPrincipals = "Loading principals…"
+            NoPrincipalsHeading = "No principals to show."
+            NoPrincipalsBody =
+                "The registry is a derived projection over memberships, user scopes and sign-in audit. If you expected users here, check that the storage / event-store substrate is composed."
+            NoTeamLessPrincipals = "No team-less principals — every enumerated user belongs to at least one team."
+            Dismiss = "dismiss"
+            TeamLessBadge = "team-less"
+            HasDataBadge = "has data"
+            NoTeams = "no teams"
+            MembershipSummary =
+                fun count roles ->
+                    let teamWord = if count = 1 then "team" else "teams"
+                    $"{count} {teamWord} · {roles}"
+            RowSubtitle = fun membership lastSeen -> $"{membership} · last seen {lastSeen}"
+            PreviewAction = "Preview"
+            OffboardAction = "Offboard"
+            ExportOffboardAction = "Export & offboard"
+            NoPreviewBadge = "no preview"
+            OutcomeCompleted = "Completed"
+            OutcomeSkipped = "Skipped"
+            OutcomeFailed = "Failed"
+            OffboardTitle = "Offboard user"
+            ExportOffboardTitle = "Export & offboard user"
+            OffboardCompleteTitle = "Offboard complete"
+            SubjectLabel = fun label -> $"{label} — scope "
+            Working = "Working…"
+            ConfirmOffboard = "Confirm offboard"
+            ReasonLabel = "Reason (audited)"
+            ReasonPlaceholder = "e.g. departed employee cleanup"
+            Cancel = "Cancel"
+            PreviewImpact = "Preview impact"
+            PreviewSummary =
+                fun n ->
+                    $"{n} record(s) / key(s) / job(s) would be affected across the registered hooks. This does not mutate anything — proceed to run the offboard."
+            ColumnHook = "Hook"
+            ColumnWouldAffect = "Would affect"
+            ColumnDetail = "Detail"
+            ConfirmationRequiredHeading = "Confirmation required"
+            ConfirmationRequiredBody =
+                "This deployment gates offboards behind a confirmation token. Request one below (single-approver policy), or paste a token a second admin minted (two-person policy)."
+            ExportConfirmationNote =
+                "Note: export-then-offboard has no confirmation-gated path — the confirmed run performs the plain erasure without the pre-export."
+            ConfirmationTokenLabel = "Confirmation token"
+            ConfirmationTokenPlaceholder = "paste token, or request one →"
+            RequestToken = "Request token"
+            Close = "Close"
+            ColumnResult = "Result"
+            CompletedCount = fun n -> $"{n} completed"
+            SkippedCount = fun n -> $"{n} skipped"
+            FailedCount = fun n -> $"{n} failed"
+            ExportArchiveWritten = fun n -> $"Export archive written ({n} segments)"
+            NoHooksRan = "The offboard ran with no registered lifecycle hooks (a valid no-op run)."
+            ReasonRequired = "A reason is required for the audit trail."
+            TokenRequired = "Enter or request a confirmation token to proceed."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

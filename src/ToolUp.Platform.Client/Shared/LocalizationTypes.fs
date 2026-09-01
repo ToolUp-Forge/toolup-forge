@@ -623,6 +623,114 @@ type PlatformAdminMessages = {
     OtherSettingsBody: string
 }
 
+/// The built-in platform-users admin module (`PlatformUsersUI`, Phase 544).
+type PlatformUsersMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Filter-bar checkbox label restricting the list to team-less
+    /// principals.
+    TeamLessOnly: string
+    /// Refresh action in the filter bar.
+    Refresh: string
+    /// Shown while the first `ListPrincipals` call is in flight.
+    LoadingPrincipals: string
+    /// Empty state: no principals at all (empty list, or the offboard
+    /// substrate is disabled — the error banner carries the why).
+    NoPrincipalsHeading: string
+    NoPrincipalsBody: string
+    /// Empty state: every enumerated principal belongs to a team, so the
+    /// team-less filter has nothing to show.
+    NoTeamLessPrincipals: string
+    /// Dismiss action on the page-level error banner.
+    Dismiss: string
+
+    // ─── Row ────────────────────────────────────────────────────────
+    /// Team-less badge on a row.
+    TeamLessBadge: string
+    /// "has data" badge on a row with `HasUserScopeData = true`.
+    HasDataBadge: string
+    /// Row / membership-summary text for a team-less principal.
+    NoTeams: string
+    /// Membership summary — "N team · role, role" (singular) or
+    /// "N teams · role, role" (plural) — takes the team count and the
+    /// comma-joined, deduplicated role list.
+    MembershipSummary: int -> string -> string
+    /// Row subtitle — "<membership summary> · last seen <date>" — takes
+    /// the already-formatted membership summary and last-seen date.
+    RowSubtitle: string -> string -> string
+    /// Row action opening the read-only preview.
+    PreviewAction: string
+    /// Row / modal action for the plain-offboard path.
+    OffboardAction: string
+    /// Row / modal action for the export-then-offboard path.
+    ExportOffboardAction: string
+
+    // ─── Preview badge ──────────────────────────────────────────────
+    /// Preview-table badge when a hook has no preview support.
+    NoPreviewBadge: string
+
+    // ─── Outcome badges (summary table) ─────────────────────────────
+    OutcomeCompleted: string
+    OutcomeSkipped: string
+    OutcomeFailed: string
+
+    // ─── Offboard modal ─────────────────────────────────────────────
+    /// Modal heading for the plain-offboard kind.
+    OffboardTitle: string
+    /// Modal heading for the export-then-offboard kind.
+    ExportOffboardTitle: string
+    /// Modal heading once the destructive call has completed.
+    OffboardCompleteTitle: string
+    /// Modal subject line — takes the principal's display label; the
+    /// scope id is rendered separately in its own monospace span.
+    SubjectLabel: string -> string
+    /// Primary-button label while a destructive / preview / mint call is
+    /// in flight.
+    Working: string
+    /// Primary-button label at the `Confirming` step.
+    ConfirmOffboard: string
+    ReasonLabel: string
+    ReasonPlaceholder: string
+    Cancel: string
+    PreviewImpact: string
+    /// Preview-summary prose — takes `LifecyclePreview.TotalWouldAffect`.
+    PreviewSummary: int -> string
+    /// Column header shared by the preview table and the summary table.
+    ColumnHook: string
+    ColumnWouldAffect: string
+    /// Column header shared by the preview table and the summary table.
+    ColumnDetail: string
+    ConfirmationRequiredHeading: string
+    ConfirmationRequiredBody: string
+    /// Extra note shown only for the export-offboard kind at the
+    /// `Confirming` step (the confirmed path has no pre-export leg).
+    ExportConfirmationNote: string
+    ConfirmationTokenLabel: string
+    ConfirmationTokenPlaceholder: string
+    RequestToken: string
+    Close: string
+    /// Summary-table hook-outcome column header.
+    ColumnResult: string
+    /// Outcome-count badge — "N completed".
+    CompletedCount: int -> string
+    /// Outcome-count badge — "N skipped".
+    SkippedCount: int -> string
+    /// Outcome-count badge — "N failed".
+    FailedCount: int -> string
+    /// Takes the export archive's segment count.
+    ExportArchiveWritten: int -> string
+    /// Shown when the offboard ran with no registered lifecycle hooks.
+    NoHooksRan: string
+
+    // ─── Update-reducer validation (Phase 751 — read via
+    // `MessageCatalog.english.PlatformUsers.*` from a pure-reducer branch
+    // with no rendered tree at the point these are raised) ────────────
+    ReasonRequired: string
+    TokenRequired: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -657,4 +765,5 @@ type MessageCatalog = {
     OAuth1aCredential: OAuth1aCredentialMessages
     NoActiveTeamLanding: NoActiveTeamLandingMessages
     PlatformAdmin: PlatformAdminMessages
+    PlatformUsers: PlatformUsersMessages
 }
