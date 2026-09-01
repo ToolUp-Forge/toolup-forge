@@ -46,7 +46,7 @@ The three shapes below cover the spectrum from "single binary, every concern" th
 
 **Composition root.** `ProcessProfile = AllInOne` (which is also the default — omit the field to inherit it).
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
@@ -86,7 +86,7 @@ ServerApp.empty
 
 **Composition root — web silo.** `ProcessProfile = WebOnly`; cloud-backed persistence; distributed notification channel.
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
@@ -107,7 +107,7 @@ The web silo still registers `IJobScheduler` and `IWebhookDispatcher` so module 
 
 **Composition root — worker silo.** `ProcessProfile = WorkerOnly`; same persistence + same Redis as the web silo.
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
@@ -155,7 +155,7 @@ The worker silo's HTTP pipeline is not mounted (`ProcessProfileGate.shouldRegist
 
 **Composition root — dispatcher silo.** `ProcessProfile = DispatcherOnly`; same persistence + same Redis.
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
 |> ServerApp.withConfig {
     ServerConfig.defaults with
@@ -241,7 +241,7 @@ type IDistributedLock =
 
 Registered unconditionally by `compose`, so any subsystem or module resolves an `IDistributedLock` from DI without first checking whether the deployment composed one. The default is `InProcessDistributedLock` — a `ConcurrentDictionary<string, Lease>` that is *correct* for a single instance and excludes nothing across replicas. A distributed deployment overrides it from `ComposeExtensions.ServiceConfig`:
 
-```fsharp skip=fragment
+```fsharp
 let lck =
     DistributedLockSelection.fromEnv logger [ RedisDistributedLock.resolver ]
 
@@ -259,9 +259,11 @@ let lck =
 
 **`Release` and `Renew` are holder-checked and never throw on loss.** Both compare the caller's `FenceToken` against the current holder's, so a lease that lapsed and was re-taken by someone else is never released out from under its new holder and never renewed back into existence. `Release` is idempotent — a `finally` can call it unconditionally. `Renew` signals failure by **returning the lease unchanged** rather than raising, so the caller's own `Lease.isLive` check is the arbiter:
 
-```fsharp skip=fragment
-let! renewed = lck.Renew lease
-if Lease.isLive renewed then keepWorking renewed else abandon ()
+```fsharp
+async {
+    let! renewed = lck.Renew lease
+    if Lease.isLive renewed then keepWorking renewed else abandon ()
+}
 ```
 
 **Distinct ids never contend**, and no ordering is promised between two different lock ids (GP 12 rule 5). Namespace your ids — the shipped consumers use `toolup:job-dispatch:{jobId}` and `toolup:platform-admin:write` — so two subsystems sharing one Redis cannot collide.
@@ -282,17 +284,20 @@ Option 3 is what `FenceToken` is for.
 
 `FenceToken` strictly increases per `LockId` across acquisitions, and is **stable across `Renew`** (renewing extends the same hold, it does not start a new one). The pattern is the standard one (Kleppmann's fencing tokens): the *downstream store* records the highest token it has seen for a resource and refuses any write carrying a lower one.
 
-```fsharp skip=fragment
+```fsharp
 // The holder threads its token into the write:
-match! lck.TryAcquire(lockId, ttl) with
-| None -> ()              // someone else holds it — skip
-| Some lease ->
-    try
-        do! store.WriteFenced(resourceId, lease.FenceToken, payload)
-        // ^ refuses the write if it has already seen a HIGHER token,
-        //   i.e. if this lease lapsed and someone else took over.
-    finally
-        DistributedLock.releaseDetached onError lck lease
+async {
+    match! lck.TryAcquire(lockId, ttl) with
+    | None -> ()              // someone else holds it — skip
+    | Some lease ->
+        try
+            // WriteFenced refuses the write if it has already seen a
+            // HIGHER token — i.e. if this lease lapsed and someone
+            // else took over.
+            do! store.WriteFenced(resourceId, lease.FenceToken, payload)
+        finally
+            DistributedLock.releaseDetached onError lck lease
+}
 ```
 
 Two things follow, and both are easy to get wrong:

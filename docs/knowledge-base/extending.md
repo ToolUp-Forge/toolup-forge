@@ -10,7 +10,7 @@ The minimum contract for a KB replacement:
 1. Implements a ToolUp.Remoting API for document upload + list.
 2. Wires an `IIngestionStatusObserver` into `composeWithRAG`.
 3. Either matches the `"KnowledgeBase.IngestionStatus"` notification key (so the AI side panel surfaces ingestion progress) or accepts the AI panel won't show progress for its uploads.
-4. Optionally installs the `Toolup.NarrativeCommit` handler (so other modules' "Save to Knowledge Base" buttons resolve).
+4. Optionally supplies a `ClientConfig.Handlers.NarrativeCommitHandler`, which the shell installs into the `Toolup.NarrativeCommit` broker at boot (so other modules' "Save to Knowledge Base" buttons resolve).
 
 A replacement is just another module under `src/Modules/MyKnowledgeBase/`:
 
@@ -37,29 +37,29 @@ let knowledgeApi (ctx: HttpContext) : IMyKnowledgeApi = {
 
 let myVectorisationHandler : VectorisationHandler = {
     DataTypeId = "MyKnowledge"
-    Vectorise = fun (fileName, dataObject) -> async {
+    // Synchronous, and it takes the `ProcessedData` that
+    // `DataType.Process` returned — not a (fileName, payload) pair.
+    Vectorise = fun processed ->
         // extract text from your data shape, chunk, return TextChunk list
-    }
+    // `Some f` adds a document-level summary chunk; `None` skips it.
+    Summarise = None
 }
 
 let myIngestionStatusObserver : IIngestionStatusObserver =
     {
         new IIngestionStatusObserver with
-            member _.OnJobAccepted(job) = ...
-            member _.OnChunkIndexed(jobId, chunkId) = ...
-            member _.OnJobCompleted(jobId, chunkCount) = ...
-            member _.OnJobFailed(jobId, reason) = ...
+            member _.OnChunkIndexed(job) = ...
+            member _.OnChunkFailed(job, error) = ...
     }
 ```
 
 In the composition root:
 
-```fsharp skip=fragment
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> ...
+```fsharp
 // Vectorisation handlers ride on the module that owns the data type —
 // `ServerModule.withVectorisation [ myVectorisationHandler ]` — not on
 // the RAG app.
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.addModules [ myKnowledgeBaseModule ]    // your module
 |> RAGServerApp.withIngestionObserver myIngestionStatusObserver
 |> RAGServerApp.run
@@ -71,7 +71,7 @@ Drop the `ToolUp.KnowledgeBase` `<PackageReference>` entries from the consuming 
 
 Dropping the package reference is the heavy form of replacement. `KnowledgeBaseMode` (Phase 1e) is the light one: a four-case DU parallel to `DataManagerMode`, applied client-side, that lets a deployment swap the module while leaving the props imports and the project reference in place.
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
 open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 
@@ -117,45 +117,73 @@ The shipped extractor list is internal to `ToolUp.KnowledgeBase.Server`. Adding 
 
 Example: ePub module:
 
-```fsharp skip=fragment
+```fsharp
 // Server.fs (in your new module)
-let epubDataType : DataType = {
-    Info = { Id = "Epub"; DisplayName = "EPUB books"; Schema = None }
+let epubDataType: DataType = {
+    Info = {
+        Id = "Epub"
+        DisplayName = "EPUB books"
+        Schema = None
+    }
     Id = "Epub"
-    Detect = fun (fileName, _) -> fileName.EndsWith(".epub")
-    Process = fun (fileName, contents) ->
-        // Parse EPUB, return (boxed result, ProcessedFileEntry)
+    // `Detect` sees the file's raw content, not its name.
+    Detect = fun contents -> async { return contents.Contains "application/epub+zip" }
+    Process =
+        fun (fileName, contents) -> async {
+            let book = parseEpub contents
+
+            // `ProcessedData` is a type tag plus a JSON payload — the
+            // `obj` return was retired, so there is nothing to box.
+            let processed = {
+                TypeName = "EpubBook"
+                Payload = serialiseEpub book
+            }
+
+            let entry = {
+                FileName = fileName
+                DataType = "Epub"
+                ProcessedAt = DateTime.UtcNow
+                Info = Some(box book.Chapters.Length)
+                Error = None
+            }
+
+            return processed, entry
+        }
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
 }
 
-let epubVectorisationHandler : VectorisationHandler = {
+let epubVectorisationHandler: VectorisationHandler = {
     DataTypeId = "Epub"
-    Vectorise = fun (fileName, dataObject) -> async {
-        let parsed = unbox<EpubBook> dataObject
-        let chunks =
+    // Synchronous, over the `ProcessedData` the step above produced.
+    // A `TextChunk` is `Content` + `Metadata` — origin and provenance
+    // ride the reserved metadata keys, not extra fields.
+    Vectorise =
+        fun processed ->
+            let parsed = deserialiseEpub processed.Payload
+
             parsed.Chapters
             |> List.map (fun chapter -> {
-                Id = Guid.NewGuid()
-                Text = chapter.Content
-                Metadata = Map.ofList [
-                    "_source", "Epub"
-                    "_fileName", fileName
-                    "_chapterTitle", chapter.Title
-                ]
-                Origin = ChunkOrigin.Document
+                Content = chapter.Content
+                Metadata =
+                    Map.ofList [
+                        "_source", "Epub"
+                        "_chapterTitle", chapter.Title
+                        ChunkMetadata.OriginKey, ChunkOrigin.toMetadataValue ChunkOrigin.Document
+                    ]
             })
-        return chunks
-    }
+    Summarise = None
 }
 ```
 
 Wire alongside KB:
 
-```fsharp skip=fragment
+```fsharp
 // Each module declares its own handler with
 // `ServerModule.withVectorisation`, so wiring the module wires the handler.
-RAGServerApp.create (...)
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.addModules [ kbModule; epubModule ]
-|> ...
+|> RAGServerApp.run
 ```
 
 The file manager UI accepts EPUBs; the post-save hook routes by `DataTypeId` to the right handler.
@@ -164,16 +192,23 @@ The file manager UI accepts EPUBs; the post-save hook routes by `DataTypeId` to 
 
 The built-in `KnowledgeBaseView` subscribes to `"KnowledgeBase.IngestionStatus"` notifications. Custom UI subscribes to the same notification key:
 
-```fsharp skip=fragment
+```fsharp
 // In your custom module's Client.fs
+//
+// `NotificationClient.subscribe` takes the handler alone — there is one
+// EventSource per tab and every envelope reaches every handler, so the
+// key is a filter you apply, not an argument you pass.
 let subscribeIngestionStatus dispatch =
     let unsub =
-        NotificationClient.subscribe SharedTypes.IngestionStatusNotificationKey (fun (env: NotificationEnvelope) ->
-            // The payload is the JSON body of a CustomNotification, so decode
-            // it rather than type-testing an already-typed value.
-            match decodeIngestionStatusUpdate env with
-            | Some update -> dispatch (IngestionStatusReceived update)
-            | None -> ())
+        NotificationClient.subscribe (fun (env: NotificationEnvelope) ->
+            match env.Notification with
+            | Notification.CustomNotification(key, payloadJson) when key = SharedTypes.IngestionStatusNotificationKey ->
+                // The payload is the JSON body of the CustomNotification,
+                // so decode it rather than type-testing a typed value.
+                match decodeIngestionStatusUpdate payloadJson with
+                | Some update -> dispatch (IngestionStatusReceived update)
+                | None -> ()
+            | _ -> ())
 
     [ unsub ]
 ```
@@ -190,7 +225,7 @@ The KB extractor for PDFs uses `UglyToad.PdfPig` for native text extraction. Sca
 
 The shipped companion is `ToolUp.OcrProviders.Tesseract` (in-process, no per-page cost, operator-supplied language data). Register any `IOcrProvider` in DI **before** `composeWithRAG` runs — the RAG composition probes for one and only falls back to the no-op when it finds none:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.RAG.OcrProviders.Tesseract
 
 let ocr = TesseractOcrProvider.createForTessData "/var/lib/tessdata"
@@ -211,7 +246,7 @@ OCR is by far the most expensive step an ingestion path can take — in wall-clo
 
 For documents where embedded tables are important (financial reports, scientific papers), an `ITableExtractor` companion can surface tables explicitly:
 
-```fsharp skip=fragment
+```fsharp
 let tableExtractor = CamelotTableExtractor.create pythonSidecar :> ITableExtractor
 
 // Registered in DI BEFORE the RAG composition runs — `composeRAG` probes
@@ -228,7 +263,7 @@ The built-in observer updates document metadata blobs + publishes `IngestionStat
 
 The seam is two methods, both taking the `IngestionJob` itself — there are no separate accepted / completed callbacks and no bare job ids:
 
-```fsharp skip=fragment
+```fsharp
 type SlackOnFailureObserver(slackWebhookUrl: string) =
     interface IIngestionStatusObserver with
         member _.OnChunkIndexed(_) = async { return () }
@@ -242,16 +277,21 @@ Register several with `RAGServerApp.withIngestionObservers` — the built-in KB 
 
 Wire alongside (or replace) the built-in observer:
 
-```fsharp skip=fragment
-let composedObserver = ChainedObserver([
-    KnowledgeBase.Server.makeIngestionStatusObserver()
-    SlackOnFailureObserver(slackWebhookUrl)
-])
+```fsharp
+// `makeIngestionStatusObserver` takes the substrate it writes through —
+// blob storage for the status index, an optional notification channel
+// for the terminal publish, and a logger.
+let composedObserver: IIngestionStatusObserver =
+    ChainedObserver(
+        [
+            KnowledgeBase.Server.makeIngestionStatusObserver blobStorage (Some notifications) logger
+            SlackOnFailureObserver(slackWebhookUrl) :> IIngestionStatusObserver
+        ]
+    )
 
-RAGServerApp.create (...)
-|> ...
+RAGServerApp.create aiProviderFactory providerProfile embedder
 |> RAGServerApp.withIngestionObserver composedObserver
-|> ...
+|> RAGServerApp.run
 ```
 
 (`ChainedObserver` isn't shipped — it's a 5-line composition you write yourself.)
@@ -260,17 +300,44 @@ RAGServerApp.create (...)
 
 The AI Context page is a UI for the standing-context entries persisted to `_platform/kb-ai-context/{teamId}/entries.json`. A custom AI-context UI replaces just the page, keeping the persistence and the standing-context builder:
 
-```fsharp skip=fragment
-// Custom AI-context page
-let aiContextView model dispatch : PageContent = ...
+```fsharp
+// Custom AI-context page. A page view returns a `PageContent` case —
+// each page picks its own layout.
+let aiContextView (model: Model) (dispatch: Msg -> unit) : PageContent =
+    FullWidth(Html.div [ Html.text "standing context" ])
+
+// `withPages` pairs a `PageConfig` with its view. `PageConfig` carries
+// Route / Title / Icon — the sidebar entry is derived from it.
+let documentsPage: PageConfig = {
+    Route = "/documents"
+    Title = "Documents"
+    Icon = Icon.ofUrl "/svg/document.svg"
+}
+
+let notesPage: PageConfig = {
+    Route = "/notes"
+    Title = "Notes"
+    Icon = Icon.ofUrl "/svg/note.svg"
+}
+
+let aiContextPage: PageConfig = {
+    Route = "/my-ai-context"
+    Title = "AI Context"
+    Icon = Icon.ofUrl "/svg/ai-context.svg"
+}
 
 // Custom multi-page module that omits the built-in /ai-context page
 let myKnowledgeBaseModule () =
-    ClientModule.create { ... }
+    ClientModule.create {
+        Init = init
+        Update = update
+        Name = "Knowledge"
+        Icon = Icon.ofUrl "/svg/knowledge.svg"
+    }
     |> ClientModule.withPages [
-        { Route = "/documents"; Label = "Documents"; View = documentsView }
-        { Route = "/notes"; Label = "Notes"; View = notesView }
-        { Route = "/my-ai-context"; Label = "AI Context"; View = aiContextView }
+        documentsPage, documentsView
+        notesPage, notesView
+        aiContextPage, aiContextView
     ]
     |> ClientModule.register
 ```
@@ -281,11 +348,14 @@ The standing-context builder still reads from the same blob path; the difference
 
 A common pattern: surface knowledge from across modules via a single AI conversation. The narrative-commit mechanism gives modules a one-line path to push their content into KB:
 
-```fsharp skip=fragment
+```fsharp
 // In SalesAnalysis ClientView.fs
 let saveAnalysisToKB (analysis: Analysis) =
     match Toolup.NarrativeCommit.current () with
-    | Some handler -> handler.Submit (narrativeOf analysis) false |> Async.StartImmediate
+    // `Submit` answers with a `NarrativeCommitResult` (`Committed` /
+    // `Duplicate` / `MissingProvenance` / `Failed`); discard it only if
+    // the UI has nothing to say about the outcome.
+    | Some handler -> handler.Submit (narrativeOf analysis) false |> Async.Ignore |> Async.StartImmediate
     | None -> ()   // no KB composed in this deployment
 ```
 
@@ -295,6 +365,6 @@ The broker takes a `NarrativeDocument` plus an overwrite flag; `current ()` retu
 
 - **The built-in KB module's Documents page UI** — the Documents page UI itself isn't broken up into smaller components for partial replacement. To customise the upload UX, replace the whole module.
 - **The PDF / PPTX / DOCX / XLSX extractors** — they're internal to the package. To use a different PDF extractor, replace the module.
-- **The narrative-commit dispatcher** — `Toolup.NarrativeCommit.submit` is a single dispatch path. Multiple handlers can be registered (`install` is additive), but the dispatch routes to whichever handler matches first.
+- **The narrative-commit dispatcher** — `Toolup.NarrativeCommit` holds exactly **one** handler, snapshotted once at boot from `ClientConfig.Handlers.NarrativeCommitHandler` (`setHandler`, read back by `current ()`). There is no additive registration and no routing: a deployment that wants fan-out composes it inside its own `Submit`.
 
 For deeper customisation than the extension points allow, the right shape is "fork the module structure into your own consumer code". Module source is fully visible (Fable companion ships `fable/` source in the nupkg) so the cost is reading existing code, not reverse-engineering.

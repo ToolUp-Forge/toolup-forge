@@ -8,15 +8,19 @@ A new provider goes in its own NuGet package. The convention is `ToolUp.AIProvid
 
 ### Minimum implementation
 
-Implement `IAIProvider`:
+Implement `IAIProvider`. All three members are abstract, so all three must be implemented. `SendMessage`
+carries the whole request as ordinary arguments — there is no request record —
+and returns `Result<AIProviderResponse, AIProviderError>` rather than throwing.
+`SendStructuredMessage` can be a one-line delegation (see
+[Structured-output support](#structured-output-support) below).
 
-```fsharp skip=fragment
-module MyVendor.AIProvider
-
+```fsharp
+// MyVendorAIProvider.fs, in `module MyVendor.AIProvider`.
 open ToolUp.Platform
+open ToolUp.Platform.AI
 
 type MyVendorProvider(apiKey: string, model: string, httpClient: HttpClient) =
-    let capabilities = {
+    let capabilities: AIProviderCapabilities = {
         ProviderName = "myvendor"
         Model = model
         Streaming = true
@@ -29,32 +33,56 @@ type MyVendorProvider(apiKey: string, model: string, httpClient: HttpClient) =
 
     interface IAIProvider with
         member _.Capabilities = capabilities
-        member _.SendMessage(req) = async {
-            // Translate AIProviderRequest -> vendor wire format
-            let wireRequest = translateRequest req
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            // Translate the SDK's request values -> vendor wire format
+            let wireRequest = translateRequest messages tools systemPrompt
+
+            let body =
+                new StringContent(
+                    JsonSerializer.Serialize(wireRequest),
+                    System.Text.Encoding.UTF8,
+                    "application/json")
+
             // POST to the vendor's endpoint
             use! response =
-                httpClient.PostAsJsonAsync(
-                    "https://api.myvendor.com/v1/messages",
-                    wireRequest)
+                httpClient.PostAsync("https://api.myvendor.com/v1/messages", body)
                 |> Async.AwaitTask
-            response.EnsureSuccessStatusCode() |> ignore
-            // Translate vendor response -> AIProviderResponse
-            let! wireResponse = response.Content.ReadFromJsonAsync<WireResponse>() |> Async.AwaitTask
-            return translateResponse wireResponse
+
+            if not response.IsSuccessStatusCode then
+                // Errors are values, not exceptions — the agent loop
+                // reasons about the case, and the provider's own retry
+                // loop absorbs the transient ones.
+                return Error(TransientServer(int response.StatusCode, response.ReasonPhrase))
+            else
+                // Translate vendor response -> AIProviderResponse
+                let! raw = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                return Ok(translateResponse (JsonSerializer.Deserialize<WireResponse>(raw)))
         }
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
 ```
 
-The agent loop is provider-agnostic — every provider gets the same `AIProviderRequest`, returns the same `AIProviderResponse`. The translation layer per-provider is the bulk of the work.
+The agent loop is provider-agnostic — every provider gets the same message /
+tool / prompt values, returns the same `AIProviderResponse`. The translation
+layer per-provider is the bulk of the work.
 
 ### Expose a builder + descriptor
 
-```fsharp skip=fragment
-module MyVendor.AIProvider
+```fsharp
+// Still MyVendorAIProvider.fs, in `module MyVendor.AIProvider`.
 
 let descriptor: AIProviderDescriptor = {
-    Id = "myvendor"                   // unique; used by IUserAIConfigStore
+    Id = "myvendor"                   // unique; used by IProviderProfile
     DisplayName = "MyVendor AI"
+    SupportedModels = [ "myvendor-pro-1"; "myvendor-lite-1" ]
     DefaultModel = "myvendor-pro-1"
     Capabilities = {
         ProviderName = "myvendor"
@@ -80,7 +108,7 @@ let builder: AIProviderBuilder = {
 
 ### Wire into the consuming app
 
-```fsharp skip=fragment
+```fsharp
 open MyVendor.AIProvider
 
 let aiProviderFactory =
@@ -97,49 +125,65 @@ No other wiring changes. Users can now register a `MyVendor` provider instance v
 
 ### Streaming
 
-For providers that stream SSE responses, the implementation reads the response stream and emits incremental tokens via a streaming callback. The default agent loop handles streaming if `Capabilities.Streaming = true` and the request's `Stream` flag is true.
+There is no separate streaming method. `SendMessage` takes an
+`onStream: (string -> unit) option` argument: `Some cb` means the caller wants
+incremental output, and the provider calls `cb` with each **text** delta as it
+arrives. Tool calls are not streamed through the callback — they come back on
+`AIProviderResponse.ToolCalls` when the turn completes. A provider that
+declares `Capabilities.Streaming = false` ignores the argument.
+
+Two contract obligations, both load-bearing:
+
+- **Never retry after any partial content has reached the callback** — a retry
+  would duplicate output the user has already seen.
+- **Classify a mid-stream failure as `StreamingAborted(partialText, detail)`**,
+  carrying what was already emitted, so the caller can surface a diagnostic
+  rather than a silent truncation.
 
 Pattern (skeleton — vendor-specific stream parsing varies):
 
-```fsharp skip=fragment
-member _.SendMessageStreaming(req, emit) = async {
+```fsharp
+// The streaming leg of `SendMessage`, taken when `onStream` is `Some cb`.
+let sendStreaming (cb: string -> unit) : Async<Result<AIProviderResponse, AIProviderError>> = async {
     // Open the SSE response
-    use! response =
+    use! stream =
         httpClient.GetStreamAsync("https://api.myvendor.com/v1/messages/stream")
         |> Async.AwaitTask
 
-    use reader = new StreamReader(response)
+    use reader = new StreamReader(stream)
 
     let mutable accumulated = []
     let mutable usage = None
+    let mutable stopReason = "end_turn"
+    let mutable reading = true
 
-    while not reader.EndOfStream do
+    while reading do
         let! line = reader.ReadLineAsync() |> Async.AwaitTask
-        if line.StartsWith("data: ") then
+
+        if isNull line then
+            reading <- false
+        elif line.StartsWith("data: ") then
             let payload = line.Substring(6)
+
             match parseStreamChunk payload with
             | TextDelta delta ->
-                emit (StreamDelta delta)
+                cb delta
                 accumulated <- delta :: accumulated
-            | ToolUseStart (id, name) ->
-                emit (ToolCallBegin (id, name))
-            | UsageUpdate u ->
-                usage <- Some u
+            | UsageUpdate u -> usage <- Some u
             | Done reason ->
-                let final = String.concat "" (List.rev accumulated)
-                return {
-                    Content = final
-                    StopReason = reason
-                    ToolCalls = collectToolCalls accumulated
-                    Usage = usage
-                }
+                stopReason <- reason
+                reading <- false
             | Heartbeat -> ()
-    return {
-        Content = ""
-        StopReason = EndTurn
-        ToolCalls = []
-        Usage = usage
-    }
+
+    let content = String.concat "" (List.rev accumulated)
+
+    return
+        Ok {
+            Content = content
+            StopReason = stopReason
+            ToolCalls = collectToolCalls content
+            Usage = usage
+        }
 }
 ```
 
@@ -147,15 +191,17 @@ member _.SendMessageStreaming(req, emit) = async {
 
 Populate `AIProviderResponse.Usage` with the provider's reported token counts:
 
-```fsharp skip=fragment
-{
+```fsharp
+let providerResponse: AIProviderResponse = {
     Content = text
-    StopReason = EndTurn
+    // A wire-level string, not a DU — "end_turn" | "tool_use" | "max_tokens".
+    StopReason = "end_turn"
     ToolCalls = []
     Usage = Some {
         PromptTokens = response.Usage.InputTokens
         CachedPromptTokens = response.Usage.CachedInputTokens |> Option.defaultValue 0
         OutputTokens = response.Usage.OutputTokens
+        // `int option` — `None` for providers with no separate cache-write count.
         CacheCreationTokens = response.Usage.CacheCreationTokens
     }
 }
@@ -197,7 +243,7 @@ For providers with automatic caching (OpenAI), no markers are needed — set `Ca
 - [ ] `SendStructuredMessage` — either a native implementation against the vendor's JSON-Schema mode, or a one-line delegation to `IAIProviderDefaults.sendStructuredViaFallback` (see [Structured-output support](#structured-output-support) below).
 - [ ] `AIProviderDescriptor` with unique `Id` matching the package vendor name.
 - [ ] `AIProviderBuilder` pairing descriptor + Build function.
-- [ ] Streaming support (if vendor supports it) — emits `StreamDelta` / `ToolCallBegin` / `Done` callbacks.
+- [ ] Streaming support (if vendor supports it) — `SendMessage` honours its `onStream` argument, and a mid-stream failure returns `StreamingAborted` carrying the partial text.
 - [ ] Token usage reporting — `Usage` populated from vendor response.
 - [ ] Prompt caching markers (if vendor supports it) — explicit cache_control in request, or implicit (no markers needed).
 - [ ] `IHealthCheck` probe + DI registration.
@@ -222,7 +268,7 @@ If the vendor supports server-side structured-output natively, implement against
 | OpenAI    | `response_format: { type: "json_schema", json_schema: { name, schema, strict: true } }` (gpt-4o-2024-08-06+).      |
 | Anthropic | No native mode. Tool-based workaround: synthesise a tool whose `input_schema` is the schema; force `tool_choice`. |
 
-For vendors without a native mode (or for an MVP provider you'll harden later), delegate one line to the helper:
+For vendors without a native mode (or for an MVP provider you'll harden later), delegate one line to the helper — the member in context is shown whole in [Minimum implementation](#minimum-implementation) above:
 
 ```fsharp skip=fragment
 interface IAIProvider with
@@ -238,9 +284,9 @@ The fallback prepends the schema as a system-prompt instruction, calls `SendMess
 
 #### Consumer-side: dispatch a structured request
 
-Once an `IAIProvider` is resolved (via `DefaultAIProviderFactory.Resolve` or any factory path), call `SendStructuredMessage` directly:
+Once an `IAIProvider` is resolved (via `IAIProviderFactory.Resolve` on the factory `DefaultAIProviderFactory.create` built, or any other factory path), call `SendStructuredMessage` directly:
 
-```fsharp skip=fragment
+```fsharp
 let schema = """{
     "type": "object",
     "properties": {
@@ -251,29 +297,33 @@ let schema = """{
     "required": ["verdict", "confidence"]
 }"""
 
-let messages = [
-    AIProviderMessage.text "user" "Is this image a cat? Respond per the schema."
-]
+let classify (provider: IAIProvider) = async {
+    let messages = [
+        AIProviderMessage.text "user" "Is this image a cat? Respond per the schema."
+    ]
 
-let! result =
-    provider.SendStructuredMessage(
-        messages,
-        [],                          // tools — see limitation below
-        Some "You are a strict classifier.",
-        schema,
-        RetryPolicy.defaults
-    )
+    let! result =
+        provider.SendStructuredMessage(
+            messages,
+            [],                          // tools — see limitation below
+            Some "You are a strict classifier.",
+            schema,
+            RetryPolicy.defaults
+        )
 
-match result with
-| Ok response ->
-    // response.Content is JSON conforming to the schema.
-    let parsed = JsonDocument.Parse(response.Content)
-    ...
-| Error (SchemaUnsupported(feature, detail)) ->
-    // Provider could not honour the schema (or the fallback couldn't
-    // extract JSON from the response).
-    ...
-| Error err -> ...
+    match result with
+    | Ok response ->
+        // response.Content is JSON conforming to the schema.
+        return Some(JsonDocument.Parse response.Content)
+    | Error(SchemaUnsupported(feature, detail)) ->
+        // Provider could not honour the schema (or the fallback couldn't
+        // extract JSON from the response).
+        eprintfn $"schema feature '{feature}' unsupported: {detail}"
+        return None
+    | Error err ->
+        eprintfn $"structured call failed: {AIProviderError.toMessage err}"
+        return None
+}
 ```
 
 #### Limitations (v1)
@@ -326,7 +376,7 @@ let myAnalysisTool: AIToolDefinition = {
 
 The executor is `HttpContext -> string -> Async<string>` — raw JSON in, raw JSON out — and is registered **as a pair** with the definition. Helpers in `ToolUp.AI.ToolHelpers` (`requireString`, `requireDecimal`, `fableSerialize`) cover the recurring argument-extraction and serialisation boilerplate:
 
-```fsharp skip=fragment
+```fsharp
 open System.Text.Json
 open ToolUp.AI.ToolHelpers
 
@@ -351,7 +401,7 @@ The agent loop sees the tool in `GetAvailableTools`; the LLM can call it. When c
 
 The substrate (`ClientToolRuntime` + `ClientToolDispatch` + `AICancellationRegistry`) is generic — any companion can register `ClientResident` tools. A typical use is to let the LLM drive the UI (set form fields, click buttons, select rows, navigate). Server-side, a `ClientResident` tool dispatches to the client over SSE; the browser runs the tool and returns the result.
 
-```fsharp skip=fragment
+```fsharp
 let setFieldTool: AIToolDefinition = {
     Name = "_platform.ui.set_field"
     Description = "Set the value of a field in the current page."
@@ -375,8 +425,8 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 
 - **Tool name format**: `<scope>.<verb>` — e.g. `my_module.analyse`, `_platform.list_documents`, `_platform.ui.set_field`. The `_platform.` prefix is reserved for platform / companion-contributed tools.
 - **Parameter schema is JSON-Schema-shaped.** The model sees `parameters: { type: "object", properties: { ... } }`. Required vs optional is currently implicit (all properties required); future schema versions may add explicit `required` lists.
-- **Executor must handle missing / malformed args gracefully.** Return `ToolResult.error` with a useful message — the agent will retry or surface the error to the user.
-- **Executor must NOT throw.** Catch exceptions and return `ToolResult.error`; an unhandled exception aborts the agent turn with `Failed` status.
+- **Executor must handle missing / malformed args gracefully.** An executor returns a plain JSON `string`; there is no error-result type. The `ToolHelpers` argument validators (`requireString`, `requireDecimal`, …) signal a bad argument by *raising* — `ToolArgumentError` for a missing / wrong-typed value, and `JsonException` from the parse — and the agent loop catches both at its dispatch site and classifies them as `InvalidArguments`, so the model is told to repair its arguments rather than to retry the same call.
+- **Any other exception is classified as `ToolThrew`.** The turn is not aborted: the loop renders the failure as a tool-result string the model can read (`ToolInvocationError.toToolResultContent`) and continues. Prefer returning a domain-shaped JSON error the model can act on over throwing, and reserve `ToolArgumentError` for genuine argument defects.
 - **Result size**: every tool result passes a per-tool context budget at agent-loop dispatch (`ResultBudget` on the definition). `DefaultResultBudget` resolves to a generous SDK-wide ceiling no well-behaved result approaches; a tool whose result grows with data cardinality declares its own `ResultBudgetChars n` (characters of the returned JSON, must be positive), and an export-shaped tool whose whole point is the payload declares `NoResultBudget`. An over-budget result reaches the model as a typed JSON marker naming the tool and the elided size, with a steer to narrow the query — the call still counts as a success, not an error.
 - **Idempotency**: if a tool writes data, design it idempotent. The agent may retry on transient errors. Idempotency keys flow through the tool args.
 - **Permissions**: tools enforce their own permission checks against `AccessContext`. The SDK's `makePermissionGuardedApi` covers HTTP API permissions but does NOT auto-wrap tool executors.
@@ -404,7 +454,7 @@ Any companion implementing `IClientToolAuthorizer` must clear the SDK's portabil
 
    Bind it from your own test pack by handing the pack a fixture: the authorizer plus two anchor calls — one the impl MUST allow and one the impl MUST deny:
 
-   ```fsharp skip=fragment
+   ```fsharp
    open ToolUp.Platform.Tests.Contracts
 
    let tests =
@@ -424,7 +474,7 @@ Any companion implementing `IClientToolAuthorizer` must clear the SDK's portabil
 
    Bind it with the same fixture-style ergonomics — the pack owns the registry, dispatch registry, `IEventStore`, `HttpContext`, and scripted provider:
 
-   ```fsharp skip=fragment
+   ```fsharp
    let dispatchTests =
        IClientToolDispatchContract.tests {
            Name = "MyCompanyAuthorizer + handler"
@@ -449,14 +499,18 @@ For the full companion-authoring walkthrough — wiring the authorizer + handler
 
 For complex prompts that pull from runtime state:
 
-```fsharp skip=fragment
+```fsharp
 let dataSummaryPromptBuilder : SystemPromptBuilder = fun ctx -> async {
     match ctx.ActiveModule with
     | Some "SalesAnalysis" ->
+        // IDataCatalog.ListObjects is (scopeId, typeId) and returns the
+        // latest `DataObject` per stored object.
         let! catalog = dataCatalog.ListObjects(ctx.Access.TeamId |> Option.defaultValue "", "SalesData")
         let summary =
             catalog
-            |> List.map (fun obj -> $"  - {obj.ObjectId}: {obj.RowCount} rows, last modified {obj.Updated:yyyy-MM-dd}")
+            |> List.map (fun o ->
+                let created = o.CreatedAt.ToString "yyyy-MM-dd"
+                $"  - {o.ObjectId}: v{o.Version}, created {created}")
             |> String.concat "\n"
         return $"""The user is viewing Sales Analysis. Available datasets:
 {summary}
@@ -468,23 +522,22 @@ Always cite the dataset name when answering questions about specific data."""
 
 Compose it into the default builder:
 
-```fsharp skip=fragment
+```fsharp
 let composedBuilder =
     SystemPromptBuilder.compose [
-        SystemPromptBuilder.fromStatic "You are an analytics assistant. ..."
+        SystemPromptBuilder.fromStatic "You are an analytics assistant."
         SystemPromptBuilder.activeModuleContext
         dataSummaryPromptBuilder
     ]
 
 AIServerApp.create aiProviderFactory providerProfile
-|> ...
 |> AIServerApp.withAIConfig {
     Branding = branding
     SystemPrompt = Some composedBuilder
     MaxHistoryMessages = None
     AISurfaceDerivation = TrustClient
 }
-|> ...
+|> AIServerApp.run
 ```
 
 ### Composition rules
@@ -499,14 +552,14 @@ AIServerApp.create aiProviderFactory providerProfile
 
 `AIProviderCapabilities` flags propagate from the provider to consumers (the agent loop, the AI Settings UI, downstream features that need vision input, etc.). Declare truthfully:
 
-- `Streaming` — true if the provider's `SendMessage` honours `req.Stream = true` and emits incremental tokens.
+- `Streaming` — true if the provider's `SendMessage` honours a `Some cb` `onStream` argument and emits incremental tokens through it.
 - `ToolUse` — true if the provider correctly translates the `Tools` array into the vendor's tool schema and parses tool calls in the response.
 - `Vision` — true if the provider accepts image content in messages (the `AIProviderMessage.Parts` multipart payload). Providers that declare `false` — or whose configured model isn't vision-capable — reject multipart messages synchronously with `AIProviderError.UnsupportedCapability("vision", …)`, no network round-trip.
 - `SupportsPromptCaching` — true if the provider implements cache markers (explicit or implicit). Drives `CacheHitRate` reporting in `/dev/ai-latency`.
 - `SupportsTriage` / `TriageModelId` — the fast-path triage gate + cheaper-tier declaration; see [Triage capability](#triage-capability) above.
 
 The agent loop respects these:
-- `Streaming = false` → loop ignores `req.Stream`, treats response as non-streaming.
+- `Streaming = false` → loop passes `onStream = None`, treats the response as non-streaming.
 - `ToolUse = false` → loop doesn't include `Tools` in the request; tool calls in the response are warned as invariant violations.
 - `Vision = false` → multimodal feature flags upstream of the agent gate to disabled for this provider.
 
@@ -543,9 +596,12 @@ For pure-DLL companions (no source injection), package as a regular .NET library
 
 ## Testing a provider
 
-The SDK ships `ToolUp.Platform.Tests` with reusable test helpers. For provider integration tests:
+`ToolUp.Platform.Tests` carries the SDK's reusable contract packs. It is
+`IsPackable=false`, so it is not a NuGet dependency you take — the documented
+adoption route is to copy the pack you need into your own test project (the
+same route the packaged-module template uses). For provider integration tests:
 
-```fsharp skip=fragment
+```fsharp
 open Expecto
 open ToolUp.AI
 open MyVendor.AIProvider
@@ -554,33 +610,65 @@ let tests =
     testList "MyVendor provider" [
         testCaseAsync "round-trips a simple message" <| async {
             let provider = MyVendor.AIProvider.createWithApiKeyAndModel testApiKey "test-model"
-            let! response =
-                provider.SendMessage {
-                    SystemPrompt = "You are helpful."
-                    Messages = [ { Role = User; Content = "What's 2 + 2?" } ]
-                    Tools = []
-                    MaxTokens = 100
-                    Temperature = 0.0
-                    Stream = false
-                }
-            Expect.isNotEmpty response.Messages "expected at least one assistant message"
-            Expect.equal response.StopReason EndTurn "expected EndTurn stop reason"
+
+            let! result =
+                provider.SendMessage(
+                    [ AIProviderMessage.text "user" "What's 2 + 2?" ],
+                    [],                             // tools
+                    Some "You are helpful.",        // system prompt
+                    None,                           // onStream — non-streaming turn
+                    RetryPolicy.defaults
+                )
+
+            match result with
+            | Ok response ->
+                Expect.isTrue (response.Content.Length > 0) "expected assistant content"
+                Expect.equal response.StopReason "end_turn" "expected an end_turn stop reason"
+            | Error err -> failtest (AIProviderError.toMessage err)
         }
     ]
 ```
 
 For unit tests of the wire-format translation layer, no provider key is needed — test the `translateRequest` / `translateResponse` functions directly with synthetic inputs.
 
-For SDK-level integration tests (agent loop + provider), the SDK ships an `InMemoryProvider` test double consumers can use:
+For SDK-level integration tests (agent loop + provider), there is no shipped
+test-double type to configure — `IAIProvider` is a three-member interface, so
+the double *is* an object expression. `SendStructuredMessage` delegates to the
+same fallback helper a real non-native provider uses, and
+`AIProviderCapabilities.unknown` is the all-false floor to start from:
 
-```fsharp skip=fragment
-let provider =
-    InMemoryProvider.create {
-        OnSendMessage = fun req -> async {
-            // Custom response logic for the test
-            return { Content = "..."; StopReason = EndTurn; ToolCalls = []; Usage = None }
+```fsharp
+let scriptedProvider =
+    { new IAIProvider with
+        member _.Capabilities = {
+            AIProviderCapabilities.unknown with
+                ProviderName = "scripted"
+                Model = "scripted-model"
         }
-    }
+
+        member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            // Custom response logic for the test
+            return
+                Ok {
+                    Content = """{"ok": true}"""
+                    StopReason = "end_turn"
+                    ToolCalls = []
+                    Usage = None
+                }
+        }
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy }
 ```
 
-This lets you test agent-loop behaviour, tool dispatch, system-prompt composition, etc. without burning real LLM tokens in CI.
+Wrap it with `DefaultAIProviderFactory.singleProvider descriptor scriptedProvider`
+to hand the agent loop an `IAIProviderFactory` that resolves to it for every
+context, or `DefaultAIProviderFactory.empty` to exercise the
+`NoProviderConfigured` path. This lets you test agent-loop behaviour, tool
+dispatch, system-prompt composition, etc. without burning real LLM tokens in CI.

@@ -81,7 +81,7 @@ The option is load-bearing. A backend that cannot report progress returns `None`
 
 `ServerConfig.ExternalCompute` defaults to `NoExternalCompute`, and a bare deployment composes without noticing this substrate exists:
 
-```fsharp skip=fragment
+```fsharp
 // Builds and runs unchanged — ExternalCompute = NoExternalCompute.
 ServerApp.empty |> ServerApp.run
 ```
@@ -168,16 +168,21 @@ Two of three is not a weaker clean room, so a partial posture is refused rather 
 
 `ExecutionProfileGate.enforce` wraps a dispatcher so an `Isolated` spec it cannot honour is refused **before** `Submit` reaches the backend:
 
-```fsharp skip=fragment
+```fsharp
 let dispatcher = ExecutionProfileGate.enforce myBackend
 
-// Standard: unchanged, on any backend.
-let! ok = dispatcher.Submit(scopeId, ExternalWorkSpec.create "render-scene" payload)
+async {
+    // Standard: unchanged, on any backend.
+    let! ok = dispatcher.Submit(scopeId, ExternalWorkSpec.create "render-scene" payload)
 
-// Isolated on a backend that declared no posture: refused here. The
-// payload never leaves the process, and the error is terminal — a
-// backend does not become isolating by being asked twice.
-let! refused = dispatcher.Submit(scopeId, ExternalWorkSpec.create "fit-model" payload |> ExternalWorkSpec.isolated)
+    // Isolated on a backend that declared no posture: refused here. The
+    // payload never leaves the process, and the error is terminal — a
+    // backend does not become isolating by being asked twice.
+    let! refused =
+        dispatcher.Submit(scopeId, ExternalWorkSpec.create "fit-model" payload |> ExternalWorkSpec.isolated)
+
+    return ok, refused
+}
 ```
 
 The ordering is the point. A check performed after the backend accepted the work is a check on something that has already left: no subsequent refusal recalls a payload. `Poll` and `Cancel` pass straight through — they act on a handle the backend already minted — and the decorator re-declares the inner posture, so stacking it cannot silently downgrade a genuinely isolating backend.
@@ -188,17 +193,20 @@ Composing the decorator is opt-in: `ServerConfig.ExternalCompute` is untouched b
 
 An `Isolated` worker's output is not a result the caller receives; it is a candidate the clean-room gate has not yet ruled on. `GatedComputeOutput` (in the `ToolUp.InterPlatform` companion, which is where the gate lives) is that hold:
 
-```fsharp skip=fragment
-// The only route into a held output. Refuses a Standard spec, and
-// refuses a backend that declared no posture.
-let held = GatedComputeOutput.hold (ExecutionProfileGate.postureOf dispatcher) spec handle workerOutput
-
-// The only route to anything readable. Runs the composed clean-room gate.
+```fsharp
 let deps =
     GatedComputeDeps.create broker template
     |> GatedComputeDeps.withAudit auditSink
 
-let! released = GatedComputeOutput.release deps held
+async {
+    // The only route into a held output — and it can refuse before there is
+    // anything to release: a Standard spec, or a backend that declared no
+    // posture, comes back as `Error` rather than a hold.
+    match GatedComputeOutput.hold (ExecutionProfileGate.postureOf dispatcher) spec handle workerOutput with
+    | Error refusal -> return Error refusal
+    // The only route to anything readable. Runs the composed clean-room gate.
+    | Ok held -> return! GatedComputeOutput.release deps held
+}
 ```
 
 `GatedComputeOutput` has a private representation and no accessor for the payload: `release` is the only function that can see the bytes, and it runs the gate first. A withheld release is a typed `ComputeReleaseRefusal` — every case of which is a diagnostic string or an `ExternalComputeError`, with no case that could carry a partial result.
@@ -250,7 +258,7 @@ Distinct from **`IModelFitProvider`**, which executes a fit in-process through a
 
 A handler may return **`JobResult.HandedOff handle`** instead of a result: "I did not do the work, I arranged for it to be done elsewhere, here is the receipt." The scheduler records the run as `AwaitingExternal` with the handle persisted, **releases its dispatch slot immediately**, and reconciles the handle on subsequent ticks until the backend reports a terminal outcome.
 
-```fsharp skip=fragment
+```fsharp
 // The whole handler. It submits and returns — no loop, no sleep, no slot held.
 let trainHandler (dispatcher: IExternalComputeDispatcher) =
     { new IJobHandler with
@@ -327,7 +335,7 @@ Reconciliation runs only when the deployment composed an actual backend — `Ser
 
 One wiring caveat worth knowing, because it fails quietly otherwise: compose finds the dispatcher by inspecting the service collection, so an **instance** registration is seen and a **factory** registration is not (a factory cannot be invoked before the provider is built without constructing a second instance). Register the instance:
 
-```fsharp skip=fragment
+```fsharp
 services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)
 ```
 
@@ -385,7 +393,7 @@ Five flat primitives, deliberately, rather than a serialised `ExternalOutcome`: 
 
 The platform mints a fresh 256-bit secret per hand-off and stores **only its SHA-256**. The cleartext exists once, in the `ExternalCallbackCredential` handed to the backend:
 
-```fsharp skip=fragment
+```fsharp
 type MyDispatcher() =
     interface IExternalComputeDispatcher with
         member _.Backend = "gpu-pool"
@@ -503,7 +511,7 @@ A .NET worker should call `SignedOutcomeVerifier.artifactHash` and `WorkerOutcom
 
 **.NET 10's BCL ships no Ed25519 primitive** — `System.Security.Cryptography` 10.0.0.0 exposes four `ECDsa*` types and zero `Ed*` — and pulling BouncyCastle or NSec into `ToolUp.Platform.Server` would put a third-party crypto stack in the SDK core (GP 1) for a capability most deployments never compose. So `es256` is the default, and `ed25519` is reachable through a structural function seam, the same GP 1 decoupling the detached-JWS verifier uses:
 
-```fsharp skip=fragment
+```fsharp
 let verify: WorkerSignatureVerifier =
     fun key payload signature ->
         match key.Algorithm with
@@ -540,7 +548,7 @@ The registry is **deployment-scoped, not tenant-scoped**, and GP 4 is unaffected
 
 ### Policy
 
-```fsharp skip=fragment
+```fsharp
 services.AddSingleton(
     SignedOutcomeVerification.create RequireForIsolatingBackends myWorkerKeyRegistry)
 ```
@@ -581,7 +589,7 @@ cached terminal outcome instead of re-running the work. Where
 backend chooses, this is the platform-side one — and it is what makes a
 re-submission cost nothing rather than merely produce one handle.
 
-```fsharp skip=fragment
+```fsharp
 // Outermost. A hit returns before anything below it is consulted.
 let dispatcher = MemoizedComputeDispatcher(backend, blobs = blobStorage) :> IExternalComputeDispatcher
 services.AddSingleton<IExternalComputeDispatcher>(dispatcher)
@@ -667,17 +675,19 @@ The durable leg does not shed at all. `Durable = true` is the caller declaring a
 
 A handler reports through `ctx.Progress` and never resolves the sink:
 
-```fsharp skip=fragment
+```fsharp
 // inside IJobHandler.Execute
-do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
+async {
+    do! ctx.Progress.Report(ProgressCheckpoint.create (Some 0.37) "materialising embeddings")
 
-// a stage boundary worth keeping after the run ends
-do!
-    ctx.Progress.Report(
-        ProgressCheckpoint.create (Some 0.4) "epoch 4/10"
-        |> ProgressCheckpoint.withStage "epoch"
-        |> ProgressCheckpoint.durable
-    )
+    // a stage boundary worth keeping after the run ends
+    do!
+        ctx.Progress.Report(
+            ProgressCheckpoint.create (Some 0.4) "epoch 4/10"
+            |> ProgressCheckpoint.withStage "epoch"
+            |> ProgressCheckpoint.durable
+        )
+}
 ```
 
 The reporter is **bound to the running job's id and scope**, so a handler cannot report progress into another tenant's scope even by accident (GP 4) — the seam offers no way to name a different job. It rides the async chain (the same ambient mechanism the correlation-id scope uses) rather than sitting as a `JobContext` field: `JobContext` is a public record with no field defaults, so a new field would source-break every handler test harness that constructs one, which is exactly what GP 11 exists to prevent. The scope is established immediately before `Execute` and torn down immediately after, including when the handler throws, so nothing survives an attempt and portability rule 4 still holds.
@@ -738,11 +748,11 @@ Two packs, in `ToolUp.Platform.Tests`:
 
 `contractFor` takes a name, a declaration of what the backend honours, and a factory. The factory is called **per law**, so one case's units never leak into another's — which matters when the backend is a shared stub server or a real cluster.
 
-```fsharp skip=fragment
-open ToolUp.Platform.Tests.Contracts
+```fsharp
+open ToolUp.Platform.Tests.Contracts.IExternalComputeDispatcherContract
 
 let myBackendTests =
-    IExternalComputeDispatcherContract.contractFor
+    contractFor
         "MyComputeBackend"
         { ExternalComputeConformance.strict with
             SettleBudget = TimeSpan.FromSeconds 30.0 }

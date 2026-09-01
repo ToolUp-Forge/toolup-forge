@@ -29,12 +29,10 @@ In your client project's `.fsproj`:
 
 In a module's `SharedTypes.fs`:
 
-```fsharp skip=fragment
-module MyModule.SharedTypes
-
+```fsharp
 open ToolUp.Forms.FormSchema
 
-let leadCaptureSchema : FormSchema =
+let leadCaptureSchema: FormSchema =
     FormSchema.create "lead-capture-v1" "Lead Capture" [
         { Key = "name"
           DisplayName = "Your name"
@@ -88,7 +86,10 @@ let leadCaptureSchema : FormSchema =
 | FileField of allowedTypes: string list
 | EntityRefField of entityType: string
 | NestedFormField of FormSchemaId
+| MatrixField of rows: int * cols: int * cell: FieldKind * labels: MatrixFieldLabels option
 ```
+
+`MatrixField` is a fixed-shape 2D grid of `cell`-typed inputs. Build one with `Matrix.create rows cols cell labels`, which enforces the ≥ 1 bounds and rejects a nested matrix cell; its values flatten into the ordinary `Map<string, FieldValue>` under `Matrix.cellKey`-shaped sub-keys, so nothing about persistence changes.
 
 `ValidationRule` shipped variants:
 
@@ -157,7 +158,7 @@ let leadWorkflow : WorkflowDefinition = {
 
 In the server composition root:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform.Server
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -198,16 +199,14 @@ let exitCode = FormsServerApp.run serverApp
 ```
 
 - **Guards** have signature `WorkflowContext -> Async<Result<unit, string>>`, where the context bundles `Submission`, `AccessContext` and a per-invocation `IServiceProvider` — so a guard resolves what it needs from DI rather than capturing it at compose time. `Ok ()` allows the transition; `Error reason` short-circuits it as `FormError.TransitionDenied reason`. A guard that throws surfaces as `GuardEvaluationFailed (guardName, reason)` so callers can retry transient faults.
-- **Actions** have signature `Submission * AccessContext -> Async<unit>`. They run after persistence, wrapped in the `IActionLedger` lifecycle so each `(SubmissionId, transitionId, actionName)` triple fires at most once.
+- **Actions** have signature `WorkflowContext -> Async<unit>` — the same context guards receive, so an action resolves its collaborators from DI per invocation too. They run after persistence, wrapped in the `IActionLedger` lifecycle so each `(SubmissionId, transitionId, actionName)` triple fires at most once.
 - **`withActionPolicy`** sets the per-action `ActionFailurePolicy` (`FailSubmission` / `DeadLetter` / `LogOnly`). Without an explicit policy the engine defaults to `DeadLetter`.
 
 ## 5. Render the form on the client
 
 In a module's `ClientView.fs`:
 
-```fsharp skip=fragment
-module MyModule.ClientView
-
+```fsharp
 open Feliz
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -234,12 +233,14 @@ Client-side validation mirrors the server's; the server's is authoritative.
 
 The `OnSubmit` callback typically dispatches an Elmish `Msg`. The handler calls the API:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Forms.FormApi
 open ToolUp.Forms.FormSubmission
 
+// one arm of the module's `update`
+match msg with
 | SubmitLead values ->
-    let request : SubmitRequest = {
+    let request: SubmitRequest = {
         FormId = MyModule.SharedTypes.leadCaptureSchema.Id
         Values = values
         WorkflowId = Some leadWorkflow.Id
@@ -266,8 +267,8 @@ open ToolUp.Forms.FormSubmission
 
 ## 7. List + manage submissions
 
-```fsharp skip=fragment
-let submissionsView model dispatch =
+```fsharp
+let submissionsView (model: Model) dispatch =
     FormSubmissionsList.FormSubmissionsList model.Submissions
 ```
 
@@ -275,9 +276,11 @@ The list view shows one row per submission, formatted per schema. Workflow-aware
 
 Transition handler:
 
-```fsharp skip=fragment
-| TransitionWorkflow (submissionId, eventName) ->
-    let request : ApplyTransitionRequest = {
+```fsharp
+// another arm of the same `update`
+match msg with
+| TransitionWorkflow(submissionId, eventName) ->
+    let request: ApplyTransitionRequest = {
         SubmissionId = submissionId
         Event = eventName
     }
@@ -324,7 +327,7 @@ let npsSchema =
 
 Wire `IShareTokenStore`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform.Server
 open ToolUp.Forms.FormsCompose
 
@@ -343,22 +346,23 @@ let exitCode = FormsServerApp.run serverApp
 
 Issue tokens:
 
-```fsharp skip=fragment
+```fsharp
 open System
 open ToolUp.Forms.FormApi
 
-let! result =
-    formsApi.IssueTokens {
-        SchemaId = npsSchema.Id
-        Recipients = [
-            for i in 1 .. 100 ->
-                { Handle = $"panel-{i}"; DisplayName = None }
-        ]
-        ExpiresAt = Some (DateTimeOffset.UtcNow.AddDays 30.0)
-        UseLimit = Some (Some 1)
-    }
-// result : Result<IssuedToken list, FormError>
-// Each IssuedToken has .Url = "{PublicBaseUrl}/r/{token}".
+async {
+    let! result =
+        formsApi.IssueTokens {
+            SchemaId = npsSchema.Id
+            Recipients = [ for i in 1..100 -> { Handle = $"panel-{i}"; DisplayName = None } ]
+            ExpiresAt = Some(DateTimeOffset.UtcNow.AddDays 30.0)
+            UseLimit = Some(Some 1)
+        }
+
+    // result : Result<IssuedToken list, FormError>
+    // Each IssuedToken has .Url = "{PublicBaseUrl}/r/{token}".
+    return result
+}
 ```
 
 Distribute the URLs by email / SMS / panel provider. Anonymous respondents visit `/r/{token}` and submit the form via the `PublicEmbed` Feliz component (no app shell, no auth required).
