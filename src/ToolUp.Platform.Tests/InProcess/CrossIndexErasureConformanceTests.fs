@@ -117,12 +117,12 @@ type private Command =
 /// sequence that only ever deleted from an empty index would satisfy the
 /// invariant without exercising anything.
 ///
-/// `allowScopeWipe = false` drops `DeleteByScope` from the tail. It is set
-/// only by the restart property, and only because of the live defect the
-/// pending reproducer at the bottom of this file pins — see the comment
-/// there before widening it back. Every other command stays in both
-/// sequences.
-let private generateWith (seed: int) (tailLength: int) (allowScopeWipe: bool) : Command list =
+/// Phase 726 — the restart property used to draw from a narrowed command
+/// set (`allowScopeWipe = false`, which substituted `DeleteWholeDocument`
+/// for every `DeleteByScope`) because a scope wipe on a lazily-hydrated
+/// scope was undone by the next read. That defect is fixed, so there is
+/// one command set again and both properties draw from it.
+let private generate (seed: int) (tailLength: int) : Command list =
     let rng = Random(seed)
     let pick (xs: 'a array) = xs[rng.Next xs.Length]
 
@@ -143,16 +143,10 @@ let private generateWith (seed: int) (tailLength: int) (allowScopeWipe: bool) : 
             // index: `DeleteDocument` must tolerate deleting a chunk id
             // that was never written.
             | n when n < 72 -> DeleteWholeDocument(pick scopePool, pick docPool, rng.Next 4)
-            | n when n < 82 ->
-                if allowScopeWipe then
-                    DeleteWholeScope(pick scopePool)
-                else
-                    DeleteWholeDocument(pick scopePool, pick docPool, rng.Next 4)
+            | n when n < 82 -> DeleteWholeScope(pick scopePool)
             | n when n < 94 -> EraseSubject(pick scopePool, pick subjectPool, false)
             | _ -> EraseSubject(pick scopePool, pick subjectPool, true)
     ]
-
-let private generate (seed: int) (tailLength: int) = generateWith seed tailLength true
 
 // ─── The model (the oracle) ───────────────────────────────────────────
 
@@ -381,9 +375,10 @@ let tests =
             for seed in 101..106 do
                 let storage = InMemoryBlobStorage() :> IBlobStorage
                 let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
-                // `allowScopeWipe = false` — see `generateWith` and the
-                // pending reproducer at the bottom of this file.
-                let commands = generateWith seed 20 false
+                // Phase 726 — scope wipes are back in this sequence; the
+                // hydration defect that forced them out is fixed and pinned
+                // by the two reproducers at the bottom of this file.
+                let commands = generate seed 20
                 let half = commands.Length / 2
 
                 let first = boot storage cache
@@ -668,43 +663,34 @@ let tests =
                     Expect.stringContains note "sparse-index" "the merged note must name the sparse leg"
         }
 
-        // ── PENDING: a live defect this property found and this phase is
-        // not scoped to fix ────────────────────────────────────────────
+        // ── Phase 726 — the emptiness-as-absence reproducers ───────────
         //
-        // Found by the restart property above at seed 101, and the reason
-        // that property runs with `allowScopeWipe = false`.
+        // Written by Phase 204 (which found the defect at restart seed 101
+        // and narrowed its own generator to avoid it) and left DISARMED
+        // because the fix was outside that phase's lease. Phase 726 fixed
+        // both faces and armed them.
         //
-        // Both in-process indexes decide "is this lazily-hydrated scope
-        // already loaded?" by asking whether they currently hold anything
-        // for it — `InMemoryVectorStore.ensureScopeLoaded` tests
+        // Face one, below. Both in-process indexes used to decide "is this
+        // lazily-hydrated scope already loaded?" by asking whether they
+        // currently held anything for it — `InMemoryVectorStore` tested
         // `store.Keys |> Seq.exists (fun (sk, _) -> sk = scopeKey)`, and
-        // `InMemoryBM25Index.Search` tests `scopes.ContainsKey`. Emptiness
-        // is therefore read as absence. `DeleteByScope` empties the scope
-        // in memory and marks it dirty, but the persisted snapshot lives
-        // until the next flush — so the very next read re-hydrates the
-        // scope from that snapshot and every chunk the scope-wide delete
-        // just removed is back, in memory and (on the following flush)
-        // at rest again.
+        // `InMemoryBM25Index` tested `scopes.ContainsKey`. Emptiness was
+        // therefore read as absence. `DeleteByScope` empties the scope in
+        // memory and marks it dirty, but the persisted snapshot lives until
+        // the next flush — so the very next read re-hydrated the scope from
+        // that snapshot and every chunk the scope-wide delete had just
+        // removed was back, in memory and (on the following flush) at rest
+        // again. Both stores now track loaded scope keys explicitly, so a
+        // scope that genuinely holds nothing stays loaded-and-empty.
         //
         // Not reachable on `Platform` / `Deployment`, which are loaded
-        // eagerly at construction and never re-hydrated. Reachable on
-        // every `Team` / `User` scope once a flush has happened — i.e. in
-        // any real deployment, where the background flush loop runs on a
-        // timer rather than only at disposal. `DeleteByScope` is the
-        // documented "configuration-grade reset" for a scope, so a tenant
-        // wipe that silently un-wipes itself is the shape that matters.
-        //
-        // The same emptiness-as-absence read has a second face: a
-        // `DeleteChunk` / `DeleteByScope` issued on a fresh process
-        // BEFORE anything has read that scope operates on an unloaded
-        // (empty) map and no-ops, because neither delete path calls
-        // `ensureScopeLoaded` first. The property above cannot see that
-        // one — it asserts (and so hydrates every scope) immediately
-        // after each restart.
-        //
-        // Flip this to `testAsync` when the hydration guard is fixed; it
-        // asserts the CORRECT behaviour, so it will pass unchanged.
-        ptestAsync "KNOWN DEFECT: DeleteByScope on a lazily-hydrated scope is undone by the next read" {
+        // eagerly at construction. Reachable on every `Team` / `User` scope
+        // once a flush has happened — i.e. in any real deployment, where the
+        // background flush loop runs on a timer rather than only at
+        // disposal. `DeleteByScope` is the documented "configuration-grade
+        // reset" for a scope, so a tenant wipe that silently un-wipes itself
+        // is the shape that matters.
+        testAsync "DeleteByScope on a lazily-hydrated scope survives the next read" {
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
             let scope = User "u1"
@@ -746,5 +732,85 @@ let tests =
                     "a wiped scope must stay wiped on the BM25 leg — re-hydration must not resurrect it"
             finally
                 h.Shutdown()
+        }
+
+        // Face two of the same root, and the reason this case exists beside
+        // the one above rather than inside it. The case above READS before it
+        // wipes, so the scope is already hydrated by the time `DeleteByScope`
+        // runs — it pins the explicit loaded-key tracking and nothing else.
+        //
+        // Here the wipe is the FIRST thing a fresh process does to the scope.
+        // Neither delete path used to call its hydration guard, so the wipe
+        // operated on an unloaded (empty) map, removed nothing, and left the
+        // scope still marked un-read; the read that followed then hydrated
+        // the whole persisted corpus straight back. Phase 204's property
+        // could not see this one — it asserts, and so hydrates every scope,
+        // immediately after each restart.
+        //
+        // This case therefore goes red if EITHER fix is removed: without the
+        // delete-path hydration guard the wipe misses the snapshot, and
+        // without explicit loaded-key tracking the read after the wipe infers
+        // "holds nothing" as "not yet loaded" and re-hydrates anyway.
+        testAsync "DeleteByScope issued before any read of the scope reaches the persisted snapshot" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
+            let scope = Team "t1"
+
+            // ── Boot 1: populate a lazily-hydrated scope and flush it ──
+            do! async {
+                let h = boot storage cache
+
+                try
+                    let! _ =
+                        runSequence "delete-before-read boot 1" h Model.empty [
+                            Ingest(scope, "d0", 0, None)
+                            Ingest(scope, "d0", 1, None)
+                        ]
+
+                    ()
+                finally
+                    h.Shutdown()
+            }
+
+            // The snapshots must actually be at rest, or the wipe below has
+            // nothing to fail to reach and the case proves nothing.
+            let! denseAtRest = storage.Download("_rag", "_rag/team:t1/index.json")
+            let! sparseAtRest = storage.Download("_rag", "_rag/team:t1/bm25.json")
+            Expect.isTrue (Result.isOk denseAtRest) "the dense snapshot must exist before the wipe"
+            Expect.isTrue (Result.isOk sparseAtRest) "the sparse snapshot must exist before the wipe"
+
+            // ── Boot 2: wipe FIRST — no read of the scope precedes it ──
+            do! async {
+                let h = boot storage cache
+
+                try
+                    let! report = h.Lifecycle.DeleteByScope scope
+                    Expect.isTrue (IndexLifecycleReport.isClean report) "DeleteByScope reports success"
+
+                    let! dense = h.VectorStore.Search [ scope ] unitVec sweepK
+                    let! sparse = h.Sparse.Search [ scope ] universalTerm sweepK
+
+                    Expect.isEmpty
+                        dense
+                        "a wipe issued before any read must reach the dense snapshot — the read after it must not resurrect the scope"
+
+                    Expect.isEmpty
+                        sparse
+                        "a wipe issued before any read must reach the BM25 snapshot — the read after it must not resurrect the scope"
+                finally
+                    h.Shutdown()
+            }
+
+            // ── Boot 3: and it stayed wiped at rest, across a restart ──
+            let third = boot storage cache
+
+            try
+                let! dense = third.VectorStore.Search [ scope ] unitVec sweepK
+                let! sparse = third.Sparse.Search [ scope ] universalTerm sweepK
+
+                Expect.isEmpty dense "the wipe must survive a restart on the dense leg"
+                Expect.isEmpty sparse "the wipe must survive a restart on the BM25 leg"
+            finally
+                third.Shutdown()
         }
     ]
