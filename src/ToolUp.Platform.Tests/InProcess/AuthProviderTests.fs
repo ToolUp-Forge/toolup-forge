@@ -1743,10 +1743,11 @@ let private oidcAudiencePreflightTests =
 // `AuthConfig.ClaimMapping` names the claims projected onto
 // `AuthenticatedUser.UserId` / `TenantId` in place of the built-in
 // `sub`. It is the substrate generalisation of the per-IdP claim-
-// remapping decorator the deprecated Entra companion carries, and it is
-// deliberately STRICTER than that decorator: the companion's chain
-// treats a refused or absent claim as "fall through to the next
-// candidate", whereas the seam rejects.
+// remapping decorator the `EntraExternalId` companion carried until its
+// Phase 749 removal, and it is deliberately STRICTER than that
+// decorator was: the companion's chain treated a refused or absent
+// claim as "fall through to the next candidate", whereas the seam
+// rejects.
 //
 // This pack asserts three things, and the third is the one that would
 // otherwise rot:
@@ -1758,22 +1759,26 @@ let private oidcAudiencePreflightTests =
 //      refused by `IdentitySanitiser`. Each is asserted to reject AND
 //      to name the claim, because a rejection with an unattributable
 //      message is what turns a five-minute config fix into an outage.
-//   3. **Parity with the companion**, driven through BOTH shipped
-//      entry points over the SAME fixture tokens rather than through a
-//      re-implementation of either. Parity is claimed where the two
-//      agree (a token carrying the claim) and the DIVERGENCE is pinned
-//      where they deliberately differ (a token that does not) — a bare
-//      "these are equal" assertion would have to be either false or
-//      scoped to nothing, and pinning the divergence is what makes the
-//      companion's eventual removal a reviewable step rather than a
-//      behavioural surprise.
+//   3. **The companion's recorded behaviour**, ported at Phase 749.
+//      Until that phase these cases drove BOTH shipped entry points
+//      over the same fixture tokens, with the companion as the live
+//      oracle; the pre-removal run was green on every vector below
+//      (25/25), which is the parity proof the removal was gated on.
+//      The companion is gone, so what survives is its RECORDED answer
+//      per vector, kept as a literal beside the seam's. Parity is
+//      asserted where the two agreed (a token carrying the claim) and
+//      the DIVERGENCE is pinned where they deliberately differed (a
+//      token that does not) — the divergence is the one migration
+//      hazard a consumer coming off the companion can be bitten by, so
+//      it stays asserted rather than becoming prose.
 
 module private ClaimMappingFixture =
-    /// A token in the shape both mappings re-read: real base64url
-    /// segments, junk signature. Neither `applyValidatedClaimMapping`
-    /// nor the companion's `applyValidatedClaims` verifies anything —
-    /// that already happened upstream — so signing it would test
-    /// nothing and would obscure that this is a post-validation re-read.
+    /// A token in the shape the mapping re-reads: real base64url
+    /// segments, junk signature. `applyValidatedClaimMapping` verifies
+    /// nothing — that already happened upstream — so signing it would
+    /// test nothing and would obscure that this is a post-validation
+    /// re-read. These are the removed companion's own fixture vectors,
+    /// kept at Phase 749 rather than rewritten.
     let token (claims: (string * string) list) =
         let escape (s: string) =
             s
@@ -1808,7 +1813,7 @@ module private ClaimMappingFixture =
         $"{header}.{b64 (Encoding.UTF8.GetBytes payloadJson)}.not-a-signature"
 
     /// The inner provider's already-sanitised output — the value the
-    /// COMPANION falls back to and the seam does not.
+    /// removed companion fell back to and the seam does not.
     let innerUser: AuthenticatedUser = {
         UserId = "inner-sanitised-subject"
         DisplayName = "Inner Display Name"
@@ -1828,8 +1833,10 @@ module private ClaimMappingFixture =
     let seamMapped (mapping: ClaimMapping) (claims: (string * string) list) =
         OidcAuthProvider.applyValidatedClaimMapping mapping (token claims) innerUser
 
-    let companionMapped (claims: (string * string) list) =
-        EntraExternalIdAuthProvider.applyValidatedClaims (token claims) innerUser
+// The removed companion's own answer is not re-implemented here. For
+// every vector this pack drives it is recoverable from the vector
+// itself, so it is asserted as a LITERAL at each case below — see the
+// `RECORDED:` note on each.
 
 let private oidcClaimMappingTests =
     let mkMappedProvider (key: OidcFixture.IssuerKey) (mapping: ClaimMapping option) =
@@ -2120,71 +2127,75 @@ let private oidcClaimMappingTests =
             | Ok user -> failtestf "expected rejection; got a partially-mapped user (UserId '%s')" user.UserId
             | Error(claim, _) -> Expect.equal claim "tid" "the failure is attributed to the claim that was missing"
 
-        // ─── Parity with the deprecated companion ────────────────────
+        // ─── The removed companion's recorded behaviour (Phase 749) ──
 
-        testCase "PARITY — the seam reproduces the companion's mapping on every claim-bearing vector"
+        testCase "PARITY — the seam reproduces the companion's recorded mapping on every claim-bearing vector"
         <| fun () ->
-            // Driven through BOTH shipped entry points over the same
-            // fixture tokens. The companion is the oracle; the seam is
-            // the substrate replacement for it.
+            // RECORDED: for every vector below the removed decorator's
+            // candidate chain produced the claim value verbatim —
+            // `oid` -> UserId (preferred over `sub`), `tid` -> TenantId
+            // — because each is a value `IdentitySanitiser` accepts.
+            // Until Phase 749 this case drove the live companion and
+            // compared; the companion's answer is now the literal on the
+            // right, which is the same assertion with one fewer moving
+            // part.
             let vectors =
                 [
                     [ "oid", "entra-object-id"; "tid", "entra-tenant" ], "the companion's own control vector"
                     [ "oid", "user-1"; "tid", "tenant-1"; "sub", "pairwise-subject" ],
-                    "`oid` wins over `sub` on both sides"
+                    "`oid` wins over `sub`, as it did on the companion"
                 ]
                 @ (benignClaimValues
                    |> List.map (fun (value, description) -> [ "oid", value; "tid", value ], description))
 
             for claims, description in vectors do
-                let companion = ClaimMappingFixture.companionMapped claims
+                let expectedUserId = claims |> List.find (fst >> (=) "oid") |> snd
+                let expectedTenantId = claims |> List.find (fst >> (=) "tid") |> snd
 
                 match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped claims with
                 | Error(claim, reason) ->
                     failtestf "seam refused the parity vector (%s) on '%s': %s" description claim reason
                 | Ok seam ->
-                    Expect.equal seam.UserId companion.UserId $"UserId parity on {description}"
-                    Expect.equal seam.TenantId companion.TenantId $"TenantId parity on {description}"
+                    Expect.equal seam.UserId expectedUserId $"UserId parity on {description}"
+                    Expect.equal seam.TenantId (Some expectedTenantId) $"TenantId parity on {description}"
 
-        testCase "PARITY — the companion's own control vector is genuinely mapped on both sides"
+        testCase "PARITY — the control vector is genuinely mapped, not merely agreed on"
         <| fun () ->
-            // Without this, a parity assertion between two mappings that
-            // had BOTH stopped applying claims would pass: they would
-            // agree on the inner user.
+            // The anti-vacuity guard the parity case above needs: a
+            // mapping that had stopped applying claims altogether would
+            // return the inner user and still satisfy an equality
+            // assertion written against it. RECORDED: the companion
+            // returned "entra-object-id" here, not the inner subject.
             let claims = [ "oid", "entra-object-id"; "tid", "entra-tenant" ]
-
-            Expect.notEqual
-                (ClaimMappingFixture.companionMapped claims).UserId
-                ClaimMappingFixture.innerUser.UserId
-                "the companion genuinely overrides the inner UserId"
 
             match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped claims with
             | Error(claim, reason) -> failtestf "seam refused the control vector on '%s': %s" claim reason
             | Ok seam ->
-                Expect.equal seam.UserId "entra-object-id" "the seam genuinely overrides the inner UserId"
+                Expect.notEqual
+                    seam.UserId
+                    ClaimMappingFixture.innerUser.UserId
+                    "the seam genuinely overrides the inner UserId, as the companion did"
+
+                Expect.equal seam.UserId "entra-object-id" "the seam projects the claim, not the inner subject"
                 Expect.equal seam.TenantId (Some "entra-tenant") "the seam genuinely overrides the inner TenantId"
 
-        testCase "DIVERGENCE — the seam is fail-closed exactly where the companion falls back"
+        testCase "DIVERGENCE — the seam is fail-closed exactly where the companion fell back"
         <| fun () ->
-            // The one deliberate behavioural difference, pinned rather
-            // than left to be discovered at the companion's removal.
-            // Two token shapes the companion accepts and the seam does
-            // not, and in BOTH the companion's answer is the inner
-            // user — i.e. a DIFFERENT identity from the one the operator
-            // asked for, returned as a success.
+            // The one deliberate behavioural difference between the
+            // removed companion and the substrate that replaced it, and
+            // the only migration hazard a consumer coming off the
+            // companion can be bitten by. RECORDED: on BOTH token shapes
+            // the companion returned the INNER user as a success — a
+            // different identity from the one the operator's mapping
+            // asked for. The seam rejects instead, so the divergence is
+            // safe in the direction that matters; it is pinned here so
+            // it stays a documented behaviour rather than a surprise.
             let divergent = [
                 [ "sub", "pairwise-subject" ], "the token carries no `oid` at all"
                 [ "oid", "../../etc"; "sub", "pairwise-subject" ], "the `oid` is refused by IdentitySanitiser"
             ]
 
             for claims, description in divergent do
-                let companion = ClaimMappingFixture.companionMapped claims
-
-                Expect.notEqual
-                    companion.UserId
-                    "../../etc"
-                    $"the companion never applies a refused claim raw ({description})"
-
                 match
                     ClaimMappingFixture.seamMapped
                         {
@@ -2195,7 +2206,7 @@ let private oidcClaimMappingTests =
                 with
                 | Ok user ->
                     failtestf
-                        "the seam must reject where the companion falls back (%s); got UserId '%s'"
+                        "the seam must reject where the companion fell back (%s); got UserId '%s'"
                         description
                         user.UserId
                 | Error(claim, _) -> Expect.equal claim "oid" $"the rejection names `oid` ({description})"
@@ -2203,14 +2214,11 @@ let private oidcClaimMappingTests =
         testCase "the seam never resolves an identity the companion would have refused"
         <| fun () ->
             // The safety direction of the divergence, stated as a
-            // property rather than a case list: for every hostile value,
-            // whatever each side returns, neither ever yields the raw
-            // value as the effective identity.
+            // property rather than a case list. RECORDED: for every
+            // hostile value the companion fell back to the inner user
+            // and so never yielded the raw value either — the seam is
+            // strictly the safer of the two, never the looser.
             for value, description in hostileClaimValues do
-                let companion = ClaimMappingFixture.companionMapped [ "oid", value ]
-
-                Expect.notEqual companion.UserId value $"companion never yields a raw {description}"
-
                 match
                     ClaimMappingFixture.seamMapped
                         {

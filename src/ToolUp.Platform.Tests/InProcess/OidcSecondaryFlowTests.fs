@@ -31,8 +31,9 @@ open ToolUp.AuthProviders.Oidc.OidcStateMachine
 //                     projection to the client tier;
 //   3. the request  — the EXACT authorize parameter set each flow
 //                     produces, including the parity check against the
-//                     `EntraExternalIdClient` companion's shell this
-//                     affordance replaces;
+//                     shell of the client-side Entra companion this
+//                     affordance replaced (removed at Phase 749; the
+//                     parameter set below is its recorded request);
 //   4. rule 16      — the coherence validator's refusal of a flow that
 //                     cannot work.
 //
@@ -147,7 +148,7 @@ let private attachment =
             Expect.equal
                 EntraUserFlowParameter
                 "p"
-                "pinned: this is the parameter EntraExternalIdAuthUI passed to beginSignInWithExtras"
+                "pinned: this is the parameter the removed Entra companion shell passed to beginSignInWithExtras"
 
         testCase "toClientConfig projects the flow verbatim"
         <| fun () ->
@@ -206,14 +207,15 @@ let private authorizeRequest =
 
         testCase "the Entra sign-up flow issues the standard set plus `p`"
         <| fun () ->
-            // The parity assertion. `EntraExternalIdAuthUI`'s sign-up
-            // button calls
+            // The parity assertion, and since Phase 749 the sole
+            // surviving record of the removed companion shell's request.
+            // Its sign-up button called
             //     OidcClient.beginSignInWithExtras oidcConfig [ "p", policyId ]
-            // (see `beginSignUp` in that shell), so the authorize
-            // request it issues is the standard OAuth / PKCE set with
-            // `p=<policyId>` appended. The preset path must produce
-            // that same request, parameter for parameter, or the
-            // companion's removal is not a no-op for its consumers.
+            // so the authorize request it issued was the standard OAuth
+            // / PKCE set with `p=<policyId>` appended. This case was
+            // green against that shell before it was deleted (Phase
+            // 749.A), and the literal below IS that request — so the
+            // preset path stays held to it, parameter for parameter.
             let cfg =
                 entraExternalId "contoso" clientId redirectUri
                 |> withEntraSignUpUserFlow "B2C_1_signup"

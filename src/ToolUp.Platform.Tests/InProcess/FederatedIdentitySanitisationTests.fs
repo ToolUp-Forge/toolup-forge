@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.AuthProviders
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Phase 334 — federated-identity sanitisation PARITY ──────────────
@@ -18,10 +19,14 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // `X-Peer-Name` through it before building `peers/{name}/bearer`. Two
 // federated boundaries were still raw:
 //
-//   • the Entra decorator's `applyEntraMapping` OVERWROTE the inner OIDC
-//     provider's already-sanitised `UserId` / `TenantId` with the raw
-//     `oid` / `sub` / `tid` claims — the sanitised value was only the
-//     fallback, so 6l.H's guard was undone one line after it ran;
+//   • the per-IdP claim mapping OVERWROTE the inner OIDC provider's
+//     already-sanitised `UserId` / `TenantId` with the raw `oid` /
+//     `sub` / `tid` claims — the sanitised value was only the fallback,
+//     so 6l.H's guard was undone one line after it ran. (At 334 that
+//     mapping lived in an auth-provider companion; Phase 745 moved it
+//     into the substrate as `AuthConfig.ClaimMapping` and Phase 749
+//     removed the companion. The boundary this pack drives moved with
+//     it — see "Boundary 1" below.);
 //   • `JwtPeerAuthProvider` interpolated the token's own unverified
 //     `iss` straight into `peers/{iss}/signing-key`, and
 //     `BlobPeerRegistry` used `PeerId` as a blob name unchecked.
@@ -78,13 +83,30 @@ let private benignIds = [
 let private canonicalAccepts (id: string) =
     IdentitySanitiser.sanitiseScopeId id |> Result.isOk
 
-// ─── Boundary 1 — the Entra claim decorator ──────────────────────────
+// ─── Boundary 1 — the OIDC claim-mapping seam ────────────────────────
+//
+// Until Phase 749 this boundary was the `EntraExternalId` companion's
+// `applyEntraMapping` decorator. The companion was removed once the
+// substrate seam it anticipated shipped (Phase 745), and the boundary
+// moved with the behaviour: `AuthConfig.ClaimMapping` on the generic
+// `OidcAuthProvider` is now what projects a named claim onto
+// `AuthenticatedUser.UserId` / `TenantId`, and it is held to the same
+// `IdentitySanitiser` rule.
+//
+// **The corpus and the fixture tokens are the decorator's own, kept
+// verbatim.** What changed is the shape of a refusal, and only that: the
+// decorator treated a refused claim as ABSENT and walked on to the next
+// candidate, whereas the seam REJECTS. Both directions are safe — neither
+// ever yields a hostile value as the effective identity, which is what
+// this pack measures — so the parity table below reads a rejection where
+// it used to read a fall-back, and `boundaryDetailTests` pins the
+// difference itself.
 
 let private base64UrlRaw (bytes: byte[]) =
     Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 
 /// The inner OIDC provider's output: already sanitised by `6l.H`, and
-/// the value the decorator must fall back to when a claim is refused.
+/// the value the seam leaves in place for every field it does not map.
 let private innerUser: AuthenticatedUser = {
     UserId = "inner-sanitised-subject"
     DisplayName = "Inner Display Name"
@@ -94,11 +116,11 @@ let private innerUser: AuthenticatedUser = {
 }
 
 /// An Entra id token carrying the given claims, in the shape the
-/// decorator re-reads AFTER the inner provider has verified signature,
+/// mapping re-reads AFTER the inner provider has verified signature,
 /// issuer, audience and expiry. The signature segment is deliberately
-/// junk: `applyValidatedClaims` performs no verification of its own
-/// (that already happened), so signing it would test nothing and would
-/// hide the fact that this is a post-validation re-read.
+/// junk: `applyValidatedClaimMapping` performs no verification of its
+/// own (that already happened), so signing it would test nothing and
+/// would hide the fact that this is a post-validation re-read.
 let private entraToken (claims: (string * string) list) =
     let escape (s: string) =
         s
@@ -118,12 +140,36 @@ let private entraToken (claims: (string * string) list) =
     let payload = base64UrlRaw (Encoding.UTF8.GetBytes $"{{{body}}}")
     $"{header}.{payload}.not-a-signature"
 
-/// Drive the real decorator mapping. `applyValidatedClaims` is exactly
-/// what `wrapWithEntraMapping` calls on the validated user, exposed by
-/// Phase 334 so this pack asserts against the shipped path rather than a
-/// re-implementation of it.
-let private entraMapped (claims: (string * string) list) =
-    ToolUp.AuthProviders.EntraExternalIdAuthProvider.applyValidatedClaims (entraToken claims) innerUser
+/// Drive the real seam. `applyValidatedClaimMapping` is exactly what the
+/// validation pipeline calls on the validated user, so this pack asserts
+/// against the shipped path rather than a re-implementation of it.
+let private claimMapped (mapping: ClaimMapping) (claims: (string * string) list) =
+    OidcAuthProvider.applyValidatedClaimMapping mapping (entraToken claims) innerUser
+
+/// The seam's verdict on a single named claim, in the boolean shape the
+/// parity table compares against `IdentitySanitiser`: accepted means the
+/// claim reached the effective identity **unchanged**, which is the only
+/// outcome a boundary may report as acceptance.
+let private claimBoundaryAccepts (claimName: string) (id: string) =
+    let mapping: ClaimMapping =
+        if claimName = "tid" then
+            {
+                UserIdClaim = None
+                TenantIdClaim = Some "tid"
+            }
+        else
+            {
+                UserIdClaim = Some claimName
+                TenantIdClaim = None
+            }
+
+    match claimMapped mapping [ claimName, id ] with
+    | Result.Error _ -> false
+    | Result.Ok user ->
+        if claimName = "tid" then
+            user.TenantId = Some id
+        else
+            user.UserId = id
 
 // ─── Boundary 2 — the peer `iss` claim ───────────────────────────────
 
@@ -237,25 +283,34 @@ let parityTests =
                         (canonicalAccepts id)
                         $"the corpus row '{description}' must be one IdentitySanitiser itself rejects — otherwise this whole row proves nothing"
 
-                    Expect.notEqual
-                        (entraMapped [ "oid", id ]).UserId
-                        id
-                        $"an Entra `oid` that is a {description} must never become the effective scope identity"
+                    Expect.isFalse
+                        (claimBoundaryAccepts "oid" id)
+                        $"a mapped `oid` that is a {description} must never become the effective scope identity"
 
-                    Expect.equal
-                        (entraMapped [ "oid", id ]).UserId
-                        innerUser.UserId
-                        $"a refused `oid` ({description}) falls back to the inner provider's already-sanitised UserId"
+                    Expect.isFalse
+                        (claimBoundaryAccepts "sub" id)
+                        $"a mapped `sub` that is a {description} must never become the effective scope identity"
 
-                    Expect.equal
-                        (entraMapped [ "sub", id ]).UserId
-                        innerUser.UserId
-                        $"a refused `sub` ({description}) falls back to the inner provider's already-sanitised UserId"
+                    Expect.isFalse
+                        (claimBoundaryAccepts "tid" id)
+                        $"a mapped `tid` that is a {description} must never become the effective tenant"
 
-                    Expect.equal
-                        (entraMapped [ "tid", id ]).TenantId
-                        innerUser.TenantId
-                        $"a refused `tid` ({description}) falls back to the inner provider's TenantId"
+                    // "not the raw value" is satisfied by a boundary that
+                    // has broken and refuses everything unattributably.
+                    // The seam must say WHICH claim it refused — a
+                    // rejection nobody can attribute is what turns a
+                    // five-minute config fix into an outage.
+                    match
+                        claimMapped
+                            {
+                                UserIdClaim = Some "oid"
+                                TenantIdClaim = None
+                            }
+                            [ "oid", id ]
+                    with
+                    | Result.Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId
+                    | Result.Error(claim, _) ->
+                        Expect.equal claim "oid" $"the refusal of a {description} names the claim it refused"
 
                     Expect.isFalse
                         (peerAccepts id)
@@ -274,19 +329,16 @@ let parityTests =
                         (canonicalAccepts id)
                         $"the corpus row '{description}' must be one IdentitySanitiser accepts"
 
-                    Expect.equal
-                        (entraMapped [ "oid", id ]).UserId
-                        id
+                    Expect.isTrue
+                        (claimBoundaryAccepts "oid" id)
                         $"a well-formed `oid` ({description}) still overrides the inner UserId, unchanged"
 
-                    Expect.equal
-                        (entraMapped [ "sub", id ]).UserId
-                        id
+                    Expect.isTrue
+                        (claimBoundaryAccepts "sub" id)
                         $"a well-formed `sub` ({description}) is still applied, unchanged"
 
-                    Expect.equal
-                        (entraMapped [ "tid", id ]).TenantId
-                        (Some id)
+                    Expect.isTrue
+                        (claimBoundaryAccepts "tid" id)
                         $"a well-formed `tid` ({description}) is still applied, unchanged"
 
                     Expect.isTrue
@@ -309,9 +361,9 @@ let parityTests =
                 let canonical = canonicalAccepts id
 
                 Expect.equal
-                    ((entraMapped [ "oid", id ]).UserId = id)
+                    (claimBoundaryAccepts "oid" id)
                     canonical
-                    $"Entra `oid` boundary diverged from IdentitySanitiser on: {description}"
+                    $"OIDC claim-mapping boundary diverged from IdentitySanitiser on: {description}"
 
                 Expect.equal
                     (peerAccepts id)
@@ -369,18 +421,24 @@ let negativeControlTests =
                 "a well-formed issuer validates through the identical mint→validate fixture"
         }
 
-        test "CONTROL — the Entra mapping is live, not inert" {
-            // If `applyEntraMapping` had stopped applying claims
-            // altogether, every hostile case would still return the
-            // inner UserId and look like a pass.
-            let mapped = entraMapped [ "oid", "entra-object-id"; "tid", "entra-tenant" ]
+        test "CONTROL — the claim mapping is live, not inert" {
+            // If `applyValidatedClaimMapping` had stopped applying claims
+            // altogether it would return the inner user for every input,
+            // and every hostile case above would look like a pass.
+            let mapping: ClaimMapping = {
+                UserIdClaim = Some "oid"
+                TenantIdClaim = Some "tid"
+            }
 
-            Expect.equal mapped.UserId "entra-object-id" "a well-formed `oid` genuinely overrides the inner UserId"
+            match claimMapped mapping [ "oid", "entra-object-id"; "tid", "entra-tenant" ] with
+            | Result.Error(claim, reason) -> failtestf "the seam refused a well-formed vector on '%s': %s" claim reason
+            | Result.Ok mapped ->
+                Expect.equal mapped.UserId "entra-object-id" "a well-formed `oid` genuinely overrides the inner UserId"
 
-            Expect.equal
-                mapped.TenantId
-                (Some "entra-tenant")
-                "a well-formed `tid` genuinely overrides the inner TenantId"
+                Expect.equal
+                    mapped.TenantId
+                    (Some "entra-tenant")
+                    "a well-formed `tid` genuinely overrides the inner TenantId"
         }
 
         test "CONTROL — a refused peer id leaves the directory untouched" {
@@ -415,32 +473,57 @@ let negativeControlTests =
 let boundaryDetailTests =
     testList "Phase 334 — boundary-specific behaviour" [
 
-        test "a refused `oid` falls through to a well-formed `sub` before the inner UserId" {
-            // Rejection is modelled as ABSENCE, so the decorator walks
-            // the same oid → sub → inner candidate chain it always had
-            // rather than short-circuiting to the inner value.
-            let mapped = entraMapped [ "oid", "../../etc"; "sub", "well-formed-subject" ]
-
-            Expect.equal mapped.UserId "well-formed-subject" "a refused `oid` is treated as absent, not as a hard stop"
+        test "a refused `oid` is a rejection, NOT a fall-through to a well-formed `sub`" {
+            // The one behavioural difference between this boundary and
+            // the `EntraExternalId` decorator it replaced (Phase 749).
+            // The decorator modelled a refusal as ABSENCE and walked its
+            // oid → sub → inner candidate chain, so this exact token
+            // resolved as "well-formed-subject" — a DIFFERENT identity
+            // from the one the operator's mapping named, returned as a
+            // success. The seam refuses instead: a half-honoured mapping
+            // is not a state it may reach.
+            match
+                claimMapped
+                    {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = None
+                    }
+                    [ "oid", "../../etc"; "sub", "well-formed-subject" ]
+            with
+            | Result.Ok user -> failtestf "expected a rejection; the seam fell through to UserId '%s'" user.UserId
+            | Result.Error(claim, _) -> Expect.equal claim "oid" "the refusal names the claim the operator mapped"
         }
 
-        test "display name and email are untouched by the sanitiser" {
-            // They never become a scope or key-path segment, so
-            // constraining them would reject legitimate human names for
-            // no security gain.
-            let mapped =
-                entraMapped [
-                    "oid", "user-1"
-                    "name", "Ada Lovelace-King (Dr.)"
-                    "email", "ada@example.co.uk"
-                ]
+        test "the mapping touches the identity fields only — display name and email pass through" {
+            // `DisplayName` / `Email` never become a scope or key-path
+            // segment, so constraining them would reject legitimate human
+            // names for no security gain. The seam maps `UserId` /
+            // `TenantId` and nothing else, so both arrive exactly as the
+            // inner provider resolved them — including the punctuation
+            // and `@` that the scope-id rule would refuse.
+            match
+                claimMapped
+                    {
+                        UserIdClaim = Some "oid"
+                        TenantIdClaim = None
+                    }
+                    [ "oid", "user-1" ]
+            with
+            | Result.Error(claim, reason) -> failtestf "the seam refused a well-formed `oid` on '%s': %s" claim reason
+            | Result.Ok mapped ->
+                Expect.equal
+                    mapped.DisplayName
+                    innerUser.DisplayName
+                    "a human display name with spaces and punctuation survives the mapping untouched"
 
-            Expect.equal
-                mapped.DisplayName
-                "Ada Lovelace-King (Dr.)"
-                "a human display name with spaces and punctuation survives"
+                Expect.equal mapped.Email innerUser.Email "an email address with an `@` survives the mapping untouched"
 
-            Expect.equal mapped.Email (Some "ada@example.co.uk") "an email address with an `@` survives"
+                Expect.stringContains mapped.DisplayName " " "precondition: the inner display name carries whitespace"
+
+                Expect.stringContains
+                    (mapped.Email |> Option.defaultValue "")
+                    "@"
+                    "precondition: the inner email carries an `@` — both shapes IdentitySanitiser refuses"
         }
 
         test "a wire-supplied delegation chain hop is sanitised before its key lookup" {

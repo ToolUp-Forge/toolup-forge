@@ -183,6 +183,28 @@ let tests: Test =
 
             testCase "PresetKind.expectsDecodableAccessToken = true"
             <| fun () -> Expect.isTrue (PresetKind.expectsDecodableAccessToken EntraExternalId) ""
+
+            // ─── Ported from the removed companion (Phase 749) ──────
+            //
+            // The `EntraExternalId` companion's own issuer-URL vectors,
+            // kept when its config module was deleted. The v1.0 endpoint
+            // exists but rejects the bound audience format current app
+            // registrations use, which surfaces as an `InvalidAudience`
+            // error that is hard to diagnose from logs alone — so the
+            // v2.0 path is a correctness property of the preset, not an
+            // incidental detail of the string it happens to build.
+
+            testCase "the issuer is always the v2.0 path — the v1.0 endpoint is never emitted"
+            <| fun () ->
+                for tenant in [ "contoso"; "x"; "mytenant" ] do
+                    let cfg = entraExternalId tenant testClientId testRedirectUri
+                    Expect.stringEnds cfg.Issuer "/v2.0" $"v2.0 path enforced for tenant '{tenant}'"
+                    Expect.isFalse (cfg.Issuer.Contains "/v1.0") $"no v1.0 path for tenant '{tenant}'"
+
+            testCase "the companion's own default-host vector"
+            <| fun () ->
+                let cfg = entraExternalId "contoso" testClientId testRedirectUri
+                Expect.equal cfg.Issuer "https://contoso.ciamlogin.com/contoso/v2.0" "default host pattern"
         ]
 
         // ─── entraExternalIdWithDomain (custom-domain override) ────
@@ -236,6 +258,20 @@ let tests: Test =
 
                 Expect.contains cfg.Scopes "offline_access" ""
                 Expect.equal cfg.ValidateIdToken (Some true) ""
+
+            testCase "the companion's own custom-domain vector (host replaced, tenant kept in path)"
+            <| fun () ->
+                // Ported from the removed companion (Phase 749): a
+                // custom CIAM domain replaces the host, and the tenant
+                // id stays in the path segment because External ID's
+                // v2.0 metadata structure requires it there.
+                let cfg =
+                    entraExternalIdWithDomain "contoso" "login.contoso.com" testClientId testRedirectUri
+
+                Expect.equal
+                    cfg.Issuer
+                    "https://login.contoso.com/contoso/v2.0"
+                    "custom domain replaces host; path keeps tenant"
         ]
 
         // ─── auth0 preset ──────────────────────────────────────────
