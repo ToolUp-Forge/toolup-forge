@@ -22,7 +22,7 @@ read its constraints first — they all still apply.
 - **All `ag-grid-enterprise` / `ag-charts-enterprise` imports stay in
   `AgGridEnterprise.fs`**, at module-top-level. The typed series/param files
   (`AgGridEnterpriseTypes.fs`, `AgChartEnterpriseTypes.fs`) are erased and emit
-  **no** JS imports. No file outside `src/AgGridEnterprise/` may import an
+  **no** JS imports. No file outside `src/Feliz.AgGrid.Enterprise/` may import an
   enterprise package.
 - **`MemoizedSparkline` stays non-`private`** (same Fable inline-export rule as
   `MemoizedChart`; it's referenced by an `inline` member on an `[<Erase>]`
@@ -55,7 +55,7 @@ SparklineOptions.chart [
 
 ## Enterprise grid recipes
 
-`open ToolUp.Platform.AgGrid` and `open AgGridEnterpriseTypes` (the `Enterprise`
+`open Feliz.AgGrid` and `open AgGridEnterpriseTypes` (the `Enterprise`
 sub-module carries the grid members).
 
 ### Set Filter

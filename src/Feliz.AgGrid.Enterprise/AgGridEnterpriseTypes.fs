@@ -3,22 +3,22 @@
 
 module AgGridEnterpriseTypes
 
-// Enterprise-feature typed surface for AG Grid. Lifted from
-// `src/ToolUp.Platform.Client/Client/UI/AgGrid.fs` (`module Enterprise`) into the
-// companion package so the SDK proper compiles without referencing
-// Enterprise feature names. The types are erased and emit no JS imports;
+// Enterprise-feature typed surface for AG Grid. Lifted from the Community
+// binding (`module Enterprise` in what is now `src/Feliz.AgGrid/AgGrid.fs`)
+// into the companion package so the Community binding compiles without
+// referencing Enterprise feature names. The types are erased and emit no JS imports;
 // the actual `import "..." "ag-grid-enterprise"` calls stay in
 // AgGridEnterprise.fs at module-top-level.
 //
-// This file is injected into the consuming client project via
-// AgGridEnterprise.Client.props, after ToolUp.Platform.Client.props has
-// already injected AgGrid.fs — so `open ToolUp.Platform.AgGrid` resolves
-// to the Community types this file extends.
+// `open Feliz.AgGrid` resolves the Community types this file extends;
+// since Phase 344 that is an ordinary reference to the standalone
+// Feliz.AgGrid binding rather than a source injection through
+// ToolUp.Platform.Client.
 
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 module Enterprise =
 

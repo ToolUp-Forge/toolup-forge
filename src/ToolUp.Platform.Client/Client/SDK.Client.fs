@@ -3317,8 +3317,7 @@ module Client =
 
         // Wrap in AgGridProvider — supplies AG Grid modules and optional license key
         // to all grid instances in the React tree via context.
-        let withGrid =
-            ToolUp.Platform.AgGrid.provider config.GridModules [ withLoadingIndicator ]
+        let withGrid = Feliz.AgGrid.provider config.GridModules [ withLoadingIndicator ]
 
         // Phase 622 — wrap in the presence + soft-lock provider so module
         // views can read "who else is here" / "is this entity locked" via

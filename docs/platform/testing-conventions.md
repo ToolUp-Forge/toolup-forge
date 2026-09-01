@@ -88,7 +88,7 @@ Every `let mutable` at module scope in `toolup-forge/src/` MUST fall into one of
 **Class (a) — documented exception.** Acceptable when the mutable is:
 - A warn-once advisory flag (`OidcAuthProvider.unmappedRolesWarned`) — written-once, read-only-by-observers, no per-test reset hazard because the test surface doesn't observe it.
 - A compose-time-write-once scalar (`FileManagement.storeEvictionMinutes`) — set by `configureEvictionMinutes` on startup; tests that need a non-default value set it via the configure path.
-- Fable-tier client-side state (`ToolUp.Platform.Client/`, `ToolUp.AI.Client/`, `AuthProviders/OidcClient/`, `AgGridEnterprise/`) — the .NET test runner doesn't compile these modules' browser-only branches and doesn't poison the cache through the test entry points.
+- Fable-tier client-side state (`ToolUp.Platform.Client/`, `ToolUp.AI.Client/`, `AuthProviders/OidcClient/`, `Feliz.AgGrid.Enterprise/`) — the .NET test runner doesn't compile these modules' browser-only branches and doesn't poison the cache through the test entry points.
 
 Each (a) site MUST carry a comment naming its classification: `// (a) — process-lifetime warn-once flag, no Expecto reset hazard` (or similar).
 
