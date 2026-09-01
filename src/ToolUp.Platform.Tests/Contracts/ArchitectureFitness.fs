@@ -19,7 +19,7 @@ open System.Text.RegularExpressions
 //      direction rule (`Core` references neither `Server` nor `Client`;
 //      `Server` does not reference `Client`; `Client` does not reference
 //      `Server`) and the AG Grid Enterprise split (`Client` carries no
-//      reference to the opt-in `ToolUp.AgGridEnterprise` companion).
+//      reference to the opt-in `Feliz.AgGrid.Enterprise` companion).
 //      `Assembly.GetReferencedAssemblies()` reflects the real IL
 //      reference set, so a `ProjectReference` that compiles a forbidden
 //      edge shows up here even if no `open` does.

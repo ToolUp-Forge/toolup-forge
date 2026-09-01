@@ -47,7 +47,6 @@ w:document
       w:pPr
         w:rPr
           w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="7"
-          w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="102"
       w:ins w:author="Reviewer A" w:date="2026-06-02T14:30:00Z" w:id="8"
         w:r
           w:t xml:space="preserve" "A wholly new paragraph."
@@ -55,7 +54,6 @@ w:document
       w:pPr
         w:rPr
           w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="9"
-          w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="104"
       w:del w:author="Reviewer B" w:date="2026-06-03T09:15:00Z" w:id="10"
         w:r
           w:delText xml:space="preserve" "This paragraph is struck out."

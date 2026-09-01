@@ -64,7 +64,7 @@ direct dependencies and their licences for at-a-glance attribution.
 - **@dnd-kit** — Drag-and-drop primitives for React. MIT License.
   Copyright (c) Claudéric Demers. https://github.com/clauderic/dnd-kit
 
-Note: ToolUp deployments that opt into the `ToolUp.AgGridEnterprise`
+Note: ToolUp deployments that opt into the `Feliz.AgGrid.Enterprise`
 companion package will additionally pull in `ag-grid-enterprise` and
 `ag-charts-enterprise`, which are NOT covered by Apache 2.0 — they ship
 under AG Grid's commercial licence and require a separately purchased

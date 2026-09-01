@@ -7,7 +7,7 @@ module AgChartEnterpriseTypes
 // `AgGridEnterpriseTypes.fs` shape. These are erased option-builder types that
 // emit NO JS imports: an Enterprise series is just an options object with a
 // distinguishing `type` string, passed to the SAME `AgCharts` React component
-// that Community charts use (`ToolUp.Platform.AgChart.agChart`, imported from
+// that Community charts use (`Feliz.AgCharts.agChart`, imported from
 // the community `ag-charts-react` package). The sole
 // `import "AgChartsEnterpriseModule" "ag-charts-enterprise"` (which registers
 // the Enterprise chart modules at module-eval time) stays in
@@ -19,14 +19,14 @@ module AgChartEnterpriseTypes
 // radial-*, radar-* which stay obj escape hatches until a module needs them).
 // Sparklines are a preset rendered through the community `AgCharts` component.
 //
-// Compiled after AgGridEnterpriseTypes.fs (see AgGridEnterprise.fsproj), so
-// `open ToolUp.Platform.AgChart` resolves the Community chart types this file
+// Compiled after AgGridEnterpriseTypes.fs (see Feliz.AgGrid.Enterprise.fsproj),
+// so `open Feliz.AgCharts` resolves the Community chart types this file
 // builds on (ChartTooltipContent, IChartTooltipParams, agChart, MarkerShape).
 
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
-open ToolUp.Platform.AgChart
+open Feliz.AgCharts
 
 // ─── Hierarchy data (sunburst / treemap) ─────────────────────────
 

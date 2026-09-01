@@ -20,7 +20,7 @@ It asserts:
    reference `Server`. Reflecting the real IL reference set means a forbidden `ProjectReference`
    shows up here even if no `open` does. Each violation names the offending `from → to` edge.
 2. **AG Grid Enterprise split (GP 2)** — `ToolUp.Platform.Client` (the default-composed Client tier)
-   carries no reference to the opt-in `ToolUp.AgGridEnterprise` companion, and no `Client` source
+   carries no reference to the opt-in `Feliz.AgGrid.Enterprise` companion, and no `Client` source
    file `open`s the Enterprise shim module. The paid tier stays off the default path.
 3. **No infra/framework opens under a `Shared/` folder (GP 10)** — a source scan flags any
    `open Microsoft.AspNetCore` / `open Giraffe` / `open Saturn` under any `src/**/Shared/` folder, so

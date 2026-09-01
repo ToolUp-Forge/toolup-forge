@@ -132,21 +132,6 @@ let private importRun
 
 // ─── Paragraph import ────────────────────────────────────────────
 
-/// The paragraph's captured `w:pPr` with any `w:sectPr` stripped
-/// out — section properties are modelled on `Section`, so leaving
-/// them in the paragraph payload would duplicate them on emission.
-let private paragraphRawProperties (pPr: Wordprocessing.ParagraphProperties) : string option =
-    match pPr with
-    | null -> None
-    | props ->
-        let clone = props.CloneNode(true) :?> Wordprocessing.ParagraphProperties
-
-        clone.Elements<Wordprocessing.SectionProperties>()
-        |> Seq.toArray
-        |> Array.iter _.Remove()
-
-        if clone.HasChildren then Some clone.OuterXml else None
-
 let private paragraphMarkRevision (pPr: Wordprocessing.ParagraphProperties) : RevisionMark option =
     match pPr with
     | null -> None
@@ -161,6 +146,55 @@ let private paragraphMarkRevision (pPr: Wordprocessing.ParagraphProperties) : Re
             | Some ins, _ -> Some(Inserted(revisionInfo ins.Author ins.Date))
             | _, Some del -> Some(Deleted(revisionInfo del.Author del.Date))
             | None, None -> None
+
+/// The paragraph's captured `w:pPr` with everything the model
+/// DECOMPOSES stripped out, so each such fact has exactly one carrier
+/// in the model. Two things qualify, for one reason:
+///
+/// * `w:sectPr` — section properties are modelled on `Section`.
+/// * the `w:pPr/w:rPr` revision element `MarkRevision` captured
+///   (Phase 736) — `w:ins` when the mark imported as `Inserted`,
+///   `w:del` when it imported as `Deleted`.
+///
+/// The reason is emission: `Emit` re-attaches this payload verbatim
+/// AND lowers the typed field on top of it, so anything left in both
+/// places is written TWICE. For the paragraph mark that produced a
+/// `w:rPr` with two `w:ins` children — schema-invalid, and growing by
+/// one on every further round trip.
+///
+/// Only the captured KIND is removed. A `w:rPr` may legitimately carry
+/// a `w:ins` and a `w:del` together (`EG_ParaRPrTrackChanges` is a
+/// sequence of optionals, not a choice) while `MarkRevision` carries
+/// one; stripping both would turn a duplication defect into a loss.
+/// Everything else in the bag — including a `w:rPr` left with no
+/// children — stays verbatim in its original position, which is what
+/// keeps emission's re-attachment schema-ordered.
+let private paragraphRawProperties
+    (mark: RevisionMark option)
+    (pPr: Wordprocessing.ParagraphProperties)
+    : string option =
+    match pPr with
+    | null -> None
+    | props ->
+        let clone = props.CloneNode(true) :?> Wordprocessing.ParagraphProperties
+
+        clone.Elements<Wordprocessing.SectionProperties>()
+        |> Seq.toArray
+        |> Array.iter _.Remove()
+
+        match clone.ParagraphMarkRunProperties, mark with
+        | null, _
+        | _, None -> ()
+        | markProps, Some(Inserted _) ->
+            markProps.Elements<Wordprocessing.Inserted>()
+            |> Seq.toArray
+            |> Array.iter _.Remove()
+        | markProps, Some(Deleted _) ->
+            markProps.Elements<Wordprocessing.Deleted>()
+            |> Seq.toArray
+            |> Array.iter _.Remove()
+
+        if clone.HasChildren then Some clone.OuterXml else None
 
 let private numberingReference (pPr: Wordprocessing.ParagraphProperties) : NumberingRef option =
     match pPr with
@@ -268,11 +302,15 @@ let private importParagraph
                 Disposition = Dropped
             }
 
+    // The mark is resolved BEFORE the verbatim payload, because it is
+    // what decides which revision element that payload must not keep.
+    let markRevision = paragraphMarkRevision pPr
+
     let paragraph = {
         Runs = List.ofSeq runs
         StyleId = styleId
-        RawProperties = paragraphRawProperties pPr
-        MarkRevision = paragraphMarkRevision pPr
+        RawProperties = paragraphRawProperties markRevision pPr
+        MarkRevision = markRevision
         CommentIds = List.ofSeq commentIds
     }
 

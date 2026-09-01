@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AgChart
+module Feliz.AgCharts
 
 open Fable.Core
 open Fable.Core.JsInterop
