@@ -60,7 +60,7 @@ ServerApp.empty
 
 **Persistence.** Whatever fits the deployment — `InMemoryEventStore` for dev / staging, `PersistentBlobBacked` for any deployment with retention requirements. No cross-process coordination needed because there is only one process.
 
-**Replica count.** `1` is the safe default. Two `AllInOne` replicas double-fire the scheduler / webhook timer / OAuth refresher — every single-leader concern fires on both. Lift to `ReplicaCount > 1` only once those three subsystems lease their ticks — Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) but deliberately not tick election, so the pin still stands.
+**Replica count.** `1` is the safe default. Two `AllInOne` replicas both run the scheduler's cron tick, so every due job is noticed twice; and each holds its own in-process webhook queue, so an event is dispatched only by whichever replica wrote it. Lift to `ReplicaCount > 1` only once the scheduler leases its tick and webhook events reach a durable queue — Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) and Phase 16a leased the webhook failure-state transition, but tick election is deliberately still out, so the pin stands.
 
 ### Shape 2 — web + worker (`WebOnly` + `WorkerOnly`)
 
@@ -131,7 +131,7 @@ The worker silo's HTTP pipeline is not mounted (`ProcessProfileGate.shouldRegist
 | Silo | Replica count | Why |
 |---|---|---|
 | Web (`WebOnly`) | `≥ 1` — scale freely | Every `BackgroundService` is gated off; nothing to double-fire |
-| Worker (`WorkerOnly`) | `= 1` until the ticks are leased | Cron tick + webhook retry timer + OAuth refresher double-fire across replicas; Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) but no tick election yet |
+| Worker (`WorkerOnly`) | `= 1` until the cron tick is leased | Every replica notices the same due job (the OAuth refresher rides that same tick as a scheduled job); and each holds its own webhook queue, so events are owned per-replica. Phase 9i shipped the [`IDistributedLock` primitive](#idistributedlock--the-lease-primitive-phase-9i) and Phase 16a leased the webhook failure-state transition, but there is still no tick election and no durable queue |
 
 ### Shape 3 — web + worker + dispatcher (`WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 
@@ -173,7 +173,7 @@ ServerApp.empty
 
 The dispatcher silo mounts the HTTP pipeline so its admin endpoints (`/api/_platform/health`, `/dev/inspect`, etc.) are reachable; the worker silo's scheduler routes still register because the substrate is the same. `ProcessProfileGate.shouldRegisterBackgroundService` returns `true` only for `TransactionalDispatcherSubsystem` and `WebhookDispatcherSubsystem` under `DispatcherOnly`; every other background subsystem is gated off.
 
-**Replica count.** `= 1` on the dispatcher silo — webhook retry uses an in-process timer that double-fires across replicas, and it has not yet been migrated to take a lease per tick (Phase 9i shipped the primitive; see [the lease primitive](#idistributedlock--the-lease-primitive-phase-9i)). The web silo is freely scalable (as in shape 2).
+**Replica count.** `= 1` on the dispatcher silo. Not because retries double-fire — Phase 16a leased the failure-state transition, so two dispatcher replicas now count failures and auto-disable correctly against one subscription (see [the lease primitive](#idistributedlock--the-lease-primitive-phase-9i)) — but because webhook and transactional event OWNERSHIP is still a per-replica in-process queue. A second dispatcher replica does not share the load; it sits idle for every event the first one dequeued, and receives nothing at all for events written on another silo. The web silo is freely scalable (as in shape 2).
 
 ## Substrate contract — what every shape must share
 
@@ -202,18 +202,24 @@ The four background subsystems with single-leader semantics:
 | Subsystem | What single-leader means | Coordination mechanism (today) |
 |---|---|---|
 | Job scheduler | Cron-due-job tick that dispatches a job at most once per due-time | `InProcessJobScheduler` uses an in-process timer; **not safe** across multiple `WorkerOnly` replicas without `IDistributedLock` |
-| Webhook dispatcher | Retry timer that re-attempts failed deliveries on backoff | In-process timer; **not safe** across multiple replicas |
-| OAuth refresher | Token-refresh polling that renews expiring tokens before they expire | In-process timer; **not safe** across multiple replicas |
+| Webhook dispatcher | Two separate concerns — see below. The failure-state transition (`ConsecutiveFailures` + auto-disable) must apply once per dead-letter; event OWNERSHIP must fall to one replica | Failure-state transition is leased on `IDistributedLock` (Phase 16a). Event ownership is **not** coordinated — it needs a durable queue, not a lock |
+| OAuth refresher | Token refresh that renews expiring tokens before they expire | Runs as a scheduled JOB (`OAuthRefreshJobHandler` on `IJobScheduler`), so it inherits the scheduler's row above — it owns no timer of its own |
 | Audit replicator + usage flusher | Drains the event store / usage log into external sinks | Idempotent on the sink side (vendor dedup keys per `ToolUp.AuditSinks.*` README); safe across replicas if the sink contract is honoured |
 
-The first three are why `ReplicaCount = 1` on the worker and dispatcher silos is non-negotiable. The last one is the silver lining — the largest by data volume is already coordinated, just by a different mechanism (sink-side dedup, not in-process locking).
+**The webhook row was wrong until Phase 16a, in a way worth recording**, because "webhook retry timer" appears in this chapter's earlier revisions, in the Phase 16a task list, and in more than one plan drawn off them. There is no webhook retry timer. `WebhookDispatcherService` has no periodic sweep and no redelivery pass: it drains a bounded in-process `Channel` fed by the post-write hook on `IEventStore`, and the "retry" is an `Async.Sleep` inside the ladder for one event that only ever exists on the one replica that dequeued it. So two replicas do not double-fire a retry — there is no shared clock for them to double-fire off.
+
+What IS shared is the subscription record the ladder writes at its terminal step, and that is what Phase 16a leases. The failure mode was not a duplicate delivery; it was a **lost update**: two ladders ending concurrently — two events to one failing subscription, or that subscription reached from a worker silo and a dispatcher silo — each read `ConsecutiveFailures = n` and each wrote `n + 1`. The counter stalls, so a persistently-failing receiver is never auto-disabled; and when both do cross the threshold, `WebhookSubscriptionAutoDisabled` is emitted twice for one transition. Same class as `BlobBackedPlatformAdminStore`'s write lock, and the same remedy: `toolup:webhook-failure-state:{scopeId}:{subscriptionId}`, taken with `DistributedLock.withLease`, with the counter re-read inside the lease so the increment is against current state rather than the dispatch-time snapshot. The healthy path acquires nothing (GP 13) — the reset is guarded on the snapshot before the lease, so a subscription already at zero pays no acquire, no re-read and no write.
+
+The scheduler row is therefore the one remaining unleased tick, and the audit replicator is the silver lining — the largest by data volume is already coordinated, just by a different mechanism (sink-side dedup, not locking).
 
 ### `IDistributedLock` — the lease primitive (Phase 9i)
 
 Phase 9i ships the **primitive**, not the adoption. Read the scope boundary before planning a replica count off this section:
 
-- ✅ **Shipped** — `IDistributedLock` + `Lease`, the always-registered `InProcessDistributedLock` default, a `RedisDistributedLock` companion, an `IDistributedLockContract` conformance pack, and two migrated consumers (the job scheduler's per-`JobId` dispatch mutex and `BlobBackedPlatformAdminStore`'s write serialisation, both of which previously held a process-local `SemaphoreSlim` that stopped excluding anything the moment a second replica appeared).
-- ⛔ **Not shipped** — **tick election.** The scheduler's cron tick, the webhook retry timer, and the OAuth refresher still run on in-process timers with no lease around the tick itself. **`ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos therefore still stands.** Treat it as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` still double-fires silently.
+- ✅ **Shipped** — `IDistributedLock` + `Lease`, the always-registered `InProcessDistributedLock` default, a `RedisDistributedLock` companion, an `IDistributedLockContract` conformance pack, and three migrated consumers: the job scheduler's per-`JobId` dispatch mutex, `BlobBackedPlatformAdminStore`'s write serialisation (both of which previously held a process-local `SemaphoreSlim` that stopped excluding anything the moment a second replica appeared), and — Phase 16a — the webhook dispatcher's failure-state read-modify-write, which held no `SemaphoreSlim` at all and was simply last-write-wins.
+- ⛔ **Not shipped** — **tick election.** The scheduler's cron tick still runs on an in-process timer with no lease around the tick itself, and the webhook dispatcher's event ownership still rests on a per-replica in-process queue. **`ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos therefore still stands.** Treat it as part of the deployment manifest, not as runtime config — the silo cannot detect the violation at compose time and a misconfigured `replicas = 2` still mis-fires silently.
+
+**Read the two ⛔ items as different problems with different remedies**, because conflating them is what produced the phantom "webhook retry timer" above. Tick election is a LOCK problem: two replicas legitimately read the same due job from shared state and only one may act. Event ownership is a QUEUE problem: a webhook event enqueued in one replica's memory is invisible to every other, so no lease can hand it over — and, more sharply, an event written by a `WebOnly` silo is dispatched by nobody at all, because the web silo's dispatcher is gated off and the worker's queue never saw it. A durable, partition-keyed queue fixes that; a lease cannot.
 
 The distinction is worth being pedantic about: the scheduler now leases *the dispatch of a given job*, which means two replicas cannot interleave two runs of the same job. It does not lease *the decision that a job is due*, so two replicas would each still notice the same due job and one would simply lose the dispatch lease — the work happens once, but only because the loser's lease acquire fails, and only after both replicas have already read the store. That is a de-duplication side-effect, not leader election, and it is not what the `ReplicaCount` pin is asking about.
 
@@ -348,6 +354,7 @@ The HTML view renders the same data as a table. The `Reason` column makes the ga
 
 ## Follow-ups (deferred)
 
-- **Tick election over `IDistributedLock`** — Phase 9i shipped the [lease primitive](#idistributedlock--the-lease-primitive-phase-9i) and migrated the two read-modify-write consumers, but the three tick-owning subsystems (scheduler cron tick, webhook retry timer, OAuth refresher) still run unleased timers. Until they take a lease per tick, `ReplicaCount = 1` on `WorkerOnly` and `DispatcherOnly` silos.
+- **Tick election over `IDistributedLock`** — Phase 9i shipped the [lease primitive](#idistributedlock--the-lease-primitive-phase-9i) and migrated two read-modify-write consumers; Phase 16a migrated a third (the webhook failure-state transition). There is exactly ONE unleased tick left: the scheduler's cron due-job selection, which the OAuth refresher rides as a scheduled job. Note that the loser of a contended dispatch currently WAITS on `acquireBlocking` rather than skipping, and the re-read inside the lease checks status and outstanding external work but not whether the job is still due — so tick election is the fix, not an optimisation of it.
+- **A durable webhook / transactional queue** — the other half of the multi-silo story, and not a lock problem at all (see the two ⛔ items above). Until it lands, a `WebOnly` silo's events are dispatched by nobody, and a second `WorkerOnly` / `DispatcherOnly` replica adds no outbound throughput.
 - **`WorkerOnly` → `Host.CreateApplicationBuilder()`** — the silo binds no port at all. The [`IServerHost.createWorkerHost`](../../ToolUp.Platform.Server/Server/IServerHost.fs) helper supports it; the compose-side construction-branch refactor is the follow-up commit on the Phase 16a body. Until it lands, sibling load balancers should not route HTTP at a `WorkerOnly` deployment (Kestrel binds the port but no Giraffe router responds).
 - **Per-silo Platform Admin surface (Phase 61)** — the production-safe equivalent of `/dev/inspect`'s `ProcessProfile` panel, accessible to Owner/Admin without enabling `EnableDevEndpoints`.

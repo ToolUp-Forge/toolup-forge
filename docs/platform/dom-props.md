@@ -8,6 +8,12 @@ a downstream consumer module hand-rolls an SVG element with the
 `Html.g` Feliz primitives, or needs to set a `data-*`, `aria-*`, or
 `role` attribute that Feliz doesn't already type.
 
+Since Phase 307 the three ship in the standalone **`ToolUp.Platform.UI`**
+package alongside the `Toolup.UIToolkit` component set. Their module paths
+are unchanged and `ToolUp.Platform.Client` depends on the package, so an SDK
+consumer needs no fsproj change; a consumer that wants the helpers and the
+toolkit *without* the SDK client tier adds `ToolUp.Platform.UI` alone.
+
 ## Why these modules exist
 
 Feliz's typed `Svg.*` API takes an `ISvgAttribute list`, which doesn't
@@ -224,7 +230,8 @@ let confirmDialog (titleId: string) (descId: string) (body: ReactElement) =
 ## Audit ratchet
 
 `src/ToolUp.Platform.Tests/InProcess/DomAttrCustomAuditTests.fs`
-walks `src/*.Client/Client/**/*.fs` and flags any
+walks `src/*.Client/Client/**/*.fs` and `src/ToolUp.Platform.UI/**/*.fs`
+(where the helper modules and the UI toolkit live since Phase 307) and flags any
 `prop.custom ("data-*"|"aria-*"|"role", _)` call outside the helper
 modules themselves. The test pack runs as part of `dotnet run --project
 src/ToolUp.Platform.Tests/`; regressions fail the next pack run.

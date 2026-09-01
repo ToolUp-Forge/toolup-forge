@@ -124,6 +124,14 @@ let config = {
             // neither project references the other — nor should it, so
             // neither of the existing packs could host them.
             TestPack.create "Reporting" "src/ToolUp.Reporting.Tests/ToolUp.Reporting.Tests.fsproj"
+            // Phase 24 — ToolUp.Offline: the Core retry / status /
+            // drain-selection model and the sync handler's three guards
+            // (server-resolved scope, last-writer-wins conflict
+            // detection, audit stamped with the mutation's ORIGINAL
+            // enqueue time). Pure — no browser, no network, no
+            // credentials. The IndexedDB and Feliz surfaces are
+            // browser-only and ride the Fable compile gate instead.
+            TestPack.create "Offline" "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj"
         ]
 }
 
@@ -294,6 +302,25 @@ let main args =
         "ToolUp.Platform.Core"
         "ToolUp.Platform.Client"
         "ToolUp.Platform.Server"
+        // Phase 307 — declared by Platform.Client (the UI toolkit,
+        // promoted out of the client tier into its own package). This is
+        // exactly the SDK->SDK dependency the note above describes: without
+        // it, Platform.Client packed at the gate version would declare a
+        // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
+        // escalation would fail the gate by name.
+        "ToolUp.Platform.UI"
+        // Also declared by Platform.Client, since Phase 344 promoted the
+        // AG Grid / AG Charts bindings out of the client tier. They were
+        // not added here at the time, and the consequence is not benign:
+        // BOTH ids exist on nuget.org (Feliz.AgGrid 0.0.1, Feliz.AgCharts
+        // 0.23.0 — unrelated packages by another author), so restore
+        // silently fell through to a stranger's package and NU1603 turned
+        // that into a hard error. The `templates` CI job has been red on
+        // main since 344 landed. Found and fixed by Phase 307, which hit
+        // it while adding ToolUp.Platform.UI above — the very case the
+        // note at the head of this list describes.
+        "Feliz.AgGrid"
+        "Feliz.AgCharts"
         // Declared by Platform.Core.
         "ToolUp.AI.Wire"
         // Declared by Platform.Server, and its own ProjectReference.

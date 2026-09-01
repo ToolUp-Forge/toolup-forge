@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Platform Client — Fable + Elmish + Feliz client surface: shell MVU, sidebar navigation, UIToolkit, AgChart / AgGrid bindings, AuthUIProvider, Clerk auth components. Depends on ToolUp.Platform.Core.</Description>
+        <Description>ToolUp.Platform Client — Fable + Elmish + Feliz client surface: shell MVU, sidebar navigation, the app-shell layout, AuthUIProvider, Clerk auth components. Depends on ToolUp.Platform.Core, and on ToolUp.Platform.UI (the UI toolkit) and Feliz.AgGrid / Feliz.AgCharts, all of which it re-exposes transitively.</Description>
         <PackageTags>fsharp;fable;feliz;elmish;sdk;client</PackageTags>
     </PropertyGroup>
     <ItemGroup>
@@ -18,6 +18,21 @@
              licensing surface arrives through these edges. -->
         <ProjectReference Include="..\Feliz.AgGrid\Feliz.AgGrid.fsproj" />
         <ProjectReference Include="..\Feliz.AgCharts\Feliz.AgCharts.fsproj" />
+        <!-- Phase 307 — the UI toolkit (`Toolup.UIToolkit.*`), the icon
+             primitives (`ToolUp.Platform.{Icon,Icons}`) and the typed
+             prop-helper family (`ToolUp.Platform.{SvgProp,DataProp,AriaProp}`),
+             lifted out of this tier into the standalone ToolUp.Platform.UI
+             package. Same shape as the Phase 344 edges above: this tier
+             still depends on the toolkit — the SDK's built-in module views
+             compose it throughout — so an existing consumer needs no fsproj
+             change and no compat shim, because every namespace and module
+             path is preserved (GP 11). What changed is that a consumer who
+             wants the toolkit WITHOUT the SDK can now take it alone.
+             `Client\UI\Toolkit\Layout.fs` deliberately stayed: it is the
+             shell composition layer (AppShell / PageContent /
+             LoadingIndicatorMode / @clerk/react), not a toolkit component.
+             See ToolUp.Platform.UI.fsproj's header. -->
+        <ProjectReference Include="..\ToolUp.Platform.UI\ToolUp.Platform.UI.fsproj" />
     </ItemGroup>
     <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
          under fable/. The library's own .fsproj + .fs files ship inside
@@ -61,7 +76,11 @@
         <Compile Include="Client\Elmish\React.fs" />
         <Compile Include="Client\Elmish\HMR.fs" />
         <Compile Include="Client\Api.fs" />
-        <Compile Include="Client\Icon.fs" />
+        <!-- Phase 307 — `Client\Icon.fs` (the `?react`-import → ReactElement
+             primitive) moved to ToolUp.Platform.UI beside the icon set that
+             is written against it. `ToolUp.Platform.Icon` is unchanged and
+             arrives through the ProjectReference above. -->
+
         <!-- Phase 65 — client-tier default ILogger (ConsoleLogger) +
              Logger module helpers. Foundational utility consumed by
              downstream client files; placed early so every later
@@ -108,27 +127,22 @@
         <Compile Include="Client\UI\AgChartExport.fs" />
         <Compile Include="Client\UI\AgGridCompat.fs" />
         <Compile Include="Client\SidebarPreferences.fs" />
-        <Compile Include="Client\UI\SvgProp.fs" />
-        <!-- v0.5.0 — DataProp + AriaProp typed helpers. Same shape /
-             rationale as SvgProp.fs: wrap `prop.custom` with a typed
-             entry per attribute so the call-site advertises intent
-             and a future audit can ratchet against raw
-             `prop.custom ("data-*"|"aria-*"|"role", _)` shapes
-             (see `DomAttrCustomAuditTests.fs`). React preserves
-             `data-*` / `aria-*` / `role` verbatim today via a
-             hardcoded exception; these helpers insulate against any
-             future React tightening + give a single seam to audit.
+        <!-- v0.5.0 — the SvgProp / DataProp / AriaProp typed helpers wrap
+             `prop.custom` with a typed entry per attribute so the call-site
+             advertises intent and `DomAttrCustomAuditTests` can ratchet
+             against raw `prop.custom ("data-*"|"aria-*"|"role", _)` shapes.
+             Phase 612 needed them ahead of Sidebar.fs, because the rail's
+             roving-tabindex model marks each keyboard stop with a
+             `data-toolup-rail-stop` attribute that the audit forbids
+             writing raw.
 
-             Phase 612 moved these three AHEAD of Sidebar.fs (they were
-             immediately after it). The rail's roving-tabindex model marks
-             each keyboard stop with a `data-toolup-rail-stop` attribute,
-             and the audit above is exactly the reason that must not be a
-             raw `prop.custom` call — so Sidebar.fs has to be able to
-             `open ToolUp.Platform.DataProp`. All three helper modules
-             open nothing but Feliz, so moving them earlier is
-             dependency-free. -->
-        <Compile Include="Client\UI\DataProp.fs" />
-        <Compile Include="Client\UI\AriaProp.fs" />
+             Phase 307 moved all three to ToolUp.Platform.UI — one family,
+             Feliz-only, and the toolkit's `Forms.fs` is written against
+             `dataProp`, so splitting them would have left a standalone
+             toolkit consumer with a third of the family. They now compile
+             a whole assembly ahead of Sidebar.fs, which satisfies the
+             Phase 612 ordering by construction; the module paths are
+             unchanged, so `open ToolUp.Platform.DataProp` still resolves. -->
         <Compile Include="Client\UI\Sidebar.fs" />
         <Compile Include="Client\IAuthBridge.fs" />
         <!-- Pure no-active-team landing config + gate-target precedence.
@@ -183,15 +197,21 @@
              helper; ClientConfig builder consumes them via overrides record. -->
         <Compile Include="Client\BundleConstants.fs" />
         <Compile Include="Client\ClientConfigFromBundleConstants.fs" />
-        <Compile Include="Client\Icons.fs" />
-        <Compile Include="Client\UI\Toolkit\OutputFormatting.fs" />
-        <Compile Include="Client\UI\Toolkit\Tokens.fs" />
-        <Compile Include="Client\UI\Toolkit\Typography.fs" />
+        <!-- Phase 307 — `Client\Icons.fs` (+ its `icons/*.svg`) and the
+             seven `Toolup.UIToolkit` component modules moved to
+             ToolUp.Platform.UI. `Layout.fs` alone stayed: it is the SHELL
+             composition layer, not a toolkit component — `AppShell`
+             composes `Toolup.Sidebar`, `renderPageContent` /
+             `loadingIndicator` are written against `PageContent` /
+             `InputsPaneWidth` / `LoadingIndicatorMode` from
+             SDK.ClientTypes.fs below, and `userButton` imports
+             `@clerk/react`. It therefore has to compile AFTER
+             SDK.ClientTypes.fs and after Sidebar.fs, which is exactly
+             where it already sat. The namespace `Toolup.UIToolkit` now
+             spans two assemblies with disjoint module names, so
+             `open Toolup.UIToolkit` still resolves Tokens / Typography /
+             Layout / Forms / … as one surface. -->
         <Compile Include="Client\UI\Toolkit\Layout.fs" />
-        <Compile Include="Client\UI\Toolkit\Forms.fs" />
-        <Compile Include="Client\UI\Toolkit\Data.fs" />
-        <Compile Include="Client\UI\Toolkit\StateViews.fs" />
-        <Compile Include="Client\UI\Toolkit\Kpi.fs" />
         <Compile Include="Client\NarrativeCommit.fs" />
         <Compile Include="Client\NarrativeRenderer.fs" />
         <Compile Include="Client\Markdown.fs" />
