@@ -243,19 +243,42 @@ let private deliverOnce
 /// in `TECHNICAL_GUIDE.md`; replacing with a durable queue (Akka,
 /// Orleans Reminders, EventGrid) is the Phase 9c migration path.
 ///
-/// **There is no mutual exclusion around delivery or retry, and that is
+/// **There is no mutual exclusion around DELIVERY or RETRY, and that is
 /// intended.** `ExecuteAsync` dequeues an event and `Async.Start`s its
 /// fan-out without awaiting, so deliveries to independent subscriptions
 /// never head-of-line-block each other and a subscription whose endpoint
 /// is timing out through its whole retry ladder cannot stall the queue
 /// for every other subscriber; pacing is the retry loop's own
-/// `Async.Sleep`. So this dispatcher holds no `SemaphoreSlim` to migrate
-/// onto `IDistributedLock` — a spec that assumes one is describing a
-/// different subsystem. What multi-instance operation actually needs
-/// here is the durable queue above (so one replica owns an event) rather
-/// than a lease over a lock this file does not take;
-/// `MultiInstanceAdminCoherenceValidator` warns when `ReplicaCount > 1`
-/// and webhooks are composed.
+/// `Async.Sleep`. So this dispatcher holds no delivery-path
+/// `SemaphoreSlim` to migrate onto `IDistributedLock` — a spec that
+/// assumes one is describing a different subsystem. What multi-instance
+/// operation needs for the DELIVERY half is the durable queue above (so
+/// one replica owns an event) rather than a lease over a lock this file
+/// does not take; `MultiInstanceAdminCoherenceValidator` warns when
+/// `ReplicaCount > 1` and webhooks are composed.
+///
+/// **The FAILURE-STATE half is different, and Phase 16a leases it.** The
+/// retry ladder's terminal step is a read-modify-write over shared,
+/// blob-backed subscription state: read `ConsecutiveFailures` from the
+/// snapshot this delivery started with, write `n + 1`, and flip the
+/// subscription to `Disabled` (plus one `WebhookSubscriptionAutoDisabled`
+/// audit row) when the threshold is crossed. `IWebhookRegistry` documents
+/// that surface as last-write-wins, so two deliveries whose ladders end
+/// concurrently — two events to the same failing subscription on one
+/// replica, or the same subscription reached from two `WorkerOnly` /
+/// `DispatcherOnly` silos — both read `n` and both write `n + 1`. The
+/// counter stalls, so a persistently-failing receiver is never
+/// auto-disabled; and when the threshold IS crossed by both, the
+/// auto-disable fires TWICE, emitting two audit rows for one transition.
+/// That is the same class `BlobBackedPlatformAdminStore`'s write lock was
+/// migrated for in Phase 9i, so it takes the same shape here: a lease on
+/// the injected `IDistributedLock`, with the counter re-read INSIDE the
+/// lease so the increment is against current state rather than the
+/// dispatch-time snapshot (the job scheduler's `dispatchFrom` re-reads
+/// for the same reason).
+///
+/// This leases the failure-state transition, **not tick election** — the
+/// scheduler's cron tick, per chapter 13, remains unleased.
 type WebhookDispatcherService
     (
         registry: IWebhookRegistry,
@@ -282,9 +305,53 @@ type WebhookDispatcherService
         // SSRF policy (operator allowlist from ServerConfig.WebhookUrlAllowedHosts).
         // Re-applied at delivery time to defeat DNS rebinding past the
         // registration-time guard in WebhookApiHandler.
-        urlPolicy: WebhookUrlValidator.WebhookUrlPolicy
+        urlPolicy: WebhookUrlValidator.WebhookUrlPolicy,
+        // Phase 16a — the cross-instance lease seam for the failure-state
+        // read-modify-write (see the type docstring). Optional and
+        // defaulted exactly as `InProcessJobScheduler`'s is: absent means
+        // `InProcessDistributedLock.shared`, the SAME instance `compose`
+        // registers in DI, so a hand-constructed dispatcher and a composed
+        // one contend on one table. Threading a store-backed COMPANION in
+        // needs the lock resolved before compose constructs the subsystem
+        // — the Phase 9c follow-on `SDK.Server.fs` already defers for the
+        // scheduler and the platform-admin store; this parameter is the
+        // seam that follow-on will fill, and the override a test uses.
+        ?distributedLock: IDistributedLock
     ) =
     inherit BackgroundService()
+
+    /// Phase 16a — the lease seam for the failure-state critical section.
+    let failureStateLock = defaultArg distributedLock InProcessDistributedLock.shared
+
+    /// Lock id for one subscription's failure-state transition.
+    /// Namespaced (GP 12 rule 5 promises no ordering across ids, so a
+    /// shared store must not let two subsystems collide) and keyed by
+    /// scope AND subscription id: the same `Guid` in another scope is a
+    /// different subscription, and two subscriptions in one scope must
+    /// not serialise against each other.
+    let failureStateLockId (sub: WebhookSubscription) =
+        sprintf "toolup:webhook-failure-state:%s:%O" sub.ScopeId sub.SubscriptionId
+
+    /// Lease TTL for a failure-state hold. Deliberately SHORT relative to
+    /// the scheduler's one-hour dispatch lease, because the critical
+    /// section is different in kind: two or three registry round-trips
+    /// with no `Async.Sleep` inside it, taken *after* the retry ladder has
+    /// already finished. A minute is generous for that and still reclaims
+    /// promptly from a holder that died mid-transition.
+    let failureStateLeaseTtl = TimeSpan.FromMinutes 1.0
+
+    /// Run `body` holding the subscription's failure-state lease.
+    /// `withLease` waits for the lease, releases on every exit path
+    /// including exceptions, and re-raises with the stack intact.
+    ///
+    /// **Waiting rather than skipping is the correct branch here**, and it
+    /// is the opposite of what a tick-election call site wants. A loser
+    /// that skipped would DROP its increment, which is the very
+    /// lost-update this lease exists to prevent; the scheduler's
+    /// `dispatchFrom` waits for the same reason. Fail-fast `TryAcquire`
+    /// belongs where the losing caller has nothing left to do.
+    let withFailureStateLease (sub: WebhookSubscription) (body: unit -> Async<'T>) : Async<'T> =
+        DistributedLock.withLease failureStateLock (failureStateLockId sub) failureStateLeaseTtl (fun _lease -> body ())
 
     let queue =
         Channel.CreateBounded<DispatchTask>(
@@ -488,10 +555,30 @@ type WebhookDispatcherService
                             // Reset the consecutive-failure counter on success
                             // so a recovered receiver flips the subscription
                             // back out of the auto-disable trigger zone.
+                            //
+                            // Phase 16a — the outer guard reads the
+                            // dispatch-time snapshot and stays OUTSIDE the
+                            // lease deliberately: a healthy subscription
+                            // (the overwhelming majority of deliveries) is
+                            // already at 0 and must not pay an acquire, a
+                            // re-read, or a write for a no-op (GP 13). A
+                            // stale `0` that races an increment is caught
+                            // by the NEXT failure's re-read inside the
+                            // lease, which is the only place the counter is
+                            // ever derived from.
                             if sub.ConsecutiveFailures > 0 then
-                                let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, 0)
+                                do!
+                                    withFailureStateLease sub (fun () -> async {
+                                        let! fresh = registry.GetSubscription(sub.ScopeId, sub.SubscriptionId)
 
-                                ()
+                                        match fresh with
+                                        | Some f when f.ConsecutiveFailures > 0 ->
+                                            let! _ =
+                                                registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, 0)
+
+                                            ()
+                                        | _ -> ()
+                                    })
 
                             attempt <- retryPolicy.MaxAttempts + 1 // exit
                         | _ -> attempt <- attempt + 1
@@ -531,18 +618,61 @@ type WebhookDispatcherService
                     // the operator has visibility into the throttle event
                     // without the subscription being penalised.
                     if not wasRateLimitRefused then
-                        let newCount = sub.ConsecutiveFailures + 1
+                        // Phase 16a — read-modify-write over shared
+                        // subscription state, held under the
+                        // subscription's failure-state lease. Both halves
+                        // are inside it: the counter is RE-READ here
+                        // rather than derived from `sub` (the
+                        // dispatch-time snapshot, by now as old as the
+                        // whole retry ladder), and the auto-disable
+                        // decision is made from the value this delivery
+                        // actually wrote. Outside the lease the two
+                        // concurrent ladders described on the type both
+                        // read `n`, both write `n + 1`, and the counter
+                        // never reaches the threshold.
+                        do!
+                            withFailureStateLease sub (fun () -> async {
+                                let! fresh = registry.GetSubscription(sub.ScopeId, sub.SubscriptionId)
 
-                        let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, newCount)
+                                // A subscription deleted while its ladder
+                                // ran has no state to advance. Its absence
+                                // is not an error — `DeleteSubscription`
+                                // is idempotent by contract — so this is
+                                // silent, matching how the delivery paths
+                                // already treat a vanished target.
+                                match fresh with
+                                | None -> ()
+                                | Some current ->
+                                    let newCount = current.ConsecutiveFailures + 1
 
-                        if newCount >= retryPolicy.DisableAfterConsecutiveFailures then
-                            let! _ = registry.UpdateStatus(sub.ScopeId, sub.SubscriptionId, WebhookStatus.Disabled)
+                                    let! _ = registry.SetConsecutiveFailures(sub.ScopeId, sub.SubscriptionId, newCount)
 
-                            do!
-                                emitAudit sub.ScopeId WebhookEventTypes.SubscriptionAutoDisabled {|
-                                    SubscriptionId = sub.SubscriptionId
-                                    ConsecutiveFailures = newCount
-                                |}
+                                    // The status re-read makes the
+                                    // auto-disable idempotent as well as
+                                    // exclusive: a subscription an admin
+                                    // (or a lease-holder ahead of us)
+                                    // already moved out of `Active` must
+                                    // not be re-disabled, and must not
+                                    // emit a second
+                                    // `SubscriptionAutoDisabled` row for
+                                    // one transition.
+                                    if
+                                        newCount >= retryPolicy.DisableAfterConsecutiveFailures
+                                        && current.Status = WebhookStatus.Active
+                                    then
+                                        let! _ =
+                                            registry.UpdateStatus(
+                                                sub.ScopeId,
+                                                sub.SubscriptionId,
+                                                WebhookStatus.Disabled
+                                            )
+
+                                        do!
+                                            emitAudit sub.ScopeId WebhookEventTypes.SubscriptionAutoDisabled {|
+                                                SubscriptionId = sub.SubscriptionId
+                                                ConsecutiveFailures = newCount
+                                            |}
+                            })
             finally
                 deliveryActivityOpt |> Option.iter _.Dispose()
     }
@@ -605,6 +735,39 @@ type WebhookDispatcherService
             |> Async.Parallel
             |> Async.Ignore
     }
+
+    /// Phase 16a — kept additive for the public-API approval gate: the
+    /// optional `distributedLock` parameter folds the primary constructor
+    /// into one widened arity, which would otherwise read as a REMOVAL of
+    /// the ten-argument token consumers construct against today. Declared
+    /// here rather than beside the primary constructor because F# requires
+    /// every `let` binding to precede the first member (FS0960).
+    new
+        (
+            registry,
+            deliveryLog,
+            eventStore,
+            httpClient,
+            retryPolicy,
+            logger,
+            activitySink,
+            secretStore,
+            getRateLimiter,
+            urlPolicy
+        ) =
+        new WebhookDispatcherService(
+            registry,
+            deliveryLog,
+            eventStore,
+            httpClient,
+            retryPolicy,
+            logger,
+            activitySink,
+            secretStore,
+            getRateLimiter,
+            urlPolicy,
+            ?distributedLock = None
+        )
 
     interface IWebhookDispatcher with
         member _.Dispatch(event) =
@@ -768,4 +931,40 @@ let create
         secretStore,
         getRateLimiter,
         urlPolicy
+    )
+
+/// Phase 16a — `create` with an explicit `IDistributedLock` for the
+/// failure-state critical section (see `WebhookDispatcherService`).
+///
+/// Additive rather than a widened `create`: adding a parameter to the
+/// curried function above would retype its token and read as a removal at
+/// the public-API approval gate, breaking every consumer that composes a
+/// dispatcher by hand. `create` remains the path for the single-instance
+/// default; this one is for a deployment (or a test) that has a
+/// store-backed lock in hand.
+let createWithLock
+    (registry: IWebhookRegistry)
+    (deliveryLog: IWebhookDeliveryLog)
+    (eventStore: IEventStore)
+    (httpClient: HttpClient)
+    (retryPolicy: WebhookRetryPolicy)
+    (logger: ILogger)
+    (activitySink: IActivitySink)
+    (secretStore: ISecretStore)
+    (getRateLimiter: unit -> IRateLimiter)
+    (urlPolicy: WebhookUrlValidator.WebhookUrlPolicy)
+    (distributedLock: IDistributedLock)
+    : WebhookDispatcherService =
+    new WebhookDispatcherService(
+        registry,
+        deliveryLog,
+        eventStore,
+        httpClient,
+        retryPolicy,
+        logger,
+        activitySink,
+        secretStore,
+        getRateLimiter,
+        urlPolicy,
+        distributedLock = distributedLock
     )
