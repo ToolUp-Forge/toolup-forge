@@ -1274,7 +1274,10 @@ type TenantLifecycleAdminMessages = {
     ColumnDetail: string
     ColumnElapsed: string
     /// Per-hook elapsed-time cell — takes the elapsed milliseconds.
-    ElapsedMsLabel: int -> string
+    /// `int64`, matching `LifecycleHookOutcome.ElapsedMs` — the arity is
+    /// typed, so a mismatch here is a compile error rather than a
+    /// silently-truncated number.
+    ElapsedMsLabel: int64 -> string
 }
 
 /// The built-in module-visibility profile editor (`ModuleVisibilityAdminUI`).
@@ -1558,7 +1561,7 @@ type PublicUtilityFetchMessages = {
     RequestFailed: int -> string
     /// The request itself threw (offline, DNS, CORS). Takes the
     /// underlying exception message.
-    NetworkError: string
+    NetworkError: string -> string
 }
 
 /// Widget 1 — the traffic-dashboard stub. The server-side
