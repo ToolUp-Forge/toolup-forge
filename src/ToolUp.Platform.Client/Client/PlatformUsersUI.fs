@@ -426,7 +426,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some "A reason is required for the audit trail."
+                                Error = Some(MessageCatalog.english.PlatformUsers.ReasonRequired)
                         }
             },
             Cmd.none
@@ -436,7 +436,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some "Enter or request a confirmation token to proceed."
+                                Error = Some(MessageCatalog.english.PlatformUsers.TokenRequired)
                         }
             },
             Cmd.none
@@ -474,9 +474,9 @@ let private displayLabels (directory: Map<string, UserSummary>) (userId: string)
     | None -> userId, None
 
 /// Membership summary — "3 teams · Admin, Member" — or a team-less badge.
-let private membershipLabel (p: PrincipalSummary) : string =
+let private membershipLabel (msgs: PlatformUsersMessages) (p: PrincipalSummary) : string =
     if p.TeamLess then
-        "no teams"
+        msgs.NoTeams
     else
         let roles =
             p.Memberships
@@ -484,8 +484,7 @@ let private membershipLabel (p: PrincipalSummary) : string =
             |> List.distinct
             |> String.concat ", "
 
-        let teamWord = if List.length p.Memberships = 1 then "team" else "teams"
-        sprintf "%d %s · %s" (List.length p.Memberships) teamWord roles
+        msgs.MembershipSummary (List.length p.Memberships) roles
 
 let private lastSeenLabel (p: PrincipalSummary) : string =
     match p.LastSeenAt with
@@ -498,19 +497,19 @@ let private badge (cls: string) (label: string) =
         prop.text label
     ]
 
-let private previewResultBadge (item: LifecyclePreviewItem) =
+let private previewResultBadge (msgs: PlatformUsersMessages) (item: LifecyclePreviewItem) =
     if not item.HasPreview then
-        badge "bg-gray-100 text-gray-500" "no preview"
+        badge "bg-gray-100 text-gray-500" msgs.NoPreviewBadge
     elif item.WouldAffect = 0 then
         badge "bg-green-50 text-green-700" "0"
     else
         badge "bg-amber-50 text-amber-800" (string item.WouldAffect)
 
-let private summaryResultBadge (result: LifecycleHookResult) =
+let private summaryResultBadge (msgs: PlatformUsersMessages) (result: LifecycleHookResult) =
     match result with
-    | LifecycleHookResult.Completed -> badge "bg-green-100 text-green-700" "Completed"
-    | LifecycleHookResult.Skipped _ -> badge "bg-yellow-100 text-yellow-800" "Skipped"
-    | LifecycleHookResult.Failed _ -> badge "bg-red-100 text-red-700" "Failed"
+    | LifecycleHookResult.Completed -> badge "bg-green-100 text-green-700" msgs.OutcomeCompleted
+    | LifecycleHookResult.Skipped _ -> badge "bg-yellow-100 text-yellow-800" msgs.OutcomeSkipped
+    | LifecycleHookResult.Failed _ -> badge "bg-red-100 text-red-700" msgs.OutcomeFailed
 
 let private summaryResultDetail (result: LifecycleHookResult) =
     match result with
@@ -537,21 +536,21 @@ let private modalError (state: OffboardModalState) =
     | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
     | None -> Html.none
 
-let private kindTitle =
+let private kindTitle (msgs: PlatformUsersMessages) =
     function
-    | PlainOffboard -> "Offboard user"
-    | ExportOffboard -> "Export & offboard user"
+    | PlainOffboard -> msgs.OffboardTitle
+    | ExportOffboard -> msgs.ExportOffboardTitle
 
-let private primaryActionLabel (state: OffboardModalState) =
+let private primaryActionLabel (msgs: PlatformUsersMessages) (state: OffboardModalState) =
     if state.Busy then
-        "Working…"
+        msgs.Working
     else
         match state.Step, state.Kind with
-        | Confirming, _ -> "Confirm offboard"
-        | _, PlainOffboard -> "Offboard"
-        | _, ExportOffboard -> "Export & offboard"
+        | Confirming, _ -> msgs.ConfirmOffboard
+        | _, PlainOffboard -> msgs.OffboardAction
+        | _, ExportOffboard -> msgs.ExportOffboardAction
 
-let private primaryButton (state: OffboardModalState) (dispatch: Msg -> unit) =
+let private primaryButton (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
     Html.button [
         prop.disabled state.Busy
         prop.className [
@@ -561,23 +560,23 @@ let private primaryButton (state: OffboardModalState) (dispatch: Msg -> unit) =
             else
                 "bg-red-600 text-white hover:bg-red-700"
         ]
-        prop.text (primaryActionLabel state)
+        prop.text (primaryActionLabel msgs state)
         prop.onClick (fun _ -> dispatch SubmitOffboard)
     ]
 
-let private reasonField (state: OffboardModalState) (dispatch: Msg -> unit) =
+let private reasonField (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
     Html.div [
         prop.children [
             Html.label [
                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text "Reason (audited)"
+                prop.text msgs.ReasonLabel
             ]
             // Per-keystroke binding into modal state — same idiom as
             // TeamManagerUI's single-input modals; the toolkit input
             // commits on blur and would drop the typed value here.
             Html.textarea [
                 prop.value state.Reason
-                prop.placeholder "e.g. departed employee cleanup"
+                prop.placeholder msgs.ReasonPlaceholder
                 prop.rows 2
                 prop.onChange (fun (v: string) -> dispatch (SetOffboardReason v))
                 prop.className
@@ -586,7 +585,7 @@ let private reasonField (state: OffboardModalState) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private previewTable (preview: LifecyclePreview) =
+let private previewTable (msgs: PlatformUsersMessages) (preview: LifecyclePreview) =
     Html.div [
         prop.className "border border-border rounded-lg overflow-hidden"
         prop.children [
@@ -600,15 +599,15 @@ let private previewTable (preview: LifecyclePreview) =
                                 prop.children [
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text "Hook"
+                                        prop.text msgs.ColumnHook
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text "Would affect"
+                                        prop.text msgs.ColumnWouldAffect
                                     ]
                                     Html.th [
                                         prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text "Detail"
+                                        prop.text msgs.ColumnDetail
                                     ]
                                 ]
                             ]
@@ -623,7 +622,7 @@ let private previewTable (preview: LifecyclePreview) =
                                         Html.td [ prop.className "px-3 py-2 font-mono"; prop.text item.HookName ]
                                         Html.td [
                                             prop.className "px-3 py-2"
-                                            prop.children [ previewResultBadge item ]
+                                            prop.children [ previewResultBadge msgs item ]
                                         ]
                                         Html.td [
                                             prop.className "px-3 py-2 text-gray-600 break-all"
@@ -638,18 +637,20 @@ let private previewTable (preview: LifecyclePreview) =
         ]
     ]
 
-let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportArchive option) =
+let private summaryTable
+    (msgs: PlatformUsersMessages)
+    (summary: LifecycleSummary)
+    (archive: LifecycleExportArchive option)
+    =
     Html.div [
         prop.className "space-y-3"
         prop.children [
             Html.div [
                 prop.className "flex gap-2 flex-wrap"
                 prop.children [
-                    badge
-                        "bg-green-50 text-green-700"
-                        (sprintf "%d completed" (LifecycleSummary.completedCount summary))
-                    badge "bg-yellow-50 text-yellow-800" (sprintf "%d skipped" (LifecycleSummary.skippedCount summary))
-                    badge "bg-red-50 text-red-700" (sprintf "%d failed" (LifecycleSummary.failedCount summary))
+                    badge "bg-green-50 text-green-700" (msgs.CompletedCount(LifecycleSummary.completedCount summary))
+                    badge "bg-yellow-50 text-yellow-800" (msgs.SkippedCount(LifecycleSummary.skippedCount summary))
+                    badge "bg-red-50 text-red-700" (msgs.FailedCount(LifecycleSummary.failedCount summary))
                     badge "bg-gray-100 text-gray-600" (sprintf "%d ms" (int summary.TotalElapsedMs))
                 ]
             ]
@@ -661,7 +662,7 @@ let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportAr
                     prop.children [
                         Html.p [
                             prop.className "font-medium mb-1"
-                            prop.text (sprintf "Export archive written (%d segments)" a.SegmentCount)
+                            prop.text (msgs.ExportArchiveWritten a.SegmentCount)
                         ]
                         Html.p [ prop.text (sprintf "%s/%s" a.Container a.BlobPath) ]
                         Html.p [
@@ -673,10 +674,7 @@ let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportAr
             | None -> Html.none
 
             if List.isEmpty summary.Outcomes then
-                Html.p [
-                    prop.className "text-xs text-gray-500"
-                    prop.text "The offboard ran with no registered lifecycle hooks (a valid no-op run)."
-                ]
+                Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoHooksRan ]
             else
                 Html.div [
                     prop.className "border border-border rounded-lg overflow-hidden"
@@ -691,15 +689,15 @@ let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportAr
                                             prop.children [
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Hook"
+                                                    prop.text msgs.ColumnHook
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Result"
+                                                    prop.text msgs.ColumnResult
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Detail"
+                                                    prop.text msgs.ColumnDetail
                                                 ]
                                             ]
                                         ]
@@ -717,7 +715,7 @@ let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportAr
                                                     ]
                                                     Html.td [
                                                         prop.className "px-3 py-2"
-                                                        prop.children [ summaryResultBadge outcome.Result ]
+                                                        prop.children [ summaryResultBadge msgs outcome.Result ]
                                                     ]
                                                     Html.td [
                                                         prop.className "px-3 py-2 text-gray-600 break-all"
@@ -734,17 +732,22 @@ let private summaryTable (summary: LifecycleSummary) (archive: LifecycleExportAr
         ]
     ]
 
-let private offboardModalView (state: OffboardModalState) (label: string) (dispatch: Msg -> unit) =
+let private offboardModalView
+    (msgs: PlatformUsersMessages)
+    (state: OffboardModalState)
+    (label: string)
+    (dispatch: Msg -> unit)
+    =
     let heading =
         match state.Step with
-        | Completed _ -> "Offboard complete"
-        | _ -> kindTitle state.Kind
+        | Completed _ -> msgs.OffboardCompleteTitle
+        | _ -> kindTitle msgs state.Kind
 
     let subject =
         Html.p [
             prop.className "text-sm text-muted"
             prop.children [
-                Html.span [ prop.text (sprintf "%s — scope " label) ]
+                Html.span [ prop.text (msgs.SubjectLabel label) ]
                 Html.span [ prop.className "font-mono text-xs break-all"; prop.text state.ScopeId ]
             ]
         ]
@@ -758,11 +761,11 @@ let private offboardModalView (state: OffboardModalState) (label: string) (dispa
 
         match state.Step with
         | Compose ->
-            reasonField state dispatch
+            reasonField msgs state dispatch
             modalError state
 
             footer [
-                Forms.Button.secondary "Cancel" (fun () -> dispatch CloseOffboard)
+                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
                 Html.button [
                     prop.disabled state.Busy
                     prop.className [
@@ -772,47 +775,38 @@ let private offboardModalView (state: OffboardModalState) (label: string) (dispa
                         else
                             "border-border text-text hover:bg-gray-50"
                     ]
-                    prop.text "Preview impact"
+                    prop.text msgs.PreviewImpact
                     prop.onClick (fun _ -> dispatch RequestPreview)
                 ]
-                primaryButton state dispatch
+                primaryButton msgs state dispatch
             ]
 
         | Previewed preview ->
             Html.p [
                 prop.className "text-sm text-muted"
-                prop.text (
-                    sprintf
-                        "%d record(s) / key(s) / job(s) would be affected across the registered hooks. This does not mutate anything — proceed to run the offboard."
-                        preview.TotalWouldAffect
-                )
+                prop.text (msgs.PreviewSummary preview.TotalWouldAffect)
             ]
 
-            previewTable preview
-            reasonField state dispatch
+            previewTable msgs preview
+            reasonField msgs state dispatch
             modalError state
 
             footer [
-                Forms.Button.secondary "Cancel" (fun () -> dispatch CloseOffboard)
-                primaryButton state dispatch
+                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
+                primaryButton msgs state dispatch
             ]
 
         | Confirming ->
             Html.div [
                 prop.className "text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800"
                 prop.children [
-                    Html.p [ prop.className "font-medium mb-1"; prop.text "Confirmation required" ]
                     Html.p [
-                        prop.text
-                            "This deployment gates offboards behind a confirmation token. Request one below (single-approver policy), or paste a token a second admin minted (two-person policy)."
+                        prop.className "font-medium mb-1"
+                        prop.text msgs.ConfirmationRequiredHeading
                     ]
+                    Html.p [ prop.text msgs.ConfirmationRequiredBody ]
                     match state.Kind with
-                    | ExportOffboard ->
-                        Html.p [
-                            prop.className "mt-1"
-                            prop.text
-                                "Note: export-then-offboard has no confirmation-gated path — the confirmed run performs the plain erasure without the pre-export."
-                        ]
+                    | ExportOffboard -> Html.p [ prop.className "mt-1"; prop.text msgs.ExportConfirmationNote ]
                     | PlainOffboard -> Html.none
                 ]
             ]
@@ -825,12 +819,12 @@ let private offboardModalView (state: OffboardModalState) (label: string) (dispa
                         prop.children [
                             Html.label [
                                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                                prop.text "Confirmation token"
+                                prop.text msgs.ConfirmationTokenLabel
                             ]
                             Html.input [
                                 prop.type' "text"
                                 prop.value state.Token
-                                prop.placeholder "paste token, or request one →"
+                                prop.placeholder msgs.ConfirmationTokenPlaceholder
                                 prop.onChange (fun (v: string) -> dispatch (SetOffboardToken v))
                                 prop.className
                                     "border border-border rounded-lg px-3 py-2 w-full text-xs font-mono focus:outline-none focus:border-brand"
@@ -846,7 +840,7 @@ let private offboardModalView (state: OffboardModalState) (label: string) (dispa
                             else
                                 "border-border text-text hover:bg-gray-50"
                         ]
-                        prop.text "Request token"
+                        prop.text msgs.RequestToken
                         prop.onClick (fun _ -> dispatch RequestToken)
                     ]
                 ]
@@ -855,18 +849,23 @@ let private offboardModalView (state: OffboardModalState) (label: string) (dispa
             modalError state
 
             footer [
-                Forms.Button.secondary "Cancel" (fun () -> dispatch CloseOffboard)
-                primaryButton state dispatch
+                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
+                primaryButton msgs state dispatch
             ]
 
         | Completed(summary, archive) ->
-            summaryTable summary archive
-            footer [ Forms.Button.primary "Close" (fun () -> dispatch CloseOffboard) ]
+            summaryTable msgs summary archive
+            footer [ Forms.Button.primary msgs.Close (fun () -> dispatch CloseOffboard) ]
     ]
 
 // ─── List row ────────────────────────────────────────────────────────
 
-let private principalRow (directory: Map<string, UserSummary>) (p: PrincipalSummary) (dispatch: Msg -> unit) =
+let private principalRow
+    (msgs: PlatformUsersMessages)
+    (directory: Map<string, UserSummary>)
+    (p: PrincipalSummary)
+    (dispatch: Msg -> unit)
+    =
     let primaryLabel, secondaryLabel = displayLabels directory p.UserId
 
     Html.div [
@@ -880,9 +879,9 @@ let private principalRow (directory: Map<string, UserSummary>) (p: PrincipalSumm
                         prop.children [
                             Html.span [ prop.className "font-medium break-all"; prop.text primaryLabel ]
                             if p.TeamLess then
-                                badge "bg-orange-100 text-orange-700" "team-less"
+                                badge "bg-orange-100 text-orange-700" msgs.TeamLessBadge
                             if p.HasUserScopeData then
-                                badge "bg-gray-100 text-gray-600" "has data"
+                                badge "bg-gray-100 text-gray-600" msgs.HasDataBadge
                         ]
                     ]
                     match secondaryLabel with
@@ -890,7 +889,7 @@ let private principalRow (directory: Map<string, UserSummary>) (p: PrincipalSumm
                     | None -> Html.none
                     Html.span [
                         prop.className "text-xs text-muted"
-                        prop.text (sprintf "%s · last seen %s" (membershipLabel p) (lastSeenLabel p))
+                        prop.text (msgs.RowSubtitle (membershipLabel msgs p) (lastSeenLabel p))
                     ]
                     Html.span [
                         prop.className "text-xs text-gray-400 font-mono break-all"
@@ -901,13 +900,14 @@ let private principalRow (directory: Map<string, UserSummary>) (p: PrincipalSumm
             Html.div [
                 prop.className "flex gap-2 flex-wrap"
                 prop.children [
-                    Forms.Button.secondary "Preview" (fun () -> dispatch (OpenOffboard(p.UserId, PlainOffboard)))
-                    Forms.Button.secondary "Export & offboard" (fun () ->
+                    Forms.Button.secondary msgs.PreviewAction (fun () ->
+                        dispatch (OpenOffboard(p.UserId, PlainOffboard)))
+                    Forms.Button.secondary msgs.ExportOffboardAction (fun () ->
                         dispatch (OpenOffboard(p.UserId, ExportOffboard)))
                     Html.button [
                         prop.className
                             "px-3 py-1.5 text-sm rounded-lg border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
-                        prop.text "Offboard"
+                        prop.text msgs.OffboardAction
                         prop.onClick (fun _ -> dispatch (OpenOffboard(p.UserId, PlainOffboard)))
                     ]
                 ]
@@ -917,7 +917,15 @@ let private principalRow (directory: Map<string, UserSummary>) (p: PrincipalSumm
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook called there joins the
+/// shell's hook order and breaks the moment the active module changes. A
+/// component of its own has a stable identity and its own hook site.
+[<ReactComponent>]
+let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).PlatformUsers
+
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -928,7 +936,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     Html.span [ prop.text msg ]
                     Html.button [
                         prop.className "text-xs text-red-600 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -947,12 +955,12 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                             prop.isChecked model.TeamLessOnly
                             prop.onChange (fun (_: bool) -> dispatch ToggleTeamLessOnly)
                         ]
-                        Html.span [ prop.text "Team-less only" ]
+                        Html.span [ prop.text msgs.TeamLessOnly ]
                     ]
                 ]
                 Html.button [
                     prop.className "text-xs text-brand hover:underline"
-                    prop.text "Refresh"
+                    prop.text msgs.Refresh
                     prop.onClick (fun _ -> dispatch LoadPrincipals)
                 ]
             ]
@@ -960,7 +968,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
     let listPane =
         match model.Principals with
-        | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading principals…" ]
+        | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingPrincipals ]
         | Some principals ->
             let visible =
                 if model.TeamLessOnly then
@@ -974,24 +982,20 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 Html.div [
                     prop.className "bg-white rounded-lg border border-border p-6 text-center"
                     prop.children [
-                        Html.p [ prop.className "text-sm text-gray-600"; prop.text "No principals to show." ]
-                        Html.p [
-                            prop.className "text-xs text-gray-400 mt-1"
-                            prop.text
-                                "The registry is a derived projection over memberships, user scopes and sign-in audit. If you expected users here, check that the storage / event-store substrate is composed."
-                        ]
+                        Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoPrincipalsHeading ]
+                        Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoPrincipalsBody ]
                     ]
                 ]
             elif List.isEmpty visible then
                 Html.p [
                     prop.className "text-sm text-gray-500 py-4"
-                    prop.text "No team-less principals — every enumerated user belongs to at least one team."
+                    prop.text msgs.NoTeamLessPrincipals
                 ]
             else
                 Html.div [
                     prop.children [
                         for p in visible do
-                            principalRow model.Directory p dispatch
+                            principalRow msgs model.Directory p dispatch
                     ]
                 ]
 
@@ -1002,21 +1006,19 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Users" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text
-                    "Every principal the platform has evidence for — memberships, personal scopes, and sign-in audit. Flag team-less accounts and offboard them end-to-end."
-            ]
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
             errorBanner
             filterBar
             listPane
 
             match model.Offboard with
-            | Some state -> offboardModalView state (selfLabelForModal state) dispatch
+            | Some state -> offboardModalView msgs state (selfLabelForModal state) dispatch
             | None -> Html.none
         ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = PlatformUsersBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

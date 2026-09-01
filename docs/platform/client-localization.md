@@ -181,3 +181,38 @@ Some strings the SDK renders are deliberately outside it:
   values, boot-degradation source keys, module ids. Localising these would
   break the round-trip they exist for. Where such a key is *displayed*, the
   display projection is localised and the key is not.
+- **Date and number formats.** A format specifier baked into a translated
+  template would make the format a property of the *language*. Formatting
+  happens at the call site (see "Dates, numbers and currency" above) and the
+  catalog function receives a plain string.
+
+## Surfaces that render outside the provider (Phase 751)
+
+Two SDK surfaces render *around* or *before* the shell's own view, so the
+provider `Client.view` mounts does not reach them. Both are handled, and both
+are worth knowing if you write a surface of the same shape:
+
+- **The sign-in screens** (`OidcClient`, `PasskeyClient`,
+  `EntraExternalIdClient`). `AuthUIProvider.gate` WRAPS the shell — a
+  signed-out visitor sees the companion's screen and none of `view`. So
+  `Client.viewWithSignIn` mounts the catalog provider *outside* the gate as
+  well. Without that, a deployment's override would have reached every page
+  except the one a signed-out visitor actually sees. The screens themselves
+  are localised through additive `…With` entry points
+  (`OidcAuthUI.SignInScreenWith`, `PasskeyAuthUI.ErrorScreenWith`,
+  `OidcTokenStore.describeErrorWith`), never through a widened arity — that
+  would read as a removal in the public-API approval baseline. `ClerkUI`
+  contributes nothing: Clerk renders its own themed screens.
+- **The invitation-accept page.** `InviteAccept.render ()` mounts its own
+  React root from a `PublicEntryDispatchers` short-circuit, before
+  `Client.program` exists at all, so neither provider mount reaches it. Use
+  **`InviteAccept.renderWith config`** from your dispatcher to get the
+  resolved catalog; `render ()` keeps its arity and its English-only
+  behaviour for consumers already calling it. The team default locale is not
+  consulted there — there is no active team on an invite link — so
+  `TeamDefault` falls through to the visitor's browser preference.
+
+If you build a surface that mounts its own root, mount
+`MessageCatalogProvider.provider` with it; a `useMessages ()` outside every
+provider silently returns English rather than failing, which is the right
+behaviour for a test harness and the wrong one to ship unnoticed.

@@ -102,6 +102,20 @@ let shouldResumeAccept (currentToken: string option) (stashed: string option) : 
 let InviteAccept () : ReactElement =
     let state, setState = React.useState AcceptState.Accepting
 
+    // Phase 751 — `InviteAccept` is itself the `[<ReactComponent>]`
+    // entry point (there is no separate shell `view` invoking it
+    // inline), so the hook is called directly here rather than via a
+    // `…Body` wrapper.
+    //
+    // This component is mounted as its OWN React root against
+    // `"elmish-app"`, from a `PublicEntryDispatchers` short-circuit that
+    // runs BEFORE the shell's `program` / `viewWithSignIn` is ever built
+    // — so neither of the shell's `MessageCatalogProvider` mounts wraps
+    // this tree. `renderWith` below is the entry point that provides the
+    // resolved catalog; through the older `render ()` this hook returns
+    // the outside-a-provider default, which is English.
+    let msgs = (MessageCatalogProvider.useMessages ()).InviteAccept
+
     // Shared accept driver — used both by the initial mount and by
     // the auto-resume observer when the visitor returns signed-in.
     // Pure function of the token; resolves to a terminal state via
@@ -138,12 +152,12 @@ let InviteAccept () : ReactElement =
             // exception message; the typed path above is the
             // canonical sign-in signal. Stash kept so a
             // subsequent retry (manual or auto) can drain it.
-            setState (AcceptState.Failed(sprintf "Network error: %s" ex.Message))
+            setState (AcceptState.Failed(msgs.NetworkError ex.Message))
     }
 
     React.useEffectOnce (fun () ->
         match extractToken window.location.pathname with
-        | None -> setState (AcceptState.Failed "No invitation token in URL.")
+        | None -> setState (AcceptState.Failed msgs.NoToken)
         | Some token ->
             stashToken token
             runAccept token |> Async.StartImmediate)
@@ -191,39 +205,35 @@ let InviteAccept () : ReactElement =
         pageFrame [
             Html.h1 [
                 prop.className "text-2xl font-semibold text-brand font-[Umami]"
-                prop.text "Sign in to accept"
+                prop.text msgs.SignInHeading
             ]
             Html.p [
                 prop.className $"{Tokens.Text.secondary} text-center"
-                prop.text
-                    "You'll need to sign in before you can join the team. Sign in at the home page, then re-open this invitation link."
+                prop.text msgs.SignInBody
             ]
             Html.a [
                 prop.className $"{Tokens.Button.primary} w-full text-center"
-                prop.text "Go to sign in"
+                prop.text msgs.GoToSignIn
                 prop.href "/"
             ]
         ]
     | AcceptState.Accepting ->
         pageFrame [
-            Html.div [
-                prop.className $"{Tokens.Text.secondary} text-sm"
-                prop.text "Joining the team…"
-            ]
+            Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.Joining ]
         ]
     | AcceptState.Accepted result ->
         pageFrame [
             Html.h1 [
                 prop.className "text-2xl font-semibold text-brand font-[Umami]"
-                prop.text $"Welcome to {result.TeamName}"
+                prop.text (msgs.WelcomeHeading result.TeamName)
             ]
             Html.p [
                 prop.className $"{Tokens.Text.secondary} text-center"
-                prop.text $"You've joined as {TeamRoles.displayName result.Role}."
+                prop.text (msgs.JoinedAs(TeamRoles.displayName result.Role))
             ]
             Html.a [
                 prop.className $"{Tokens.Button.primary} w-full text-center"
-                prop.text "Continue to the app"
+                prop.text msgs.ContinueToApp
                 prop.href "/"
             ]
         ]
@@ -231,7 +241,7 @@ let InviteAccept () : ReactElement =
         pageFrame [
             Html.h1 [
                 prop.className "text-xl font-semibold text-brand font-[Umami]"
-                prop.text "Could not accept invitation"
+                prop.text msgs.FailedHeading
             ]
             Html.p [
                 prop.className $"{Tokens.Colours.error} text-center text-sm"
@@ -239,7 +249,7 @@ let InviteAccept () : ReactElement =
             ]
             Html.a [
                 prop.className $"{Tokens.Button.secondary} w-full text-center"
-                prop.text "Go to home"
+                prop.text msgs.GoToHome
                 prop.href "/"
             ]
         ]
@@ -265,3 +275,38 @@ let render () : unit =
     if not (isNull root) then
         CsrfClient.prefetch ()
         ReactDOM.createRoot(root).render (InviteAccept())
+
+/// Mount the invitation-accept page with the deployment's RESOLVED
+/// message catalog.
+///
+/// Phase 751 — this page mounts its own React root from a
+/// `PublicEntryDispatchers` short-circuit, before `Client.program` is
+/// ever built, so neither of the shell's two `MessageCatalogProvider`
+/// mounts reaches it: `useMessages ()` inside `InviteAccept` returns the
+/// built-in English catalog whatever the deployment configured. Swept
+/// strings alone would therefore have given a translator fields that
+/// nothing could ever change. This entry point provides the catalog the
+/// `ClientConfig` the dispatcher already holds resolves to.
+///
+/// The TEAM default locale is deliberately not consulted, and its
+/// absence is not a gap: there is no active team on an invite link —
+/// accepting one is how the visitor gets a team — so `TeamDefault` falls
+/// through to the browser preference, which is the best answer available
+/// about somebody the deployment has never seen.
+///
+/// Additive, per 444's recorded pattern: `render ()` above keeps its
+/// arity and its behaviour, because widening it would read as a REMOVAL
+/// in the public-API approval baseline and would break every consumer
+/// whose dispatcher already calls it.
+let renderWith (config: ClientConfig) : unit =
+    let root = document.getElementById "elmish-app"
+
+    if not (isNull root) then
+        CsrfClient.prefetch ()
+
+        let locale =
+            MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+
+        let catalog = MessageCatalog.resolve locale config.MessageCatalogOverride
+
+        ReactDOM.createRoot(root).render (MessageCatalogProvider.provider catalog (InviteAccept()))

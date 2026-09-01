@@ -5,6 +5,12 @@ module KnowledgeListView
 
 open System
 open Feliz
+// Phase 751 — `ToolUp.Platform` is opened for the message catalog, and it
+// must come BEFORE `SharedTypes`: both namespaces declare an
+// `IngestionStatus`, and the LAST open wins in F#. Opened after
+// `SharedTypes`, the platform type shadows this package's own and every
+// status match in the file stops compiling.
+open ToolUp.Platform
 open SharedTypes
 
 // ─── Version gate (Phase 636) ──────────────────────────────────────
@@ -33,38 +39,42 @@ let hasVersionHistory (doc: KnowledgeDocument) = versionHasHistory doc.Version
 
 module Badges =
 
-    let statusBadge (status: IngestionStatus) =
+    /// Phase 751 — the localised form. Plain (non-component) helper
+    /// taking `msgs` as its first parameter; called from within
+    /// `KnowledgeListView`'s own component render and from `ClientView`'s
+    /// `noteRow` (itself rendered inside `NotesPanel`, a component).
+    let statusBadgeWith (msgs: KnowledgeListMessages) (status: IngestionStatus) =
         match status with
         | Queued ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
-                prop.text "Queued"
+                prop.text msgs.Status.Queued
             ]
         | ExtractingText ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-                prop.text "Extracting…"
+                prop.text msgs.Status.ExtractingBadge
             ]
         | Embedding(processed, total) ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700"
-                prop.text (sprintf "Embedding %d/%d" processed total)
+                prop.text (msgs.Status.EmbeddingProgress processed total)
             ]
         | Complete count ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-                prop.text (sprintf "Indexed (%d chunks)" count)
+                prop.text (msgs.Status.Indexed count)
             ]
         | Failed reason ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
                 prop.title reason
-                prop.text "Failed"
+                prop.text msgs.Status.Failed
             ]
         // Phase 119 — refused before any storage write (never reaches the
         // persisted list, but the match must stay exhaustive).
@@ -73,7 +83,7 @@ module Badges =
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
                 prop.title reason
-                prop.text "Rejected"
+                prop.text msgs.Status.Rejected
             ]
         // Phase 119 — stored but no extractor recognised the type, so it
         // is not searchable. Amber, not green — honest about the gap.
@@ -82,7 +92,7 @@ module Badges =
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700"
                 prop.title detail
-                prop.text "Stored · not searchable"
+                prop.text msgs.Status.StoredNotSearchable
             ]
         // Phase 500 — the type IS supported; what is missing is an OCR
         // companion. Amber like `UnsupportedFormat` (both mean "stored,
@@ -95,16 +105,24 @@ module Badges =
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700"
                 prop.title detail
-                prop.text "Scanned · OCR unavailable"
+                prop.text msgs.Status.ScannedOcrUnavailable
             ]
 
-    let sourceBadge (source: KnowledgeSource) =
+    /// Phase 751 — pre-existing public signature, kept for callers outside
+    /// this package's own render tree: renders with the built-in English
+    /// catalog (an arity-widened `statusBadge` would read as a REMOVAL in
+    /// the public-API approval baseline). New call sites inside this
+    /// package call `statusBadgeWith` directly with the resolved `msgs`.
+    let statusBadge (status: IngestionStatus) =
+        statusBadgeWith MessageCatalog.english.KnowledgeBase.List status
+
+    let sourceBadgeWith (msgs: KnowledgeListMessages) (source: KnowledgeSource) =
         match source with
         | UploadedFile ->
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700"
-                prop.text "Upload"
+                prop.text msgs.UploadBadge
             ]
         | FromNarrative src ->
             let tooltip =
@@ -121,22 +139,24 @@ module Badges =
                     else
                         sprintf "%s\n%s" src.ModuleId tooltip
                 )
-                prop.text (sprintf "Narrative · %s" src.ModuleId)
+                prop.text (msgs.NarrativeLabel src.ModuleId)
             ]
         | Note src ->
             let edited =
                 match src.LastEditedAt with
-                | Some t -> sprintf " · edited %s" (t.ToString("yyyy-MM-dd HH:mm"))
+                | Some t -> msgs.NoteEditedFragment(t.ToString("yyyy-MM-dd HH:mm"))
                 | None -> ""
 
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700"
-                prop.title (
-                    sprintf "Authored by %s on %s%s" src.Author (src.CreatedAt.ToString("yyyy-MM-dd HH:mm")) edited
-                )
-                prop.text "Note"
+                prop.title (msgs.NoteAuthoredTooltip src.Author (src.CreatedAt.ToString("yyyy-MM-dd HH:mm")) edited)
+                prop.text msgs.Note
             ]
+
+    /// Phase 751 — pre-existing public signature; see `statusBadge`.
+    let sourceBadge (source: KnowledgeSource) =
+        sourceBadgeWith MessageCatalog.english.KnowledgeBase.List source
 
     /// Phase 636 — the version badge. Renders **nothing at all** below
     /// version 2, so a single-version document produces byte-for-byte
@@ -147,16 +167,20 @@ module Badges =
     /// from the row's action column, where a `dispatch` is in scope —
     /// this component is shared with the read-only Platform Library and
     /// Platform Admin surfaces, which have no KB dispatch to give it.
-    let versionBadge (version: int) =
+    let versionBadgeWith (msgs: KnowledgeListMessages) (version: int) =
         if not (versionHasHistory version) then
             Html.none
         else
             Html.span [
                 prop.className
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-50 text-violet-700"
-                prop.title (sprintf "Version %d — earlier versions are preserved" version)
-                prop.text (sprintf "v%d" version)
+                prop.title (msgs.VersionTooltip version)
+                prop.text (msgs.VersionLabel version)
             ]
+
+    /// Phase 751 — pre-existing public signature; see `statusBadge`.
+    let versionBadge (version: int) =
+        versionBadgeWith MessageCatalog.english.KnowledgeBase.List version
 
     let fileTypeBadge (fileType: string) =
         let color =
@@ -219,22 +243,27 @@ type SortDir =
 /// Source-kind key used for both the filter chip and the group section
 /// header. Narratives are bucketed per ModuleId so a team with N modules
 /// surfaces N narrative buckets, not one undifferentiated "Narrative".
-let private sourceKindKey (source: KnowledgeSource) =
+///
+/// Phase 751 — plain helper taking `msgs` first; the returned strings
+/// also serve as `Set<string>` filter-membership keys, which stays safe
+/// purely local, computed once per render from `msgs`, and never
+/// round-tripped to the server or compared against a foreign source.
+let private sourceKindKeyWith (msgs: KnowledgeListMessages) (source: KnowledgeSource) =
     match source with
-    | UploadedFile -> "Uploaded"
-    | FromNarrative src -> sprintf "Narrative · %s" src.ModuleId
-    | Note _ -> "Note"
+    | UploadedFile -> msgs.UploadedKey
+    | FromNarrative src -> msgs.NarrativeLabel src.ModuleId
+    | Note _ -> msgs.Note
 
-let private statusKey (status: IngestionStatus) =
+let private statusKeyWith (msgs: KnowledgeListMessages) (status: IngestionStatus) =
     match status with
-    | Queued -> "Queued"
-    | ExtractingText -> "Extracting"
-    | Embedding _ -> "Embedding"
-    | Complete _ -> "Complete"
-    | Failed _ -> "Failed"
-    | UploadRejected _ -> "Rejected"
-    | UnsupportedFormat _ -> "Stored · not searchable"
-    | OcrUnavailable _ -> "Scanned · OCR unavailable"
+    | Queued -> msgs.Status.Queued
+    | ExtractingText -> msgs.Status.ExtractingKey
+    | Embedding _ -> msgs.Status.EmbeddingKey
+    | Complete _ -> msgs.Status.CompleteKey
+    | Failed _ -> msgs.Status.Failed
+    | UploadRejected _ -> msgs.Status.Rejected
+    | UnsupportedFormat _ -> msgs.Status.StoredNotSearchable
+    | OcrUnavailable _ -> msgs.Status.ScannedOcrUnavailable
 
 let private monthKey (dt: DateTimeOffset) = dt.ToString("yyyy-MM")
 
@@ -326,6 +355,12 @@ type KnowledgeListConfig = {
 [<ReactComponent>]
 let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocument list) =
     // Hooks unconditional, in fixed order — Rules of Hooks.
+    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.List
+    // Phase 751 — shadow the module-level key helpers with `msgs` already
+    // applied, so every existing `sourceKindKey d.Source` / `statusKey
+    // d.Status` call site below is unchanged.
+    let sourceKindKey = sourceKindKeyWith msgs
+    let statusKey = statusKeyWith msgs
     let search, setSearch = React.useState ""
     let fileTypeFilter, setFileTypeFilter = React.useState (Set.empty: Set<string>)
     let sourceFilter, setSourceFilter = React.useState (Set.empty: Set<string>)
@@ -450,7 +485,7 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                             // name, absent entirely below version 2 (see
                             // `Badges.versionBadge`), so a single-version
                             // corpus renders exactly as it did before.
-                            Badges.versionBadge doc.Version
+                            Badges.versionBadgeWith msgs doc.Version
                             // Phase 502.C — tags under the file name
                             // rather than in their own column: they are
                             // an unbounded set, and a column would either
@@ -477,7 +512,10 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                         prop.className "px-4 py-3"
                         prop.children [ Badges.fileTypeBadge doc.FileType ]
                     ]
-                    Html.td [ prop.className "px-4 py-3"; prop.children [ Badges.sourceBadge doc.Source ] ]
+                    Html.td [
+                        prop.className "px-4 py-3"
+                        prop.children [ Badges.sourceBadgeWith msgs doc.Source ]
+                    ]
                     Html.td [ prop.className "px-4 py-3 text-xs text-gray-500"; prop.text doc.UploadedBy ]
                     Html.td [
                         prop.className "px-4 py-3 text-xs text-gray-500 tabular-nums whitespace-nowrap"
@@ -487,7 +525,10 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                         prop.className "px-4 py-3 text-xs text-gray-500"
                         prop.text (doc.UploadedAt.ToString("yyyy-MM-dd HH:mm"))
                     ]
-                    Html.td [ prop.className "px-4 py-3"; prop.children [ Badges.statusBadge doc.Status ] ]
+                    Html.td [
+                        prop.className "px-4 py-3"
+                        prop.children [ Badges.statusBadgeWith msgs doc.Status ]
+                    ]
                     actionCell
                 ]
             ]
@@ -545,13 +586,13 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 prop.children [
                     Html.tr [
                         prop.children [
-                            sortableHeader "File" SortByName
-                            sortableHeader "Type" SortByType
-                            sortableHeader "Source" SortBySource
-                            sortableHeader "Uploader" SortByUploader
-                            sortableHeader "Size" SortBySize
-                            sortableHeader "Added" SortByAdded
-                            sortableHeader "Status" SortByStatus
+                            sortableHeader msgs.ColumnFile SortByName
+                            sortableHeader msgs.ColumnType SortByType
+                            sortableHeader msgs.ColumnSource SortBySource
+                            sortableHeader msgs.ColumnUploader SortByUploader
+                            sortableHeader msgs.ColumnSize SortBySize
+                            sortableHeader msgs.ColumnAdded SortByAdded
+                            sortableHeader msgs.ColumnStatus SortByStatus
                             if config.RowAction.IsSome then
                                 Html.th [ prop.className "px-4 py-2" ]
                         ]
@@ -579,7 +620,7 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
             if filtered.IsEmpty then
                 Html.div [
                     prop.className "p-8 text-center text-sm text-gray-500 bg-white border border-gray-200 rounded-lg"
-                    prop.text "No documents match the current filters."
+                    prop.text msgs.NoMatches
                 ]
             else
                 match groupBy with
@@ -606,20 +647,20 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
 
         let dateRangeLabel range =
             match range with
-            | AllDates -> "All dates"
-            | Last7Days -> "Last 7 days"
-            | Last30Days -> "Last 30 days"
-            | Last90Days -> "Last 90 days"
-            | OlderThan90Days -> "Older than 90 days"
+            | AllDates -> msgs.AllDates
+            | Last7Days -> msgs.Last7Days
+            | Last30Days -> msgs.Last30Days
+            | Last90Days -> msgs.Last90Days
+            | OlderThan90Days -> msgs.OlderThan90Days
 
         let groupByLabel gb =
             match gb with
-            | NoGrouping -> "No grouping"
-            | ByFileType -> "Group by file type"
-            | BySource -> "Group by source"
-            | ByStatus -> "Group by status"
-            | ByUploader -> "Group by uploader"
-            | ByMonth -> "Group by month"
+            | NoGrouping -> msgs.NoGrouping
+            | ByFileType -> msgs.GroupByFileType
+            | BySource -> msgs.GroupBySource
+            | ByStatus -> msgs.GroupByStatus
+            | ByUploader -> msgs.GroupByUploader
+            | ByMonth -> msgs.GroupByMonth
 
         let groupByValue =
             match groupBy with
@@ -686,10 +727,10 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
 
         let sizeRangeLabel range =
             match range with
-            | AllSizes -> "Any size"
-            | UnderOneMb -> "Under 1 MB"
-            | OneToTenMb -> "1–10 MB"
-            | OverTenMb -> "Over 10 MB"
+            | AllSizes -> msgs.AnySize
+            | UnderOneMb -> msgs.UnderOneMb
+            | OneToTenMb -> msgs.OneToTenMb
+            | OverTenMb -> msgs.OverTenMb
 
         let sizeRangeValue =
             match sizeRange with
@@ -744,19 +785,19 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                         prop.type' "search"
                         prop.className
                             "px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 w-64"
-                        prop.placeholder "Search by file name…"
+                        prop.placeholder msgs.SearchPlaceholder
                         prop.value search
                         prop.onChange setSearch
                     ]
                     Html.div [
                         prop.className "flex items-center gap-3 text-xs text-gray-500"
                         prop.children [
-                            Html.span [ prop.text (sprintf "%d of %d" filtered.Length documents.Length) ]
+                            Html.span [ prop.text (msgs.ResultCount filtered.Length documents.Length) ]
                             groupBySelect
                             if activeFilterCount > 0 then
                                 Html.button [
                                     prop.className "text-blue-600 hover:text-blue-800 font-medium"
-                                    prop.text "Clear filters"
+                                    prop.text msgs.ClearFilters
                                     prop.onClick (fun _ -> clearAll ())
                                 ]
                         ]
@@ -769,25 +810,25 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                 prop.className "space-y-2"
                 prop.children [
                     chipRow
-                        "Type"
+                        msgs.TypeFilterLabel
                         (availableFileTypes
                          |> List.map (fun ft ->
                              chip (ft.ToUpperInvariant()) (fileTypeFilter.Contains ft) (fun () ->
                                  setFileTypeFilter (toggleMember fileTypeFilter ft))))
                     chipRow
-                        "Source"
+                        msgs.SourceFilterLabel
                         (availableSourceKinds
                          |> List.map (fun sk ->
                              chip sk (sourceFilter.Contains sk) (fun () ->
                                  setSourceFilter (toggleMember sourceFilter sk))))
                     chipRow
-                        "Status"
+                        msgs.StatusFilterLabel
                         (availableStatuses
                          |> List.map (fun st ->
                              chip st (statusFilter.Contains st) (fun () ->
                                  setStatusFilter (toggleMember statusFilter st))))
                     chipRow
-                        "Uploader"
+                        msgs.UploaderFilterLabel
                         (availableUploaders
                          |> List.map (fun u ->
                              chip u (uploaderFilter.Contains u) (fun () ->
@@ -800,7 +841,7 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                                 prop.children [
                                     Html.span [
                                         prop.className "text-xs text-gray-500 font-medium min-w-[60px]"
-                                        prop.text "Added"
+                                        prop.text msgs.AddedFilterLabel
                                     ]
                                     dateRangeSelect
                                 ]
@@ -808,7 +849,10 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                             Html.div [
                                 prop.className "flex items-center gap-2"
                                 prop.children [
-                                    Html.span [ prop.className "text-xs text-gray-500 font-medium"; prop.text "Size" ]
+                                    Html.span [
+                                        prop.className "text-xs text-gray-500 font-medium"
+                                        prop.text msgs.SizeFilterLabel
+                                    ]
                                     sizeRangeSelect
                                 ]
                             ]

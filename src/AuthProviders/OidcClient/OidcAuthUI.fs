@@ -35,13 +35,25 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-let LoadingScreen () : ReactElement =
+// Phase 751 — every screen here gained an additive `…With` variant
+// taking the resolved `AuthMessages`, and the pre-751 entry point
+// delegates to it with the built-in English catalog. The arities are
+// deliberately NOT widened: these are public non-component render
+// functions, so a widened arity reads as a REMOVAL in the public-API
+// approval baseline and breaks every caller, for a parameter only a
+// catalog-resolving caller can supply (444's recorded pattern, as
+// `BootDegradation.bannerWith` / `ModuleBoundary.wrapWith` did).
+//
+// `OidcShell` below is a component, so it resolves the catalog with the
+// ordinary hook and calls the `…With` forms.
+
+let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
-        Html.div [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "Signing you in…"
-        ]
+        Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
+
+let LoadingScreen () : ReactElement =
+    LoadingScreenWith MessageCatalog.english.Auth
 
 /// The sign-in screen with an optional SECOND button beside "Sign in"
 /// — the generic dual-button ("Sign in / Sign up") affordance. The
@@ -51,7 +63,8 @@ let LoadingScreen () : ReactElement =
 ///
 /// `None` renders exactly what `SignInScreen` renders — the secondary
 /// button is not a hidden element, it is not emitted at all (GP 11).
-let SignInScreenWithSecondary
+let SignInScreenWith
+    (msgs: AuthMessages)
     (secondary: OidcSecondaryFlow option)
     (onSignIn: unit -> unit)
     (onSecondary: unit -> unit)
@@ -61,6 +74,9 @@ let SignInScreenWithSecondary
         | Some flow ->
             Html.button [
                 prop.className $"{Tokens.Button.secondary} w-full text-center"
+                // The secondary flow's label is the DEPLOYMENT's own
+                // wording, supplied on `OidcSecondaryFlow` — the catalog
+                // does not own it and must not override it.
                 prop.text flow.Label
                 prop.onClick (fun _ -> onSecondary ())
             ]
@@ -69,19 +85,26 @@ let SignInScreenWithSecondary
     pageFrame [
         Html.h1 [
             prop.className "text-2xl font-semibold text-brand font-[Umami]"
-            prop.text "Welcome"
+            prop.text msgs.Welcome
         ]
         Html.p [
             prop.className $"{Tokens.Text.secondary} text-center"
-            prop.text "Sign in to continue."
+            prop.text msgs.SignInPrompt
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Sign in"
+            prop.text msgs.SignIn
             prop.onClick (fun _ -> onSignIn ())
         ]
         secondaryButton
     ]
+
+let SignInScreenWithSecondary
+    (secondary: OidcSecondaryFlow option)
+    (onSignIn: unit -> unit)
+    (onSecondary: unit -> unit)
+    : ReactElement =
+    SignInScreenWith MessageCatalog.english.Auth secondary onSignIn onSecondary
 
 /// The single-button sign-in screen. Retained as the no-secondary-flow
 /// entry point (and so a consumer rendering it directly is unaffected
@@ -89,22 +112,25 @@ let SignInScreenWithSecondary
 let SignInScreen (onSignIn: unit -> unit) : ReactElement =
     SignInScreenWithSecondary None onSignIn ignore
 
-let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
+let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
         Html.h1 [
             prop.className "text-xl font-semibold text-brand font-[Umami]"
-            prop.text "Sign-in failed"
+            prop.text msgs.SignInFailedHeading
         ]
         Html.p [
             prop.className $"{Tokens.Colours.error} text-center text-sm"
-            prop.text (describeError err)
+            prop.text (describeErrorWith msgs.Errors err)
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Try again"
+            prop.text msgs.TryAgain
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
+
+let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
+    ErrorScreenWith MessageCatalog.english.Auth err onRetry
 
 // ─── Shell wrapper ──────────────────────────────────────────────────
 //
@@ -116,6 +142,7 @@ let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
 
 [<ReactComponent>]
 let OidcShell (cfg: OidcUIConfig) (shell: ReactElement) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let authState, setAuthState = React.useState Checking
 
     // Enter the signed-in state and arm the pre-expiry refresh timer.
@@ -190,10 +217,10 @@ let OidcShell (cfg: OidcUIConfig) (shell: ReactElement) : ReactElement =
         | None -> ()
 
     match authState with
-    | Checking -> LoadingScreen()
+    | Checking -> LoadingScreenWith msgs
     | SignedIn -> shell
-    | SignedOut -> SignInScreenWithSecondary cfg.SecondaryFlow beginSignIn beginSecondaryFlow
-    | Failed e -> ErrorScreen e (fun () -> setAuthState SignedOut)
+    | SignedOut -> SignInScreenWith msgs cfg.SecondaryFlow beginSignIn beginSecondaryFlow
+    | Failed e -> ErrorScreenWith msgs e (fun () -> setAuthState SignedOut)
 
 // ─── UserMenu — header sign-out trigger ──────────────────────────────
 //
@@ -203,8 +230,13 @@ let OidcShell (cfg: OidcUIConfig) (shell: ReactElement) : ReactElement =
 
 [<ReactComponent>]
 let UserMenu (cfg: OidcUIConfig) : ReactElement =
+    // A component, so it reads the catalog with the ordinary hook rather
+    // than needing a `…With` variant — and it is dropped INSIDE the app's
+    // own header, where the shell's provider is already mounted.
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
+
     Html.button [
         prop.className $"{Tokens.Button.secondary} text-sm"
-        prop.text "Sign out"
+        prop.text msgs.SignOut
         prop.onClick (fun _ -> OidcClient.signOut cfg |> Async.StartImmediate)
     ]

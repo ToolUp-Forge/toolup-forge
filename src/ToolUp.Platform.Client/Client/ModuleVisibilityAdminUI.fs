@@ -283,7 +283,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some "Profile saved."
+                Status = Some MessageCatalog.english.ModuleVisibilityAdmin.ProfileSaved
         },
         Cmd.ofMsg Load
 
@@ -311,7 +311,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some "Profile cleared — this scope no longer contributes a layer."
+                Status = Some MessageCatalog.english.ModuleVisibilityAdmin.ProfileCleared
         },
         Cmd.ofMsg Load
 
@@ -329,14 +329,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ────────────────────────────────────────────────────
 
-let private banner (cls: string) (text: string) (onDismiss: unit -> unit) =
+let private banner (msgs: ModuleVisibilityAdminMessages) (cls: string) (text: string) (onDismiss: unit -> unit) =
     Html.div [
         prop.className $"mb-4 p-3 border rounded text-sm flex items-center justify-between {cls}"
         prop.children [
             Html.span [ prop.text text ]
             Html.button [
                 prop.className "text-xs hover:underline"
-                prop.text "dismiss"
+                prop.text msgs.Dismiss
                 prop.onClick (fun _ -> onDismiss ())
             ]
         ]
@@ -362,6 +362,7 @@ let private kindButton (label: string) (description: string) (active: bool) (onC
 /// edited rule, and — once the resolution has landed — whether the
 /// server currently admits it.
 let private moduleRow
+    (msgs: ModuleVisibilityAdminMessages)
     (resolution: ModuleVisibilityResolution option)
     (selected: bool)
     (moduleId: string)
@@ -374,12 +375,12 @@ let private moduleRow
             if ModuleVisibility.admitsModule r moduleId then
                 Html.span [
                     prop.className "text-xs px-2 py-0.5 rounded bg-green-100 text-green-700"
-                    prop.text "visible now"
+                    prop.text msgs.VisibleNow
                 ]
             else
                 Html.span [
                     prop.className "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600"
-                    prop.text "hidden now"
+                    prop.text msgs.HiddenNow
                 ]
 
     Html.label [
@@ -398,27 +399,23 @@ let private moduleRow
 /// The resolved answer, rendered beside the editable profile. See the
 /// header note — this is what makes "I allowed it and it still does not
 /// appear" answerable without leaving the page.
-let private resolvedPane (model: Model) =
+let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
     let body =
         match model.Resolved with
-        | None when not model.ResolvedLoaded -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
-        | None ->
-            Html.p [
-                prop.className "text-sm text-gray-600"
-                prop.text
-                    "No layer declares a profile, so every registered module is surfaced. Saving a profile below makes this scope the first contributing layer."
-            ]
+        | None when not model.ResolvedLoaded ->
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | None -> Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoResolutionYet ]
         | Some r ->
-            let list (label: string) (items: string list) =
+            let list (label: int -> string) (items: string list) =
                 Html.div [
                     prop.className "mb-3"
                     prop.children [
                         Html.div [
                             prop.className "text-xs font-medium text-gray-600 mb-1"
-                            prop.text $"{label} ({List.length items})"
+                            prop.text (label (List.length items))
                         ]
                         if List.isEmpty items then
-                            Html.p [ prop.className "text-xs text-gray-400"; prop.text "none" ]
+                            Html.p [ prop.className "text-xs text-gray-400"; prop.text msgs.NoItems ]
                         else
                             Html.div [
                                 prop.className "flex flex-wrap gap-1"
@@ -436,21 +433,23 @@ let private resolvedPane (model: Model) =
 
             Html.div [
                 prop.children [
-                    list "Governed modules" r.GovernedModuleIds
-                    list "Selected after every layer" r.SelectedModuleIds
-                    list "Excluded pages / entries" r.ExcludedEntryIds
-                    list "Contributing scopes" (r.ContributingScopes |> List.map FlagScope.slug)
+                    list msgs.GovernedModules r.GovernedModuleIds
+                    list msgs.SelectedAfterEveryLayer r.SelectedModuleIds
+                    list msgs.ExcludedEntries r.ExcludedEntryIds
+                    list msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
                 ]
             ]
 
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4"
         prop.children [
-            Html.h3 [ prop.className "text-sm font-semibold mb-1"; prop.text "Resolved for you" ]
+            Html.h3 [
+                prop.className "text-sm font-semibold mb-1"
+                prop.text msgs.ResolvedForYouHeading
+            ]
             Html.p [
                 prop.className "text-xs text-gray-500 mb-3"
-                prop.text
-                    "Composed platform → team → user; each layer may only remove. An outer layer can already have narrowed what your profile allows."
+                prop.text msgs.ResolvedForYouHelp
             ]
             body
         ]
@@ -463,18 +462,19 @@ let private resolvedPane (model: Model) =
 /// the operator is mid-way through typing.
 [<ReactComponent>]
 let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
     let note, setNote = React.useState model.Note
 
     Html.div [
         prop.children [
             Html.label [
                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text "Note (why this profile exists)"
+                prop.text msgs.NoteLabel
             ]
             Html.input [
                 prop.type' "text"
                 prop.value note
-                prop.placeholder "e.g. this deployment ships the finance family only"
+                prop.placeholder msgs.NotePlaceholder
                 prop.onChange (fun (v: string) -> setNote v)
                 prop.className
                     "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full text-sm mb-4"
@@ -492,7 +492,7 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
                                 "bg-brand hover:bg-brand-dark cursor-pointer"
                         ]
                         prop.disabled model.Busy
-                        prop.text (if model.Busy then "Working…" else "Save profile")
+                        prop.text (if model.Busy then msgs.Working else msgs.SaveProfile)
                         prop.onClick (fun _ -> onSave note)
                     ]
                     Html.button [
@@ -504,7 +504,7 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
                                 "border-border text-gray-700 hover:border-red-300 hover:text-red-600 cursor-pointer"
                         ]
                         prop.disabled (model.Busy || model.StoredProfile.IsNone)
-                        prop.text "Clear profile"
+                        prop.text msgs.ClearProfile
                         prop.onClick (fun _ -> onClear ())
                     ]
                 ]
@@ -512,15 +512,22 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook there would join the shell's
+/// hook order and break the moment the active module changed.
+[<ReactComponent>]
+let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
+
     let errorBanner =
         match model.Error with
-        | Some msg -> banner "bg-red-50 border-red-200 text-red-700" msg (fun () -> dispatch DismissError)
+        | Some msg -> banner msgs "bg-red-50 border-red-200 text-red-700" msg (fun () -> dispatch DismissError)
         | None -> Html.none
 
     let statusBanner =
         match model.Status with
-        | Some msg -> banner "bg-green-50 border-green-200 text-green-700" msg (fun () -> dispatch DismissStatus)
+        | Some msg -> banner msgs "bg-green-50 border-green-200 text-green-700" msg (fun () -> dispatch DismissStatus)
         | None -> Html.none
 
     let candidateRows =
@@ -528,51 +535,42 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
             [
                 Html.p [
                     prop.className "px-3 py-3 text-xs text-gray-500"
-                    prop.text
-                        "This deployment registers no curatable modules. The SDK's own admin surfaces are deliberately absent from the governed set, so a profile can never hide the surface it is administered from."
+                    prop.text msgs.NoCuratableModules
                 ]
             ]
         else
             [
                 for moduleId in model.RegisteredModuleIds ->
-                    moduleRow model.Resolved (List.contains moduleId model.Selection) moduleId (fun () ->
+                    moduleRow msgs model.Resolved (List.contains moduleId model.Selection) moduleId (fun () ->
                         dispatch (ToggleModule moduleId))
             ]
 
     let candidateHeader =
         Html.div [
             prop.className "px-3 py-2 bg-gray-50 text-xs font-medium text-gray-600"
-            prop.text
-                $"Registered modules ({List.length model.RegisteredModuleIds}) — {List.length model.Selection} named"
+            prop.text (msgs.RegisteredModulesHeader model.RegisteredModuleIds.Length model.Selection.Length)
         ]
 
     let editor =
         if not model.Loaded then
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
         else
             Html.div [
                 prop.className "bg-white rounded-lg border border-border p-4 mb-4"
                 prop.children [
-                    Html.h3 [ prop.className "text-sm font-semibold mb-1"; prop.text "Your profile" ]
-                    Html.p [
-                        prop.className "text-xs text-gray-500 mb-3"
-                        prop.text
-                            "Stored at your admin scope — the active team in team mode, your own scope otherwise. Modules this deployment does not register are ignored."
+                    Html.h3 [
+                        prop.className "text-sm font-semibold mb-1"
+                        prop.text msgs.YourProfileHeading
                     ]
+                    Html.p [ prop.className "text-xs text-gray-500 mb-3"; prop.text msgs.YourProfileHelp ]
 
                     Html.div [
                         prop.className "flex gap-2 mb-4"
                         prop.children [
-                            kindButton
-                                "Allow"
-                                "Surface only the modules named below."
-                                (model.Kind = RuleKind.Allow)
-                                (fun () -> dispatch (SetKind RuleKind.Allow))
-                            kindButton
-                                "Deny"
-                                "Surface everything except the modules named below."
-                                (model.Kind = RuleKind.Deny)
-                                (fun () -> dispatch (SetKind RuleKind.Deny))
+                            kindButton msgs.AllowLabel msgs.AllowDescription (model.Kind = RuleKind.Allow) (fun () ->
+                                dispatch (SetKind RuleKind.Allow))
+                            kindButton msgs.DenyLabel msgs.DenyDescription (model.Kind = RuleKind.Deny) (fun () ->
+                                dispatch (SetKind RuleKind.Deny))
                         ]
                     ]
 
@@ -588,17 +586,17 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Module visibility" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text "Curate which of this deployment's registered modules are surfaced at your scope."
-            ]
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
             errorBanner
             statusBanner
             editor
-            resolvedPane model
+            resolvedPane msgs model
         ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    ModuleVisibilityAdminBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

@@ -26,13 +26,19 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-let LoadingScreen () : ReactElement =
+// Phase 751 — the two plain public render functions gained additive
+// `…With` variants rather than a widened arity, which would read as a
+// REMOVAL in the public-API approval baseline (444's recorded pattern).
+// `SignInScreen` needs neither: it is already a component, so it reads
+// the catalog with the ordinary hook and its arity is untouched.
+
+let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
-        Html.div [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "Signing you in…"
-        ]
+        Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
+
+let LoadingScreen () : ReactElement =
+    LoadingScreenWith MessageCatalog.english.Auth
 
 [<ReactComponent>]
 let SignInScreen
@@ -40,27 +46,28 @@ let SignInScreen
     (onSignIn: string -> unit)
     (onRegister: string -> string -> unit)
     : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let username, setUsername = React.useState ""
     let bootstrapToken, setBootstrapToken = React.useState ""
 
     pageFrame [
         Html.h1 [
             prop.className "text-2xl font-semibold text-brand font-[Umami]"
-            prop.text "Welcome"
+            prop.text msgs.Welcome
         ]
         Html.p [
             prop.className $"{Tokens.Text.secondary} text-center"
-            prop.text "Sign in with a passkey — no password required."
+            prop.text msgs.Passkey.SignInPrompt
         ]
         Html.input [
             prop.className "border rounded px-3 py-2 w-full"
-            prop.placeholder "Username"
+            prop.placeholder msgs.Passkey.UsernamePlaceholder
             prop.value username
             prop.onChange (fun (v: string) -> setUsername v)
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Sign in with passkey"
+            prop.text msgs.Passkey.SignIn
             prop.onClick (fun _ -> onSignIn username)
         ]
         if cfg.AllowRegistration then
@@ -69,28 +76,28 @@ let SignInScreen
                 prop.children [
                     Html.p [
                         prop.className $"{Tokens.Text.secondary} text-xs text-center"
-                        prop.text "First time here? Register a passkey."
+                        prop.text msgs.Passkey.RegisterPrompt
                     ]
                     Html.input [
                         prop.className "border rounded px-3 py-2 w-full text-sm"
-                        prop.placeholder "Bootstrap token (first-time setup only)"
+                        prop.placeholder msgs.Passkey.BootstrapTokenPlaceholder
                         prop.value bootstrapToken
                         prop.onChange (fun (v: string) -> setBootstrapToken v)
                     ]
                     Html.button [
                         prop.className $"{Tokens.Button.secondary} w-full"
-                        prop.text "Register a passkey"
+                        prop.text msgs.Passkey.Register
                         prop.onClick (fun _ -> onRegister username bootstrapToken)
                     ]
                 ]
             ]
     ]
 
-let ErrorScreen (message: string) (onRetry: unit -> unit) : ReactElement =
+let ErrorScreenWith (msgs: AuthMessages) (message: string) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
         Html.h1 [
             prop.className "text-xl font-semibold text-brand font-[Umami]"
-            prop.text "Sign-in failed"
+            prop.text msgs.SignInFailedHeading
         ]
         Html.p [
             prop.className $"{Tokens.Colours.error} text-center text-sm"
@@ -98,10 +105,13 @@ let ErrorScreen (message: string) (onRetry: unit -> unit) : ReactElement =
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Try again"
+            prop.text msgs.TryAgain
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
+
+let ErrorScreen (message: string) (onRetry: unit -> unit) : ReactElement =
+    ErrorScreenWith MessageCatalog.english.Auth message onRetry
 
 // ─── Shell wrapper ───────────────────────────────────────────────────
 //
@@ -111,6 +121,7 @@ let ErrorScreen (message: string) (onRetry: unit -> unit) : ReactElement =
 
 [<ReactComponent>]
 let PasskeyShell (cfg: PasskeyUIConfig) (shell: ReactElement) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let authState, setAuthState = React.useState Checking
 
     React.useEffectOnce (fun () ->
@@ -143,18 +154,20 @@ let PasskeyShell (cfg: PasskeyUIConfig) (shell: ReactElement) : ReactElement =
         |> Async.StartImmediate
 
     match authState with
-    | Checking -> LoadingScreen()
+    | Checking -> LoadingScreenWith msgs
     | SignedIn -> shell
     | SignedOut -> SignInScreen cfg doSignIn doRegister
-    | Failed e -> ErrorScreen e (fun () -> setAuthState SignedOut)
+    | Failed e -> ErrorScreenWith msgs e (fun () -> setAuthState SignedOut)
 
 // ─── UserMenu — header sign-out trigger ──────────────────────────────
 
 [<ReactComponent>]
 let UserMenu () : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
+
     Html.button [
         prop.className $"{Tokens.Button.secondary} text-sm"
-        prop.text "Sign out"
+        prop.text msgs.SignOut
         prop.onClick (fun _ ->
             signOut ()
             Browser.Dom.window.location.reload ())

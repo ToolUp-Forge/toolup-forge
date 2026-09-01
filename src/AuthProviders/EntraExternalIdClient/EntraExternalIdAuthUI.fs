@@ -61,15 +61,18 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-let private LoadingScreen () : ReactElement =
+// Phase 751 — these three are `private`, so they simply take the
+// resolved `AuthMessages` as a first parameter. The additive `…With`
+// ceremony the sibling companions carry is needed only where the
+// function is public surface tracked by the approval baseline.
+
+let private LoadingScreen (msgs: AuthMessages) : ReactElement =
     pageFrame [
-        Html.div [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "Signing you in…"
-        ]
+        Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
 
 let private SignInScreen
+    (msgs: AuthMessages)
     (config: EntraExternalIdClientConfig)
     (onSignIn: unit -> unit)
     (onSignUp: unit -> unit)
@@ -79,7 +82,7 @@ let private SignInScreen
         | Some _ ->
             Html.button [
                 prop.className $"{Tokens.Button.secondary} w-full text-center"
-                prop.text "Sign up"
+                prop.text msgs.SignUp
                 prop.onClick (fun _ -> onSignUp ())
             ]
         | None -> Html.none
@@ -87,33 +90,33 @@ let private SignInScreen
     pageFrame [
         Html.h1 [
             prop.className "text-2xl font-semibold text-brand font-[Umami]"
-            prop.text "Welcome"
+            prop.text msgs.Welcome
         ]
         Html.p [
             prop.className $"{Tokens.Text.secondary} text-center"
-            prop.text "Sign in to continue."
+            prop.text msgs.SignInPrompt
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Sign in"
+            prop.text msgs.SignIn
             prop.onClick (fun _ -> onSignIn ())
         ]
         signUp
     ]
 
-let private ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
+let private ErrorScreen (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
         Html.h1 [
             prop.className "text-xl font-semibold text-brand font-[Umami]"
-            prop.text "Sign-in failed"
+            prop.text msgs.SignInFailedHeading
         ]
         Html.p [
             prop.className $"{Tokens.Colours.error} text-center text-sm"
-            prop.text (describeError err)
+            prop.text (describeErrorWith msgs.Errors err)
         ]
         Html.button [
             prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Try again"
+            prop.text msgs.TryAgain
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
@@ -123,6 +126,7 @@ let private ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement 
 [<ReactComponent>]
 let EntraExternalIdShell (config: EntraExternalIdClientConfig) (shell: ReactElement) : ReactElement =
     let oidcConfig = EntraExternalIdClientConfig.toOidcUIConfig config
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let authState, setAuthState = React.useState Checking
 
     let enterSignedIn () =
@@ -197,10 +201,10 @@ let EntraExternalIdShell (config: EntraExternalIdClientConfig) (shell: ReactElem
             |> Async.StartImmediate
 
     match authState with
-    | Checking -> LoadingScreen()
+    | Checking -> LoadingScreen msgs
     | SignedIn -> shell
-    | SignedOut -> SignInScreen config beginSignIn beginSignUp
-    | Failed e -> ErrorScreen e (fun () -> setAuthState SignedOut)
+    | SignedOut -> SignInScreen msgs config beginSignIn beginSignUp
+    | Failed e -> ErrorScreen msgs e (fun () -> setAuthState SignedOut)
 
 // ─── Public surface ──────────────────────────────────────────────────
 
@@ -216,10 +220,11 @@ let wrap (config: EntraExternalIdClientConfig) (shell: ReactElement) : ReactElem
 /// Delegates to the generic OIDC client's `signOut`.
 [<ReactComponent>]
 let UserMenu (config: EntraExternalIdClientConfig) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let oidcConfig = EntraExternalIdClientConfig.toOidcUIConfig config
 
     Html.button [
         prop.className $"{Tokens.Button.secondary} text-sm"
-        prop.text "Sign out"
+        prop.text msgs.SignOut
         prop.onClick (fun _ -> OidcClient.signOut oidcConfig |> Async.StartImmediate)
     ]
