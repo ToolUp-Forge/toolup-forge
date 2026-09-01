@@ -2098,6 +2098,282 @@ type MappingDataManagerMessages = {
     ImportedFilesPanelTitle: string
 }
 
+/// Status-token vocabulary shared by `KnowledgeListView.Badges.statusBadge`
+/// (the per-row pill, some cases carrying live counts) and the private
+/// `statusKey` used for the status filter chips / group headers (the
+/// same word, without the count). Fields whose text is identical between
+/// the two call sites are shared; `ExtractingBadge`/`ExtractingKey` and
+/// `EmbeddingProgress`/`EmbeddingKey`/`Indexed`/`CompleteKey` diverge
+/// (the badge is more specific — an ellipsis, a live count, "Indexed"
+/// rather than "Complete") and so carry separate fields.
+type KnowledgeStatusMessages = {
+    Queued: string
+    /// Badge text while extracting — "Extracting…".
+    ExtractingBadge: string
+    /// Filter-chip / group-header text for the same status — no ellipsis.
+    ExtractingKey: string
+    /// Badge text while embedding — takes (processed, total).
+    EmbeddingProgress: int -> int -> string
+    /// Filter-chip / group-header text for the same status.
+    EmbeddingKey: string
+    /// Badge text once complete — takes the chunk count.
+    Indexed: int -> string
+    /// Filter-chip / group-header text for the same status ("Complete",
+    /// not "Indexed" — the two surfaces use different words here).
+    CompleteKey: string
+    Failed: string
+    Rejected: string
+    StoredNotSearchable: string
+    ScannedOcrUnavailable: string
+}
+
+/// The shared `KnowledgeListView` component: badges, the filter/group/sort
+/// chrome, and the table column headers. Consumed by the team Documents
+/// page, the Platform Library page, and the Platform Admin module alike,
+/// so a translation here reaches all three surfaces at once.
+type KnowledgeListMessages = {
+    Status: KnowledgeStatusMessages
+    /// Source badge for an uploaded file.
+    UploadBadge: string
+    /// Filter-chip / group-header text for the same source kind.
+    UploadedKey: string
+    /// Source badge AND filter-chip text for a narrative-origin document —
+    /// takes the producing module's id. Identical wording at both call
+    /// sites, so one field covers both.
+    NarrativeLabel: string -> string
+    /// Source badge AND filter-chip text for a hand-authored note.
+    Note: string
+    /// Note-badge tooltip's trailing " · edited {date}" fragment — empty
+    /// when the note has never been edited. Takes the pre-formatted date.
+    NoteEditedFragment: string -> string
+    /// Note-badge tooltip — takes (author, createdDate, editedFragment);
+    /// `editedFragment` is `NoteEditedFragment`'s output, or "" when unedited.
+    NoteAuthoredTooltip: string -> string -> string -> string
+    /// Version-badge tooltip — takes the version number.
+    VersionTooltip: int -> string
+    /// Version-badge text — takes the version number ("v{n}").
+    VersionLabel: int -> string
+    NoGrouping: string
+    GroupByFileType: string
+    GroupBySource: string
+    GroupByStatus: string
+    GroupByUploader: string
+    GroupByMonth: string
+    AllDates: string
+    Last7Days: string
+    Last30Days: string
+    Last90Days: string
+    OlderThan90Days: string
+    AnySize: string
+    UnderOneMb: string
+    OneToTenMb: string
+    OverTenMb: string
+    ColumnFile: string
+    ColumnType: string
+    ColumnSource: string
+    ColumnUploader: string
+    ColumnSize: string
+    ColumnAdded: string
+    ColumnStatus: string
+    /// Empty state after filters exclude every document (distinct from
+    /// `KnowledgeListConfig.EmptyStateText`, which covers zero documents
+    /// before any filter is applied).
+    NoMatches: string
+    SearchPlaceholder: string
+    /// "{filtered} of {total}" result-count readout.
+    ResultCount: int -> int -> string
+    ClearFilters: string
+    /// Filter-chip-row label — distinct field from `ColumnType` even
+    /// though the English word is the same, since a translation may want
+    /// to distinguish the column noun from the filter-row label.
+    TypeFilterLabel: string
+    SourceFilterLabel: string
+    StatusFilterLabel: string
+    UploaderFilterLabel: string
+    AddedFilterLabel: string
+    SizeFilterLabel: string
+}
+
+/// The team Documents page (`KnowledgeBaseView`'s `MainPanel`): the
+/// upload zone, the bulk-import roll-up, the per-row tag editor and
+/// delete/history actions, and the version-history drawer (Phase 636).
+type KnowledgeMainMessages = {
+    DropToUpload: string
+    UploadPrompt: string
+    SupportedFormats: string
+    Importing: string
+    Uploading: string
+    ChooseFiles: string
+    /// `FileReader` failure while reading a local file for the bulk path
+    /// — takes the file name. Feeds into `BatchImportFailed` once it
+    /// reaches the model as `BulkImportFailed`.
+    CouldNotReadFile: string -> string
+    BatchImportFailed: string -> string
+    /// Takes (imported, total, refused).
+    BatchImportComplete: int -> int -> int -> string
+    TagsPlaceholder: string
+    Save: string
+    Cancel: string
+    AddTags: string
+    EditTags: string
+    History: string
+    /// History-action tooltip — takes the document's current version.
+    HistoryTooltip: int -> string
+    Delete: string
+    NoDocumentsYet: string
+    /// Version-drawer row label — takes the version number ("v{n}").
+    VersionLabel: int -> string
+    Current: string
+    /// Version-drawer row meta line — takes (formattedDate, formattedSize,
+    /// chunkCount, uploadedBy). Dates/sizes are formatted at the call
+    /// site; this only composes the already-formatted pieces plus the
+    /// chunk-count pluralisation.
+    VersionMeta: string -> string -> int -> string -> string
+    /// Takes the formatted supersede timestamp.
+    Superseded: string -> string
+    OpenOriginal: string
+    Opening: string
+    OpenOriginalTooltip: string
+    OriginalPreservedTooltip: string
+    OriginalPreserved: string
+    /// Takes the load-failure reason.
+    LoadHistoryFailed: string -> string
+    Loading: string
+    NoVersionHistory: string
+    VersionHistoryHeading: string
+    /// Drawer `aria-label` — takes the document's file name.
+    VersionHistoryAriaLabel: string -> string
+    CloseVersionHistory: string
+    Heading: string
+    Subheading: string
+    Reload: string
+    ReloadTooltip: string
+    RefreshAIContext: string
+    Syncing: string
+    RefreshAIContextTooltip: string
+    ResetIndex: string
+    Resetting: string
+    ResetIndexTooltip: string
+    /// The `window.confirm` prompt for "Reset index" — takes the current
+    /// document count and composes the pluralised scope sentence (empty
+    /// when the corpus is already empty) plus the fixed boilerplate.
+    ResetConfirmPrompt: int -> string
+}
+
+/// The Notes page: the inline note editor and the note list.
+type KnowledgeNotesMessages = {
+    /// Editor heading for a new note AND the page's "New note" button —
+    /// identical text at both call sites.
+    NewNote: string
+    EditNote: string
+    TitleLabel: string
+    TitlePlaceholder: string
+    BodyLabel: string
+    BodyPlaceholder: string
+    Cancel: string
+    Saving: string
+    SaveNote: string
+    /// Takes (createdDate, editedDate), both pre-formatted at the call site.
+    CreatedEdited: string -> string -> string
+    /// Takes the pre-formatted created date, for a note never edited.
+    Created: string -> string
+    /// Takes (author, timestampLine).
+    ByAuthor: string -> string -> string
+    Edit: string
+    Delete: string
+    /// The `window.confirm` prompt for deleting a note — takes its title.
+    ConfirmDeleteNote: string -> string
+    Heading: string
+    Subheading: string
+    EmptyState: string
+}
+
+/// The Standing AI Context page.
+type KnowledgeAIContextMessages = {
+    StandingContextLabel: string
+    BodyPlaceholder: string
+    ClearHint: string
+    Cancel: string
+    Saving: string
+    Save: string
+    AnonymousUnavailable: string
+    Loading: string
+    NoContextYet: string
+    NoTeamCuratedContext: string
+    /// Takes (formattedDate, updatedBy).
+    LastUpdated: string -> string -> string
+    Edit: string
+    Heading: string
+    Subheading: string
+}
+
+/// The read-only team-side Platform Library page.
+type KnowledgePlatformLibraryMessages = {
+    Heading: string
+    Subheading: string
+    Reload: string
+    Loading: string
+    ReloadTooltip: string
+    EmptyState: string
+}
+
+/// `PlatformKnowledgeAdminUI` — the Platform Admin's upload + manage
+/// surface for the cross-team Platform Knowledge Base.
+type KnowledgeAdminMessages = {
+    UploadHeading: string
+    UploadDescription: string
+    Uploading: string
+    DocumentsHeading: string
+    Refresh: string
+    Loading: string
+    EmptyState: string
+    Delete: string
+}
+
+/// Strings raised from `ClientModel`'s pure `update` reducer and its
+/// non-rendering async helpers (`deliverOriginal`, `originalDocumentOpener`)
+/// — read via `MessageCatalog.english.KnowledgeBase.Errors.*` directly,
+/// with no rendered tree and therefore no hook to thread `msgs` through.
+type KnowledgeErrorMessages = {
+    /// The version-history drawer's "open original" popup-blocked fallback.
+    PopupBlocked: string
+    /// `deliverOriginal`'s out-of-scope refusal (version-history download).
+    DocumentNotAvailable: string
+    NoOriginalForVersion: string
+    OriginalFetchFailed: string
+    /// `UploadCompleted`'s catch-all — the wire result carried neither an
+    /// `UploadRejected` policy reason nor a recognised success shape.
+    UploadFailed: string
+    /// Takes the server's failure reason.
+    TagsUpdateFailed: string -> string
+    /// Takes the server's failure reason.
+    DeleteFailed: string -> string
+    /// Takes the server's failure reason.
+    ResetFailed: string -> string
+    /// `originalDocumentOpener`'s out-of-scope refusal (AI Sources panel
+    /// citation open) — worded "source" rather than "document" because the
+    /// caller is a citation, not a drawer row.
+    SourceNotAvailable: string
+    SourceHasNoOriginal: string
+    OriginalOpenFailed: string
+}
+
+/// The closed set of strings the `ToolUp.KnowledgeBase.Client` package
+/// renders — one nested record per surface (Phase 751). This package is
+/// Fable-packed separately from `ToolUp.Platform.Client` but references it
+/// as a companion, so it reads the SAME `MessageCatalog` through the same
+/// `MessageCatalogProvider.useMessages ()` hook rather than carrying a
+/// substrate of its own.
+type KnowledgeBaseMessages = {
+    Main: KnowledgeMainMessages
+    Notes: KnowledgeNotesMessages
+    AIContext: KnowledgeAIContextMessages
+    PlatformLibrary: KnowledgePlatformLibraryMessages
+    List: KnowledgeListMessages
+    Admin: KnowledgeAdminMessages
+    Errors: KnowledgeErrorMessages
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -2150,4 +2426,5 @@ type MessageCatalog = {
     ServiceStatusBoard: ServiceStatusBoardMessages
     UsageDashboard: UsageDashboardMessages
     MappingDataManager: MappingDataManagerMessages
+    KnowledgeBase: KnowledgeBaseMessages
 }

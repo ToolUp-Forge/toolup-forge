@@ -1326,6 +1326,212 @@ module MessageCatalog =
                 "Upload one or more CSVs. Known structures re-import automatically; unrecognised ones land below — use New Mapping to map them."
             ImportedFilesPanelTitle = "Imported Files"
         }
+        KnowledgeBase = {
+            Main = {
+                DropToUpload = "Drop files to upload"
+                UploadPrompt = "Upload documents to your knowledge base"
+                SupportedFormats =
+                    "PDF, PPTX, DOCX, XLSX, CSV, TXT — or a .zip to expand  ·  drop files here or click to choose"
+                Importing = "Importing…"
+                Uploading = "Uploading…"
+                ChooseFiles = "Choose files"
+                CouldNotReadFile = fun name -> $"Could not read '{name}'"
+                BatchImportFailed = fun err -> $"Batch import failed: {err}"
+                BatchImportComplete =
+                    fun imported total refused ->
+                        $"Batch import complete — {imported} of {total} item(s) imported, {refused} refused."
+                TagsPlaceholder = "policy, 2024"
+                Save = "Save"
+                Cancel = "Cancel"
+                AddTags = "Add tags"
+                EditTags = "Edit tags"
+                History = "History"
+                HistoryTooltip = fun v -> $"Version {v} — show this document's version history"
+                Delete = "Delete"
+                NoDocumentsYet = "No documents uploaded yet. Drop files into the upload zone above to get started."
+                VersionLabel = fun v -> $"v{v}"
+                Current = "Current"
+                VersionMeta =
+                    fun date size chunkCount uploadedBy ->
+                        // The plural branch is a whole clause per arm rather
+                        // than a suffix spliced into the hole: F# forbids a
+                        // string literal inside an interpolation hole, and a
+                        // language whose plural rule is not "add an s" needs
+                        // the whole clause anyway.
+                        let chunks =
+                            if chunkCount = 1 then
+                                $"{chunkCount} chunk"
+                            else
+                                $"{chunkCount} chunks"
+
+                        $"{date} · {size} · {chunks} · by {uploadedBy}"
+                Superseded = fun date -> $"Superseded {date}"
+                OpenOriginal = "Open original"
+                Opening = "Opening…"
+                OpenOriginalTooltip = "Fetch this version's original document"
+                OriginalPreservedTooltip =
+                    "This version's original bytes are preserved, but the API addresses a document rather than a version — there is no per-version fetch yet."
+                OriginalPreserved = "Original preserved"
+                LoadHistoryFailed = fun err -> $"Couldn't load the version history: {err}"
+                Loading = "Loading…"
+                NoVersionHistory = "No version history is available for this document."
+                VersionHistoryHeading = "Version history"
+                VersionHistoryAriaLabel = fun fileName -> $"Version history for {fileName}"
+                CloseVersionHistory = "Close version history"
+                Heading = "Knowledge Base"
+                Subheading = "Upload documents to make them searchable by the AI assistant"
+                Reload = "Reload"
+                ReloadTooltip = "Reload the document list from the server"
+                RefreshAIContext = "Refresh AI context"
+                Syncing = "Syncing…"
+                RefreshAIContextTooltip =
+                    "Push the current document inventory to the AI assistant. Use after deleting or editing documents to ensure subsequent AI replies reflect only the current set."
+                ResetIndex = "Reset index"
+                Resetting = "Resetting…"
+                ResetIndexTooltip =
+                    "Wipe every document, status, and embedded chunk in this scope. This cannot be undone."
+                ResetConfirmPrompt =
+                    fun count ->
+                        let scopeLabel =
+                            if count = 0 then
+                                ""
+                            elif count = 1 then
+                                $" {count} document will be permanently removed."
+                            else
+                                $" {count} documents will be permanently removed."
+
+                        $"Reset the knowledge base?{scopeLabel} Other team members will lose access to these documents too."
+            }
+            Notes = {
+                NewNote = "New note"
+                EditNote = "Edit note"
+                TitleLabel = "Title"
+                TitlePlaceholder = "What is this note about?"
+                BodyLabel = "Body (markdown)"
+                BodyPlaceholder = "Use blank lines between paragraphs — each paragraph becomes one retrievable chunk."
+                Cancel = "Cancel"
+                Saving = "Saving…"
+                SaveNote = "Save note"
+                CreatedEdited = fun created edited -> $"Created {created} · edited {edited}"
+                Created = fun created -> $"Created {created}"
+                ByAuthor = fun author timestampLine -> $"by {author} · {timestampLine}"
+                Edit = "Edit"
+                Delete = "Delete"
+                ConfirmDeleteNote = fun title -> $"Delete note \"{title}\"?"
+                Heading = "Notes"
+                Subheading =
+                    "Free-form team prose — decisions, conventions, context. Each blank-line-separated paragraph becomes a retrievable chunk."
+                EmptyState = "No notes yet. Click \"New note\" to capture team context for the AI assistant."
+            }
+            AIContext = {
+                StandingContextLabel = "Standing context (markdown)"
+                BodyPlaceholder =
+                    "Team mission, naming conventions, response style, constraints… The AI sees this on every message."
+                ClearHint = "Leave empty and Save to clear the standing context."
+                Cancel = "Cancel"
+                Saving = "Saving…"
+                Save = "Save"
+                AnonymousUnavailable = "Standing AI context is unavailable in anonymous mode — no persistent scope."
+                Loading = "Loading…"
+                NoContextYet = "No standing context written yet."
+                NoTeamCuratedContext = "The AI assistant has no team-curated standing context yet."
+                LastUpdated = fun date updatedBy -> $"Last updated {date} by {updatedBy}"
+                Edit = "Edit"
+                Heading = "Standing AI Context"
+                Subheading =
+                    "Team-curated context the AI assistant sees on every message — like a CLAUDE.md for your team."
+            }
+            PlatformLibrary = {
+                Heading = "Platform Library"
+                Subheading =
+                    "Cross-team reference material the AI assistant draws from. Read-only — managed by Platform Admins."
+                Reload = "Reload"
+                Loading = "Loading…"
+                ReloadTooltip = "Re-fetch the Platform KB content from the server."
+                EmptyState =
+                    "No Platform Knowledge Base content yet. Platform Admins can add cross-team reference material from the Platform Admin section."
+            }
+            List = {
+                Status = {
+                    Queued = "Queued"
+                    ExtractingBadge = "Extracting…"
+                    ExtractingKey = "Extracting"
+                    EmbeddingProgress = fun processed total -> $"Embedding {processed}/{total}"
+                    EmbeddingKey = "Embedding"
+                    Indexed = fun count -> $"Indexed ({count} chunks)"
+                    CompleteKey = "Complete"
+                    Failed = "Failed"
+                    Rejected = "Rejected"
+                    StoredNotSearchable = "Stored · not searchable"
+                    ScannedOcrUnavailable = "Scanned · OCR unavailable"
+                }
+                UploadBadge = "Upload"
+                UploadedKey = "Uploaded"
+                NarrativeLabel = fun moduleId -> $"Narrative · {moduleId}"
+                Note = "Note"
+                NoteEditedFragment = fun editedDate -> $" · edited {editedDate}"
+                NoteAuthoredTooltip =
+                    fun author createdDate editedFragment -> $"Authored by {author} on {createdDate}{editedFragment}"
+                VersionTooltip = fun v -> $"Version {v} — earlier versions are preserved"
+                VersionLabel = fun v -> $"v{v}"
+                NoGrouping = "No grouping"
+                GroupByFileType = "Group by file type"
+                GroupBySource = "Group by source"
+                GroupByStatus = "Group by status"
+                GroupByUploader = "Group by uploader"
+                GroupByMonth = "Group by month"
+                AllDates = "All dates"
+                Last7Days = "Last 7 days"
+                Last30Days = "Last 30 days"
+                Last90Days = "Last 90 days"
+                OlderThan90Days = "Older than 90 days"
+                AnySize = "Any size"
+                UnderOneMb = "Under 1 MB"
+                OneToTenMb = "1–10 MB"
+                OverTenMb = "Over 10 MB"
+                ColumnFile = "File"
+                ColumnType = "Type"
+                ColumnSource = "Source"
+                ColumnUploader = "Uploader"
+                ColumnSize = "Size"
+                ColumnAdded = "Added"
+                ColumnStatus = "Status"
+                NoMatches = "No documents match the current filters."
+                SearchPlaceholder = "Search by file name…"
+                ResultCount = fun filtered total -> $"{filtered} of {total}"
+                ClearFilters = "Clear filters"
+                TypeFilterLabel = "Type"
+                SourceFilterLabel = "Source"
+                StatusFilterLabel = "Status"
+                UploaderFilterLabel = "Uploader"
+                AddedFilterLabel = "Added"
+                SizeFilterLabel = "Size"
+            }
+            Admin = {
+                UploadHeading = "Upload to Platform Knowledge Base"
+                UploadDescription =
+                    "Documents uploaded here are available to every authenticated user across every team in the deployment when the Platform Knowledge Base is enabled. Use for cross-team reference content (regulatory PDFs, deployment-wide style guides, shared methodology)."
+                Uploading = "Uploading…"
+                DocumentsHeading = "Platform Knowledge Base documents"
+                Refresh = "Refresh"
+                Loading = "Loading…"
+                EmptyState = "No documents in the Platform Knowledge Base yet."
+                Delete = "Delete"
+            }
+            Errors = {
+                PopupBlocked = "Your browser blocked the download window. Allow pop-ups for this site and try again."
+                DocumentNotAvailable = "This document isn't available."
+                NoOriginalForVersion = "This version has no stored original to download."
+                OriginalFetchFailed = "Couldn't fetch the original. Please try again."
+                UploadFailed = "Upload failed"
+                TagsUpdateFailed = fun reason -> $"Couldn't update the document's tags: {reason}"
+                DeleteFailed = fun reason -> $"Couldn't delete the document: {reason}"
+                ResetFailed = fun reason -> $"Reset failed: {reason}"
+                SourceNotAvailable = "This source isn't available."
+                SourceHasNoOriginal = "This source has no original document to open."
+                OriginalOpenFailed = "Couldn't open the original document. Please try again."
+            }
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
