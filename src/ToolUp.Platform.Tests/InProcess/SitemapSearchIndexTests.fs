@@ -653,10 +653,154 @@ let private phase38EgressTests =
             Expect.contains (slugsAt (at.AddSeconds 1.0)) "embargoed" "present after"
     ]
 
+// ─── Phase 737 — the conditional-GET leg of the noindex opt-in ───────
+//
+// The universe filter itself is asserted in
+// `StructuredDataConformanceTests` (where the Phase 212 conformance rule
+// that pinned the gap lives). What is asserted HERE is the half that
+// needs the handler: opting in moves the sitemap ETag EXACTLY ONCE — with
+// the body, not ahead of it — and `304` behaviour is intact on both the
+// default and the opted-in path afterwards. A validator that did not move
+// would serve a stale sitemap to every crawler holding the old ETag; one
+// that moved per request would defeat conditional GET entirely.
+
+let private withRobots (value: string) (page: PublicPage) : PublicPage = {
+    page with
+        Frontmatter = page.Frontmatter |> Map.add "robots" value
+}
+
+let private noindexOptedIn: SitemapGenerator.SitemapHandlerOptions = {
+    SitemapGenerator.SitemapHandlerOptions.defaults with
+        Universe = { ExcludeNoindex = true }
+}
+
+let private sitemap737Tests =
+    testList "PublicRendering — Phase 737 noindex exclusion (conditional-GET leg)" [
+
+        testCase "opting in moves the sitemap ETag exactly once, and the body moves with it"
+        <| fun _ ->
+            let pages = [
+                mkPage "public" (Some(DateTimeOffset.Parse "2026-05-22"))
+                mkPage "hidden" (Some(DateTimeOffset.Parse "2026-05-22"))
+                |> withRobots "noindex"
+            ]
+
+            let api = fakeApi pages
+
+            let runWith (opts: SitemapGenerator.SitemapHandlerOptions) =
+                let ctx = mkCtxWith []
+
+                let status, body =
+                    runHandler (SitemapGenerator.handlerWith opts "https://example.com" api noDynamic) ctx
+
+                status, body, ctx.Response.Headers["ETag"].ToString()
+
+            let _, defaultBody, defaultEtag =
+                runWith SitemapGenerator.SitemapHandlerOptions.defaults
+
+            let _, optedBody, optedEtag = runWith noindexOptedIn
+
+            Expect.stringContains defaultBody "/hidden" "not opted in: the noindex page is still advertised"
+            Expect.isFalse (optedBody.Contains "/hidden") "opted in: the noindex page is not advertised"
+            Expect.stringContains optedBody "/public" "opted in: the indexable page is still advertised"
+            Expect.notEqual optedEtag defaultEtag "the ETag moves with the body at opt-in"
+
+            // …exactly once: the opted-in universe is stable, so a second
+            // poll on the same content presents the same validator.
+            let _, optedBody2, optedEtag2 = runWith noindexOptedIn
+            Expect.equal optedEtag2 optedEtag "the ETag does not move again on the next poll"
+            Expect.equal optedBody2 optedBody "…nor does the body"
+
+        testCase "304 behaviour is intact on BOTH paths after the one-off move"
+        <| fun _ ->
+            let pages = [
+                mkPage "public" (Some(DateTimeOffset.Parse "2026-05-22"))
+                mkPage "hidden" (Some(DateTimeOffset.Parse "2026-05-22"))
+                |> withRobots "noindex"
+            ]
+
+            let api = fakeApi pages
+
+            for label, opts in
+                [
+                    "default", SitemapGenerator.SitemapHandlerOptions.defaults
+                    "opted in", noindexOptedIn
+                ] do
+                let handler = SitemapGenerator.handlerWith opts "https://example.com" api noDynamic
+                let first = mkCtxWith []
+                let status1, _ = runHandler handler first
+                let etag = first.Response.Headers["ETag"].ToString()
+
+                Expect.notEqual status1 304 (sprintf "%s: the first crawl is a full response" label)
+                Expect.isTrue (etag.StartsWith "W/\"") (sprintf "%s: weak ETag emitted" label)
+
+                let status2, _ = runHandler handler (mkCtxWith [ "If-None-Match", etag ])
+                Expect.equal status2 304 (sprintf "%s: a matching If-None-Match re-poll 304s" label)
+
+        testCase "the opted-in ETag of a site with no noindex page equals its default ETag"
+        <| fun _ ->
+            // The flag is not a nonce: it moves a validator only where it
+            // moves the universe, so a deployment with no `robots` key at
+            // all can adopt it with no re-crawl at all.
+            let api =
+                fakeApi [ mkPage "a" (Some(DateTimeOffset.Parse "2026-05-22")); mkPage "b" None ]
+
+            let etagOf (opts: SitemapGenerator.SitemapHandlerOptions) =
+                let ctx = mkCtxWith []
+
+                runHandler (SitemapGenerator.handlerWith opts "https://example.com" api noDynamic) ctx
+                |> ignore
+
+                ctx.Response.Headers["ETag"].ToString()
+
+            Expect.equal
+                (etagOf noindexOptedIn)
+                (etagOf SitemapGenerator.SitemapHandlerOptions.defaults)
+                "no noindex page → no universe change → no ETag change"
+
+        testCase "the shard handler honours the flag on the same universe as sitemap.xml"
+        <| fun _ ->
+            let opts = {
+                noindexOptedIn with
+                    Sharding = {
+                        SitemapGenerator.SitemapShardingOptions.defaults with
+                            Threshold = 10
+                    }
+            }
+
+            let pages = [
+                for i in 1..25 ->
+                    let p = mkPage (sprintf "p%02d" i) None
+                    if i % 5 = 0 then withRobots "noindex" p else p
+            ]
+
+            let api = fakeApi pages
+
+            // 20 indexable pages at a threshold of 10 → exactly 2 shards;
+            // 25 unfiltered would have been 3. A shard index that disagreed
+            // with the filtered universe is the failure this pins.
+            let _, index =
+                runHandler (SitemapGenerator.handlerWith opts "https://example.com" api noDynamic) (mkCtxWith [])
+
+            Expect.stringContains index "/sitemap-2.xml" "lists shard 2"
+            Expect.isFalse (index.Contains "/sitemap-3.xml") "ceil(20/10) = 2 shards, not 3"
+
+            let shardHandler =
+                SitemapGenerator.shardHandler opts "https://example.com" api noDynamic
+
+            let _, shard1 = runHandler shardHandler (mkCtxPath "/sitemap-1.xml")
+            let _, shard2 = runHandler shardHandler (mkCtxPath "/sitemap-2.xml")
+            let served = shard1 + shard2
+
+            Expect.stringContains served "/p01" "an indexable page is served by a shard"
+            Expect.isFalse (served.Contains "/p05") "a noindex page reaches no shard either"
+    ]
+
 let tests =
-    testList "PublicRendering — sitemap & search index (Phase 149/150/157)" [
+    testList "PublicRendering — sitemap & search index (Phase 149/150/157/737)" [
         sitemap149Tests
         sitemap150Tests
         searchIndex157Tests
         phase38EgressTests
+        sitemap737Tests
     ]

@@ -77,6 +77,8 @@ The tracked-changes fixture surfaced a real defect in `Emit`, present since the 
 
 Two consequences: the emitted package **fails OOXML schema validation**, and the round trip is **not a fixpoint** — each pass adds another duplicate, without bound. Runs are unaffected, because a run's mark sits outside its `w:rPr`; that is why every fixture written before this one round-tripped clean and nothing in the suite caught it.
 
+**Update — the defect is FIXED, by [Phase 736](736-openxml-emit-paragraph-mark-revision-duplication-fix.md).** `Import` now strips the mark it captures typed, so the fixture below carries no `KnownDefect` and its two `*.validation.txt` goldens are gone. The rest of this section is kept as written, because it is what the corpus found and how it declared it.
+
 **This phase pins the defect; it does not fix it.** The corpus's job is to make today's fidelity measurable so tomorrow's drift fails the build, and the phase is scoped test-only — production sources are unchanged. The pin is not an exemption, and is deliberately not a comment:
 
 - the defect is declared as data, on the fixture, in `Corpus/CorpusFixtures.fs`;

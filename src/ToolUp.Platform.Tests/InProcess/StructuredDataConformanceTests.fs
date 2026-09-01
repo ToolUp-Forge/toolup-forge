@@ -1531,57 +1531,164 @@ let private ruleSelfTests =
             Expect.isEmpty (Conformance.robotsContent "probe" "noindex, nofollow") "a valid directive passes"
     ]
 
-// ─── 8. A pinned gap in the shipped surface ──────────────────────────
+// ─── 8. Phase 737 — the pinned gap, closed behind an opt-in ──────────
+//
+// Phase 212 pinned a real gap here as data: `SitemapGenerator.entriesAt`
+// never consulted the Phase 152 `robots` key, so a page declaring
+// `robots: noindex` was still advertised in `sitemap.xml` — the "Submitted
+// URL marked 'noindex'" coverage error, a sitemap asking a crawler to
+// index a URL the page itself refuses. The rule
+// (`Conformance.noindexNotAdvertised`) was correct throughout and was
+// never weakened to make the emitter pass; the pin carried the FINDING
+// until the behaviour could change.
+//
+// Phase 737 closes it behind `SitemapUniverseOptions.ExcludeNoindex`,
+// default off, because closing it unconditionally would have moved the
+// sitemap body — and with it the Phase 149 ETag — of every deployment
+// already using the key (GP 11). So the pin becomes THREE obligations,
+// and all three are live assertions rather than a carve-out:
+//
+//   * opted in, the 212 rule is asserted DIRECTLY: no noindex page is
+//     advertised, and no known-gap exemption remains anywhere in the pack;
+//   * NOT opted in, the universe is byte-for-byte what it was — proven
+//     against an explicit expected body, not merely against itself, so a
+//     future default flip cannot pass this pack;
+//   * the documented `sitemap: exclude` workaround still holds, on BOTH
+//     paths. The two mechanisms are a union of exclusions, so a deployment
+//     that adopted the workaround adopts the flag with no content edit.
 
-let private knownGapTests =
-    testList "known gap — robots:noindex does not exclude a page from sitemap.xml" [
+let private noindexPages = [
+    mkPage "public" "Public" "" (Markdown "x") []
+    mkPage "hidden" "Hidden" "" (Markdown "x") [ "robots", "noindex" ]
+]
 
-        // FINDING (Phase 212). `SitemapGenerator.entriesAt` drops a page
-        // for three reasons: a `sitemap: exclude` frontmatter key, a
-        // non-`Public` audience, and a not-publicly-visible status. It
-        // does NOT consult the Phase 152 `robots` key — so a page
-        // declaring `robots: noindex` is still advertised in
-        // `sitemap.xml`, which Search Console reports as the "Submitted
-        // URL marked 'noindex'" coverage error.
-        //
-        // The rule (`Conformance.noindexNotAdvertised`) is correct and is
-        // NOT weakened to make the emitter pass. The behaviour is pinned
-        // here instead, because closing it would change the sitemap body
-        // — and therefore the Phase 149 ETag — of every deployment
-        // already using the key, which is a shipping-surface change this
-        // phase is explicitly scoped out of (GP 11 / GP 13). The
-        // author-side workaround is to set `sitemap: exclude` alongside
-        // `robots: noindex`, which the case below also pins as working.
-        //
-        // This case FAILS when the gap is closed. That is the intent:
-        // the failure is the prompt to delete it and move the assertion
-        // into `robotsTests` as a conformance case.
+/// A clock pinned inside every fixture page's visibility window, so the
+/// cases below decide on the `robots` key alone.
+let private pinnedNow = DateTimeOffset.Parse "2026-06-19T00:00:00Z"
 
-        testCase "pinned: a robots:noindex page IS currently advertised"
+/// The advertised slugs for a given set of universe options — the deduped
+/// universe `<urlset>` is emitted from, one line upstream of the body.
+/// Taken here rather than off the rendered XML because the body builder is
+/// assembly-`internal` (this pack reaches it only through the public
+/// delegators — see the header), and because the Phase 212 rule under test
+/// takes a slug list. The rendered opted-in body is asserted over the real
+/// handler in `SitemapSearchIndexTests`' Phase 737 list, and
+/// `generateUrlSetFrom`'s conformance over an arbitrary universe — the
+/// shorter opted-in one included — is already pinned by `sitemapTests`.
+let private advertisedWith
+    (universeOptions: SitemapGenerator.SitemapUniverseOptions)
+    (pages: PublicPage list)
+    : string list =
+    SitemapGenerator.entriesAtWith universeOptions pinnedNow pages []
+    |> List.map (fun (Slug s, _) -> s)
+
+let private optedIn: SitemapGenerator.SitemapUniverseOptions = { ExcludeNoindex = true }
+
+let private noindexExclusionTests =
+    testList "Phase 737 — robots:noindex excluded from sitemap.xml behind an opt-in" [
+
+        testCase "opted in: a robots:noindex page is absent from <urlset> and the 212 rule passes directly"
         <| fun _ ->
-            let pages = [
-                mkPage "public" "Public" "" (Markdown "x") []
-                mkPage "hidden" "Hidden" "" (Markdown "x") [ "robots", "noindex" ]
-            ]
+            let advertised = advertisedWith optedIn noindexPages
 
-            let advertised =
-                Conformance.advertisedSlugs baseUrl (SitemapGenerator.generate baseUrl pages)
+            Expect.contains advertised "public" "an indexable page is still advertised"
+            Expect.isFalse (List.contains "hidden" advertised) "the noindex page is not advertised"
 
-            Expect.isNonEmpty
-                (Conformance.noindexNotAdvertised "known gap" [ "hidden" ] advertised)
-                "if this is now empty the gap has been closed — delete this case and assert conformance instead"
+            expectConformant
+                "noindex vs sitemap (opted in)"
+                (Conformance.noindexNotAdvertised "noindex vs sitemap (opted in)" [ "hidden" ] advertised)
 
-        testCase "the documented workaround holds: sitemap:exclude alongside robots:noindex"
+        testCase "NOT opted in: the body is byte-for-byte the pre-737 output (GP 11)"
+        <| fun _ ->
+            // The pre-737 emitter advertised BOTH pages; that is what a
+            // non-adopting deployment must keep seeing, ETag included.
+            // Asserted against an explicit expected body rather than
+            // against another call of the same code path — a default
+            // flipped to `true` would sail through the latter.
+            let expected =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+                + "  <url>\n    <loc>https://example.com/public</loc>\n    <lastmod>2026-06-19</lastmod>\n  </url>\n"
+                + "  <url>\n    <loc>https://example.com/hidden</loc>\n    <lastmod>2026-06-19</lastmod>\n  </url>\n"
+                + "</urlset>\n"
+
+            let actual = (SitemapGenerator.generate baseUrl noindexPages).Replace("\r\n", "\n")
+
+            Expect.equal actual expected "the default path emits the pre-737 body, byte for byte"
+
+            Expect.equal
+                (SitemapGenerator.entriesAt pinnedNow noindexPages [])
+                (SitemapGenerator.entriesAtWith SitemapGenerator.SitemapUniverseOptions.defaults pinnedNow noindexPages [])
+                "entriesAt IS entriesAtWith at defaults"
+
+        testCase "the documented workaround holds on both paths: sitemap:exclude alongside robots:noindex"
         <| fun _ ->
             let pages = [
                 mkPage "public" "Public" "" (Markdown "x") []
                 mkPage "hidden" "Hidden" "" (Markdown "x") [ "robots", "noindex"; "sitemap", "exclude" ]
             ]
 
-            let advertised =
-                Conformance.advertisedSlugs baseUrl (SitemapGenerator.generate baseUrl pages)
+            for label, options in
+                [
+                    "workaround (default)", SitemapGenerator.SitemapUniverseOptions.defaults
+                    "workaround (opted in)", optedIn
+                ] do
+                expectConformant
+                    label
+                    (Conformance.noindexNotAdvertised label [ "hidden" ] (advertisedWith options pages))
 
-            expectConformant "workaround" (Conformance.noindexNotAdvertised "workaround" [ "hidden" ] advertised)
+        testCase "the exclusions are a UNION — neither key weakens the other"
+        <| fun _ ->
+            // Opted in, `sitemap: exclude` still excludes a page whose
+            // robots key positively invites indexing.
+            let pages = [
+                mkPage "public" "Public" "" (Markdown "x") []
+                mkPage "excluded" "Excluded" "" (Markdown "x") [ "sitemap", "exclude"; "robots", "index, follow" ]
+            ]
+
+            let advertised = advertisedWith optedIn pages
+            Expect.contains advertised "public" "the plain page is advertised"
+            Expect.isFalse (List.contains "excluded" advertised) "sitemap:exclude still wins whatever robots says"
+
+        testCase "'none' resolves to noindex; an indexing directive and a blank key do not"
+        <| fun _ ->
+            // `none` is the documented shorthand for `noindex, nofollow`.
+            // A reader matching only the literal `noindex` would advertise
+            // a page that is just as firmly excluded.
+            let cases = [
+                "noindex", true
+                "none", true
+                "NoIndex", true
+                "  noindex , nofollow  ", true
+                "noindex,nofollow,noarchive", true
+                "index, follow", false
+                "noarchive", false
+                "nofollow", false
+                "", false
+                "   ", false
+            ]
+
+            for value, expected in cases do
+                let page = mkPage "p" "P" "" (Markdown "x") [ "robots", value ]
+
+                Expect.equal
+                    (SitemapGenerator.resolvesToNoindex page)
+                    expected
+                    (sprintf "robots '%s' resolves to noindex = %b" value expected)
+
+            Expect.isFalse
+                (SitemapGenerator.resolvesToNoindex (mkPage "p" "P" "" (Markdown "x") []))
+                "an absent robots key never excludes"
+
+        testCase "opting in excludes nothing on a site that declares no robots key"
+        <| fun _ ->
+            // The flag is not a blanket filter: it moves the universe only
+            // where a `robots` key actually says noindex, which is why a
+            // deployment with none can adopt it with no crawl impact.
+            Expect.equal
+                (advertisedWith optedIn sitemapPages)
+                (advertisedWith SitemapGenerator.SitemapUniverseOptions.defaults sitemapPages)
+                "the representative page set carries no robots key — identical universes"
     ]
 
 let tests =
@@ -1591,5 +1698,5 @@ let tests =
         canonicalHreflangTests
         robotsTests
         ruleSelfTests
-        knownGapTests
+        noindexExclusionTests
     ]

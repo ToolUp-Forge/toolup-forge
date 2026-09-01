@@ -1,2 +1,0 @@
-Sch_UnexpectedElementContentExpectingComplex at /w:document[1]/w:body[1]/w:p[5]/w:pPr[1]/w:rPr[1]: The element has unexpected child element 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:ins'.
-Sch_UnexpectedElementContentExpectingComplex at /w:document[1]/w:body[1]/w:p[6]/w:pPr[1]/w:rPr[1]: The element has unexpected child element 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:del'.

@@ -260,6 +260,25 @@ type BootVerificationVerdict =
     /// Everything sealed verified, and the running composition is not
     /// the one that was sealed. Carries every difference found.
     | Drifted of drift: CompositionDrift list
+    /// Phase 678 — the sealed deploy record this deployment was started
+    /// from has been RETIRED: a signed terminal op closed its audit
+    /// ledger and a retirement reference binds the two.
+    ///
+    /// **Its own case, and not a `VerificationFailed` finding.** A retired
+    /// record is not a broken one — its seal verifies, its artifacts
+    /// match, and its composition may be exactly what was sealed. What is
+    /// true of it is that the deployment it describes is over, which is a
+    /// different fact calling for a different response: an operator
+    /// looking at `unverified` hunts for tampering, and an operator
+    /// looking at `retired` restores from the wrong backup or points a
+    /// container at a decommissioned engagement.
+    ///
+    /// **Not affirmative, and it refuses under EVERY policy** — see
+    /// `runWithRetirement`. Log-and-serve exists so a deployment can adopt
+    /// a check before knowing whether it passes; there is no equivalent
+    /// grace period for serving a deployment somebody signed a
+    /// decommission for.
+    | Retired of retirement: DeployRetirement
 
 [<RequireQualifiedAccess>]
 module BootVerificationVerdict =
@@ -271,6 +290,7 @@ module BootVerificationVerdict =
         | BootVerificationVerdict.Unsealed _ -> "unsealed"
         | BootVerificationVerdict.VerificationFailed _ -> "unverified"
         | BootVerificationVerdict.Drifted _ -> "drifted"
+        | BootVerificationVerdict.Retired _ -> "retired"
 
     /// `true` for the two affirmative verdicts. Everything else is a
     /// reason not to serve under a refusing policy.
@@ -304,6 +324,7 @@ module BootVerificationVerdict =
             (failures |> List.map DeployRecords.DeployRecordVerificationFailure.describe)
             @ bindingFindings
         | BootVerificationVerdict.Drifted drift -> drift |> List.map CompositionDrift.describe
+        | BootVerificationVerdict.Retired retirement -> [ DeployRetirement.describe retirement ]
 
     /// One-line account naming the verdict and how many findings sit
     /// behind it.
@@ -319,6 +340,8 @@ module BootVerificationVerdict =
             $"boot verification: the sealed deploy record did not verify ({count} finding(s))"
         | BootVerificationVerdict.Drifted drift ->
             $"boot verification: the running composition differs from the sealed one ({drift.Length} difference(s))"
+        | BootVerificationVerdict.Retired retirement ->
+            $"boot verification: this deployment's sealed record was retired by '{retirement.RetiredBy}' at {retirement.RetiredAt} — its audit ledger is closed and it must not serve"
 
 // ─── Policy + profile ────────────────────────────────────────────────
 
@@ -806,11 +829,10 @@ module BootVerificationPreflight =
                 | Error reason -> return Error [ $"composition binding seal does not cover this binding: {reason}" ]
         }
 
-    /// Ask the four questions in the file header and return the verdict.
-    ///
-    /// Pure with respect to the process: it decides nothing and refuses
-    /// nothing. `run` is what turns a verdict into a decision.
-    let verify (options: BootVerificationOptions) (observed: CompositionManifest) : Async<BootVerificationVerdict> = async {
+    /// The four questions in the file header, without the Phase 678
+    /// retirement question. Private: every caller reaches it through
+    /// `verifyWithRetirement`, which is the whole check.
+    let private verifyUnretired (options: BootVerificationOptions) (observed: CompositionManifest) = async {
         match options.Record, options.Binding with
         | None, _ ->
             return
@@ -871,6 +893,70 @@ module BootVerificationPreflight =
                 | drift -> return BootVerificationVerdict.Drifted drift
     }
 
+    /// Phase 678 — the four questions in the file header, preceded by a
+    /// fifth: *has this deployment been retired?*
+    ///
+    /// **The retirement is a parameter rather than a field on
+    /// `BootVerificationOptions`.** Widening that record would retype its
+    /// constructor and break every consumer that builds one literally, for
+    /// a feature no existing consumer supplies — the repo's standing
+    /// design corollary, and the same call Phase 656 and Phase 657 each
+    /// made for their own records. `verify` below delegates here with
+    /// `None`, so a deployment that never retires is byte-for-byte what it
+    /// was (GP 11 / GP 13).
+    ///
+    /// **Retirement is asked FIRST, and answered only when it BINDS this
+    /// record.** First, because a decommissioned deployment is the single
+    /// most actionable fact available and reporting it behind a drift list
+    /// would bury it. Only when bound, because a retirement naming another
+    /// deploy says nothing about this one — it has been presented
+    /// alongside the wrong record, which is a finding in the same
+    /// binding-mismatch family the composition binding already uses, and
+    /// emphatically not a reason to refuse the boot of a deployment nobody
+    /// retired.
+    let verifyWithRetirement
+        (options: BootVerificationOptions)
+        (retirement: DeployRetirement option)
+        (observed: CompositionManifest)
+        : Async<BootVerificationVerdict> =
+        async {
+            let recordDigest =
+                options.Record
+                |> Option.map (fun sealedRecord ->
+                    sealedRecord.Record
+                    |> DeployRecord.coerce
+                    |> DeployRecords.canonicalBytes
+                    |> DeployRecords.digestBytes)
+
+            match recordDigest, retirement with
+            | Some digest, Some retirement when DeployRetirement.bindsRecord digest retirement ->
+                return BootVerificationVerdict.Retired retirement
+            | _ ->
+                let misbound = [
+                    match recordDigest, retirement with
+                    | Some digest, Some retirement ->
+                        $"a retirement was supplied for a different deploy record: it retires {retirement.DeployRecordDigest}, this record digests to {digest}"
+                    | None, Some retirement ->
+                        $"a retirement was supplied with no sealed deploy record to bind it to: it retires {retirement.DeployRecordDigest}"
+                    | _, None -> ()
+                ]
+
+                let! verdict = verifyUnretired options observed
+
+                match verdict, misbound with
+                | _, [] -> return verdict
+                | BootVerificationVerdict.VerificationFailed(failures, findings), _ ->
+                    return BootVerificationVerdict.VerificationFailed(failures, findings @ misbound)
+                | _, _ -> return BootVerificationVerdict.VerificationFailed([], misbound)
+        }
+
+    /// Ask the four questions in the file header and return the verdict.
+    ///
+    /// Pure with respect to the process: it decides nothing and refuses
+    /// nothing. `run` is what turns a verdict into a decision.
+    let verify (options: BootVerificationOptions) (observed: CompositionManifest) : Async<BootVerificationVerdict> =
+        verifyWithRetirement options None observed
+
     /// Record a verdict through the audit seam.
     ///
     /// Emitted as an ordinary `AuditEvent`, so whichever sinks the
@@ -895,8 +981,9 @@ module BootVerificationPreflight =
             do! auditLog.Record(options.ScopeId, AuditEvent.CompositionVerificationRecorded payload)
     }
 
-    /// Run the preflight, record the verdict, and decide whether the
-    /// process may serve.
+    /// Phase 678 — run the preflight against a deployment that may have
+    /// been retired, record the verdict, and decide whether the process
+    /// may serve.
     ///
     /// `Ok` means serve; `Error` means refuse to start. Both carry the
     /// same result value, because the caller wants the verdict either
@@ -906,18 +993,36 @@ module BootVerificationPreflight =
     /// The verdict is recorded on both arms, before the decision is
     /// returned. A refusal that never reached the audit trail because the
     /// process stopped first is the one an incident review most needs.
-    let run
+    ///
+    /// **`Retired` refuses under EVERY policy, log-and-serve included**,
+    /// and that is the one place this file departs from the policy ladder
+    /// it otherwise honours exactly. Log-and-serve exists so a deployment
+    /// can adopt a check before it knows whether it passes — a grace
+    /// period for a check that might be wrong about a deployment that is
+    /// fine. A retirement is not that: it is a signed statement, made by
+    /// the deployment's own key holder, that this deployment is over.
+    /// There is nothing for an operator to watch and grow confident about,
+    /// and a policy under which a decommissioned engagement keeps serving
+    /// is a policy that makes the certificate a lie.
+    ///
+    /// `run` above is this with `None`, so nothing changes for a
+    /// deployment that supplies no retirement.
+    let runWithRetirement
         (options: BootVerificationOptions)
+        (retirement: DeployRetirement option)
         (observed: CompositionManifest)
         : Async<Result<BootVerificationResult, BootVerificationResult>> =
         async {
             let policy = CompositionProfile.effectivePolicy options.Profile options.Policy
-            let! verdict = verify options observed
+            let! verdict = verifyWithRetirement options retirement observed
 
             let refusedStart =
-                match policy with
-                | BootVerificationPolicy.LogAndServe -> false
-                | BootVerificationPolicy.RefuseOnDrift -> not (BootVerificationVerdict.isAffirmative verdict)
+                match verdict with
+                | BootVerificationVerdict.Retired _ -> true
+                | _ ->
+                    match policy with
+                    | BootVerificationPolicy.LogAndServe -> false
+                    | BootVerificationPolicy.RefuseOnDrift -> not (BootVerificationVerdict.isAffirmative verdict)
 
             let result = {
                 Verdict = verdict
@@ -930,6 +1035,16 @@ module BootVerificationPreflight =
 
             return if refusedStart then Error result else Ok result
         }
+
+    /// Run the preflight, record the verdict, and decide whether the
+    /// process may serve. `runWithRetirement` with no retirement supplied
+    /// — unchanged behaviour for every deployment that has not
+    /// decommissioned.
+    let run
+        (options: BootVerificationOptions)
+        (observed: CompositionManifest)
+        : Async<Result<BootVerificationResult, BootVerificationResult>> =
+        runWithRetirement options None observed
 
 // ─── The verified composition profile ────────────────────────────────
 
