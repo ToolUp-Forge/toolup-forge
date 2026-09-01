@@ -519,6 +519,13 @@
              DeployPlaneTypes.fs because it uses the DeployId / TenantId /
              BuildId aliases. -->
         <Compile Include="Shared\Types\DeployRecordTypes.fs" />
+        <!-- Phase 678 — the deploy-record retirement reference: the
+             companion binding one sealed deploy record to the terminal op
+             that closed its audit ledger. After DeployRecordTypes.fs,
+             whose SealedDeployRecord it embeds; it references the ledger
+             only by opaque digest, so nothing here depends on the
+             chained-ledger companion (GP 1). Fable-safe. -->
+        <Compile Include="Shared\Types\DeployRetirementTypes.fs" />
         <!-- Phase 713 — the evidence chain as data: the ordered hop model,
              the four-case link verdict, the declared caps + typed refusals,
              and the canonical form the verdict digest is taken over. Pure

@@ -350,7 +350,12 @@ let private buildParagraphProperties
             | NoProps, None -> None
 
     // Paragraph-mark revision (whole-paragraph insert / delete)
-    // lowers to w:pPr/w:rPr/w:ins|w:del.
+    // lowers to w:pPr/w:rPr/w:ins|w:del — ADDED ON TOP of the verbatim
+    // payload above, which is why `RawProperties` must not carry the
+    // same element (Phase 736; the invariant is stated on
+    // `ParagraphModel.RawProperties` and held by `Import`). A payload
+    // that did carry it would be emitted twice, and `w:rPr` with two
+    // `w:ins` children is schema-invalid.
     match paragraph.MarkRevision with
     | None -> props
     | Some mark ->

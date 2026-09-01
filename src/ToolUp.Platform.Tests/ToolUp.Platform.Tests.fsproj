@@ -1166,6 +1166,10 @@
              the Phase 562/674 declassification story. Compiled beside the
              conjunction pack it extends. -->
         <Compile Include="InProcess\DeclassificationBudgetTests.fs" />
+        <!-- Phase 679 - the co-signed budget amendment: how a Phase 675
+             ceiling is relieved without one party moving it alone. Must
+             follow the budget pack it extends. -->
+        <Compile Include="InProcess\DeclassificationBudgetAmendmentTests.fs" />
         <!-- Phase 558 — fact-resolver compose wiring (the Stage-1 loop). -->
         <Compile Include="InProcess\FactResolverComposeTests.fs" />
         <!-- Phase 506 — the IQueryRewriter compose pickup (sibling probe). -->

@@ -336,6 +336,60 @@ ToolUp.Facts.CoverageTool.DisclosureProbeK : System.Int32 (literal)
 ToolUp.Facts.CoverageTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.CoverageTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.DeclassificationAmendmentConfig (class)
+ToolUp.Facts.DeclassificationAmendmentConfig..ctor(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit])
+ToolUp.Facts.DeclassificationAmendmentConfig.Amendments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment] { get }
+ToolUp.Facts.DeclassificationAmendmentConfig.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit] { get }
+ToolUp.Facts.DeclassificationAmendmentConfig.Registry : ToolUp.Platform.ICountersignatureRegistry { get }
+ToolUp.Facts.DeclassificationAmendmentConfig.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DeclassificationAmendmentConfigModule (class)
+ToolUp.Facts.DeclassificationAmendmentConfigModule.chainFor(System.String, System.String, ToolUp.Facts.DeclassificationAmendmentConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]
+ToolUp.Facts.DeclassificationAmendmentConfigModule.create(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]) : ToolUp.Facts.DeclassificationAmendmentConfig
+ToolUp.Facts.DeclassificationAmendmentConfigModule.tryCreate(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DeclassificationAmendmentConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.DeclassificationAmendmentConfigModule.withAudit(ToolUp.Facts.IDeclassificationAmendmentAudit, ToolUp.Facts.DeclassificationAmendmentConfig) : ToolUp.Facts.DeclassificationAmendmentConfig
+ToolUp.Facts.DeclassificationAmendmentEvent (class)
+ToolUp.Facts.DeclassificationAmendmentEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Decimal, System.Decimal, System.Decimal, System.DateTimeOffset)
+ToolUp.Facts.DeclassificationAmendmentEvent.CeilingAfter : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.CeilingBefore : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.CeilingDelta : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.Outcome : System.String { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.PartyId : System.String { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.SubjectHash : System.String { get }
+ToolUp.Facts.DeclassificationAmendmentEvent.TemplateId : System.String { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome.IsAmendmentApplied : System.Boolean { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome.IsAmendmentBaselineMoved : System.Boolean { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome.IsAmendmentBelowRecordedSpend : System.Boolean { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome.IsAmendmentNotCountersigned : System.Boolean { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentApplied (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentApplied.effectiveFrom : System.DateTimeOffset { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentBaselineMoved (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentBaselineMoved.inForce : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentBelowRecordedSpend (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentBelowRecordedSpend.proposed : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentBelowRecordedSpend.recorded : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentNotCountersigned (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome+AmendmentNotCountersigned.status : ToolUp.Platform.CountersignatureStatus { get }
+ToolUp.Facts.DeclassificationAmendmentOutcome+Tags (class)
+ToolUp.Facts.DeclassificationAmendmentOutcome+Tags.AmendmentApplied : System.Int32 (literal)
+ToolUp.Facts.DeclassificationAmendmentOutcome+Tags.AmendmentBaselineMoved : System.Int32 (literal)
+ToolUp.Facts.DeclassificationAmendmentOutcome+Tags.AmendmentBelowRecordedSpend : System.Int32 (literal)
+ToolUp.Facts.DeclassificationAmendmentOutcome+Tags.AmendmentNotCountersigned : System.Int32 (literal)
+ToolUp.Facts.DeclassificationAmendmentResolution (class)
+ToolUp.Facts.DeclassificationAmendmentResolution..ctor(ToolUp.Platform.BudgetAmendment, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.DeclassificationAmendmentOutcome, System.Decimal, System.Decimal, System.DateTimeOffset)
+ToolUp.Facts.DeclassificationAmendmentResolution.Amendment : ToolUp.Platform.BudgetAmendment { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.CeilingAfter : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.CeilingBefore : System.Decimal { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.Outcome : ToolUp.Facts.DeclassificationAmendmentOutcome { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.ResolvedAt : System.DateTimeOffset { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DeclassificationAmendmentResolution.SubjectHash : System.String { get }
+ToolUp.Facts.DeclassificationAmendments (class)
+ToolUp.Facts.DeclassificationAmendments.effectiveCeiling(ToolUp.Facts.DeclassificationBudgetConfig, ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[System.Decimal]
+ToolUp.Facts.DeclassificationAmendments.resolve(ToolUp.Facts.DeclassificationBudgetConfig, ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DeclassificationCeiling]
 ToolUp.Facts.DeclassificationBudget (class)
 ToolUp.Facts.DeclassificationBudget..ctor(System.String, ToolUp.Facts.DeclassificationCharge, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.BudgetEpoch, ToolUp.Platform.WithholdCharge, System.TimeSpan)
 ToolUp.Facts.DeclassificationBudget.Charge : ToolUp.Facts.DeclassificationCharge { get }
@@ -345,7 +399,8 @@ ToolUp.Facts.DeclassificationBudget.OperationId : System.String { get }
 ToolUp.Facts.DeclassificationBudget.ReservationTtl : System.TimeSpan { get }
 ToolUp.Facts.DeclassificationBudget.WithholdCharge : ToolUp.Platform.WithholdCharge { get }
 ToolUp.Facts.DeclassificationBudgetConfig (class)
-ToolUp.Facts.DeclassificationBudgetConfig..ctor(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationBudget], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Facts.DeclassificationBudgetConfig..ctor(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationBudget], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationAmendmentConfig])
+ToolUp.Facts.DeclassificationBudgetConfig.Amendments : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationAmendmentConfig] { get }
 ToolUp.Facts.DeclassificationBudgetConfig.Budgets : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationBudget] { get }
 ToolUp.Facts.DeclassificationBudgetConfig.Ledger : ToolUp.Platform.IPrivacyBudgetLedger { get }
 ToolUp.Facts.DeclassificationBudgetConfig.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
@@ -354,7 +409,12 @@ ToolUp.Facts.DeclassificationBudgetConfigModule.budgetFor(ToolUp.Facts.Declassif
 ToolUp.Facts.DeclassificationBudgetConfigModule.create(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget]) : ToolUp.Facts.DeclassificationBudgetConfig
 ToolUp.Facts.DeclassificationBudgetConfigModule.isEmpty(ToolUp.Facts.DeclassificationBudgetConfig) : System.Boolean
 ToolUp.Facts.DeclassificationBudgetConfigModule.tryCreate(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DeclassificationBudgetConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Facts.DeclassificationBudgetConfigModule.withAmendments(ToolUp.Facts.DeclassificationAmendmentConfig, ToolUp.Facts.DeclassificationBudgetConfig) : ToolUp.Facts.DeclassificationBudgetConfig
 ToolUp.Facts.DeclassificationBudgetConfigModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Facts.DeclassificationBudgetConfig) : ToolUp.Facts.DeclassificationBudgetConfig
+ToolUp.Facts.DeclassificationBudgetEvents (class)
+ToolUp.Facts.DeclassificationBudgetEvents.AmendedType : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetEvents.AmendmentRefusedType : System.String (literal)
+ToolUp.Facts.DeclassificationBudgetEvents.outcomeName(ToolUp.Facts.DeclassificationAmendmentOutcome) : System.String
 ToolUp.Facts.DeclassificationBudgetGate (class)
 ToolUp.Facts.DeclassificationBudgetGate.reserve(ToolUp.Facts.DeclassificationBudgetConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DeclassificationBudgetOutcome]
 ToolUp.Facts.DeclassificationBudgetGate.settle(ToolUp.Facts.DeclassificationBudgetConfig, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationHold]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -370,6 +430,7 @@ ToolUp.Facts.DeclassificationBudgetModule.countedCrossings(System.String, System
 ToolUp.Facts.DeclassificationBudgetModule.policyFor(ToolUp.Facts.DeclassificationBudget) : ToolUp.Platform.PrivacyBudgetPolicy
 ToolUp.Facts.DeclassificationBudgetModule.scopeFor(ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : ToolUp.Platform.BudgetScope
 ToolUp.Facts.DeclassificationBudgetModule.spendFor(ToolUp.Facts.DeclassificationBudget, System.String, System.DateTimeOffset) : ToolUp.Platform.BudgetSpend
+ToolUp.Facts.DeclassificationBudgetModule.templateIdFor(System.String) : System.String
 ToolUp.Facts.DeclassificationBudgetModule.validate(ToolUp.Facts.DeclassificationBudget) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.DeclassificationBudgetModule.withEpoch(ToolUp.Platform.BudgetEpoch, ToolUp.Facts.DeclassificationBudget) : ToolUp.Facts.DeclassificationBudget
 ToolUp.Facts.DeclassificationBudgetModule.withReservationTtl(System.TimeSpan, ToolUp.Facts.DeclassificationBudget) : ToolUp.Facts.DeclassificationBudget
@@ -386,6 +447,10 @@ ToolUp.Facts.DeclassificationBudgetOutcome+CrossingsRefused.policyRef : System.S
 ToolUp.Facts.DeclassificationBudgetOutcome+Tags (class)
 ToolUp.Facts.DeclassificationBudgetOutcome+Tags.CrossingsHeld : System.Int32 (literal)
 ToolUp.Facts.DeclassificationBudgetOutcome+Tags.CrossingsRefused : System.Int32 (literal)
+ToolUp.Facts.DeclassificationCeiling (class)
+ToolUp.Facts.DeclassificationCeiling..ctor(System.Decimal, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationAmendmentResolution])
+ToolUp.Facts.DeclassificationCeiling.Ceiling : System.Decimal { get }
+ToolUp.Facts.DeclassificationCeiling.Resolutions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationAmendmentResolution] { get }
 ToolUp.Facts.DeclassificationCharge (class)
 ToolUp.Facts.DeclassificationCharge.IsChargedEpsilon : System.Boolean { get }
 ToolUp.Facts.DeclassificationCharge.IsCountedCrossings : System.Boolean { get }
@@ -406,6 +471,8 @@ ToolUp.Facts.DisclosureTaint (class)
 ToolUp.Facts.DisclosureTaint.analyze(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
 ToolUp.Facts.DisclosureTaint.buildGraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.FactDerivationGraph
 ToolUp.Facts.DisclosureTaint.declassifierOf(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.Fact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
+ToolUp.Facts.EventStoreAmendmentAudit (class)
+ToolUp.Facts.EventStoreAmendmentAudit..ctor(ToolUp.Platform.IEventStore, System.String)
 ToolUp.Facts.FactAssertedEvent (class)
 ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
@@ -562,6 +629,7 @@ ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withCoverageNarratives(ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withDeclassificationBudgetConfig(ToolUp.Facts.DeclassificationBudgetConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDeclassificationBudgets(ToolUp.Platform.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -615,6 +683,8 @@ ToolUp.Facts.IAttestedGroundingCertificateIssuer (interface)
 ToolUp.Facts.IAttestedGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Facts.CertificateError]]
 ToolUp.Facts.ICertificateIssuanceLog (interface)
 ToolUp.Facts.ICertificateIssuanceLog.Issued(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CertificateIssuance], System.String]]
+ToolUp.Facts.IDeclassificationAmendmentAudit (interface)
+ToolUp.Facts.IDeclassificationAmendmentAudit.Record(ToolUp.Facts.DeclassificationAmendmentResolution) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.IFactImportDoor (interface)
 ToolUp.Facts.IFactImportDoor.Import(System.String, System.String, ToolUp.Facts.ImportedFactOffer, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, ToolUp.Facts.FactImportRefusal]]
 ToolUp.Facts.IFactRecomputer (interface)

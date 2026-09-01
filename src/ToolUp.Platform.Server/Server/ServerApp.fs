@@ -2046,7 +2046,14 @@ module ServerApp =
             )
         | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
         | BootVerificationVerdict.VerificationFailed _
-        | BootVerificationVerdict.Drifted _ ->
+        | BootVerificationVerdict.Drifted _
+        // Phase 678 — a retired deployment is a REJECTION in this
+        // report's vocabulary, not a second affirmative case: the verdict
+        // already refused the start under every policy, and the section's
+        // job here is to carry that refusal and its reason. The verdict's
+        // own `describe` / `findings` name the retirement, so nothing is
+        // lost by not giving it a fourth tier-neutral case.
+        | BootVerificationVerdict.Retired _ ->
             BootSealRejected(
                 profile,
                 policy,

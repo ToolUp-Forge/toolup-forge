@@ -756,6 +756,11 @@
         <!-- After AdUnitConfigApi: the ad-analytics slot sanity check
              reads AdUnitConfigApi.tryListConfiguredSlotIds. -->
         <Compile Include="Server\AdAnalyticsApiHandler.fs" />
+        <!-- Phase 163 — end-user product-telemetry fan-out endpoint. Beside
+             the other analytics sinks; needs only ITelemetrySink +
+             AccessContext from Core, and must precede
+             Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
+        <Compile Include="Server\TelemetryApiHandler.fs" />
         <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
         <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />

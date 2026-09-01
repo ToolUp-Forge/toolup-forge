@@ -3,12 +3,16 @@
 Authoring reference for the ToolUp Community AG Grid and AG Charts Fable
 bindings, written top-down for humans and for AI agents (Claude Code, Cursor)
 reading the repo. The Enterprise mirror is
-[`src/AgGridEnterprise/COOKBOOK.md`](../../../AgGridEnterprise/COOKBOOK.md).
+[`src/Feliz.AgGrid.Enterprise/COOKBOOK.md`](../../../Feliz.AgGrid.Enterprise/COOKBOOK.md).
 
 ## Source of truth
 
-- Bindings: [`AgGrid.fs`](AgGrid.fs) (`module ToolUp.Platform.AgGrid`) and
-  [`AgChart.fs`](AgChart.fs) (`module ToolUp.Platform.AgChart`).
+- Bindings: [`AgGrid.fs`](../../../Feliz.AgGrid/AgGrid.fs) (`module Feliz.AgGrid`,
+  package `Feliz.AgGrid`) and [`AgChart.fs`](../../../Feliz.AgCharts/AgChart.fs)
+  (`module Feliz.AgCharts`, package `Feliz.AgCharts`). Phase 344 promoted both out
+  of this tier; `ToolUp.Platform.Client` re-exports them under their old module
+  names (`ToolUp.Platform.AgGrid` / `.AgChart`) so existing call sites compile
+  unchanged, but new code opens the `Feliz.*` modules the snippets below use.
 - Upstream API: the TypeScript `.d.ts` under
   `node_modules/ag-grid-community/dist/types/src/` and
   `node_modules/ag-charts-types/dist/types/src/`. Pinned versions:
@@ -47,7 +51,7 @@ gets a runtime `SyntaxError`. Read before writing chart/grid code.
 Copy-paste runnable. A single line series over category x / number y.
 
 ```fsharp
-open ToolUp.Platform.AgChart
+open Feliz.AgCharts
 
 type Point = { Month: string; Sales: float }
 
@@ -273,7 +277,7 @@ worked example, including the `Render` call and the options:
 ### Basic table
 
 ```fsharp
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 type Row = { Name: string; Qty: int; Price: float }
 
@@ -414,6 +418,6 @@ AgChart.data myList
 
 ## See also
 
-- Enterprise cookbook: [`src/AgGridEnterprise/COOKBOOK.md`](../../../AgGridEnterprise/COOKBOOK.md).
+- Enterprise cookbook: [`src/Feliz.AgGrid.Enterprise/COOKBOOK.md`](../../../Feliz.AgGrid.Enterprise/COOKBOOK.md).
 - Binding reference: [`src/ToolUp.Platform/TECHNICAL_GUIDE.md`](../../TECHNICAL_GUIDE.md)
   "AG Grid / AG Charts binding reference".

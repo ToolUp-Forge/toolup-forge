@@ -122,7 +122,8 @@ The Elmish runtime's classical Elm Architecture (Init / Update / View / Cmd / Su
 | `ToolUp.Metrics.OpenTelemetry` | OTLP metrics export |
 | `ToolUp.Secrets.AzureKeyVault` | `ISecretStore` companion |
 | `ToolUp.VectorStores.Hnsw` | Scalable HNSW vector store |
-| `ToolUp.AgGridEnterprise` | AG Grid Enterprise initialisation shim |
+| `Feliz.AgGrid` / `Feliz.AgCharts` | Standalone Feliz bindings for AG Grid / AG Charts Community |
+| `Feliz.AgGrid.Enterprise` | AG Grid Enterprise initialisation shim (opt-in) |
 
 ## Building from source
 

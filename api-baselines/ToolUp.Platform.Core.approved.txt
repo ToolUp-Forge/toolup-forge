@@ -4355,6 +4355,24 @@ ToolUp.Platform.DeployRecordSeal.KeyId : System.String { get }
 ToolUp.Platform.DeployRecordSeal.Scheme : System.String { get }
 ToolUp.Platform.DeployRecordSeal.SealedAt : System.DateTimeOffset { get }
 ToolUp.Platform.DeployRecordSeal.Token : System.String { get }
+ToolUp.Platform.DeployRetirement (class)
+ToolUp.Platform.DeployRetirement..ctor(System.Int32, System.String, System.String, System.String, System.Int64, System.String, System.String, System.String)
+ToolUp.Platform.DeployRetirement.DeployRecordDigest : System.String { get }
+ToolUp.Platform.DeployRetirement.LedgerHeadDigest : System.String { get }
+ToolUp.Platform.DeployRetirement.LedgerRecordCount : System.Int64 { get }
+ToolUp.Platform.DeployRetirement.Reason : System.String { get }
+ToolUp.Platform.DeployRetirement.RetiredAt : System.String { get }
+ToolUp.Platform.DeployRetirement.RetiredBy : System.String { get }
+ToolUp.Platform.DeployRetirement.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.DeployRetirement.TerminalOpDigest : System.String { get }
+ToolUp.Platform.DeployRetirementModule (class)
+ToolUp.Platform.DeployRetirementModule.FramingVersion : System.String (literal)
+ToolUp.Platform.DeployRetirementModule.SchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeployRetirementModule.bindsHead(System.String, System.Int64, ToolUp.Platform.DeployRetirement) : System.Boolean
+ToolUp.Platform.DeployRetirementModule.bindsRecord(System.String, ToolUp.Platform.DeployRetirement) : System.Boolean
+ToolUp.Platform.DeployRetirementModule.canonicalForm(ToolUp.Platform.DeployRetirement) : System.String
+ToolUp.Platform.DeployRetirementModule.create(System.String, System.String, System.String, System.Int64, System.String, System.String, System.String) : ToolUp.Platform.DeployRetirement
+ToolUp.Platform.DeployRetirementModule.describe(ToolUp.Platform.DeployRetirement) : System.String
 ToolUp.Platform.DeployState (class)
 ToolUp.Platform.DeployState.DeployQueued : ToolUp.Platform.DeployState { get }
 ToolUp.Platform.DeployState.IsDeployBuilding : System.Boolean { get }
@@ -9610,6 +9628,10 @@ ToolUp.Platform.ResultStoreMode+Tags (class)
 ToolUp.Platform.ResultStoreMode+Tags.InMemoryResultStore : System.Int32 (literal)
 ToolUp.Platform.ResultStoreMode+Tags.NoResultStore : System.Int32 (literal)
 ToolUp.Platform.ResultStoreMode+Tags.PersistentResultStore : System.Int32 (literal)
+ToolUp.Platform.RetiredDeployRecord (class)
+ToolUp.Platform.RetiredDeployRecord..ctor(ToolUp.Platform.SealedDeployRecord, ToolUp.Platform.DeployRetirement)
+ToolUp.Platform.RetiredDeployRecord.Record : ToolUp.Platform.SealedDeployRecord { get }
+ToolUp.Platform.RetiredDeployRecord.Retirement : ToolUp.Platform.DeployRetirement { get }
 ToolUp.Platform.RouteLimit (class)
 ToolUp.Platform.RouteLimit..ctor(System.String, ToolUp.Platform.RateLimitKeyKind, ToolUp.Platform.RateLimitWindow, System.Int32, ToolUp.Platform.RateLimitOnExceeded)
 ToolUp.Platform.RouteLimit.Key : ToolUp.Platform.RateLimitKeyKind { get }

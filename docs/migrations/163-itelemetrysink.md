@@ -15,6 +15,12 @@ New surface:
 - `ServerConfig.TelemetrySink: TelemetrySinkMode` (`NoTelemetrySink`
   default → registers `NoOpTelemetrySink`; `CustomTelemetrySink` → a
   companion sink the consumer registers).
+- `Telemetry.track` (`ToolUp.Platform.Client`, Fable) — the browser-side
+  helper: consent-gated, then POSTs the event to the server.
+- `POST /api/_platform/telemetry` (`ToolUp.Platform.Server`) — the fan-out
+  endpoint, which hands the event to the composed `ITelemetrySink` tagged
+  with the caller's resolved scope. Mounted **only** under
+  `CustomTelemetrySink`.
 
 **Consumer action: none by default (GP 11 / GP 13).** `NoTelemetrySink`
 (the default) registers the no-op sink, so emission sites are free. A
@@ -33,24 +39,45 @@ ServerConfig.defaults with TelemetrySink = CustomTelemetrySink
 
 Resolve `ITelemetrySink` from DI in module server code and call `Track`.
 
+## Emitting from the client
+
+Opting in with `CustomTelemetrySink` also mounts `POST
+/api/_platform/telemetry`. From client-tier code:
+
+```fsharp
+Telemetry.trackNow {
+    Event = "report_exported"
+    Properties = Map [ "format", "pdf"; "module", "sales" ]
+}
+```
+
+`trackNow` is fire-and-forget; `Telemetry.track` is the awaitable shape.
+Both are consent-gated (below) and best-effort — a network failure, or the
+404 a `NoTelemetrySink` deployment returns, resolves to `unit` rather than
+surfacing at the call site.
+
+The server tags the event with the caller's already-resolved config scope
+(team id / user id), falling back to the deployment-wide `_platform`
+bucket, and hands it to the composed sink. The route declares no
+`SurfaceRequirement`, so it inherits the fail-closed `userOrTeam` default
+on an authenticating deployment and the `/api/` `public_` default in
+Anonymous mode — it is deliberately not registered as a public sink the way
+the ad endpoints are, since an unauthenticated write into a third-party
+analytics product is an abuse vector.
+
 ## Consent + PII
 
 `TelemetryEvent.Properties` are operator-declared keys — the SDK never
-auto-populates a user identifier. Analytics-consent gating belongs
-**client-side**: gate the (forthcoming) `Telemetry.track` client helper
-against the client-tier `IConsentProvider` before an event leaves the
-browser, so analytics that never ships can never breach consent. The
+auto-populates a user identifier, and the client helper adds nothing of its
+own in transit. Analytics-consent gating is **client-side**:
+`Telemetry.track` asks the client-tier `IConsentProvider` for
+`ConsentCategory.Analytics` and dispatches only on an explicit `Granted`,
+so an un-consented event never leaves the browser and there is no window in
+which it sits in a server log awaiting deletion. `Denied` and
+`NotYetDecided` both suppress (opt-in semantics), as does a provider that
+throws. The default `NoOpConsentProvider` grants only `Necessary`, so a
+deployment that has wired no CMP suppresses analytics until it does. The
 server sink ships whatever reaches it.
-
-## Deferred (client transport)
-
-The client-side `Telemetry.track` Fable helper + the server fan-out
-endpoint are a deferred follow-on — the **seam** (sink + no-op default +
-GA4 companion + contract + `ServerConfig` mode) is the substrate this phase
-lands ahead of demand; the client transport (with its consent gate) lands
-when a consumer wires product analytics. All sink-side acceptance criteria
-(no-op default, scope-tagged delivery, vendor isolation, contract pack) are
-met by this substrate.
 
 ## Portability
 
