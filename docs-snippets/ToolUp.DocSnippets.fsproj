@@ -70,7 +70,9 @@
     gap rather than doc drift — add the ProjectReference here.
   -->
   <ItemGroup>
-    <ProjectReference Include="../src/AgGridEnterprise/AgGridEnterprise.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgCharts/Feliz.AgCharts.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgGrid/Feliz.AgGrid.fsproj" />
+    <ProjectReference Include="../src/Feliz.AgGrid.Enterprise/Feliz.AgGrid.Enterprise.fsproj" />
     <ProjectReference Include="../src/AI.Samples/ToolUp.AI.SampleClientTool.Client/ToolUp.AI.SampleClientTool.Client.fsproj" />
     <ProjectReference Include="../src/AI.Samples/ToolUp.AI.SampleClientTool.Server/ToolUp.AI.SampleClientTool.Server.fsproj" />
     <ProjectReference Include="../src/AICookbooks/AgChart/AgChartAICookbook.fsproj" />
