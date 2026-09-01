@@ -1174,6 +1174,53 @@ type DataSubjectRequestAdminMessages = {
     EraseNotImplemented: string -> string
 }
 
+/// The built-in module-configuration / feature-flag admin (`TeamConfigUI`).
+/// Covers both tabs on the one page — the per-module config forms and the
+/// feature-flag override editor — since they share several primitives
+/// (the Save/Clear buttons' Saving/Saved/dismiss status banner) across
+/// both.
+type TeamConfigMessages = {
+    /// Marks a required config field, next to its label.
+    RequiredMarker: string
+    /// Status-banner text while a save/clear call is in flight — reused
+    /// by both the module-config form and the feature-flag row.
+    Saving: string
+    /// Status-banner text after a successful save/clear — reused the
+    /// same way as `Saving`.
+    Saved: string
+    /// Dismiss action on every status/error banner on this page.
+    Dismiss: string
+    SaveButton: string
+    ClearAllButton: string
+    NoEditableConfig: string
+    /// Module-config form subheading — takes the module's config key.
+    ModuleKeyLabel: string -> string
+    FlagEnabled: string
+    FlagDisabled: string
+    FlagOverridden: string
+    FlagUsingDefault: string
+    /// Takes the flag's declared owner.
+    FlagOwnerLabel: string -> string
+    /// Takes the flag's formatted default value.
+    FlagDefaultLabel: string -> string
+    SaveOverrideButton: string
+    ClearOverrideButton: string
+    FeatureFlagsHeading: string
+    FeatureFlagsHelp: string
+    LoadingFlags: string
+    NoFlagsDeclared: string
+    ModulesHeading: string
+    /// Sidebar loading state, before the module list has landed.
+    SidebarLoading: string
+    NoConfigurableModules: string
+    SelectModulePrompt: string
+    LoadingModulesPrompt: string
+    /// Takes the unresolvable module key.
+    ModuleNotAvailable: string -> string
+    ConfigurationTab: string
+    FeatureFlagsTab: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1214,4 +1261,5 @@ type MessageCatalog = {
     NarrativeRenderer: NarrativeRendererMessages
     ServiceAccount: ServiceAccountMessages
     DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
+    TeamConfig: TeamConfigMessages
 }

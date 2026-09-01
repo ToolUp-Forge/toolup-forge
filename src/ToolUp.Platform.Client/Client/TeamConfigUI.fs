@@ -416,6 +416,8 @@ let private ModuleForm
     (onDismissStatus: unit -> unit)
     =
 
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
+
     // Working copy per field, seeded from persisted values falling back
     // to the declared default. Re-seeded whenever the persisted map
     // identity changes (save round-trip completes).
@@ -509,7 +511,7 @@ let private ModuleForm
                     prop.children [
                         Html.text field.DisplayName
                         if field.Required then
-                            Html.span [ prop.className "text-red-500 ml-1"; prop.text "*" ]
+                            Html.span [ prop.className "text-red-500 ml-1"; prop.text msgs.RequiredMarker ]
                     ]
                 ]
                 fieldInput field
@@ -522,16 +524,16 @@ let private ModuleForm
     let statusBanner =
         match status with
         | Idle -> Html.none
-        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text "Saving..." ]
+        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
         | Saved ->
             Html.div [
                 prop.className
                     "mt-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center justify-between"
                 prop.children [
-                    Html.span [ prop.text "Saved." ]
+                    Html.span [ prop.text msgs.Saved ]
                     Html.button [
                         prop.className "text-xs text-green-700 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> onDismissStatus ())
                     ]
                 ]
@@ -544,7 +546,7 @@ let private ModuleForm
                     Html.span [ prop.text err ]
                     Html.button [
                         prop.className "text-xs text-red-700 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> onDismissStatus ())
                     ]
                 ]
@@ -574,22 +576,18 @@ let private ModuleForm
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text entry.DisplayName ]
             Html.p [
                 prop.className "text-xs text-gray-500 mb-4"
-                prop.text $"Key: {entry.ModuleKey}"
+                prop.text (msgs.ModuleKeyLabel entry.ModuleKey)
             ]
             match entry.Schema.Fields with
-            | [] ->
-                Html.p [
-                    prop.className "text-sm text-gray-500"
-                    prop.text "This module has no editable configuration."
-                ]
+            | [] -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoEditableConfig ]
             | fields ->
                 Html.div [ prop.children (fields |> List.map row) ]
 
                 Html.div [
                     prop.className "flex gap-2 mt-4"
                     prop.children [
-                        Forms.Button.primary "Save" onSaveClick
-                        Forms.Button.secondary "Clear all" onClear
+                        Forms.Button.primary msgs.SaveButton onSaveClick
+                        Forms.Button.secondary msgs.ClearAllButton onClear
                     ]
                 ]
 
@@ -614,6 +612,8 @@ let private FlagRow
     (onClear: unit -> unit)
     (onDismissStatus: unit -> unit)
     =
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
+
     // Seed the draft from the existing override if any, else the
     // declared default. Re-seeds when the override identity changes
     // (save / clear round-trip completes).
@@ -643,7 +643,7 @@ let private FlagRow
                     ]
                     Html.span [
                         prop.className "text-sm text-gray-700"
-                        prop.text (if current then "Enabled" else "Disabled")
+                        prop.text (if current then msgs.FlagEnabled else msgs.FlagDisabled)
                     ]
                 ]
             ]
@@ -660,16 +660,16 @@ let private FlagRow
     let statusBanner =
         match status with
         | Idle -> Html.none
-        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text "Saving..." ]
+        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
         | Saved ->
             Html.div [
                 prop.className
                     "mt-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center justify-between"
                 prop.children [
-                    Html.span [ prop.text "Saved." ]
+                    Html.span [ prop.text msgs.Saved ]
                     Html.button [
                         prop.className "text-xs text-green-700 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> onDismissStatus ())
                     ]
                 ]
@@ -682,7 +682,7 @@ let private FlagRow
                     Html.span [ prop.text err ]
                     Html.button [
                         prop.className "text-xs text-red-700 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> onDismissStatus ())
                     ]
                 ]
@@ -698,12 +698,12 @@ let private FlagRow
         | Some _ ->
             Html.span [
                 prop.className "inline-block text-xs px-2 py-0.5 rounded bg-brand text-white"
-                prop.text "Overridden"
+                prop.text msgs.FlagOverridden
             ]
         | None ->
             Html.span [
                 prop.className "inline-block text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
-                prop.text "Using default"
+                prop.text msgs.FlagUsingDefault
             ]
 
     Html.div [
@@ -720,7 +720,11 @@ let private FlagRow
                         ]
                     ]
                     match flag.Owner with
-                    | Some owner -> Html.span [ prop.className "text-xs text-gray-500"; prop.text $"Owner: {owner}" ]
+                    | Some owner ->
+                        Html.span [
+                            prop.className "text-xs text-gray-500"
+                            prop.text (msgs.FlagOwnerLabel owner)
+                        ]
                     | None -> Html.none
                 ]
             ]
@@ -728,14 +732,14 @@ let private FlagRow
                 Html.p [ prop.className "text-xs text-gray-500 mb-2"; prop.text flag.Description ]
             Html.p [
                 prop.className "text-xs text-gray-400 mb-3"
-                prop.text $"Default: {defaultDisplay}"
+                prop.text (msgs.FlagDefaultLabel defaultDisplay)
             ]
             input
             Html.div [
                 prop.className "flex gap-2 mt-3"
                 prop.children [
-                    Forms.Button.primary "Save override" (fun () -> onSave draft)
-                    Forms.Button.secondary "Clear override" (fun () ->
+                    Forms.Button.primary msgs.SaveOverrideButton (fun () -> onSave draft)
+                    Forms.Button.secondary msgs.ClearOverrideButton (fun () ->
                         if overrideOpt.IsSome then
                             onClear ())
                 ]
@@ -744,16 +748,15 @@ let private FlagRow
         ]
     ]
 
-let private flagsTabView (model: Model) (dispatch: Msg -> unit) =
+let private flagsTabView (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Feature flags" ]
-            Html.p [
-                prop.className "text-xs text-gray-500 mb-4"
-                prop.text
-                    "Set overrides at your admin scope. Cleared overrides fall through to the next layer (User → Team → Platform → declared default)."
+            Html.h2 [
+                prop.className "text-lg font-semibold mb-1"
+                prop.text msgs.FeatureFlagsHeading
             ]
+            Html.p [ prop.className "text-xs text-gray-500 mb-4"; prop.text msgs.FeatureFlagsHelp ]
             match model.FlagsError with
             | Some msg ->
                 Html.div [
@@ -763,20 +766,16 @@ let private flagsTabView (model: Model) (dispatch: Msg -> unit) =
                         Html.span [ prop.text msg ]
                         Html.button [
                             prop.className "text-xs text-red-600 hover:underline"
-                            prop.text "dismiss"
+                            prop.text msgs.Dismiss
                             prop.onClick (fun _ -> dispatch DismissFlagsError)
                         ]
                     ]
                 ]
             | None -> Html.none
             if not model.FlagsLoaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading flags..." ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingFlags ]
             elif List.isEmpty model.DeclaredFlags then
-                Html.p [
-                    prop.className "text-sm text-gray-500"
-                    prop.text
-                        "No feature flags declared. Modules surface flags automatically when they list them at register() time."
-                ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoFlagsDeclared ]
             else
                 Html.div [
                     prop.children [
@@ -799,18 +798,18 @@ let private flagsTabView (model: Model) (dispatch: Msg -> unit) =
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private sidebar (model: Model) (dispatch: Msg -> unit) =
+let private sidebar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "w-64 border-r border-border bg-gray-50 p-4"
         prop.children [
             Html.h3 [
                 prop.className "text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
-                prop.text "Modules"
+                prop.text msgs.ModulesHeading
             ]
             if not model.Loaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.SidebarLoading ]
             elif List.isEmpty model.Modules then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "No configurable modules." ]
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoConfigurableModules ]
             else
                 Html.div [
                     prop.className "flex flex-col gap-1"
@@ -834,7 +833,7 @@ let private sidebar (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private detail (model: Model) (dispatch: Msg -> unit) =
+let private detail (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
     match model.Selected with
     | None ->
         Html.div [
@@ -844,9 +843,9 @@ let private detail (model: Model) (dispatch: Msg -> unit) =
                     prop.className "text-sm text-gray-500"
                     prop.text (
                         if model.Loaded then
-                            "Select a module to configure."
+                            msgs.SelectModulePrompt
                         else
-                            "Loading modules..."
+                            msgs.LoadingModulesPrompt
                     )
                 ]
             ]
@@ -859,7 +858,7 @@ let private detail (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.p [
                         prop.className "text-sm text-red-500"
-                        prop.text $"Module '{key}' is not available for configuration."
+                        prop.text (msgs.ModuleNotAvailable key)
                     ]
                 ]
             ]
@@ -893,16 +892,23 @@ let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private tabBar (model: Model) (dispatch: Msg -> unit) =
+let private tabBar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
-            tabButton "Configuration" (model.ActiveTab = ConfigTab) (fun () -> dispatch (SwitchTab ConfigTab))
-            tabButton "Feature flags" (model.ActiveTab = FlagsTab) (fun () -> dispatch (SwitchTab FlagsTab))
+            tabButton msgs.ConfigurationTab (model.ActiveTab = ConfigTab) (fun () -> dispatch (SwitchTab ConfigTab))
+            tabButton msgs.FeatureFlagsTab (model.ActiveTab = FlagsTab) (fun () -> dispatch (SwitchTab FlagsTab))
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the page body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook called there would join the
+/// shell's hook order and break the moment the active module changed.
+[<ReactComponent>]
+let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
+
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -913,7 +919,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     Html.span [ prop.text msg ]
                     Html.button [
                         prop.className "text-xs text-red-600 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -925,14 +931,14 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
         | ConfigTab ->
             Html.div [
                 prop.className "flex flex-1 min-h-0"
-                prop.children [ sidebar model dispatch; detail model dispatch ]
+                prop.children [ sidebar msgs model dispatch; detail msgs model dispatch ]
             ]
-        | FlagsTab -> flagsTabView model dispatch
+        | FlagsTab -> flagsTabView msgs model dispatch
 
     let body =
         Html.div [
             prop.className "flex flex-col h-full"
-            prop.children [ tabBar model dispatch; content ]
+            prop.children [ tabBar msgs model dispatch; content ]
         ]
 
     // 0.5.6 — FullWidth render. Error banner stacks above the body.
@@ -940,6 +946,8 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
         prop.className "flex flex-col gap-3 h-full"
         prop.children [ errorBanner; body ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamConfigBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

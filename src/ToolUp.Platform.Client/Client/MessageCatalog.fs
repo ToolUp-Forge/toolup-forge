@@ -805,6 +805,38 @@ module MessageCatalog =
             EraseRefused = fun reason -> $"Refused: {reason}"
             EraseNotImplemented = fun detail -> $"Not implemented: {detail}"
         }
+        TeamConfig = {
+            RequiredMarker = "*"
+            Saving = "Saving..."
+            Saved = "Saved."
+            Dismiss = "dismiss"
+            SaveButton = "Save"
+            ClearAllButton = "Clear all"
+            NoEditableConfig = "This module has no editable configuration."
+            ModuleKeyLabel = fun key -> $"Key: {key}"
+            FlagEnabled = "Enabled"
+            FlagDisabled = "Disabled"
+            FlagOverridden = "Overridden"
+            FlagUsingDefault = "Using default"
+            FlagOwnerLabel = fun owner -> $"Owner: {owner}"
+            FlagDefaultLabel = fun value -> $"Default: {value}"
+            SaveOverrideButton = "Save override"
+            ClearOverrideButton = "Clear override"
+            FeatureFlagsHeading = "Feature flags"
+            FeatureFlagsHelp =
+                "Set overrides at your admin scope. Cleared overrides fall through to the next layer (User → Team → Platform → declared default)."
+            LoadingFlags = "Loading flags..."
+            NoFlagsDeclared =
+                "No feature flags declared. Modules surface flags automatically when they list them at register() time."
+            ModulesHeading = "Modules"
+            SidebarLoading = "Loading..."
+            NoConfigurableModules = "No configurable modules."
+            SelectModulePrompt = "Select a module to configure."
+            LoadingModulesPrompt = "Loading modules..."
+            ModuleNotAvailable = fun key -> $"Module '{key}' is not available for configuration."
+            ConfigurationTab = "Configuration"
+            FeatureFlagsTab = "Feature flags"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
