@@ -23,6 +23,7 @@ Each companion package versions independently — `ToolUp.Platform.Core 0.3.0` c
 toolup-forge/
 ├── src/
 │   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK (4 packages)
+│   ├── ToolUp.Platform.UI/                           # the standalone UI toolkit (Feliz component library)
 │   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
 │   ├── ToolUp.AI.Wire{,.Conformance}/                # AI wire format + conformance fixtures
 │   ├── ToolUp.RAG.{Core,Server}/                     # retrieval-augmented generation
@@ -76,7 +77,8 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 - **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
 - **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
-- **`Client`** — Fable + Feliz shell with the in-tree Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, `UIToolkit`, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on and re-exports under their old module names for compatibility.
+- **`Client`** — Fable + Feliz shell with the in-tree Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, the app-shell layout, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on and re-exports under their old module names for compatibility. Nor is the `UIToolkit` component set — Phase 307 promoted it, the icon primitives and the typed prop helpers to `ToolUp.Platform.UI`, which the tier likewise depends on; there every namespace is preserved, so no re-export was needed.
+- **`UI`** — the toolkit `ToolUp.Platform.Client` composes and re-exposes: `Toolup.UIToolkit.*` (design tokens, typography, form controls, tabular + KPI views, empty / error / loading state views), `ToolUp.Platform.{Icon,Icons}`, and the `{Svg,Data,Aria}Prop` typed `prop.custom` helpers. Depends on `Platform.Core` only, so a consumer can take the components without the SDK client tier. `Layout.fs` — the shell composition half of the same namespace — deliberately stayed in `Client`.
 - **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
 
 ### `ToolUp.AI` — AI assistant companion

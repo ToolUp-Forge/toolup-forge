@@ -294,6 +294,13 @@ let main args =
         "ToolUp.Platform.Core"
         "ToolUp.Platform.Client"
         "ToolUp.Platform.Server"
+        // Phase 307 — declared by Platform.Client (the UI toolkit,
+        // promoted out of the client tier into its own package). This is
+        // exactly the SDK->SDK dependency the note above describes: without
+        // it, Platform.Client packed at the gate version would declare a
+        // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
+        // escalation would fail the gate by name.
+        "ToolUp.Platform.UI"
         // Declared by Platform.Core.
         "ToolUp.AI.Wire"
         // Declared by Platform.Server, and its own ProjectReference.

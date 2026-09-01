@@ -9,6 +9,11 @@ canonical `@toolup/tailwind` block to re-skin the whole client surface — no re
 The token **names match the consumer-side design-kit + the six `--color-*` shell tokens**, so an app's
 palette overrides flow straight through to the toolkit.
 
+Since Phase 307 the toolkit components ship in the standalone **`ToolUp.Platform.UI`** package
+(`Layout` stayed in `ToolUp.Platform.Client` — it composes the sidebar and the SDK's page-content
+types). The namespace is unchanged and the client tier depends on the package, so this contract reads
+the same from either side of the split.
+
 ## Tokens
 
 | Token | Role | Default (current look) |
