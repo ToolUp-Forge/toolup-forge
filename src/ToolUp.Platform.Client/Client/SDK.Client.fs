@@ -3371,6 +3371,19 @@ module Client =
 
         view config modules chrome model dispatch
         |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
+        // Phase 751 — the catalog provider is mounted OUTSIDE the auth
+        // gate as well as inside `view`, because the gate WRAPS the
+        // shell: a signed-out visitor sees the companion's sign-in
+        // screen and nothing of `view` at all. Mounted only here, the
+        // provider would be the one surface a deployment's
+        // `MessageCatalogOverride` could not reach — its sign-in screen
+        // would stay English while every page behind it translated.
+        //
+        // The inner mount stays: `view` is public and outer composers
+        // call it directly (see the note on this function), so removing
+        // it would strand them. Two nested providers carrying the same
+        // resolved value cost one context read.
+        |> MessageCatalogProvider.provider (resolveCatalog config model.LocaleOverride model.PlatformConfig)
 
     // ─── Phase 580 — client-shell module identity gate ────────────────
     //

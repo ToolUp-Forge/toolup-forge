@@ -379,6 +379,82 @@ type AdminHomeMessages = {
     NoTilesForSubjectFooter: string
 }
 
+/// The user-facing sentences an OIDC failure is described by
+/// (`OidcTokenStore.describeError`). One field per `AuthError` case, so
+/// adding a case upstream fails to compile here until it is worded.
+///
+/// The security-sensitive branches (signature / nonce / issuer /
+/// audience) are deliberately opaque in English and a translation must
+/// stay so: the developer-facing `diagnose` carries the withheld
+/// sub-cause, and a message that named it would let a tampering
+/// attacker probe the validator by reading the screen.
+type AuthErrorMessages = {
+    /// Takes the underlying transport message.
+    DiscoveryFailed: string -> string
+    InvalidState: string
+    MissingCode: string
+    /// Takes the issuer's error code.
+    IssuerError: string -> string
+    /// Takes the issuer's error code and its description.
+    IssuerErrorDescribed: string -> string -> string
+    /// Takes the underlying transport message.
+    TokenExchangeFailed: string -> string
+    /// Takes the underlying transport message.
+    NetworkError: string -> string
+    NonceMismatch: string
+    MalformedIdToken: string
+    SignatureInvalid: string
+    IssuerInvalid: string
+    AudienceInvalid: string
+    Expired: string
+}
+
+/// The prompts only the passwordless flow has (`PasskeyClient`).
+type PasskeyAuthMessages = {
+    /// Prose under the sign-in heading.
+    SignInPrompt: string
+    UsernamePlaceholder: string
+    SignIn: string
+    /// Prose introducing the first-time registration block.
+    RegisterPrompt: string
+    BootstrapTokenPlaceholder: string
+    Register: string
+}
+
+/// The sign-in surfaces the auth-UI companion packages render —
+/// `OidcClient`, `PasskeyClient`, `EntraExternalIdClient` (Phase 751).
+///
+/// ONE shared section rather than one per package: the three render the
+/// same vocabulary, and four near-identical sections would ask a
+/// translator for "Sign in" four times. `Passkey` carries the prompts
+/// only the passwordless flow has; `ClerkUI` contributes nothing,
+/// because Clerk renders its own themed screens and the companion holds
+/// no text of its own.
+///
+/// These screens render OUTSIDE the shell's own view — the auth gate
+/// WRAPS it — which is why `Client.viewWithSignIn` mounts the catalog
+/// provider outside the gate as well. Without that, a deployment's
+/// `MessageCatalogOverride` would reach every surface except the one a
+/// signed-out visitor actually sees.
+type AuthMessages = {
+    /// Shown while the shell decides whether this is a callback or a
+    /// cold start.
+    SigningIn: string
+    /// Sign-in screen heading.
+    Welcome: string
+    /// Prose under the heading.
+    SignInPrompt: string
+    SignIn: string
+    /// Secondary action, rendered only where a sign-up flow is declared.
+    SignUp: string
+    /// Header sign-out action of the companions' `UserMenu`.
+    SignOut: string
+    SignInFailedHeading: string
+    TryAgain: string
+    Errors: AuthErrorMessages
+    Passkey: PasskeyAuthMessages
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -407,4 +483,5 @@ type MessageCatalog = {
     HealthMonitor: HealthMonitorMessages
     DataIngestion: DataIngestionMessages
     AdminHome: AdminHomeMessages
+    Auth: AuthMessages
 }

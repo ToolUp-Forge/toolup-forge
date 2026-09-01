@@ -354,6 +354,39 @@ module MessageCatalog =
                 "A tile follows the same access rules as the surface it opens, so this page shows only what you could navigate to anyway — and right now that is nothing on this deployment."
             NoTilesForSubjectFooter = "If you expected more here, ask an administrator to review your role."
         }
+        Auth = {
+            SigningIn = "Signing you in…"
+            Welcome = "Welcome"
+            SignInPrompt = "Sign in to continue."
+            SignIn = "Sign in"
+            SignUp = "Sign up"
+            SignOut = "Sign out"
+            SignInFailedHeading = "Sign-in failed"
+            TryAgain = "Try again"
+            Errors = {
+                DiscoveryFailed = fun detail -> $"Could not reach the identity provider ({detail})."
+                InvalidState = "Sign-in state mismatch. Please try again."
+                MissingCode = "No authorization code received from the identity provider."
+                IssuerError = fun code -> $"Identity provider returned {code}."
+                IssuerErrorDescribed = fun code description -> $"Identity provider returned {code}: {description}."
+                TokenExchangeFailed = fun detail -> $"Token exchange failed ({detail})."
+                NetworkError = fun detail -> $"Network error ({detail})."
+                NonceMismatch = "Sign-in token did not match the original request. Please try again."
+                MalformedIdToken = "Sign-in token was malformed. Please try again."
+                SignatureInvalid = "Sign-in token signature could not be verified. Please try again."
+                IssuerInvalid = "Sign-in token came from an unexpected identity provider. Please try again."
+                AudienceInvalid = "Sign-in token was not issued for this application. Please try again."
+                Expired = "Sign-in token has expired. Please try again."
+            }
+            Passkey = {
+                SignInPrompt = "Sign in with a passkey — no password required."
+                UsernamePlaceholder = "Username"
+                SignIn = "Sign in with passkey"
+                RegisterPrompt = "First time here? Register a passkey."
+                BootstrapTokenPlaceholder = "Bootstrap token (first-time setup only)"
+                Register = "Register a passkey"
+            }
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
