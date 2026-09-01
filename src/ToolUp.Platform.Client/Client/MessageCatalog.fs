@@ -246,6 +246,13 @@ module MessageCatalog =
             Expired = "Expired"
             RecentlyExpired = "Recently expired (last 30 days)"
             Dismiss = "dismiss"
+            TeamIdLabel = fun teamId -> $"Team ID: {teamId}"
+            InviteIdentifierPlaceholder = "person@example.com"
+            TransferRoleExplanation =
+                fun newOwner ->
+                    $"{newOwner} becomes the Owner and you become an Admin. Only the new Owner can transfer it back."
+            InviteExpires = fun role at -> $"{role} · expires {at}"
+            InviteExpired = fun role at -> $"{role} · expired {at}"
         }
         HealthMonitor = {
             LiveHealthTab = "Live health"

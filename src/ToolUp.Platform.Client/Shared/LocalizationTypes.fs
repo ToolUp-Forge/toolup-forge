@@ -256,6 +256,21 @@ type TeamManagerMessages = {
     Expired: string
     RecentlyExpired: string
     Dismiss: string
+    // Phase 751 — five literals Phase 444's own sweep left behind. Its
+    // audit grep suppressed any all-lowercase string as a CSS class and
+    // did not reach a `sprintf` template at all, so these were invisible
+    // to the pass that declared this module residue-zero. Additive.
+    /// Takes the team's id — the small caption under a team's name.
+    TeamIdLabel: string -> string
+    /// Placeholder of the invite identifier / typeahead field.
+    InviteIdentifierPlaceholder: string
+    /// Takes the incoming owner's label — the sentence explaining what
+    /// the transfer does to each party's role.
+    TransferRoleExplanation: string -> string
+    /// Takes the role's display name and the formatted expiry date.
+    InviteExpires: string -> string -> string
+    /// …and the same for one that has already expired.
+    InviteExpired: string -> string -> string
 }
 
 /// The built-in health-monitor module (`HealthMonitorUI`).
