@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>ToolUp.AuthProviders.Oidc.Client</PackageId>
     <AssemblyName>ToolUp.AuthProviders.Oidc.Client</AssemblyName>
-    <Description>Client-side OIDC sign-in UI for ToolUp.Platform: Authorization Code + PKCE flow against any OIDC-compliant issuer. (Phase 11.C.5 unified the `.Client` suffix convention: `ToolUp.AuthProviders.OidcClient` -> `.Oidc.Client`, matching `ToolUp.AIProviders.Claude.Client` and `ToolUp.AuthProviders.EntraExternalId.Client`.)</Description>
+    <Description>Client-side OIDC sign-in UI for ToolUp.Platform: Authorization Code + PKCE flow against any OIDC-compliant issuer. (Phase 11.C.5 unified the `.Client` suffix convention: `ToolUp.AuthProviders.OidcClient` -> `.Oidc.Client`, matching `ToolUp.AIProviders.Claude.Client`.)</Description>
     <PackageTags>fsharp;fable;feliz;sdk;auth;oidc;pkce;client;provider</PackageTags>
   </PropertyGroup>
   <ItemGroup>

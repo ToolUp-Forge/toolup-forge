@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (198 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (192 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -102,12 +102,6 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_ENTRA_DIRECTORY_ENABLED` | bool | false | no | pending | Enables the Entra directory companion for user lookup and invitation via Microsoft Graph. |
 | `TOOLUP_ENTRA_DIRECTORY_GRAPH_ENDPOINT` | string | — | no | pending | Microsoft Graph endpoint override for the Entra directory companion. |
 | `TOOLUP_ENTRA_DIRECTORY_SENDER_OID` | string | — | no | pending | Object id of the principal used as the sender for directory invitations. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_AUDIENCE` | string | — | no | pending | Expected token audience for the Entra External ID auth provider. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS` | int | — | no | pending | Permitted clock skew, in seconds, when validating Entra tokens. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN` | string | — | no | pending | Custom sign-in domain for the Entra External ID auth provider. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_SIGN_IN_POLICY` | string | — | no | pending | Sign-in user-flow policy id. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_SIGN_UP_POLICY` | string | — | no | pending | Sign-up user-flow policy id. |
-| `TOOLUP_ENTRA_EXTERNAL_ID_TENANT` | string | — | no | pending | Entra External ID tenant name. |
 | `TOOLUP_GITHUB_ALLOWED_ORGS` | string | — | no | pending | Comma-separated GitHub organisations whose members may sign in. Unset allows any account. |
 | `TOOLUP_GITHUB_API_BASE_URL` | string | https://api.github.com | no | pending | GitHub API base URL. Override it for GitHub Enterprise. |
 | `TOOLUP_GITHUB_AUTH` | bool | false | no | pending | Enables the GitHub OAuth auth provider. |

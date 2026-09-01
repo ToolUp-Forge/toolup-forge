@@ -850,7 +850,6 @@
              signed capability cookie and demotes a lying client. -->
         <Compile Include="AI\AISurfaceCapabilityTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
-        <Compile Include="InProcess\EntraExternalIdConfigTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
@@ -2276,8 +2275,6 @@
              `classifyStoredTokenWith` is. The GIS interop itself is
              Fable-only and is not touched by the .NET runner. -->
         <ProjectReference Include="..\AuthProviders\GoogleIdentityClient\GoogleIdentityClient.fsproj" />
-        <!-- Phase 3d — Entra External ID companion config / claim-mapping unit tests. -->
-        <ProjectReference Include="..\AuthProviders\EntraExternalId\EntraExternalId.fsproj" />
         <!-- Phase 747 — Google Workspace IUserDirectory companion, driven
              against a stub transport (no Workspace tenant required). -->
         <ProjectReference Include="..\AuthProviders\GoogleDirectory\GoogleDirectory.fsproj" />

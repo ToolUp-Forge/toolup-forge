@@ -8,7 +8,7 @@ open System
 // Single base64url (RFC 4648 §5) codec for the whole SDK. Before this
 // module the encode/decode pair was hand-copied across every JWT /
 // token site (StaticJwtAuthProvider, the OIDC JWT + id-token parsers,
-// EntraExternalId, JwtPeerAuthProvider, ShareTokenStore, OAuthCrypto),
+// JwtPeerAuthProvider, ShareTokenStore, OAuthCrypto),
 // with three divergent padding implementations — exactly the
 // maintainability hazard a shared primitive exists to remove.
 //

@@ -651,24 +651,6 @@ module Names =
     let gcsCredentialsJson = "TOOLUP_GCS_CREDENTIALS_JSON"
 
     [<Literal>]
-    let entraExternalIdTenant = "TOOLUP_ENTRA_EXTERNAL_ID_TENANT"
-
-    [<Literal>]
-    let entraExternalIdAudience = "TOOLUP_ENTRA_EXTERNAL_ID_AUDIENCE"
-
-    [<Literal>]
-    let entraExternalIdCustomDomain = "TOOLUP_ENTRA_EXTERNAL_ID_CUSTOM_DOMAIN"
-
-    [<Literal>]
-    let entraExternalIdSignInPolicy = "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_IN_POLICY"
-
-    [<Literal>]
-    let entraExternalIdSignUpPolicy = "TOOLUP_ENTRA_EXTERNAL_ID_SIGN_UP_POLICY"
-
-    [<Literal>]
-    let entraExternalIdClockSkewSeconds = "TOOLUP_ENTRA_EXTERNAL_ID_CLOCK_SKEW_SECONDS"
-
-    [<Literal>]
     let entraDirectoryEnabled = "TOOLUP_ENTRA_DIRECTORY_ENABLED"
 
     [<Literal>]
@@ -1754,54 +1736,6 @@ let all: ConfigKeyDescriptor list = [
             "Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory)."
         Type = EnumKey [ "enabled"; "disabled" ]
         Default = Some "disabled"
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdTenant
-        Description = "Entra External ID tenant name."
-        Type = StringKey
-        Default = None
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdAudience
-        Description = "Expected token audience for the Entra External ID auth provider."
-        Type = StringKey
-        Default = None
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdCustomDomain
-        Description = "Custom sign-in domain for the Entra External ID auth provider."
-        Type = StringKey
-        Default = None
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdSignInPolicy
-        Description = "Sign-in user-flow policy id."
-        Type = StringKey
-        Default = None
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdSignUpPolicy
-        Description = "Sign-up user-flow policy id."
-        Type = StringKey
-        Default = None
-        IsSecret = false
-        Category = "Auth & identity"
-    }
-    {
-        EnvVar = Names.entraExternalIdClockSkewSeconds
-        Description = "Permitted clock skew, in seconds, when validating Entra tokens."
-        Type = IntKey
-        Default = None
         IsSecret = false
         Category = "Auth & identity"
     }

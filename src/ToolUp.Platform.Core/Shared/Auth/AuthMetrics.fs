@@ -63,16 +63,18 @@ module AuthMetrics =
     [<Literal>]
     let ValidateMalformed = "toolup.auth.validate.malformed_total"
 
-    /// Entra-specific claim post-processing failed silently (the
-    /// inner OIDC provider accepted the token but the Entra wrapper
-    /// could not re-parse the payload to read `oid` / `tid` / `idp`).
-    /// Acceptable — Entra mappings are best-effort enrichment — but
-    /// dashboard-worthy.
-    [<Literal>]
-    let EntraClaimParseFailed = "toolup.auth.entra.claim_parse_failed_total"
+    // `EntraClaimParseFailed` ("toolup.auth.entra.claim_parse_failed_total")
+    // was removed at Phase 749 with the Entra External ID companion that
+    // was its only emitter. The generic claim-mapping seam that replaced
+    // that companion's post-processing is FAIL-CLOSED, so a payload it
+    // cannot re-read is a rejected request counted under
+    // `ValidateMalformed` above — an outcome, not the best-effort
+    // enrichment failure this counter existed to make visible. A
+    // dashboard carrying the old series will simply stop receiving
+    // points; see `docs/migrations/0.23.0-entra-external-id-removal.md`.
 
-    /// Tag key for the provider identity (`oidc` / `entra-external-id`
-    /// / etc.). Use as `Map.ofList [ ProviderTag, "oidc" ]` when
-    /// constructing the per-emission tag map.
+    /// Tag key for the provider identity (`oidc` / `google` / etc.).
+    /// Use as `Map.ofList [ ProviderTag, "oidc" ]` when constructing
+    /// the per-emission tag map.
     [<Literal>]
     let ProviderTag = "provider"
