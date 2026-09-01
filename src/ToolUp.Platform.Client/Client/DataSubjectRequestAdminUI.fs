@@ -140,20 +140,19 @@ let private downloadExport (subject: string) (bytes: byte[]) =
     document.body.removeChild anchor |> ignore
     emitJsExpr<unit> url "URL.revokeObjectURL($0)"
 
-let private policyLabel =
+/// Display projection of `ErasurePolicy`. The DU itself stays wire-shaped
+/// (parsed, matched, sent to the API); this is only the rendered label.
+let private policyLabel (msgs: DataSubjectRequestAdminMessages) =
     function
-    | ErasurePolicy.HardDelete -> "Hard delete"
-    | ErasurePolicy.Tombstone -> "Tombstone"
-    | ErasurePolicy.RetainPerCompliance -> "Retain per compliance"
+    | ErasurePolicy.HardDelete -> msgs.PolicyHardDeleteLabel
+    | ErasurePolicy.Tombstone -> msgs.PolicyTombstoneLabel
+    | ErasurePolicy.RetainPerCompliance -> msgs.PolicyRetainPerComplianceLabel
 
-let private policyDescription =
+let private policyDescription (msgs: DataSubjectRequestAdminMessages) =
     function
-    | ErasurePolicy.HardDelete ->
-        "Remove records entirely. Breaks event-log integrity for the subject — only valid where no compliance-driven retention applies."
-    | ErasurePolicy.Tombstone ->
-        "Replace user-identifying fields with markers; preserve shape and version chain. Fits most GDPR / CCPA / DPDPA regimes."
-    | ErasurePolicy.RetainPerCompliance ->
-        "Redact only where possible; audit / event records survive. For jurisdictions where retention legally overrides erasure."
+    | ErasurePolicy.HardDelete -> msgs.PolicyHardDeleteDescription
+    | ErasurePolicy.Tombstone -> msgs.PolicyTombstoneDescription
+    | ErasurePolicy.RetainPerCompliance -> msgs.PolicyRetainPerComplianceDescription
 
 // ─── Init / update ───────────────────────────────────────────────────
 
@@ -193,15 +192,27 @@ let private erasureInput (model: Model) : ErasureRequestInput = {
     OverridePolicy = model.OverridePolicy
 }
 
+// `validateForm` is called only from the pure `update` reducer below,
+// which has no hook site and no rendered tree at the point its result is
+// produced — so it reads the catalog directly off `MessageCatalog.english`
+// rather than taking `msgs` as a parameter, exactly as `TeamManagerUI.update`
+// does.
 let private validateForm (model: Model) =
+    let msgs = MessageCatalog.english.DataSubjectRequestAdmin
+
     if model.SubjectInput.Trim() = "" then
-        Some "Subject user id is required."
+        Some msgs.SubjectRequired
     elif model.ReasonInput.Trim() = "" then
-        Some "Reason is required (lands in audit)."
+        Some msgs.ReasonRequired
     else
         None
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    // Same rationale as `validateForm` above — `update` is pure and has no
+    // hook site, so banner text is read directly off `MessageCatalog.english`
+    // rather than threaded in as `msgs`.
+    let msgs = MessageCatalog.english.DataSubjectRequestAdmin
+
     match msg with
     | SwitchTab tab ->
         // Keep form contents; clear any pending preview to avoid
@@ -258,7 +269,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = RunningExport
                 ActiveTicket = Some ticket
                 TicketStatus = Some ExportStatus.Preparing
-                Banner = OkBanner "Background export queued — assembling segments…"
+                Banner = OkBanner msgs.BackgroundExportQueued
         },
         pollDelay
 
@@ -312,7 +323,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = ErrorBanner $"Export failed: {reason}"
+                    Banner = ErrorBanner(msgs.ExportFailed reason)
             },
             Cmd.none
         | ExportStatus.Cancelled ->
@@ -321,7 +332,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = OkBanner "Export cancelled."
+                    Banner = OkBanner msgs.ExportCancelled
             },
             Cmd.none
         | ExportStatus.Expired
@@ -331,7 +342,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = ErrorBanner "Export ticket expired or unknown — re-submit."
+                    Banner = ErrorBanner msgs.ExportTicketExpiredOrUnknown
             },
             Cmd.none
 
@@ -352,7 +363,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 ActiveTicket = None
                 TicketStatus = None
-                Banner = OkBanner $"Background export ready — {bytes.Length} bytes downloaded."
+                Banner = OkBanner(msgs.BackgroundExportReady bytes.Length)
         },
         Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
@@ -381,7 +392,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 ActiveTicket = None
                 TicketStatus = Some ExportStatus.Cancelled
-                Banner = OkBanner "Export cancelled."
+                Banner = OkBanner msgs.ExportCancelled
         },
         Cmd.none
 
@@ -393,7 +404,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = OkBanner $"Export ready — {bytes.Length} bytes downloaded."
+                Banner = OkBanner(msgs.ExportReady bytes.Length)
         },
         Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
@@ -451,7 +462,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | None ->
             {
                 model with
-                    Banner = ErrorBanner "Run Preview first."
+                    Banner = ErrorBanner msgs.RunPreviewFirst
             },
             Cmd.none
         | Some preview ->
@@ -469,10 +480,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | ConfirmResolved(Ok(Completed summary)) ->
         let banner =
             if summary.OverallSuccess then
-                OkBanner $"Erase confirmed — {summary.PerHandler.Count} handler(s) ran successfully."
+                OkBanner(msgs.EraseConfirmedSuccess summary.PerHandler.Count)
             else
-                ErrorBanner
-                    $"Erase ran with partial failures — {summary.PerHandler.Count} handler(s); inspect per-handler results."
+                ErrorBanner(msgs.EraseConfirmedPartialFailure summary.PerHandler.Count)
 
         {
             model with
@@ -487,7 +497,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner $"Refused: {reason}"
+                Banner = ErrorBanner(msgs.EraseRefused reason)
         },
         Cmd.none
 
@@ -495,7 +505,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner $"Not implemented: {detail}"
+                Banner = ErrorBanner(msgs.EraseNotImplemented detail)
         },
         Cmd.none
 
@@ -524,49 +534,40 @@ let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
         prop.onClick (fun _ -> onClick ())
     ]
 
-let private tabBar (model: Model) (dispatch: Msg -> unit) =
+let private tabBar (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex gap-1 border-b border-border bg-white px-4"
         prop.children [
-            tabButton "Export (Article 15)" (model.ActiveTab = ExportTab) (fun () -> dispatch (SwitchTab ExportTab))
-            tabButton "Erase (Article 17)" (model.ActiveTab = EraseTab) (fun () -> dispatch (SwitchTab EraseTab))
+            tabButton msgs.TabExport (model.ActiveTab = ExportTab) (fun () -> dispatch (SwitchTab ExportTab))
+            tabButton msgs.TabErase (model.ActiveTab = EraseTab) (fun () -> dispatch (SwitchTab EraseTab))
         ]
     ]
 
-let private subjectFormRows (model: Model) (dispatch: Msg -> unit) =
+let private subjectFormRows (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex flex-col gap-3"
         prop.children [
-            Forms.Input.text
-                model.SubjectInput
-                (fun v -> dispatch (SetSubjectInput v))
-                "Subject user id (e.g. identity-provider sub claim)"
+            Forms.Input.text model.SubjectInput (fun v -> dispatch (SetSubjectInput v)) msgs.SubjectPlaceholder
 
-            Forms.Input.text
-                model.TeamInput
-                (fun v -> dispatch (SetTeamInput v))
-                "Team id (optional — leave blank for cross-team)"
+            Forms.Input.text model.TeamInput (fun v -> dispatch (SetTeamInput v)) msgs.TeamPlaceholder
 
-            Forms.Input.text
-                model.ReasonInput
-                (fun v -> dispatch (SetReasonInput v))
-                "Reason (ticket / case / regulator inquiry — lands in audit)"
+            Forms.Input.text model.ReasonInput (fun v -> dispatch (SetReasonInput v)) msgs.ReasonPlaceholder
         ]
     ]
 
-let private ticketStatusLabel =
+let private ticketStatusLabel (msgs: DataSubjectRequestAdminMessages) =
     function
-    | ExportStatus.Preparing -> "Preparing — assembling segments…"
-    | ExportStatus.Ready size -> $"Ready — {size} bytes; downloading…"
-    | ExportStatus.Failed reason -> $"Failed — {reason}"
-    | ExportStatus.Cancelled -> "Cancelled"
-    | ExportStatus.Expired -> "Expired"
-    | ExportStatus.Unknown -> "Unknown"
+    | ExportStatus.Preparing -> msgs.TicketPreparing
+    | ExportStatus.Ready size -> msgs.TicketReady size
+    | ExportStatus.Failed reason -> msgs.TicketFailed reason
+    | ExportStatus.Cancelled -> msgs.TicketCancelled
+    | ExportStatus.Expired -> msgs.TicketExpired
+    | ExportStatus.Unknown -> msgs.TicketUnknown
 
 /// Phase 9h.A — in-flight background-export panel. Shows the active
 /// ticket's status (auto-polled) with a cancel control. Download happens
 /// automatically when the ticket flips to `Ready`.
-let private activeTicketPanel (model: Model) (dispatch: Msg -> unit) =
+let private activeTicketPanel (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     match model.ActiveTicket, model.TicketStatus with
     | Some ticket, Some status ->
         Html.div [
@@ -577,16 +578,19 @@ let private activeTicketPanel (model: Model) (dispatch: Msg -> unit) =
                     prop.children [
                         Html.div [
                             prop.children [
-                                Html.div [ prop.className "text-sm font-medium"; prop.text "Background export" ]
+                                Html.div [
+                                    prop.className "text-sm font-medium"
+                                    prop.text msgs.BackgroundExportHeading
+                                ]
                                 Html.div [
                                     prop.className "text-xs text-muted"
-                                    prop.text $"Ticket {ticket} • {ticketStatusLabel status}"
+                                    prop.text (msgs.TicketLine ticket (ticketStatusLabel msgs status))
                                 ]
                             ]
                         ]
                         match status with
                         | ExportStatus.Preparing ->
-                            Forms.Button.secondary "Cancel" (fun () -> dispatch CancelAsyncExport)
+                            Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelAsyncExport)
                         | _ -> Html.none
                     ]
                 ]
@@ -594,19 +598,18 @@ let private activeTicketPanel (model: Model) (dispatch: Msg -> unit) =
         ]
     | _ -> Html.none
 
-let private exportTabView (model: Model) (dispatch: Msg -> unit) =
+let private exportTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let submitLabel =
         match model.Busy with
-        | RunningExport -> "Exporting…"
-        | _ -> "Request export"
+        | RunningExport -> msgs.Exporting
+        | _ -> msgs.RequestExport
 
-    Layout.Panel.panel "Article 15 — data export" [
+    Layout.Panel.panel msgs.ExportPanelTitle [
         Html.p [
             prop.className "text-sm text-text-secondary mb-3"
-            prop.text
-                "Streams every record across every registered exporter that names the subject. Scope-isolated when a Team id is supplied."
+            prop.text msgs.ExportPanelBody
         ]
-        subjectFormRows model dispatch
+        subjectFormRows msgs model dispatch
         Html.label [
             prop.className "mt-3 flex items-center gap-2 text-sm cursor-pointer"
             prop.children [
@@ -615,10 +618,7 @@ let private exportTabView (model: Model) (dispatch: Msg -> unit) =
                     prop.isChecked model.AsyncMode
                     prop.onChange (fun (v: bool) -> dispatch (SetAsyncMode v))
                 ]
-                Html.span [
-                    prop.text
-                        "Run as a background job (large exports — returns a ticket, polls until ready, then downloads). Requires async DSR enabled server-side."
-                ]
+                Html.span [ prop.text msgs.AsyncModeLabel ]
             ]
         ]
         Html.div [
@@ -626,16 +626,13 @@ let private exportTabView (model: Model) (dispatch: Msg -> unit) =
             prop.children [
                 Forms.Button.primary submitLabel (fun () -> dispatch SubmitExport)
                 if model.Busy = RunningExport then
-                    Html.span [
-                        prop.className "text-xs text-muted"
-                        prop.text "Aggregating segments from every store…"
-                    ]
+                    Html.span [ prop.className "text-xs text-muted"; prop.text msgs.AggregatingSegments ]
             ]
         ]
-        activeTicketPanel model dispatch
+        activeTicketPanel msgs model dispatch
     ]
 
-let private policyRadio (model: Model) (dispatch: Msg -> unit) =
+let private policyRadio (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let radio (selected: bool) (label: string) (description: string) (onSelect: unit -> unit) =
         Html.label [
             prop.className [
@@ -665,14 +662,11 @@ let private policyRadio (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex flex-col gap-2"
         prop.children [
-            Html.span [
-                prop.className "text-xs text-muted"
-                prop.text "Override deployment default for this request (optional):"
-            ]
+            Html.span [ prop.className "text-xs text-muted"; prop.text msgs.OverridePolicyPrompt ]
             radio
                 (model.OverridePolicy = None)
-                "Use deployment default"
-                "Apply the policy set in ServerConfig."
+                msgs.UseDeploymentDefault
+                msgs.UseDeploymentDefaultDescription
                 (fun () -> dispatch (SetOverridePolicy None))
             for policy in
                 [
@@ -680,41 +674,50 @@ let private policyRadio (model: Model) (dispatch: Msg -> unit) =
                     ErasurePolicy.Tombstone
                     ErasurePolicy.RetainPerCompliance
                 ] do
-                radio (model.OverridePolicy = Some policy) (policyLabel policy) (policyDescription policy) (fun () ->
-                    dispatch (SetOverridePolicy(Some policy)))
+                radio
+                    (model.OverridePolicy = Some policy)
+                    (policyLabel msgs policy)
+                    (policyDescription msgs policy)
+                    (fun () -> dispatch (SetOverridePolicy(Some policy)))
         ]
     ]
 
-let private previewPanel (preview: ErasurePreview) (model: Model) (dispatch: Msg -> unit) =
+let private previewPanel
+    (msgs: DataSubjectRequestAdminMessages)
+    (preview: ErasurePreview)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    =
     let total = preview.PerHandlerCounts.Values |> Seq.sumBy _.RecordsAffected
 
     let confirmLabel =
         match model.Busy with
-        | RunningConfirm -> "Confirming…"
-        | _ -> "Confirm erase"
+        | RunningConfirm -> msgs.Confirming
+        | _ -> msgs.ConfirmErase
 
-    Layout.Panel.panel "Preview — review then confirm" [
+    Layout.Panel.panel msgs.PreviewPanelTitle [
         Html.div [
             prop.className "flex items-center justify-between mb-3"
             prop.children [
                 Html.div [
                     prop.children [
-                        Html.div [ prop.className "text-sm"; prop.text $"Request id: {preview.Request.Id}" ]
+                        Html.div [ prop.className "text-sm"; prop.text (msgs.RequestIdLine preview.Request.Id) ]
                         Html.div [
                             prop.className "text-xs text-muted"
-                            prop.text
-                                $"Policy: {policyLabel preview.Request.Policy} • Total affected: {total} across {preview.PerHandlerCounts.Count} handler(s)"
+                            prop.text (
+                                msgs.PreviewSummaryLine
+                                    (policyLabel msgs preview.Request.Policy)
+                                    total
+                                    preview.PerHandlerCounts.Count
+                            )
                         ]
                     ]
                 ]
-                Forms.Button.secondary "Cancel" (fun () -> dispatch CancelPreview)
+                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelPreview)
             ]
         ]
         if preview.PerHandlerCounts.IsEmpty then
-            Html.p [
-                prop.className "text-sm text-muted py-2"
-                prop.text "No handlers registered or no records matched — confirm is a no-op."
-            ]
+            Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.PreviewEmpty ]
         else
             Html.div [
                 prop.className "flex flex-col gap-1 mb-4"
@@ -726,7 +729,7 @@ let private previewPanel (preview: ErasurePreview) (model: Model) (dispatch: Msg
                                 Html.span [ prop.className "font-medium"; prop.text name ]
                                 Html.span [
                                     prop.className "text-xs text-muted"
-                                    prop.text $"{summary.RecordsAffected} record(s)"
+                                    prop.text (msgs.HandlerRecordsAffected summary.RecordsAffected)
                                 ]
                             ]
                         ]
@@ -738,17 +741,17 @@ let private previewPanel (preview: ErasurePreview) (model: Model) (dispatch: Msg
                 Forms.Button.primary confirmLabel (fun () -> dispatch SubmitConfirm)
                 Html.span [
                     prop.className "text-xs text-muted"
-                    prop.text "Confirmation is irreversible under HardDelete and event-store Tombstone."
+                    prop.text msgs.ConfirmIrreversibleFootnote
                 ]
             ]
         ]
     ]
 
-let private runSummaryPanel (summary: ErasureRunSummary) =
+let private runSummaryPanel (msgs: DataSubjectRequestAdminMessages) (summary: ErasureRunSummary) =
     let perHandlerRow (name: string) (outcome: Result<ErasureSummary, ErasureError>) =
         let body, badgeClass =
             match outcome with
-            | Result.Ok s -> $"{s.RecordsAffected} record(s)", "bg-green-100 text-green-700"
+            | Result.Ok s -> msgs.HandlerRecordsAffected s.RecordsAffected, "bg-green-100 text-green-700"
             | Result.Error err -> ErasureError.toMessage err, "bg-red-100 text-red-700"
 
         Html.div [
@@ -764,14 +767,14 @@ let private runSummaryPanel (summary: ErasureRunSummary) =
 
     let overall =
         if summary.OverallSuccess then
-            "success"
+            msgs.OverallSuccess
         else
-            "partial failure"
+            msgs.OverallPartialFailure
 
-    Layout.Panel.panel "Last run summary" [
+    Layout.Panel.panel msgs.RunSummaryPanelTitle [
         Html.div [
             prop.className "text-xs text-muted mb-2"
-            prop.text $"Started {started} • Completed {completed} • Overall: {overall}"
+            prop.text (msgs.RunSummaryLine started completed overall)
         ]
         Html.div [
             prop.className "flex flex-col gap-1"
@@ -782,47 +785,43 @@ let private runSummaryPanel (summary: ErasureRunSummary) =
         ]
     ]
 
-let private eraseTabView (model: Model) (dispatch: Msg -> unit) =
+let private eraseTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let previewLabel =
         match model.Busy with
-        | RunningPreview -> "Previewing…"
-        | _ -> "Preview erase"
+        | RunningPreview -> msgs.Previewing
+        | _ -> msgs.PreviewErase
 
     Html.div [
         prop.className "flex flex-col gap-4"
         prop.children [
-            Layout.Panel.panel "Article 17 — data erasure" [
+            Layout.Panel.panel msgs.ErasePanelTitle [
                 Html.p [
                     prop.className "text-sm text-text-secondary mb-3"
-                    prop.text
-                        "Erase or redact every record naming the subject across every registered handler. Two-phase — Preview shows per-store affected counts; Confirm executes."
+                    prop.text msgs.ErasePanelBody
                 ]
-                subjectFormRows model dispatch
-                Html.div [ prop.className "mt-3"; prop.children [ policyRadio model dispatch ] ]
+                subjectFormRows msgs model dispatch
+                Html.div [ prop.className "mt-3"; prop.children [ policyRadio msgs model dispatch ] ]
                 Html.div [
                     prop.className "mt-4 flex items-center gap-3"
                     prop.children [
                         Forms.Button.primary previewLabel (fun () -> dispatch SubmitPreview)
                         if model.PendingPreview.IsSome then
-                            Html.span [
-                                prop.className "text-xs text-muted"
-                                prop.text "Pending preview ready below — confirm or cancel."
-                            ]
+                            Html.span [ prop.className "text-xs text-muted"; prop.text msgs.PendingPreviewHint ]
                     ]
                 ]
             ]
 
             match model.PendingPreview with
-            | Some preview -> previewPanel preview model dispatch
+            | Some preview -> previewPanel msgs preview model dispatch
             | None -> Html.none
 
             match model.LastRunSummary with
-            | Some summary -> runSummaryPanel summary
+            | Some summary -> runSummaryPanel msgs summary
             | None -> Html.none
         ]
     ]
 
-let private bannerView (model: Model) (dispatch: Msg -> unit) =
+let private bannerView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     let render (cls: string) (msg: string) =
         Html.div [
             prop.className $"mt-3 p-3 border rounded text-sm flex items-center justify-between {cls}"
@@ -830,7 +829,7 @@ let private bannerView (model: Model) (dispatch: Msg -> unit) =
                 Html.span [ prop.text msg ]
                 Html.button [
                     prop.className "text-xs hover:underline"
-                    prop.text "dismiss"
+                    prop.text msgs.DismissBanner
                     prop.onClick (fun _ -> dispatch DismissBanner)
                 ]
             ]
@@ -841,18 +840,27 @@ let private bannerView (model: Model) (dispatch: Msg -> unit) =
     | OkBanner msg -> render "bg-green-50 border-green-200 text-green-700" msg
     | ErrorBanner msg -> render "bg-red-50 border-red-200 text-red-700" msg
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 444 — the module body as a React COMPONENT rather than a plain
+/// render function, so it has a hook site from which to read the resolved
+/// catalog. A module's `view` is invoked inline by the shell's own render,
+/// where a hook would join the shell's hook order and break the moment the
+/// active module changed; a component of its own has a stable identity and
+/// its own. Same shape as `HealthMonitorUI.HealthMonitorBody`.
+[<ReactComponent>]
+let private DataSubjectRequestAdminBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).DataSubjectRequestAdmin
+
     let body =
         Html.div [
             prop.className "flex flex-col"
             prop.children [
-                tabBar model dispatch
+                tabBar msgs model dispatch
                 Html.div [
                     prop.className "p-4"
                     prop.children [
                         match model.ActiveTab with
-                        | ExportTab -> exportTabView model dispatch
-                        | EraseTab -> eraseTabView model dispatch
+                        | ExportTab -> exportTabView msgs model dispatch
+                        | EraseTab -> eraseTabView msgs model dispatch
                     ]
                 ]
             ]
@@ -861,8 +869,11 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     // 0.5.6 — FullWidth render. Banner stacks above the body.
     Html.div [
         prop.className "flex flex-col gap-3 h-full"
-        prop.children [ bannerView model dispatch; body ]
+        prop.children [ bannerView msgs model dispatch; body ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    DataSubjectRequestAdminBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 

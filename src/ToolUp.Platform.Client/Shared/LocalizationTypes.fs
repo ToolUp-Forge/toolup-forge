@@ -1071,6 +1071,109 @@ type ServiceAccountMessages = {
     TokensForAccount: string -> string
 }
 
+/// The built-in GDPR data-subject-request admin module
+/// (`DataSubjectRequestAdminUI`) — the Article 15 export tab, the
+/// Article 17 erasure tab (preview + confirm), and the background-export
+/// ticket panel. Request-kind / status / policy DUs stay wire-shaped and
+/// out of scope; the fields below are their DISPLAY projections only.
+type DataSubjectRequestAdminMessages = {
+    /// Tab bar.
+    TabExport: string
+    TabErase: string
+    /// Shared subject/team/reason form placeholders (both tabs).
+    SubjectPlaceholder: string
+    TeamPlaceholder: string
+    ReasonPlaceholder: string
+    /// Article 15 — export tab.
+    ExportPanelTitle: string
+    ExportPanelBody: string
+    AsyncModeLabel: string
+    RequestExport: string
+    Exporting: string
+    AggregatingSegments: string
+    /// Background-export ticket panel (Phase 9h.A).
+    BackgroundExportHeading: string
+    /// Takes the ticket id and the resolved status label.
+    TicketLine: string -> string -> string
+    /// Shared "Cancel" action — the async-export ticket panel and the
+    /// erasure preview panel both use this exact label.
+    Cancel: string
+    /// `ticketStatusLabel`'s catalog projection of `ExportStatus`.
+    TicketPreparing: string
+    /// Takes the ready envelope's size in bytes.
+    TicketReady: int64 -> string
+    /// Takes the failure reason.
+    TicketFailed: string -> string
+    TicketCancelled: string
+    TicketExpired: string
+    TicketUnknown: string
+    /// `ErasurePolicy` display projections — the DU itself stays
+    /// wire-shaped; only `policyLabel` / `policyDescription`'s rendered
+    /// text is in scope.
+    PolicyHardDeleteLabel: string
+    PolicyHardDeleteDescription: string
+    PolicyTombstoneLabel: string
+    PolicyTombstoneDescription: string
+    PolicyRetainPerComplianceLabel: string
+    PolicyRetainPerComplianceDescription: string
+    /// Policy-override radio group.
+    OverridePolicyPrompt: string
+    UseDeploymentDefault: string
+    UseDeploymentDefaultDescription: string
+    /// Erasure preview panel.
+    PreviewPanelTitle: string
+    /// Takes the preview's request id.
+    RequestIdLine: string -> string
+    /// Takes the policy label, the total affected count and the
+    /// handler count.
+    PreviewSummaryLine: string -> int -> int -> string
+    PreviewEmpty: string
+    /// Takes a handler's affected-record count. Shared between the
+    /// preview panel's per-handler rows and the run-summary panel's.
+    HandlerRecordsAffected: int -> string
+    ConfirmErase: string
+    Confirming: string
+    ConfirmIrreversibleFootnote: string
+    /// Last-run summary panel.
+    RunSummaryPanelTitle: string
+    /// Takes the formatted started timestamp, the formatted completed
+    /// timestamp, and the localised overall-outcome word.
+    RunSummaryLine: string -> string -> string -> string
+    OverallSuccess: string
+    OverallPartialFailure: string
+    /// Article 17 — erase tab.
+    ErasePanelTitle: string
+    ErasePanelBody: string
+    PreviewErase: string
+    Previewing: string
+    PendingPreviewHint: string
+    /// Dismiss the inline status banner.
+    DismissBanner: string
+    /// Raised from the pure `update` reducer (no rendered tree at the
+    /// point they're raised) rather than threaded through `msgs` — read
+    /// directly off `MessageCatalog.english`, per `TeamManagerUI.update`.
+    SubjectRequired: string
+    ReasonRequired: string
+    BackgroundExportQueued: string
+    /// Takes the export-failure reason.
+    ExportFailed: string -> string
+    ExportCancelled: string
+    ExportTicketExpiredOrUnknown: string
+    /// Takes the downloaded byte count.
+    BackgroundExportReady: int -> string
+    /// Takes the downloaded byte count.
+    ExportReady: int -> string
+    RunPreviewFirst: string
+    /// Takes the successfully-run handler count.
+    EraseConfirmedSuccess: int -> string
+    /// Takes the handler count.
+    EraseConfirmedPartialFailure: int -> string
+    /// Takes the refusal reason.
+    EraseRefused: string -> string
+    /// Takes the not-implemented detail.
+    EraseNotImplemented: string -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1110,4 +1213,5 @@ type MessageCatalog = {
     WebhookAdmin: WebhookAdminMessages
     NarrativeRenderer: NarrativeRendererMessages
     ServiceAccount: ServiceAccountMessages
+    DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
 }

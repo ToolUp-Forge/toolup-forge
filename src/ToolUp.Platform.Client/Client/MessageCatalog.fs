@@ -733,6 +733,78 @@ module MessageCatalog =
             BackToList = "← All service accounts"
             TokensForAccount = fun name -> $"Tokens — {name}"
         }
+        DataSubjectRequestAdmin = {
+            TabExport = "Export (Article 15)"
+            TabErase = "Erase (Article 17)"
+            SubjectPlaceholder = "Subject user id (e.g. identity-provider sub claim)"
+            TeamPlaceholder = "Team id (optional — leave blank for cross-team)"
+            ReasonPlaceholder = "Reason (ticket / case / regulator inquiry — lands in audit)"
+            ExportPanelTitle = "Article 15 — data export"
+            ExportPanelBody =
+                "Streams every record across every registered exporter that names the subject. Scope-isolated when a Team id is supplied."
+            AsyncModeLabel =
+                "Run as a background job (large exports — returns a ticket, polls until ready, then downloads). Requires async DSR enabled server-side."
+            RequestExport = "Request export"
+            Exporting = "Exporting…"
+            AggregatingSegments = "Aggregating segments from every store…"
+            BackgroundExportHeading = "Background export"
+            TicketLine = fun ticket status -> $"Ticket {ticket} • {status}"
+            Cancel = "Cancel"
+            TicketPreparing = "Preparing — assembling segments…"
+            TicketReady = fun size -> $"Ready — {size} bytes; downloading…"
+            TicketFailed = fun reason -> $"Failed — {reason}"
+            TicketCancelled = "Cancelled"
+            TicketExpired = "Expired"
+            TicketUnknown = "Unknown"
+            PolicyHardDeleteLabel = "Hard delete"
+            PolicyHardDeleteDescription =
+                "Remove records entirely. Breaks event-log integrity for the subject — only valid where no compliance-driven retention applies."
+            PolicyTombstoneLabel = "Tombstone"
+            PolicyTombstoneDescription =
+                "Replace user-identifying fields with markers; preserve shape and version chain. Fits most GDPR / CCPA / DPDPA regimes."
+            PolicyRetainPerComplianceLabel = "Retain per compliance"
+            PolicyRetainPerComplianceDescription =
+                "Redact only where possible; audit / event records survive. For jurisdictions where retention legally overrides erasure."
+            OverridePolicyPrompt = "Override deployment default for this request (optional):"
+            UseDeploymentDefault = "Use deployment default"
+            UseDeploymentDefaultDescription = "Apply the policy set in ServerConfig."
+            PreviewPanelTitle = "Preview — review then confirm"
+            RequestIdLine = fun requestId -> $"Request id: {requestId}"
+            PreviewSummaryLine =
+                fun policyLabel total handlerCount ->
+                    $"Policy: {policyLabel} • Total affected: {total} across {handlerCount} handler(s)"
+            PreviewEmpty = "No handlers registered or no records matched — confirm is a no-op."
+            HandlerRecordsAffected = fun count -> $"{count} record(s)"
+            ConfirmErase = "Confirm erase"
+            Confirming = "Confirming…"
+            ConfirmIrreversibleFootnote = "Confirmation is irreversible under HardDelete and event-store Tombstone."
+            RunSummaryPanelTitle = "Last run summary"
+            RunSummaryLine =
+                fun started completed overall -> $"Started {started} • Completed {completed} • Overall: {overall}"
+            OverallSuccess = "success"
+            OverallPartialFailure = "partial failure"
+            ErasePanelTitle = "Article 17 — data erasure"
+            ErasePanelBody =
+                "Erase or redact every record naming the subject across every registered handler. Two-phase — Preview shows per-store affected counts; Confirm executes."
+            PreviewErase = "Preview erase"
+            Previewing = "Previewing…"
+            PendingPreviewHint = "Pending preview ready below — confirm or cancel."
+            DismissBanner = "dismiss"
+            SubjectRequired = "Subject user id is required."
+            ReasonRequired = "Reason is required (lands in audit)."
+            BackgroundExportQueued = "Background export queued — assembling segments…"
+            ExportFailed = fun reason -> $"Export failed: {reason}"
+            ExportCancelled = "Export cancelled."
+            ExportTicketExpiredOrUnknown = "Export ticket expired or unknown — re-submit."
+            BackgroundExportReady = fun bytes -> $"Background export ready — {bytes} bytes downloaded."
+            ExportReady = fun bytes -> $"Export ready — {bytes} bytes downloaded."
+            RunPreviewFirst = "Run Preview first."
+            EraseConfirmedSuccess = fun count -> $"Erase confirmed — {count} handler(s) ran successfully."
+            EraseConfirmedPartialFailure =
+                fun count -> $"Erase ran with partial failures — {count} handler(s); inspect per-handler results."
+            EraseRefused = fun reason -> $"Refused: {reason}"
+            EraseNotImplemented = fun detail -> $"Not implemented: {detail}"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
