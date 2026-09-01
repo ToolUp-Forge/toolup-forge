@@ -14,5 +14,16 @@
 #     in the excluded trees. A design record states what was PROPOSED;
 #     where implementation diverged, its blocks are accurate history
 #     rather than drifted teaching material, so 32 left the corpus.
+#   554 -> 553 (2026-09-01) — Phase 749 DELETED the two Entra External ID
+#     companion packages, and with them the two compiled blocks in
+#     `docs/companions/auth-providers.md` that wired them (the server
+#     `EntraExternalIdConfig` composition and the client `CustomAuthUI`
+#     wrapping). There is no surface left for them to be checked against;
+#     keeping them would have meant keeping a `ProjectReference` to a
+#     deleted project. One block came back in their place — the preset
+#     path that replaces them, promoted from `skip=fragment` to compiled
+#     and widened to cover `entraExternalIdWithDomain`, which no other
+#     block on the page reached. Net -1, and the surviving block checks
+#     the path a reader is now told to use.
 
-554
+553

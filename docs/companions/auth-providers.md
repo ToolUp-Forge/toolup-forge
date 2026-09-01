@@ -507,10 +507,20 @@ Entra External ID is served by the **generic OIDC pair plus a preset** — `Tool
 2. **Scopes.** `offline_access` is in the preset's default set (the generic OIDC defaults omit it; External ID requires it for refresh-token issuance).
 3. **`ValidateIdToken = Some true`.** Client-side id_token validation (signature + `iss` + `aud` + `exp` via WebCrypto) runs on every callback. The generic `OidcUIConfig.defaults` leaves this `None`; a customer-facing CIAM surface is where defence-in-depth at the boundary is worth the WebCrypto verify per sign-in.
 
-```fsharp skip=fragment
-let cfg =
+```fsharp
+// Default CIAM host — `<tenant>.ciamlogin.com`.
+let entraCfg =
     OidcPresets.entraExternalId
         "<tenant-subdomain>"
+        "<client-id>"
+        "https://app.example.com/auth/callback"
+
+// A tenant configured with a custom CIAM domain: the host is replaced,
+// the tenant subdomain stays in the path segment.
+let entraCustomDomainCfg =
+    OidcPresets.entraExternalIdWithDomain
+        "<tenant-subdomain>"
+        "login.mybrand.com"
         "<client-id>"
         "https://app.example.com/auth/callback"
 ```
