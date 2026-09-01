@@ -527,6 +527,102 @@ type NoActiveTeamLandingMessages = {
     Joined: string -> string
 }
 
+/// The built-in Platform Admin module (`PlatformAdminUI`) — role
+/// management (assign / revoke Platform Admin), the all-teams admin
+/// table (create / archive / restore / delete), and the Platform
+/// Knowledge Base toggle, under the Admins / Teams / Settings tabs.
+type PlatformAdminMessages = {
+    /// Tab-bar labels.
+    AdminsTab: string
+    TeamsTab: string
+    SettingsTab: string
+    AssignHeading: string
+    AssignHelp: string
+    /// Placeholder for the user-directory typeahead, shared by the
+    /// Assign-admin field and the Create-team initial-owner field.
+    UserPickerPlaceholder: string
+    Assign: string
+    /// Inline-validation error read directly in `update` (a pure
+    /// reducer with no rendered tree of its own) — the string ends up
+    /// in `Model.AssignError`, rendered later via `errorBanner`.
+    EnterUserId: string
+    CurrentAdminsHeading: string
+    /// Shared by the admin list and the all-teams table.
+    Refresh: string
+    Loading: string
+    NoAdmins: string
+    /// Per-admin-row revoke button.
+    Revoke: string
+    GrantHeading: string
+    GrantBody: string
+    UserLabel: string
+    UserIdLabel: string
+    /// Shared by the assign-confirm and delete-team-confirm modals.
+    Cancel: string
+    GrantConfirm: string
+    CreateTeamHeading: string
+    CreateTeamHelp: string
+    TeamNameLabel: string
+    TeamNamePlaceholder: string
+    InitialOwnerLabel: string
+    /// Inline-validation error read directly in `update` — see
+    /// `EnterUserId`.
+    TeamNameRequired: string
+    /// Inline-validation error read directly in `update` — see
+    /// `EnterUserId`.
+    OwnerRequired: string
+    /// Tooltip on the "Self" button — takes the operator's own
+    /// resolved display label (email, display name, or raw id).
+    SelfTooltip: string -> string
+    SelfChecked: string
+    SelfUnchecked: string
+    /// Confirmation line when the operator picked themselves as the
+    /// new team's owner — takes their resolved display label.
+    SelfOwnerConfirm: string -> string
+    /// Confirmation line when the operator picked someone else as
+    /// owner — takes the picked user's resolved display label.
+    OwnerConfirm: string -> string
+    Creating: string
+    /// The create-team submit button at rest.
+    CreateTeam: string
+    ColumnTeam: string
+    ColumnCreated: string
+    ColumnMembers: string
+    ColumnOwners: string
+    ColumnAdmins: string
+    ColumnActions: string
+    AllTeamsHeading: string
+    LoadingTeams: string
+    NoTeamsYet: string
+    ArchivedBadge: string
+    /// Per-team-row action buttons.
+    Restore: string
+    Delete: string
+    Archive: string
+    DeleteTeamHeading: string
+    DeleteTeamBody: string
+    TeamLabel: string
+    /// The delete-team confirm button (distinct from the row-level
+    /// `Delete` action that opens this modal).
+    DeleteTeam: string
+    /// Card heading, rendered both above and inside the toggle.
+    PlatformKnowledgeBaseHeading: string
+    /// Explanatory sentence under the heading — takes the current
+    /// Enabled / Disabled status label.
+    KnowledgeBaseStatus: string -> string
+    Enabled: string
+    Disabled: string
+    /// Toggle button while the KB is currently enabled (click to
+    /// disable it).
+    DisableAction: string
+    /// Toggle button while the KB is currently disabled (click to
+    /// enable it).
+    EnableAction: string
+    LoadingCurrentState: string
+    OtherSettingsHeading: string
+    OtherSettingsBody: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -560,4 +656,5 @@ type MessageCatalog = {
     Consent: ConsentMessages
     OAuth1aCredential: OAuth1aCredentialMessages
     NoActiveTeamLanding: NoActiveTeamLandingMessages
+    PlatformAdmin: PlatformAdminMessages
 }
