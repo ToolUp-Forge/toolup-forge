@@ -1164,6 +1164,27 @@ module MessageCatalog =
             SectionRefreshFailed = fun section -> $"{section} refresh failed."
             UnknownSectionMessage = fun other -> $"unknown section: {other}"
         }
+        UsageDashboard = {
+            Heading = "Usage"
+            Subheading =
+                "Per-team consumption — AI tokens, storage bytes, ingestion rows, request counts. Owner / Admin only."
+            GroupByLabel = "Group by"
+            Grouping = {
+                ByDay = "By day"
+                ByMonth = "By month"
+                ByResourceKind = "By resource kind"
+                ByUser = "By user"
+            }
+            Refresh = "Refresh"
+            Exporting = "Exporting…"
+            ExportCsv = "Export CSV"
+            ColumnBucket = "Bucket"
+            ColumnQuantity = "Quantity"
+            NoRecords =
+                "No usage records for this scope. Records appear after the first metered AI call, file upload, or ingestion run."
+            ClickRefresh = "Click Refresh."
+            Loading = "Loading…"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

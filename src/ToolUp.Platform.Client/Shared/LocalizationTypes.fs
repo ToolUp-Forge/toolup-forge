@@ -1812,6 +1812,46 @@ type ServiceStatusBoardMessages = {
     UnknownSectionMessage: string -> string
 }
 
+/// Display labels for the `UsageGrouping` aggregation choices. Distinct
+/// from the DU cases themselves, which select the server-side
+/// aggregation and are wire-shaped (the select's value/onChange round-trip
+/// compares against these same labels, but never leaves the client).
+type UsageGroupingMessages = {
+    ByDay: string
+    ByMonth: string
+    ByResourceKind: string
+    ByUser: string
+}
+
+/// The built-in usage-dashboard admin module (`UsageDashboard`).
+type UsageDashboardMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Visible `<label>` text AND accessible name of the grouping
+    /// `<select>` — both read from one field so they cannot drift.
+    GroupByLabel: string
+    /// Display labels for each `UsageGrouping` value.
+    Grouping: UsageGroupingMessages
+    /// Reload action.
+    Refresh: string
+    /// Export-CSV button label while the export is in flight.
+    Exporting: string
+    /// Export-CSV button label at rest.
+    ExportCsv: string
+    /// Aggregate-table bucket column header.
+    ColumnBucket: string
+    /// Aggregate-table quantity column header.
+    ColumnQuantity: string
+    /// Empty-state prose when the aggregate query returns no rows.
+    NoRecords: string
+    /// `NotLoaded` state prompt — shown before the first load.
+    ClickRefresh: string
+    /// `Loading` state prompt.
+    Loading: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1862,4 +1902,5 @@ type MessageCatalog = {
     PublicUtilityWidgets: PublicUtilityWidgetsMessages
     FileManager: FileManagerMessages
     ServiceStatusBoard: ServiceStatusBoardMessages
+    UsageDashboard: UsageDashboardMessages
 }

@@ -126,12 +126,12 @@ let update msg model =
 
 // ─── View ────────────────────────────────────────────────────────
 
-let private groupingLabel =
+let private groupingLabel (msgs: UsageGroupingMessages) =
     function
-    | ByDay -> "By day"
-    | ByMonth -> "By month"
-    | ByResourceKind -> "By resource kind"
-    | ByUser -> "By user"
+    | ByDay -> msgs.ByDay
+    | ByMonth -> msgs.ByMonth
+    | ByResourceKind -> msgs.ByResourceKind
+    | ByUser -> msgs.ByUser
 
 let private allGroupings = [ ByDay; ByMonth; ByResourceKind; ByUser ]
 
@@ -149,12 +149,11 @@ let private renderRow (row: UsageAggregateRow) =
         ]
     ]
 
-let private renderTable (rows: UsageAggregateRow list) =
+let private renderTable (msgs: UsageDashboardMessages) (rows: UsageAggregateRow list) =
     if List.isEmpty rows then
         Html.div [
             prop.className "p-8 text-center text-sm text-gray-500"
-            prop.text
-                "No usage records for this scope. Records appear after the first metered AI call, file upload, or ingestion run."
+            prop.text msgs.NoRecords
         ]
     else
         Html.table [
@@ -167,12 +166,12 @@ let private renderTable (rows: UsageAggregateRow list) =
                             Html.th [
                                 prop.className
                                     "px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
-                                prop.text "Bucket"
+                                prop.text msgs.ColumnBucket
                             ]
                             Html.th [
                                 prop.className
                                     "px-3 py-2 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider"
-                                prop.text "Quantity"
+                                prop.text msgs.ColumnQuantity
                             ]
                         ]
                     ]
@@ -184,14 +183,14 @@ let private renderTable (rows: UsageAggregateRow list) =
             ]
         ]
 
-let private renderControls (model: Model) (dispatch: Msg -> unit) =
+let private renderControls (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) =
     // The visible <label> sits BESIDE the select rather than wrapping it, and
     // this tier has no `for`/`id` pairing convention to associate them — so the
     // select carries its own accessible name. Without it the control is an
     // unnamed combo box: it looks labelled to anyone who can see the text, but
     // a screen reader announces no name and voice control has nothing to say.
     // Both read from one binding so the visible and announced names cannot drift.
-    let groupByLabel = "Group by"
+    let groupByLabel = msgs.GroupByLabel
 
     Html.div [
         prop.className "flex flex-wrap items-end gap-4 mb-4"
@@ -203,15 +202,18 @@ let private renderControls (model: Model) (dispatch: Msg -> unit) =
                     Html.select [
                         prop.ariaLabel groupByLabel
                         prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                        prop.value (groupingLabel model.Grouping)
+                        prop.value (groupingLabel msgs.Grouping model.Grouping)
                         prop.onChange (fun (v: string) ->
                             allGroupings
-                            |> List.tryFind (fun g -> groupingLabel g = v)
+                            |> List.tryFind (fun g -> groupingLabel msgs.Grouping g = v)
                             |> Option.iter (SetGrouping >> dispatch))
                         prop.children (
                             allGroupings
                             |> List.map (fun g ->
-                                Html.option [ prop.value (groupingLabel g); prop.text (groupingLabel g) ])
+                                Html.option [
+                                    prop.value (groupingLabel msgs.Grouping g)
+                                    prop.text (groupingLabel msgs.Grouping g)
+                                ])
                         )
                     ]
                 ]
@@ -219,33 +221,39 @@ let private renderControls (model: Model) (dispatch: Msg -> unit) =
             Html.button [
                 prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
                 prop.onClick (fun _ -> dispatch Refresh)
-                prop.text "Refresh"
+                prop.text msgs.Refresh
             ]
             Html.button [
                 prop.className "px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
                 prop.disabled model.Exporting
                 prop.onClick (fun _ -> dispatch ExportCsv)
-                prop.text (if model.Exporting then "Exporting…" else "Export CSV")
+                prop.text (if model.Exporting then msgs.Exporting else msgs.ExportCsv)
             ]
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the dashboard body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
+/// inline by the shell's own render, so a hook called there would join the
+/// shell's hook order and break the moment the active module changed.
+[<ReactComponent>]
+let private UsageDashboardBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).UsageDashboard
+
     Html.div [
         prop.className "p-4"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold text-gray-800 mb-2"; prop.text "Usage" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text
-                    "Per-team consumption — AI tokens, storage bytes, ingestion rows, request counts. Owner / Admin only."
+            Html.h2 [
+                prop.className "text-lg font-semibold text-gray-800 mb-2"
+                prop.text msgs.Heading
             ]
-            renderControls model dispatch
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            renderControls msgs model dispatch
 
             match model.Aggregate with
-            | NotLoaded -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Click Refresh." ]
-            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
-            | Loaded rows -> renderTable rows
+            | NotLoaded -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.ClickRefresh ]
+            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Loaded rows -> renderTable msgs rows
             | LoadError err ->
                 Html.div [
                     prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
@@ -253,6 +261,8 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                 ]
         ]
     ]
+
+let view (model: Model) (dispatch: Msg -> unit) : ReactElement = UsageDashboardBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────
 
