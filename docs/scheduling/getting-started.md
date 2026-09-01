@@ -55,7 +55,7 @@ let stylistOne: BookableResource = {
 
 ## 3. Wire `SchedulingServerApp`
 
-```fsharp skip=fragment
+```fsharp
 SchedulingServerApp.create ()
 |> SchedulingServerApp.withConfig {
     ServerConfig.defaults with
@@ -68,79 +68,98 @@ SchedulingServerApp.create ()
 
 That's it. The scheduling API + persistence is now in place. Register `stylistOne` at runtime with `ISchedulingApi.RegisterResource` — resources are per-scope data, not compose-time configuration.
 
-## 4. List slots for a date range
+## 4. Find free slots in a date range
 
-Client-side:
-
-```fsharp skip=fragment
-let! slots =
-    SchedulingClient.proxy.ListSlots {
-        ResourceId = "stylist-1"
-        Start = DateTime(2026, 5, 12)
-        End = DateTime(2026, 5, 19)    // one week
-    }
-// slots : Slot list (each Free | Booked | Blocked)
-```
-
-`Slot`:
+Client-side. There is no shipped `ToolUp.Scheduling.Client` package and no shipped proxy value — the consumer builds its own `ISchedulingApi` proxy over `SchedulingApi.routeBuilder` (see [api-reference.md](api-reference.md#client-tier)) and calls through it:
 
 ```fsharp
-type Slot = {
-    ResourceId: ResourceId
-    Start: DateTime
-    End: DateTime
-    Status: SlotStatus
-}
+let weekOfSlots = async {
+    let oneWeek: DateRange = {
+        Start = DateTimeOffset(2026, 5, 12, 0, 0, 0, TimeSpan.Zero)
+        End = DateTimeOffset(2026, 5, 19, 0, 0, 0, TimeSpan.Zero)
+    }
 
-and SlotStatus =
-    | Free
-    | Booked of BookingId
-    | Blocked of reason: string
+    let! slots =
+        schedulingApi.FindAvailableSlots {
+            ResourceId = "stylist-1"
+            Window = oneWeek
+            SlotDurationMinutes = 60
+        }
+
+    // slots : TimeSlot list — only FREE windows are emitted
+    return slots
+}
 ```
 
-The server derives slots from the resource's `AvailabilityWindows` + buffer + existing bookings. Free slots are bookable; Booked / Blocked aren't.
+Slot length is a property of the query (`SlotDurationMinutes`), not of the resource. `TimeSlot`:
+
+```fsharp
+type TimeSlot = {
+    Start: DateTimeOffset
+    End: DateTimeOffset
+    ResourceId: ResourceId
+}
+```
+
+The server derives slots from the resource's `DefaultAvailability` windows, subtracts existing bookings (ignoring `Cancelled` and `NoShow`), subtracts `FullDay` / `PartialBlock` exceptions, adds `ExtendedHours` exceptions, and emits a slot on every surviving boundary. **A slot carries no status** — an occupied or blocked window simply is not emitted, so there is nothing to branch on.
 
 ## 5. Book a slot
 
-```fsharp skip=fragment
-let! result =
-    SchedulingClient.proxy.Book {
-        Id = Guid.NewGuid().ToString()
-        Type = "appointment"
-        Version = 1
-        ResourceId = "stylist-1"
-        Title = "Jane Smith — colour + cut"
-        StartUtc = DateTimeOffset(2026, 5, 12, 14, 0, 0, TimeSpan.Zero)
-        EndUtc = DateTimeOffset(2026, 5, 12, 15, 0, 0, TimeSpan.Zero)
-        Status = Confirmed
-        BookedBy = currentUserId
-        BookedFor = None
-        Recurrence = None
-        ParentBookingId = None
-        Metadata = Map.empty
-    }
+```fsharp
+let bookColourAndCut = async {
+    let! result =
+        schedulingApi.Book {
+            Id = Guid.NewGuid().ToString()
+            // The entity-store discriminator — the constant the three
+            // scheduling registrations use, never a domain label.
+            Type = "Booking"
+            Version = 0
+            ResourceId = "stylist-1"
+            Title = "Jane Smith — colour + cut"
+            StartUtc = DateTimeOffset(2026, 5, 12, 14, 0, 0, TimeSpan.Zero)
+            EndUtc = DateTimeOffset(2026, 5, 12, 15, 0, 0, TimeSpan.Zero)
+            Status = Confirmed
+            BookedBy = currentUserId
+            BookedFor = None
+            Recurrence = None
+            ParentBookingId = None
+            Metadata = Map.empty
+        }
 
-match result with
-| Ok booking ->
-    // Booking confirmed — booking.Id is the reference
-    ...
-| Error OutsideAvailability ->
-    // Slot is outside the stylist's availability windows
-    ...
-| Error SlotOccupied ->
-    // Another booking claimed overlapping time (concurrent caller won the race)
-    ...
-| Error ResourceNotFound -> ...
-| Error Forbidden -> ...
+    match result with
+    | Ok booking -> printfn $"Booked — reference {booking.Id}"
+
+    // Every schedule disagreement arrives as ONE `Conflicts` case
+    // carrying the full list, so the UI can surface every reason at
+    // once rather than only the first.
+    | Error(Conflicts conflicts) ->
+        for conflict in conflicts do
+            match conflict with
+            | OverlappingBooking existing -> printfn $"Overlaps booking {existing}"
+            | OutsideAvailability _ -> printfn "Outside the stylist's availability windows"
+            | ResourceUnavailable exc -> printfn $"Blocked by an availability exception on {exc.Date}"
+            | RecurrenceOverflow(_, emitted) -> printfn $"Recurrence expanded past the cap after {emitted}"
+
+    | Error(UnknownResource id) -> printfn $"No resource {id} in this scope"
+    | Error(UnknownBooking id) -> printfn $"No booking {id} in this scope"
+    | Error(InvalidRecurrence message)
+    | Error(InvalidWindow message)
+    | Error(StorageFailure message) -> printfn $"Booking failed: {message}"
+}
 ```
 
-The server's per-resource `SemaphoreSlim` ensures two concurrent callers booking the same slot get one success + one `SlotOccupied`. No double-bookings.
+`BookingError` has no `SlotOccupied`, `ResourceNotFound` or `Forbidden` case — the first is a `BookingConflict` (`OverlappingBooking`) delivered inside `Conflicts`, the second is `UnknownResource`, and authorisation is not a `BookingError` at all: the handler classifies the whole `ISchedulingApi` surface `AllowAnonymous` and relies on `StorageScope` isolation, so a caller never sees a per-method refusal here.
+
+**The shipped `BookingScheduler` does not serialise concurrent bookings.** `Book` runs conflict detection and then saves, with no per-resource lock, so two genuinely concurrent callers can both pass detection and both persist. Deployments that need strict no-double-booking replace `IBookingScheduler` with an implementation that takes a distributed lock around detect-then-save — see [extending.md](extending.md).
 
 ## 6. Cancel a booking
 
-```fsharp skip=fragment
-let! result = schedulingApi.Cancel(bookingId, "Customer rang to cancel")
-// result : Result<unit, BookingError>
+```fsharp
+let cancel = async {
+    let! result = schedulingApi.Cancel(bookingId, "Customer rang to cancel")
+    // result : Result<unit, BookingError>
+    return result
+}
 ```
 
 `Cancel` takes the reason alongside the id, and is idempotent — cancelling twice succeeds and emits `BookingCancelled` only on the first transition. A cancelled booking is ignored by conflict detection, so its window frees up for re-booking.
@@ -149,7 +168,7 @@ let! result = schedulingApi.Cancel(bookingId, "Customer rang to cancel")
 
 The SDK ships no built-in calendar UI — the data primitives let you render whatever grid your module needs:
 
-```fsharp skip=fragment
+```fsharp
 open Feliz
 
 // slots : TimeSlot list — FindAvailableSlots emits only free windows, so
@@ -174,8 +193,8 @@ For complex calendar shapes (week view, month view, drag-to-extend slot), use a 
 
 For recurring appointments ("weekly therapy session for 12 weeks"):
 
-```fsharp skip=fragment
-let weeklyRule = {
+```fsharp
+let weeklyRule: RecurrenceRule = {
     Frequency = Weekly
     Interval = 1
     ByWeekday = [ DayOfWeek.Tuesday ]
@@ -183,48 +202,74 @@ let weeklyRule = {
     Until = None
 }
 
-let dates =
-    RecurrenceExpander.expand
-        weeklyRule
-        (startDate = DateTime(2026, 5, 12))
-
-// Book each date
-for date in dates do
-    let! _ =
-        SchedulingClient.proxy.Book {
-            baseBooking with
-                Id = Guid.NewGuid().ToString()
-                StartUtc = date.AddHours 14.0
-                EndUtc = date.AddHours 15.0
-        }
-```
-
-If any individual booking fails (slot occupied, outside availability), the loop continues; the caller decides whether to roll back the already-booked dates or partially proceed.
-
-For atomic series booking (all-or-nothing), use `BookSeries`:
-
-```fsharp skip=fragment
-let! result = SchedulingClient.proxy.BookSeries {
-    ResourceId = stylistId
-    DurationMinutes = 60
-    Recurrence = weeklyRule
-    StartDate = DateTime(2026, 5, 12)
-    StartTime = TimeSpan(14, 0, 0)
-    Notes = Some "Recurring"
+// `expand` is pure, and it takes a SEED BOOKING rather than a start
+// date: each occurrence is the seed with `StartUtc` / `EndUtc` shifted,
+// so the duration and every other field carry over unchanged.
+let seed = {
+    baseBooking with
+        StartUtc = DateTimeOffset(2026, 5, 12, 14, 0, 0, TimeSpan.Zero)
+        EndUtc = DateTimeOffset(2026, 5, 12, 15, 0, 0, TimeSpan.Zero)
+        Recurrence = Some weeklyRule
 }
 
-// result : Result<Booking list, BookingError * DateTime list>
-//   Ok bookings = all succeeded
-//   Error (err, conflictDates) = none booked; conflicts are the dates that would fail
+let searchWindow: DateRange = {
+    Start = DateTimeOffset(2026, 5, 12, 0, 0, 0, TimeSpan.Zero)
+    End = DateTimeOffset(2026, 8, 12, 0, 0, 0, TimeSpan.Zero)
+}
+
+let occurrences = RecurrenceExpander.expand seed weeklyRule searchWindow
+
+// Book each occurrence. Each needs its own id — `expand` clones the
+// seed, so every occurrence arrives carrying the seed's.
+let bookEach = async {
+    for occurrence in occurrences do
+        let! _ = schedulingApi.Book { occurrence with Id = Guid.NewGuid().ToString() }
+        ()
+}
 ```
 
-`BookSeries` either books every occurrence or none. Useful for "all 12 weeks must work, or I'll pick a different time".
+The window is the third bound, alongside the rule's own `Count` and `Until`; expansion also stops at a hard cap of 10,000 occurrences. If any individual booking fails (conflict, outside availability), the loop continues; the caller decides whether to roll back the already-booked dates or partially proceed.
+
+There is **no `BookSeries` call** — `ISchedulingApi` books one occurrence at a time. "All twelve weeks or none" is a caller-side two-phase over `DetectConflicts`:
+
+```fsharp
+let bookSeries (occurrences: Booking list) = async {
+    let! probes =
+        occurrences
+        |> List.map (fun occurrence -> async {
+            let! conflicts = schedulingApi.DetectConflicts occurrence
+            return occurrence, conflicts
+        })
+        |> Async.Sequential
+
+    let clashes =
+        probes
+        |> Array.filter (fun (_, conflicts) -> not (List.isEmpty conflicts))
+        |> Array.map (fun (occurrence, _) -> occurrence.StartUtc)
+        |> List.ofArray
+
+    if not (List.isEmpty clashes) then
+        // Nothing was booked — `clashes` are the dates that would fail.
+        return Error clashes
+    else
+        let booked = ResizeArray<Booking>()
+
+        for occurrence in occurrences do
+            match! schedulingApi.Book occurrence with
+            | Ok b -> booked.Add b
+            | Error _ -> () // lost a race since the probe
+
+        return Ok(List.ofSeq booked)
+}
+```
+
+This is check-then-act, not a transaction: `DetectConflicts` is a pure read, so a concurrent caller can claim a window between the probe and the booking. It gives the reader a clean refusal in the common case, not an atomicity guarantee — a deployment that needs one replaces `IBookingScheduler` with a locking implementation, as above.
 
 ## 9. Export to iCalendar
 
 There is no `ExportICalendar` call on the API — the `iCalendar` module is a pure codec, and serving `.ics` is your module's route to write:
 
-```fsharp skip=fragment
+```fsharp
 let ics (bookings: Booking list) =
     iCalendar.emit {
         Version = "2.0"
@@ -235,15 +280,16 @@ let ics (bookings: Booking list) =
 
 Serve it as a download:
 
-```fsharp skip=fragment
+```fsharp
 let icalRoute: HttpHandler =
     fun next ctx -> task {
         let resourceId = ctx.Request.Query["resource"].ToString()
         let scheduler = ctx.RequestServices.GetRequiredService<IBookingScheduler>()
-        let! bookings = scheduler.ListBookings(scopeId, resourceId, window) |> Async.StartAsTask
-        ctx.Response.Headers.ContentType <- "text/calendar"
-        ctx.Response.Headers.ContentDisposition <- "attachment; filename=bookings.ics"
-        return! ctx.Response.WriteAsync(ics bookings)
+        // Every IBookingScheduler method is scope-first and tupled.
+        let! bookings = scheduler.ListBookings(scopeId, resourceId, exportWindow) |> Async.StartAsTask
+        ctx.SetContentType "text/calendar"
+        ctx.SetHttpHeader("Content-Disposition", "attachment; filename=bookings.ics")
+        return! ctx.WriteStringAsync(ics bookings)
     }
 ```
 

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.Platform.UI — the standalone UI toolkit.
+
+    Phase 307 lifted the `Toolup.UIToolkit` component set out of
+    ToolUp.Platform.Client, mirroring what Phase 344 did for the AG Grid /
+    AG Charts bindings: the toolkit is a domain-agnostic Feliz component
+    library (design tokens, typography, form controls, tabular views, KPI
+    tiles, empty/error/loading state views) plus the icon-rendering
+    primitives and the typed `prop.custom` helper family it is written
+    against. None of it names an SDK type, so no consumer should have to
+    take the whole client tier to render a card.
+
+    `ToolUp.Platform.Client` still depends on this package — its built-in
+    module views compose the toolkit throughout — so an existing consumer
+    needs no fsproj change: the toolkit arrives transitively and every
+    namespace is preserved (`Toolup.UIToolkit.*`, `ToolUp.Platform.Icons`,
+    `ToolUp.Platform.{SvgProp,DataProp,AriaProp}`), so no re-export shim is
+    needed at all (GP 11). What changed is that a consumer who wants only
+    the toolkit can now take it alone.
+
+    WHAT DELIBERATELY DID NOT MOVE — `Client/UI/Toolkit/Layout.fs`.
+    Despite living in the same `Toolup.UIToolkit` namespace, `Layout` is
+    the SHELL composition layer, not a toolkit component: `AppShell`
+    composes `Toolup.Sidebar`, `renderPageContent` / `loadingIndicator`
+    are written against `PageContent` / `InputsPaneWidth` /
+    `LoadingIndicatorMode` from `SDK.ClientTypes.fs`, and `userButton`
+    imports `@clerk/react`. Moving it would drag the entire SDK client
+    types surface down here, which is the opposite of the split. It stays
+    in ToolUp.Platform.Client and consumes this package from above. A
+    namespace spanning two assemblies is ordinary F#; the module names are
+    disjoint, so `open Toolup.UIToolkit` resolves both halves.
+
+    Nor did `Client/UI/Sidebar.fs`: it is shell chrome (per-user
+    preferences in localStorage, the client logger, the ToolUp-Forge rail
+    footer asset), not a reusable component, and keeping it above this
+    boundary is what lets the toolkit stay free of any
+    `MessageCatalogProvider` dependency — see the localization note below.
+
+    LOCALIZATION BOUNDARY (the decision Phase 444 deferred to this phase).
+    The toolkit takes NO message-catalog dependency. Every component
+    receives its user-visible text as a caller-supplied parameter
+    (`StateViews.noData message`, `Forms.dataSourcePicker label …`,
+    `Typography.text`), and the shell — which does read the catalog —
+    passes localized strings in. That keeps this package renderable
+    without the SDK, and it means Phase 444's sidebar sweep threads the
+    catalog through `Toolup.Sidebar` / `Layout.AppShell` in
+    ToolUp.Platform.Client only, never across this boundary.
+
+    THREE literals do not yet honour that posture, and they are named here
+    rather than left to be rediscovered — the i18n successor phase closes
+    them by adding a caller-supplied parameter, which is a signature change
+    on public toolkit functions and therefore that phase's call, not this
+    packaging phase's:
+      * `Toolkit/Forms.fs`      — "CHOOSE FILE" (the file-picker button)
+      * `Toolkit/Forms.fs`      — "No data files available — upload via
+                                   Data Manager" (`dataSourcePicker`'s
+                                   empty state)
+      * `Toolkit/StateViews.fs` — `prop.title "Dismiss"` (`errorBanner`)
+    Everything else in this package already takes its text as a parameter.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Platform.UI</PackageId>
+    <AssemblyName>ToolUp.Platform.UI</AssemblyName>
+    <Description>The ToolUp UI toolkit — a Feliz component library: design tokens, typography, form controls, tabular and KPI views, empty/error/loading state views, the SVG icon-rendering primitives, and the typed data-/aria-/svg-attribute prop helpers. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly. Depends on ToolUp.Platform.Core.</Description>
+    <PackageTags>fsharp;fable;feliz;react;ui;toolkit;components;sdk</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- `Toolkit/Forms.fs` names `ProcessedDataTypes.ProcessedDataFile`
+         (the data-source picker's option shape); that type is Core's, so
+         this is the only reference the package carries. -->
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Typed wrappers over `prop.custom` — one family, one audit
+         (`DomAttrCustomAuditTests`), one doc page
+         (docs/platform/dom-props.md). Feliz-only; first so everything
+         below can be written against them. -->
+    <Compile Include="SvgProp.fs" />
+    <Compile Include="DataProp.fs" />
+    <Compile Include="AriaProp.fs" />
+    <!-- Icon.fs is the `?react`-import → ReactElement primitive; Icons.fs
+         is the SDK built-in icon set written against it. Both keep their
+         `ToolUp.Platform.{Icon,Icons}` module paths, and `icons/` moved
+         with Icons.fs so its relative `./icons/*.svg?react` imports
+         resolve unchanged under Fable. The two `toolup-forge*.png` brand
+         assets did NOT move: they are the sidebar rail footer's, imported
+         relatively from `Client/UI/Sidebar.fs`, which stays. -->
+    <Compile Include="Icon.fs" />
+    <Compile Include="Icons.fs" />
+    <!-- The toolkit proper, in the compile order it had inside the client
+         tier (Typography → Forms → StateViews is a real dependency chain;
+         `Layout.fs` sat between Typography and Forms and stays behind). -->
+    <Compile Include="Toolkit\OutputFormatting.fs" />
+    <Compile Include="Toolkit\Tokens.fs" />
+    <Compile Include="Toolkit\Typography.fs" />
+    <Compile Include="Toolkit\Forms.fs" />
+    <Compile Include="Toolkit\Data.fs" />
+    <Compile Include="Toolkit\StateViews.fs" />
+    <Compile Include="Toolkit\Kpi.fs" />
+  </ItemGroup>
+  <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
+       under fable/. The library's own .fsproj + .fs files ship inside the
+       nupkg; Fable's package loader extracts and compiles source directly.
+       The `.svg` glob is load-bearing here — `Icons.fs` resolves its icons
+       relatively at Fable compile time. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+    <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.React.Types" />
+    <PackageReference Include="Fable.Browser.Dom" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

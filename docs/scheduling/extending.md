@@ -23,16 +23,20 @@ type RedisLockedBookingScheduler(entityStore: IEntityStore, redis: IConnectionMu
                             |> Async.AwaitTask
                             |> Async.RunSynchronously
             if not acquired then
-                return Error (StorageError "Could not acquire booking lock — try again")
+                return Error (StorageFailure "Could not acquire booking lock — try again")
             try
                 // ... rest of booking logic mirrors default impl
                 let! existing = entityStore.Query<Booking> (...)
-                if existsConflict existing request then
-                    return Error SlotOccupied
-                else
+                match conflictsWith existing request with
+                | [] ->
                     let booking = { ... }
                     let! _ = entityStore.Save booking
                     return Ok booking
+                | conflicts ->
+                    // `Conflicts` is the schedule-disagreement case — it
+                    // carries the whole list so the UI can surface every
+                    // reason at once.
+                    return Error (Conflicts conflicts)
             finally
                 // Release lock — Lua-script for atomic check-and-delete
                 let script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
@@ -46,12 +50,14 @@ type RedisLockedBookingScheduler(entityStore: IEntityStore, redis: IConnectionMu
 
 Wire:
 
-```fsharp skip=fragment
-// The scheduler is a DI registration, read by the scheduling composition:
-services.AddSingleton<IBookingScheduler>(RedisLockedBookingScheduler(entityStore, redis))
+```fsharp
+// The scheduler is a DI registration: the API handler resolves
+// `IBookingScheduler` out of `RequestServices` per request.
+services.AddSingleton<IBookingScheduler>(redisLockedScheduler)
 
 SchedulingServerApp.create ()
-|> ...
+|> SchedulingServerApp.withConfig config
+|> SchedulingServerApp.run
 ```
 
 Run `IBookingSchedulerContract` against your impl to verify conformance.
@@ -64,17 +70,21 @@ The shipped scheduler is per-`ResourceId`. For multi-resource booking (assign N 
 
 Each practitioner is their own `Resource`. A booking targets one specific practitioner. The customer-facing UI lets them pick (or auto-assigns).
 
-```fsharp skip=fragment
+```fsharp
 // Each practitioner is a BookableResource with their own weekly availability.
 let practitioners = [ "p-1", "Alice"; "p-2", "Bob"; "p-3", "Carol" ]
 
-// Booking targets one practitioner explicitly.
-let! result = schedulingApi.Book { seedBooking with ResourceId = "p-2" }
+// Booking targets one practitioner explicitly. `ResourceId` is a plain
+// `string` alias, so the id needs no constructor.
+let bookWithBob = async {
+    let! result = schedulingApi.Book { seedBooking with ResourceId = "p-2" }
+    return result
+}
 ```
 
 For auto-assignment, the module asks each practitioner for their free slots and picks the earliest. `ResourceId` is a plain `string`, and `FindAvailableSlots` emits only free windows — there is no slot status to filter on:
 
-```fsharp skip=fragment
+```fsharp
 let assignNextAvailable (candidates: ResourceId list) (window: DateRange) = async {
     let! perCandidate =
         candidates
@@ -212,7 +222,7 @@ A `GoogleCalendarSyncProvider` companion would query Google Calendar's API for t
 
 Currently this is a deferred extension. Build it as a custom module-side layer for now:
 
-```fsharp skip=fragment
+```fsharp
 let slotsWithExternalSync resourceId window = async {
     let! slots =
         schedulingApi.FindAvailableSlots {
@@ -229,22 +239,22 @@ let slotsWithExternalSync resourceId window = async {
 
 The shipped `RecurrenceExpander` covers Daily / Weekly / Monthly / Yearly with `Count` / `Until` termination and a `ByWeekday` filter on Weekly rules. Sub-day frequencies and the complex monthly forms (`BySetPos`, `ByMonthDay`) are out of scope in v1. For richer recurrence — multi-modifier `BYDAY`, business days, exception dates — write a custom expander over `occurrenceStarts`:
 
-```fsharp skip=fragment
-module CustomRecurrence
+```fsharp
+module CustomRecurrence =
 
-let occurrencesExcept
-    (seed: DateTimeOffset)
-    (rule: RecurrenceRule)
-    (upperBound: DateTimeOffset)
-    (exceptions: DateTimeOffset list)
-    : DateTimeOffset list =
-    RecurrenceExpander.occurrenceStarts seed rule upperBound
-    |> List.filter (fun d -> not (List.contains d exceptions))
+    let occurrencesExcept
+        (seed: DateTimeOffset)
+        (rule: RecurrenceRule)
+        (upperBound: DateTimeOffset)
+        (exceptions: DateTimeOffset list)
+        : DateTimeOffset list =
+        RecurrenceExpander.occurrenceStarts seed rule upperBound
+        |> List.filter (fun d -> not (List.contains d exceptions))
 ```
 
 Or wrap an existing RFC 5545 library:
 
-```fsharp skip=fragment
+```fsharp
 type FullICalRecurrenceExpander(icalLib: IMyRRuleLibrary) =
     member _.Expand (rule: string) (seed: DateTimeOffset) : DateTimeOffset list =
         icalLib.ExpandRRule rule seed
@@ -254,40 +264,77 @@ Both expander entry points are pure, so a consumer can substitute them without c
 
 ## Wait lists
 
-When a booking cancels, auto-promote from a wait list. Build at the module layer:
+When a booking cancels, auto-promote from a wait list. Build at the module layer.
 
-```fsharp skip=fragment
-// Subscribe to BookingCancelled events
-let waitListPromoter scopeId =
-    eventStore.Subscribe "_platform.audit" "BookingCancelled" (fun event -> async {
-        let cancelledBooking = parseBookingCancelled event
-        let! waitList = readWaitListForResource cancelledBooking.ResourceId
-        match waitList with
-        | next :: _ ->
-            let! _ =
-                schedulingApi.Book {
-                    cancelledBooking with
-                        Id = Guid.NewGuid().ToString()
-                        Status = Confirmed
-                        BookedFor = Some next.CustomerId
-                        Title = $"Promoted from wait list — {next.CustomerId}"
-                }
-            do! markWaitListEntryFulfilled next.Id
-            do! sendPromotionEmail next.Email
-        | [] -> ()
-    })
+`IEventStore` has no subscribe method — it is a write-and-query journal (`Write` / `ReadAll` / `ReadByType` / `ReadBySource`). Reacting to an event is the job substrate's `Trigger.OnEvent`, which fires a registered `IJobHandler` whenever a `ModuleEvent` of that type is written in the same scope:
+
+```fsharp
+type WaitListPromoter(schedulingApi: ISchedulingApi) =
+    interface IJobHandler with
+        member _.Execute(ctx: JobContext) = async {
+            // `BookingCancelledPayload` carries the booking id, not the
+            // resource — read the booking back to learn what freed up.
+            let cancelled = parseBookingCancelled ctx.Payload
+            let! booking = schedulingApi.GetBooking cancelled.BookingId
+
+            match booking with
+            | None -> return JobResult.Success
+            | Some released ->
+                let! waitList = readWaitListForResource released.ResourceId
+
+                match waitList with
+                | next :: _ ->
+                    let! _ =
+                        schedulingApi.Book {
+                            released with
+                                Id = Guid.NewGuid().ToString()
+                                Status = Confirmed
+                                BookedFor = Some next.CustomerId
+                                Title = $"Promoted from wait list — {next.CustomerId}"
+                        }
+
+                    do! markWaitListEntryFulfilled next.Id
+                    do! sendPromotionEmail next.Email
+                    return JobResult.Success
+                | [] -> return JobResult.Success
+        }
 ```
 
-The wait-list itself is a custom entity store; the cancel-event subscription drives the promotion logic.
+Register it against the event the scheduler writes — `SchedulingEvents.BookingCancelled`, under `SourceModule = "_scheduling"`:
+
+```fsharp
+SchedulingServerApp.create ()
+|> SchedulingServerApp.withJobHandler (
+    "wait-list-promoter",
+    WaitListPromoter(schedulingApi) :> IJobHandler,
+    OnEvent SchedulingEvents.BookingCancelled
+)
+|> SchedulingServerApp.run
+```
+
+The wait-list itself is a custom entity store; the `OnEvent` job drives the promotion logic.
 
 ## Group bookings
 
 Express N customers in one slot as N parallel resources of the same kind:
 
-```fsharp skip=fragment
-let class1Spot1 = { ResourceId = ResourceId "class-1-spot-1"; Name = "Yoga Class A — Spot 1"; ... }
-let class1Spot2 = { ResourceId = ResourceId "class-1-spot-2"; Name = "Yoga Class A — Spot 2"; ... }
-// ...
+```fsharp
+// `ResourceId` is a `string` alias, so a spot id is just a string. The
+// constant `Type` field is the entity-store discriminator — the
+// companion publishes it as `BookingScheduler.ResourceTypeName` —
+// while `ResourceType` is the caller-defined classification.
+let classSpot (n: int) : BookableResource = {
+    Id = sprintf "class-1-spot-%d" n
+    Type = BookingScheduler.ResourceTypeName
+    Version = 0
+    ResourceType = "ClassSpot"
+    DisplayName = sprintf "Yoga Class A — Spot %d" n
+    Timezone = "Europe/London"
+    DefaultAvailability = classWindows
+    Metadata = Map.ofList [ "class", "yoga-a" ]
+}
+
+let class1Spots = [ for n in 1..10 -> classSpot n ]
 ```
 
 Customers book a specific spot. For "any spot available" UX, the `PractitionerPoolScheduler` pattern above generalises.
@@ -304,7 +351,9 @@ type CapacityScheduler(capacity: int, entityStore: IEntityStore) =
                 let! existing = entityStore.Query<Booking> (overlapsAt request)
                 let concurrent = existing |> List.filter (fun b -> b.Status = Confirmed) |> List.length
                 if concurrent >= capacity then
-                    return Error SlotOccupied
+                    // Over capacity is a schedule disagreement, so it
+                    // rides `BookingError.Conflicts`.
+                    return Error (Conflicts [ OverlappingBooking request.Id ])
                 else
                     // Persist
                     let booking = { ... }
@@ -320,7 +369,7 @@ This is the pattern for class bookings (10 students per class), shared-resource 
 
 ## Companion conventions
 
-Most scheduling extensions live in your own module code, not in companion packages. The interfaces (`IBookingScheduler`, `ICalendarSyncProvider`) are stable; the wire format is committed. For deeper customisation:
+Most scheduling extensions live in your own module code, not in companion packages. The shipped interface (`IBookingScheduler`) is stable and the `ISchedulingApi` wire format is committed; `ICalendarSyncProvider` is a sketch of a deferred extension, not a shipped seam. For deeper customisation:
 
 - Replace `IBookingScheduler` outright for distributed-lock / capacity / pool semantics.
 - Wrap with decorators for wait-list / sync / multi-resource composition.

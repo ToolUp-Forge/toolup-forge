@@ -32,11 +32,10 @@ Don't use when:
 
 Setup:
 
-```fsharp skip=fragment
+```fsharp
 // Default — no withAuth call needed; HeaderAuthProvider is the implicit default
 ServerApp.empty
 |> ServerApp.withConfig config
-|> ...
 |> ServerApp.run
 ```
 
@@ -51,29 +50,33 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
+The provider takes one `StaticJwtConfig` record — there is no multi-argument constructor and no clock-skew knob:
+
+```fsharp
+let staticJwtConfig: StaticJwtAuthProvider.StaticJwtConfig = {
+    Secret = "your-symmetric-signing-key"
+    Issuer = Some "https://your-issuer.example.com"
+    Audience = Some "your-app-id"
+}
+
 let authProvider =
-    StaticJwtAuthProvider(
-        signingKey = "your-symmetric-signing-key",
-        expectedIssuer = Some "https://your-issuer.example.com",
-        expectedAudience = Some "your-app-id",
-        clockSkewSeconds = 60
-    ) :> IAuthProvider
+    StaticJwtAuthProvider.StaticJwtAuthProvider(staticJwtConfig) :> IAuthProvider
 
 ServerApp.empty
 |> ServerApp.withAuth authProvider
-|> ...
+|> ServerApp.run
 ```
 
 Token validation:
-1. Signature (HS256 with `signingKey`).
-2. `exp` claim — not expired (with `clockSkewSeconds` tolerance).
-3. `iss` claim matches `expectedIssuer` (if set).
-4. `aud` claim matches `expectedAudience` (if set).
+1. Signature (HS256 with `Secret`), after an explicit `alg = HS256` header check — a non-HS256 token is refused before the verifier runs.
+2. `exp` claim — present and not expired. A token with no `exp` is rejected outright. The tolerance is the SDK-wide `JwtCrypto.clockSkewSeconds` constant (60s), shared with the OIDC provider's default; this provider exposes no per-deployment override.
+3. `nbf` claim, when present — a not-yet-valid token is rejected under the same tolerance.
+4. `iss` claim matches `Issuer` (if set).
+5. `aud` claim matches `Audience` (if set).
 
 Identity projection:
-- `sub` claim → `UserId`.
-- `name` claim → `DisplayName`.
+- `sub` claim → `UserId`. Mandatory, and run through the same `IdentitySanitiser` guard the OIDC provider applies — a missing, empty or refused `sub` is a validation error, never an anonymous fallback.
+- `name` claim → `DisplayName` (falls back to the sanitised `sub`).
 - `email` claim → `Email`.
 
 ### `ToolUp.AuthProviders.Oidc` (production OIDC)
@@ -85,18 +88,27 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
-open ToolUp.AuthProviders.Oidc
+`OidcAuthProvider` is a module of factory functions, not a class — build the declarative `AuthConfig` and hand it to `fromConfig`, which returns an `IAuthProvider` already:
 
-let authProvider =
-    OidcAuthProvider(
-        issuer = "https://your-issuer.example.com",
-        audience = "your-client-id"
-    ) :> IAuthProvider
+```fsharp
+open ToolUp.AuthProviders
+
+let authConfig: AuthConfig = {
+    Issuer = Some "https://your-issuer.example.com"
+    Audience = Some "your-client-id"
+    KeySource = JwksDiscovery "https://your-issuer.example.com"
+    TokenLocation = BearerHeader
+    ClockSkewSeconds = None
+    AcceptedAlgorithms = None
+    PreferOidWhenPresent = None
+    ClaimMapping = None
+}
+
+let authProvider = OidcAuthProvider.fromConfig (Some logger) authConfig
 
 ServerApp.empty
 |> ServerApp.withAuth authProvider
-|> ...
+|> ServerApp.run
 ```
 
 Configuration via environment variables (read by the provider at startup):
@@ -116,11 +128,11 @@ By default the provider maps the OIDC `sub` claim onto `AuthenticatedUser.UserId
 
 `AuthConfig.ClaimMapping` names the claims to project, so the generic provider covers the whole family rather than needing one decorator per IdP:
 
-```fsharp skip=fragment
-let authConfig = {
-    Issuer = Some issuerUrl
+```fsharp
+let authConfig: AuthConfig = {
+    Issuer = Some oidcIssuerUrl
     Audience = Some audience
-    KeySource = JwksDiscovery issuerUrl
+    KeySource = JwksDiscovery oidcIssuerUrl
     TokenLocation = BearerHeader
     ClockSkewSeconds = None
     AcceptedAlgorithms = None
@@ -156,19 +168,19 @@ Either field may be set alone. `ClaimMapping = None` (the default, and what both
 
 When the deployment registers a real `IMetricsSink` (default-shipped Prometheus sink under `MetricsEndpoint = EnabledMetricsEndpoint`, or the `OtelMetricsSink` companion), construct the auth provider via the metered overloads so the auth pipeline emits `toolup.auth.validate.*` counters tagged `provider=oidc` (or `provider=entra-external-id`) alongside the SDK's other observability metrics:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders
 
 // Resolve the sink from the SDK's DI container after `compose` registers it.
 let metrics: IMetricsSink option =
-    services.GetService<IMetricsSink>() |> Option.ofObj
+    serviceProvider.GetService<IMetricsSink>() |> Option.ofObj
 
 // Production shorthand:
 let auth = OidcAuthProvider.fromConfigMetered (Some logger) metrics authConfig
 
 // Or, for the env-driven dispatcher:
-let auth =
+let authFromEnv =
     AuthProvider.fromEnvMetered
         logger
         metrics
@@ -176,7 +188,7 @@ let auth =
 
 ServerApp.empty
 |> ServerApp.withAuth auth
-|> ...
+|> ServerApp.run
 ```
 
 The non-metered constructors (`fromConfig` / `fromConfigWith` / `AuthProvider.fromEnv`) remain unchanged and elide emission. Each provider instance binds its own sink in its closure — there is no module-level mutable state. See [the auth-metrics DI migration doc](../migrations/9e-A-auth-metrics-di.md) for the full migration shape (Entra mirrors this pattern via `createMetered` / `fromEnvMetered`).
@@ -185,14 +197,16 @@ The non-metered constructors (`fromConfig` / `fromConfigWith` / `AuthProvider.fr
 
 The provider's signature-verification step dispatches on the JWT header's `alg` field. The deployment-trusted set is controlled by `AuthConfig.AcceptedAlgorithms` — `None` resolves to `[ RS256 ]` (the historical default; every existing consumer is byte-for-byte unchanged). Operators opt in to additional algorithms explicitly:
 
-```fsharp skip=fragment
-let authConfig = {
-    Issuer = Some issuerUrl
+```fsharp
+let authConfig: AuthConfig = {
+    Issuer = Some oidcIssuerUrl
     Audience = Some audience
-    KeySource = JwksDiscovery issuerUrl
+    KeySource = JwksDiscovery oidcIssuerUrl
     TokenLocation = BearerHeader
     ClockSkewSeconds = None
     AcceptedAlgorithms = Some [ RS256; ES256 ]   // ← e.g. Cognito-shape interop
+    PreferOidWhenPresent = None
+    ClaimMapping = None
 }
 ```
 
@@ -239,7 +253,7 @@ trouble. Wiring it is two steps, because the OIDC provider is a props-injected
 companion the SDK composition root does not reference, so nothing in the SDK can
 subscribe on its behalf:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders
 open ToolUp.AuthProviders.OidcJwksCacheTypes
 
@@ -259,12 +273,13 @@ let provider =
         authConfig
 
 // The receiving half — same channel, same id, once at compose time.
-OidcJwksCache.subscribeToEvictions channel instanceId (Some logger)
+// `OidcJwksCache` is nested inside the `OidcAuthProvider` module.
+OidcAuthProvider.OidcJwksCache.subscribeToEvictions channel instanceId (Some logger)
 |> Async.RunSynchronously
 |> ignore
 ```
 
-`OidcJwksCache.evictUrl jwksUrl` is the manual lever for an operator who has
+`OidcAuthProvider.OidcJwksCache.evictUrl jwksUrl` is the manual lever for an operator who has
 just revoked a key and does not want to wait out the TTL on the instance they
 are looking at.
 
@@ -282,8 +297,8 @@ Setup:
 
 The companion exports a **handler** the consumer registers; there is no `register` side effect to call, and the OIDC config rides `AuthUIMode` rather than a separate provider value.
 
-```fsharp skip=fragment
-open ToolUp.AuthProviders.Oidc.OidcRegister
+```fsharp
+open ToolUp.AuthProviders.Oidc
 
 let oidcConfig =
     OidcUIConfig.defaults
@@ -321,10 +336,9 @@ Client.run
 
 Google needs no tenant, region, or custom-domain input, so the preset takes only the two values the app registration gives you:
 
-```fsharp skip=fragment
-open ToolUp.AuthProviders.Oidc.OidcAppConfig
+```fsharp
 open ToolUp.AuthProviders.Oidc
-open ToolUp.AuthProviders.Oidc.OidcRegister
+open ToolUp.AuthProviders.Oidc.OidcAppConfig
 
 // One declaration; both sides project from it.
 let googleCfg: OidcAppConfig =
@@ -345,27 +359,30 @@ Client.run
 
 Server side, bind the issuer and audience from the same value rather than restating them:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders
 
-let authConfig = {
+let authConfig: AuthConfig = {
     Issuer = Some googleCfg.Issuer          // https://accounts.google.com
     Audience = Some googleCfg.Audience      // the OAuth client id
     KeySource = JwksDiscovery googleCfg.Issuer
     TokenLocation = BearerHeader
     ClockSkewSeconds = None
     AcceptedAlgorithms = None               // RS256 — what Google signs with
+    PreferOidWhenPresent = None
+    ClaimMapping = None
 }
 
 ServerApp.empty
 |> ServerApp.withAuth (OidcAuthProvider.fromConfig (Some logger) authConfig)
-|> ServerApp.withConfigValidator (OidcCoherenceValidator googleCfg :> IConfigValidator)
-|> ...
+|> ServerApp.withConfigValidator (
+    OidcCoherenceValidator.OidcCoherenceValidator(googleCfg) :> ConfigValidation.IConfigValidator)
+|> ServerApp.run
 ```
 
 **Refresh tokens are an authorize-parameter concern.** Google ignores `offline_access`, which is why the preset does not request it. Ask for offline access explicitly, via the extras channel:
 
-```fsharp skip=fragment
+```fsharp
 // `prompt=consent` matters as much as `access_type=offline`: Google issues a
 // refresh token only on a user's FIRST consent for a given client, so a
 // re-authorising user silently gets none without a consent re-prompt.
@@ -405,7 +422,7 @@ Most identity providers issue a JWT access token, and the SDK sends it as the HT
 
 Declare it on `OidcAppConfig`:
 
-```fsharp skip=fragment
+```fsharp
 let cfg = {
     OidcAppConfig.create issuer clientId redirectUri with
         BearerToken = Some IdTokenBearer
@@ -436,7 +453,7 @@ It is one sign-in, not two. Both buttons run the same Authorization Code + PKCE 
 
 Declare it on `OidcAppConfig`:
 
-```fsharp skip=fragment
+```fsharp
 let cfg =
     OidcPresets.entraExternalId "<tenant-subdomain>" "<client-id>" "<redirect-uri>"
     |> OidcPresets.withEntraSignUpUserFlow "<sign-up-user-flow-policy-id>"
@@ -451,7 +468,7 @@ let cfg =
 
 So a Google deployment offering explicit re-consent — Google issues a refresh token only on a user's first consent unless consent is re-prompted — needs no Google-specific SDK surface:
 
-```fsharp skip=fragment
+```fsharp
 let cfg =
     OidcPresets.google "<client-id>" "<redirect-uri>"
     |> OidcPresets.withSecondaryFlow "Re-consent" [ "prompt", "consent" ]
@@ -467,7 +484,7 @@ let cfg =
 
 By default, the callback handler binds the returned `id_token` to *this* sign-in attempt via nonce validation (mandatory; on by default since Cluster B1), then trusts the id_token's signature / `iss` / `aud` / `exp` until the server validates them on the next protected request. Opt in to immediate client-side validation by setting `OidcUIConfig.ValidateIdToken = Some true`:
 
-```fsharp skip=fragment
+```fsharp
 let oidcConfig = {
     OidcUIConfig.defaults issuer clientId redirectUri with
         ValidateIdToken = Some true
@@ -498,11 +515,12 @@ Use when:
 
 Setup:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders
+open ToolUp.AuthProviders.EntraExternalIdConfig
 
 // Inline:
-let config = {
+let config: EntraExternalIdConfig = {
     Tenant = "contoso"
     CustomDomain = None
     Audience = "5e2c1f...client-id"
@@ -514,13 +532,13 @@ let config = {
 let authProvider = EntraExternalIdAuthProvider.create None config
 
 // Or from env vars (see below):
-let authProvider =
+let authProviderFromEnv =
     EntraExternalIdAuthProvider.fromEnv None
     |> Option.defaultWith (fun () -> failwith "TOOLUP_ENTRA_EXTERNAL_ID_TENANT not set")
 
 ServerApp.empty
 |> ServerApp.withAuth authProvider
-|> ...
+|> ServerApp.run
 ```
 
 Configuration via environment variables:
@@ -547,8 +565,11 @@ Browser-side counterpart to the External ID server provider. Wraps `ToolUp.AuthP
 
 Wired via the SDK's `CustomAuthUI` extension point (no edit to `AuthUIMode` required):
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders.EntraExternalId
+// `create` lives in a module nested inside the same-named file module,
+// so the namespace open alone resolves the bare name to the TYPE.
+open ToolUp.AuthProviders.EntraExternalId.EntraExternalIdClientConfig
 
 let entraConfig =
     EntraExternalIdClientConfig.create
@@ -596,7 +617,7 @@ neither of those is a requirement, stop at the redirect flow and skip this secti
 
 #### Composition
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders.GoogleIdentity
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 
@@ -625,7 +646,7 @@ session, not what the session is.
 SDK does not make on its behalf (GP 11), so the default composition renders the button and nothing
 else:
 
-```fsharp skip=fragment
+```fsharp
 let googleUiWithOneTap = GoogleIdentityUIConfig.withOneTap googleUi
 ```
 
@@ -641,11 +662,11 @@ never renders for anyone.
 
 Widen it by composition rather than by hand-editing a header:
 
-```fsharp skip=fragment
+```fsharp
 ServerApp.empty
 |> ServerApp.withCspContributor (GoogleIdentityServicesCspContributor())
 |> ServerApp.withConfigValidator (
-    GoogleIdentityCspValidator.GoogleIdentityCspValidator(serverConfig, services) :> IConfigValidator)
+    GoogleIdentityCspValidator.GoogleIdentityCspValidator(serverConfig, services) :> ConfigValidation.IConfigValidator)
 ```
 
 The second line is a startup preflight. Registering it is how a deployment *declares* that it renders
@@ -691,7 +712,7 @@ Wraps Clerk's React components and surfaces them through the `AuthUIProvider` re
 
 Setup:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders
 
 Client.run
@@ -740,8 +761,9 @@ Scopes requested, and no others:
 
 Wiring. The service-account JSON comes from the deployment's `ISecretStore`, never an environment variable or a file path — a delegated key can impersonate any user in the domain, so it belongs behind an audited secret backend. That is also why this companion ships no `fromEnv`:
 
-```fsharp skip=fragment
+```fsharp
 open ToolUp.AuthProviders
+open ToolUp.AuthProviders.GoogleDirectory
 
 let directoryConfig = {
     GoogleDirectoryConfig.defaults with
@@ -754,7 +776,7 @@ let directory = GoogleDirectory.create secretStore directoryConfig
 
 ServerApp.empty
 |> ServerApp.withConfig config
-|> ServerApp.withUserDirectory (Some directory)
+|> ServerApp.withUserDirectory directory
 |> ServerApp.run
 ```
 
@@ -772,9 +794,7 @@ The permission-grant walkthrough — both consoles, in order, with the PowerShel
 
 For an auth mechanism not covered by the shipped companions (LDAP / SAML / proprietary / etc.):
 
-```fsharp skip=fragment
-module MyAuthProvider
-
+```fsharp
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
@@ -803,6 +823,14 @@ type MyAuthProvider(config: MyAuthConfig) =
             // `Ok user` on success or `Error reason` on failure.
             return Error "not implemented"
         }
+
+        // Required, and deliberately without a default: `true` when the
+        // provider proves identity cryptographically (a verified JWT
+        // signature, mTLS), `false` when it trusts ambient request data
+        // such as a header. The startup `header-auth-mode` validator
+        // refuses to boot an auth-requiring deployment whose provider
+        // reports `false`.
+        member _.IsCryptographicallyVerified = true
 ```
 
 Pair with an `AuthUIProvider` if you need a client-side sign-in UI. Register via `withAuth` on `ServerApp`.

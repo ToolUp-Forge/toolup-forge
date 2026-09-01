@@ -56,7 +56,7 @@ Name the tree `siteNav` rather than `nav`: a layout module opens `Giraffe.ViewEn
 
 `NavTree.filter ctx nav` drops every node the requesting principal can't see — together with its whole subtree — *before* render, so a gated item never appears in the markup for an unauthorised viewer. The audience model is evaluated against the shipped `AccessContext`, so site structure is self-contained; it doesn't depend on page-level audience targeting.
 
-```fsharp skip=fragment
+```fsharp
 let visible = NavTree.filter ctx siteNav   // ctx from the request
 ```
 
@@ -83,9 +83,11 @@ let pageLayout (page: PublicPage) (ctx: AccessContext) : XmlNode =
 
 `NavTree.ofCollection pages` turns a collection's pages into a flat leaf menu (the docs-site "chapter list from the `docs` collection" shape):
 
-```fsharp skip=fragment
-let! chapters = api.GetCollection "docs"            // Phase 38
-let docsMenu = NavTree.ofCollection chapters         // one NavSlug leaf per chapter, labelled by Title
+```fsharp
+let docsMenu = async {
+    let! chapters = api.GetCollection "docs"     // Phase 38
+    return NavTree.ofCollection chapters         // one NavSlug leaf per chapter, labelled by Title
+}
 ```
 
 ## Taxonomy (tags)
@@ -101,8 +103,8 @@ tags: news, product, launch
 
 and the helpers read them:
 
-```fsharp skip=fragment
-PublicPage.tags page          // [ "news"; "product"; "launch" ]
+```fsharp
+PublicPage.tags page               // [ "news"; "product"; "launch" ]
 PublicPage.hasTag "Product" page   // true (case-insensitive)
 ```
 
@@ -118,13 +120,13 @@ PublicRenderingServerApp.create ()
 |> PublicRenderingServerApp.run
 ```
 
-The provider thunk (`fun () -> api.ListPages ""`) enumerates the candidate set from the file + entity-overlay tiers (never the source tier, so no resolution recursion). An unknown tag degrades to a thoughtful empty-state body, not a 404. A non-`tag/...` slug falls through without invoking the provider.
+The provider thunk (`fun () -> api.ListPages ""`) enumerates the candidate set from the file + entity-overlay tiers (never the source tier, so no resolution recursion). The **source gates that set itself** (Phase 632) — it applies `PublicPage.isPubliclyDiscoverable` to whatever the thunk returns, on both the resolve arm and the sitemap-enumerate arm — so passing the ungated `ListPages` here is safe, and a `Draft` page carrying the default `Audience = Public` cannot leak its title into `/tag/{slug}` or its tag into `sitemap.xml`. An unknown tag degrades to a thoughtful empty-state body, not a 404. A non-`tag/...` slug falls through without invoking the provider. `TaxonomyHandler.tagIndexSourceFromApi api` is the same wiring in one call, and `withTaxonomy` (below) does it for you.
 
 ### Related content & faceted browse
 
-```fsharp skip=fragment
+```fsharp
 let related = TaxonomyHandler.relatedByTag allPages page   // same-tag pages, ranked by shared-tag count, self excluded
-let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("product", 8); … ] count-desc, tag-asc
+let facets = TaxonomyHandler.tagCounts allPages            // [ ("news", 12); ("product", 8); … ] count-desc, tag-asc
 ```
 
 `relatedByTag` is the pure-data path; a deployment that composes RAG can layer semantic-related on top. `tagCounts` drives a faceted-browse sidebar (case-insensitive grouping, deterministic order).
@@ -133,7 +135,8 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `withTaxonomy` enables the `/tag/{slug}` surface with no hand-wired `listPages` thunk — compose registers `TaxonomyHandler.tagIndexSource` against the default content API automatically. `withNav` loads a `nav.yaml` file at startup and registers the parsed tree as a `NavCatalog` DI singleton (also stored on `app.Nav` for a layout to capture); `withNavTree` registers a code-built tree directly.
 
-```fsharp skip=fragment
+```fsharp
+app                                          // the compose pipeline so far
 |> PublicRenderingServerApp.withTaxonomy
 |> PublicRenderingServerApp.withNav "content/nav.yaml"
 ```
@@ -142,7 +145,8 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `TaxonomyHandler.facetedBrowseSource` serves `/browse/{tags}` where `{tags}` is a `+`-separated tag list (AND semantics) — the "filter by topic + type" interaction. It renders the matching pages plus a **facet sidebar** (each remaining tag + the count it would yield, narrowing as tags are added), excluding gated and non-published pages (GP 4). The pure `TaxonomyHandler.facetedBrowse matchAll tags pages` (AND when `matchAll`, OR otherwise) returns `(results, facets)` for custom wiring, and composes with the Phase 98 pager.
 
-```fsharp skip=fragment
+```fsharp
+app
 |> PublicRenderingServerApp.withContentSource (TaxonomyHandler.facetedBrowseSource (fun () -> api.ListPages ""))
 // GET /browse/news+product  → pages tagged both, + facet counts
 ```
@@ -151,8 +155,8 @@ let facets  = TaxonomyHandler.tagCounts allPages           // [ ("news", 12); ("
 
 `Pagination.paginate pageSize page items` is a pure helper returning the page's slice plus a stable `{ Page; PageCount; HasPrev; HasNext }` contract (`pageSize <= 0` = the whole list, unchanged). `NavTree.ofCollectionPaged` paginates a collection menu; `NavLayout.pager pageHref slice` renders a `Previous` / numbered / `Next` control with `tu-pager__*` class hooks — `pageHref n` lets the layout choose the URL scheme (path `/tag/news/2` or query `?page=2`):
 
-```fsharp skip=fragment
-let slice = NavTree.ofCollectionPaged 20 page chapters
+```fsharp
+let slice = NavTree.ofCollectionPaged 20 pageNumber chapters
 NavLayout.menu None slice.Items
 NavLayout.pager (sprintf "/docs?page=%d") slice
 ```
@@ -161,10 +165,13 @@ NavLayout.pager (sprintf "/docs?page=%d") slice
 
 A reader can subscribe to a topic: `withTagFeed` registers a feed filtered to one tag (the taxonomy-axis extension of the Phase 80b `withFeed`), reusing the same Atom renderer:
 
-```fsharp skip=fragment
+```fsharp
+app
 |> PublicRenderingServerApp.withTagFeed "news"
-     { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }
+    { NarrativeFeedConfig.defaults with Title = "News"; SelfUrl = "/tag/news/feed.atom" }
+
 // or fan out one feed per tag:
+app
 |> PublicRenderingServerApp.withTagFeeds "Topics" NarrativeFeedConfig.defaults [ "news"; "events"; "product" ]
 ```
 
@@ -174,12 +181,14 @@ A tag feed surfaces the Narrative-bodied pages carrying that tag, newest-first, 
 
 `NavLayout.headStructuredData baseUrl ctx currentSlug nav` derives schema.org `BreadcrumbList` (from the page's nested slug) and `SiteNavigationElement` (from the **audience-filtered** nav tree) JSON-LD, absolutised against the base URL, as `<script type="application/ld+json">` blocks a layout splices into `<head>`:
 
-```fsharp skip=fragment
+```fsharp
 head [] [
     // …
-    yield! NavLayout.headStructuredData config.PublicBaseUrl ctx (Some page.Slug) siteNav
+    yield! NavLayout.headStructuredData (defaultArg config.PublicBaseUrl "") ctx (Some page.Slug) siteNav
 ]
 ```
+
+`baseUrl` is a plain `string`, while `ServerConfig.PublicBaseUrl` is a `string option` — hence the `defaultArg`. An empty base leaves the emitted URLs site-relative, which is valid JSON-LD but weaker for crawlers, so a deployment that wants structured data sets `PublicBaseUrl`.
 
 The site-nav structured data omits the same gated items the rendered menu omits (GP 4 — no leak), and returns `[]` when there's nothing to describe, so a layout `yield!`s it unconditionally.
 
