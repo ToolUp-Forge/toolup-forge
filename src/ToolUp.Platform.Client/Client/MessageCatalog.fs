@@ -688,6 +688,51 @@ module MessageCatalog =
             Copied = "Copied!"
             CopyAsMarkdown = "Copy as Markdown"
         }
+        ServiceAccount = {
+            Heading = "Service accounts"
+            Subheading =
+                "Machine identities owned by this scope. Each mints scoped, expiring API tokens that authenticate as the account — never as a person."
+            Loading = "Loading…"
+            Dismiss = "dismiss"
+            PermissionRead = "Read"
+            PermissionWrite = "Write"
+            PermissionAdmin = "Admin"
+            PermissionSchemaOnly = "Schema only"
+            StatusActive = "Active"
+            StatusDisabled = "Disabled"
+            StatusRevoked = "Revoked"
+            StatusExpired = "Expired"
+            CopyTokenHeading = fun name -> $"Copy the token for \"{name}\" now"
+            SecretOneTimeBody =
+                "This is the only time this secret is shown. The server stores only a salted hash of it, so it cannot be shown again — if it is lost, revoke this token and mint another."
+            AcknowledgeSecret = "I have copied this token"
+            NewAccountHeading = "New service account"
+            NameLabel = "Name"
+            NamePlaceholder = "e.g. nightly-export"
+            ModulePermissionsLabel = "Module permissions"
+            ModuleNamePlaceholder = "module name"
+            AddPermission = "Add"
+            NoPermissionsHint =
+                "Add at least one module permission. An account with no declared permissions is refused — an empty set would grant unrestricted access, not none."
+            Working = "Working…"
+            CreateAccount = "Create account"
+            MintTokenHeading = "Mint a token"
+            MintLabelPlaceholder = "label, e.g. CI deploy key"
+            Days = "days"
+            Mint = "Mint"
+            NoAccountsHeading = "No service accounts yet."
+            NoAccountsBody =
+                "A service account is a machine identity — a CI job, a partner integration, an agent host — that authenticates as itself rather than borrowing a person's account."
+            Tokens = "Tokens"
+            Disable = "Disable"
+            Enable = "Enable"
+            NoTokensYet = "This account has no tokens yet."
+            TokenIssuedSummary =
+                fun issuedOn issuedBy expiresOn -> $"issued {issuedOn} by {issuedBy} · expires {expiresOn}"
+            Revoke = "Revoke"
+            BackToList = "← All service accounts"
+            TokensForAccount = fun name -> $"Tokens — {name}"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

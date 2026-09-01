@@ -994,6 +994,83 @@ type NarrativeRendererMessages = {
     CopyAsMarkdown: string
 }
 
+/// The built-in service-account admin module (`ServiceAccountUI`, Phase 527).
+type ServiceAccountMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    Loading: string
+    /// The error banner's dismiss action.
+    Dismiss: string
+    /// Module-permission display labels, shared by the status badge, the
+    /// create-form's permission picker and the summary pill. The
+    /// underlying DU case names stay wire-shaped (sent to the server /
+    /// used as the `<select>` option value as-is) — only these display
+    /// labels are localised.
+    PermissionRead: string
+    PermissionWrite: string
+    PermissionAdmin: string
+    PermissionSchemaOnly: string
+    /// Shared by an account's own status badge and a live (non-revoked,
+    /// non-expired) token's status badge.
+    StatusActive: string
+    StatusDisabled: string
+    StatusRevoked: string
+    StatusExpired: string
+    /// The one-time secret panel's heading — takes the minted token's
+    /// display name.
+    CopyTokenHeading: string -> string
+    /// The one-time secret panel's explanatory prose: the secret cannot
+    /// be shown again once acknowledged.
+    SecretOneTimeBody: string
+    /// The one-time secret panel's acknowledgement button.
+    AcknowledgeSecret: string
+    /// Create-account form heading.
+    NewAccountHeading: string
+    NameLabel: string
+    NamePlaceholder: string
+    ModulePermissionsLabel: string
+    /// Placeholder of the inline module-name field in the permission
+    /// picker (the module a grant applies to, e.g. "Sales").
+    ModuleNamePlaceholder: string
+    /// The picker's "add this grant to the pending set" button.
+    AddPermission: string
+    /// Shown while the pending permission set is empty — an account with
+    /// no declared permissions is refused server-side.
+    NoPermissionsHint: string
+    /// Create-account submit button while the request is in flight.
+    Working: string
+    CreateAccount: string
+    /// Mint-token form heading.
+    MintTokenHeading: string
+    MintLabelPlaceholder: string
+    /// Unit suffix on the expiry day-count field.
+    Days: string
+    Mint: string
+    /// Empty state when the deployment has no service accounts yet.
+    NoAccountsHeading: string
+    NoAccountsBody: string
+    /// The per-account "view its tokens" button, and the fallback tokens
+    /// heading when the selected account can no longer be found.
+    Tokens: string
+    Disable: string
+    Enable: string
+    /// Empty state when the selected account has no tokens yet.
+    NoTokensYet: string
+    /// A token row's summary line — takes the formatted issued-on date,
+    /// the issuer's identity, and the formatted expiry date, in that
+    /// order. Dates are formatted at the call site (444's recorded
+    /// decision), so this receives plain strings.
+    TokenIssuedSummary: string -> string -> string -> string
+    Revoke: string
+    /// The "back to the account list" breadcrumb.
+    BackToList: string
+    /// The tokens-panel heading for the selected account — takes the
+    /// account's display name.
+    TokensForAccount: string -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1032,4 +1109,5 @@ type MessageCatalog = {
     PermissionsAdmin: PermissionsAdminMessages
     WebhookAdmin: WebhookAdminMessages
     NarrativeRenderer: NarrativeRendererMessages
+    ServiceAccount: ServiceAccountMessages
 }
