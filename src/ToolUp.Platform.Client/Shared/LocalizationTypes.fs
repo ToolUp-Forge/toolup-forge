@@ -1221,6 +1221,62 @@ type TeamConfigMessages = {
     FeatureFlagsTab: string
 }
 
+/// The built-in tenant-lifecycle diagnostics admin module
+/// (`TenantLifecycleAdminUI`, Phase 54e / localized Phase 751).
+type TenantLifecycleAdminMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Label above the scope-id input.
+    ScopeIdLabel: string
+    /// Placeholder of the scope-id input.
+    ScopeIdPlaceholder: string
+    /// Submit-button label while a fetch is in flight.
+    LoadingButton: string
+    /// Submit-button label at rest.
+    LoadLastRun: string
+    /// Footnote under the scope-id form.
+    ScopeFormFootnote: string
+    /// Dismiss action on the error banner.
+    Dismiss: string
+    /// Shared "in progress" text — also used by the result pane while a
+    /// fetch is loading (same English text as `LoadingButton`, but a
+    /// distinct call site).
+    Loading: string
+    /// Result-pane empty state: queried, no run recorded — takes the
+    /// submitted scope id.
+    NoRunForScope: string -> string
+    /// Result-pane empty-state fallback for when the queried scope is
+    /// somehow unset (defensive; `QueriedScope` is always `Some` once
+    /// `Loaded` is true).
+    NoRunForScopeFallback: string
+    /// Prose under the "no run recorded" empty state.
+    NoRunHelp: string
+    /// Prompt shown before the admin has submitted a scope.
+    EnterScopePrompt: string
+    /// Summary-table heading — takes the tenant-lifecycle phase name.
+    LastRunHeading: string -> string
+    /// Count-pill labels (completed / skipped / failed / total elapsed).
+    PillCompletedLabel: string
+    PillSkippedLabel: string
+    PillFailedLabel: string
+    PillMsTotalLabel: string
+    /// Per-hook result badges.
+    BadgeCompleted: string
+    BadgeSkipped: string
+    BadgeFailed: string
+    /// Empty state: the run recorded no hooks at all (a valid no-op run).
+    NoHooksRecorded: string
+    /// Hook-outcome table column headers.
+    ColumnHook: string
+    ColumnResult: string
+    ColumnDetail: string
+    ColumnElapsed: string
+    /// Per-hook elapsed-time cell — takes the elapsed milliseconds.
+    ElapsedMsLabel: int -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1262,4 +1318,5 @@ type MessageCatalog = {
     ServiceAccount: ServiceAccountMessages
     DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
     TeamConfig: TeamConfigMessages
+    TenantLifecycleAdmin: TenantLifecycleAdminMessages
 }

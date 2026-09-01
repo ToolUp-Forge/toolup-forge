@@ -837,6 +837,37 @@ module MessageCatalog =
             ConfigurationTab = "Configuration"
             FeatureFlagsTab = "Feature flags"
         }
+        TenantLifecycleAdmin = {
+            Heading = "Tenant lifecycle"
+            Subheading = "The outcome of a tenant scope's most recent provision / offboard run."
+            ScopeIdLabel = "Tenant / team scope id"
+            ScopeIdPlaceholder = "e.g. team-abc123"
+            LoadingButton = "Loading…"
+            LoadLastRun = "Load last run"
+            ScopeFormFootnote =
+                "Shows the durable summary of the scope's most recent provision / offboard run. The registered lifecycle hook set is listed at the /dev/inspect diagnostics endpoint."
+            Dismiss = "dismiss"
+            Loading = "Loading…"
+            NoRunForScope = fun scope -> $"No lifecycle run recorded for \"{scope}\"."
+            NoRunForScopeFallback = "No lifecycle run recorded for this scope."
+            NoRunHelp =
+                "A provision or offboard run for the scope will appear here once one has executed (the summary is durable across restarts)."
+            EnterScopePrompt = "Enter a tenant or team scope id above to view its last lifecycle run."
+            LastRunHeading = fun phase -> $"Last run — {phase}"
+            PillCompletedLabel = "completed"
+            PillSkippedLabel = "skipped"
+            PillFailedLabel = "failed"
+            PillMsTotalLabel = "ms total"
+            BadgeCompleted = "Completed"
+            BadgeSkipped = "Skipped"
+            BadgeFailed = "Failed"
+            NoHooksRecorded = "The run completed with no registered lifecycle hooks (a valid no-op run)."
+            ColumnHook = "Hook"
+            ColumnResult = "Result"
+            ColumnDetail = "Detail"
+            ColumnElapsed = "Elapsed"
+            ElapsedMsLabel = fun ms -> $"{ms} ms"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

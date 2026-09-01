@@ -133,12 +133,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ──────────────────────────────────────────────────────
 
-let private resultBadge (result: LifecycleHookResult) =
+let private resultBadge (msgs: TenantLifecycleAdminMessages) (result: LifecycleHookResult) =
     let cls, label =
         match result with
-        | LifecycleHookResult.Completed -> "bg-green-100 text-green-700", "Completed"
-        | LifecycleHookResult.Skipped _ -> "bg-yellow-100 text-yellow-800", "Skipped"
-        | LifecycleHookResult.Failed _ -> "bg-red-100 text-red-700", "Failed"
+        | LifecycleHookResult.Completed -> "bg-green-100 text-green-700", msgs.BadgeCompleted
+        | LifecycleHookResult.Skipped _ -> "bg-yellow-100 text-yellow-800", msgs.BadgeSkipped
+        | LifecycleHookResult.Failed _ -> "bg-red-100 text-red-700", msgs.BadgeFailed
 
     Html.span [
         prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
@@ -162,7 +162,7 @@ let private countPill (label: string) (count: int) (cls: string) =
         ]
     ]
 
-let private summaryTable (summary: LifecycleSummary) =
+let private summaryTable (msgs: TenantLifecycleAdminMessages) (summary: LifecycleSummary) =
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4"
         prop.children [
@@ -171,7 +171,7 @@ let private summaryTable (summary: LifecycleSummary) =
                 prop.children [
                     Html.h3 [
                         prop.className "text-sm font-semibold"
-                        prop.text $"Last run — {TenantLifecyclePhase.name summary.Phase}"
+                        prop.text (msgs.LastRunHeading(TenantLifecyclePhase.name summary.Phase))
                     ]
                     Html.span [
                         prop.className "text-xs text-gray-500 font-mono break-all"
@@ -183,18 +183,21 @@ let private summaryTable (summary: LifecycleSummary) =
             Html.div [
                 prop.className "flex gap-2 mb-4 flex-wrap"
                 prop.children [
-                    countPill "completed" (LifecycleSummary.completedCount summary) "bg-green-50 text-green-700"
-                    countPill "skipped" (LifecycleSummary.skippedCount summary) "bg-yellow-50 text-yellow-800"
-                    countPill "failed" (LifecycleSummary.failedCount summary) "bg-red-50 text-red-700"
-                    countPill "ms total" (int summary.TotalElapsedMs) "bg-gray-100 text-gray-600"
+                    countPill
+                        msgs.PillCompletedLabel
+                        (LifecycleSummary.completedCount summary)
+                        "bg-green-50 text-green-700"
+                    countPill
+                        msgs.PillSkippedLabel
+                        (LifecycleSummary.skippedCount summary)
+                        "bg-yellow-50 text-yellow-800"
+                    countPill msgs.PillFailedLabel (LifecycleSummary.failedCount summary) "bg-red-50 text-red-700"
+                    countPill msgs.PillMsTotalLabel (int summary.TotalElapsedMs) "bg-gray-100 text-gray-600"
                 ]
             ]
 
             if List.isEmpty summary.Outcomes then
-                Html.p [
-                    prop.className "text-xs text-gray-500"
-                    prop.text "The run completed with no registered lifecycle hooks (a valid no-op run)."
-                ]
+                Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoHooksRecorded ]
             else
                 Html.div [
                     prop.className "border border-border rounded-lg overflow-hidden"
@@ -209,19 +212,19 @@ let private summaryTable (summary: LifecycleSummary) =
                                             prop.children [
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Hook"
+                                                    prop.text msgs.ColumnHook
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Result"
+                                                    prop.text msgs.ColumnResult
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Detail"
+                                                    prop.text msgs.ColumnDetail
                                                 ]
                                                 Html.th [
                                                     prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text "Elapsed"
+                                                    prop.text msgs.ColumnElapsed
                                                 ]
                                             ]
                                         ]
@@ -239,7 +242,7 @@ let private summaryTable (summary: LifecycleSummary) =
                                                     ]
                                                     Html.td [
                                                         prop.className "px-3 py-2"
-                                                        prop.children [ resultBadge outcome.Result ]
+                                                        prop.children [ resultBadge msgs outcome.Result ]
                                                     ]
                                                     Html.td [
                                                         prop.className "px-3 py-2 text-gray-600 break-all"
@@ -247,7 +250,7 @@ let private summaryTable (summary: LifecycleSummary) =
                                                     ]
                                                     Html.td [
                                                         prop.className "px-3 py-2 font-mono text-gray-500"
-                                                        prop.text $"{outcome.ElapsedMs} ms"
+                                                        prop.text (msgs.ElapsedMsLabel outcome.ElapsedMs)
                                                     ]
                                                 ]
                                             ]
@@ -265,6 +268,7 @@ let private summaryTable (summary: LifecycleSummary) =
 /// `onSubmit` fires only on the button click / Enter.
 [<ReactComponent>]
 let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).TenantLifecycleAdmin
     let scope, setScope = React.useState ""
     let canSubmit = not loading && scope.Trim() <> ""
 
@@ -277,7 +281,7 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
         prop.children [
             Html.label [
                 prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text "Tenant / team scope id"
+                prop.text msgs.ScopeIdLabel
             ]
             Html.div [
                 prop.className "flex gap-2"
@@ -285,7 +289,7 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
                     Html.input [
                         prop.type' "text"
                         prop.value scope
-                        prop.placeholder "e.g. team-abc123"
+                        prop.placeholder msgs.ScopeIdPlaceholder
                         prop.onChange (fun (v: string) -> setScope v)
                         prop.onKeyDown (fun e ->
                             if e.key = "Enter" then
@@ -302,20 +306,27 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
                                 "bg-gray-300 cursor-not-allowed"
                         ]
                         prop.disabled (not canSubmit)
-                        prop.text (if loading then "Loading…" else "Load last run")
+                        prop.text (if loading then msgs.LoadingButton else msgs.LoadLastRun)
                         prop.onClick (fun _ -> submit ())
                     ]
                 ]
             ]
             Html.p [
                 prop.className "text-xs text-gray-500 mt-2"
-                prop.text
-                    "Shows the durable summary of the scope's most recent provision / offboard run. The registered lifecycle hook set is listed at the /dev/inspect diagnostics endpoint."
+                prop.text msgs.ScopeFormFootnote
             ]
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// Phase 751 — the view body as a React COMPONENT, for the same reason
+/// `HealthMonitorUI.HealthMonitorBody` / `AdminHomeHeader` are: `view` is
+/// invoked inline by the shell's own render, so a hook called there would
+/// join the shell's hook order and break the moment the active module
+/// changed. `view` below keeps its existing signature and delegates here.
+[<ReactComponent>]
+let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : ReactElement =
+    let msgs = (MessageCatalogProvider.useMessages ()).TenantLifecycleAdmin
+
     let errorBanner =
         match model.Error with
         | Some msg ->
@@ -326,7 +337,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                     Html.span [ prop.text msg ]
                     Html.button [
                         prop.className "text-xs text-red-600 hover:underline"
-                        prop.text "dismiss"
+                        prop.text msgs.Dismiss
                         prop.onClick (fun _ -> dispatch DismissError)
                     ]
                 ]
@@ -335,8 +346,8 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
     let resultPane =
         match model.Summary with
-        | Some summary -> summaryTable summary
-        | None when model.Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+        | Some summary -> summaryTable msgs summary
+        | None when model.Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
         | None when model.Loaded ->
             // Queried, but no run recorded for this scope.
             Html.div [
@@ -346,37 +357,29 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
                         prop.className "text-sm text-gray-600"
                         prop.text (
                             match model.QueriedScope with
-                            | Some scope -> $"No lifecycle run recorded for \"{scope}\"."
-                            | None -> "No lifecycle run recorded for this scope."
+                            | Some scope -> msgs.NoRunForScope scope
+                            | None -> msgs.NoRunForScopeFallback
                         )
                     ]
-                    Html.p [
-                        prop.className "text-xs text-gray-400 mt-1"
-                        prop.text
-                            "A provision or offboard run for the scope will appear here once one has executed (the summary is durable across restarts)."
-                    ]
+                    Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoRunHelp ]
                 ]
             ]
         | None ->
             // Nothing queried yet.
-            Html.p [
-                prop.className "text-sm text-gray-500"
-                prop.text "Enter a tenant or team scope id above to view its last lifecycle run."
-            ]
+            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.EnterScopePrompt ]
 
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text "Tenant lifecycle" ]
-            Html.p [
-                prop.className "text-sm text-gray-600 mb-4"
-                prop.text "The outcome of a tenant scope's most recent provision / offboard run."
-            ]
+            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
             errorBanner
             ScopeForm model.Loading (fun scope -> dispatch (SubmitScope scope))
             resultPane
         ]
     ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TenantLifecycleAdminBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 
