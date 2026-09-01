@@ -1852,6 +1852,252 @@ type UsageDashboardMessages = {
     Loading: string
 }
 
+/// The mapping-aware Data Manager module (`MappingDataManagerUI`) — CSV
+/// upload, the data-quality review step, the target-format picker, the
+/// column-mapping wizard (with its derived-column builder), the dry-run
+/// validation preview, and the imported-files list.
+type MappingDataManagerMessages = {
+    // ─── Errors raised from the pure `update` reducer ──────────────────
+    /// Error banner after a one-click re-ingest fails. Takes the server
+    /// error text.
+    ReingestionFailed: string -> string
+    /// Error banner when the browser `FileReader` can't read a chosen
+    /// file. Takes the file name.
+    FileReadFailed: string -> string
+    /// Error banner when a mapping target is picked whose `DataType` has
+    /// no schema registered (`SelectTarget`).
+    NoSchemaCannotMap: string
+    /// Error banner when confirm/commit is attempted against a target
+    /// type that no longer publishes a schema (`ConfirmMapping` /
+    /// `CommitConversion` — the schema was available when the wizard
+    /// opened but the deployment changed underneath it).
+    NoSchemaPublished: string
+    /// Error banner after `ReprocessFile` fails. Takes the server error
+    /// text.
+    ReprocessFailed: string -> string
+    /// Error banner after `ResetDataStore` fails. Takes the server error
+    /// text.
+    ResetFailed: string -> string
+    /// One derived-column step in a `ConversionRecord`'s remediation-steps
+    /// provenance list. Takes the already-described expression (e.g. "Full
+    /// Name = concat(First, Last)"). Read directly off the catalog — this
+    /// runs inside the pure conversion pipeline, not a rendered tree.
+    DerivedRemediationStep: string -> string
+
+    // ─── File-size units (`formatSize`) ────────────────────────────────
+    UnitBytes: string
+    UnitKilobytes: string
+    UnitMegabytes: string
+
+    // ─── Data-type / column-type labels ────────────────────────────────
+    /// File-list "Data Type" column value for the `UnrecognisedData`
+    /// detect sentinel — the sentinel id itself is a wire value and stays
+    /// unlocalised; only this display label is.
+    UnrecognisedLabel: string
+    /// `ColumnDataKind.StringColumn` display label.
+    TypeText: string
+    /// `ColumnDataKind.NumberColumn` display label.
+    TypeNumber: string
+    /// `ColumnDataKind.DateColumn` display label.
+    TypeDate: string
+    /// `ColumnDataKind.BooleanColumn` display label.
+    TypeBoolean: string
+
+    // ─── Field-match badges (`MatchFlag`) ───────────────────────────────
+    MatchConfident: string
+    MatchLowConfidence: string
+    MatchTypeMismatch: string
+    MatchAmbiguous: string
+    MatchUnmatched: string
+
+    // ─── Mapping-grid chrome ────────────────────────────────────────────
+    /// The unmapped option in a per-field column `<select>`.
+    NotMappedOption: string
+    /// Reused for the mapping-grid column header and the derived-column
+    /// builder's target-field select label — same concept, same wording.
+    TargetField: string
+    ColumnType: string
+    ColumnCsvColumn: string
+    ColumnMatch: string
+    /// Tooltip on the red `*` beside a required field's name.
+    RequiredTooltip: string
+    /// Badge shown instead of a match badge when a field is satisfied by a
+    /// derived column rather than a 1:1 map.
+    DerivedBadge: string
+
+    // ─── Date-order choice (`DateOrder`) ────────────────────────────────
+    DateOrderDayFirst: string
+    DateOrderMonthFirst: string
+    DateOrderYearFirst: string
+
+    // ─── ReviewData step (data-quality scan + remediation) ─────────────
+    ReviewDataIntro: string
+    /// Opt-out toggle label for a column's safe fixes.
+    ApplyFixes: string
+    /// "e.g. …" prefix before a column issue's example values. Takes the
+    /// already-joined example list.
+    ExampleValues: string -> string
+    /// Detected-unit annotation beside a column name. Takes the unit
+    /// symbol (e.g. "$").
+    UnitKeptInLabel: string -> string
+    /// Before/after remediation preview on an example cell value. Takes
+    /// the raw and the remediated value.
+    PreviewBeforeAfter: string -> string -> string
+    /// Blocker line naming the ambiguous-date columns still awaiting an
+    /// order choice. Takes the already-joined column list.
+    ChooseDateOrderFor: string -> string
+    ContinueToMapping: string
+
+    // ─── Auto-mapped review list (flagged fields banner) ───────────────
+    AutoMappedWarningHeading: string
+    /// Per-field detail when the suggester found a column. Takes the
+    /// guessed column name.
+    GuessedColumn: string -> string
+    NoColumnFound: string
+
+    // ─── Derived-column builder ─────────────────────────────────────────
+    /// `ColumnExpr` kind picker option: `Concat`.
+    DerivedKindConcat: string
+    /// `ColumnExpr` kind picker option: `SplitTake`.
+    DerivedKindSplitTake: string
+    /// `ColumnExpr` kind picker option: `Substring`.
+    DerivedKindSubstring: string
+    /// `ColumnExpr` kind picker option: `Constant`.
+    DerivedKindConstant: string
+    AddDerivedColumnHeading: string
+    /// Placeholder of the target-field select.
+    FieldPlaceholder: string
+    /// "From" — the expression-kind select label.
+    DerivedFromLabel: string
+    /// The constant-value text input label.
+    ValueLabel: string
+    ColumnALabel: string
+    ColumnBLabel: string
+    /// Placeholder shared by every source-column select in the builder.
+    ColumnPlaceholder: string
+    /// The join-separator text input label (`Concat`).
+    SeparatorLabel: string
+    /// Reused by the `SplitTake` and `Substring` kinds, each of which has
+    /// only one source-column select.
+    ColumnLabel: string
+    /// The split-delimiter text input label (`SplitTake`).
+    DelimiterLabel: string
+    /// The split-index text input label (`SplitTake`).
+    PartNumberLabel: string
+    /// The substring-start text input label (`Substring`).
+    StartLabel: string
+    /// The substring-length text input label (`Substring`).
+    LengthLabel: string
+    AddButton: string
+    DerivedColumnsFootnote: string
+    RemoveButton: string
+
+    // ─── ReviewValidation step (dry-run report) ─────────────────────────
+    /// Green summary banner. Takes the total row count.
+    AllRowsValidatedCleanly: int -> string
+    /// Red summary banner — commit is blocked. Takes the failing and
+    /// total row counts.
+    RowsFailBlocked: int -> int -> string
+    /// Amber summary banner — commit is allowed anyway. Takes the failing
+    /// and total row counts.
+    RowsFailWarn: int -> int -> string
+    /// Per-column card heading. Takes the column name and its failing-cell
+    /// count.
+    FailingCellsHeading: string -> int -> string
+    /// Fallback cell-issue reason when the report carries no violation
+    /// text. Takes the expected-shape description.
+    ExpectedValue: string -> string
+    /// One cell-issue line. Takes the row number, the actual (offending)
+    /// value, and the reason.
+    RowIssueDetail: int -> string -> string -> string
+    TruncatedCellsNote: string
+    Importing: string
+    ImportButton: string
+    BackToMapping: string
+
+    // ─── Wizard shell ────────────────────────────────────────────────
+    /// Wizard header. Takes the file name being mapped.
+    MapFileNameHeading: string -> string
+    CancelButton: string
+    /// PickTarget-step intro. Takes the detected column count.
+    DetectedColumnsPrompt: int -> string
+    NoSchemaTypesRegistered: string
+    /// ReviewMapping-step subheading. Takes the target type's display
+    /// name.
+    MappingToLabel: string -> string
+    ChangeFormatButton: string
+    ReusedSavedMappingNote: string
+    /// Blocker line naming the still-unmapped required fields. Takes the
+    /// unmapped count and the already-joined field-name list.
+    RequiredFieldsUnmapped: int -> string -> string
+    /// One derived-column validation error. Takes the field name and the
+    /// detail.
+    DerivedColumnError: string -> string -> string
+    Validating: string
+    ConfirmAndValidateButton: string
+    ValidateEveryRowNote: string
+    ColumnMappingPanelTitle: string
+
+    // ─── Ingestion-status badges + filter ───────────────────────────────
+    IndexedTooltip: string
+    /// Reused for the badge text and the status-filter option.
+    IndexedBadge: string
+    IndexingTooltip: string
+    /// Badge text, with the in-progress ellipsis — distinct from the
+    /// filter option's `FilterIndexing`, which has none.
+    IndexingBadge: string
+    /// Reused for the `Failed` badge text and the status-filter option.
+    NotIndexedBadge: string
+    FilterAll: string
+    /// The status-filter option for `OnlyPending` — no ellipsis, unlike
+    /// the badge's `IndexingBadge`.
+    FilterIndexing: string
+    /// The status-filter option for `OnlyNotIndexed`.
+    FilterNotAttempted: string
+    FilterByIndexStatus: string
+
+    // ─── Imported-files table ────────────────────────────────────────
+    NoFilesImportedYet: string
+    NoFilesMatchFilter: string
+    ColumnDataType: string
+    ColumnFileName: string
+    ColumnRows: string
+    ColumnSize: string
+    ColumnSearchIndex: string
+    /// Fallback fragment inside `ConvertedFromTooltip` when a conversion
+    /// applied no remediation steps.
+    NoRemediationLabel: string
+    /// Tooltip on the "Converted" badge. Takes the source file name and
+    /// the already-joined remediation-steps summary (or
+    /// `NoRemediationLabel`).
+    ConvertedFromTooltip: string -> string -> string
+    ConvertedBadge: string
+    RetryIngestionTooltip: string
+    RetryButton: string
+    NewMappingTooltip: string
+    NewMappingButton: string
+    ReprocessTooltip: string
+    ReprocessButton: string
+    DeleteButton: string
+    /// `window.confirm` prompt before deleting a file. Takes the file
+    /// name.
+    DeleteFileConfirm: string -> string
+    ResetScopeNote: string
+    ResetDataStoreTooltip: string
+    ResetDataStoreButton: string
+    /// `window.confirm` prompt before wiping the data store. Takes the
+    /// file count about to be deleted.
+    ResetConfirm: int -> string
+
+    // ─── Top-level panels ────────────────────────────────────────────
+    ImportCsvPanelTitle: string
+    UploadFileSectionTitle: string
+    ChooseCsvButton: string
+    CheckingKnownStructure: string
+    UploadHelpText: string
+    ImportedFilesPanelTitle: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1903,4 +2149,5 @@ type MessageCatalog = {
     FileManager: FileManagerMessages
     ServiceStatusBoard: ServiceStatusBoardMessages
     UsageDashboard: UsageDashboardMessages
+    MappingDataManager: MappingDataManagerMessages
 }
