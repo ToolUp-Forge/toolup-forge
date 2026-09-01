@@ -12,7 +12,7 @@ open DataManagementTypes
 open ProcessedDataTypes
 open GeneralUITypes
 open ToolUp.Platform
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 // ─── Model ────────────────────────────────────────────────────────
 

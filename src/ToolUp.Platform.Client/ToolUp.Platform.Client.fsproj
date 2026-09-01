@@ -7,6 +7,17 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <!-- Phase 344 — the AG Grid / AG Charts bindings, lifted out of this
+             tier into standalone Apache-2.0 Feliz packages. The Client tier
+             still depends on them: ClientConfig carries an
+             AgGridModuleConfig, the shell mounts the AgGridProvider, and
+             FileManagerUI renders a grid. What changed is that a consumer
+             that wants the binding WITHOUT the SDK can now take it alone,
+             and that the Enterprise tier is a separate package again
+             (GP 1 / GP 2). Both are Community-only — no Enterprise npm or
+             licensing surface arrives through these edges. -->
+        <ProjectReference Include="..\Feliz.AgGrid\Feliz.AgGrid.fsproj" />
+        <ProjectReference Include="..\Feliz.AgCharts\Feliz.AgCharts.fsproj" />
     </ItemGroup>
     <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
          under fable/. The library's own .fsproj + .fs files ship inside
@@ -76,7 +87,18 @@
         <Compile Include="Shared\LocalizationTypes.fs" />
         <Compile Include="Client\MessageCatalog.fs" />
         <Compile Include="Client\MessageCatalogProvider.fs" />
-        <Compile Include="Client\UI\AgChart.fs" />
+        <!-- Phase 344 — the AG Charts / AG Grid bindings moved out to the
+             standalone Feliz.AgCharts / Feliz.AgGrid packages. What is left
+             here is the backward-compat re-export that keeps
+             `open ToolUp.Platform.AgChart` / `.AgGrid` compiling (GP 11);
+             each sits where its binding used to, so the compile order the
+             files below were written against is unchanged. The Enterprise
+             augmentation that used to sit beside AgGrid.fs
+             (AgGrid.Enterprise.fs) moved to the opt-in
+             Feliz.AgGrid.Enterprise package, which is where it always
+             belonged under GP 2 — the default-composed Client tier no
+             longer carries Enterprise-gated members at all. -->
+        <Compile Include="Client\UI\AgChartCompat.fs" />
         <!-- Phase 578 — capture a rendered AG chart as export-ready image
              bytes + package it as a report image placeholder. Sits
              immediately after AgChart.fs: it is the same surface's export
@@ -84,8 +106,7 @@
              Fable.Core / Browser.Dom, so anywhere after this point would
              compile equally and beside its subject is where it is found. -->
         <Compile Include="Client\UI\AgChartExport.fs" />
-        <Compile Include="Client\UI\AgGrid.fs" />
-        <Compile Include="Client\UI\AgGrid.Enterprise.fs" />
+        <Compile Include="Client\UI\AgGridCompat.fs" />
         <Compile Include="Client\SidebarPreferences.fs" />
         <Compile Include="Client\UI\SvgProp.fs" />
         <!-- v0.5.0 — DataProp + AriaProp typed helpers. Same shape /
@@ -297,6 +318,11 @@
         <Compile Include="Client\AdPanel\AdScriptLoader.fs" />
         <Compile Include="Client\AdPanel\IAdAnalyticsSink.fs" />
         <Compile Include="Client\AdPanel\ServerSinkAdAnalytics.fs" />
+        <!-- Phase 163 — client end of the ITelemetrySink seam. After
+             Consent\ConsentProvider.fs: `track` gates on
+             `ConsentProvider.current ()` before an event leaves the
+             browser, which is where the analytics-consent gate lives. -->
+        <Compile Include="Client\Telemetry.fs" />
         <Compile Include="Components\AdSlot.fs" />
         <Compile Include="Client\Premium\PremiumHook.fs" />
         <!-- Phase 56 — typed inbound rate-limit banner. Consumers handle
