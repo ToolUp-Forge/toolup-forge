@@ -31,7 +31,7 @@ let private dataPropSource () =
     let repoRoot =
         Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-    Path.Combine(repoRoot, "src", "ToolUp.Platform.Client", "Client", "UI", "DataProp.fs")
+    Path.Combine(repoRoot, "src", "ToolUp.Platform.UI", "DataProp.fs")
 
 /// Each helper the module must expose, paired with the `data-*`
 /// attribute name it must wrap. Drift between the helper name and

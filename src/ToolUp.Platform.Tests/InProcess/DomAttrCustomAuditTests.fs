@@ -70,7 +70,15 @@ let private clientFsFiles () =
 
             normalised.Contains "/Client/"
             || normalised.Contains "/Components/"
-            || normalised.Contains ".Client/")
+            || normalised.Contains ".Client/"
+            // Phase 307 — the UI toolkit and the three helper modules
+            // themselves moved to `src/ToolUp.Platform.UI/`, whose paths
+            // match none of the three shapes above. Without this clause the
+            // ratchet would go on reporting green while measuring nothing
+            // over the component set most likely to reach for
+            // `prop.custom` — the same silent-coverage-loss the brand-hex
+            // guard in ClientToolkitThemingTests hit at Phase 344.
+            || normalised.Contains "/ToolUp.Platform.UI/")
         |> Seq.filter (fun path ->
             let leaf = Path.GetFileName path
             not (excludedLeafs.Contains leaf))

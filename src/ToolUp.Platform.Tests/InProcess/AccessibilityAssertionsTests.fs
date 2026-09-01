@@ -565,7 +565,7 @@ let private allowlistTests =
         testCase "every attribute AriaProp.fs blesses is in the allowlist"
         <| fun _ ->
             let ariaPropPath =
-                Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "UI", "AriaProp.fs")
+                Path.Combine(repoRoot (), "src", "ToolUp.Platform.UI", "AriaProp.fs")
 
             Expect.isTrue (File.Exists ariaPropPath) (sprintf "expected AriaProp.fs at %s" ariaPropPath)
 
