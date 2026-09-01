@@ -1143,6 +1143,27 @@ module MessageCatalog =
                     else
                         $"Reset the data store? This permanently deletes {n} files and every derived summary in this scope. Analyses depending on this data will lose access. This cannot be undone."
         }
+        ServiceStatusBoard = {
+            Heading = "Service status"
+            Subheading =
+                "Composite snapshot of every operator-facing observability surface. Refresh re-runs every section in parallel; per-section refresh re-runs that section alone."
+            Refresh = "Refresh"
+            RefreshAll = "Refresh all"
+            Refreshing = "Refreshing..."
+            Loading = "Loading..."
+            AllSystemsOk = "All systems Ok"
+            DegradedBy = fun joined -> $"Degraded — {joined}"
+            UnhealthyBy = fun joined -> $"Unhealthy — {joined}"
+            SeverityOk = "Ok"
+            SeverityWarn = "Warn"
+            SeverityError = "Error"
+            SeverityDisabled = "Disabled"
+            GeneratedAt = fun formatted -> $"Generated at {formatted}"
+            UnknownSectionHeadline = fun name -> $"Unknown section: {name}"
+            SectionMappingIncomplete = "Client-side section mapping is incomplete."
+            SectionRefreshFailed = fun section -> $"{section} refresh failed."
+            UnknownSectionMessage = fun other -> $"unknown section: {other}"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

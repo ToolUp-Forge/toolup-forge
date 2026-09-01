@@ -1759,6 +1759,59 @@ type FileManagerMessages = {
     ConfirmReset: int -> string
 }
 
+/// The built-in service-status-board admin module (`ServiceStatusBoardUI`,
+/// Phase 9p.A / Phase 751). Aggregates Health / Preflight / Drift /
+/// RateLimit / JobQueue / SmokeTest into one composite snapshot.
+type ServiceStatusBoardMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Per-section refresh button label, at rest.
+    Refresh: string
+    /// Top "refresh everything" button label, at rest.
+    RefreshAll: string
+    /// Shared loading-state label for both refresh buttons above.
+    Refreshing: string
+    /// Shown while the composite snapshot itself is still loading.
+    Loading: string
+    /// `OverallStatus.AllOk` pill label.
+    AllSystemsOk: string
+    /// `OverallStatus.DegradedBy` pill label — takes the comma-joined
+    /// section names, which are wire-shaped and never translated.
+    DegradedBy: string -> string
+    /// `OverallStatus.UnhealthyBy` pill label — takes the comma-joined
+    /// section names, which are wire-shaped and never translated.
+    UnhealthyBy: string -> string
+    /// Severity-pill label for `StatusSeverity.Ok`.
+    SeverityOk: string
+    /// Severity-pill label for `StatusSeverity.Warn`.
+    SeverityWarn: string
+    /// Severity-pill label for `StatusSeverity.Error`.
+    SeverityError: string
+    /// Severity-pill label for a disabled section.
+    SeverityDisabled: string
+    /// Snapshot-generated-at footnote — takes the already-formatted
+    /// timestamp (formatting happens at the call site; the format
+    /// specifier itself is not a translatable string).
+    GeneratedAt: string -> string
+    /// Fallback headline when a section name doesn't match any known
+    /// section (`sectionOf`'s defensive branch, exercised only inside
+    /// pure `update`-reachable comparisons — never itself rendered).
+    /// Takes the unrecognised, wire-shaped section name.
+    UnknownSectionHeadline: string -> string
+    /// Fallback detail accompanying `UnknownSectionHeadline`.
+    SectionMappingIncomplete: string
+    /// Headline when a per-section refresh command itself errors.
+    /// Takes the wire-shaped section name.
+    SectionRefreshFailed: string -> string
+    /// Internal error text raised when `loadSectionCmd` is asked to
+    /// refresh a section name it doesn't recognise (defensive — every
+    /// call site passes a known section constant). Takes the
+    /// unrecognised, wire-shaped section name.
+    UnknownSectionMessage: string -> string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -1808,4 +1861,5 @@ type MessageCatalog = {
     InviteAccept: InviteAcceptMessages
     PublicUtilityWidgets: PublicUtilityWidgetsMessages
     FileManager: FileManagerMessages
+    ServiceStatusBoard: ServiceStatusBoardMessages
 }

@@ -65,7 +65,7 @@ let private loadSectionCmd (section: string) =
         | s when s = ServiceStatusSnapshot.RateLimitSection -> api.RefreshRateLimit()
         | s when s = ServiceStatusSnapshot.JobQueueSection -> api.RefreshJobQueue()
         | s when s = ServiceStatusSnapshot.SmokeTestSection -> api.RefreshSmokeTest()
-        | other -> async { return Error(sprintf "unknown section: %s" other) }
+        | other -> async { return Error(MessageCatalog.english.ServiceStatusBoard.UnknownSectionMessage other) }
 
     Cmd.OfRemoting.call (fun () -> work) () (fun result -> SectionLoaded(section, result)) (fun e ->
         SectionLoaded(section, Error e.Message))
@@ -97,7 +97,10 @@ let private sectionOf (snap: ServiceStatusSnapshot) (name: string) : SectionSumm
     | s when s = ServiceStatusSnapshot.RateLimitSection -> snap.RateLimit
     | s when s = ServiceStatusSnapshot.JobQueueSection -> snap.JobQueue
     | s when s = ServiceStatusSnapshot.SmokeTestSection -> snap.SmokeTest
-    | _ -> SectionSummary.failure (sprintf "Unknown section: %s" name) "Client-side section mapping is incomplete."
+    | _ ->
+        SectionSummary.failure
+            (MessageCatalog.english.ServiceStatusBoard.UnknownSectionHeadline name)
+            MessageCatalog.english.ServiceStatusBoard.SectionMappingIncomplete
 
 let private updateSection
     (snap: ServiceStatusSnapshot)
@@ -225,7 +228,8 @@ let update (msg: Msg) (model: Model) =
             Cmd.none
 
     | SectionLoaded(section, Error e) ->
-        let failureSummary = SectionSummary.failure (sprintf "%s refresh failed." section) e
+        let failureSummary =
+            SectionSummary.failure (MessageCatalog.english.ServiceStatusBoard.SectionRefreshFailed section) e
 
         let nextRefreshing = Set.remove section model.Refreshing
 
@@ -258,38 +262,38 @@ let update (msg: Msg) (model: Model) =
 
 // ─── Renderers ───────────────────────────────────────────────────────
 
-let private severityPill (summary: SectionSummary) =
+let private severityPill (msgs: ServiceStatusBoardMessages) (summary: SectionSummary) =
     let label, cls =
         if summary.Disabled then
-            "Disabled", "bg-gray-100 text-gray-600 border-gray-200"
+            msgs.SeverityDisabled, "bg-gray-100 text-gray-600 border-gray-200"
         else
             match summary.Severity with
-            | StatusSeverity.Ok -> "Ok", "bg-green-100 text-green-700 border-green-200"
-            | StatusSeverity.Warn -> "Warn", "bg-yellow-100 text-yellow-700 border-yellow-200"
-            | StatusSeverity.Error -> "Error", "bg-red-100 text-red-700 border-red-200"
+            | StatusSeverity.Ok -> msgs.SeverityOk, "bg-green-100 text-green-700 border-green-200"
+            | StatusSeverity.Warn -> msgs.SeverityWarn, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | StatusSeverity.Error -> msgs.SeverityError, "bg-red-100 text-red-700 border-red-200"
 
     Html.span [
         prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
         prop.text label
     ]
 
-let private overallPill (overall: OverallStatus) =
+let private overallPill (msgs: ServiceStatusBoardMessages) (overall: OverallStatus) =
     let label, cls =
         match overall with
-        | AllOk -> "All systems Ok", "bg-green-100 text-green-700 border-green-200"
+        | AllOk -> msgs.AllSystemsOk, "bg-green-100 text-green-700 border-green-200"
         | DegradedBy sections ->
             let joined = sections |> String.concat ", "
-            sprintf "Degraded — %s" joined, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            msgs.DegradedBy joined, "bg-yellow-100 text-yellow-700 border-yellow-200"
         | UnhealthyBy sections ->
             let joined = sections |> String.concat ", "
-            sprintf "Unhealthy — %s" joined, "bg-red-100 text-red-700 border-red-200"
+            msgs.UnhealthyBy joined, "bg-red-100 text-red-700 border-red-200"
 
     Html.span [
         prop.className $"inline-block text-sm px-3 py-1 rounded border font-semibold {cls}"
         prop.text label
     ]
 
-let private refreshButton (label: string) (loading: bool) (onClick: unit -> unit) =
+let private refreshButton (msgs: ServiceStatusBoardMessages) (label: string) (loading: bool) (onClick: unit -> unit) =
     Html.button [
         prop.className [
             "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
@@ -299,7 +303,7 @@ let private refreshButton (label: string) (loading: bool) (onClick: unit -> unit
                 "bg-white text-gray-700 border-border hover:bg-gray-50"
         ]
         prop.disabled loading
-        prop.text (if loading then "Refreshing..." else label)
+        prop.text (if loading then msgs.Refreshing else label)
         prop.onClick (fun _ -> onClick ())
     ]
 
@@ -310,6 +314,7 @@ let private errorBanner (msg: string) =
     ]
 
 let private sectionPanel
+    (msgs: ServiceStatusBoardMessages)
     (model: Model)
     (dispatch: Msg -> unit)
     (section: string)
@@ -338,10 +343,10 @@ let private sectionPanel
                                 prop.text (if isCollapsed then "▸" else "▾")
                             ]
                             Html.span [ prop.className "text-sm font-semibold text-gray-800"; prop.text section ]
-                            severityPill summary
+                            severityPill msgs summary
                         ]
                     ]
-                    refreshButton "Refresh" isRefreshing (fun () -> dispatch (RefreshSection section))
+                    refreshButton msgs msgs.Refresh isRefreshing (fun () -> dispatch (RefreshSection section))
                 ]
             ]
             if not isCollapsed then
@@ -369,7 +374,7 @@ let private sectionPanel
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private boardView (model: Model) (dispatch: Msg -> unit) =
+let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) =
     let isLoading =
         match model.Snapshot with
         | Loading -> true
@@ -383,20 +388,16 @@ let private boardView (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     Html.div [
                         prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Service status" ]
-                            Html.p [
-                                prop.className "text-xs text-gray-500"
-                                prop.text
-                                    "Composite snapshot of every operator-facing observability surface. Refresh re-runs every section in parallel; per-section refresh re-runs that section alone."
-                            ]
+                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
+                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.Subheading ]
                         ]
                     ]
-                    refreshButton "Refresh all" isLoading (fun () -> dispatch RefreshAll)
+                    refreshButton msgs msgs.RefreshAll isLoading (fun () -> dispatch RefreshAll)
                 ]
             ]
             match model.Snapshot with
             | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading..." ]
+            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
             | LoadError msg -> errorBanner msg
             | Loaded snap ->
                 Html.div [
@@ -405,22 +406,22 @@ let private boardView (model: Model) (dispatch: Msg -> unit) =
                             prop.className
                                 "flex items-center justify-between p-3 mb-4 bg-white border border-border rounded-lg"
                             prop.children [
-                                overallPill snap.Overall
+                                overallPill msgs snap.Overall
                                 Html.span [
                                     prop.className "text-xs text-gray-500"
-                                    prop.text (sprintf "Generated at %s" (snap.GeneratedAt.ToString "u"))
+                                    prop.text (msgs.GeneratedAt(snap.GeneratedAt.ToString "u"))
                                 ]
                             ]
                         ]
                         Html.div [
                             prop.className "flex flex-col gap-3"
                             prop.children [
-                                sectionPanel model dispatch ServiceStatusSnapshot.HealthSection snap.Health
-                                sectionPanel model dispatch ServiceStatusSnapshot.PreflightSection snap.Preflight
-                                sectionPanel model dispatch ServiceStatusSnapshot.DriftSection snap.Drift
-                                sectionPanel model dispatch ServiceStatusSnapshot.RateLimitSection snap.RateLimit
-                                sectionPanel model dispatch ServiceStatusSnapshot.JobQueueSection snap.JobQueue
-                                sectionPanel model dispatch ServiceStatusSnapshot.SmokeTestSection snap.SmokeTest
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.HealthSection snap.Health
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.PreflightSection snap.Preflight
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.DriftSection snap.Drift
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.RateLimitSection snap.RateLimit
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.JobQueueSection snap.JobQueue
+                                sectionPanel msgs model dispatch ServiceStatusSnapshot.SmokeTestSection snap.SmokeTest
                             ]
                         ]
                     ]
@@ -428,14 +429,21 @@ let private boardView (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let body =
-        Html.div [
-            prop.className "flex flex-col h-full"
-            prop.children [ boardView model dispatch ]
-        ]
+/// The module body as a React COMPONENT rather than a plain render
+/// function, so it has a hook site from which to read the resolved
+/// catalog — `view` is invoked inline by the shell's own render, where
+/// a hook would join the shell's hook order and break the moment the
+/// active module changed. Mirrors `HealthMonitorUI.HealthMonitorBody`.
+[<ReactComponent>]
+let private ServiceStatusBoardBody (model: Model) (dispatch: Msg -> unit) =
+    let msgs = (MessageCatalogProvider.useMessages ()).ServiceStatusBoard
 
-    body
+    Html.div [
+        prop.className "flex flex-col h-full"
+        prop.children [ boardView msgs model dispatch ]
+    ]
+
+let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = ServiceStatusBoardBody model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 
