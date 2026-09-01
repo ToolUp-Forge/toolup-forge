@@ -42,9 +42,9 @@ let private validateLicenseKey (licenseKey: string) =
 // that runs "just before Client.run" is not guaranteed to be early enough for
 // all AG Charts internal initialization paths.
 //
-// By this point in the compiled bundle, ToolUp.Platform modules (AgGrid.fs,
-// AgChart.fs) have already been evaluated, so setGridModulesRegistered and
-// setChartsModulesRegistered are available.
+// By this point in the compiled bundle, the Community bindings
+// (Feliz.AgGrid / Feliz.AgCharts) have already been evaluated, so
+// setGridModulesRegistered and setChartsModulesRegistered are available.
 
 let private allEnterpriseModules: obj =
     import "AllEnterpriseModule" "ag-grid-enterprise"
@@ -69,8 +69,8 @@ do gridModuleRegistry?registerModules ([| allEnterpriseModules; integratedCharts
 
 // Suppress Community fallback registrations in Platform SDK (AgGrid.grid and
 // AgChart.chart each guard their own ensureXxxModulesRegistered calls with these flags).
-do ToolUp.Platform.AgGrid.setGridModulesRegistered ()
-do ToolUp.Platform.AgChart.setChartsModulesRegistered ()
+do Feliz.AgGrid.setGridModulesRegistered ()
+do Feliz.AgCharts.setChartsModulesRegistered ()
 
 // Phase 12d — enable value-provenance overlay rendering (see
 // ProvenanceOverlay.fs). Until this runs the Community substrate keeps the
@@ -85,7 +85,7 @@ do AgGridEnterpriseProvenance.activate ()
 
 /// Get an AgGridModuleConfig with Enterprise grid modules.
 /// Pass the result to ClientConfig.GridModules.
-let gridModuleConfig (licenseKey: string) : ToolUp.Platform.AgGrid.AgGridModuleConfig =
+let gridModuleConfig (licenseKey: string) : Feliz.AgGrid.AgGridModuleConfig =
     validateLicenseKey licenseKey
     licenseManager?setLicenseKey licenseKey
 

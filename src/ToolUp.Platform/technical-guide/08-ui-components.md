@@ -7,7 +7,7 @@
 
 ## AG Grid Enterprise Companion
 
-AG Grid Enterprise initialisation lives in `src/AgGridEnterprise/`, separate from ToolUp.Platform. This separation serves two purposes:
+AG Grid Enterprise initialisation lives in `src/Feliz.AgGrid.Enterprise/`, separate from ToolUp.Platform. This separation serves two purposes:
 
 1. **Licensing boundary.** `ag-grid-enterprise` has a commercial EULA. The SDK works with Community edition without shipping Enterprise code. The licensing obligation is visible in the companion's `package.json`.
 
@@ -22,7 +22,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 // Module top-level — runs immediately when AgGridEnterprise.fs is first evaluated,
-// which happens before Client.fs because AgGridEnterprise.Client.props is imported first.
+// which happens before Client.fs because Feliz.AgGrid.Enterprise.Client.props is imported first.
 let mutable private registered = false
 
 let private moduleRegistry: obj = import "ModuleRegistry" "ag-grid-enterprise"
@@ -47,7 +47,7 @@ let register (licenseKey: string) =
 
 ### Integration
 
-- `AgGridEnterprise.Client.props` injects the `.fs` file into the client project's compile order, before `Client.fs`
+- `Feliz.AgGrid.Enterprise.Client.props` injects the `.fs` file into the client project's compile order, before `Client.fs`
 - The consuming app's client entry point (`Client.fs`) calls `AgGridEnterprise.register licenseKey` before `Client.run` to set the license key
 - Module rendering code (`AgGrid.grid [...]`, `AgChart.chart [...]`) is unchanged — the Fable bindings in `AgGrid.fs`/`AgChart.fs` import from `ag-grid-react`/`ag-charts-react` (Community packages) and work identically with both editions
 
@@ -58,7 +58,7 @@ Remove the `.props` import from the consuming app's client `.fsproj` and the `Ag
 ### Rules
 
 - Do not move Enterprise imports into ToolUp.Platform or SDK.Client.fs
-- Do not add top-level imports of `ag-grid-enterprise` or `ag-charts-enterprise` in any file outside `src/AgGridEnterprise/`
+- Do not add top-level imports of `ag-grid-enterprise` or `ag-charts-enterprise` in any file outside `src/Feliz.AgGrid.Enterprise/`
 - Do not move the module-level registration calls inside a function — this breaks AG Charts Enterprise animations
 - Module CSS imports must use `ag-grid-community/styles/`, not `ag-grid-enterprise/styles/`
 
@@ -148,10 +148,10 @@ The Fable bindings target **ag-grid 35.3.0** / **ag-charts 13.3.0** — the vers
 
 | Surface | File | Highlights |
 |---|---|---|
-| Community grid | `src/ToolUp.Platform.Client/Client/UI/AgGrid.fs` | events (cell/row/column/display), filter API on `IGridApi`, Theming-API `Theme` builder, `CsvExportParams`, `LocaleText`, selection completion, `ColumnDef` completion |
-| Community charts | `src/ToolUp.Platform.Client/Client/UI/AgChart.fs` | `Series` (+ histogram), `PieSeries`, `BubbleSeries`, `AgChart` tooltip/crosshair/sync/padding/legend, `Axis` completion, `LegendOptions`, `ChartThemeBuilder` |
-| Enterprise grid | `src/AgGridEnterprise/AgGridEnterpriseTypes.fs` | Set/Multi Filter, Excel export (+`ExcelStyle`), Master/Detail, Status Bar, Sidebar, charts integration, range selection, SSRM, custom agg funcs |
-| Enterprise charts | `src/AgGridEnterprise/AgChartEnterpriseTypes.fs` | Sankey, Sunburst, Treemap (`HierarchyNode`), Candlestick, Ohlc, Heatmap, Waterfall, Box-plot, Range series, `SparklineOptions` + `MemoizedSparkline` |
+| Community grid | `src/Feliz.AgGrid/AgGrid.fs` | events (cell/row/column/display), filter API on `IGridApi`, Theming-API `Theme` builder, `CsvExportParams`, `LocaleText`, selection completion, `ColumnDef` completion |
+| Community charts | `src/Feliz.AgCharts/AgChart.fs` | `Series` (+ histogram), `PieSeries`, `BubbleSeries`, `AgChart` tooltip/crosshair/sync/padding/legend, `Axis` completion, `LegendOptions`, `ChartThemeBuilder` |
+| Enterprise grid | `src/Feliz.AgGrid.Enterprise/AgGridEnterpriseTypes.fs` | Set/Multi Filter, Excel export (+`ExcelStyle`), Master/Detail, Status Bar, Sidebar, charts integration, range selection, SSRM, custom agg funcs |
+| Enterprise charts | `src/Feliz.AgGrid.Enterprise/AgChartEnterpriseTypes.fs` | Sankey, Sunburst, Treemap (`HierarchyNode`), Candlestick, Ohlc, Heatmap, Waterfall, Box-plot, Range series, `SparklineOptions` + `MemoizedSparkline` |
 
 ### Rules carried forward from the Community bindings
 
@@ -163,7 +163,7 @@ The Fable bindings target **ag-grid 35.3.0** / **ag-charts 13.3.0** — the vers
 ### Source of truth + cookbooks
 
 - `.d.ts` under `node_modules/ag-{grid,charts}-{community,enterprise}/dist/types/src/` and `node_modules/ag-charts-types/`.
-- Authoring cookbooks (canonical, single-Read for an AI agent): [`../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md`](../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md) (Community) and [`../../AgGridEnterprise/COOKBOOK.md`](../../AgGridEnterprise/COOKBOOK.md) (Enterprise).
+- Authoring cookbooks (canonical, single-Read for an AI agent): [`../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md`](../../ToolUp.Platform.Client/Client/UI/COOKBOOK.md) (Community) and [`../../Feliz.AgGrid.Enterprise/COOKBOOK.md`](../../Feliz.AgGrid.Enterprise/COOKBOOK.md) (Enterprise).
 - In 13.3.0, heatmap / waterfall / box-plot / range-bar / range-area are Enterprise-only (bound in the companion, not `AgChart.fs`). Long-tail (Advanced Filter custom UI, Viewport Row Model, nightingale / radial / radar, Annotations) stay `obj` escape hatches.
 
 ## Module-level error boundaries (Phase 12c)

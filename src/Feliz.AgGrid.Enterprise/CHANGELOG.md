@@ -1,6 +1,6 @@
-# Changelog — ToolUp.AgGridEnterprise
+# Changelog — Feliz.AgGrid.Enterprise
 
-All notable changes to the `ToolUp.AgGridEnterprise` package are recorded here.
+All notable changes to the `Feliz.AgGrid.Enterprise` package are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions track the coordinated `ToolUp.Sdk` meta-release; per the
 SemVer-on-0.x policy (see the repository `CLAUDE.md` "Versioning"
