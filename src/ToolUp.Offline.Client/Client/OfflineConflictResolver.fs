@@ -6,6 +6,7 @@ module ToolUp.Offline.Client.OfflineConflictResolver
 open System
 open System.Text
 open Feliz
+open ToolUp.Platform.DataProp
 open ToolUp.Offline
 open ToolUp.Offline.Client.OfflineQueue
 
@@ -122,7 +123,7 @@ let private conflictCard (props: ConflictResolverProps) (entry: QueueEntry) =
 
     Html.div [
         prop.key entry.Mutation.Id
-        prop.custom ("data-toolup-offline-conflict", entry.Mutation.EntityType)
+        dataProp.custom "data-toolup-offline-conflict" entry.Mutation.EntityType
         prop.style [
             style.border (1, borderStyle.solid, "#fbbf24")
             style.borderRadius (length.px 8)
@@ -190,7 +191,7 @@ let OfflineConflictResolver (props: ConflictResolverProps) =
         Html.none
     else
         Html.div [
-            prop.custom ("data-toolup-offline", "conflict-resolver")
+            dataProp.custom "data-toolup-offline" "conflict-resolver"
             prop.style [ style.marginBottom (length.px 16) ]
             prop.children [
                 Html.h3 [

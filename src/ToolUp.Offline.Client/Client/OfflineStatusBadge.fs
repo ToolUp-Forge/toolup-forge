@@ -4,6 +4,7 @@
 module ToolUp.Offline.Client.OfflineStatusBadge
 
 open Feliz
+open ToolUp.Platform.DataProp
 open ToolUp.Offline
 
 // ─── Phase 24 — connectivity / sync status indicator ─────────────────
@@ -87,8 +88,8 @@ let OfflineStatusBadge (props: StatusBadgeProps) =
         let interactive = Option.isSome props.OnClick
 
         Html.div [
-            prop.custom ("data-toolup-offline", "status-badge")
-            prop.custom ("data-toolup-offline-status", SyncStatus.label status)
+            dataProp.custom "data-toolup-offline" "status-badge"
+            dataProp.custom "data-toolup-offline-status" (SyncStatus.label status)
             prop.title (tooltip status)
             prop.role (if interactive then "button" else "status")
             if interactive then
