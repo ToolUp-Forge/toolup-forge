@@ -344,6 +344,26 @@ type DataIngestionMessages = {
     DismissError: string
 }
 
+/// The administration-area landing surface (`AdminHome`, Phase 573).
+type AdminHomeMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Reload action.
+    Refresh: string
+    /// Tooltip on a tile's click target — takes the tile's title.
+    OpenTile: string -> string
+    /// Empty state: the deployment contributes no tiles at all.
+    NoTilesContributedHeading: string
+    NoTilesContributedBody: string
+    NoTilesContributedFooter: string
+    /// Empty state: tiles exist, none is visible to this subject.
+    NoTilesForSubjectHeading: string
+    NoTilesForSubjectBody: string
+    NoTilesForSubjectFooter: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -371,4 +391,5 @@ type MessageCatalog = {
     TeamManager: TeamManagerMessages
     HealthMonitor: HealthMonitorMessages
     DataIngestion: DataIngestionMessages
+    AdminHome: AdminHomeMessages
 }

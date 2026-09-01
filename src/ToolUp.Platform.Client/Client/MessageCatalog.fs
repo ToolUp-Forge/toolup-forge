@@ -332,6 +332,21 @@ module MessageCatalog =
             CancelCreate = "cancel"
             DismissError = "dismiss"
         }
+        AdminHome = {
+            Heading = "Administration"
+            Subheading = "The administration surfaces this deployment runs, filtered to the ones your role can open."
+            Refresh = "Refresh"
+            OpenTile = fun title -> $"Open {title}"
+            NoTilesContributedHeading = "No administration tiles are contributed yet"
+            NoTilesContributedBody =
+                "Tiles are contributed by the modules they front, not by this page. Each administration module this deployment enables in its client configuration contributes one — a health monitor, a service status board, a usage dashboard, a team manager — and a module of your own contributes one by adding a tile contributor to the client handler registry."
+            NoTilesContributedFooter =
+                "Until then, the rail on the left is the complete list of administration surfaces you can reach."
+            NoTilesForSubjectHeading = "Nothing to show for your role"
+            NoTilesForSubjectBody =
+                "A tile follows the same access rules as the surface it opens, so this page shows only what you could navigate to anyway — and right now that is nothing on this deployment."
+            NoTilesForSubjectFooter = "If you expected more here, ask an administrator to review your role."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a
