@@ -3,6 +3,12 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+OpenAIOAuth (class)
+OpenAIOAuth.FlowName : System.String (literal)
+OpenAIOAuth.configure(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig, ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig]) : ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig
+OpenAIOAuth.create(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IProviderOAuthFlow
+OpenAIOAuth.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.OAuthError]]]], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig) : ToolUp.Platform.IProviderOAuthFlow
+OpenAIOAuth.defaults : ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig { get }
 OpenAIProvider (class)
 OpenAIProvider.DefaultModel : System.String (literal)
 OpenAIProvider.KnownModels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

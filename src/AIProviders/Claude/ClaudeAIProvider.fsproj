@@ -11,6 +11,9 @@
     <Compile Include="ClaudeAIProvider.Wire.fs" />
     <Compile Include="ClaudeAIProvider.fs" />
     <Compile Include="ClaudeAIProviderHealth.fs" />
+    <!-- Phase 43.B — provider-profile one-click OAuth connect. After the
+         provider (it names ClaudeAIProvider.ProviderId). -->
+    <Compile Include="OAuth\ClaudeOAuth.fs" />
   </ItemGroup>
   <ItemGroup>
     <!-- Phase 254 — the portable wire tier: JsonValue / JsonHost for the

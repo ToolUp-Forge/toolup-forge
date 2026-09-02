@@ -466,11 +466,18 @@ carelessly.
 > The OAuth credential flow enforces PKCE, and cross-deployment peer
 > authentication binds the JWT audience to the local peer identity, so a token
 > minted for one peer cannot be replayed against another.
+> The PKCE gate is fail-closed and **shared**: a flow that declares
+> `SupportsPkce` but reaches the callback with no stashed verifier is refused
+> rather than exchanged, and since Phase 43.B that single gate serves both the
+> data-source and the provider-profile connect paths.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/PeerBearerAuthMiddleware.fs` ·
 > `src/ToolUp.Platform.Server/Server/PeerBearerConfigValidator.fs` ·
+> `src/ToolUp.Platform.Server/Server/OAuthFlowHandler.fs` (`exchangeCode` — the
+> shared fail-closed PKCE gate) ·
 > `src/ToolUp.Platform.Tests/Contracts/IPeerBearerAuthContract.fs` ·
 > `src/ToolUp.Platform.Tests/Contracts/IOAuthCredentialFlowContract.fs` ·
-> `docs/migrations/130-pkce-and-peer-audience.md` (Phase 130)
+> `docs/migrations/130-pkce-and-peer-audience.md` (Phase 130; gate shared across
+> both correlation families by Phase 43.B)
 
 > **AN-10 — Responses reached via a share-link token suppress referrer and
 > caching.**

@@ -567,6 +567,11 @@
              vocabulary + IMetricRegistry read surface). Distinct from
              MetricsTypes.fs (observability). Depends only on System. -->
         <Compile Include="Shared\MetricRegistryTypes.fs" />
+        <!-- Phase 43.B — neutral OAuth correlation identifier. Before
+             ProviderProfileTypes.fs (ProviderOAuthBinding embeds it) and
+             before the Server tier's IOAuthCredentialFlow / IOAuthStateStore,
+             which correlate on it. Depends only on System. -->
+        <Compile Include="Shared\Types\OAuthCorrelationTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
         <!-- Phase 240 — IPaymentProvider direct-billing substrate. -->

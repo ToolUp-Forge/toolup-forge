@@ -1223,6 +1223,7 @@ ToolUp.Platform.ComposeJobs.registerDataSubjectRequestJobs(Microsoft.Extensions.
 ToolUp.Platform.ComposeJobs.registerJobScheduler(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobStore+BlobJobStore]], Microsoft.FSharp.Core.FSharpRef`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobTriggerWatermark+JobTriggerWatermark]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler]
 ToolUp.Platform.ComposeJobs.registerModelFitting(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerOAuthRefresher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IRateLimiter, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeJobs.registerProviderOAuth(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerScheduledJobDeclarations(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeJobs.registerWebhookSubsystem(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]]) : System.Void
 ToolUp.Platform.ComposeJobs.wireWebhookRegistryToNotificationChannel(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`4[ToolUp.Platform.IWebhookRegistry, ToolUp.Platform.IWebhookDeliveryLog, ToolUp.Platform.WebhookDispatcher+WebhookDispatcherService, ToolUp.Platform.IEventStore]], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry, ToolUp.Platform.ILogger) : System.Void
@@ -5257,6 +5258,12 @@ ToolUp.Platform.IPromotedArtifactSigner.SignArtifact(System.Byte[]) : Microsoft.
 ToolUp.Platform.IProvenanceGraph (interface)
 ToolUp.Platform.IProvenanceGraph.GetChain(System.String, ToolUp.Platform.ProvenanceRef, ToolUp.Platform.ProvenanceDirection, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
 ToolUp.Platform.IProvenanceGraph.GetChainForMessage(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProvenanceChain]
+ToolUp.Platform.IProviderEntryProbe (interface)
+ToolUp.Platform.IProviderEntryProbe.Probe(ToolUp.Platform.StorageScope, ToolUp.Platform.ProviderEntry) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProbeOutcome, System.String]]
+ToolUp.Platform.IProviderOAuthFlow (interface)
+ToolUp.Platform.IProviderOAuthFlow.DefaultEntryLabel : System.String { get }
+ToolUp.Platform.IProviderOAuthFlow.DefaultModel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.IProviderOAuthFlow.ProviderId : System.String { get }
 ToolUp.Platform.IPublisherKeyStore (interface)
 ToolUp.Platform.IPublisherKeyStore.AddTrustedKey(ToolUp.Platform.PublisherKeyId, System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IPublisherKeyStore.ListTrustedKeyIds() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublisherKeyId]]
@@ -7003,10 +7010,14 @@ ToolUp.Platform.OAuthError+Tags.StateMismatch : System.Int32 (literal)
 ToolUp.Platform.OAuthErrorModule (class)
 ToolUp.Platform.OAuthErrorModule.toMessage(ToolUp.Platform.OAuthError) : System.String
 ToolUp.Platform.OAuthFlowContext (class)
-ToolUp.Platform.OAuthFlowContext..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig])
+ToolUp.Platform.OAuthFlowContext..ctor(System.String, System.String, ToolUp.Platform.OAuthCorrelationKey, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig])
 ToolUp.Platform.OAuthFlowContext.Config : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig] { get }
+ToolUp.Platform.OAuthFlowContext.Correlation : ToolUp.Platform.OAuthCorrelationKey { get }
 ToolUp.Platform.OAuthFlowContext.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthFlowContext.ScopeId : System.String { get }
+ToolUp.Platform.OAuthFlowContextModule (class)
+ToolUp.Platform.OAuthFlowContextModule.forCorrelation(System.String, ToolUp.Platform.OAuthCorrelationKey) : ToolUp.Platform.OAuthFlowContext
+ToolUp.Platform.OAuthFlowContextModule.forDataSource(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig]) : ToolUp.Platform.OAuthFlowContext
 ToolUp.Platform.OAuthFlowDescriptor (class)
 ToolUp.Platform.OAuthFlowDescriptor..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.OAuthFlowDescriptor.DisplayName : System.String { get }
@@ -7025,9 +7036,10 @@ ToolUp.Platform.OAuthFlowHandler+CredentialMetadata.DataSourceId : System.String
 ToolUp.Platform.OAuthFlowHandler+CredentialMetadata.FlowName : System.String { get }
 ToolUp.Platform.OAuthFlowHandler+CredentialMetadata.LastError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.OAuthFlowState (class)
-ToolUp.Platform.OAuthFlowState..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.OAuthFlowState..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey])
 ToolUp.Platform.OAuthFlowState.CodeVerifier : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.OAuthFlowState.Container : System.String { get }
+ToolUp.Platform.OAuthFlowState.Correlation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey] { get }
 ToolUp.Platform.OAuthFlowState.CreatedAt : System.DateTime { get }
 ToolUp.Platform.OAuthFlowState.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthFlowState.FlowName : System.String { get }
@@ -7035,6 +7047,8 @@ ToolUp.Platform.OAuthFlowState.RedirectUri : System.String { get }
 ToolUp.Platform.OAuthFlowState.ScopeId : System.String { get }
 ToolUp.Platform.OAuthFlowState.Token : System.String { get }
 ToolUp.Platform.OAuthFlowState.UserId : System.String { get }
+ToolUp.Platform.OAuthFlowStateModule (class)
+ToolUp.Platform.OAuthFlowStateModule.correlationOf(ToolUp.Platform.OAuthFlowState) : ToolUp.Platform.OAuthCorrelationKey
 ToolUp.Platform.OAuthFlowValidator (class)
 ToolUp.Platform.OAuthFlowValidator+OAuthFlowValidator (class)
 ToolUp.Platform.OAuthFlowValidator+OAuthFlowValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -7742,6 +7756,100 @@ ToolUp.Platform.ProvenanceRef+Tags.FactRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.MessageRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.ModelArtifactRef : System.Int32 (literal)
 ToolUp.Platform.ProvenanceRef+Tags.ResultRef : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect (class)
+ToolUp.Platform.ProviderOAuthConnect.DefaultLeadTime : System.TimeSpan { get }
+ToolUp.Platform.ProviderOAuthConnect.bindEntry(ToolUp.Platform.IProviderOAuthFlow, ToolUp.Platform.OAuthCorrelationKey, System.DateTime, ToolUp.Platform.ProviderProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfile, System.String]
+ToolUp.Platform.ProviderOAuthConnect.completeConnect(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.IProviderOAuthFlow, ToolUp.Platform.OAuthCorrelationKey, ToolUp.Platform.OAuthCredentials, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.ProviderOAuthConnect.refreshEntry(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.StorageScope, ToolUp.Platform.IProviderOAuthFlow, ToolUp.Platform.ProviderEntry, System.DateTime, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome]
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome (class)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsNeedsReauthorization : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsNotDue : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsNotOAuthConnected : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsRefreshed : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsTransientFailure : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.NotDue : ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.NotOAuthConnected : ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+NeedsReauthorization (class)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+NeedsReauthorization.reason : System.String { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Refreshed (class)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Refreshed.newExpiry : System.DateTime { get }
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags (class)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags.NeedsReauthorization : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags.NotDue : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags.NotOAuthConnected : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags.Refreshed : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+Tags.TransientFailure : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+TransientFailure (class)
+ToolUp.Platform.ProviderOAuthConnect+ProviderOAuthRefreshOutcome+TransientFailure.reason : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow (class)
+ToolUp.Platform.ProviderOAuthFlow.DefaultExpirySeconds : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthFlow.clientIdKey(System.String) : System.String
+ToolUp.Platform.ProviderOAuthFlow.clientSecretKey(System.String) : System.String
+ToolUp.Platform.ProviderOAuthFlow.create(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.OAuthError]]]], ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig) : ToolUp.Platform.IProviderOAuthFlow
+ToolUp.Platform.ProviderOAuthFlow.httpPost(System.Net.Http.HttpClient, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.OAuthError]]
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig (class)
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.AuthorizeEndpoint : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.DefaultEntryLabel : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.DefaultModel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.DisplayName : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.FlowName : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.HelpUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.ProviderId : System.String { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.RevokeEndpoint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.SupportsPkce : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthFlow+ProviderOAuthFlowConfig.TokenEndpoint : System.String { get }
+ToolUp.Platform.ProviderOAuthKeys (class)
+ToolUp.Platform.ProviderOAuthKeys.accessExpiryKey(System.String, ToolUp.Platform.OAuthCorrelationKey) : System.String
+ToolUp.Platform.ProviderOAuthKeys.accessTokenKey(System.String, ToolUp.Platform.OAuthCorrelationKey) : System.String
+ToolUp.Platform.ProviderOAuthKeys.refreshTokenKey(System.String, ToolUp.Platform.OAuthCorrelationKey) : System.String
+ToolUp.Platform.ProviderOAuthRefreshJobHandler (class)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler.HandlerName : System.String (literal)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler.RefreshCronExpression : System.String (literal)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.ProviderOAuthRefreshJobHandler.registrationFor(ToolUp.Platform.StorageScope, System.String, System.String, System.String) : ToolUp.Platform.JobRegistration
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshJobHandler (class)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshJobHandler..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload (class)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload..ctor(System.String, System.String, System.Boolean, System.String, System.String)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.Container : System.String { get }
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.EntryLabel : System.String { get }
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.FlowName : System.String { get }
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.Persist : System.Boolean { get }
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.ScopeId : System.String { get }
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayloadModule (class)
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayloadModule.scope(ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload) : ToolUp.Platform.StorageScope
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayloadModule.serialize(ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload) : System.String
+ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayloadModule.tryDeserialize(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload]
+ToolUp.Platform.ProviderProbeOutcome (class)
+ToolUp.Platform.ProviderProbeOutcome..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ProviderProbeOutcome.Diagnostic : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderProbeOutcome.Models : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ProviderProbeOutcome.RateLimitHeadroom : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.ProviderProbeOutcome.Reachable : System.Boolean { get }
+ToolUp.Platform.ProviderProbeOutcome.SpendToDate : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Platform.ProviderProbeOutcomeModule (class)
+ToolUp.Platform.ProviderProbeOutcomeModule.failed(System.String) : ToolUp.Platform.ProviderProbeOutcome
+ToolUp.Platform.ProviderProbeOutcomeModule.reachable : ToolUp.Platform.ProviderProbeOutcome { get }
+ToolUp.Platform.ProviderProbeOutcomeModule.toHealth(ToolUp.Platform.ProviderHealth, System.DateTime, ToolUp.Platform.ProviderProbeOutcome) : ToolUp.Platform.ProviderHealth
+ToolUp.Platform.ProviderStatusProbeJobHandler (class)
+ToolUp.Platform.ProviderStatusProbeJobHandler.DefaultCronExpression : System.String (literal)
+ToolUp.Platform.ProviderStatusProbeJobHandler.HandlerName : System.String (literal)
+ToolUp.Platform.ProviderStatusProbeJobHandler.create(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IProviderEntryProbe, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.ProviderStatusProbeJobHandler.registrationFor(ToolUp.Platform.StorageScope, System.String, System.String) : ToolUp.Platform.JobRegistration
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbeJobHandler (class)
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbeJobHandler..ctor(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.IProviderEntryProbe, ToolUp.Platform.ILogger)
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload (class)
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload..ctor(System.String, System.String, System.Boolean)
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload.Container : System.String { get }
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload.Persist : System.Boolean { get }
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload.ScopeId : System.String { get }
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayloadModule (class)
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayloadModule.scope(ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload) : ToolUp.Platform.StorageScope
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayloadModule.serialize(ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload) : System.String
+ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayloadModule.tryDeserialize(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayload]
 ToolUp.Platform.PublicBaseUrlFormatValidator (class)
 ToolUp.Platform.PublicBaseUrlFormatValidator+PublicBaseUrlFormatValidator (class)
 ToolUp.Platform.PublicBaseUrlFormatValidator+PublicBaseUrlFormatValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

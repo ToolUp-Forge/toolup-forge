@@ -183,11 +183,7 @@ let pkceFlowTests =
         <| async {
             let flow = FakePkceOAuthFlow() :> IOAuthCredentialFlow
 
-            let ctx: OAuthFlowContext = {
-                ScopeId = "s"
-                DataSourceId = "ds"
-                Config = None
-            }
+            let ctx: OAuthFlowContext = OAuthFlowContext.forDataSource "s" "ds" None
 
             let verifier = OAuthCrypto.generateCodeVerifier ()
             let challenge = OAuthCrypto.codeChallengeFromVerifier verifier
@@ -213,11 +209,7 @@ let pkceFlowTests =
         <| async {
             let flow = FakePkceOAuthFlow() :> IOAuthCredentialFlow
 
-            let ctx: OAuthFlowContext = {
-                ScopeId = "s"
-                DataSourceId = "ds"
-                Config = None
-            }
+            let ctx: OAuthFlowContext = OAuthFlowContext.forDataSource "s" "ds" None
 
             match! flow.ExchangeCode(ctx, "valid-test-code", "https://example.com/cb", Some "the-verifier") with
             | Ok creds -> Expect.isNonEmpty creds.RefreshToken "verifier-backed exchange mints credentials"
@@ -228,11 +220,7 @@ let pkceFlowTests =
         <| async {
             let flow = FakePkceOAuthFlow() :> IOAuthCredentialFlow
 
-            let ctx: OAuthFlowContext = {
-                ScopeId = "s"
-                DataSourceId = "ds"
-                Config = None
-            }
+            let ctx: OAuthFlowContext = OAuthFlowContext.forDataSource "s" "ds" None
 
             match! flow.ExchangeCode(ctx, "valid-test-code", "https://example.com/cb", None) with
             | Ok _ ->

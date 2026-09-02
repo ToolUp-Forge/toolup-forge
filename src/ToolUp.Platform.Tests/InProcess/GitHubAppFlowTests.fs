@@ -84,11 +84,8 @@ let private seededCreds = [
     "github-client-secret-ds-1", "secret-xyz"
 ]
 
-let private mkCtx () : OAuthFlowContext = {
-    ScopeId = "team-scope-1"
-    DataSourceId = "ds-1"
-    Config = None
-}
+let private mkCtx () : OAuthFlowContext =
+    OAuthFlowContext.forDataSource "team-scope-1" "ds-1" None
 
 let private mkFlow (secretStore: ISecretStore) =
     let httpClient = new HttpClient(new StubGitHub())

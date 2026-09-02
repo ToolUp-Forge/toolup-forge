@@ -34,11 +34,12 @@ open ToolUp.Platform
 
 let tests (name: string) (factory: unit -> IOAuthCredentialFlow) =
 
-    let mkContext () : OAuthFlowContext = {
-        ScopeId = "team-scope-1"
-        DataSourceId = "ds-1"
-        Config = None
-    }
+    // Phase 43.B — built through the smart constructor, which is what
+    // keeps `DataSourceId` and `Correlation` in agreement. A flow that
+    // reads only `ctx.DataSourceId` (every pre-43.B implementation)
+    // sees exactly what it saw before.
+    let mkContext () : OAuthFlowContext =
+        OAuthFlowContext.forDataSource "team-scope-1" "ds-1" None
 
     testList $"{name} — IOAuthCredentialFlow contract" [
 

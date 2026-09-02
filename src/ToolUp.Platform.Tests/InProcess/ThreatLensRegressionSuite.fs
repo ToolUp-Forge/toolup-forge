@@ -595,6 +595,10 @@ let private mkFlowState (token: string) : OAuthFlowState = {
     CreatedAt = DateTime.UtcNow
     RedirectUri = "https://example.com/api/oauth/threatlens-flow/callback"
     CodeVerifier = Some "abc123"
+    // Deliberately `None`: this suite pins the LEGACY state shape, so
+    // it exercises `OAuthFlowState.correlationOf`'s mapping of a
+    // pre-43.B entry's `DataSourceId` onto the neutral key.
+    Correlation = None
 }
 
 let private lens6OAuthLifecycle =
@@ -627,11 +631,7 @@ let private lens6OAuthLifecycle =
         <| async {
             let flow = PkceEnforcingFlow() :> IOAuthCredentialFlow
 
-            let ctx: OAuthFlowContext = {
-                ScopeId = "s"
-                DataSourceId = "ds"
-                Config = None
-            }
+            let ctx: OAuthFlowContext = OAuthFlowContext.forDataSource "s" "ds" None
 
             match! flow.ExchangeCode(ctx, "valid-code", "https://example.com/cb", Some "verifier") with
             | Ok _ -> ()

@@ -679,6 +679,15 @@ let private registeredTests =
         AISurfaceCapabilityTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
+        // Phase 43.B — the two reference provider-OAuth flows, bound to
+        // both conformance packs (`IOAuthCredentialFlowContract` for the
+        // OAuth half, `IProviderOAuthFlowContract` for the
+        // provider-profile half) plus the steered refresh outcomes.
+        ProviderOAuthFlowTests.claudeOAuthContractTests
+        ProviderOAuthFlowTests.openAiOAuthContractTests
+        ProviderOAuthFlowTests.claudeProviderFlowContractTests
+        ProviderOAuthFlowTests.openAiProviderFlowContractTests
+        ProviderOAuthFlowTests.tests
         SseTraceContributorTests.tests
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests

@@ -321,11 +321,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             let! upstreamRevoked =
                                 match refreshOpt, OAuthFlowHandler.findFlow ctx.RequestServices meta.FlowName with
                                 | Some refresh, Some flow -> async {
-                                    let flowCtx: OAuthFlowContext = {
-                                        ScopeId = containerForScope
-                                        DataSourceId = sourceId
-                                        Config = None
-                                    }
+                                    let flowCtx = OAuthFlowContext.forDataSource containerForScope sourceId None
 
                                     let! result = flow.Revoke(flowCtx, refresh)
 

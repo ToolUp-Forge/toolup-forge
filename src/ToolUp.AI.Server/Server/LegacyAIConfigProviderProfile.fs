@@ -87,6 +87,11 @@ let private instanceToEntry (i: LegacyInstance) : ProviderEntry = {
     SecretKeyName = i.SecretKeyName
     Tags = []
     Origin = CredentialOrigin.PastedKey
+    // Phase 43.B — a pre-42.B `ai-config.json` entry is a pasted key
+    // by definition (OAuth-connected entries did not exist), so the
+    // binding is `None`. The field is an `option` precisely so this
+    // migration needs no legacy-DTO change.
+    OAuthBinding = None
     Health = ProviderHealth.unknown
     UpdatedAt = i.UpdatedAt
 }

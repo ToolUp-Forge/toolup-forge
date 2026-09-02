@@ -473,6 +473,7 @@ let tests =
                 Tags = []
                 Origin = CredentialOrigin.PastedKey
                 Health = ProviderHealth.unknown
+                OAuthBinding = None
                 UpdatedAt = DateTime.UtcNow
             }
 

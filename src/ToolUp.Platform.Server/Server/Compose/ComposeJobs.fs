@@ -698,6 +698,102 @@ let registerOAuthRefresher
                     })
                 |> ignore
 
+// ─── Phase 43.B / 43.C — provider-profile OAuth + status probe ────
+
+/// The single registered instance of `'T` in the collection, when one
+/// was registered by INSTANCE (the shape every substrate below uses).
+/// Reading the `IServiceCollection` rather than a built provider is the
+/// `DeployPlaneDepsValidator` pattern — at compose time there is no
+/// container to resolve from yet.
+let private tryRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
+    services
+    |> Seq.tryPick (fun d ->
+        if d.ServiceType = typeof<'T> then
+            match d.ImplementationInstance with
+            | :? 'T as instance -> Some instance
+            | _ -> None
+        else
+            None)
+
+/// Every instance-registered `'T`. Multi-registration is how
+/// `IOAuthCredentialFlow` is wired (`ServerApp.run` folds one
+/// `AddSingleton` per flow).
+let private registeredInstances<'T when 'T: not struct> (services: IServiceCollection) : 'T list =
+    services
+    |> Seq.choose (fun d ->
+        if d.ServiceType = typeof<'T> then
+            match d.ImplementationInstance with
+            | :? 'T as instance -> Some instance
+            | _ -> None
+        else
+            None)
+    |> List.ofSeq
+
+/// Phase 43.B / 43.C — bind the provider-profile OAuth refresh job and
+/// the live-status probe job to the scheduler.
+///
+/// **Everything here is gated on an `IProviderProfile` being
+/// registered** — which is the `NoProviderProfile` state the phase's
+/// GP-13 criterion names: a deployment that never calls
+/// `ServerApp.withProviderProfile` (nor composes AI, which mirrors it)
+/// registers no handler, schedules no job, and constructs neither
+/// handler object. The refresh handler additionally needs at least one
+/// `IProviderOAuthFlow`, and the probe handler an `IProviderEntryProbe`
+/// — each is independently absent-tolerant, because one-click connect
+/// and live-status probing are separate opt-ins.
+///
+/// **Must run AFTER `extensions.ServiceConfig`.** The provider profile,
+/// the flows and the probe all arrive through that hook; calling this
+/// earlier would silently see none of them and register nothing, which
+/// is the failure mode that looks exactly like a correctly-disabled
+/// deployment.
+let registerProviderOAuth
+    (services: IServiceCollection)
+    (jobSchedulerInstance: IJobScheduler option)
+    (secretStore: Secrets.ISecretStore)
+    (auditLog: IAuditLog)
+    (resolvedLogger: ILogger)
+    : unit =
+    match tryRegisteredInstance<Providers.IProviderProfile> services with
+    | None -> () // NoProviderProfile — zero footprint (GP 13).
+    | Some providerProfile ->
+        let providerFlows =
+            registeredInstances<IOAuthCredentialFlow> services
+            |> List.choose (fun flow ->
+                match box flow with
+                | :? IProviderOAuthFlow as p -> Some p
+                | _ -> None)
+
+        let probeOpt = tryRegisteredInstance<IProviderEntryProbe> services
+
+        if providerFlows.IsEmpty && probeOpt.IsNone then
+            () // Provider profile present but neither opt-in wired.
+        else
+            match jobSchedulerInstance with
+            | None ->
+                resolvedLogger.Warn(
+                    "[Phase 43.B] Provider-profile OAuth flows / status probe are wired but JobScheduler = NoJobScheduler — token auto-refresh and the live-status probe will not run. Pair with JobScheduler = InProcessJobScheduler."
+                )
+            | Some scheduler ->
+                if not providerFlows.IsEmpty then
+                    scheduler.RegisterHandler(
+                        ProviderOAuthRefreshJobHandler.HandlerName,
+                        ProviderOAuthRefreshJobHandler.create
+                            providerFlows
+                            providerProfile
+                            secretStore
+                            (Some auditLog)
+                            resolvedLogger
+                    )
+
+                match probeOpt with
+                | Some probe ->
+                    scheduler.RegisterHandler(
+                        ProviderStatusProbeJobHandler.HandlerName,
+                        ProviderStatusProbeJobHandler.create providerProfile probe resolvedLogger
+                    )
+                | None -> ()
+
 /// Phase 449 — register the model-fit envelope when
 /// `ServerConfig.ModelFitting = EnabledModelFitting`. Indexes every
 /// DI-registered `IModelFitProvider` into a `ModelFitProviderRegistry`

@@ -316,6 +316,23 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AIProviderUsageMiddleware.wrapFactoryForDI config aiProviderFactory providerProfile
                 )
                 .AddSingleton<IProviderProfile>(providerProfile)
+                // Phase 43.C — the AI tier's implementation of the
+                // platform `IProviderEntryProbe` seam. Registering it
+                // here is what turns on BOTH verification-on-add
+                // (`AISettingsHandler.SaveInstance` refuses to persist
+                // an unverified pasted key) and the scheduled
+                // live-status probe (`ComposeJobs.registerProviderOAuth`
+                // binds the job only when this seam is present). A
+                // deployment composing AI gets both; one that does not
+                // pays nothing (GP 13).
+                //
+                // The probe runs from a background job where no request
+                // principal exists, so it synthesises an
+                // `AccessContext` for the scope — the same posture
+                // `JobContext.AccessContext` takes.
+                .AddSingleton<IProviderEntryProbe>(
+                    AIProviderEntryProbe.create aiProviderFactory AIProviderEntryProbe.scopeAccessContext
+                )
                 // Phase 171 — expose the active AI provider/model to the
                 // platform-tier Home overview via the Core IActiveAiProbe
                 // seam (GP 1: Platform.Server stays AI-dependency-free).

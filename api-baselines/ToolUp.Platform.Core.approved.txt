@@ -8646,6 +8646,20 @@ ToolUp.Platform.OAuthConnectedPayload.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload.ScopeId : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuthCorrelationKey (class)
+ToolUp.Platform.OAuthCorrelationKey..ctor(System.String, System.String)
+ToolUp.Platform.OAuthCorrelationKey.Id : System.String { get }
+ToolUp.Platform.OAuthCorrelationKey.Kind : System.String { get }
+ToolUp.Platform.OAuthCorrelationKeyModule (class)
+ToolUp.Platform.OAuthCorrelationKeyModule.DataSourceKind : System.String (literal)
+ToolUp.Platform.OAuthCorrelationKeyModule.ProviderEntryKind : System.String (literal)
+ToolUp.Platform.OAuthCorrelationKeyModule.dataSource(System.String) : ToolUp.Platform.OAuthCorrelationKey
+ToolUp.Platform.OAuthCorrelationKeyModule.isDataSource(ToolUp.Platform.OAuthCorrelationKey) : System.Boolean
+ToolUp.Platform.OAuthCorrelationKeyModule.isProviderEntry(ToolUp.Platform.OAuthCorrelationKey) : System.Boolean
+ToolUp.Platform.OAuthCorrelationKeyModule.isWellFormed(ToolUp.Platform.OAuthCorrelationKey) : System.Boolean
+ToolUp.Platform.OAuthCorrelationKeyModule.providerEntry(System.String) : ToolUp.Platform.OAuthCorrelationKey
+ToolUp.Platform.OAuthCorrelationKeyModule.render(ToolUp.Platform.OAuthCorrelationKey) : System.String
+ToolUp.Platform.OAuthCorrelationKeyModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey]
 ToolUp.Platform.OAuthDisconnectedPayload (class)
 ToolUp.Platform.OAuthDisconnectedPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.OAuthDisconnectedPayload.DataSourceId : System.String { get }
@@ -9228,15 +9242,20 @@ ToolUp.Platform.ProvenanceQueryError+Tags.ProvenanceDepthInvalid : System.Int32 
 ToolUp.Platform.ProvenanceQueryErrorModule (class)
 ToolUp.Platform.ProvenanceQueryErrorModule.describe(ToolUp.Platform.ProvenanceQueryError) : System.String
 ToolUp.Platform.ProviderEntry (class)
-ToolUp.Platform.ProviderEntry..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CredentialOrigin, ToolUp.Platform.ProviderHealth, System.DateTime)
+ToolUp.Platform.ProviderEntry..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CredentialOrigin, ToolUp.Platform.ProviderHealth, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderOAuthBinding], System.DateTime)
 ToolUp.Platform.ProviderEntry.Health : ToolUp.Platform.ProviderHealth { get }
 ToolUp.Platform.ProviderEntry.Label : System.String { get }
 ToolUp.Platform.ProviderEntry.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderEntry.OAuthBinding : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderOAuthBinding] { get }
 ToolUp.Platform.ProviderEntry.Origin : ToolUp.Platform.CredentialOrigin { get }
 ToolUp.Platform.ProviderEntry.ProviderId : System.String { get }
 ToolUp.Platform.ProviderEntry.SecretKeyName : System.String { get }
 ToolUp.Platform.ProviderEntry.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ProviderEntry.UpdatedAt : System.DateTime { get }
+ToolUp.Platform.ProviderEntryModule (class)
+ToolUp.Platform.ProviderEntryModule.oauthBinding(ToolUp.Platform.ProviderEntry) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderOAuthBinding]
+ToolUp.Platform.ProviderEntryModule.oauthConnected(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.ProviderOAuthBinding) : ToolUp.Platform.ProviderEntry
+ToolUp.Platform.ProviderEntryModule.pastedKey(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.ProviderEntry
 ToolUp.Platform.ProviderHealth (class)
 ToolUp.Platform.ProviderHealth..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.Platform.ProviderHealthStatus)
 ToolUp.Platform.ProviderHealth.LastVerifiedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
@@ -9263,6 +9282,11 @@ ToolUp.Platform.ProviderHealthStatus+Tags.Healthy : System.Int32 (literal)
 ToolUp.Platform.ProviderHealthStatus+Tags.NeedsReauthorization : System.Int32 (literal)
 ToolUp.Platform.ProviderHealthStatus+Tags.Unhealthy : System.Int32 (literal)
 ToolUp.Platform.ProviderHealthStatus+Tags.Unknown : System.Int32 (literal)
+ToolUp.Platform.ProviderOAuthBinding (class)
+ToolUp.Platform.ProviderOAuthBinding..ctor(System.String, ToolUp.Platform.OAuthCorrelationKey, System.DateTime)
+ToolUp.Platform.ProviderOAuthBinding.ConnectedAt : System.DateTime { get }
+ToolUp.Platform.ProviderOAuthBinding.Correlation : ToolUp.Platform.OAuthCorrelationKey { get }
+ToolUp.Platform.ProviderOAuthBinding.FlowName : System.String { get }
 ToolUp.Platform.ProviderProfile (class)
 ToolUp.Platform.ProviderProfile..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule], ToolUp.Platform.FallbackChain, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.DateTime)
 ToolUp.Platform.ProviderProfile.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntry] { get }

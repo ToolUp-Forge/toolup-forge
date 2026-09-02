@@ -43,8 +43,32 @@ let tests (name: string) (factory: unit -> IProviderProfile) =
         Tags = [ "fast"; "cheap" ]
         Origin = CredentialOrigin.PastedKey
         Health = ProviderHealth.unknown
+        OAuthBinding = None
         UpdatedAt = ts
     }
+
+    /// Phase 43.B — an OAuth-connected entry. `SecretKeyName` names the
+    /// refresh-token key the substrate derived, and the binding carries
+    /// the flow name + neutral correlation key.
+    let oauthEntry label providerId flowName : ProviderEntry =
+        let correlation = OAuthCorrelationKey.providerEntry label
+
+        {
+            Label = label
+            ProviderId = providerId
+            Model = None
+            SecretKeyName = $"{flowName}-refresh-provider-entry-{label}"
+            Tags = []
+            Origin = CredentialOrigin.OAuthConnected
+            Health = ProviderHealth.unknown
+            OAuthBinding =
+                Some {
+                    FlowName = flowName
+                    Correlation = correlation
+                    ConnectedAt = ts
+                }
+            UpdatedAt = ts
+        }
 
     /// A non-trivial profile exercising every field: two entries, a
     /// surface-default route + a context-specific override, a
@@ -254,6 +278,120 @@ let tests (name: string) (factory: unit -> IProviderProfile) =
             match! store.SetEntryHealth(uniqueScope (), "any", ProviderHealth.unknown) with
             | Error e -> failtestf "expected Ok no-op; got Error: %s" e
             | Ok() -> ()
+        }
+
+        // ─── Phase 43.B — the OAuth-connected entry lifecycle ────
+        //
+        // A store that silently drops `OAuthBinding` would look correct
+        // on every case above and then present, days later, as tokens
+        // that stop refreshing — the binding is what the refresh job
+        // reads to know WHICH flow and WHICH correlation to refresh.
+        // These cases are the conformance bar for that.
+
+        testCaseAsync "An OAuthConnected entry round-trips its binding (flow name + correlation key)"
+        <| async {
+            let store = factory ()
+            let scope = uniqueScope ()
+            let connected = oauthEntry "anthropic" "anthropic-claude" "claude-oauth"
+
+            let profile = {
+                ProviderProfile.empty () with
+                    Entries = [ connected ]
+                    UpdatedAt = ts
+            }
+
+            match! store.Set(scope, profile) with
+            | Error e -> failtestf "Set failed: %s" e
+            | Ok() -> ()
+
+            let! got = store.Get scope
+
+            match got |> Option.bind (fun p -> p.Entries |> List.tryHead) with
+            | None -> failtest "the OAuth-connected entry did not round-trip"
+            | Some e ->
+                Expect.equal e.Origin CredentialOrigin.OAuthConnected "origin survives"
+
+                match ProviderEntry.oauthBinding e with
+                | None -> failtest "OAuthBinding was dropped — the refresh job cannot recover the flow or correlation"
+                | Some b ->
+                    Expect.equal b.FlowName "claude-oauth" "flow name survives"
+                    Expect.equal b.Correlation.Kind OAuthCorrelationKey.ProviderEntryKind "correlation kind survives"
+                    Expect.equal b.Correlation.Id "anthropic" "correlation id survives"
+        }
+
+        testCaseAsync "A PastedKey entry round-trips with no binding, alongside an OAuthConnected one"
+        <| async {
+            let store = factory ()
+            let scope = uniqueScope ()
+
+            let profile = {
+                ProviderProfile.empty () with
+                    Entries = [
+                        entry "pasted" "openai-gpt"
+                        oauthEntry "connected" "anthropic-claude" "claude-oauth"
+                    ]
+                    UpdatedAt = ts
+            }
+
+            let! _ = store.Set(scope, profile)
+            let! got = store.Get scope
+
+            match got with
+            | None -> failtest "profile did not round-trip"
+            | Some p ->
+                let pasted = p.Entries |> List.find (fun e -> e.Label = "pasted")
+                let connected = p.Entries |> List.find (fun e -> e.Label = "connected")
+                Expect.isNone pasted.OAuthBinding "a pasted-key entry carries no binding"
+
+                Expect.isSome
+                    (ProviderEntry.oauthBinding connected)
+                    "the two origins coexist in one profile without either losing its shape"
+        }
+
+        testCaseAsync
+            "SetEntryHealth flips an OAuthConnected entry to NeedsReauthorization without disturbing its binding"
+        <| async {
+            // This is exactly what the refresh job does when the
+            // upstream rejects the stored grant. Losing the binding
+            // here would make the entry unrecoverable: the reconnect
+            // path reads it to know which flow to send the user back to.
+            let store = factory ()
+            let scope = uniqueScope ()
+            let connected = oauthEntry "anthropic" "anthropic-claude" "claude-oauth"
+
+            let! _ =
+                store.Set(
+                    scope,
+                    {
+                        ProviderProfile.empty () with
+                            Entries = [ connected ]
+                            UpdatedAt = ts
+                    }
+                )
+
+            match!
+                store.SetEntryHealth(
+                    scope,
+                    "anthropic",
+                    {
+                        LastVerifiedAt = None
+                        RecentErrorCount = 1
+                        RateLimitHeadroom = None
+                        Status = ProviderHealthStatus.NeedsReauthorization
+                    }
+                )
+            with
+            | Error e -> failtestf "SetEntryHealth failed: %s" e
+            | Ok() -> ()
+
+            let! got = store.Get scope
+
+            match got |> Option.bind (fun p -> p.Entries |> List.tryHead) with
+            | None -> failtest "entry vanished after the health write"
+            | Some e ->
+                Expect.equal e.Health.Status ProviderHealthStatus.NeedsReauthorization "health flipped"
+                Expect.isSome (ProviderEntry.oauthBinding e) "the binding survives the health write"
+                Expect.equal e.SecretKeyName connected.SecretKeyName "the refresh-token key reference survives"
         }
 
         testCaseAsync "Scope isolation — a profile saved in scope A is invisible in scope B"

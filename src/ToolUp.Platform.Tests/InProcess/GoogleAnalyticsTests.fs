@@ -659,11 +659,8 @@ let private flowContractTests =
 
     IOAuthCredentialFlowContract.tests "GoogleOAuthFlow" factory
 
-let private flowCtx: OAuthFlowContext = {
-    ScopeId = "team-scope-1"
-    DataSourceId = "ds-1"
-    Config = None
-}
+let private flowCtx: OAuthFlowContext =
+    OAuthFlowContext.forDataSource "team-scope-1" "ds-1" None
 
 let private flowTests =
     testList "GoogleOAuthFlow — Google specifics" [

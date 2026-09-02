@@ -125,6 +125,47 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
     let scopeOpt = AccessContext.configScope accessContext
 
+    // ─── Phase 43.C — verification on pasted-key add / rotate ────
+    //
+    // The probe seam is OPTIONAL, and that is what keeps this change
+    // backward-compatible (GP 11): a deployment that has not wired an
+    // `IProviderEntryProbe` sees byte-identical `SaveInstance`
+    // behaviour to Phase 43.A. Wire one — `AICompose` does it
+    // automatically when the provider-profile store is present — and
+    // a save that rotates a key is verified before it is allowed to
+    // stand.
+    let probeOpt =
+        match ctx.RequestServices.GetService(typeof<IProviderEntryProbe>) with
+        | :? IProviderEntryProbe as p -> Some p
+        | _ -> None
+
+    let jobSchedulerOpt =
+        match ctx.RequestServices.GetService(typeof<IJobScheduler>) with
+        | :? IJobScheduler as s -> Some s
+        | _ -> None
+
+    /// Register the per-scope live-status probe job. Idempotent on
+    /// `(handler, container)`, so calling it on every verified save is
+    /// how a scope acquires its probe without a separate ceremony —
+    /// and re-calling it costs one store lookup.
+    let ensureProbeJob (scope: StorageScope) : Async<unit> = async {
+        match jobSchedulerOpt, probeOpt with
+        | Some scheduler, Some _ ->
+            let! result =
+                scheduler.Schedule(
+                    ProviderStatusProbeJobHandler.registrationFor
+                        scope
+                        ProviderStatusProbeJobHandler.DefaultCronExpression
+                        accessContext.UserId
+                )
+
+            match result with
+            | Ok _ -> ()
+            | Error e ->
+                logger.Warn $"AI settings: could not schedule provider status probe for {scope.Container}: %A{e}"
+        | _ -> ()
+    }
+
     /// In Team mode only Owner and Admin roles may write team-scoped
     /// AI configuration (decision point 2 of the BYOK plan: team AIs
     /// are team-managed, no personal overrides; this is the enforcement
@@ -250,6 +291,14 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                                 |> Option.map _.Origin
                                 |> Option.defaultValue CredentialOrigin.PastedKey
                             Health = priorEntry |> Option.map _.Health |> Option.defaultValue ProviderHealth.unknown
+                            // Phase 43.B — preserved, never minted
+                            // here. The settings API is the PASTED-KEY
+                            // path; an OAuth binding is written only by
+                            // the OAuth callback. Preserving it means a
+                            // metadata edit (model, tags) on a
+                            // connected entry does not silently sever
+                            // its refresh binding.
+                            OAuthBinding = priorEntry |> Option.bind _.OAuthBinding
                             UpdatedAt = DateTime.UtcNow
                         }
 
@@ -265,6 +314,19 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         // (model, provider) without rotating the key.
                         let keyRotated = req.ApiKey.IsSome
 
+                        // Read the key we are about to overwrite BEFORE
+                        // overwriting it. Phase 43.C's "refuse to
+                        // persist on failure" has to be able to put the
+                        // previous credential back — a rotation that
+                        // fails verification and leaves the old key
+                        // deleted would have broken a working provider
+                        // in the act of failing to change it.
+                        let! priorSecret =
+                            if keyRotated then
+                                secretStore.GetSecret(scope.Container, keyName)
+                            else
+                                async { return None }
+
                         let! saveResult =
                             match req.ApiKey with
                             | Some key -> async {
@@ -276,7 +338,79 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                               }
                             | None -> providerProfile.Set(scope, updated)
 
+                        /// Undo an add / rotate that failed
+                        /// verification: put the previous profile and
+                        /// the previous key back. `existing = None`
+                        /// clears rather than writing an empty profile,
+                        /// so a first-ever save that fails leaves the
+                        /// scope exactly as it was found.
+                        let revert () = async {
+                            let! _ =
+                                match existing with
+                                | Some prior -> providerProfile.Set(scope, prior)
+                                | None -> async {
+                                    do! providerProfile.Clear scope
+                                    return Ok()
+                                  }
+
+                            let! _ =
+                                match priorSecret with
+                                | Some previous -> secretStore.SetSecret(scope.Container, keyName, previous)
+                                | None -> secretStore.DeleteSecret(scope.Container, keyName)
+
+                            return ()
+                        }
+
                         match saveResult with
+                        | Ok() when keyRotated && probeOpt.IsSome ->
+                            // Phase 43.C — verification call. The entry
+                            // is written first because the probe
+                            // resolves through
+                            // `IAIProviderFactory.TryResolveByLabel`,
+                            // which reads the profile: verifying a
+                            // CANDIDATE without persisting it would
+                            // need a second resolution path, and a
+                            // second path is how the verified shape and
+                            // the live shape drift apart. The write is
+                            // therefore provisional, and `revert` is
+                            // what makes "refuse to persist on failure"
+                            // true.
+                            let probe = probeOpt.Value
+                            let! outcome = probe.Probe(scope, newEntry)
+
+                            match outcome with
+                            | Ok result when result.Reachable ->
+                                let! _ =
+                                    providerProfile.SetEntryHealth(
+                                        scope,
+                                        req.Label,
+                                        ProviderProbeOutcome.toHealth newEntry.Health DateTime.UtcNow result
+                                    )
+
+                                do! ensureProbeJob scope
+
+                                logger.Info
+                                    $"AI settings: saved + verified instance label='{req.Label}' provider={req.ProviderId} model={req.Model} scope={scope.Container} models={result.Models.Length}"
+
+                                return Ok()
+                            | Ok result ->
+                                do! revert ()
+
+                                let diagnostic =
+                                    result.Diagnostic
+                                    |> Option.defaultValue "the provider rejected the verification call"
+
+                                logger.Warn
+                                    $"AI settings: verification failed for label='{req.Label}' scope={scope.Container}; change reverted: {diagnostic}"
+
+                                return Error $"The API key was not saved — verification failed: {diagnostic}"
+                            | Error e ->
+                                do! revert ()
+
+                                logger.Warn
+                                    $"AI settings: verification could not run for label='{req.Label}' scope={scope.Container}; change reverted: {e}"
+
+                                return Error $"The API key was not saved — verification could not run: {e}"
                         | Ok() ->
                             logger.Info
                                 $"AI settings: saved instance label='{req.Label}' provider={req.ProviderId} model={req.Model} scope={scope.Container} keyRotated={keyRotated}"

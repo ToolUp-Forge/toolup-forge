@@ -39,6 +39,9 @@ let private mkEntry (token: string) (createdAt: DateTime) : OAuthFlowState = {
     CreatedAt = createdAt
     RedirectUri = "https://example.com/api/oauth/test-flow/callback"
     CodeVerifier = Some "abc123"
+    // Phase 43.B — a store must round-trip the neutral correlation
+    // key, not just the legacy `DataSourceId`.
+    Correlation = Some(OAuthCorrelationKey.dataSource "ds-1")
 }
 
 let tests (name: string) (factory: unit -> IOAuthStateStore) =

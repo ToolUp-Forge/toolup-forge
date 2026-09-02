@@ -37,6 +37,21 @@ open System
 // the deployment lifetime — renaming a flow strands any in-flight
 // state tokens (acceptable: TTL is 10 minutes). Phase 9c rule 1.
 //
+// **Phase 43.B — the correlation key is neutral now.** The SUBJECT of
+// a round-trip used to be a `DataSourceId`; it is an
+// `OAuthCorrelationKey` (`Kind` + `Id`), so a provider-profile entry
+// can use the identical substrate without pretending to be a data
+// source. The change is additive: `OAuthFlowContext.DataSourceId` and
+// `OAuthFlowState.DataSourceId` are still present and still carry the
+// same value for every Phase 10e connector, so no shipped flow needed
+// an edit. Six-rule audit on the changed surface: rule 1 holds (the
+// key is a two-string record, not a handle); rules 2/3 are untouched
+// (`Async<Result<_, OAuthError>>` everywhere, `OAuthError` still the
+// only failure channel); rule 4 holds (the key rides the per-call
+// context, nothing is cached); rule 5 promises nothing across two
+// correlation keys; rule 6 is N/A here and declared `Minute` on the
+// job that consumes it. Full write-up: `OAuthCorrelationTypes.fs`.
+//
 // **Async at every boundary.** Every method returns `Async<Result<_, _>>`.
 // HTTP calls to upstream token endpoints, ISecretStore reads, and
 // state-store writes all participate. Phase 9c rule 2.
@@ -79,7 +94,21 @@ type OAuthFlowContext = {
     /// The data source the flow is operating on. Used as the cursor
     /// key for state-store correlation and as the secret-key suffix
     /// for the persisted refresh token (`{flowName}-refresh-{DataSourceId}`).
+    ///
+    /// **Phase 43.B — still populated, still the field every shipped
+    /// flow reads.** It is no longer the substrate's correlation key
+    /// (`Correlation` is); for a data-source round-trip the two carry
+    /// the same id, and for a non-data-source subject this field
+    /// carries the correlation's `Id` so a flow that only knows the
+    /// old shape still sees a stable per-connection identifier.
     DataSourceId: DataSourceId
+    /// Phase 43.B — the neutral correlation identifier for this
+    /// round-trip. `OAuthCorrelationKey.dataSource ctx.DataSourceId`
+    /// for every Phase 10e connector; `providerEntry label` for a
+    /// provider-profile entry. Build the context with
+    /// `OAuthFlowContext.forDataSource` / `forCorrelation` rather than
+    /// setting both id fields by hand.
+    Correlation: OAuthCorrelationKey
     /// Persisted `DataSourceConfig` (read-only). Flows read connector-
     /// specific settings from `Config.ConnectionScope` — Microsoft
     /// providers read `tenant_id`, Salesforce reads `instance_url`,
@@ -88,6 +117,29 @@ type OAuthFlowContext = {
     /// persisting).
     Config: DataSourceConfig option
 }
+
+module OAuthFlowContext =
+    /// Build a context for a Phase 10e data-source round-trip. Sets
+    /// `DataSourceId` and the matching `Correlation` together so the
+    /// two can never disagree.
+    let forDataSource (scopeId: string) (dataSourceId: DataSourceId) (config: DataSourceConfig option) = {
+        ScopeId = scopeId
+        DataSourceId = dataSourceId
+        Correlation = OAuthCorrelationKey.dataSource dataSourceId
+        Config = config
+    }
+
+    /// Build a context for any correlation subject. `DataSourceId` is
+    /// populated with the correlation's `Id` so a flow written against
+    /// the pre-43.B shape still reads a stable identifier; `Config` is
+    /// `None` because a non-data-source subject has no
+    /// `DataSourceConfig` to read.
+    let forCorrelation (scopeId: string) (correlation: OAuthCorrelationKey) = {
+        ScopeId = scopeId
+        DataSourceId = correlation.Id
+        Correlation = correlation
+        Config = None
+    }
 
 /// Credentials minted by `ExchangeCode`. The substrate writes
 /// `RefreshToken` to `ISecretStore.SetSecret(scope, "{flowName}-refresh-{dataSourceId}")`

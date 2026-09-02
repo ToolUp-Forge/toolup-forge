@@ -65,6 +65,33 @@ module ProviderHealth =
         Status = ProviderHealthStatus.Unknown
     }
 
+/// Phase 43.B — what an `OAuthConnected` entry carries INSTEAD of a
+/// pasted key: the flow that minted the credentials and the neutral
+/// correlation key the substrate persisted them under. The refresh
+/// token itself never appears here — it lives in `ISecretStore` under
+/// a key derived from `(FlowName, Correlation)`, exactly as the Phase
+/// 10e data-source path derives its own.
+///
+/// `None` on a `PastedKey` entry, which is why the field is an
+/// `option`: a profile blob written before 43.B deserialises with the
+/// field absent, and an absent F# `option` reads back as `None` on
+/// both the `FableConverters` (STJ) and the Fable.SimpleJson paths.
+/// Every other reference-typed shape would have come back `null`.
+type ProviderOAuthBinding = {
+    /// `IOAuthCredentialFlow.Name` of the flow that minted (and will
+    /// refresh) this entry's credentials — e.g. `"claude-oauth"`.
+    FlowName: string
+    /// Neutral correlation key, always
+    /// `OAuthCorrelationKey.providerEntry entry.Label` for an entry
+    /// bound through the provider-profile path. Held explicitly
+    /// rather than recomputed so a future re-label can be migrated
+    /// without stranding the persisted secret.
+    Correlation: OAuthCorrelationKey
+    /// When the upstream consent round-trip completed. Advisory —
+    /// admin UIs render "connected N days ago".
+    ConnectedAt: DateTime
+}
+
 /// One configured provider instance in a user's (or team's) catalogue.
 /// Superset of ToolUp.AI.AIProviderInstance — the extra fields (Tags,
 /// Origin, Health) are additive; the original four (Label, ProviderId,
@@ -91,9 +118,67 @@ type ProviderEntry = {
     Origin: CredentialOrigin
     /// Advisory live status. Defaults to ProviderHealth.unknown.
     Health: ProviderHealth
+    /// Phase 43.B — set when Origin = OAuthConnected: the flow name +
+    /// correlation key the substrate minted and refreshes the
+    /// credentials under. None for a PastedKey entry.
+    OAuthBinding: ProviderOAuthBinding option
     /// Last mutation; advisory ("added N days ago").
     UpdatedAt: DateTime
 }
+
+module ProviderEntry =
+    /// A pasted-key (S0) entry — `Origin = PastedKey`, no OAuth
+    /// binding, health `Unknown` until the verification call or the
+    /// probe writes one. Smart constructor so a call site adding an
+    /// entry does not have to restate the 43.B fields it does not
+    /// care about.
+    let pastedKey (label: string) (providerId: string) (model: string option) (secretKeyName: string) : ProviderEntry = {
+        Label = label
+        ProviderId = providerId
+        Model = model
+        SecretKeyName = secretKeyName
+        Tags = []
+        Origin = CredentialOrigin.PastedKey
+        Health = ProviderHealth.unknown
+        OAuthBinding = None
+        UpdatedAt = DateTime.UtcNow
+    }
+
+    /// An OAuth-connected (S1) entry — `Origin = OAuthConnected` plus
+    /// the binding. `secretKeyName` still names the `ISecretStore` key
+    /// the substrate persisted the refresh token under, so the field
+    /// keeps a single meaning across both origins ("where this entry's
+    /// credential material lives"); it is derived by the substrate
+    /// rather than chosen by the user.
+    let oauthConnected
+        (label: string)
+        (providerId: string)
+        (model: string option)
+        (secretKeyName: string)
+        (binding: ProviderOAuthBinding)
+        : ProviderEntry =
+        {
+            Label = label
+            ProviderId = providerId
+            Model = model
+            SecretKeyName = secretKeyName
+            Tags = []
+            Origin = CredentialOrigin.OAuthConnected
+            Health = ProviderHealth.unknown
+            OAuthBinding = Some binding
+            UpdatedAt = DateTime.UtcNow
+        }
+
+    /// The binding of an entry that is genuinely OAuth-connected.
+    /// `None` for a pasted-key entry AND for an entry whose `Origin`
+    /// says `OAuthConnected` but whose binding is absent — a shape
+    /// that can only arrive from a hand-edited or pre-43.B blob, and
+    /// which every consumer must treat as unusable rather than
+    /// half-trusting.
+    let oauthBinding (entry: ProviderEntry) : ProviderOAuthBinding option =
+        match entry.Origin, entry.OAuthBinding with
+        | CredentialOrigin.OAuthConnected, Some b -> Some b
+        | _ -> None
 
 /// One routing decision: for a named Surface (and optionally a finer
 /// Context within it), use the entry with EntryLabel. Replaces the

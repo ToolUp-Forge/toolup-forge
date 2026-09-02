@@ -105,6 +105,9 @@ ToolUp.AI.AILatencyMetrics.cachedPromptRatioBuckets : Microsoft.FSharp.Collectio
 ToolUp.AI.AILatencyMetrics.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
 ToolUp.AI.AIModelEnvValidator (class)
 ToolUp.AI.AIModelEnvValidator.create(ToolUp.AI.IAIProviderFactory) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.AI.AIProviderEntryProbe (class)
+ToolUp.AI.AIProviderEntryProbe.create(ToolUp.AI.IAIProviderFactory, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]]) : ToolUp.Platform.IProviderEntryProbe
+ToolUp.AI.AIProviderEntryProbe.scopeAccessContext(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
 ToolUp.AI.AIProviderEnvValidator (class)
 ToolUp.AI.AIProviderEnvValidator.create(ToolUp.AI.IAIProviderFactory) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.AI.AIProviderProbeValidator (class)

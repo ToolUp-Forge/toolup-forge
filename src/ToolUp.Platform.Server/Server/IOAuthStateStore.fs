@@ -88,7 +88,28 @@ type OAuthFlowState = {
     /// it here; the substrate forwards it to `ExchangeCode` so the
     /// provider can validate the verifier-challenge pair.
     CodeVerifier: string option
+    /// Phase 43.B — the neutral correlation identifier for this
+    /// round-trip. `None` means "a pre-43.B entry, or an entry minted
+    /// by a caller that only knows the data-source shape"; read it
+    /// through `OAuthFlowState.correlationOf`, which maps
+    /// `DataSourceId` onto the neutral key in that case.
+    ///
+    /// An `option` deliberately: a distributed state-store companion
+    /// persists this record as JSON, and an absent `option` field
+    /// deserialises as `None` on both wire paths, where any other
+    /// reference-typed shape would come back `null` and NRE at the
+    /// first read.
+    Correlation: OAuthCorrelationKey option
 }
+
+module OAuthFlowState =
+    /// The correlation key for a state entry, mapping the legacy
+    /// `DataSourceId` onto the neutral key when the entry predates
+    /// Phase 43.B. This is the one place the compatibility mapping
+    /// lives — callers never branch on `Correlation.IsNone`.
+    let correlationOf (state: OAuthFlowState) : OAuthCorrelationKey =
+        state.Correlation
+        |> Option.defaultWith (fun () -> OAuthCorrelationKey.dataSource state.DataSourceId)
 
 type IOAuthStateStore =
     /// Persist a fresh state entry. Returns `Error` on duplicate

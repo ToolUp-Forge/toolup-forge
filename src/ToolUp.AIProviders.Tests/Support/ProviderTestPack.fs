@@ -340,6 +340,7 @@ let tests (spec: ProviderSpec) : Test =
                     Tags = []
                     Origin = CredentialOrigin.PastedKey
                     Health = ProviderHealth.unknown
+                    OAuthBinding = None
                     UpdatedAt = DateTime.UtcNow
                 }
 

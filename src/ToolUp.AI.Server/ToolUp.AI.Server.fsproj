@@ -64,6 +64,11 @@
         <Compile Include="Server\DefaultAIProviderFactory.fs" />
         <Compile Include="Server\BlobPlatformAIKeyStore.fs" />
         <Compile Include="Server\PlatformAIKeysHandler.fs" />
+        <!-- Phase 43.C — the AI tier's IProviderEntryProbe over
+             IAIProviderFactory.TryResolveByLabel. After the factory it
+             builds on; before AISettingsHandler (verification on
+             add/rotate) and AICompose (DI registration). -->
+        <Compile Include="Server\AIProviderEntryProbe.fs" />
         <Compile Include="Server\AISettingsHandler.fs" />
         <Compile Include="Server\FastPathBeaconHandler.fs" />
         <Compile Include="Server\ConversationExportAuditHandler.fs" />

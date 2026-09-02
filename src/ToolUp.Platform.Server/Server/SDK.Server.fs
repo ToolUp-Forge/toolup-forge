@@ -1093,6 +1093,15 @@ let compose
     | Some cfg -> cfg services |> ignore
     | None -> ()
 
+    // Phase 43.B / 43.C — provider-profile OAuth token auto-refresh +
+    // the live-status probe (extracted to
+    // `ComposeJobs.registerProviderOAuth`). Deliberately AFTER the
+    // `extensions.ServiceConfig` hook: the `IProviderProfile`, the
+    // `IProviderOAuthFlow`s and the `IProviderEntryProbe` all arrive
+    // through it, and a deployment with no provider-profile store
+    // registers nothing at all here (GP 13).
+    registerProviderOAuth services jobSchedulerInstance secretStore auditLog resolvedLogger
+
     // Giraffe stock-helper DI defaults (extracted to
     // `ComposeBootstrap.registerGiraffeDefaults`) — `INegotiationConfig`
     // + `Json.ISerializer` (FableConverters-backed) + `Xml.ISerializer`,

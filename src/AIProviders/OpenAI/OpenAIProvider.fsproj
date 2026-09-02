@@ -11,6 +11,9 @@
     <Compile Include="OpenAIProvider.Wire.fs" />
     <Compile Include="OpenAIProvider.fs" />
     <Compile Include="OpenAIProviderHealth.fs" />
+    <!-- Phase 43.B — provider-profile one-click OAuth connect. After the
+         provider (it names OpenAIProvider.ProviderId). -->
+    <Compile Include="OAuth\OpenAIOAuth.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

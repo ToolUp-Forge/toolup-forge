@@ -22,6 +22,10 @@
     <ItemGroup>
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\IProviderProfileContract.fs" />
+        <!-- Phase 43.B — the provider-profile half of a provider OAuth flow
+             (connect / bind / scheduled-refresh outcomes). Sibling of
+             IOAuthCredentialFlowContract, which covers the OAuth half. -->
+        <Compile Include="Contracts\IProviderOAuthFlowContract.fs" />
         <Compile Include="Contracts\IEventStoreContract.fs" />
         <Compile Include="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IDataCatalogContract.fs" />
@@ -942,6 +946,10 @@
         <Compile Include="InProcess\HnswFidelityTests.fs" />
         <Compile Include="InProcess\PermissionStoreFailClosedTests.fs" />
         <Compile Include="InProcess\BlobProviderProfileTests.fs" />
+        <!-- Phase 43.B — binds the Claude + OpenAI reference IProviderOAuthFlows
+             to both conformance packs, plus the steered refresh outcomes. -->
+        <Compile Include="Support\ProviderOAuthTestSupport.fs" />
+        <Compile Include="InProcess\ProviderOAuthFlowTests.fs" />
         <Compile Include="InProcess\SmokeTestDefaultsTests.fs" />
         <Compile Include="InProcess\InProcessRateLimiterTests.fs" />
         <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />

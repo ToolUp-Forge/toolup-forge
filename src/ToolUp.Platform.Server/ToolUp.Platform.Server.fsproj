@@ -689,6 +689,18 @@
         <Compile Include="Server\IRateLimitStore.fs" />
         <Compile Include="Server\InMemoryRateLimitStore.fs" />
         <Compile Include="Server\Providers\BlobProviderProfile.fs" />
+        <!-- Phase 43.B/43.C — provider-profile OAuth connect + auto-refresh
+             and the live-status probe seam. After IProviderProfile (Core)
+             + IOAuthCredentialFlow + IJobHandler/IJobScheduler, and before
+             OAuthFlowHandler (whose callback binds an entry through
+             ProviderOAuthConnect) and SDK.Server / ServerApp (which wire
+             the job handlers). -->
+        <Compile Include="Server\Providers\IProviderOAuthFlow.fs" />
+        <Compile Include="Server\Providers\IProviderEntryProbe.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthFlowBuilder.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthConnect.fs" />
+        <Compile Include="Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
+        <Compile Include="Server\Providers\ProviderStatusProbeJobHandler.fs" />
         <Compile Include="Server\IAuditSink.fs" />
         <Compile Include="Server\AuditReplicatorTypes.fs" />
         <Compile Include="Server\InMemoryAuditSink.fs" />
