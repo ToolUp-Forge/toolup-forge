@@ -873,6 +873,11 @@
         <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
+        <!-- Phase 2c: the credential-rejection trail. Classification is
+             per-companion (real SDK exception instances, including the
+             AggregateException-wrapped shape); recording is shared. Sits
+             after AuditEventRegistryTests.fs, whose registry it also pins. -->
+        <Compile Include="InProcess\BlobStorageAuthAuditTests.fs" />
         <Compile Include="InProcess\AuditWriteFailureMetricTests.fs" />
         <!-- Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction /
              DegradeToFile + fallback spill capacity + poison quarantine). -->

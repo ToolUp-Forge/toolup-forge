@@ -2,6 +2,7 @@ module ToolUp.Storage.AzureBlobStorage
 
 open System
 open System.IO
+open System.Runtime.ExceptionServices
 open Azure
 open Azure.Storage.Blobs
 open Azure.Storage.Blobs.Models
@@ -46,6 +47,18 @@ type AzureBlobStorageConfig = {
     /// `ISecretStore.GetSecret` read, keeping this companion free of a
     /// direct dependency on the secret backend (GP 12).
     ConnectionStringProvider: (unit -> string) option
+    /// Phase 2c — optional audit sink for credential rejections. `None`
+    /// (default) emits nothing and costs nothing (GP 11 + GP 13);
+    /// `Some log` records one `BlobStorageAuthFailed` row per Azure call
+    /// rejected `401` / `403`, under the `_platform` scope.
+    ///
+    /// Complements `ConnectionStringProvider` rather than duplicating it:
+    /// the provider is how a rotated AccountKey is PICKED UP, this is how
+    /// an operator learns that the one currently held has stopped being
+    /// accepted. A deployment on a static connection string — which
+    /// cannot recover without a restart — is the one that most needs the
+    /// row.
+    AuditLog: ToolUp.Platform.IAuditLog option
 }
 
 module AzureBlobStorageConfig =
@@ -53,6 +66,7 @@ module AzureBlobStorageConfig =
         ConnectionString = ""
         RootContainer = "toolup"
         ConnectionStringProvider = None
+        AuditLog = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -79,6 +93,34 @@ let private (|Unwrapped|) (ex: exn) =
         | Some inner -> inner
         | None -> ex
     | _ -> ex
+
+/// Phase 2c — the companion id this storage backend records under, the
+/// SAME spelling its health probe uses (`blob_storage:azure`), so the
+/// probe's `Unhealthy` reading and this companion's audit rows join on
+/// one key rather than on two.
+[<Literal>]
+let internal companionId = "azure"
+
+/// Phase 2c — classify an SDK exception as a credential rejection,
+/// returning the rejecting status when it is one.
+///
+/// Reuses the Phase 733 `Unwrapped` pattern rather than adding a second
+/// matching path: an Azure exception reaches a `with` handler wrapped in
+/// `AggregateException`, and a direct type test on the wrapper never
+/// fires — the defect that left this file's `416` arm dead until it was
+/// measured.
+///
+/// `401` and `403` are kept distinct rather than folded into one
+/// verdict because they answer different operator questions: `401` means
+/// no usable credential was presented (an expired SAS reaches here), and
+/// `403` means one WAS presented and refused (a rotated AccountKey, or a
+/// container ACL change). Everything else, `404` and `412` included, is
+/// not a credential fact and returns `None`.
+let internal authFailureStatus (ex: exn) : int option =
+    match ex with
+    | Unwrapped(:? RequestFailedException as failure) when failure.Status = 401 || failure.Status = 403 ->
+        Some failure.Status
+    | _ -> None
 
 // ─── IBlobStorage implementation ─────────────────────────────────────
 
@@ -125,11 +167,33 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
     // malformed connection string / unreachable account at startup.
     do container () |> ignore
 
+    // Phase 2c — the credential-rejection trail. Called from a `with`
+    // handler with the exception that is about to become the caller's
+    // `Error`, immediately BEFORE that `Error` is returned: nothing is
+    // swallowed, no message changes, and a non-auth failure records
+    // nothing. `BlobStorageAuthAudit.record` never throws, so this
+    // cannot turn a storage failure into a different one.
+    let noteAuthFailure (operation: string) (ex: exn) : Async<unit> =
+        match authFailureStatus ex with
+        | Some status ->
+            ToolUp.Platform.BlobStorageAuthAudit.record
+                config.AuditLog
+                companionId
+                config.RootContainer
+                operation
+                status
+                ex.Message
+        | None -> async { () }
+
     // Phase 600 follow-up — live-etag disclosure read for a refused
     // conditional write. `Ok None` = the blob is absent (the only case
     // the seam may report `ETagMismatch None`); `Error` = the
     // disclosure read itself failed, surfaced as
     // `ConditionalWriteFailure` rather than a fabricated verdict.
+    //
+    // Deliberately NOT audited for credential rejection (Phase 2c): this
+    // read is reached only after a `412` / `409` on the same call, which
+    // means the credential had already authenticated moments earlier.
     let currentETag (key: string) : Async<Result<string option, string>> = async {
         try
             let blob = (container ()).GetBlobClient key
@@ -156,6 +220,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! _ = blob.UploadAsync(ms, overwrite = true) |> Async.AwaitTask
                 return Ok(blob.Uri.ToString())
             with Unwrapped ex ->
+                do! noteAuthFailure "Upload" ex
                 return Error ex.Message
         }
 
@@ -167,7 +232,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             with
             | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "Download" ex
+                return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -192,7 +259,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                     // Azure's 416 arrives wrapped; see the pattern's
                     // doc-comment for what that cost.
                     return Ok Array.empty
-                | Unwrapped ex -> return Error ex.Message
+                | Unwrapped ex ->
+                    do! noteAuthFailure "DownloadRange" ex
+                    return Error ex.Message
         }
 
         // Phase 741 — Azure's native multi-part commit is the BLOCK
@@ -246,7 +315,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 with
                 | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                     return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
-                | Unwrapped ex -> return Error(ComposeRefusal.ComposeFailed ex.Message)
+                | Unwrapped ex ->
+                    do! noteAuthFailure "ComposeFrom" ex
+                    return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
         member _.Delete(toolupContainer, blobName) = async {
@@ -258,45 +329,74 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! _ = blob.DeleteIfExistsAsync() |> Async.AwaitTask
                 return Ok()
             with Unwrapped ex ->
+                do! noteAuthFailure "Delete" ex
                 return Error ex.Message
         }
 
+        // `List` deliberately has no error mapping — an auth failure
+        // propagates as an exception, which is exactly what the Phase 2c
+        // health probe relies on to read `Unhealthy` rather than the
+        // `Exists`-shaped false "absent". The outer handler added here
+        // records the trail and then RETHROWS THE ORIGINAL through
+        // `ExceptionDispatchInfo`, preserving both its identity and its
+        // stack, so the probe's `Unhealthy ex.Message` is unchanged. It
+        // wraps the client resolution too, because `container ()` calls
+        // `CreateIfNotExists` and can itself be refused.
         member _.List(toolupContainer, prefix) = async {
             let fullPrefix = blobKey toolupContainer prefix
             let stripLen = (toolupContainer + "/").Length
             let results = System.Collections.Generic.List<string>()
 
-            // All four positional args — F# can't resolve the C#-
-            // style optional-params overload from a subset, so we
-            // pass the default CancellationToken explicitly.
-            let enumerable: AsyncPageable<BlobItem> =
-                (container ())
-                    .GetBlobsAsync(BlobTraits.None, BlobStates.None, fullPrefix, System.Threading.CancellationToken())
-
-            let enumerator = enumerable.GetAsyncEnumerator()
-
             try
-                let mutable keepGoing = true
+                // All four positional args — F# can't resolve the C#-
+                // style optional-params overload from a subset, so we
+                // pass the default CancellationToken explicitly.
+                let enumerable: AsyncPageable<BlobItem> =
+                    (container ())
+                        .GetBlobsAsync(
+                            BlobTraits.None,
+                            BlobStates.None,
+                            fullPrefix,
+                            System.Threading.CancellationToken()
+                        )
 
-                while keepGoing do
-                    let! hasNext = enumerator.MoveNextAsync().AsTask() |> Async.AwaitTask
+                let enumerator = enumerable.GetAsyncEnumerator()
 
-                    if hasNext then
-                        results.Add(enumerator.Current.Name.Substring stripLen)
-                    else
-                        keepGoing <- false
-            finally
-                enumerator.DisposeAsync().AsTask().Wait()
+                try
+                    let mutable keepGoing = true
 
-            return results |> List.ofSeq
+                    while keepGoing do
+                        let! hasNext = enumerator.MoveNextAsync().AsTask() |> Async.AwaitTask
+
+                        if hasNext then
+                            results.Add(enumerator.Current.Name.Substring stripLen)
+                        else
+                            keepGoing <- false
+                finally
+                    enumerator.DisposeAsync().AsTask().Wait()
+
+                return results |> List.ofSeq
+            with ex ->
+                do! noteAuthFailure "List" ex
+                ExceptionDispatchInfo.Capture(ex).Throw()
+                // Unreachable — `Throw()` always throws. F# still needs a
+                // branch value; `reraise` is not available inside a
+                // computation-expression handler.
+                return []
         }
 
+        // `Exists` swallows every failure and answers `false`, which is
+        // the contract — but it means a `403` from a rejected credential
+        // used to be completely silent here. Recording it does not change
+        // the answer (Phase 2c moved the health probe off `Exists` for
+        // exactly this reason); it stops the rejection being invisible.
         member _.Exists(toolupContainer, blobName) = async {
             try
                 let blob = (container ()).GetBlobClient(blobKey toolupContainer blobName)
                 let! response = blob.ExistsAsync() |> Async.AwaitTask
                 return response.Value
-            with _ ->
+            with ex ->
+                do! noteAuthFailure "Exists" ex
                 return false
         }
 
@@ -321,7 +421,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             with
             | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "GetMetadata" ex
+                return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -345,7 +447,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             with
             | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "DownloadWithETag" ex
+                return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -369,7 +473,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 | Ok current -> return Error(ETagMismatch current)
                 | Error msg ->
                     return Error(ConditionalWriteFailure $"precondition refused; etag disclosure read failed: {msg}")
-            | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
+            | Unwrapped ex ->
+                do! noteAuthFailure "UploadWithETag" ex
+                return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -386,6 +492,10 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
     // and write, but holds no key to sign WITH. That is a legitimate
     // deployment shape, not a fault, so it reports `NotConfigured` and
     // the caller falls back to proxying.
+    //
+    // No credential-rejection row here (Phase 2c): SAS minting issues no
+    // request, so there is no status to classify. A URL minted with a
+    // rotated key fails at the FETCHER, which is not this process.
     interface ISignedUrlBlobStorage with
         member _.SignedUrl(toolupContainer, blobName, ttl) = async {
             try
@@ -433,5 +543,9 @@ let fromEnv (rootContainer: string option) : IBlobStorage option =
                 // `create` with `ConnectionStringProvider = Some f`
                 // (Phase 2c) to survive rotation without a restart.
                 ConnectionStringProvider = None
+                // Env-built instances compose no audit sink, there being
+                // no env var that could name one. A deployment wanting
+                // the credential-rejection trail builds the config itself.
+                AuditLog = None
             }
         )

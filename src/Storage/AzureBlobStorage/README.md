@@ -12,6 +12,8 @@ To survive rotation without a restart, construct via `create` with `ConnectionSt
 
 The `blob_storage:azure` health probe performs a **live authenticated list** (Phase 2c) against the `_platform` health prefix, so a rotated-out key surfaces as `Unhealthy` with the Azure `403` message within one probe cycle — the earlier `Exists`-based probe swallowed the `403` and read Healthy.
 
+Set `AuditLog = Some log` on the config (Phase 2c) and every Azure call rejected `401` / `403` also records a **`BlobStorageAuthFailed`** audit event under the `_platform` scope, naming the companion, the root container, the `IBlobStorage` operation, the status and a sanitised SDK message (an `AccountKey` echoed back by the SDK is redacted before it reaches the row). The probe is the alarm; this is the trail that says when the rejections started and what they cost — most valuable on a static connection string, which cannot recover without a restart. `None` (the default, and what `fromEnv` wires) emits nothing.
+
 Licensed under Apache-2.0.
 
 Part of the ToolUp Platform SDK — see [github.com/ToolUp-Forge/toolup-forge](https://github.com/ToolUp-Forge/toolup-forge) for full documentation.

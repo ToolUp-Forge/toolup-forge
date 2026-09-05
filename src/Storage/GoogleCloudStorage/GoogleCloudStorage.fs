@@ -11,6 +11,7 @@ open System
 open System.Globalization
 open System.IO
 open System.Net
+open System.Runtime.ExceptionServices
 open Google
 open Google.Apis.Auth.OAuth2
 open Google.Cloud.Storage.V1
@@ -70,6 +71,17 @@ type GoogleCloudStorageConfig = {
     /// call. Supplying `CredentialsJson` alongside an override keeps the
     /// credential, for an authenticating GCS-compatible endpoint.
     EndpointUrl: string option
+    /// Phase 2c — optional audit sink for credential rejections. `None`
+    /// (default) emits nothing and costs nothing (GP 11 + GP 13);
+    /// `Some log` records one `BlobStorageAuthFailed` row per GCS call
+    /// rejected `401` / `403`, under the `_platform` scope.
+    ///
+    /// Complements `CredentialsJsonProvider` rather than duplicating it:
+    /// the provider is how a rolled service-account key is PICKED UP,
+    /// this is how an operator learns that the one currently held has
+    /// stopped being accepted. Worth composing even on an ADC deployment,
+    /// which is rotation-transparent but can still lose an IAM binding.
+    AuditLog: ToolUp.Platform.IAuditLog option
 }
 
 module GoogleCloudStorageConfig =
@@ -78,6 +90,7 @@ module GoogleCloudStorageConfig =
         CredentialsJson = None
         CredentialsJsonProvider = None
         EndpointUrl = None
+        AuditLog = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -104,6 +117,38 @@ let private (|Unwrapped|) (ex: exn) =
         | Some inner -> inner
         | None -> ex
     | _ -> ex
+
+/// Phase 2c — the companion id this storage backend records under, the
+/// SAME spelling its health probe uses (`blob_storage:gcs`), so the
+/// probe's `Unhealthy` reading and this companion's audit rows join on
+/// one key rather than on two.
+[<Literal>]
+let internal companionId = "gcs"
+
+/// Phase 2c — classify an SDK exception as a credential rejection,
+/// returning the rejecting status when it is one.
+///
+/// Reuses the `Unwrapped` pattern rather than adding a second matching
+/// path: a GCS exception reaches a `with` handler wrapped in
+/// `AggregateException`, and a direct type test on the wrapper never
+/// fires — the defect that broke `Delete`'s idempotency until the first
+/// armed cloud-parity run measured it.
+///
+/// `401` and `403` are kept distinct rather than folded into one verdict
+/// because they answer different operator questions: `401` means no
+/// usable credential was presented (an ADC chain that resolved nothing,
+/// an expired token), and `403` means one WAS presented and refused — a
+/// rolled service-account key, or an IAM binding removed from the
+/// bucket. Everything else, `404` and `412` included, is not a
+/// credential fact and returns `None`.
+let internal authFailureStatus (ex: exn) : int option =
+    match ex with
+    | Unwrapped(:? GoogleApiException as failure) ->
+        match failure.HttpStatusCode with
+        | HttpStatusCode.Unauthorized -> Some 401
+        | HttpStatusCode.Forbidden -> Some 403
+        | _ -> None
+    | _ -> None
 
 let private buildClientFor (endpointUrl: string option) (credentialsJson: string option) : StorageClient =
     match endpointUrl with
@@ -172,11 +217,33 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
     // malformed service-account JSON / credential-chain failure at startup.
     do client () |> ignore
 
+    // Phase 2c — the credential-rejection trail. Called from a `with`
+    // handler with the exception that is about to become the caller's
+    // `Error`, immediately BEFORE that `Error` is returned: nothing is
+    // swallowed, no message changes, and a non-auth failure records
+    // nothing. `BlobStorageAuthAudit.record` never throws, so this
+    // cannot turn a storage failure into a different one.
+    let noteAuthFailure (operation: string) (ex: exn) : Async<unit> =
+        match authFailureStatus ex with
+        | Some status ->
+            ToolUp.Platform.BlobStorageAuthAudit.record
+                config.AuditLog
+                companionId
+                config.BucketName
+                operation
+                status
+                ex.Message
+        | None -> async { () }
+
     // Phase 600 follow-up — live-generation disclosure read for a
     // refused conditional write. `Ok None` = the object is absent (the
     // only case the seam may report `ETagMismatch None`); `Error` = the
     // disclosure read itself failed, surfaced as
     // `ConditionalWriteFailure` rather than a fabricated verdict.
+    //
+    // Deliberately NOT audited for credential rejection (Phase 2c): this
+    // read is reached only after a `412` on the same call, which means
+    // the credential had already authenticated moments earlier.
     let currentGeneration (key: string) : Async<Result<string option, string>> = async {
         try
             let! obj = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
@@ -211,6 +278,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
 
                 return Ok $"gs://{obj.Bucket}/{obj.Name}"
             with Unwrapped ex ->
+                do! noteAuthFailure "Upload" ex
                 return Error ex.Message
         }
 
@@ -223,7 +291,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             with
             | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "Download" ex
+                return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -254,7 +324,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                     ->
                     // Past-EOF clamp per the interface contract.
                     return Ok Array.empty
-                | Unwrapped ex -> return Error ex.Message
+                | Unwrapped ex ->
+                    do! noteAuthFailure "DownloadRange" ex
+                    return Error ex.Message
         }
 
         // Phase 741 — GCS is the one companion whose compose is FULLY
@@ -341,7 +413,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 with
                 | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                     return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
-                | Unwrapped ex -> return Error(ComposeRefusal.ComposeFailed ex.Message)
+                | Unwrapped ex ->
+                    do! noteAuthFailure "ComposeFrom" ex
+                    return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
         member _.Delete(toolupContainer, blobName) = async {
@@ -354,35 +428,59 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 return Ok()
             with
             | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "Delete" ex
+                return Error ex.Message
         }
 
+        // `List` deliberately has no error mapping — an auth failure
+        // propagates as an exception, which is exactly what the Phase 2c
+        // health probe relies on to read `Unhealthy` rather than the
+        // `Exists`-shaped false "absent". The outer handler added here
+        // records the trail and then RETHROWS THE ORIGINAL through
+        // `ExceptionDispatchInfo`, preserving both its identity and its
+        // stack, so the probe's `Unhealthy ex.Message` is unchanged. It
+        // wraps the client resolution too, because `client ()` can itself
+        // fail on a credential the ADC chain can no longer resolve.
         member _.List(toolupContainer, prefix) = async {
             let fullPrefix = blobKey toolupContainer prefix
             let stripLen = (toolupContainer + "/").Length
             let results = System.Collections.Generic.List<string>()
 
-            // `fullPrefix` is the 2nd positional arg; no options
-            // needed for a simple prefix list.
-            let enumerable = (client ()).ListObjectsAsync(config.BucketName, fullPrefix)
-            let enumerator = enumerable.GetAsyncEnumerator()
-
             try
-                let mutable keepGoing = true
+                // `fullPrefix` is the 2nd positional arg; no options
+                // needed for a simple prefix list.
+                let enumerable = (client ()).ListObjectsAsync(config.BucketName, fullPrefix)
+                let enumerator = enumerable.GetAsyncEnumerator()
 
-                while keepGoing do
-                    let! hasNext = enumerator.MoveNextAsync().AsTask() |> Async.AwaitTask
+                try
+                    let mutable keepGoing = true
 
-                    if hasNext then
-                        results.Add(enumerator.Current.Name.Substring stripLen)
-                    else
-                        keepGoing <- false
-            finally
-                enumerator.DisposeAsync().AsTask().Wait()
+                    while keepGoing do
+                        let! hasNext = enumerator.MoveNextAsync().AsTask() |> Async.AwaitTask
 
-            return results |> List.ofSeq
+                        if hasNext then
+                            results.Add(enumerator.Current.Name.Substring stripLen)
+                        else
+                            keepGoing <- false
+                finally
+                    enumerator.DisposeAsync().AsTask().Wait()
+
+                return results |> List.ofSeq
+            with ex ->
+                do! noteAuthFailure "List" ex
+                ExceptionDispatchInfo.Capture(ex).Throw()
+                // Unreachable — `Throw()` always throws. F# still needs a
+                // branch value; `reraise` is not available inside a
+                // computation-expression handler.
+                return []
         }
 
+        // `Exists` swallows every failure and answers `false`, which is
+        // the contract — but it means a `403` from a rejected credential
+        // used to be completely silent here. Recording it does not change
+        // the answer (Phase 2c moved the health probe off `Exists` for
+        // exactly this reason); it stops the rejection being invisible.
         member _.Exists(toolupContainer, blobName) = async {
             try
                 let key = blobKey toolupContainer blobName
@@ -390,7 +488,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 return true
             with
             | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return false
-            | _ -> return false
+            | ex ->
+                do! noteAuthFailure "Exists" ex
+                return false
         }
 
         member _.GetMetadata(toolupContainer, blobName) = async {
@@ -440,7 +540,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             with
             | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "GetMetadata" ex
+                return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -481,7 +583,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             with
             | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "DownloadWithETag" ex
+                return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -521,7 +625,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                     | Ok current -> return Error(ETagMismatch current)
                     | Error msg ->
                         return Error(ConditionalWriteFailure $"precondition refused; generation read failed: {msg}")
-                | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
+                | Unwrapped ex ->
+                    do! noteAuthFailure "UploadWithETag" ex
+                    return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -541,6 +647,10 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
     // opted into. Deployments that want signed originals supply the
     // service-account JSON explicitly (`CredentialsJson` /
     // `CredentialsJsonProvider`).
+    //
+    // No credential-rejection row here (Phase 2c): signing issues no
+    // request, so there is no status to classify. A URL signed with a
+    // rolled key fails at the FETCHER, which is not this process.
     interface ISignedUrlBlobStorage with
         member _.SignedUrl(toolupContainer, blobName, ttl) = async {
             let resolvedJson =
@@ -607,5 +717,9 @@ let fromEnv () : IBlobStorage option =
                 // var to redirect production storage is a footgun, not a
                 // feature.
                 EndpointUrl = None
+                // Env-built instances compose no audit sink, there being
+                // no env var that could name one. A deployment wanting
+                // the credential-rejection trail builds the config itself.
+                AuditLog = None
             }
         )

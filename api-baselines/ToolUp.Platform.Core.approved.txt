@@ -914,6 +914,7 @@ ToolUp.Platform.AuditEvent.IsAuditSinkFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAuthScopeResolutionFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsAuthorizationDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsBeaconRejected : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsBlobStorageAuthFailed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsCertificateIssued : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsClassifiedFieldWritten : System.Boolean { get }
@@ -1129,6 +1130,8 @@ ToolUp.Platform.AuditEvent+AuthorizationDenied (class)
 ToolUp.Platform.AuditEvent+AuthorizationDenied.Item : ToolUp.Platform.AuthorizationDeniedPayload { get }
 ToolUp.Platform.AuditEvent+BeaconRejected (class)
 ToolUp.Platform.AuditEvent+BeaconRejected.Item : ToolUp.Platform.BeaconRejectedPayload { get }
+ToolUp.Platform.AuditEvent+BlobStorageAuthFailed (class)
+ToolUp.Platform.AuditEvent+BlobStorageAuthFailed.Item : ToolUp.Platform.BlobStorageAuthFailedPayload { get }
 ToolUp.Platform.AuditEvent+CertificateIssued (class)
 ToolUp.Platform.AuditEvent+CertificateIssued.Item : ToolUp.Platform.CertificateIssuedPayload { get }
 ToolUp.Platform.AuditEvent+ClassifiedFieldRead (class)
@@ -1425,6 +1428,7 @@ ToolUp.Platform.AuditEvent+Tags.AuditSinkFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AuthScopeResolutionFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.AuthorizationDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.BeaconRejected : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.BlobStorageAuthFailed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.CertificateIssued : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ClassifiedFieldWritten : System.Int32 (literal)
@@ -2020,6 +2024,20 @@ ToolUp.Platform.BlobStorage+SignedUrlRefusal+SigningFailed.message : System.Stri
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags (class)
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.NotConfigured : System.Int32 (literal)
 ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.SigningFailed : System.Int32 (literal)
+ToolUp.Platform.BlobStorageAuthAudit (class)
+ToolUp.Platform.BlobStorageAuthAudit.maxReasonLength : System.Int32 (literal)
+ToolUp.Platform.BlobStorageAuthAudit.payload(System.String, System.String, System.String, System.Int32, System.String) : ToolUp.Platform.BlobStorageAuthFailedPayload
+ToolUp.Platform.BlobStorageAuthAudit.record(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String, System.Int32, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.BlobStorageAuthAudit.sanitiseReason(System.String) : System.String
+ToolUp.Platform.BlobStorageAuthAudit.scopeId : System.String (literal)
+ToolUp.Platform.BlobStorageAuthFailedPayload (class)
+ToolUp.Platform.BlobStorageAuthFailedPayload..ctor(System.String, System.String, System.String, System.Int32, System.String, System.DateTime)
+ToolUp.Platform.BlobStorageAuthFailedPayload.At : System.DateTime { get }
+ToolUp.Platform.BlobStorageAuthFailedPayload.Companion : System.String { get }
+ToolUp.Platform.BlobStorageAuthFailedPayload.Container : System.String { get }
+ToolUp.Platform.BlobStorageAuthFailedPayload.Operation : System.String { get }
+ToolUp.Platform.BlobStorageAuthFailedPayload.Reason : System.String { get }
+ToolUp.Platform.BlobStorageAuthFailedPayload.StatusCode : System.Int32 { get }
 ToolUp.Platform.BootVerificationReading (class)
 ToolUp.Platform.BootVerificationReading.IsBootRejected : System.Boolean { get }
 ToolUp.Platform.BootVerificationReading.IsBootUnsealed : System.Boolean { get }

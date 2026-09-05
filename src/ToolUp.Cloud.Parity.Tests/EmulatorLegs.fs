@@ -122,6 +122,7 @@ let blobStorageFactory (leg: CloudLeg) : Result<(unit -> IBlobStorage), LegSkip>
                     ConnectionString = connectionString
                     RootContainer = unique "parity"
                     ConnectionStringProvider = None
+                    AuditLog = None
                 })
 
     | LocalStack ->
@@ -141,6 +142,7 @@ let blobStorageFactory (leg: CloudLeg) : Result<(unit -> IBlobStorage), LegSkip>
                     BucketName = bucket
                     Region = region
                     EndpointUrl = Some endpointUrl
+                    AuditLog = None
                 })
 
     | FakeGcs ->
@@ -172,6 +174,7 @@ let blobStorageFactory (leg: CloudLeg) : Result<(unit -> IBlobStorage), LegSkip>
                     CredentialsJson = None
                     CredentialsJsonProvider = None
                     EndpointUrl = Some endpointUrl
+                    AuditLog = None
                 })
 
 // ─── ISecretStore per leg ────────────────────────────────────────────

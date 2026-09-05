@@ -11,7 +11,8 @@ ToolUp.Storage.GoogleCloudStorage.fromEnv() : Microsoft.FSharp.Core.FSharpOption
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorage (class)
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorage..ctor(ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig)
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig (class)
-ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig.BucketName : System.String { get }
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig.CredentialsJson : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Storage.GoogleCloudStorage+GoogleCloudStorageConfig.CredentialsJsonProvider : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]] { get }

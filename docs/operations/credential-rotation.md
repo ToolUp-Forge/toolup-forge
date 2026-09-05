@@ -168,6 +168,35 @@ swallow the auth failure:
   which propagates a `403` and surfaces it as `Unhealthy` with the
   vendor's status message within one probe cycle.
 
+A probe answers "is the deployment well?". It does not answer "when did
+this start, on which store, and doing what" — and before Phase 2c those
+facts were recoverable only by noticing, later, that retrievals had gaps.
+So pair the probe with a **trail**:
+
+- The three storage companions accept an optional `AuditLog` on their
+  config (`None` by default — a deployment that does not opt in is
+  byte-for-byte unchanged, GP 11 + GP 13) and record one
+  **`BlobStorageAuthFailed`** audit event per call rejected `401` /
+  `403`, under the `_platform` scope: companion, bucket / container,
+  `IBlobStorage` operation, status, and a sanitised message.
+- **Emit on the failure path only, immediately before returning the
+  error the caller has always received.** Emission must not swallow the
+  failure, change its message, or be able to raise — a storage failure
+  that becomes a different failure because the audit sink was down is
+  worse than no trail at all. `BlobStorageAuthAudit.record` swallows sink
+  errors for exactly this reason.
+- **Keep `401` and `403` distinct.** They answer different operator
+  questions: no usable credential was presented, versus one that
+  authenticated and was refused (the shape a policy edit takes).
+- **Never let a credential reach the row.** `BlobStorageAuthAudit`
+  redacts `name=value` pairs whose name reads as secret-bearing, because
+  vendor SDKs do sometimes echo a connection string back in a message,
+  and an audit store replicates to third-party sinks.
+- **Do not coalesce.** During a rotation window every call fails; two
+  failed calls are two facts, and a trail that collapses them cannot say
+  how long the gap ran. A deployment wanting quieter trails filters at
+  the sink.
+
 ## Checklist for a new secret-bearing companion
 
 - [ ] Config carries an optional provider closure; `None` is the default
@@ -179,6 +208,9 @@ swallow the auth failure:
       renewal path.
 - [ ] The health probe does a live authenticated read/list and does not
       swallow the auth failure.
+- [ ] A rejected call leaves a trail as well as an alarm — an optional
+      audit sink, defaulting to off, emitting on the failure path only
+      and never able to change the error the caller sees.
 - [ ] Ambient-credential companions document "rotation transparent" and
       deliberately ship no seam.
 

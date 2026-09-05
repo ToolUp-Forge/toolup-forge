@@ -3,6 +3,7 @@ module ToolUp.Storage.AwsS3Storage
 open System
 open System.IO
 open System.Net
+open System.Runtime.ExceptionServices
 open Amazon.S3
 open Amazon.S3.Model
 open ToolUp.Platform.BlobStorage
@@ -33,6 +34,22 @@ type AwsS3StorageConfig = {
     /// Optional S3-compatible endpoint override (MinIO, R2, B2).
     /// `None` = use the default AWS endpoint for the region.
     EndpointUrl: string option
+    /// Phase 2c — optional audit sink for credential rejections. `None`
+    /// (default) emits nothing and costs nothing (GP 11 + GP 13);
+    /// `Some log` records one `BlobStorageAuthFailed` row per S3 call
+    /// rejected `401` / `403`, under the `_platform` scope.
+    ///
+    /// It is a sink on the config rather than a widened `create`, because
+    /// that is where this companion's other Phase 2c seam already lives
+    /// (`AzureBlobStorageConfig.ConnectionStringProvider`) and because
+    /// `create` is the shape every existing consumer calls.
+    ///
+    /// AWS credentials flow through the SDK's default chain, which
+    /// refreshes itself, so ordinary key *rotation* is transparent here
+    /// — but a revoked role, a policy edit that drops one permission, or
+    /// an expired static key still rejects, and that is what this
+    /// records.
+    AuditLog: ToolUp.Platform.IAuditLog option
 }
 
 module AwsS3StorageConfig =
@@ -40,6 +57,7 @@ module AwsS3StorageConfig =
         BucketName = ""
         Region = "us-east-1"
         EndpointUrl = None
+        AuditLog = None
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -74,6 +92,38 @@ let private (|Unwrapped|) (ex: exn) =
         | None -> ex
     | _ -> ex
 
+/// Phase 2c — the companion id this storage backend records under, the
+/// SAME spelling its health probe uses (`blob_storage:aws-s3`), so the
+/// probe's `Unhealthy` reading and this companion's audit rows join on
+/// one key rather than on two.
+[<Literal>]
+let internal companionId = "aws-s3"
+
+/// Phase 2c — classify an SDK exception as a credential rejection,
+/// returning the rejecting status when it is one.
+///
+/// Reuses the Phase 733/734 `Unwrapped` pattern rather than adding a
+/// second matching path: an S3 exception reaches a `with` handler
+/// wrapped in `AggregateException`, and a direct type test on the
+/// wrapper never fires — the defect that left this file's `416` arm dead
+/// until it was measured.
+///
+/// `401` and `403` are kept distinct rather than folded into one
+/// "auth failed" verdict because they answer different operator
+/// questions: `401` means no usable credential was presented at all
+/// (the default chain resolved nothing, or the key is unknown to the
+/// account), `403` means one WAS presented, authenticated, and was
+/// refused — the shape an IAM policy edit takes. Everything else,
+/// `404` included, is not a credential fact and returns `None`.
+let internal authFailureStatus (ex: exn) : int option =
+    match ex with
+    | Unwrapped(:? AmazonS3Exception as s3) ->
+        match s3.StatusCode with
+        | HttpStatusCode.Unauthorized -> Some 401
+        | HttpStatusCode.Forbidden -> Some 403
+        | _ -> None
+    | _ -> None
+
 // Returns the concrete `AmazonS3Client`. Under AWS SDK v4 `IAmazonS3`
 // carries static abstract members, so naming it as an ordinary type
 // raises FS3536 (IWSAM-as-type); the client is only ever used through
@@ -100,11 +150,36 @@ let private buildClient (config: AwsS3StorageConfig) : AmazonS3Client =
 type AwsS3Storage(config: AwsS3StorageConfig) =
     let client = buildClient config
 
+    // Phase 2c — the credential-rejection trail. Called from a `with`
+    // handler with the exception that is about to become the caller's
+    // `Error`, immediately BEFORE that `Error` is returned: nothing is
+    // swallowed, no message changes, and a non-auth failure records
+    // nothing. `BlobStorageAuthAudit.record` never throws, so this
+    // cannot turn a storage failure into a different one.
+    let noteAuthFailure (operation: string) (ex: exn) : Async<unit> =
+        match authFailureStatus ex with
+        | Some status ->
+            ToolUp.Platform.BlobStorageAuthAudit.record
+                config.AuditLog
+                companionId
+                config.BucketName
+                operation
+                status
+                ex.Message
+        | None -> async { () }
+
     // Phase 600 follow-up — live-etag disclosure read for a refused
     // conditional write. `Ok None` = the object is absent (the only
     // case the seam may report `ETagMismatch None`); `Error` = the
     // disclosure read itself failed, surfaced as
     // `ConditionalWriteFailure` rather than a fabricated verdict.
+    //
+    // Deliberately NOT audited for credential rejection (Phase 2c): this
+    // read is reached only after a `412` / `409` on the same call, which
+    // means the credential had already authenticated moments earlier. A
+    // `403` here is a permission fact about the disclosure read, not the
+    // rotation signal the row exists for, and emitting it would put a
+    // second row under every refused conditional write.
     let currentETag (key: string) : Async<Result<string option, string>> = async {
         try
             let req = GetObjectMetadataRequest()
@@ -135,6 +210,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! _ = client.PutObjectAsync req |> Async.AwaitTask
                 return Ok $"s3://{config.BucketName}/{req.Key}"
             with Unwrapped ex ->
+                do! noteAuthFailure "Upload" ex
                 return Error ex.Message
         }
 
@@ -150,7 +226,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             with
             | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "Download" ex
+                return Error ex.Message
         }
 
         member _.DownloadRange(toolupContainer, blobName, offset, length) = async {
@@ -180,7 +258,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                     // 416 arrives wrapped; see the pattern's doc-comment
                     // for what that cost.
                     return Ok Array.empty
-                | Unwrapped ex -> return Error ex.Message
+                | Unwrapped ex ->
+                    do! noteAuthFailure "DownloadRange" ex
+                    return Error ex.Message
         }
 
         // Phase 741 — S3's native multi-part commit, with the one
@@ -279,6 +359,7 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                         with _ ->
                             ()
 
+                    do! noteAuthFailure "ComposeFrom" ex
                     return Error(ComposeRefusal.ComposeFailed ex.Message)
         }
 
@@ -293,9 +374,17 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 let! _ = client.DeleteObjectAsync req |> Async.AwaitTask
                 return Ok()
             with Unwrapped ex ->
+                do! noteAuthFailure "Delete" ex
                 return Error ex.Message
         }
 
+        // `List` deliberately has no error mapping — an auth failure
+        // propagates as an exception, which is exactly what the Phase 2c
+        // health probe relies on to read `Unhealthy` rather than the
+        // `Exists`-shaped false "absent". The handler added here records
+        // the trail and then RETHROWS THE ORIGINAL through
+        // `ExceptionDispatchInfo`, preserving both its identity and its
+        // stack, so the probe's `Unhealthy ex.Message` is unchanged.
         member _.List(toolupContainer, prefix) = async {
             let fullPrefix = blobKey toolupContainer prefix
             let stripLen = (toolupContainer + "/").Length
@@ -304,30 +393,43 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             let mutable continuationToken: string = null
             let mutable keepGoing = true
 
-            while keepGoing do
-                let req = ListObjectsV2Request()
-                req.BucketName <- config.BucketName
-                req.Prefix <- fullPrefix
+            try
+                while keepGoing do
+                    let req = ListObjectsV2Request()
+                    req.BucketName <- config.BucketName
+                    req.Prefix <- fullPrefix
 
-                if continuationToken <> null then
-                    req.ContinuationToken <- continuationToken
+                    if continuationToken <> null then
+                        req.ContinuationToken <- continuationToken
 
-                let! response = client.ListObjectsV2Async req |> Async.AwaitTask
+                    let! response = client.ListObjectsV2Async req |> Async.AwaitTask
 
-                // AWS SDK v4 returns null (not an empty list) for response
-                // collections when the page has no objects.
-                if not (isNull response.S3Objects) then
-                    for obj in response.S3Objects do
-                        results.Add(obj.Key.Substring stripLen)
+                    // AWS SDK v4 returns null (not an empty list) for response
+                    // collections when the page has no objects.
+                    if not (isNull response.S3Objects) then
+                        for obj in response.S3Objects do
+                            results.Add(obj.Key.Substring stripLen)
 
-                if response.IsTruncated.GetValueOrDefault() then
-                    continuationToken <- response.NextContinuationToken
-                else
-                    keepGoing <- false
+                    if response.IsTruncated.GetValueOrDefault() then
+                        continuationToken <- response.NextContinuationToken
+                    else
+                        keepGoing <- false
 
-            return results |> List.ofSeq
+                return results |> List.ofSeq
+            with ex ->
+                do! noteAuthFailure "List" ex
+                ExceptionDispatchInfo.Capture(ex).Throw()
+                // Unreachable — `Throw()` always throws. F# still needs a
+                // branch value; `reraise` is not available inside a
+                // computation-expression handler.
+                return []
         }
 
+        // `Exists` swallows every failure and answers `false`, which is
+        // the contract — but it means a `403` from a rejected credential
+        // used to be completely silent here. Recording it does not change
+        // the answer (Phase 2c: the probe was moved off `Exists` for
+        // exactly this reason); it stops the rejection being invisible.
         member _.Exists(toolupContainer, blobName) = async {
             try
                 let req = GetObjectMetadataRequest()
@@ -337,7 +439,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 return true
             with
             | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound -> return false
-            | _ -> return false
+            | ex ->
+                do! noteAuthFailure "Exists" ex
+                return false
         }
 
         member _.GetMetadata(toolupContainer, blobName) = async {
@@ -362,7 +466,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             with
             | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "GetMetadata" ex
+                return Error ex.Message
         }
 
     // ─── Phase 600 follow-up — conditional writes (the ETag seam) ────
@@ -396,7 +502,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
             with
             | Unwrapped(:? AmazonS3Exception as ex) when ex.StatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
-            | Unwrapped ex -> return Error ex.Message
+            | Unwrapped ex ->
+                do! noteAuthFailure "DownloadWithETag" ex
+                return Error ex.Message
         }
 
         member _.UploadWithETag(toolupContainer, blobName, content, condition) = async {
@@ -427,7 +535,9 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
                 // `If-Match` against an absent key — the blob the caller
                 // expected is gone.
                 return Error(ETagMismatch None)
-            | Unwrapped ex -> return Error(ConditionalWriteFailure ex.Message)
+            | Unwrapped ex ->
+                do! noteAuthFailure "UploadWithETag" ex
+                return Error(ConditionalWriteFailure ex.Message)
         }
 
     // ─── Phase 108 — time-bound direct-download URLs ─────────────────
@@ -443,6 +553,10 @@ type AwsS3Storage(config: AwsS3StorageConfig) =
     // whose session credentials expire before the requested TTL get a
     // URL that stops working at whichever bound comes first — which is
     // AWS's semantics, not something this seam can widen.
+    //
+    // No credential-rejection row here (Phase 2c): presigning issues no
+    // request, so there is no status to classify. A URL minted with a
+    // revoked key fails at the FETCHER, which is not this process.
     interface ISignedUrlBlobStorage with
         member _.SignedUrl(toolupContainer, blobName, ttl) = async {
             try
@@ -496,5 +610,9 @@ let fromEnv () : IBlobStorage option =
                 BucketName = bucket
                 Region = region
                 EndpointUrl = endpoint
+                // Env-built instances compose no audit sink — there is no
+                // env var that could name one. A deployment wanting the
+                // credential-rejection trail builds the config itself.
+                AuditLog = None
             }
         )

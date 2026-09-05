@@ -34,6 +34,7 @@ let tests =
                 ConnectionString = connectionString
                 RootContainer = "test-" + suffix
                 ConnectionStringProvider = None
+                AuditLog = None
             }
 
         IBlobStorageContract.tests "AzureBlobStorage" factory

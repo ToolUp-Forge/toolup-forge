@@ -1820,6 +1820,18 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> MediaKeyDelivered(fromAuditJson<MediaKeyDeliveredPayload> j)
     }
+    // Phase 2c — the trail beside the credential-rotation health probe.
+    // The probe says the deployment is unwell; this row says when the
+    // rejections started, against which store, and doing what. Emitted
+    // by the three cloud-storage companions on their own failure paths.
+    {
+        EventType = "BlobStorageAuthFailed"
+        TryEncode =
+            (function
+            | BlobStorageAuthFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> BlobStorageAuthFailed(fromAuditJson<BlobStorageAuthFailedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

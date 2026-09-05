@@ -10,6 +10,8 @@ Configuration is read from standard AWS resolution (environment, profile, IMDS).
 
 The `blob_storage:aws-s3` health probe performs a **live authenticated list** (Phase 2c) against the `_platform` health prefix, so a revoked role, an IAM-policy change, or a bucket rename surfaces as `Unhealthy` with the S3 `403` message within one probe cycle — the earlier `Exists`-based probe swallowed the `403` and read Healthy.
 
+Set `AuditLog = Some log` on the config (Phase 2c) and every S3 call rejected `401` / `403` also records a **`BlobStorageAuthFailed`** audit event under the `_platform` scope, naming the companion, the bucket, the `IBlobStorage` operation, the status and a sanitised SDK message. The probe is the alarm; this is the trail that says when the rejections started and what they cost. `None` (the default, and what `fromEnv` wires) emits nothing.
+
 Licensed under Apache-2.0.
 
 Part of the ToolUp Platform SDK — see [github.com/ToolUp-Forge/toolup-forge](https://github.com/ToolUp-Forge/toolup-forge) for full documentation.

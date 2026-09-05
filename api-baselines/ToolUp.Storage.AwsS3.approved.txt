@@ -11,7 +11,8 @@ ToolUp.Storage.AwsS3Storage.fromEnv() : Microsoft.FSharp.Core.FSharpOption`1[Too
 ToolUp.Storage.AwsS3Storage+AwsS3Storage (class)
 ToolUp.Storage.AwsS3Storage+AwsS3Storage..ctor(ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig)
 ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig (class)
-ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig.BucketName : System.String { get }
 ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig.EndpointUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Storage.AwsS3Storage+AwsS3StorageConfig.Region : System.String { get }

@@ -699,6 +699,8 @@ let private registeredTests =
         // (same class as the SvgPropTests note further down).
         AuditWriteFailureMetricTests.tests
         AuditEventRegistryTests.tests
+        // Phase 2c — BlobStorageAuthFailed credential-rejection trail.
+        BlobStorageAuthAuditTests.tests
         // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
         // / DegradeToFile + fallback spill capacity + poison quarantine).
         AuditFailurePolicyTests.tests

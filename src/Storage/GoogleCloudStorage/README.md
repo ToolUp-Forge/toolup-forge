@@ -12,6 +12,8 @@ With an **inline service-account JSON** (`CredentialsJson = Some …`), the cred
 
 The `blob_storage:gcs` health probe performs a **live authenticated list** (Phase 2c) against the `_platform` health prefix, so a rolled-out key surfaces as `Unhealthy` with the GCS `403` message within one probe cycle — the earlier `Exists`-based probe swallowed the `403` and read Healthy.
 
+Set `AuditLog = Some log` on the config (Phase 2c) and every GCS call rejected `401` / `403` also records a **`BlobStorageAuthFailed`** audit event under the `_platform` scope, naming the companion, the bucket, the `IBlobStorage` operation, the status and a sanitised SDK message. The probe is the alarm; this is the trail that says when the rejections started and what they cost. Worth composing even on ADC, which is rotation-transparent but can still lose an IAM binding. `None` (the default, and what `fromEnv` wires) emits nothing.
+
 Licensed under Apache-2.0.
 
 Part of the ToolUp Platform SDK — see [github.com/ToolUp-Forge/toolup-forge](https://github.com/ToolUp-Forge/toolup-forge) for full documentation.

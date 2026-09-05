@@ -4437,6 +4437,65 @@ type MediaKeyDeliveredPayload = {
     At: DateTime
 }
 
+/// Phase 2c — a cloud-storage companion's call to its backing store was
+/// rejected with `401 Unauthorized` or `403 Forbidden`, i.e. the
+/// credential the companion is holding is no longer accepted.
+///
+/// **Why this row exists.** The Phase 2c health probes turn a revoked or
+/// rotated credential into an `Unhealthy` reading within one probe
+/// cycle, which tells an operator that the deployment is unwell. It does
+/// not tell them *when it started*, *which store*, or *what was being
+/// attempted* — and before this row those facts were recoverable only by
+/// noticing, later, that retrievals had gaps. The probe is the alarm;
+/// this is the trail (GP 6).
+///
+/// **Emitted on the failure path only, once per rejected call**, from
+/// the companion's own `with` handler, immediately before the same
+/// `Error` the caller has always received is returned. Nothing is
+/// swallowed and no error text changes: a deployment that composes no
+/// audit sink behaves byte-for-byte as it did (GP 11 + GP 13).
+///
+/// **Volume is bounded by the outage, not by traffic shape** — during a
+/// rotation window every storage call fails, so this row is deliberately
+/// NOT coalesced: two failed calls are two facts, and a trail that
+/// collapses them cannot answer how long the gap ran or which operations
+/// were lost. A deployment wanting quieter trails filters at the sink,
+/// which is where `MediaKeyDelivered` puts the same decision.
+///
+/// **No credential ever reaches the row.** `Reason` is passed through
+/// `BlobStorageAuthAudit.sanitiseReason`, which redacts `name=value`
+/// pairs whose name reads as secret-bearing (an Azure connection string
+/// echoed in an SDK message is the motivating case) and truncates.
+type BlobStorageAuthFailedPayload = {
+    /// Which companion was rejected, in the SAME spelling its health
+    /// probe uses — `"aws-s3"` / `"azure"` / `"gcs"`, i.e. the suffix of
+    /// `blob_storage:{companion}`. One spelling, so the probe row and
+    /// the audit row join without a translation table.
+    Companion: string
+    /// The backing store the credential was rejected FOR: the S3 /GCS
+    /// bucket name, or the Azure root container. Names the resource an
+    /// operator has to re-grant, which is not always the one they think
+    /// when a deployment holds several.
+    Container: string
+    /// The `IBlobStorage` member that was attempting the call —
+    /// `"Upload"` / `"Download"` / `"List"` / … . Carried because a
+    /// credential can lose one permission and keep others (an IAM policy
+    /// edit that drops `s3:PutObject` reads exactly like a full
+    /// revocation from any single failing write).
+    Operation: string
+    /// The rejecting HTTP status: `401` or `403`. Kept as the transport
+    /// status rather than mapped to a verdict DU — the two answer
+    /// different operator questions (no credential presented vs. a
+    /// credential that authenticated and was refused) and the SDKs
+    /// already agree on the numbers.
+    StatusCode: int
+    /// The SDK's own message, sanitised and truncated. Diagnostic only —
+    /// the queryable axes are the four fields above.
+    Reason: string
+    /// When the call was rejected.
+    At: DateTime
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -5168,6 +5227,12 @@ type AuditEvent =
     /// Phase 471 shipped with: refusals were queryable, grants were a
     /// log line.
     | MediaKeyDelivered of MediaKeyDeliveredPayload
+    /// Phase 2c — a cloud-storage companion's call was rejected 401/403,
+    /// i.e. the credential it holds is no longer accepted. The trail
+    /// beside the Phase 2c health probe's alarm: the probe says the
+    /// deployment is unwell, this says when it started, on which store,
+    /// and doing what.
+    | BlobStorageAuthFailed of BlobStorageAuthFailedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -5370,6 +5435,7 @@ module AuditEvent =
         | DeploymentVerified _ -> "DeploymentVerified"
         | EvidenceChainWalked _ -> "EvidenceChainWalked"
         | MediaKeyDelivered _ -> "MediaKeyDelivered"
+        | BlobStorageAuthFailed _ -> "BlobStorageAuthFailed"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the
@@ -5614,3 +5680,145 @@ type IAuthAuditHook =
     /// by the implementation. The default impl coalesces probing bursts on
     /// the same `(route, subject)` key within its dedup window.
     abstract RecordDenial: denial: AuthDenial -> Async<unit>
+// ─── Phase 2c — cloud-storage credential-rejection trail ─────────────
+//
+// The one place a cloud-storage companion turns a rejected SDK call into
+// a `BlobStorageAuthFailed` row. Three companions need identical
+// behaviour on this path — scope, sanitisation, and the guarantee that
+// emission can never change what the caller sees — so it lives once
+// here rather than three times in `Storage/*`. What CANNOT live here is
+// the classification itself: deciding that an exception is a 401/403
+// means naming `AmazonS3Exception` / `RequestFailedException` /
+// `GoogleApiException`, and a vendor SDK type never enters
+// `ToolUp.Platform.*` (GP 1). So each companion classifies and this
+// module records.
+//
+// Fable-safe: values, `Async`, and BCL string operations only — no
+// regex (nothing else in `Platform.Core/Shared` uses one, and this file
+// ships under `fable/`).
+
+/// Records the `BlobStorageAuthFailed` row for a cloud-storage call that
+/// was rejected 401/403. See `BlobStorageAuthFailedPayload` for why the
+/// row exists and what each field answers.
+module BlobStorageAuthAudit =
+
+    /// The scope every credential-rejection row is recorded under.
+    ///
+    /// Deliberately NOT the caller's scope, which is the more usual
+    /// choice for a storage event. A rejected credential is a property of
+    /// the DEPLOYMENT, not of whichever tenant happened to make the call
+    /// that discovered it: during a rotation window every scope's calls
+    /// fail, so a per-scope trail would scatter one operational fact
+    /// across every tenant and leave no single place to ask "when did
+    /// this start". The container the call was made against is carried in
+    /// the payload instead, so nothing is lost by centralising.
+    [<Literal>]
+    let scopeId = "_platform"
+
+    /// Longest sanitised SDK message kept on a row. An SDK message is a
+    /// diagnostic aid here, not a queryable axis — the four fields above
+    /// it are — so a bound that keeps the row small beats a complete
+    /// message.
+    [<Literal>]
+    let maxReasonLength = 512
+
+    /// Name fragments that mark a `name=value` pair as secret-bearing.
+    /// Deliberately broad: `AccessKeyId` matches on `key` and is redacted
+    /// even though it is an identifier rather than a secret, because the
+    /// cost of redacting an id is a slightly less specific diagnostic and
+    /// the cost of the opposite mistake is a credential in an audit
+    /// store that replicates to third-party sinks.
+    let private secretMarkers = [ "key"; "secret"; "password"; "token"; "signature"; "sig"; "credential" ]
+
+    /// Redact secret-bearing `name=value` pairs from an SDK message,
+    /// flatten control characters and separators to single spaces, and
+    /// truncate to `maxReasonLength`.
+    ///
+    /// The motivating case is an Azure connection string echoed back in a
+    /// `RequestFailedException` message — `AccountKey=...` — but the rule
+    /// is applied to every companion's message rather than to Azure's,
+    /// because "which SDK might quote a credential" is not a question
+    /// this code can keep answering correctly as SDKs change.
+    ///
+    /// Separators are normalised rather than preserved: rebuilding the
+    /// original punctuation around redacted tokens would be more code for
+    /// a string nobody parses.
+    let sanitiseReason (message: string) : string =
+        if String.IsNullOrWhiteSpace message then
+            ""
+        else
+            let flattened = message |> String.map (fun c -> if Char.IsControl c then ' ' else c)
+
+            let redact (token: string) =
+                let separator = token.IndexOf '='
+
+                if separator > 0 then
+                    let name = token.Substring(0, separator)
+                    let lowered = name.ToLowerInvariant()
+
+                    if secretMarkers |> List.exists lowered.Contains then
+                        name + "=***"
+                    else
+                        token
+                else
+                    token
+
+            let normalised =
+                flattened.Split([| ' '; ';'; '&'; ',' |], StringSplitOptions.RemoveEmptyEntries)
+                |> Array.map redact
+                |> String.concat " "
+
+            if normalised.Length <= maxReasonLength then
+                normalised
+            else
+                normalised.Substring(0, maxReasonLength) + "..."
+
+    /// Build the row for a rejected call. Split out from `record` so a
+    /// caller can assert the payload without an `IAuditLog`, and so the
+    /// timestamp is the only impurity.
+    let payload
+        (companion: string)
+        (container: string)
+        (operation: string)
+        (statusCode: int)
+        (message: string)
+        : BlobStorageAuthFailedPayload =
+        {
+            Companion = companion
+            Container = container
+            Operation = operation
+            StatusCode = statusCode
+            Reason = sanitiseReason message
+            At = DateTime.UtcNow
+        }
+
+    /// Record one credential-rejection row, if the companion was composed
+    /// with an audit log.
+    ///
+    /// **Never throws, and never delays the caller's own error.** A
+    /// deployment that composed no `IAuditLog` (`None`) does nothing at
+    /// all; a sink that raises is swallowed here, matching
+    /// `IAuditLog.Record`'s own best-effort contract. The one thing this
+    /// function must not do is turn a storage failure into a different
+    /// storage failure — the caller returns the error it always returned,
+    /// immediately after this returns.
+    let record
+        (audit: IAuditLog option)
+        (companion: string)
+        (container: string)
+        (operation: string)
+        (statusCode: int)
+        (message: string)
+        : Async<unit> =
+        async {
+            match audit with
+            | None -> ()
+            | Some log ->
+                try
+                    let event =
+                        BlobStorageAuthFailed(payload companion container operation statusCode message)
+
+                    do! log.Record(scopeId, event)
+                with _ ->
+                    ()
+        }

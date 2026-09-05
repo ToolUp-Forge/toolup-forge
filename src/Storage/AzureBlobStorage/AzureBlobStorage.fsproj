@@ -8,6 +8,14 @@
     <PackageTags>fsharp;sdk;storage;azure;azure-blob;blob-storage;provider</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Phase 2c: the credential-rejection classifier (authFailureStatus) is
+         internal, being a per-SDK detail rather than public surface, and
+         BlobStorageAuthAuditTests proves it against real SDK exception
+         instances. Same mechanism ToolUp.Platform.Server uses for its own
+         internal codec registry. -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="AzureBlobStorage.fs" />
     <Compile Include="AzureBlobStorageHealth.fs" />
     <Compile Include="AzureBlobEncryptionAtRestValidator.fs" />
