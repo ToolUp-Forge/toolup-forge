@@ -558,6 +558,7 @@ let private registeredTests =
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
+        OidcRefreshPlanTests.tests
         GoogleIdentityCompanionTests.tests
         OidcDiagnoseTests.tests
         OidcTracerTests.tests

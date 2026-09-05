@@ -350,6 +350,22 @@ type OidcAppConfig = {
     /// provider-specific `OidcPresets.withEntraSignUpUserFlow` for an
     /// Entra External ID sign-up user flow.
     SecondaryFlow: OidcSecondaryFlow option
+
+    /// Phase 755 — knobs for the client companion's automatic
+    /// pre-expiry refresh timer: the safety margin ahead of `exp`, the
+    /// cadence used when the bearer carries no readable `exp`, whether
+    /// a woken background tab re-checks, and an outright opt-out.
+    ///
+    /// `None` (the default on every preset and on
+    /// `OidcAppConfig.create`) arms the timer with the margins it
+    /// shipped with, byte for byte (GP 11) — the timer is ALWAYS-ON by
+    /// default, because a shell that quietly lets its bearer lapse is
+    /// the worse default.
+    ///
+    /// Attach one with `OidcPresets.withRefreshPolicy`, or the two
+    /// single-knob helpers `OidcPresets.withRefreshMargin` /
+    /// `OidcPresets.withoutAutoRefresh`.
+    RefreshPolicy: OidcRefreshPolicy option
 }
 
 module OidcAppConfig =
@@ -368,6 +384,7 @@ module OidcAppConfig =
         Preset = None
         BearerToken = None
         SecondaryFlow = None
+        RefreshPolicy = None
     }
 
     /// The effective bearer strategy for a config: the consumer's
@@ -402,6 +419,13 @@ module OidcAppConfig =
     /// second button is a product decision, not a provider quirk), so
     /// `None` here means exactly what `None` meant on the app config:
     /// the single-button shell.
+    ///
+    /// The refresh policy is projected VERBATIM for the same reason,
+    /// and deliberately NOT resolved here: `OidcRefreshPolicy.resolve`
+    /// runs at the point of use in the browser, so the `None`-means-
+    /// shipped-defaults guarantee is stated once, at the tier where the
+    /// timer actually runs, rather than baked into a projection whose
+    /// output a consumer never reads.
     let toClientConfig (cfg: OidcAppConfig) : OidcUIConfig = {
         Issuer = cfg.Issuer
         ClientId = cfg.ClientId
@@ -411,4 +435,5 @@ module OidcAppConfig =
         ValidateIdToken = cfg.ValidateIdToken
         BearerToken = Some(resolveBearerToken cfg)
         SecondaryFlow = cfg.SecondaryFlow
+        RefreshPolicy = cfg.RefreshPolicy
     }

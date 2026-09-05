@@ -744,6 +744,7 @@
         <Compile Include="InProcess\MinimumViableShapeTests.fs" />
         <Compile Include="InProcess\RedactionAllowlistParityTests.fs" />
         <Compile Include="InProcess\OidcClassifyTokenTests.fs" />
+        <Compile Include="InProcess\OidcRefreshPlanTests.fs" />
         <Compile Include="InProcess\GoogleIdentityCompanionTests.fs" />
         <Compile Include="InProcess\OidcDiagnoseTests.fs" />
         <Compile Include="InProcess\OidcTracerTests.fs" />

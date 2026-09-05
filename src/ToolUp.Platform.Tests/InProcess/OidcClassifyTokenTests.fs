@@ -37,6 +37,7 @@ let private cfg (issuer: string) : OidcUIConfig = {
     ValidateIdToken = None
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 let private nowSeconds = 1_800_000_000.0 // fixed anchor (~2027); tests roll exp around it.

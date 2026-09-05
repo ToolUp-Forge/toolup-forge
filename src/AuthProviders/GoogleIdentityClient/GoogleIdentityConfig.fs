@@ -203,6 +203,11 @@ module GoogleIdentityUIConfig =
         // also wires the redirect flow declares its secondary flow on
         // that config.
         SecondaryFlow = None
+        // `None`: the built-in margins. Google's id_token carries a
+        // readable `exp`, so the timer reads a real lifetime here
+        // rather than falling back to a fixed cadence — there is
+        // nothing provider-specific to override.
+        RefreshPolicy = None
     }
 
     /// GIS wire value for a button theme.

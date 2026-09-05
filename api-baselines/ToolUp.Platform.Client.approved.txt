@@ -4353,23 +4353,34 @@ ToolUp.Platform.OfflineMode+EnabledOffline.Item : ToolUp.Platform.OfflineConfig 
 ToolUp.Platform.OfflineMode+Tags (class)
 ToolUp.Platform.OfflineMode+Tags.EnabledOffline : System.Int32 (literal)
 ToolUp.Platform.OfflineMode+Tags.NoOffline : System.Int32 (literal)
+ToolUp.Platform.OidcRefreshPolicy (class)
+ToolUp.Platform.OidcRefreshPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Double], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])
+ToolUp.Platform.OidcRefreshPolicy.Enabled : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
+ToolUp.Platform.OidcRefreshPolicy.FallbackSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.OidcRefreshPolicy.RefreshOnWake : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
+ToolUp.Platform.OidcRefreshPolicy.SafetyMarginSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.OidcRefreshPolicyModule (class)
+ToolUp.Platform.OidcRefreshPolicyModule.none() : ToolUp.Platform.OidcRefreshPolicy
+ToolUp.Platform.OidcRefreshPolicyModule.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy]) : ToolUp.Platform.ResolvedOidcRefreshPolicy
 ToolUp.Platform.OidcSecondaryFlow (class)
 ToolUp.Platform.OidcSecondaryFlow..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.OidcSecondaryFlow.ExtraAuthorizeParams : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.OidcSecondaryFlow.Label : System.String { get }
 ToolUp.Platform.OidcUIConfig (class)
-ToolUp.Platform.OidcUIConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow])
+ToolUp.Platform.OidcUIConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy])
 ToolUp.Platform.OidcUIConfig.BearerToken : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind] { get }
 ToolUp.Platform.OidcUIConfig.ClientId : System.String { get }
 ToolUp.Platform.OidcUIConfig.Issuer : System.String { get }
 ToolUp.Platform.OidcUIConfig.PostLogoutRedirectUri : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.OidcUIConfig.RedirectUri : System.String { get }
+ToolUp.Platform.OidcUIConfig.RefreshPolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy] { get }
 ToolUp.Platform.OidcUIConfig.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.OidcUIConfig.SecondaryFlow : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow] { get }
 ToolUp.Platform.OidcUIConfig.ValidateIdToken : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.Platform.OidcUIConfigModule (class)
 ToolUp.Platform.OidcUIConfigModule.defaults(System.String, System.String, System.String) : ToolUp.Platform.OidcUIConfig
 ToolUp.Platform.OidcUIConfigModule.resolveBearerToken(ToolUp.Platform.OidcUIConfig) : ToolUp.Platform.BearerTokenKind
+ToolUp.Platform.OidcUIConfigModule.resolveRefreshPolicy(ToolUp.Platform.OidcUIConfig) : ToolUp.Platform.ResolvedOidcRefreshPolicy
 ToolUp.Platform.OriginalDocumentBridge (class)
 ToolUp.Platform.OriginalDocumentBridge.current() : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]
 ToolUp.Platform.OriginalDocumentBridge.register(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]) : System.Void
@@ -4791,6 +4802,14 @@ ToolUp.Platform.RemotingCategorisedException.Category : ToolUp.Platform.ErrorCat
 ToolUp.Platform.RemotingCategorisedException.ErrorBody : System.String { get }
 ToolUp.Platform.RemotingInterceptors (class)
 ToolUp.Platform.RemotingInterceptors.install(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : System.Void
+ToolUp.Platform.ResolvedOidcRefreshPolicy (class)
+ToolUp.Platform.ResolvedOidcRefreshPolicy..ctor(System.Boolean, System.Double, System.Double, System.Boolean, System.Double, System.Double)
+ToolUp.Platform.ResolvedOidcRefreshPolicy.Enabled : System.Boolean { get }
+ToolUp.Platform.ResolvedOidcRefreshPolicy.FallbackSeconds : System.Double { get }
+ToolUp.Platform.ResolvedOidcRefreshPolicy.MinDelaySeconds : System.Double { get }
+ToolUp.Platform.ResolvedOidcRefreshPolicy.RefreshOnWake : System.Boolean { get }
+ToolUp.Platform.ResolvedOidcRefreshPolicy.RetrySeconds : System.Double { get }
+ToolUp.Platform.ResolvedOidcRefreshPolicy.SafetyMarginSeconds : System.Double { get }
 ToolUp.Platform.ScopeDenial (class)
 ToolUp.Platform.ScopeDenial.IsForbidden : System.Boolean { get }
 ToolUp.Platform.ScopeDenial.IsNeedsActiveTeam : System.Boolean { get }
