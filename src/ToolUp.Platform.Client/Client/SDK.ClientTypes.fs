@@ -641,6 +641,125 @@ type OidcSecondaryFlow = {
     ExtraAuthorizeParams: (string * string) list
 }
 
+/// Phase 755 — policy knobs for the OIDC companion's automatic
+/// pre-expiry refresh timer.
+///
+/// The timer itself shipped with [Phase 746] armed unconditionally and
+/// with literal margins. Phase 755 keeps ALWAYS-ON as the default —
+/// an authenticated shell that silently lets its bearer lapse is the
+/// worse default, and every field below is `option` precisely so that
+/// `None` (and a `None` policy on the config) reproduces the shipped
+/// behaviour byte for byte (GP 11).
+///
+/// What it is NOT is a place to disable a correctness fix by accident:
+/// the fields exist for deployments whose token lifetimes or
+/// rate limits make the built-in cadence wrong, and each one says what
+/// its default is so a reader never has to open the companion to find
+/// out.
+type OidcRefreshPolicy = {
+    /// Master switch for the background refresh timer. `None` (and
+    /// `Some true`) arm it; `Some false` is a deliberate opt-out for a
+    /// deployment that renews the bearer by some other means (a host
+    /// app driving `OidcClient.refreshAccessToken` itself, a session
+    /// cookie the SDK never sees). With the timer off, nothing else in
+    /// this record has any effect.
+    Enabled: bool option
+    /// Seconds BEFORE the bearer's `exp` at which the refresh fires.
+    /// `None` resolves to 60. Raise it for an issuer whose token
+    /// endpoint is slow or rate-limited; the computed delay is always
+    /// clamped to a small positive floor, so a margin larger than the
+    /// whole token lifetime degrades to "refresh almost immediately"
+    /// rather than to a negative delay.
+    SafetyMarginSeconds: float option
+    /// Refresh cadence used when the bearer carries no readable `exp`
+    /// — an opaque access token, or an encrypted-payload JWT. `None`
+    /// resolves to 300. This is the knob that matters for opaque-token
+    /// providers (Google always, Auth0 without an `audience`), where
+    /// the client cannot read a lifetime and must pick one.
+    FallbackSeconds: float option
+    /// Whether a throttled background tab that becomes visible again
+    /// — or a browser that reports the link is back — triggers an
+    /// immediate expiry check. `None` resolves to `true`. Browsers
+    /// throttle timers in background tabs, so without this a tab left
+    /// in the background wakes with an already-expired bearer. Turn it
+    /// off only for an issuer whose token endpoint cannot absorb a
+    /// check per tab-focus.
+    RefreshOnWake: bool option
+}
+
+/// `OidcRefreshPolicy` with every question answered — what the
+/// companion's timer actually runs on. Produced by
+/// `OidcRefreshPolicy.resolve`; the scheduling arithmetic takes this
+/// rather than the optional form so no default lives in two places.
+type ResolvedOidcRefreshPolicy = {
+    /// Resolved `OidcRefreshPolicy.Enabled`.
+    Enabled: bool
+    /// Resolved `OidcRefreshPolicy.SafetyMarginSeconds`.
+    SafetyMarginSeconds: float
+    /// Resolved `OidcRefreshPolicy.FallbackSeconds`.
+    FallbackSeconds: float
+    /// Resolved `OidcRefreshPolicy.RefreshOnWake`.
+    RefreshOnWake: bool
+    /// Floor on any computed delay. Deliberately NOT a consumer knob:
+    /// it is a safety invariant (a zero or negative delay turns the
+    /// timer into a refresh loop against the issuer), not a policy
+    /// choice, so it is resolved to a fixed value here rather than
+    /// offered on `OidcRefreshPolicy`.
+    MinDelaySeconds: float
+    /// Delay before re-checking after a TRANSPORT failure, or after a
+    /// timer fires while the browser reports itself offline. Also not
+    /// a consumer knob — see `MinDelaySeconds`.
+    RetrySeconds: float
+}
+
+module OidcRefreshPolicy =
+    /// A policy that answers nothing — every field `None`, so
+    /// `resolve` yields the built-in defaults. A FUNCTION rather than
+    /// a module-level value on purpose: a value in this file drags in
+    /// the whole file's startup initialisation, which reaches the AG
+    /// Grid Fable `import` stubs and throws on .NET (see the note on
+    /// `OidcSecondaryFlow`).
+    let none () : OidcRefreshPolicy = {
+        Enabled = None
+        SafetyMarginSeconds = None
+        FallbackSeconds = None
+        RefreshOnWake = None
+    }
+
+    /// Resolve an optional policy to the fully-decided form the timer
+    /// runs on. `None` — and a policy whose every field is `None` —
+    /// yields exactly the margins the timer shipped with in Phase 746
+    /// (60 s margin, 300 s fallback, 5 s floor), which is the GP 11
+    /// guarantee stated as code.
+    ///
+    /// Non-finite and non-positive numbers are rejected in favour of
+    /// the default rather than honoured: a `nan` margin propagates
+    /// through every comparison as `false` and would arm a timer that
+    /// never fires, which is the exact failure this phase exists to
+    /// remove. A consumer who wants no timer says `Enabled = Some
+    /// false`, which is unambiguous.
+    let resolve (policy: OidcRefreshPolicy option) : ResolvedOidcRefreshPolicy =
+        let defaultMargin = 60.0
+        let defaultFallback = 300.0
+
+        // Bare comparisons rather than `Double.IsNaN` / `IsFinite`:
+        // `nan` fails `v > 0.0` and infinity fails the upper bound, so
+        // the guard needs no BCL numeric helper and therefore behaves
+        // identically under Fable and .NET.
+        let positiveOr (fallback: float) (value: float option) =
+            match value with
+            | Some v when v > 0.0 && v < System.Double.MaxValue -> v
+            | _ -> fallback
+
+        {
+            Enabled = policy |> Option.bind _.Enabled |> Option.defaultValue true
+            SafetyMarginSeconds = policy |> Option.bind _.SafetyMarginSeconds |> positiveOr defaultMargin
+            FallbackSeconds = policy |> Option.bind _.FallbackSeconds |> positiveOr defaultFallback
+            RefreshOnWake = policy |> Option.bind _.RefreshOnWake |> Option.defaultValue true
+            MinDelaySeconds = 5.0
+            RetrySeconds = 30.0
+        }
+
 type OidcUIConfig = {
     /// OIDC issuer URL (base). Used for metadata discovery at
     /// `{issuer}/.well-known/openid-configuration`.
@@ -685,6 +804,18 @@ type OidcUIConfig = {
     /// unlike the bearer strategy there is nothing to resolve, because
     /// no preset supplies one by default.
     SecondaryFlow: OidcSecondaryFlow option
+    /// Phase 755 — knobs for the automatic pre-expiry refresh timer.
+    /// `None` (the default) arms the timer with the margins it shipped
+    /// with, byte for byte (GP 11). ONE nested-record field rather than
+    /// a field per knob, so a later refresh knob widens
+    /// `OidcRefreshPolicy` and leaves this record — which every
+    /// consumer literal names — alone.
+    ///
+    /// Projected verbatim from `OidcAppConfig.RefreshPolicy`; like
+    /// `SecondaryFlow` there is nothing to resolve at projection time,
+    /// because no preset supplies one. `OidcRefreshPolicy.resolve`
+    /// answers the defaults at the point of use.
+    RefreshPolicy: OidcRefreshPolicy option
 }
 
 module OidcUIConfig =
@@ -697,6 +828,7 @@ module OidcUIConfig =
         ValidateIdToken = None
         BearerToken = None
         SecondaryFlow = None
+        RefreshPolicy = None
     }
 
     /// Resolve the effective bearer strategy for a client-tier config.
@@ -704,6 +836,12 @@ module OidcUIConfig =
     /// stated as code, at the tier where behaviour actually happens.
     let resolveBearerToken (cfg: OidcUIConfig) : BearerTokenKind =
         cfg.BearerToken |> Option.defaultValue AccessTokenBearer
+
+    /// Resolve the effective refresh-timer policy for a client-tier
+    /// config — the same GP 11 guarantee as `resolveBearerToken`, for
+    /// the timer's margins.
+    let resolveRefreshPolicy (cfg: OidcUIConfig) : ResolvedOidcRefreshPolicy =
+        OidcRefreshPolicy.resolve cfg.RefreshPolicy
 
 /// Configuration for the Clerk sign-in flow, used when
 /// `ClientConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`

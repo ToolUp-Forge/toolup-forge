@@ -478,6 +478,51 @@ let cfg =
 
 **This replaced the dual-button shell of the client-side Entra External ID companion, which is removed as of 0.23.0.** That companion existed partly because the generic shell had no sign-up affordance; the authorize request its "Sign up" button issued (`p=<policyId>` alongside the full OAuth / PKCE set) is the request the preset path issues now, parameter for parameter, and the SDK test pack asserts the exact set. See [the removal migration](../migrations/0.23.0-entra-external-id-removal.md), the earlier [deprecation note](../migrations/0.4.0-entra-external-id-deprecation.md) and [the secondary-flow migration](../migrations/748-oidc-secondary-flow.md).
 
+#### Automatic pre-expiry token refresh
+
+A signed-in shell renews its own bearer. `OidcAuthUI.OidcShell` arms a single browser timer at sign-in (and on mount over a restored session), refreshes at `exp − 60 s`, re-arms against the new expiry, and cancels on unmount. **It is on by default and there is nothing to wire** — a shell that let its bearer lapse and then failed the next API call is the worse default, and long-lived sessions are now the norm with offline / PWA support and co-editing.
+
+The expiry is read from the **bearer the session is actually sending** — the `id_token`'s `exp` under `IdTokenBearer`, the access token's under `AccessTokenBearer` — so the [bearer strategy](#bearer-token-strategy) and the timer agree by construction rather than by a rule anyone has to keep. A bearer whose `exp` cannot be read at all (an opaque access token, an encrypted-payload JWT) falls back to a fixed 300 s cadence.
+
+**Three behaviours worth knowing, because each covers a way a session used to die quietly:**
+
+| Situation | What happens |
+|---|---|
+| A background tab wakes past its margin | Browsers throttle timers in background tabs, so the armed timer has not fired and the bearer has already expired. The shell listens for `visibilitychange` (and `online`) and refreshes immediately when the session is inside its margin. A wake that is *not* inside the margin deliberately leaves the armed timer alone rather than re-arming it — a re-arm on every tab-focus would push an opaque-token refresh out indefinitely. |
+| The browser is offline when the timer fires | **No request is made.** A refresh with no link cannot succeed, and the failure it produces is indistinguishable from an issuer refusing the grant. The timer re-checks in 30 s, and a reconnect (`online`) triggers an immediate check. |
+| A refresh fails | A **transport** failure (`NetworkError`) is a retry — the grant is intact and the session survives an outage of any length. Any other failure means the issuer answered and refused (a revoked or rotated-away refresh token), and the shell drops to the sign-in screen with no half-authenticated state. |
+
+Everything above is policy, and all of it is adjustable on `OidcAppConfig.RefreshPolicy` — `None` (the default on every preset and on `OidcAppConfig.create`) reproduces the behaviour described, byte for byte (GP 11):
+
+```fsharp
+// A slow or rate-limited token endpoint: start the refresh earlier.
+let entraCfg =
+    OidcPresets.entraExternalId "<tenant-subdomain>" "<client-id>" "<redirect-uri>"
+    |> OidcPresets.withRefreshMargin 120.0
+
+// An opaque-token provider with a short token lifetime: the fallback
+// cadence is the only lifetime the client can know about.
+let googleCfg =
+    OidcPresets.google "<client-id>" "<redirect-uri>"
+    |> OidcPresets.withRefreshFallback 600.0
+
+// A host app that renews the bearer itself.
+let manualCfg =
+    OidcPresets.generic "<issuer>" "<client-id>" "<redirect-uri>"
+    |> OidcPresets.withoutAutoRefresh
+```
+
+| Knob | Default | What it is for |
+|---|---|---|
+| `Enabled` | on | The deliberate opt-out, for a deployment renewing the bearer by some other means. |
+| `SafetyMarginSeconds` | `60.0` | Seconds ahead of `exp`. The refresh has to *complete* before `exp`, not merely start. |
+| `FallbackSeconds` | `300.0` | Cadence when the bearer carries no readable `exp`. The knob that matters for opaque-token providers. |
+| `RefreshOnWake` | on | The `visibilitychange` / `online` catch-up. Turn it off only for a token endpoint that cannot absorb a check per tab-focus; the armed timer still fires, late. |
+
+`OidcPresets.withRefreshPolicy` sets all four at once; build the record from `OidcRefreshPolicy.none ()` and a record update so a future knob does not break the call. A non-positive or non-finite number is rejected in favour of the default rather than honoured — a `nan` margin would arm a timer that never fires, which is the failure this exists to prevent.
+
+**A consumer driving renewal manually** calls `OidcClient.refreshAccessToken cfg` directly; that entry point is unchanged and is what the timer itself calls. See [the refresh-policy migration](../migrations/755-oidc-refresh-policy.md).
+
 #### Client-side `id_token` validation (opt-in)
 
 By default, the callback handler binds the returned `id_token` to *this* sign-in attempt via nonce validation (mandatory; on by default since Cluster B1), then trusts the id_token's signature / `iss` / `aud` / `exp` until the server validates them on the next protected request. Opt in to immediate client-side validation by setting `OidcUIConfig.ValidateIdToken = Some true`:

@@ -143,6 +143,7 @@ let private mkCfg (issuer: string) (clientId: string) (validate: bool option) : 
     ValidateIdToken = validate
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 let private kid = "phase-3ba-test-key"

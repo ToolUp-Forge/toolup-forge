@@ -51,6 +51,39 @@ ToolUp.AuthProviders.Oidc.OidcClient+JwtClaimsExtract (class)
 ToolUp.AuthProviders.Oidc.OidcClient+JwtClaimsExtract..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Double])
 ToolUp.AuthProviders.Oidc.OidcClient+JwtClaimsExtract.Exp : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
 ToolUp.AuthProviders.Oidc.OidcClient+JwtClaimsExtract.Iss : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.Idle : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.IsArmTimer : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.IsIdle : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.IsRefreshNow : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.RefreshNow : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction.Tag : System.Int32 { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+ArmTimer (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+ArmTimer.delaySeconds : System.Double { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+Tags (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+Tags.ArmTimer : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+Tags.Idle : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction+Tags.RefreshNow : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.Expire : ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.IsExpire : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.IsRearm : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.IsRetryLater : System.Boolean { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.Rearm : ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome.Tag : System.Int32 { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+RetryLater (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+RetryLater.delaySeconds : System.Double { get }
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+Tags (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+Tags.Expire : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+Tags.Rearm : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome+Tags.RetryLater : System.Int32 (literal)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan (class)
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.admit(System.Boolean, ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction) : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.delaySeconds(ToolUp.Platform.ResolvedOidcRefreshPolicy, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.Double]) : System.Double
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.onArm(ToolUp.Platform.ResolvedOidcRefreshPolicy, System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.Double]) : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.onTimer(ToolUp.Platform.ResolvedOidcRefreshPolicy, System.Boolean) : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.onWake(ToolUp.Platform.ResolvedOidcRefreshPolicy, System.Boolean, System.Boolean, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.Double]) : ToolUp.AuthProviders.Oidc.OidcClient+RefreshAction
+ToolUp.AuthProviders.Oidc.OidcClient+RefreshPlan.outcomeOf(ToolUp.Platform.ResolvedOidcRefreshPolicy, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError]) : ToolUp.AuthProviders.Oidc.OidcClient+RefreshOutcome
 ToolUp.AuthProviders.Oidc.OidcClient+StoredTokenState (class)
 ToolUp.AuthProviders.Oidc.OidcClient+StoredTokenState.FreshJwt : ToolUp.AuthProviders.Oidc.OidcClient+StoredTokenState { get }
 ToolUp.AuthProviders.Oidc.OidcClient+StoredTokenState.IsFreshJwt : System.Boolean { get }
@@ -140,7 +173,12 @@ ToolUp.AuthProviders.Oidc.OidcPresets.entraWorkforce(System.String, System.Strin
 ToolUp.AuthProviders.Oidc.OidcPresets.generic(System.String, System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcPresets.google(System.String, System.String) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcPresets.withEntraSignUpUserFlow(System.String, ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.withRefreshFallback(System.Double, ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.withRefreshMargin(System.Double, ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.withRefreshPolicy(ToolUp.Platform.OidcRefreshPolicy, ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcPresets.withSecondaryFlow(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.withoutAutoRefresh(ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
+ToolUp.AuthProviders.Oidc.OidcPresets.withoutRefreshOnWake(ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig) : ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig
 ToolUp.AuthProviders.Oidc.OidcRegister (class)
 ToolUp.AuthProviders.Oidc.OidcRegister.handler : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement]]] { get }
 ToolUp.AuthProviders.Oidc.OidcRegister.signOutHandler(ToolUp.Platform.OidcUIConfig, Microsoft.FSharp.Core.Unit) : System.Void

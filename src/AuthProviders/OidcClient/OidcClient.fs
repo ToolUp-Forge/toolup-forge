@@ -32,11 +32,11 @@ open ToolUp.AuthProviders.Oidc.OidcStateMachine
 //    `origin + "/"`) so the shell re-boots with the token in place and
 //    off the callback route.
 //
-// 3. `refreshAccessToken` — called proactively (not yet — Phase 3b
-//    ships the plumbing but not the background timer) when the access
-//    token is near expiry. POSTs refresh_token to the token endpoint,
+// 3. `refreshAccessToken` — POSTs refresh_token to the token endpoint,
 //    persists the new access token and optionally a rotated refresh
-//    token.
+//    token. Called proactively by `scheduleRefresh` (the background
+//    pre-expiry timer, at the foot of this file), and directly by a
+//    host app that drives renewal itself.
 
 // ─── fetch helpers ───────────────────────────────────────────────────
 
@@ -765,14 +765,59 @@ let private jsClearTimeout (handle: float) : unit = jsNative
 [<Emit("Date.now()")>]
 let private nowMs () : float = jsNative
 
-[<Literal>]
-let private refreshSafetyMarginSeconds = 60.0
+// `navigator.onLine` is a HINT, never the decision — it reports
+// whether the machine has a link, not whether the issuer is
+// reachable, and captive portals and VPN drops both report `true`.
+// The refresh timer uses it exactly as `SyncCoordinator` uses its own
+// copy: to decide how eagerly to try, never to conclude a session is
+// over. A transport failure is what actually says "not now", and it
+// is classified as a RETRY rather than an expiry (see
+// `RefreshPlan.outcomeOf`).
+//
+// Declared here rather than reused from `ToolUp.Offline.Client`
+// deliberately: `OfflineStatusBadge` / `SyncCoordinator` live in a
+// different companion, and taking a package dependency from the OIDC
+// companion on the offline companion to read one boolean would couple
+// two independently-adopted companions for no gain. Two three-line
+// emit shims are the cheaper truth.
+[<Emit("(typeof navigator !== 'undefined' && navigator !== null && navigator.onLine !== false)")>]
+let private navigatorOnline () : bool = jsNative
 
-[<Literal>]
-let private minRefreshDelaySeconds = 5.0
+// Read as a raw string rather than through the typed `VisibilityState`
+// enum — the enum's shape has moved between Fable.Browser.Dom majors,
+// and this comparison must not break when the binding is bumped.
+// (Same rationale, same spelling, as `SyncCoordinator`'s.)
+[<Emit("(typeof document !== 'undefined' && document !== null && document.visibilityState === 'visible')")>]
+let private documentVisible () : bool = jsNative
 
-[<Literal>]
-let private fallbackRefreshSeconds = 300.0
+// Listener add/remove as [<Emit>] shims taking the handler as an
+// ARGUMENT, rather than `Browser.Dom.document.addEventListener(name,
+// unbox handler)`.
+//
+// This is not style. `unbox` at a call site emits a fresh arrow
+// wrapping the handler — `document.addEventListener("visibilitychange",
+// (arg) => onVisibility(arg))` — so the add site and the remove site
+// pass two DIFFERENT function objects and `removeEventListener` silently
+// matches nothing. The listener then outlives every `cancelRefresh`,
+// and since `scheduleRefresh` re-arms after each successful refresh, a
+// long session accumulates one live listener per refresh, each holding
+// a closure over a config. A tab-focus eventually fires N wakes.
+//
+// Passing the handler through an `[<Emit>]` parameter emits the bound
+// identifier itself at both sites, so the two calls agree. Caught by
+// reading the emitted JS during the Fable gate — nothing about the F#
+// says it.
+[<Emit("document.addEventListener($0, $1)")>]
+let private addDocumentListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("document.removeEventListener($0, $1)")>]
+let private removeDocumentListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("window.addEventListener($0, $1)")>]
+let private addWindowListener (event: string) (handler: obj) : unit = jsNative
+
+[<Emit("window.removeEventListener($0, $1)")>]
+let private removeWindowListener (event: string) (handler: obj) : unit = jsNative
 
 /// Unix-seconds `exp` from a JWT access token, if it can be read. Pure
 /// best-effort: any malformed segment / missing claim yields `None` and
@@ -941,14 +986,187 @@ let classifyStoredToken (cfg: OidcUIConfig) : StoredTokenState =
     emitOk (readCorrelationId ()) (sprintf "classify-stored:%s" label) None
     result
 
-// OIDC pre-expiry refresh timer — a single browser timer handle.
-// Documented client-side mutable: a background-timer handle is not
-// Elmish model state; it must survive React re-renders to stay
-// cancellable, and at most one refresh loop may be in flight per page.
-let mutable private refreshTimer: float option = None
+// ─── Phase 755 — the refresh POLICY, as pure arithmetic ──────────────
+//
+// Everything the timer decides is computed here, by total functions
+// over an explicitly-supplied clock, online flag and expiry. Nothing
+// in `RefreshPlan` touches `setTimeout`, `localStorage`, `navigator`
+// or `document`, which is what lets .NET-side Expecto drive the whole
+// decision surface — arming arithmetic, the woken-tab decision,
+// single-flight coalescing and the failure classification — with a
+// fake clock and no browser at all. The browser wiring below is then
+// the thin part: read the world, ask `RefreshPlan`, do what it says.
+//
+// This split is the same one `classifyStoredTokenWith` made for the
+// stored-token classifier, for the same reason.
 
-/// Cancel any armed refresh timer. Idempotent; safe to call when none
-/// is armed (sign-out, shell unmount, hard refresh failure).
+/// What a refresh trigger resolves to.
+type RefreshAction =
+    /// Refresh right now.
+    | RefreshNow
+    /// (Re-)arm the timer this many seconds out.
+    | ArmTimer of delaySeconds: float
+    /// Do nothing, and leave whatever is armed alone. Covers "the
+    /// timer is switched off", "there is no session to refresh", "a
+    /// refresh is already in flight" and "waking told us nothing we
+    /// did not already know" — all of which are the same instruction
+    /// to the caller even though they are different situations.
+    | Idle
+
+/// What the result of a refresh attempt means for the session.
+type RefreshOutcome =
+    /// Renewed — re-arm against the new expiry.
+    | Rearm
+    /// The attempt did not reach the issuer. The grant is intact and
+    /// the session is NOT over; look again in this many seconds.
+    | RetryLater of delaySeconds: float
+    /// The issuer refused. Sign-in is required.
+    | Expire
+
+module RefreshPlan =
+    /// Seconds from `now` until the refresh should fire.
+    ///
+    /// With a readable `exp` that is `exp − margin`, floored so a
+    /// token already inside its margin (or past it) yields a small
+    /// positive delay rather than a negative one. With no readable
+    /// `exp` — an opaque access token, an encrypted-payload JWT — the
+    /// client cannot know a lifetime, so it falls back to a fixed
+    /// cadence, less the same margin.
+    let delaySeconds
+        (policy: ResolvedOidcRefreshPolicy)
+        (nowEpochSeconds: float)
+        (expEpochSeconds: float option)
+        : float =
+        let raw =
+            match expEpochSeconds with
+            | Some expEpoch -> expEpoch - nowEpochSeconds - policy.SafetyMarginSeconds
+            | None -> policy.FallbackSeconds - policy.SafetyMarginSeconds
+
+        max raw policy.MinDelaySeconds
+
+    /// The decision when arming or re-arming — on sign-in, on shell
+    /// mount over a stored session, and after every successful
+    /// refresh.
+    ///
+    /// Note it does NOT consult the online flag: an offline session
+    /// still arms its timer, and the offline question is asked when
+    /// the timer FIRES (`onTimer`). Arming is free; a request is not.
+    let onArm
+        (policy: ResolvedOidcRefreshPolicy)
+        (hasToken: bool)
+        (nowEpochSeconds: float)
+        (expEpochSeconds: float option)
+        : RefreshAction =
+        if not policy.Enabled || not hasToken then
+            Idle
+        else
+            ArmTimer(delaySeconds policy nowEpochSeconds expEpochSeconds)
+
+    /// The decision when the armed timer fires.
+    ///
+    /// Offline, this deliberately makes NO request: a refresh with no
+    /// link cannot succeed, and the failure it would produce is
+    /// indistinguishable at the call site from an issuer refusing the
+    /// grant. Re-checking shortly is both cheaper and safer than
+    /// asking a question the network cannot answer.
+    let onTimer (policy: ResolvedOidcRefreshPolicy) (isOnline: bool) : RefreshAction =
+        if isOnline then
+            RefreshNow
+        else
+            ArmTimer policy.RetrySeconds
+
+    /// The decision when a background tab becomes visible again, or
+    /// the browser reports the link is back.
+    ///
+    /// Browsers throttle timers in background tabs, so a tab parked
+    /// for an hour wakes with a timer that has not fired and a bearer
+    /// that has already expired — the armed timer is late, not
+    /// cancelled, and the first API call after the wake is the one
+    /// that 401s. Hence: if the session is already inside its safety
+    /// margin, refresh at once.
+    ///
+    /// If it is NOT inside the margin, the answer is `Idle` — leave
+    /// the armed timer exactly as it is — rather than a re-arm. A
+    /// re-arm would restart the delay on every tab-focus, and for the
+    /// no-readable-`exp` case (where the cadence is a fixed fallback
+    /// rather than a real deadline) a user who switches tabs more
+    /// often than the cadence would push the refresh out forever.
+    /// That starvation is silent and would present as the very
+    /// expired-session bug this phase closes.
+    ///
+    /// Offline, a wake means nothing — the armed timer's own offline
+    /// check will retry — so it is `Idle` too.
+    let onWake
+        (policy: ResolvedOidcRefreshPolicy)
+        (isOnline: bool)
+        (hasToken: bool)
+        (nowEpochSeconds: float)
+        (expEpochSeconds: float option)
+        : RefreshAction =
+        if not policy.Enabled || not policy.RefreshOnWake || not hasToken || not isOnline then
+            Idle
+        else
+            match expEpochSeconds with
+            | Some expEpoch when nowEpochSeconds >= expEpoch - policy.SafetyMarginSeconds -> RefreshNow
+            | _ -> Idle
+
+    /// Single-flight gate: any trigger arriving while a refresh is
+    /// already in flight collapses to `Idle`.
+    ///
+    /// Before Phase 755 the timer was single-flight BY CONSTRUCTION —
+    /// one handle, cancelled before every re-arm, so there was only
+    /// ever one thing that could fire. The wake path breaks that: a
+    /// `visibilitychange` and an `online` event can both land while
+    /// the armed timer's own refresh is still awaiting the token
+    /// endpoint. Two concurrent `refresh_token` POSTs against an
+    /// issuer that ROTATES refresh tokens is not merely wasteful —
+    /// the second presents a token the first has already consumed and
+    /// is refused, which under the failure classification below would
+    /// end a perfectly good session. So coalescing is now explicit,
+    /// and it is a decision rather than a lock so that it is testable.
+    let admit (refreshInFlight: bool) (action: RefreshAction) : RefreshAction =
+        if refreshInFlight then Idle else action
+
+    /// Classify the result of a refresh attempt.
+    ///
+    /// The distinction this draws — transport failure vs. the issuer
+    /// refusing — is the one the pre-755 code did not: it treated
+    /// EVERY `Error` as expiry and signed the user out. A single timer
+    /// tick during a tunnel, a laptop lid, or a dropped wifi hop
+    /// therefore ended the session, which is precisely the
+    /// dead-session symptom this phase exists to remove, arriving by
+    /// the other door. A `NetworkError` says the question was never
+    /// asked; the grant is untouched and the right answer is to ask
+    /// again shortly. Every other `AuthError` here comes from a
+    /// response the issuer actually sent (a refused or rotated-away
+    /// refresh token, a missing `access_token`, a bearer the strategy
+    /// cannot honour), and those do mean sign-in.
+    ///
+    /// The retry is unbounded on purpose. An offline-first session
+    /// (Phase 24) may be away from the network for hours and should
+    /// come back to a live session, not a sign-in screen; a genuinely
+    /// revoked grant surfaces the moment the link returns, because
+    /// then the issuer answers.
+    let outcomeOf (policy: ResolvedOidcRefreshPolicy) (result: Result<unit, AuthError>) : RefreshOutcome =
+        match result with
+        | Ok() -> Rearm
+        | Error(NetworkError _) -> RetryLater policy.RetrySeconds
+        | Error _ -> Expire
+
+// ─── Phase 755 — the browser wiring ──────────────────────────────────
+//
+// Documented client-side mutables: a background-timer handle, an
+// in-flight flag and a listener-detach thunk are not Elmish model
+// state; they must survive React re-renders to stay cancellable, and
+// at most one refresh loop may be in flight per page.
+
+let mutable private refreshTimer: float option = None
+let mutable private refreshInFlight = false
+let mutable private detachWakeListeners: (unit -> unit) option = None
+
+/// Cancel any armed refresh timer and detach the wake listeners.
+/// Idempotent; safe to call when none is armed (sign-out, shell
+/// unmount, hard refresh failure).
 let cancelRefresh () : unit =
     match refreshTimer with
     | Some handle ->
@@ -956,35 +1174,131 @@ let cancelRefresh () : unit =
         refreshTimer <- None
     | None -> ()
 
+    match detachWakeListeners with
+    | Some detach ->
+        detach ()
+        detachWakeListeners <- None
+    | None -> ()
+
+/// Expiry of the bearer the session is ACTUALLY sending, if it can be
+/// read, paired with whether there is a session at all. One reader for
+/// every decision point below, so arming and waking can never disagree
+/// about what is stored.
+let private currentSession () : bool * float option =
+    match getAccessToken () with
+    | None -> false, None
+    | Some token -> true, tokenExpiryEpochSeconds token
+
 /// Arm (or re-arm) the pre-expiry refresh timer for the currently
-/// stored access token. `onExpired` is invoked if a scheduled refresh
-/// fails irrecoverably (the issuer rejected the refresh token) so the
-/// shell can drop back to the sign-in screen. No-op when no access
-/// token is stored.
+/// stored bearer, and — unless the policy opts out — subscribe to the
+/// wake events that let a throttled background tab catch up.
+/// `onExpired` is invoked if the ISSUER refuses a scheduled refresh
+/// (a revoked or rotated-away grant) so the shell can drop back to the
+/// sign-in screen; a transport failure does NOT call it. No-op when no
+/// bearer is stored, or when the deployment has switched the timer off
+/// (`OidcPresets.withoutAutoRefresh`).
+///
+/// Idempotent and safe to call repeatedly: it cancels whatever was
+/// armed first, so the shell may call it on sign-in, on mount over a
+/// restored session, and after every successful refresh without
+/// accumulating timers or listeners.
 let rec scheduleRefresh (cfg: OidcUIConfig) (onExpired: unit -> unit) : unit =
     cancelRefresh ()
+    let policy = OidcUIConfig.resolveRefreshPolicy cfg
+    let hasToken, expiry = currentSession ()
 
-    match getAccessToken () with
+    match RefreshPlan.onArm policy hasToken (nowMs () / 1000.0) expiry with
+    | ArmTimer delay ->
+        armTimer cfg onExpired policy delay
+
+        if policy.RefreshOnWake then
+            attachWake cfg onExpired
+    | RefreshNow
+    | Idle -> ()
+
+and private armTimer
+    (cfg: OidcUIConfig)
+    (onExpired: unit -> unit)
+    (policy: ResolvedOidcRefreshPolicy)
+    (delaySeconds: float)
+    : unit =
+    match refreshTimer with
+    | Some handle -> jsClearTimeout handle
     | None -> ()
-    | Some token ->
-        let delaySeconds =
-            match tokenExpiryEpochSeconds token with
-            | Some expEpoch ->
-                let untilExpiry = expEpoch - nowMs () / 1000.0
-                max (untilExpiry - refreshSafetyMarginSeconds) minRefreshDelaySeconds
-            | None -> fallbackRefreshSeconds - refreshSafetyMarginSeconds
 
-        let handle =
-            jsSetTimeout
-                (fun () ->
-                    async {
-                        match! refreshAccessToken cfg with
-                        | Ok() -> scheduleRefresh cfg onExpired
-                        | Error _ ->
-                            cancelRefresh ()
-                            onExpired ()
-                    }
-                    |> Async.StartImmediate)
-                (delaySeconds * 1000.0)
+    refreshTimer <- Some(jsSetTimeout (fun () -> onTimerFired cfg onExpired policy) (delaySeconds * 1000.0))
 
-        refreshTimer <- Some handle
+and private onTimerFired (cfg: OidcUIConfig) (onExpired: unit -> unit) (policy: ResolvedOidcRefreshPolicy) : unit =
+    refreshTimer <- None
+
+    match
+        RefreshPlan.onTimer policy (navigatorOnline ())
+        |> RefreshPlan.admit refreshInFlight
+    with
+    | RefreshNow -> runRefresh cfg onExpired policy
+    | ArmTimer delay -> armTimer cfg onExpired policy delay
+    // Already in flight — the attempt that is running owns the
+    // re-arm, so leaving nothing armed here is correct rather than a
+    // dropped session.
+    | Idle -> ()
+
+and private runRefresh (cfg: OidcUIConfig) (onExpired: unit -> unit) (policy: ResolvedOidcRefreshPolicy) : unit =
+    refreshInFlight <- true
+
+    async {
+        let! result = refreshAccessToken cfg
+        refreshInFlight <- false
+
+        match RefreshPlan.outcomeOf policy result with
+        | Rearm -> scheduleRefresh cfg onExpired
+        | RetryLater delay ->
+            // Transport failure: keep the wake listeners attached so a
+            // reconnect re-checks at once rather than waiting out the
+            // retry, and re-arm the timer WITHOUT going through
+            // `scheduleRefresh` (which would detach them).
+            armTimer cfg onExpired policy delay
+        | Expire ->
+            cancelRefresh ()
+            onExpired ()
+    }
+    |> Async.StartImmediate
+
+and private attachWake (cfg: OidcUIConfig) (onExpired: unit -> unit) : unit =
+    let wake () =
+        let policy = OidcUIConfig.resolveRefreshPolicy cfg
+        let hasToken, expiry = currentSession ()
+
+        let action =
+            RefreshPlan.onWake policy (navigatorOnline ()) hasToken (nowMs () / 1000.0) expiry
+            |> RefreshPlan.admit refreshInFlight
+
+        match action with
+        | RefreshNow ->
+            match refreshTimer with
+            | Some handle ->
+                jsClearTimeout handle
+                refreshTimer <- None
+            | None -> ()
+
+            runRefresh cfg onExpired policy
+        | ArmTimer delay -> armTimer cfg onExpired policy delay
+        | Idle -> ()
+
+    // Bound once and passed by reference to BOTH the add and the
+    // remove — see the shim declarations above for why that matters.
+    // The browser calls these with an Event argument which a `unit ->
+    // unit` compiles to ignore.
+    let onVisibility: obj =
+        box (fun () ->
+            if documentVisible () then
+                wake ())
+
+    let onOnline: obj = box (fun () -> wake ())
+
+    addDocumentListener "visibilitychange" onVisibility
+    addWindowListener "online" onOnline
+
+    detachWakeListeners <-
+        Some(fun () ->
+            removeDocumentListener "visibilitychange" onVisibility
+            removeWindowListener "online" onOnline)

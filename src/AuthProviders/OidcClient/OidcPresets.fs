@@ -113,6 +113,7 @@ let generic (issuer: string) (clientId: string) (redirectUri: string) : OidcAppC
     Preset = Some Generic
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 /// Workforce Entra ID / Azure AD preset. `tenantId` MUST be a tenant
@@ -138,6 +139,7 @@ let entraWorkforce (tenantId: string) (clientId: string) (redirectUri: string) :
     Preset = Some EntraWorkforce
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 /// Entra External ID (CIAM) preset. Issuer follows the documented
@@ -168,6 +170,7 @@ let entraExternalId (tenantSubdomain: string) (clientId: string) (redirectUri: s
     Preset = Some EntraExternalId
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 /// Entra External ID preset with a custom-domain override. Use when
@@ -211,6 +214,7 @@ let auth0 (domain: string) (clientId: string) (redirectUri: string) : OidcAppCon
     Preset = Some Auth0
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 /// Google preset (consumer Google accounts and Workspace). Takes no
@@ -267,6 +271,7 @@ let google (clientId: string) (redirectUri: string) : OidcAppConfig = {
     Preset = Some Google
     BearerToken = None
     SecondaryFlow = None
+    RefreshPolicy = None
 }
 
 // ─── Secondary-flow attachments ──────────────────────────────────────
@@ -333,3 +338,104 @@ let EntraUserFlowParameter = "p"
 ///         |> OidcPresets.withEntraSignUpUserFlow "B2C_1_signup"
 let withEntraSignUpUserFlow (policyId: string) (cfg: OidcAppConfig) : OidcAppConfig =
     withSecondaryFlow "Sign up" [ EntraUserFlowParameter, policyId ] cfg
+
+// ─── Refresh-policy attachments (Phase 755) ──────────────────────────
+//
+// The pre-expiry refresh timer is ALWAYS-ON: a shell that quietly lets
+// its bearer lapse is the worse default, so every preset above returns
+// `RefreshPolicy = None` and `None` means "the built-in margins"
+// (GP 11 — byte for byte what the timer shipped with).
+//
+// These helpers attach a policy to an already-built config, in the
+// same `cfg`-last pipeline shape as the secondary-flow attachments
+// above, so the preset constructors stay single-purpose:
+//
+//     OidcPresets.google clientId redirectUri
+//     |> OidcPresets.withRefreshMargin 120.0
+
+/// Attach an explicit refresh policy. Build one from
+/// `OidcRefreshPolicy.none ()` and a record update so a future knob
+/// does not break the call:
+///
+///     OidcPresets.auth0 domain clientId redirectUri
+///     |> OidcPresets.withRefreshPolicy
+///         { OidcRefreshPolicy.none () with
+///             SafetyMarginSeconds = Some 120.0
+///             FallbackSeconds = Some 600.0 }
+let withRefreshPolicy (policy: OidcRefreshPolicy) (cfg: OidcAppConfig) : OidcAppConfig = {
+    cfg with
+        RefreshPolicy = Some policy
+}
+
+/// Move the refresh ahead of `exp` by `seconds` instead of the
+/// built-in 60. Every other knob keeps its default.
+///
+/// Raise it for an issuer whose token endpoint is slow or aggressively
+/// rate-limited — the refresh has to complete before `exp`, not merely
+/// start before it.
+let withRefreshMargin (seconds: float) (cfg: OidcAppConfig) : OidcAppConfig =
+    let existing = cfg.RefreshPolicy |> Option.defaultWith OidcRefreshPolicy.none
+
+    {
+        cfg with
+            RefreshPolicy =
+                Some {
+                    existing with
+                        SafetyMarginSeconds = Some seconds
+                }
+    }
+
+/// Set the cadence used when the bearer carries no readable `exp` —
+/// an opaque access token, or an encrypted-payload JWT — instead of
+/// the built-in 300 s.
+///
+/// This is the knob that matters for opaque-token providers (Google
+/// always; Auth0 without an `audience` parameter), where the client
+/// cannot read a lifetime off the token and has to pick one.
+let withRefreshFallback (seconds: float) (cfg: OidcAppConfig) : OidcAppConfig =
+    let existing = cfg.RefreshPolicy |> Option.defaultWith OidcRefreshPolicy.none
+
+    {
+        cfg with
+            RefreshPolicy =
+                Some {
+                    existing with
+                        FallbackSeconds = Some seconds
+                }
+    }
+
+/// Turn the background refresh timer OFF for this deployment.
+///
+/// The deliberate opt-out, for an app that renews the bearer by some
+/// other means — a host driving `OidcClient.refreshAccessToken`
+/// itself, or a session cookie the SDK never sees. It is spelled as
+/// its own function rather than left to a record update so that
+/// disabling the timer reads as a decision in the config pipeline,
+/// where a reviewer will see it.
+let withoutAutoRefresh (cfg: OidcAppConfig) : OidcAppConfig =
+    let existing = cfg.RefreshPolicy |> Option.defaultWith OidcRefreshPolicy.none
+
+    {
+        cfg with
+            RefreshPolicy = Some { existing with Enabled = Some false }
+    }
+
+/// Stop a woken background tab from re-checking expiry immediately.
+///
+/// The wake path exists because browsers throttle timers in background
+/// tabs, so a tab left in the background otherwise wakes with an
+/// already-expired bearer. Turn it off only for an issuer whose token
+/// endpoint cannot absorb a check per tab-focus; the armed timer still
+/// fires (late), so this trades promptness for request volume rather
+/// than disabling refresh.
+let withoutRefreshOnWake (cfg: OidcAppConfig) : OidcAppConfig =
+    let existing = cfg.RefreshPolicy |> Option.defaultWith OidcRefreshPolicy.none
+
+    {
+        cfg with
+            RefreshPolicy =
+                Some {
+                    existing with
+                        RefreshOnWake = Some false
+                }
+    }

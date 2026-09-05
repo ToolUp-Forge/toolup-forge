@@ -5,7 +5,7 @@
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.Oidc.OidcAppConfig (class)
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig (class)
-ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow])
+ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy])
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Audience : System.String { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.BearerToken : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.ClientId : System.String { get }
@@ -13,6 +13,7 @@ ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Issuer : System.String { g
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.PostLogoutRedirectUri : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Preset : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcAppConfig+PresetKind] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.RedirectUri : System.String { get }
+ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.RefreshPolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.SecondaryFlow : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow] { get }
 ToolUp.AuthProviders.Oidc.OidcAppConfig+OidcAppConfig.ValidateIdToken : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
