@@ -105,6 +105,15 @@
              delegations). -->
         <Compile Include="Shared\LocalizationTypes.fs" />
         <Compile Include="Client\MessageCatalog.fs" />
+        <!-- Phase 758 — the pseudo-locale rendering of the catalog, derived
+             from `MessageCatalog.english` by walking the record, so a field
+             added tomorrow is covered without an edit there. After
+             `MessageCatalog.fs` (it reads `english`) and before the provider
+             (it is Feliz-free for the same reason `MessageCatalog.fs` is —
+             the coverage gate runs on the .NET in-process harness). The
+             per-string transform itself is Phase 179's Core
+             `PseudoLocale.transform`, reused rather than re-derived. -->
+        <Compile Include="Client\PseudoLocaleCatalog.fs" />
         <Compile Include="Client\MessageCatalogProvider.fs" />
         <!-- Phase 344 — the AG Charts / AG Grid bindings moved out to the
              standalone Feliz.AgCharts / Feliz.AgGrid packages. What is left

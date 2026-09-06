@@ -502,7 +502,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                     Html.input [
                         prop.type' "text"
                         prop.value eventTypes
-                        prop.placeholder "FileUploaded, AnalysisCompleted"
+                        prop.placeholder msgs.EventTypesPlaceholder
                         prop.onChange (fun (v: string) -> setEventTypes v)
                         prop.className
                             "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full font-mono text-xs"

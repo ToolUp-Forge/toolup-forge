@@ -354,11 +354,19 @@ module ClientHostNegotiatedView =
 
     /// The structured mount-time error element (not a console warning) a
     /// hosted view renders when negotiation fails.
-    let private mismatchElement (mismatch: HostCapabilityMismatch) : ReactElement =
+    /// A component rather than a plain function (Phase 758): the heading
+    /// is a catalog string now, and reading the catalog is a hook.
+    /// `describe mismatch` beneath it stays uncatalogued on purpose —
+    /// it names capability ids to whoever is composing the host, and a
+    /// translated capability id would be a worse diagnostic.
+    [<ReactComponent>]
+    let private HostMismatchElement (mismatch: HostCapabilityMismatch) : ReactElement =
+        let msgs = (MessageCatalogProvider.useMessages ()).ModuleBoundary
+
         Html.div [
             prop.className "toolup-host-capability-mismatch"
             prop.children [
-                Html.strong [ prop.text "Hosted view unavailable" ]
+                Html.strong [ prop.text msgs.HostViewUnavailable ]
                 Html.p [ prop.text (HostCapabilityMismatch.describe mismatch) ]
             ]
         ]
@@ -382,4 +390,4 @@ module ClientHostNegotiatedView =
         | Ok() -> ClientHostView.withElementView view m
         | Error mismatch ->
             onMismatch mismatch
-            ClientModule.withFullWidthView (fun _ _ -> mismatchElement mismatch) m
+            ClientModule.withFullWidthView (fun _ _ -> HostMismatchElement mismatch) m

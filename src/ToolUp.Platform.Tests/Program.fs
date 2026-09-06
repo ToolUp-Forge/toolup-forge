@@ -1253,6 +1253,7 @@ let private registeredTests =
         MessageCatalogContractTests.teamDefaultTests
         MessageCatalogContractTests.consumerOverrideTests
         MessageCatalogContractTests.localeSwitchTests
+        LocalizationTests.tests
         // Phase 572 — per-user sidebar entry hiding. The pure preference
         // algebra plus the "still reachable" acceptance arm; four
         // separate bindings, all of which must be listed here or they run

@@ -105,6 +105,65 @@ Three properties are worth naming, because they are the whole design:
 An override that raises is swallowed back to the built-in catalog. A
 translation bug degrades the shell's language, never its availability.
 
+## The worked example: the pseudo-locale (Phase 758)
+
+The section above shows the *shape* of a translation. This one is a
+translation that covers **every** field, ships in the box, and is the
+thing to reach for before you commission a real one.
+
+`PseudoLocaleCatalog` derives a catalog from the built-in English one by
+walking the record: every string becomes an accented, ~30%-longer,
+bracketed version of itself — `Save changes` renders as
+`⟦Sávé chángés···⟧`. Wire it exactly like French:
+
+```fsharp skip=fragment
+{ ClientConfig.defaults with
+    Locale = FixedLocale PseudoLocaleCatalog.Tag        // "qps-ploc"
+    MessageCatalogOverride = Some PseudoLocaleCatalog.overrideFor }
+```
+
+`overrideFor` is an ordinary override — it serves the pseudo-locale and
+returns its argument unchanged for every other language — so you can
+compose it with your own and switch between them with
+`LocaleRequest.request`.
+
+Two defects become visible at a glance, and they are the two that a
+partial translation cannot show you:
+
+- **A string that never reached the catalog renders plain.** In a screen
+  of accented text, an un-externalised literal is the one word that looks
+  normal. That is the whole trick: English-rendered-as-English and
+  English-that-bypassed-the-catalog are indistinguishable under any real
+  language, and obvious under this one.
+- **A layout that only breaks on longer text breaks now.** The ~30%
+  padding is roughly what German or Finnish costs, so truncation,
+  wrapping and overflow surface before a real translation is paid for.
+
+Three properties are worth naming:
+
+- **It is derived, never maintained.** Add a field to `MessageCatalog`
+  and it is covered on the next build, with no edit to the pseudo-locale.
+  A field shape the walk does not understand fails loudly instead of
+  passing through untransformed — an untransformed field would look
+  exactly like the defect the locale exists to reveal.
+- **It walks whatever you hand it.** `PseudoLocaleCatalog.derive myFrench`
+  pseudo-localises *your* translation, so you can check your own coverage
+  and not just the SDK's.
+- **Parameterised messages are wrapped, not skipped.** A `string -> string`
+  field becomes a function that transforms what the original builds. The
+  argument you pass is interpolated first and is therefore accented along
+  with its sentence — there is no separate template to transform, and for
+  a developer-facing locale that is the right trade.
+
+`LocalizationTests` (in the platform test pack) is the gate this pays
+for: it asserts every catalog leaf is the pseudo-localisation of its
+English source, and — separately — that no swept view passes a bare
+string literal where a catalog field belongs. The second half excludes
+three recorded classes: glyphs and separators (`—`, `×`, `▾`), a label
+that *is* its own wire value (an `Html.option` whose text equals its
+`prop.value`), and `Client/UI/` — the sidebar and toolkit chrome
+deliberately deferred behind the toolkit extraction.
+
 ## Switching language in-session
 
 A settings page, or a language picker in your own chrome, asks the shell to
@@ -192,7 +251,7 @@ Two SDK surfaces render *around* or *before* the shell's own view, so the
 provider `Client.view` mounts does not reach them. Both are handled, and both
 are worth knowing if you write a surface of the same shape:
 
-- **The sign-in screens** (`OidcClient`, `PasskeyClient`).
+- **The sign-in screens** (`OidcClient`, `PasskeyClient`, `GoogleIdentityClient`).
   `AuthUIProvider.gate` WRAPS the shell — a
   signed-out visitor sees the companion's screen and none of `view`. So
   `Client.viewWithSignIn` mounts the catalog provider *outside* the gate as
@@ -200,7 +259,7 @@ are worth knowing if you write a surface of the same shape:
   except the one a signed-out visitor actually sees. The screens themselves
   are localised through additive `…With` entry points
   (`OidcAuthUI.SignInScreenWith`, `PasskeyAuthUI.ErrorScreenWith`,
-  `OidcTokenStore.describeErrorWith`), never through a widened arity — that
+  `GoogleIdentityAuthUI.ErrorScreenWith`, `OidcTokenStore.describeErrorWith`), never through a widened arity — that
   would read as a removal in the public-API approval baseline. `ClerkUI`
   contributes nothing: Clerk renders its own themed screens.
 - **The invitation-accept page.** `InviteAccept.render ()` mounts its own

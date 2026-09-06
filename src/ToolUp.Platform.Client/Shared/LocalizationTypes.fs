@@ -175,6 +175,14 @@ type ModuleBoundaryMessages = {
     Heading: string
     Body: string
     Reload: string
+    /// Heading of the mount-time element a HOSTED view renders when
+    /// capability negotiation fails (Phase 758). Distinct from
+    /// `Heading`: that one reports a module that ran and threw, this
+    /// one a view that was never mounted because the host could not
+    /// meet what it asked for. The detail beneath it is
+    /// `HostCapabilityMismatch.describe`, which is diagnostic rather
+    /// than prose and is deliberately not a catalog field.
+    HostViewUnavailable: string
 }
 
 /// The Ctrl+K command palette (Phase 571).
@@ -454,6 +462,11 @@ type AuthMessages = {
     SignOut: string
     SignInFailedHeading: string
     TryAgain: string
+    /// Shown when the provider's own sign-in SCRIPT could not load, so
+    /// there is no control to render (Phase 758 — the Google Identity
+    /// shell). Deliberately non-diagnostic: the advisory naming the CSP
+    /// contributor to compose goes to the console from the loader.
+    ProviderUnavailable: string
     Errors: AuthErrorMessages
     Passkey: PasskeyAuthMessages
 }
@@ -889,6 +902,10 @@ type WebhookAdminMessages = {
     SecretHelp: string
     /// Label of the event-types field.
     EventTypesLabel: string
+    /// Example event types shown in the empty subscription input. The
+    /// names are wire-shaped, and the field exists so a translation can
+    /// still reorder or re-punctuate the list (Phase 758).
+    EventTypesPlaceholder: string
     /// Create-subscription submit button.
     Create: string
     /// Heading of the one-time secret-reveal banner.

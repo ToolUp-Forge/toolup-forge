@@ -36,40 +36,50 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-let LoadingScreen () : ReactElement =
+// The `…With` / bare pairing below is Phase 444's recorded pattern and
+// `OidcAuthUI`'s: the `…With` variant takes the resolved catalog section,
+// the bare arity delegates to it with the built-in English catalog, and
+// no existing arity widens (a widened arity reads as a baseline removal).
+// Phase 751.C swept the other four auth packages this way; this one was
+// missed, and Phase 758's gate is what found it.
+
+let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
-        Html.div [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text "Signing you in…"
+        Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
+    ]
+
+let LoadingScreen () : ReactElement =
+    LoadingScreenWith MessageCatalog.english.Auth
+
+let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit) : ReactElement =
+    pageFrame [
+        Html.h1 [
+            prop.className "text-xl font-semibold text-brand font-[Umami]"
+            prop.text msgs.SignInFailedHeading
+        ]
+        Html.p [
+            prop.className $"{Tokens.Colours.error} text-center text-sm"
+            prop.text (describeErrorWith msgs.Errors err)
+        ]
+        Html.button [
+            prop.className $"{Tokens.Button.primary} w-full"
+            prop.text msgs.TryAgain
+            prop.onClick (fun _ -> onRetry ())
         ]
     ]
 
 let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
-    pageFrame [
-        Html.h1 [
-            prop.className "text-xl font-semibold text-brand font-[Umami]"
-            prop.text "Sign-in failed"
-        ]
-        Html.p [
-            prop.className $"{Tokens.Colours.error} text-center text-sm"
-            prop.text (describeError err)
-        ]
-        Html.button [
-            prop.className $"{Tokens.Button.primary} w-full"
-            prop.text "Try again"
-            prop.onClick (fun _ -> onRetry ())
-        ]
-    ]
+    ErrorScreenWith MessageCatalog.english.Auth err onRetry
 
 /// User-facing note when the GIS library itself could not load. The
 /// developer-facing advisory (which names the CSP contributor to
 /// compose) goes to the console from the script loader — this text
 /// stays deliberately non-diagnostic, matching the SDK's stance on
 /// auth-surface error strings.
-let private scriptUnavailableNote () : ReactElement =
+let private scriptUnavailableNote (msgs: AuthMessages) : ReactElement =
     Html.p [
         prop.className $"{Tokens.Colours.error} text-center text-sm"
-        prop.text "Google sign-in is unavailable right now. Please try again later."
+        prop.text msgs.ProviderUnavailable
     ]
 
 // ─── Shell wrapper ──────────────────────────────────────────────────
@@ -77,6 +87,7 @@ let private scriptUnavailableNote () : ReactElement =
 [<ReactComponent>]
 let GoogleIdentityShell (config: GoogleIdentityUIConfig) (shell: ReactElement) : ReactElement =
     let oidcConfig = GoogleIdentityUIConfig.toOidcUIConfig config
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
     let authState, setAuthState = React.useState Checking
     let scriptFailed, setScriptFailed = React.useState false
     let buttonRef = React.useElementRef ()
@@ -146,25 +157,25 @@ let GoogleIdentityShell (config: GoogleIdentityUIConfig) (shell: ReactElement) :
         pageFrame [
             Html.h1 [
                 prop.className "text-2xl font-semibold text-brand font-[Umami]"
-                prop.text (config.Heading |> Option.defaultValue "Welcome")
+                prop.text (config.Heading |> Option.defaultValue msgs.Welcome)
             ]
             Html.p [
                 prop.className $"{Tokens.Text.secondary} text-center"
-                prop.text (config.Subheading |> Option.defaultValue "Sign in to continue.")
+                prop.text (config.Subheading |> Option.defaultValue msgs.SignInPrompt)
             ]
             // GIS renders its own markup into this container; the SDK
             // supplies position and nothing else.
             Html.div [ prop.className "flex justify-center w-full"; prop.ref buttonRef ]
             if scriptFailed then
-                scriptUnavailableNote ()
+                scriptUnavailableNote msgs
         ]
 
     match authState with
-    | Checking -> LoadingScreen()
+    | Checking -> LoadingScreenWith msgs
     | SignedIn -> shell
     | SignedOut -> signInScreen ()
     | Failed err ->
-        ErrorScreen err (fun () ->
+        ErrorScreenWith msgs err (fun () ->
             setScriptFailed false
             setAuthState SignedOut)
 
@@ -184,10 +195,11 @@ let wrap (config: GoogleIdentityUIConfig) (shell: ReactElement) : ReactElement =
 [<ReactComponent>]
 let UserMenu (config: GoogleIdentityUIConfig) : ReactElement =
     let oidcConfig = GoogleIdentityUIConfig.toOidcUIConfig config
+    let msgs = (MessageCatalogProvider.useMessages ()).Auth
 
     Html.button [
         prop.className $"{Tokens.Button.secondary} text-sm"
-        prop.text "Sign out"
+        prop.text msgs.SignOut
         prop.onClick (fun _ ->
             GoogleIdentityClient.disableAutoSelect ()
             OidcClient.signOut oidcConfig |> Async.StartImmediate)

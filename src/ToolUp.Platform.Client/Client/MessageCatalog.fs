@@ -172,6 +172,7 @@ module MessageCatalog =
             Heading = "This module encountered an error."
             Body = "You can reload just this module without affecting the rest of the app."
             Reload = "Reload module"
+            HostViewUnavailable = "Hosted view unavailable"
         }
         CommandPalette = {
             DialogLabel = "Command palette"
@@ -363,6 +364,7 @@ module MessageCatalog =
             SignOut = "Sign out"
             SignInFailedHeading = "Sign-in failed"
             TryAgain = "Try again"
+            ProviderUnavailable = "Sign-in is unavailable right now. Please try again later."
             Errors = {
                 DiscoveryFailed = fun detail -> $"Could not reach the identity provider ({detail})."
                 InvalidState = "Sign-in state mismatch. Please try again."
@@ -641,6 +643,7 @@ module MessageCatalog =
             SecretHelp =
                 "Copy this value into the receiving service. To replace it later, use Rotate secret on the subscription — no delete + recreate needed."
             EventTypesLabel = "Event types (comma-separated, blank = all)"
+            EventTypesPlaceholder = "FileUploaded, AnalysisCompleted"
             Create = "Create"
             SecretRevealHeading = "Copy this secret now"
             SecretRevealBody = "This is the only time the secret will be shown. After dismiss, you cannot retrieve it."
