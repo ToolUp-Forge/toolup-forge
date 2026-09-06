@@ -214,6 +214,40 @@ module CrdtAwareness =
             | None -> Some ref.DocId
     }
 
+/// Phase 756 — how aggressively the blob-backed store folds its loose
+/// per-update log blobs into one snapshot blob.
+///
+/// **This is a read-amplification knob, not a retention policy, and the
+/// distinction is the whole reason it is separate from `Compact`.** A
+/// fold rewrites the SAME updates into one blob and deletes the loose
+/// ones: byte count is essentially unchanged, blob count falls, and no
+/// client's converged state can move because no payload is touched.
+/// Reducing *bytes* needs a merged base only a participant holding the
+/// document can compute — that is `ICrdtDocumentStore.Compact`, and it
+/// stays client-attested for exactly the reason stated there.
+///
+/// Portability (GP 12): a plain record of primitives, so a distributed
+/// implementation may honour, widen or ignore it without the
+/// composition surface changing shape.
+type CrdtSnapshotPolicy = {
+    /// Fold once this many un-folded update blobs have accumulated for
+    /// one document. `0` or less disables folding entirely — every
+    /// update stays a loose blob, which is the cheapest write path and
+    /// the most expensive read path.
+    ///
+    /// The threshold is per document (the shard key), never estate-wide:
+    /// a busy document folds often and an idle one never does, with no
+    /// shared counter between them (GP 12 rule 5).
+    SnapshotThreshold: int
+}
+
+module CrdtSnapshotPolicy =
+    /// Fold every 64 loose updates. Chosen so a document's cold read is
+    /// a small constant number of blob fetches under ordinary editing
+    /// traffic while a fold stays cheap enough to ride the append that
+    /// crosses the threshold rather than needing a background sweep.
+    let defaults: CrdtSnapshotPolicy = { SnapshotThreshold = 64 }
+
 /// Selects whether `compose` registers the CRDT co-editing document
 /// store (Phase 535). Default `NoCrdtDocuments` — no
 /// `ICrdtDocumentStore` in DI, no allocation, no `_platform.crdt`
@@ -234,3 +268,25 @@ type CrdtDocumentMode =
     /// (see the Phase 9c distributed-companion family) with no change to
     /// consuming code.
     | EnabledCrdtDocuments
+    /// Phase 756 — register the **durable** `BlobCrdtDocumentStore` over
+    /// the composed `IBlobStorage`, relay-wrapped exactly as
+    /// `EnabledCrdtDocuments` is. Co-edited documents then survive a
+    /// process restart: a client hands back the cursor it retained and
+    /// catches up on exactly the tail it missed, rather than the whole
+    /// document being gone.
+    ///
+    /// Shaped against the `EventStoreMode` precedent
+    /// (`InMemoryOnly | PersistentBlobBacked of EventRetentionPolicy`):
+    /// the durable arm carries its own policy record, the in-memory arm
+    /// carries nothing, and the default remains the do-nothing case.
+    /// Added as a THIRD case rather than by giving
+    /// `EnabledCrdtDocuments` a payload, so every existing composition
+    /// keeps compiling and the dev default stays the cheap one.
+    ///
+    /// Still **single-instance for fan-out**: the relay publishes
+    /// in-process, and sequence assignment serialises on a per-document
+    /// in-process gate. What this case buys is durability across a
+    /// restart of ONE process, not correctness across several writing
+    /// concurrently — see the file header of `BlobCrdtDocumentStore` and
+    /// the Phase 9c distributed-companion family.
+    | PersistentCrdtDocuments of CrdtSnapshotPolicy

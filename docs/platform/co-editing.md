@@ -136,7 +136,29 @@ What a queue must still own is **retention**: an update a client never managed t
 
 `EnabledCrdtDocuments` registers the single-instance in-memory log wrapped in the notification relay. The default is `NoCrdtDocuments`: no store in DI, no allocation, no `_platform.crdt` fan-out — an existing deployment that upgrades is byte-for-byte unchanged until it opts in (GP 11 + GP 13).
 
-**The in-memory default is dev / single-instance and not durable across a restart.** A production or multi-instance deployment supplies an implementation over a real log (append-only blob, database table, event store) with no change to consuming code, and inherits fan-out unchanged because the relay is a decorator over the seam rather than folded into the log.
+**The in-memory arm is dev-only and not durable across a restart.** It is still the default for the enabled case, so nothing changes for a deployment already on it.
+
+## Durability
+
+```fsharp skip=fragment
+{ ServerConfig.defaults with
+    CrdtDocuments = PersistentCrdtDocuments CrdtSnapshotPolicy.defaults }
+```
+
+`PersistentCrdtDocuments` selects `BlobCrdtDocumentStore`, which keeps each document's log in the composed `IBlobStorage` — `LocalFileStorage` on disk in dev, a cloud companion in production. The relay is the same decorator over the same seam, so fan-out is inherited rather than re-implemented; the shape mirrors `EventStore`'s `InMemoryOnly | PersistentBlobBacked _` split.
+
+What durability buys, precisely: a co-edited document survives every participant closing their tab **and** the process restarting, and a cursor a client retained before the restart is still recognised afterwards — so catch-up is the tail it missed, not the whole history. That works because the per-document watermark is *derived* from storage on every read rather than remembered in the process, which is also portability rule 4 satisfied structurally.
+
+**Two mechanisms bound two different costs, and they are not interchangeable.**
+
+| | What it does | What falls | Who triggers it |
+|---|---|---|---|
+| **Snapshot fold** | rewrites the loose per-update blobs into one snapshot blob holding the same updates | blob count | the store, automatically, past `CrdtSnapshotPolicy.SnapshotThreshold` |
+| **`Compact`** | replaces the prefix a cursor covers with one merged base | stored bytes | a participant holding the document (see above) |
+
+A fold cannot change any client's converged state, because no payload is touched — the contract pack asserts exactly that by running the whole bar against a store folding every third update. Reducing *bytes* needs a merged base only a participant can compute, which is why `Compact` is client-attested. The fold writes the snapshot before deleting what it replaces, and reads drop any loose update the snapshot already carries, so a crash between the two steps leaves the log untidy rather than wrong.
+
+**Still single-instance for fan-out and for sequence assignment.** The relay publishes in-process, and sequence assignment serialises on a per-document in-process gate. Two processes writing the same document may both derive watermark `N` and both write `N+1`: nothing is lost — each update is its own uniquely-named blob and both are delivered — but a client whose cursor sits exactly there may be handed only one of them on catch-up. A multi-writer deployment therefore wants the `IConditionalBlobStorage` ETag seam or a distributed lease around assignment (the Phase 9c distributed-companion shape), supplied as an implementation of the same seam with no change to consuming code. Nothing anywhere promises ordering *across* documents: `CrdtDocRef` is the shard key, and separate documents have separate prefixes, separate gates and separate folds (GP 12 rule 5).
 
 The substrate is **seam-first**: the SDK registers the store and mounts no route for it. A deployment exposes its own module-owned API over the resolved service, exactly as Phase 442's presence substrate was consumed before a platform API was mounted over it.
 
@@ -153,7 +175,7 @@ The substrate is **seam-first**: the SDK registers the store and mounts no route
 | **5 — No cross-shard ordering** | `CrdtDocRef` is the shard key. `Sequence` is monotonic within one ref and meaningless across refs. Within a ref the log is ordered — which the CRDT does not need, but catch-up does. |
 | **6 — Precision at the lower bound** | No timing promise is made. `AppendedAt` is for retention and diagnostics, **never a merge input** — convergence must not depend on clocks, because a distributed implementation's nodes disagree about the time and the CRDT is what resolves concurrency. Fan-out inherits `INotificationChannel`'s stated bound (near-real-time, not sub-second guaranteed). |
 
-The executable bar is `ICrdtDocumentStoreContract` in `ToolUp.Platform.Tests` — the cursor laws, compaction, scope isolation, and the convergence property (any permutation of the same update set yields the same state vector and delivers the same payload set). Any external implementation runs the same tests.
+The executable bar is `ICrdtDocumentStoreContract` in `ToolUp.Platform.Tests` — the cursor laws, compaction, scope isolation, and the convergence property (any permutation of the same update set yields the same state vector and delivers the same payload set). It is a function of the store under test and is bound three ways: the in-memory arm, the blob-backed arm, and the blob-backed arm folding every third update. Any external implementation runs the same tests by passing its own factory.
 
 ## See also
 

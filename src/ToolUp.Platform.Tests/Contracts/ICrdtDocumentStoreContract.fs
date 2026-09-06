@@ -6,6 +6,8 @@ open System.Text
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 535 — ICrdtDocumentStore conformance ──────────────────────
@@ -26,8 +28,35 @@ open ToolUp.Remoting.Json.SystemTextJson
 // content, which is the substantive claim: swap Yjs for any other
 // update-encoding CRDT and this bar is unchanged.
 //
-// Any external implementation can run the same bar — `storeUnderTest`
-// below is the only thing that would change.
+// Any external implementation can run the same bar — the store factory
+// passed to `contractCases` below is the only thing that would change.
+//
+// ── Phase 756 — the same bar, bound three ways ──
+//
+// The fifteen cases are now a FUNCTION of the store under test, and the
+// durable blob-backed implementation is held to every one of them
+// unchanged. That is the substantive claim of this phase: the seam's
+// contract did not move to accommodate a second implementation, so a
+// deployment swapping the in-memory log for the blob-backed one inherits
+// exactly the behaviour it already relied on.
+//
+// Three bindings, and the third is not redundant:
+//
+//   1. in-memory (Phase 535's single-instance default),
+//   2. blob-backed with the shipped fold threshold — high enough that no
+//      case reaches it, so this arm exercises the loose-log read path,
+//   3. blob-backed folding every third update — low enough that most
+//      cases cross it repeatedly, so the SAME fifteen assertions run
+//      against a store whose log is a mixture of one snapshot blob and a
+//      loose tail. Folding is the one thing the blob store does that the
+//      seam knows nothing about; running the contract either side of it
+//      is what makes "the fold changes no observable behaviour" a
+//      tested claim rather than a design intention.
+//
+// Beyond the shared bar, `blobSpecificCases` covers what only a durable
+// store CAN be asked: restart survival, that compaction actually reduces
+// stored bytes, that folding reduces blob count without changing what is
+// delivered, and that a path-shaped `DocId` cannot escape its own prefix.
 
 let private jsonOptions = FableConverters.create ()
 
@@ -48,9 +77,19 @@ type private RecordingChannel() =
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe(_) = async { return () }
 
-/// The store under test, relay-wrapped exactly as `compose` wires it.
-let private storeUnderTest (channel: INotificationChannel) : ICrdtDocumentStore =
+/// Phase 535's in-memory default, relay-wrapped exactly as `compose`
+/// wires it.
+let private inMemoryStore (channel: INotificationChannel) : ICrdtDocumentStore =
     NotifyingCrdtDocumentStore(InMemoryCrdtDocumentStore(), channel) :> ICrdtDocumentStore
+
+/// Phase 756's durable store over a hermetic in-memory `IBlobStorage`,
+/// wrapped in the SAME relay — which is the point: `compose` differs
+/// between the two arms only in which log it hands the decorator.
+///
+/// A fresh backing store per call, so cases cannot leak state into one
+/// another through the blob layer.
+let private blobStoreWith (policy: CrdtSnapshotPolicy) (channel: INotificationChannel) : ICrdtDocumentStore =
+    NotifyingCrdtDocumentStore(BlobCrdtDocumentStore(InMemoryBlobStorage(), policy), channel) :> ICrdtDocumentStore
 
 let private docA: CrdtDocRef = { Scope = "team-a"; DocId = "doc-1" }
 let private docB: CrdtDocRef = { Scope = "team-b"; DocId = "doc-1" }
@@ -61,8 +100,9 @@ let private text (b: byte[]) = Encoding.UTF8.GetString b
 let private payloadSet (updates: CrdtUpdate list) =
     updates |> List.map (_.Payload >> text) |> List.sort
 
-let tests =
-    testList "ICrdtDocumentStore contract (Phase 535)" [
+/// The conformance bar, as a function of the store under test.
+let private contractCases (label: string) (storeUnderTest: INotificationChannel -> ICrdtDocumentStore) =
+    testList label [
         testCaseAsync "append assigns a monotonic per-document sequence and echoes the origin session"
         <| async {
             let store = storeUnderTest (RecordingChannel())
@@ -337,4 +377,265 @@ let tests =
             let sequences = delivered |> List.map _.Sequence |> List.distinct
             Expect.equal (List.length sequences) 24 "concurrent appends each received a distinct sequence"
         }
+    ]
+
+// ─── Phase 756 — what only a DURABLE store can be asked ──────────────
+//
+// The fifteen cases above are the seam's contract and say nothing about
+// storage, which is correct: they must pass for an implementation that
+// keeps the log anywhere at all. These cases are the other half —
+// claims that are meaningless against an in-memory log and therefore
+// could not be part of the shared bar:
+//
+//   * a document outliving the process that wrote it, and a cursor
+//     retained across that boundary still resolving,
+//   * `Compact` actually reclaiming bytes rather than merely renaming
+//     them,
+//   * the snapshot fold being invisible to every read,
+//   * an opaque, path-shaped `DocId` staying inside its own prefix,
+//   * and one implementation's cursor reading as foreign to another's,
+//     which is cursor law 3 across a boundary the shared pack cannot
+//     reach on its own.
+
+/// The reserved platform container the durable store writes into. Named
+/// here rather than imported: the blob layout is deliberately internal
+/// to the implementation, and a test reaching into it would be pinning a
+/// contract the seam does not make. What these cases legitimately
+/// observe is the store's total footprint, not its filenames.
+[<Literal>]
+let private PlatformContainer = "_platform"
+
+let private durableStore (blob: IBlobStorage) (policy: CrdtSnapshotPolicy) (channel: INotificationChannel) =
+    NotifyingCrdtDocumentStore(BlobCrdtDocumentStore(blob, policy), channel) :> ICrdtDocumentStore
+
+/// Blob count and total stored bytes. The backing store is hermetic and
+/// per-case, so this is the document's whole footprint.
+let private footprint (blob: IBlobStorage) = async {
+    let! names = blob.List(PlatformContainer, "")
+
+    let! sizes =
+        names
+        |> List.map (fun name -> async {
+            let! metadata = blob.GetMetadata(PlatformContainer, name)
+
+            return
+                match metadata with
+                | Ok m -> m.Size
+                | Error _ -> 0L
+        })
+        |> Async.Parallel
+
+    return List.length names, Array.sum sizes
+}
+
+let private blobSpecificCases =
+    testList "blob-backed durability (Phase 756)" [
+        testCaseAsync "a document written by one store instance is read whole by the next (restart survival)"
+        <| async {
+            let blob = InMemoryBlobStorage() :> IBlobStorage
+            let before = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+            do! before.Append(docA, bytes "u1", "s1") |> Async.Ignore
+            do! before.Append(docA, bytes "u2", "s1") |> Async.Ignore
+
+            // The cursor a live co-editor retains before the process dies.
+            let! retained = before.GetStateVector docA
+            do! before.Append(docA, bytes "u3", "s2") |> Async.Ignore
+
+            // The restart: a new store, a new relay, the same storage.
+            // Nothing at all is carried over in memory.
+            let after = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+
+            let! whole = after.GetDiff(docA, StateVector.empty)
+            Expect.equal (payloadSet whole) [ "u1"; "u2"; "u3" ] "the whole document survived the process that wrote it"
+
+            let! caughtUp = after.GetDiff(docA, retained)
+
+            Expect.equal
+                (payloadSet caughtUp)
+                [ "u3" ]
+                "a cursor retained before the restart still resolves to exactly the missed tail"
+
+            let! resumed = after.Append(docA, bytes "u4", "s3")
+
+            Expect.equal
+                resumed.Sequence
+                4L
+                "the sequence resumed from storage rather than restarting and issuing a sequence twice"
+        }
+
+        testCaseAsync "compaction reduces stored bytes without changing any client's converged state"
+        <| async {
+            // A property over four compaction points in one twelve-update
+            // log: whatever prefix is folded away, the store holds
+            // strictly fewer bytes and a cold joiner still reconstructs
+            // the same document.
+            //
+            // The merged base is deliberately short, which is also the
+            // realistic case — a CRDT's whole-state encoding is normally
+            // far smaller than the sum of the updates that produced it.
+            // The store's own claim is the pruning; how compact the base
+            // is remains the client's business.
+            let payloads = [ for i in 1..12 -> sprintf "update-payload-%02d" i ]
+
+            for compactAfter in [ 2; 5; 8; 11 ] do
+                let blob = InMemoryBlobStorage() :> IBlobStorage
+                let store = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+
+                for p in payloads |> List.take compactAfter do
+                    do! store.Append(docA, bytes p, "s1") |> Async.Ignore
+
+                let! covers = store.GetStateVector docA
+                let tail = payloads |> List.skip compactAfter
+
+                for p in tail do
+                    do! store.Append(docA, bytes p, "s2") |> Async.Ignore
+
+                let! blobsBefore, bytesBefore = footprint blob
+                let merged = sprintf "merged<=%d" compactAfter
+                do! store.Compact(docA, bytes merged, covers) |> Async.Ignore
+                let! blobsAfter, bytesAfter = footprint blob
+
+                Expect.isLessThan
+                    bytesAfter
+                    bytesBefore
+                    (sprintf "compacting a %d-update prefix reclaimed stored bytes" compactAfter)
+
+                Expect.isLessThan
+                    blobsAfter
+                    blobsBefore
+                    (sprintf "…and the superseded update blobs were pruned, not merely rewritten (%d)" compactAfter)
+
+                let! joiner = store.GetDiff(docA, StateVector.empty)
+
+                Expect.equal
+                    (payloadSet joiner)
+                    ((merged :: tail) |> List.sort)
+                    "a cold joiner reconstructs the merged base plus the uncovered tail, whatever the compaction point"
+        }
+
+        testCaseAsync "a compacted document is still compacted after a restart"
+        <| async {
+            let blob = InMemoryBlobStorage() :> IBlobStorage
+            let before = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+            do! before.Append(docA, bytes "u1", "s1") |> Async.Ignore
+            do! before.Append(docA, bytes "u2", "s1") |> Async.Ignore
+            let! covers = before.GetStateVector docA
+            do! before.Append(docA, bytes "u3", "s2") |> Async.Ignore
+            do! before.Compact(docA, bytes "merged(u1,u2)", covers) |> Async.Ignore
+
+            let after = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+            let! joiner = after.GetDiff(docA, StateVector.empty)
+
+            Expect.equal
+                (payloadSet joiner)
+                [ "merged(u1,u2)"; "u3" ]
+                "the compacted form is what survives, not the prefix it replaced"
+
+            let! resumed = after.Append(docA, bytes "u4", "s3")
+
+            Expect.equal
+                resumed.Sequence
+                4L
+                "compaction did not rewind the watermark across the restart, so no sequence is issued twice"
+        }
+
+        testCaseAsync "folding the log into a snapshot changes the blob count, never the delivered content"
+        <| async {
+            // Two stores differing in exactly one thing: whether they
+            // fold. Folding is below the seam, so every read must agree.
+            let loose = InMemoryBlobStorage() :> IBlobStorage
+            let folded = InMemoryBlobStorage() :> IBlobStorage
+            let never = durableStore loose { SnapshotThreshold = 0 } (RecordingChannel())
+            let often = durableStore folded { SnapshotThreshold = 4 } (RecordingChannel())
+
+            for i in 1..20 do
+                let payload = bytes (sprintf "u%02d" i)
+                do! never.Append(docA, payload, "s1") |> Async.Ignore
+                do! often.Append(docA, payload, "s1") |> Async.Ignore
+
+            let! looseBlobs, _ = footprint loose
+            let! foldedBlobs, _ = footprint folded
+            Expect.isLessThan foldedBlobs looseBlobs "folding leaves fewer blobs behind to read on a cold join"
+
+            let! fromLoose = never.GetDiff(docA, StateVector.empty)
+            let! fromFolded = often.GetDiff(docA, StateVector.empty)
+            Expect.equal (payloadSet fromFolded) (payloadSet fromLoose) "…and delivers exactly the same payloads"
+
+            let! looseVector = never.GetStateVector docA
+            let! foldedVector = often.GetStateVector docA
+            Expect.equal foldedVector.Bytes looseVector.Bytes "…and issues the same cursor"
+
+            let! nothingLeft = often.GetDiff(docA, foldedVector)
+            Expect.isEmpty nothingLeft "…which still covers everything the fold absorbed"
+        }
+
+        testCaseAsync "a path-shaped DocId stays inside its own prefix (GP 4)"
+        <| async {
+            // `DocId` is opaque and module-owned, so it may legitimately
+            // look like a path. Interpolated raw into a blob name, the
+            // pair below COLLIDES: the nested document's updates would
+            // land under the parent document's own listing prefix, so a
+            // read of the parent would return them. A within-scope leak,
+            // and one that surfaces only on the day some module picks a
+            // path-like id. The same collision exists on `Scope`, by the
+            // same mechanism and with the same fix.
+            //
+            // The pair is chosen to collide rather than merely to look
+            // path-shaped: an arbitrary nested id (`notes/private`)
+            // lands beside the parent rather than inside its log prefix,
+            // so it would pass even unescaped and prove nothing.
+            let blob = InMemoryBlobStorage() :> IBlobStorage
+            let store = durableStore blob CrdtSnapshotPolicy.defaults (RecordingChannel())
+            let parent: CrdtDocRef = { Scope = "team-a"; DocId = "notes" }
+
+            let nested: CrdtDocRef = {
+                Scope = "team-a"
+                DocId = "notes/log"
+            }
+
+            do! store.Append(parent, bytes "parent-only", "s1") |> Async.Ignore
+            do! store.Append(nested, bytes "nested-only", "s2") |> Async.Ignore
+
+            let! fromParent = store.GetDiff(parent, StateVector.empty)
+            let! fromNested = store.GetDiff(nested, StateVector.empty)
+
+            Expect.equal
+                (payloadSet fromParent)
+                [ "parent-only" ]
+                "the shorter id does not swallow its path-shaped sibling"
+
+            Expect.equal (payloadSet fromNested) [ "nested-only" ] "…and the path-shaped id keeps a log of its own"
+        }
+
+        testCaseAsync "a cursor issued by a different implementation is foreign here and degrades to the whole document"
+        <| async {
+            // Cursor law 3 across an implementation boundary, which the
+            // shared pack cannot reach: each store issues its own opaque
+            // shape, so the other's must read as unrecognised rather than
+            // being misread as a watermark of its own.
+            let inMemory = inMemoryStore (RecordingChannel())
+            do! inMemory.Append(docA, bytes "elsewhere", "s") |> Async.Ignore
+            let! foreign = inMemory.GetStateVector docA
+
+            let store = blobStoreWith CrdtSnapshotPolicy.defaults (RecordingChannel())
+            do! store.Append(docA, bytes "u1", "s") |> Async.Ignore
+            do! store.Append(docA, bytes "u2", "s") |> Async.Ignore
+
+            let! diff = store.GetDiff(docA, foreign)
+
+            Expect.equal
+                (payloadSet diff)
+                [ "u1"; "u2" ]
+                "one store's cursor is not another's — the safe direction is 'send more', never 'send less'"
+        }
+    ]
+
+let tests =
+    testList "ICrdtDocumentStore contract (Phase 535)" [
+        contractCases "in-memory single-instance default (Phase 535)" inMemoryStore
+        contractCases "blob-backed durable store (Phase 756)" (blobStoreWith CrdtSnapshotPolicy.defaults)
+        contractCases
+            "blob-backed durable store, folding every third update (Phase 756)"
+            (blobStoreWith { SnapshotThreshold = 3 })
+        blobSpecificCases
     ]
