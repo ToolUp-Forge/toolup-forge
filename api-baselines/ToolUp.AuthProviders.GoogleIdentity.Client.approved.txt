@@ -5,8 +5,10 @@
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI (class)
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.ErrorScreen(ToolUp.AuthProviders.Oidc.OidcTypes+AuthError, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.ErrorScreenWith(ToolUp.Platform.AuthMessages, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.GoogleIdentityShell(ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig+GoogleIdentityUIConfig, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.LoadingScreen() : Fable.React.ReactElement
+ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.LoadingScreenWith(ToolUp.Platform.AuthMessages) : Fable.React.ReactElement
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.UserMenu(ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig+GoogleIdentityUIConfig) : Fable.React.ReactElement
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityAuthUI.wrap(ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig+GoogleIdentityUIConfig, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityClient (class)

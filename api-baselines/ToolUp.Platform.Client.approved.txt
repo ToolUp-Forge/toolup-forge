@@ -2377,9 +2377,10 @@ ToolUp.Platform.AuthErrorMessages.NonceMismatch : System.String { get }
 ToolUp.Platform.AuthErrorMessages.SignatureInvalid : System.String { get }
 ToolUp.Platform.AuthErrorMessages.TokenExchangeFailed : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.AuthMessages (class)
-ToolUp.Platform.AuthMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.AuthErrorMessages, ToolUp.Platform.PasskeyAuthMessages)
+ToolUp.Platform.AuthMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.AuthErrorMessages, ToolUp.Platform.PasskeyAuthMessages)
 ToolUp.Platform.AuthMessages.Errors : ToolUp.Platform.AuthErrorMessages { get }
 ToolUp.Platform.AuthMessages.Passkey : ToolUp.Platform.PasskeyAuthMessages { get }
+ToolUp.Platform.AuthMessages.ProviderUnavailable : System.String { get }
 ToolUp.Platform.AuthMessages.SignIn : System.String { get }
 ToolUp.Platform.AuthMessages.SignInFailedHeading : System.String { get }
 ToolUp.Platform.AuthMessages.SignInPrompt : System.String { get }
@@ -4126,9 +4127,10 @@ ToolUp.Platform.ModuleAvailability+Tags (class)
 ToolUp.Platform.ModuleAvailability+Tags.Always : System.Int32 (literal)
 ToolUp.Platform.ModuleAvailability+Tags.DebugOnly : System.Int32 (literal)
 ToolUp.Platform.ModuleBoundaryMessages (class)
-ToolUp.Platform.ModuleBoundaryMessages..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ModuleBoundaryMessages..ctor(System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModuleBoundaryMessages.Body : System.String { get }
 ToolUp.Platform.ModuleBoundaryMessages.Heading : System.String { get }
+ToolUp.Platform.ModuleBoundaryMessages.HostViewUnavailable : System.String { get }
 ToolUp.Platform.ModuleBoundaryMessages.Reload : System.String { get }
 ToolUp.Platform.ModuleDefinition (class)
 ToolUp.Platform.ModuleDefinition..ctor(System.String, System.String, Fable.React.ReactElement, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageConfig])
@@ -4724,6 +4726,13 @@ ToolUp.Platform.PreviewOutcome+Placeholder.unresolved : Microsoft.FSharp.Collect
 ToolUp.Platform.PreviewOutcome+Tags (class)
 ToolUp.Platform.PreviewOutcome+Tags.Placeholder : System.Int32 (literal)
 ToolUp.Platform.PreviewOutcome+Tags.Rendered : System.Int32 (literal)
+ToolUp.Platform.PseudoLocaleCatalog (class)
+ToolUp.Platform.PseudoLocaleCatalog.Tag : System.String { get }
+ToolUp.Platform.PseudoLocaleCatalog.catalog() : ToolUp.Platform.MessageCatalog
+ToolUp.Platform.PseudoLocaleCatalog.derive(ToolUp.Platform.MessageCatalog) : ToolUp.Platform.MessageCatalog
+ToolUp.Platform.PseudoLocaleCatalog.isActive(System.String) : System.Boolean
+ToolUp.Platform.PseudoLocaleCatalog.overrideFor(ToolUp.Platform.MessageCatalog) : ToolUp.Platform.MessageCatalog
+ToolUp.Platform.PseudoLocaleCatalog.stringLeaves(ToolUp.Platform.MessageCatalog) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.PublicUtilityFetchMessages (class)
 ToolUp.Platform.PublicUtilityFetchMessages..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
 ToolUp.Platform.PublicUtilityFetchMessages.AccessDenied : System.String { get }
@@ -5320,7 +5329,7 @@ ToolUp.Platform.WebhookAdminConfig..ctor(System.String, Fable.React.ReactElement
 ToolUp.Platform.WebhookAdminConfig.Icon : Fable.React.ReactElement { get }
 ToolUp.Platform.WebhookAdminConfig.Name : System.String { get }
 ToolUp.Platform.WebhookAdminMessages (class)
-ToolUp.Platform.WebhookAdminMessages..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.WebhookAdminMessages..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.WebhookAdminMessages.AllEvents : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.ColumnAttempt : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.ColumnAttempted : System.String { get }
@@ -5336,6 +5345,7 @@ ToolUp.Platform.WebhookAdminMessages.Delete : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.DeleteConfirm : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.Dismiss : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.EventTypesLabel : System.String { get }
+ToolUp.Platform.WebhookAdminMessages.EventTypesPlaceholder : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.EventTypesRowLabel : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.Generate : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.Loading : System.String { get }
