@@ -185,6 +185,83 @@ let start (yjs: IYjs) (doc: IYDoc) (transport: CrdtTransport) (sessionId: string
                     doc.off ("update", handler)
     }
 
+// ─── Phase 760 — surviving a dropped link ────────────────────────────
+//
+// `start` publishes every local update the moment the document emits it.
+// Offline, that publish fails, and the update exists only inside this
+// tab's CRDT document — which is fine until the tab closes, at which
+// point the user's work is gone. Phase 24's queue is the substrate that
+// solves exactly this for entity writes, and its IndexedDB store is
+// durable across a reload.
+//
+// So the wrapper below turns a failed publish into a call to a
+// caller-supplied `hold`, and exposes the matching `Replay` for whatever
+// drains the hold later. **`hold` is `byte[] -> Async<unit>` and nothing
+// more.** That signature is the whole boundary: this file names no
+// queue, no `QueuedMutation`, no `MergeableChannel`, and
+// `ToolUp.Platform.Client` takes no dependency on the offline companion
+// — which it could not anyway, the reference running the other way. A
+// deployment that wires `hold` to the offline queue and registers the
+// matching channel gets durable offline co-editing; one that wires it to
+// an array gets in-memory buffering; one that wires nothing keeps
+// today's behaviour exactly.
+//
+// What this deliberately does NOT do is decide when the link is down.
+// `navigator.onLine` lies (see the coordinator's own header) and a
+// second connectivity opinion in a second file is a second thing to get
+// wrong. A publish that threw is the only evidence used.
+
+[<Emit("(typeof console !== 'undefined' && console !== null) ? console.warn($0) : undefined")>]
+let private warn (message: string) : unit = jsNative
+
+/// A transport that hands a local update to a holding store rather than
+/// losing it when the publish path is unreachable.
+type HoldAndForward = {
+    /// Pass this to `start` in place of the bare transport.
+    Transport: CrdtTransport
+    /// Replay one held payload — straight to the INNER transport, so a
+    /// still-unreachable server raises here rather than silently
+    /// re-holding a payload the holder already has.
+    Replay: byte[] -> Async<unit>
+}
+
+/// Wrap `inner` so a failed `Publish` calls `hold` with the payload.
+///
+/// `FetchDiff` is passed through untouched: a failed catch-up read needs
+/// no holding — the cursor simply has not advanced, and the next resync
+/// asks for the same diff. Retention is only ever a problem for updates
+/// this client PRODUCED.
+///
+/// A `hold` that itself fails is warned to the console and the update is
+/// lost. That is the honest reporting of a genuinely unrecoverable case
+/// — the caller is a document update handler with no one to return to —
+/// and it is the same posture the offline queue takes when it falls back
+/// to volatile storage: never silent, never pretended away.
+let holdAndForward (inner: CrdtTransport) (hold: byte[] -> Async<unit>) : HoldAndForward =
+    let publish (payload: byte[]) = async {
+        let! published = async {
+            try
+                do! inner.Publish payload
+                return true
+            with _ ->
+                return false
+        }
+
+        if not published then
+            try
+                do! hold payload
+            with ex ->
+                warn (sprintf "[ToolUp.Platform.Crdt] a local update could not be published or held: %s" ex.Message)
+    }
+
+    {
+        Transport = {
+            Publish = publish
+            FetchDiff = inner.FetchDiff
+        }
+        Replay = inner.Publish
+    }
+
 /// The merged base for `ICrdtDocumentStore.Compact` — the whole document
 /// as one opaque update. Pair it with the cursor the store issued at the
 /// moment it was encoded (`session.Cursor()` immediately after a

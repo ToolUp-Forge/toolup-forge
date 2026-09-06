@@ -205,6 +205,113 @@ let wireNameTests =
         }
     ]
 
+// ─── Phase 760 — the routing decision ────────────────────────────────
+//
+// The acceptance asks for a test over the ROUTING, not over the CRDT
+// pump: the pump is browser-only and the coordinator that consults this
+// is `[<Emit>]`-bearing, so the one thing assertable off-browser is the
+// decision itself — which is exactly why the decision was put in Core.
+//
+// The first test is the one that matters most and looks least
+// interesting: an ordinary entity type must still route to the
+// conflicting path. "Non-CRDT mutations behave exactly as before" is
+// half the acceptance, and a marker with a sloppy prefix test is how
+// that half gets quietly broken.
+
+let private mergeable (revision: int) (channel: string) : QueuedMutation =
+    MergeablePayload.mint
+        (sprintf "c-%d" revision)
+        channel
+        "doc-1"
+        "team-1"
+        (DateTimeOffset(2026, 9, 6, 9, 14, 0, TimeSpan.Zero))
+        revision
+        [| byte revision |]
+
+let mergeablePayloadTests =
+    testList "MergeablePayload" [
+        test "an ordinary entity write still routes to the conflicting path" {
+            Expect.equal
+                (MergeablePayload.route (mutation 1))
+                MergeablePayload.ConflictingWrite
+                "an unmarked EntityType is untouched by the seam"
+        }
+
+        test "a marked payload routes to its channel" {
+            Expect.equal
+                (MergeablePayload.route (mergeable 1 "crdt"))
+                (MergeablePayload.MergeableUpdate "crdt")
+                "the channel is read back off the reserved prefix"
+        }
+
+        test "the marker round-trips" {
+            Expect.equal
+                (MergeablePayload.channelOf (MergeablePayload.entityTypeFor "crdt"))
+                (Some "crdt")
+                "entityTypeFor and channelOf are inverse"
+        }
+
+        test "channelOf is total on the degenerate inputs" {
+            // Each of these would, mishandled, name a channel that no
+            // handler can be registered for — at which point the payload
+            // is neither routed nor replayed and the queue never empties.
+            Expect.isNone (MergeablePayload.channelOf null) "null is not mergeable"
+            Expect.isNone (MergeablePayload.channelOf "") "empty is not mergeable"
+
+            Expect.isNone
+                (MergeablePayload.channelOf MergeablePayload.Prefix)
+                "the bare prefix names no channel, so it is not mergeable"
+
+            Expect.isNone (MergeablePayload.channelOf "toolup.mergeabl") "a truncated near-miss is not mergeable"
+
+            Expect.isNone
+                (MergeablePayload.channelOf "Inspection/toolup.mergeable/crdt")
+                "the marker is a PREFIX, never a substring match"
+        }
+
+        test "a minted payload carries nothing to conflict with" {
+            let m = mergeable 7 "crdt"
+
+            Expect.equal m.BaseVersion 0 "there is no base version to be stale against"
+            Expect.equal m.Operation SaveOp "a mergeable delete is expressed inside the payload"
+            Expect.equal m.EntityType "toolup.mergeable/crdt" "the wire marker is the reserved prefix plus the channel"
+            Expect.equal m.LocalRevision 7 "the client's own ordering is preserved"
+        }
+
+        test "partition splits the batch and keeps revision order" {
+            let due = [
+                mutation 1
+                mergeable 2 "crdt"
+                mutation 3
+                mergeable 4 "presence"
+                mergeable 5 "crdt"
+            ]
+
+            let batches, writes = MergeablePayload.partition due
+
+            Expect.equal (writes |> List.map _.LocalRevision) [ 1; 3 ] "the ordinary writes, in order"
+            Expect.equal (batches |> List.map fst) [ "crdt"; "presence" ] "channels in first-appearance order"
+
+            let crdt = batches |> List.find (fst >> (=) "crdt") |> snd
+
+            Expect.equal (crdt |> List.map _.LocalRevision) [ 2; 5 ] "a channel's own entries keep their order"
+        }
+
+        test "a batch with no marked payloads partitions to the pre-760 shape" {
+            let due = [ mutation 1; mutation 2 ]
+            let batches, writes = MergeablePayload.partition due
+
+            Expect.isEmpty batches "nothing is routed away from the entity path"
+            Expect.equal (writes |> List.map _.LocalRevision) [ 1; 2 ] "every mutation still drains as before"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "OfflineTypes" [ retryPolicyTests; queueStatsTests; syncStatusTests; wireNameTests ]
+    testList "OfflineTypes" [
+        retryPolicyTests
+        queueStatsTests
+        syncStatusTests
+        wireNameTests
+        mergeablePayloadTests
+    ]

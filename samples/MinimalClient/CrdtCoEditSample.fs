@@ -30,19 +30,19 @@ open ToolUp.Platform
 // dependency at all.
 
 /// The Yjs module namespace object — the one line that names the vendor.
-let private yjs: CrdtSyncClient.IYjs = importAll "yjs"
+let yjs: CrdtSyncClient.IYjs = importAll "yjs"
 
 /// The `Y.Doc` constructor.
-let private YDocCtor: obj = import "Doc" "yjs"
+let YDocCtor: obj = import "Doc" "yjs"
 
 [<Emit("$0.getText($1)")>]
-let private getText (doc: obj) (name: string) : obj = jsNative
+let getText (doc: obj) (name: string) : obj = jsNative
 
 [<Emit("$0.toString()")>]
-let private textValue (ytext: obj) : string = jsNative
+let textValue (ytext: obj) : string = jsNative
 
 [<Emit("$0.observe($1)")>]
-let private observeText (ytext: obj) (handler: unit -> unit) : unit = jsNative
+let observeText (ytext: obj) (handler: unit -> unit) : unit = jsNative
 
 [<Emit("$0.delete($1, $2)")>]
 let private deleteRange (ytext: obj) (index: int) (length: int) : unit = jsNative

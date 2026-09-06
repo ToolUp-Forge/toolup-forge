@@ -126,6 +126,33 @@ CRDT updates are the one payload class that merges cleanly on reconnect, which i
 
 What a queue must still own is **retention**: an update a client never managed to send exists only in that client's local document until it does.
 
+### The composition (Phase 760)
+
+That retention is now wired, and the wiring is deliberately thin because the two substrates must stay independent — `ToolUp.Offline` composes without the CRDT store, the CRDT store composes without `ToolUp.Offline`, and neither strip mode (`NoOffline` / `NoCrdtDocuments`) is weakened by the other's presence (GP 13). Neither package references the other's types (GP 10). Three pieces meet in the consuming app:
+
+```fsharp skip=fragment
+// 1. A transport that holds what it cannot publish. `hold` is
+//    `byte[] -> Async<unit>` — this file names no queue type.
+let holding = CrdtSyncClient.holdAndForward transport (holdInQueue queue docId scopeId)
+let session = CrdtSyncClient.start yjs ydoc holding.Transport sessionId
+
+// 2. "Held" means a durable queue entry under the reserved marker, so
+//    the coordinator can recognise it later. `MergeablePayload.mint`
+//    stamps `toolup.mergeable/crdt` and a BaseVersion of 0 — there is
+//    literally nothing for the write to be based on.
+
+// 3. The coordinator gets it back out through a registered channel.
+SyncCoordinator.startRouted
+    [ { Channel = "crdt"; CatchUp = session.Resync; Replay = holding.Replay } ]
+    queue
+    syncApi
+    offlineConfig
+```
+
+On reconnect the coordinator runs `CatchUp` first (the state-vector diff of the paragraph above), then flushes that channel's held updates, and only then drains the ordinary entity mutations. **A held CRDT update never reaches `IOfflineSyncApi`, so it never produces a `SyncOutcome.Conflict` and the conflict resolver is never mounted for it** — not because a prompt was suppressed, but because the payload did not travel the path that can raise one. A marked payload whose channel has no registered handler stays `Pending` and is warned about rather than falling back to the entity path, since that fallback is exactly the last-writer-wins replay this composition exists to avoid.
+
+`samples/MinimalClient/CrdtOfflineCoEditSample.fs` is the worked example: the Phase 535 shared text area with the link pulled out, converging on reconnect with no conflict prompt.
+
 ## Composition
 
 ```fsharp skip=fragment
@@ -160,3 +187,4 @@ The executable bar is `ICrdtDocumentStoreContract` in `ToolUp.Platform.Tests` �
 - [`portability-rules.md`](portability-rules.md) — the six rules in full.
 - [`sse-deployment.md`](sse-deployment.md) — the fan-out transport under load.
 - [`live-sessions.md`](live-sessions.md) — the server-authoritative sibling: a server-held tree pushed as patches, for surfaces where the server owns the state rather than merging clients' views of it.
+- [`ToolUp.Offline`'s README](../../src/ToolUp.Offline/README.md) — the queue half of the offline interplay above, including the reserved mergeable marker.
