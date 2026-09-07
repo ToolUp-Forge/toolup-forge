@@ -222,7 +222,15 @@ let private rateGate
 /// hide a second, genuinely-different breakage behind the first one's
 /// window — while a per-address key still bounds any single caller to
 /// one line per window. The counter is what stays complete.
-let private recordParseDrop (ctx: HttpContext) (endpoint: string) : unit =
+///
+/// Phase 763 takes the bind ERROR rather than nothing, so a body of the
+/// JSON literal `null` is counted and warned on exactly the path a
+/// truncated one is. The counter is deliberately NOT split by cause:
+/// the series is what a dashboard alerts on, "ad events are being
+/// dropped" is the alert, and a second series would halve every
+/// existing threshold for no operational gain. The cause is on the log
+/// line, where a human reads it.
+let private recordParseDrop (ctx: HttpContext) (endpoint: string) (error: HttpBodyBinding.BodyBindError) : unit =
     resolveMetrics ctx
     |> Option.iter (fun m -> m.Increment(AdAnalyticsMetrics.MalformedPayloadsTotal, Map [ "endpoint", endpoint ]))
 
@@ -233,9 +241,11 @@ let private recordParseDrop (ctx: HttpContext) (endpoint: string) : unit =
         |> Option.iter (fun l ->
             l.Warn(
                 sprintf
-                    "[ad-analytics] event=malformed_payload endpoint=%s from=%s — the posted body did not deserialise and the ad event was DROPPED (answered 400). A steady rate here usually means a client/server wire-format skew rather than abuse. Further warnings for this endpoint and address are suppressed for %g minutes; %s counts every one."
+                    "[ad-analytics] event=malformed_payload endpoint=%s from=%s reason=%s — the posted body did not deserialise (%s) and the ad event was DROPPED (answered 400). A steady rate here usually means a client/server wire-format skew rather than abuse. Further warnings for this endpoint and address are suppressed for %g minutes; %s counts every one."
                     endpoint
                     ip
+                    (HttpBodyBinding.BodyBindError.reason error)
+                    (HttpBodyBinding.BodyBindError.describe error)
                     warningWindowMinutes
                     AdAnalyticsMetrics.MalformedPayloadsTotal
             ))
@@ -347,21 +357,21 @@ let private impressionHandler: HttpHandler =
                 ctx.Response.StatusCode <- 413
                 return! ctx.WriteTextAsync "Payload too large"
             | Some body ->
-                let event =
-                    try
-                        Some(JsonSerializer.Deserialize<AdImpression>(body, jsonOptions))
-                    with _ ->
-                        None
-
-                match event with
-                | None ->
-                    recordParseDrop ctx "impression"
-                    ctx.Response.StatusCode <- 400
+                // Phase 763 — bound through the shared seam, after the
+                // size cap above, which must keep running first. A body
+                // of the JSON literal `null` used to bind to `Some null`
+                // and reach `validImpression` below, where the first
+                // field access threw OUTSIDE the `try`: a 500 for a
+                // 400-class input, with the parse-drop counter silent.
+                match HttpBodyBinding.tryBindJsonString<AdImpression> jsonOptions body with
+                | Error err ->
+                    recordParseDrop ctx "impression" err
+                    ctx.Response.StatusCode <- HttpBodyBinding.statusCodeFor err
                     return! ctx.WriteTextAsync "Malformed AdImpression payload"
-                | Some ev when not (validImpression ev) ->
+                | Ok ev when not (validImpression ev) ->
                     ctx.Response.StatusCode <- 400
                     return! ctx.WriteTextAsync "Invalid AdImpression field(s)"
-                | Some ev ->
+                | Ok ev ->
                     let! slotOk = slotIsKnown ctx ev.SlotId
 
                     if not slotOk then
@@ -396,21 +406,19 @@ let private clickHandler: HttpHandler =
                 ctx.Response.StatusCode <- 413
                 return! ctx.WriteTextAsync "Payload too large"
             | Some body ->
-                let event =
-                    try
-                        Some(JsonSerializer.Deserialize<AdClick>(body, jsonOptions))
-                    with _ ->
-                        None
-
-                match event with
-                | None ->
-                    recordParseDrop ctx "click"
-                    ctx.Response.StatusCode <- 400
+                // Phase 763 — the same bind seam as the impression
+                // endpoint above, for the same reason: `null` is valid
+                // JSON, so the old `try … with _ -> None` shape never
+                // saw it and `validClick` took the dereference.
+                match HttpBodyBinding.tryBindJsonString<AdClick> jsonOptions body with
+                | Error err ->
+                    recordParseDrop ctx "click" err
+                    ctx.Response.StatusCode <- HttpBodyBinding.statusCodeFor err
                     return! ctx.WriteTextAsync "Malformed AdClick payload"
-                | Some ev when not (validClick ev) ->
+                | Ok ev when not (validClick ev) ->
                     ctx.Response.StatusCode <- 400
                     return! ctx.WriteTextAsync "Invalid AdClick field(s)"
-                | Some ev ->
+                | Ok ev ->
                     let! slotOk = slotIsKnown ctx ev.SlotId
 
                     if not slotOk then

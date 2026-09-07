@@ -164,14 +164,18 @@ let private readBody (ctx: HttpContext) : System.Threading.Tasks.Task<string> = 
     return! reader.ReadToEndAsync()
 }
 
+/// Phase 763 — bound through the shared seam. The hand-rolled version
+/// this replaces returned `Some null` for a body of the JSON literal
+/// `null` (valid JSON, so nothing threw), and `upsertHandler`'s
+/// `String.IsNullOrWhiteSpace config.SlotId` guard below then took the
+/// dereference OUTSIDE the `try`: a 500 on an admin endpoint for what
+/// is a 400-class body. The `'T option` shape is kept so the two call
+/// sites read unchanged — what changes is that `Some` can no longer
+/// carry a null.
 let private tryDeserialise<'T> (body: string) : 'T option =
-    if String.IsNullOrWhiteSpace body then
-        None
-    else
-        try
-            Some(JsonSerializer.Deserialize<'T>(body, jsonOptions))
-        with _ ->
-            None
+    match HttpBodyBinding.tryBindJsonString<'T> jsonOptions body with
+    | Ok value -> Some value
+    | Error _ -> None
 
 let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
     resolveAuditLog ctx

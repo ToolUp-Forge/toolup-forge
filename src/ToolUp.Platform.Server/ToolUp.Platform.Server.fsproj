@@ -768,6 +768,13 @@
         <Compile Include="Server\IUserClaims.fs" />
         <Compile Include="Server\Premium\PremiumGate.fs" />
         <Compile Include="Server\Premium\GrantPremiumApiHandler.fs" />
+        <!-- Phase 763 — the shared request-body binding seam. Depends on
+             nothing but HttpContext + System.Text.Json (it takes the
+             caller's JsonSerializerOptions rather than owning one), and
+             must precede every handler swept onto it: ConsentApiHandler,
+             PlatformAdmin/AdUnitConfigApi and AdAnalyticsApiHandler below,
+             plus AuthProviders/Passkey in its own project. -->
+        <Compile Include="Server\HttpBodyBinding.fs" />
         <Compile Include="Server\ConsentApiHandler.fs" />
         <!-- Phase 159 — durable per-subject consent persistence over
              IEntityStore (in-memory dev impl + entity-backed production

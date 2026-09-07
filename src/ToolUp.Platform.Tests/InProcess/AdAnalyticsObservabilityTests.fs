@@ -173,6 +173,16 @@ let private validImpressionBody () =
 
 let private malformedBody = "{ this is not json"
 
+/// The Phase 763 fixture. `null` is VALID JSON, which is the whole
+/// reason the pre-763 `try Some(Deserialize) with _ -> None` shape
+/// never saw it: nothing threw, the deserialiser handed back a null
+/// record typed as `AdImpression`, and the first field access in
+/// `validImpression` threw a `NullReferenceException` outside the
+/// `try` — a 500, with the parse-drop counter silent. Written as a
+/// literal rather than serialised, because the point is the exact
+/// four bytes a client sends when it posts an absent value.
+let private nullLiteralBody = "null"
+
 let private storeFailures =
     AdAnalyticsApiHandler.AdAnalyticsMetrics.RateLimitStoreFailuresTotal
 
@@ -331,6 +341,116 @@ let tests =
                 Expect.equal response.StatusCode HttpStatusCode.NoContent "recorded"
                 Expect.equal (h.Metrics.CountOf malformedPayloads) 0 "no parse-drop increment on the happy path"
                 Expect.isEmpty (h.Logger.WarningsContaining "event=malformed_payload") "and no warning"
+            finally
+                h.Dispose()
+        }
+
+        // ─── Phase 763 — the null-literal body ───────────────────────
+
+        test "a null-literal impression body answers 400 rather than 500" {
+            let h = build (Some(allowingStore ()))
+
+            try
+                let response = post h impressionPath nullLiteralBody
+
+                // The assertion the phase exists for. Pre-763 this was
+                // `InternalServerError`, and asserting merely "not 204"
+                // would have passed against that — so the status is
+                // pinned exactly, and the 500 is named in its own right
+                // below so a regression cannot read as a near-miss.
+                Expect.equal
+                    response.StatusCode
+                    HttpStatusCode.BadRequest
+                    "a null body is the caller's error, answered 400"
+
+                Expect.notEqual
+                    response.StatusCode
+                    HttpStatusCode.InternalServerError
+                    "and never a 500 — the pre-763 behaviour was an unhandled NullReferenceException"
+            finally
+                h.Dispose()
+        }
+
+        test "a null-literal impression body is counted as a parse drop, exactly as a malformed one is" {
+            let h = build (Some(allowingStore ()))
+
+            try
+                post h impressionPath nullLiteralBody |> ignore
+
+                // The second half of the defect: the drop was invisible.
+                // 466's counter sat on the `None` arm, and a null body
+                // never reached it.
+                Expect.equal (h.Metrics.CountOf malformedPayloads) 1 "exactly one parse-drop increment"
+
+                Expect.equal
+                    (h.Metrics.TagsFor malformedPayloads |> List.map (Map.tryFind "endpoint"))
+                    [ Some "impression" ]
+                    "under the same endpoint tag a malformed body uses"
+
+                Expect.equal
+                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.length)
+                    1
+                    "one Warn names the drop"
+
+                Expect.stringContains
+                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    "reason=null-body"
+                    "and distinguishes the cause from a truncated body, which the counter deliberately does not"
+            finally
+                h.Dispose()
+        }
+
+        test "a null-literal click body answers 400 and counts under the click endpoint tag" {
+            let h = build (Some(allowingStore ()))
+
+            try
+                let response = post h clickPath nullLiteralBody
+
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "400, not 500"
+
+                Expect.equal
+                    (h.Metrics.TagsFor malformedPayloads |> List.map (Map.tryFind "endpoint"))
+                    [ Some "click" ]
+                    "the click endpoint carries the identical fix, not a copy that drifted"
+            finally
+                h.Dispose()
+        }
+
+        test "an empty body is a parse drop too, and is reported as the null class rather than as malformed" {
+            // `Deserialize("")` throws, so pre-763 an empty body was
+            // already a 400 — but it was reported to the operator as a
+            // MALFORMED payload, which sends whoever reads the log
+            // hunting a wire-format skew that does not exist. The
+            // status is unchanged (GP 11); the story is not.
+            let h = build (Some(allowingStore ()))
+
+            try
+                let response = post h impressionPath ""
+
+                Expect.equal response.StatusCode HttpStatusCode.BadRequest "unchanged: still a 400"
+                Expect.equal (h.Metrics.CountOf malformedPayloads) 1 "unchanged: still counted"
+
+                Expect.stringContains
+                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    "reason=null-body"
+                    "no body and a null body are the same story for an operator"
+            finally
+                h.Dispose()
+        }
+
+        test "a genuinely malformed body still reports the malformed reason, not the null one" {
+            // The control for the pair above. Without it, a bind that
+            // collapsed every failure to `BodyNull` would pass every
+            // other assertion in this section.
+            let h = build (Some(allowingStore ()))
+
+            try
+                post h impressionPath malformedBody |> ignore
+
+                Expect.stringContains
+                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    "reason=malformed-body"
+                    "the two causes stay distinguishable on the log line"
             finally
                 h.Dispose()
         }

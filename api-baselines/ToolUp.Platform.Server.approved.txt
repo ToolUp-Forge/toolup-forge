@@ -4691,6 +4691,23 @@ ToolUp.Platform.HotSwapOutcome+Tags (class)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapApplied : System.Int32 (literal)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapRejected : System.Int32 (literal)
 ToolUp.Platform.HotSwapOutcome+Tags.SwapRolledBack : System.Int32 (literal)
+ToolUp.Platform.HttpBodyBinding (class)
+ToolUp.Platform.HttpBodyBinding.statusCodeFor(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.Int32
+ToolUp.Platform.HttpBodyBinding.tryBindJsonString`1(System.Text.Json.JsonSerializerOptions, System.String) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.HttpBodyBinding+BodyBindError]
+ToolUp.Platform.HttpBodyBinding.tryBindJson`1(System.Text.Json.JsonSerializerOptions, Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.HttpBodyBinding+BodyBindError]]
+ToolUp.Platform.HttpBodyBinding+BodyBindError (class)
+ToolUp.Platform.HttpBodyBinding+BodyBindError.BodyNull : ToolUp.Platform.HttpBodyBinding+BodyBindError { get }
+ToolUp.Platform.HttpBodyBinding+BodyBindError.IsBodyMalformed : System.Boolean { get }
+ToolUp.Platform.HttpBodyBinding+BodyBindError.IsBodyNull : System.Boolean { get }
+ToolUp.Platform.HttpBodyBinding+BodyBindError.Tag : System.Int32 { get }
+ToolUp.Platform.HttpBodyBinding+BodyBindError+BodyMalformed (class)
+ToolUp.Platform.HttpBodyBinding+BodyBindError+BodyMalformed.detail : System.String { get }
+ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags (class)
+ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags.BodyMalformed : System.Int32 (literal)
+ToolUp.Platform.HttpBodyBinding+BodyBindError+Tags.BodyNull : System.Int32 (literal)
+ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule (class)
+ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule.describe(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.String
+ToolUp.Platform.HttpBodyBinding+BodyBindErrorModule.reason(ToolUp.Platform.HttpBodyBinding+BodyBindError) : System.String
 ToolUp.Platform.IArtifactProvenanceSource (interface)
 ToolUp.Platform.IArtifactProvenanceSource.GetArtifact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ArtifactProvenance]]
 ToolUp.Platform.IArtifactSigner (interface)

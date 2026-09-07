@@ -28,26 +28,22 @@ let private PlatformScope = "_platform"
 
 let private jsonOptions = FableConverters.create ()
 
-let private readBody (ctx: HttpContext) : System.Threading.Tasks.Task<string> = task {
-    use reader = new System.IO.StreamReader(ctx.Request.Body)
-    return! reader.ReadToEndAsync()
-}
-
 let private consentHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
-        let! body = readBody ctx
+        // Phase 763 — bound through the shared seam. The previous
+        // `try Some(Deserialize) with _ -> None` shape let a body of the
+        // JSON literal `null` through as `Some null`, and this handler
+        // does not dereference the event at all: it handed the null
+        // straight to `IAuditLog.Record`, answered 204, and wrote a
+        // meaningless row into the consent trail. That is the same
+        // defect class as the ad-analytics 500 and a quieter one.
+        let! bound = HttpBodyBinding.tryBindJson<ConsentEvent> jsonOptions ctx
 
-        let event =
-            try
-                Some(JsonSerializer.Deserialize<ConsentEvent>(body, jsonOptions))
-            with _ ->
-                None
-
-        match event with
-        | None ->
-            ctx.Response.StatusCode <- 400
+        match bound with
+        | Error err ->
+            ctx.Response.StatusCode <- HttpBodyBinding.statusCodeFor err
             return! ctx.WriteTextAsync "Malformed ConsentEvent payload"
-        | Some ev ->
+        | Ok ev ->
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as auditLog ->
                 // Audit emission is fire-and-forget per the `IAuditLog`

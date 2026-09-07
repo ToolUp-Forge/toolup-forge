@@ -1421,6 +1421,13 @@
              drop, each counted unconditionally and warned under a
              throttle, over a real Giraffe pipeline. -->
         <Compile Include="InProcess\AdAnalyticsObservabilityTests.fs" />
+        <!-- Phase 763 — the null-literal request body. Pins the shared
+             `HttpBodyBinding` seam and drives each swept endpoint
+             (consent, ad-unit admin, both passkey ceremony-begin
+             handlers) over a real Giraffe pipeline. The ad-analytics
+             pair is asserted in AdAnalyticsObservabilityTests above,
+             beside the Phase 466 counter their fix keeps feeding. -->
+        <Compile Include="InProcess\HttpBodyBindingTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
         <Compile Include="InProcess\UserClaimsTests.fs" />
         <!-- Phase 57 follow-up — prerender determinism + hydration-mismatch

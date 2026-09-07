@@ -1195,6 +1195,9 @@ let private registeredTests =
         // Phase 466 — the ad-analytics endpoints' silent-degradation
         // signals: rate-limit-store fail-open and malformed-payload drop.
         AdAnalyticsObservabilityTests.tests
+        // Phase 763 — the null-literal request body: the shared
+        // `HttpBodyBinding` seam plus each swept endpoint end to end.
+        HttpBodyBindingTests.tests
         UserClaimsTests.tests
         ModuleGroupingValidatorTests.tests
         ModuleIdentityTests.tests

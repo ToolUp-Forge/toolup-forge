@@ -134,15 +134,23 @@ let private registerBeginHandler: HttpHandler =
         let runtime = getService<PasskeyRuntime> ctx
         let! body = ctx.ReadBodyFromRequestAsync()
 
+        // Phase 763 — bound through the shared seam. A bodyless
+        // register-begin is a SUPPORTED flow (the empty request is how
+        // an already-authenticated caller adds a passkey), so the
+        // fallback stays the empty request rather than becoming a 400 —
+        // what changes is that a body of the JSON literal `null` now
+        // reaches it too. It used to bind to a null record that nothing
+        // caught, and `resolveIdentity` below took the dereference: a
+        // 500 on an anonymous endpoint.
         let request =
-            try
-                JsonSerializer.Deserialize<RegisterBeginRequest>(body, jsonOptions)
-            with _ -> {
+            match HttpBodyBinding.tryBindJsonString<RegisterBeginRequest> jsonOptions body with
+            | Ok r -> r
+            | Error _ -> {
                 Username = None
                 DisplayName = None
                 Email = None
                 BootstrapToken = None
-            }
+              }
 
         let! user = currentUser ctx |> Async.StartAsTask
         let pendingStore = tryGetService<IPendingInviteStore> ctx
@@ -216,10 +224,15 @@ let private assertBeginHandler: HttpHandler =
         let runtime = getService<PasskeyRuntime> ctx
         let! body = ctx.ReadBodyFromRequestAsync()
 
+        // Phase 763 — the same seam and the same reason as
+        // `registerBeginHandler`: a bodyless assert-begin is the
+        // usernameless (discoverable-credential) flow and must keep
+        // working, while a `null` body used to produce a null record
+        // whose `Username` read threw outside the `try`.
         let request =
-            try
-                JsonSerializer.Deserialize<AssertionBeginRequest>(body, jsonOptions)
-            with _ -> { Username = None }
+            match HttpBodyBinding.tryBindJsonString<AssertionBeginRequest> jsonOptions body with
+            | Ok r -> r
+            | Error _ -> { Username = None }
 
         let! begun =
             beginAssertion runtime.Fido2 runtime.Credentials runtime.Challenges runtime.Config request.Username
