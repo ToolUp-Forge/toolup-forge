@@ -122,20 +122,211 @@ module PseudoLocaleCatalog =
     let private unsupported (path: string) (t: Type) : 'a =
         invalidOp (
             $"PseudoLocaleCatalog: catalog field `{path}` has shape `{t}`, which the pseudo-locale walk "
-            + "does not understand. The walk covers `string`, nested message records, and functions "
-            + "returning `string`. Add an arm for the new shape (and a case to LocalizationTests) rather "
-            + "than leaving the field untransformed — an untransformed field is indistinguishable from an "
-            + "un-externalised literal, which is what this gate exists to detect."
+            + "does not understand. The walk covers `string`, nested message records, and functions of "
+            + "`string` / `int` / `int64` returning `string`. Add an arm to the shape table (and a case "
+            + "to LocalizationTests) rather than leaving the field untransformed — an untransformed field "
+            + "is indistinguishable from an un-externalised literal, which is what this gate exists to detect."
         )
 
-    /// Apply an F# function value reflectively. The declared field type
-    /// carries the one-argument `Invoke`, and dispatch is virtual, so a
-    /// curried chain and a compiler-generated optimised closure are both
-    /// reached through the same call.
-    let private applyOnce (fnType: Type) (domain: Type) (fn: obj) (arg: obj) : obj =
-        match fnType.GetMethod("Invoke", [| domain |]) with
-        | null -> unsupported "<function>" fnType
-        | invoke -> invoke.Invoke(fn, [| arg |])
+    // ─── Parameterised messages: the shape table ──────────────────────
+    //
+    // A parameterised message has to be WRAPPED, not evaluated: the
+    // arguments are the caller's (a module name, a row count), and only
+    // the string the message BUILDS is ours to transform.
+    //
+    // The obvious way to write that is reflectively —
+    // `FSharpValue.MakeFunction` over a `Type.GetMethod "Invoke"`. It
+    // works on .NET and **Fable supports none of the three calls**
+    // (`Type.GetMethod`, `MethodBase.Invoke`, `MakeFunction`), which
+    // would confine the pseudo-locale to the test harness and cost it
+    // its other half: a developer running the app under `qps-ploc` and
+    // seeing the one plain-looking string on the screen. The record walk
+    // itself is Fable-clean, so only this arm needed rewriting.
+    //
+    // Hence a table over the argument shapes the catalog actually uses.
+    // Each arm is ordinary typed F#, so Fable applies its own currying
+    // conventions to the wrapper exactly as it does to the original —
+    // which a hand-built curried closure could not promise. The trade is
+    // explicit: a new field of an existing shape still needs no edit
+    // here, but a new ARGUMENT TYPE does, and the `_` arm names it
+    // rather than letting the field through untransformed.
+    //
+    // Both derived forms come from ONE arm each, on purpose: the wrapper
+    // and the coverage probe are the same function seen twice, and
+    // separate tables would be two places to get one shape wrong.
+
+    let private sampleString = "sample"
+    let private sampleInt = 1
+    let private sampleLong = 1L
+
+    type private Parameterised = {
+        /// The message, post-composed with the transform. Boxed because
+        /// its type is only known reflectively at the call site.
+        Wrapped: obj
+        /// The string this message builds from the sample arguments.
+        /// A thunk — the derivation never needs it.
+        Probe: unit -> string
+    }
+
+    /// Decompose a curried function type into its argument types and the
+    /// type it finally returns.
+    let rec private signature (t: Type) : Type list * Type =
+        if FSharpType.IsFunction t then
+            let domain, range = FSharpType.GetFunctionElements t
+            let args, result = signature range
+            domain :: args, result
+        else
+            [], t
+
+    /// A compact key for an argument list: `s` string, `i` int, `l`
+    /// int64. `"sii"` is `string -> int -> int -> string`.
+    let private shapeKey (args: Type list) : string =
+        args
+        |> List.map (fun a ->
+            if a = typeof<string> then "s"
+            elif a = typeof<int> then "i"
+            elif a = typeof<int64> then "l"
+            else "?")
+        |> String.concat ""
+
+    let private parameterised (path: string) (t: Type) (v: obj) : Parameterised =
+        let args, result = signature t
+        let tr = PseudoLocale.transform
+        let s = sampleString
+        let i = sampleInt
+        let l = sampleLong
+
+        if result <> typeof<string> then
+            unsupported path t
+        else
+            match shapeKey args with
+            | "s" ->
+                let f = v :?> (string -> string)
+
+                {
+                    Wrapped = box (fun (a: string) -> tr (f a))
+                    Probe = fun () -> f s
+                }
+            | "i" ->
+                let f = v :?> (int -> string)
+
+                {
+                    Wrapped = box (fun (a: int) -> tr (f a))
+                    Probe = fun () -> f i
+                }
+            | "l" ->
+                let f = v :?> (int64 -> string)
+
+                {
+                    Wrapped = box (fun (a: int64) -> tr (f a))
+                    Probe = fun () -> f l
+                }
+            | "ss" ->
+                let f = v :?> (string -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: string) -> tr (f a b))
+                    Probe = fun () -> f s s
+                }
+            | "si" ->
+                let f = v :?> (string -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: int) -> tr (f a b))
+                    Probe = fun () -> f s i
+                }
+            | "sl" ->
+                let f = v :?> (string -> int64 -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: int64) -> tr (f a b))
+                    Probe = fun () -> f s l
+                }
+            | "is" ->
+                let f = v :?> (int -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: string) -> tr (f a b))
+                    Probe = fun () -> f i s
+                }
+            | "ii" ->
+                let f = v :?> (int -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: int) -> tr (f a b))
+                    Probe = fun () -> f i i
+                }
+            | "il" ->
+                let f = v :?> (int -> int64 -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: int64) -> tr (f a b))
+                    Probe = fun () -> f i l
+                }
+            | "sss" ->
+                let f = v :?> (string -> string -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: string) (c: string) -> tr (f a b c))
+                    Probe = fun () -> f s s s
+                }
+            | "sis" ->
+                let f = v :?> (string -> int -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: int) (c: string) -> tr (f a b c))
+                    Probe = fun () -> f s i s
+                }
+            | "sii" ->
+                let f = v :?> (string -> int -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: int) (c: int) -> tr (f a b c))
+                    Probe = fun () -> f s i i
+                }
+            | "iss" ->
+                let f = v :?> (int -> string -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: string) (c: string) -> tr (f a b c))
+                    Probe = fun () -> f i s s
+                }
+            | "isl" ->
+                let f = v :?> (int -> string -> int64 -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: string) (c: int64) -> tr (f a b c))
+                    Probe = fun () -> f i s l
+                }
+            | "iii" ->
+                let f = v :?> (int -> int -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: int) (c: int) -> tr (f a b c))
+                    Probe = fun () -> f i i i
+                }
+            | "siii" ->
+                let f = v :?> (string -> int -> int -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: int) (c: int) (d: int) -> tr (f a b c d))
+                    Probe = fun () -> f s i i i
+                }
+            | "iiii" ->
+                let f = v :?> (int -> int -> int -> int -> string)
+
+                {
+                    Wrapped = box (fun (a: int) (b: int) (c: int) (d: int) -> tr (f a b c d))
+                    Probe = fun () -> f i i i i
+                }
+            | "ssis" ->
+                let f = v :?> (string -> string -> int -> string -> string)
+
+                {
+                    Wrapped = box (fun (a: string) (b: string) (c: int) (d: string) -> tr (f a b c d))
+                    Probe = fun () -> f s s i s
+                }
+            | _ -> unsupported path t
 
     /// Rebuild `value` of type `t` with every reachable string replaced by
     /// its pseudo-localised form. Total over the three shapes above;
@@ -144,13 +335,7 @@ module PseudoLocaleCatalog =
         if t = typeof<string> then
             box (PseudoLocale.transform (value :?> string))
         elif FSharpType.IsFunction t then
-            // Wrap rather than evaluate: the arguments are the caller's
-            // (a module name, a row count), and only the string the
-            // function BUILDS is ours to transform. The recursion on
-            // `range` walks a curried chain one argument at a time.
-            let domain, range = FSharpType.GetFunctionElements t
-
-            FSharpValue.MakeFunction(t, (fun arg -> transformValue path range (applyOnce t domain value arg)))
+            (parameterised path t value).Wrapped
         elif FSharpType.IsRecord(t, true) then
             let fields = FSharpType.GetRecordFields(t, true)
 
@@ -206,22 +391,12 @@ module PseudoLocaleCatalog =
 
     // ─── The coverage walk ────────────────────────────────────────────
 
-    /// A sample argument for probing a parameterised message. The value
-    /// is never asserted on — only the string the message builds around
-    /// it is — so any inhabitant of the type will do.
-    let private sampleArg (path: string) (t: Type) : obj =
-        if t = typeof<string> then box "sample"
-        elif t = typeof<int> then box 1
-        elif t = typeof<int64> then box 1L
-        elif t = typeof<float> then box 1.0
-        elif t = typeof<bool> then box true
-        else unsupported path t
-
     /// Every string leaf a catalog can render, as `path * value`, in a
-    /// stable order. Parameterised messages are probed with `sampleArg`,
-    /// so a function field contributes the string it BUILDS rather than
-    /// being skipped — which is what lets the coverage gate see a section
-    /// whose only fields are functions.
+    /// stable order. A parameterised message contributes the string it
+    /// BUILDS from the sample arguments rather than being skipped —
+    /// which is what lets the coverage gate see a section whose fields
+    /// are all functions. The sample values are never asserted on, only
+    /// the sentence built around them.
     ///
     /// Two catalogs of the same type always produce the same paths in the
     /// same order, which is what lets the gate compare a derived catalog
@@ -231,8 +406,7 @@ module PseudoLocaleCatalog =
             if t = typeof<string> then
                 [ path, (value :?> string) ]
             elif FSharpType.IsFunction t then
-                let domain, range = FSharpType.GetFunctionElements t
-                walk path range (applyOnce t domain value (sampleArg path domain))
+                [ path, (parameterised path t value).Probe() ]
             elif FSharpType.IsRecord(t, true) then
                 FSharpType.GetRecordFields(t, true)
                 |> Array.toList
