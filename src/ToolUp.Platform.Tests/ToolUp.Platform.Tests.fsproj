@@ -727,6 +727,11 @@
              suggestion, the three exclusion classes, the strict-mode
              escalation, and the silent no-finding case. -->
         <Compile Include="InProcess\UnknownConfigKeyValidatorTests.fs" />
+        <!-- Phase 9m.C — the value-level companion to the guard above:
+             TOOLUP_TRACE_CATEGORIES values no composed emission site
+             declared. Pure-function tests plus one sequenced list over
+             the process-global category registry. -->
+        <Compile Include="InProcess\TraceCategoriesValidatorTests.fs" />
         <!-- Phase 9m.A — TOOLUP_AI_PROVIDER / TOOLUP_AI_MODEL env-var
              typo catchers. Always-on validators that self-skip with Ok
              when the env var is unset. Pure-function tests; no

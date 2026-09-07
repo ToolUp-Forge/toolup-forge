@@ -51,6 +51,8 @@ let registerFirstPartyConfigValidators
     // health check — exactly as it was.
     addConfigValidator (UnknownConfigKeyValidator.validator ()) // Phase 695 — warn (refuse under TOOLUP_STRICT_CONFIG) on set TOOLUP_* variables that name no config key the SDK reads
 
+    addConfigValidator (TraceCategoriesValidator.validator config) // Phase 9m.C — warn on TOOLUP_TRACE_CATEGORIES values no composed emission site declared (the guard above sees key NAMES, so a misspelt VALUE inside a correctly-named key is outside its quantifier); Ok when nothing is configured or nothing registered
+
     addConfigValidator (ConfigValidator.BlobStorageValidator(resolvedBlobStorage)) // blob storage reachable
     addConfigValidator (BlobStorageSelectionValidator.BlobStorageSelectionValidator(resolvedBlobStorage)) // refuse cloud-declared backend that silently fell back to LocalFileStorage
     addConfigValidator (ConfigValidator.SecretStoreValidator(secretStore)) // secret store reachable

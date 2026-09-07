@@ -72,6 +72,21 @@ let registerSseDevDiagnosticsContributor
 
         services.AddSingleton<IDevDiagnosticsContributor>(sseContrib) |> ignore
 
+/// Phase 9m.C. `IDevDiagnosticsContributor` for the composed
+/// trace-category registry — which categories emission sites declared,
+/// and which of them this deployment's `TOOLUP_TRACE_CATEGORIES`
+/// currently selects. Gated on `EnableDevEndpoints` on the same terms as
+/// the SSE panel above, and registered separately so a deployment that
+/// composes no SSE manager still gets the panel.
+///
+/// The preflight validator (`TraceCategoriesValidator`, registered in
+/// `ComposeConfigValidators`) states a typo once at boot; this panel is
+/// what an operator reads afterwards to see what is available to enable.
+let registerTraceCategoryDevDiagnosticsContributor (services: IServiceCollection) (config: ServerConfig) : unit =
+    if config.EnableDevEndpoints then
+        services.AddSingleton<IDevDiagnosticsContributor>(TraceCategoriesValidator.contributor config)
+        |> ignore
+
 /// Register the core SDK singletons that every consumer resolves
 /// from DI: logger, dataTypes, blob storage, data-object store, data
 /// catalog, event store, audit log, auth provider, secret store, SSE

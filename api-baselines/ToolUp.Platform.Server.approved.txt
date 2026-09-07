@@ -1282,6 +1282,7 @@ ToolUp.Platform.ComposeRuntimeServices.registerMetricsAndObservability(Microsoft
 ToolUp.Platform.ComposeRuntimeServices.registerOutboundRateLimiter(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpRef`1[ToolUp.Platform.IRateLimiter]) : ToolUp.Platform.IRateLimiter
 ToolUp.Platform.ComposeRuntimeServices.registerRateLimitMiddleware(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerSseDevDiagnosticsContributor(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.SSEConnectionManager) : System.Void
+ToolUp.Platform.ComposeRuntimeServices.registerTraceCategoryDevDiagnosticsContributor(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerUsageMetering(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Usage.ITeamQuotaPolicy]) : ToolUp.Platform.Usage.IUsageLog
 ToolUp.Platform.ComposeScopeResolver (class)
 ToolUp.Platform.ComposeScopeResolver.registerScopeResolution(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore], ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnonymousSessionMigrator]) : System.Void
@@ -6007,6 +6008,9 @@ ToolUp.Platform.LocaleResolver+LocaleConfigKeys (class)
 ToolUp.Platform.LocaleResolver+LocaleConfigKeys.TeamLocale : System.String (literal)
 ToolUp.Platform.LocaleResolver+LocaleConfigKeys.UserLocalePrefix : System.String (literal)
 ToolUp.Platform.Logger (class)
+ToolUp.Platform.Logger.clearRegisteredCategories() : System.Void
+ToolUp.Platform.Logger.registerCategory(System.String) : System.Void
+ToolUp.Platform.Logger.registeredCategories() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Logger.trace(ToolUp.Platform.ILogger, System.String, System.String) : System.Void
 ToolUp.Platform.LoggerScope (class)
 ToolUp.Platform.LoggerScope.RequestId : System.String (literal)
@@ -9310,6 +9314,15 @@ ToolUp.Platform.TokenAttemptThrottle.IsThrottled(System.String, System.DateTime)
 ToolUp.Platform.TokenAttemptThrottle.MaxFailures : System.Int32 { get }
 ToolUp.Platform.TokenAttemptThrottle.RecordFailure(System.String, System.DateTime) : System.Int32
 ToolUp.Platform.TokenAttemptThrottle.Window : System.TimeSpan { get }
+ToolUp.Platform.TraceCategoriesValidator (class)
+ToolUp.Platform.TraceCategoriesValidator.contributor(ToolUp.Platform.ServerConfig) : ToolUp.Platform.IDevDiagnosticsContributor
+ToolUp.Platform.TraceCategoriesValidator.evaluate(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.TraceCategoriesValidator.validator(ToolUp.Platform.ServerConfig) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.Platform.TraceCategoriesValidator+TraceCategoriesContributor (class)
+ToolUp.Platform.TraceCategoriesValidator+TraceCategoriesContributor..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.TraceCategoriesValidator+TraceCategoriesValidator (class)
+ToolUp.Platform.TraceCategoriesValidator+TraceCategoriesValidator..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.TraceCategoriesValidator+TraceCategoriesValidator.Name : System.String { get }
 ToolUp.Platform.Tracing.ActivityContextHelpers (class)
 ToolUp.Platform.Tracing.ActivityContextHelpers.currentTraceparent() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Tracing.ActivityContextHelpers.tryParseTraceparent(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Diagnostics.ActivityContext]

@@ -846,6 +846,10 @@ let compose
     // to `ComposeRuntimeServices.registerSseDevDiagnosticsContributor`).
     registerSseDevDiagnosticsContributor services config sseConnectionManager
 
+    // Phase 9m.C — the composed trace-category registry as a
+    // `/dev/inspect` panel ("Trace categories").
+    registerTraceCategoryDevDiagnosticsContributor services config
+
     // Phase 1g — webhook DI registrations (extracted to
     // `ComposeJobs.registerWebhookSubsystem`).
     // Phase 16 — pass `config` so `ServerlessHost = ServerlessHost`
