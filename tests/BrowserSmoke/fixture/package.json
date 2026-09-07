@@ -1,0 +1,30 @@
+{
+    "private": true,
+    "engines": {
+        "node": ">=20 || >=22 || >=24 || >=25"
+    },
+    "scripts": {
+        "build": "vite build"
+    },
+    "//1": "SDK-bundle deps mirror `samples/MinimalClient/package.json` — the Platform.Client tier this fixture references imports each of these via Fable.Core.JsInterop, so Vite needs them installed to BUNDLE the fixture even though no scenario renders a grid or a chart. Keep the two lists in step: a dependency added there and not here fails this gate at bundle time, which is the intended signal.",
+    "//2": "`yjs` is the one dependency the fixture itself uses — the CRDT library the Phase 535 sample names (MIT, GP 2). It is the CONSUMING app's dependency by design: `ToolUp.Platform.Client` imports nothing from it.",
+    "//3": "The lockfile is committed and the gate runs `npm ci`, so the bundle a CI run serves is byte-reproducible from this tree.",
+    "dependencies": {
+        "@clerk/react": "^6.6.4",
+        "@dnd-kit/core": "^6.3.1",
+        "@dnd-kit/sortable": "^10.0.0",
+        "@dnd-kit/utilities": "^3.2.2",
+        "ag-charts-community": "13.3.0",
+        "ag-charts-react": "13.3.0",
+        "ag-grid-community": "35.3.0",
+        "ag-grid-react": "35.3.0",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6",
+        "yjs": "^13.6.27"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^6.0.2",
+        "vite": "^8.0.13",
+        "vite-plugin-svgr": "^5.2.0"
+    }
+}

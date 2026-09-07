@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    BrowserSmokeFixture — the page the Phase 761 browser smoke harness drives.
+
+    A Fable app, and deliberately not a sample: nothing here ships, and
+    its only consumer is `ToolUp.BrowserSmoke.Tests`, which serves the
+    bundled output over `FixtureHost` and drives it with Playwright.
+
+    WHAT IS UNDER TEST is the shipped source, not a copy of it. The two
+    `samples/MinimalClient` files compiled below are the Phase 535 / 760
+    REFERENCE WIRING — the code a consumer is told to copy — so if that
+    wiring rots the smoke gate goes red. `Fixture.fs` adds only the two
+    things a deployment owns and the SDK deliberately does not: the
+    module-owned HTTP API over `ICrdtDocumentStore` (Phase 535 is
+    seam-first and mounts no route), and the fan-out that tells a tab a
+    co-editor moved — polled here, where a deployment would subscribe to
+    the reserved `_platform.crdt` notification topic.
+
+    WHY IT ProjectReferences `ToolUp.Offline.Client` WHOLE, exactly as
+    `samples/MinimalClient` does. The client tiers under test are not
+    separable by hand: `SyncCoordinator` takes an `OfflineConfig`, which
+    lives in `SDK.ClientTypes.fs`, which sits behind the folded Elmish
+    tier — so a "compile just the four files" fixture reconstructs most
+    of `ToolUp.Platform.Client` one `<Compile>` line at a time and then
+    has to keep that order in step with the tier's own. Reusing the
+    reference shape costs an npm install this gate pays for once, in its
+    own job, and cannot drift.
+
+    NOT IN ToolUp.Forge.sln, on purpose, exactly as MinimalClient is
+    not: `dotnet build ToolUp.Forge.sln` and `VerifyAll` must be
+    untouched by this phase. The harness has its own opt-in target,
+    the `VerifyBrowserSmoke` target in Build.fs.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**;dist\**</DefaultItemExcludes>
+    <!-- The Fable ecosystem (Feliz, the in-tree Elmish runtime,
+         Fable.SimpleJson) pre-dates F# 10's nullable reference types;
+         enabling nullness here would cascade "null / not null
+         inconsistent" errors through the transitive references. Per the
+         repo `CLAUDE.md`: nullness stays disabled on Fable-touching
+         projects. -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The Phase 535 / 760 reference wiring, compiled from the samples
+         themselves rather than restated here. Link-compiled rather than
+         moved: `samples/MinimalClient` is the Fable ACCEPTANCE gate's
+         consumer and stays that. -->
+    <Compile Include="..\..\..\samples\MinimalClient\CrdtCoEditSample.fs" Link="Sample\CrdtCoEditSample.fs" />
+    <Compile Include="..\..\..\samples\MinimalClient\CrdtOfflineCoEditSample.fs" Link="Sample\CrdtOfflineCoEditSample.fs" />
+    <Compile Include="Fixture.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 535's client pump arrives with this tier; Phase 24's
+         IndexedDB queue and Phase 760's routed coordinator with the
+         one below. -->
+    <ProjectReference Include="..\..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="..\..\..\src\ToolUp.Offline.Client\ToolUp.Offline.Client.fsproj" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

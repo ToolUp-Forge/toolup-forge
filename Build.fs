@@ -248,6 +248,172 @@ let main args =
         if result.ExitCode <> 0 then
             failwithf "VerifyFable: node exited %d." result.ExitCode)
 
+    // Phase 761 — the browser-level smoke gate.
+    //
+    // The repo's first REAL-BROWSER tier. Two scenarios, both of which
+    // shipped verified structurally or by hand because nothing here
+    // could open a browser: Phase 535's "two sessions co-edit the
+    // sample doc live", and Phase 24's "drop the network, make a
+    // change, restore it".
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyBrowserSmoke`
+    //
+    // ── Why it is a target of its own, and not a `TestPacks` entry ──
+    //
+    // Because `VerifyAll`'s wall-clock is a shared budget and this
+    // launches browsers. The harness project is deliberately outside
+    // `ToolUp.Forge.sln` AND outside `BuildConfig.TestPacks`, so the
+    // default gate is untouched by construction rather than by
+    // convention — there is no list a later edit could add it to by
+    // accident.
+    //
+    // ── It cannot pass vacuously ────────────────────────────────────
+    //
+    // The scenarios are gated on a locally-installed Chromium and
+    // report Pending, not Failed, without one (the `BrowserGate`
+    // convention from Phase 126). That is right for a developer's
+    // checkout and catastrophic for CI: a runner with no browser would
+    // report every scenario skipped and the job green. So this target
+    // reads the PASSED count out of Expecto's summary and fails below
+    // `browserScenarioFloor` — the same guard `VerifyFable` puts on its
+    // TAP counts, and for the same reason. Unlike that one the floor is
+    // the EXACT current count rather than a slack lower bound: there are
+    // eight scenarios and each is expensive, so losing one silently is
+    // exactly what this must catch. Adding or removing a scenario bumps
+    // this number in the same commit.
+    let browserScenarioFloor = 8
+
+    Target.create "VerifyBrowserSmoke" (fun _ ->
+        let fixtureDir = Path.getFullName "tests/BrowserSmoke/fixture"
+
+        let harnessProject =
+            Path.getFullName "tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/ToolUp.BrowserSmoke.Tests.fsproj"
+
+        let onPath name =
+            match ProcessUtils.tryFindFileOnPath name with
+            | Some path -> path
+            | None ->
+                failwithf
+                    "VerifyBrowserSmoke: `%s` was not found on PATH. The harness needs the .NET SDK, Node.js (>= 20) and PowerShell 7 (for Playwright's browser installer)."
+                    name
+
+        let proc exe args workingDir =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory workingDir
+
+        let runChecked exe args workingDir =
+            proc exe args workingDir |> CreateProcess.ensureExitCode |> Proc.run |> ignore
+
+        let npm = onPath "npm"
+
+        // ── 1-4: the page the browser will be pointed at ────────────
+        //
+        // `ci`, not `install` — the lockfile is committed, so the bundle
+        // a CI run serves is reproducible from the tree. The Fable
+        // compile and the Vite bundle are separate steps because they
+        // fail differently: the first is an F# compile against the real
+        // client tiers, the second is module resolution against the npm
+        // tree.
+        Trace.tracefn "▶ VerifyBrowserSmoke (1/6): dotnet tool restore (fixture)"
+        runChecked "dotnet" [ "tool"; "restore" ] fixtureDir
+
+        Trace.tracefn "▶ VerifyBrowserSmoke (2/6): npm ci (fixture)"
+        runChecked npm [ "ci"; "--no-fund"; "--no-audit" ] fixtureDir
+
+        Trace.tracefn "▶ VerifyBrowserSmoke (3/6): dotnet fable -o output --noCache (fixture)"
+        runChecked "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fixtureDir
+
+        Trace.tracefn "▶ VerifyBrowserSmoke (4/6): npm run build (fixture bundle)"
+        runChecked npm [ "run"; "build" ] fixtureDir
+
+        // ── 5: the harness, and the browser it drives ───────────────
+        //
+        // Built and then invoked as a DLL rather than through `dotnet
+        // run --project`, per Phase 731: that launch path intermittently
+        // hangs before the suite starts, and a hang costs far more than
+        // a failure because nothing about it says which it is.
+        Trace.tracefn "▶ VerifyBrowserSmoke (5/6): build the harness + ensure Chromium"
+
+        let targetPath =
+            proc "dotnet" [ "build"; harnessProject; "--nologo"; "-getProperty:TargetPath" ] "."
+            |> CreateProcess.redirectOutput
+            |> CreateProcess.ensureExitCode
+            |> Proc.run
+            |> fun result -> result.Result.Output.Trim()
+
+        if String.isNullOrWhiteSpace targetPath || not (File.exists targetPath) then
+            failwithf
+                "VerifyBrowserSmoke: could not resolve the harness assembly (MSBuild reported %A). Nothing can run without it."
+                targetPath
+
+        // Playwright ships its installer beside the built assembly. Best
+        // effort: a failure here is reported and not fatal, because the
+        // floor check below turns "no browser" into a named failure with
+        // a much better message than a download error.
+        let installer = Path.combine (Path.getDirectory targetPath) "playwright.ps1"
+
+        if File.exists installer then
+            try
+                runChecked (onPath "pwsh") [ installer; "install"; "chromium" ] "."
+            with ex ->
+                Trace.traceImportantfn
+                    "VerifyBrowserSmoke: Playwright's Chromium install step failed (%s). Continuing — the scenario floor below will report it if no browser is available."
+                    ex.Message
+
+        Trace.tracefn "▶ VerifyBrowserSmoke (6/6): run the scenarios"
+
+        let result =
+            proc "dotnet" [ targetPath ] "." |> CreateProcess.redirectOutput |> Proc.run
+
+        let output = result.Result.Output + result.Result.Error
+        printfn "%s" output
+
+        // Expecto's summary line, e.g.
+        //   "8 tests run in 00:00:23 for ToolUp.BrowserSmoke.Tests - 8 passed, 0 ignored, 0 failed, 0 errored."
+        // Stripped of ANSI colour first. Expecto colours every count, so
+        // the raw text reads "…[36m8[37m passed" and a naive
+        // `(\d+) passed` matches nothing — which this target then reports
+        // as "the harness did not run" on a run that passed every
+        // scenario. It did exactly that once, before this line existed.
+        let plain = System.Text.RegularExpressions.Regex.Replace(output, "\\[[0-9;]*m", "")
+
+        // The colour-code strip above removes the bracket sequences but
+        // leaves the escape characters themselves, so the separator
+        // between the count and its label is matched loosely rather
+        // than as whitespace.
+        let countBefore (label: string) =
+            let pattern = sprintf @"(\d+)[^0-9]{0,8}%s" label
+            let matched = System.Text.RegularExpressions.Regex.Match(plain, pattern)
+
+            if matched.Success then
+                Some(int matched.Groups[1].Value)
+            else
+                None
+
+        match countBefore "passed", countBefore "ignored" with
+        | Some passed, Some ignored ->
+            Trace.tracefn ""
+
+            Trace.tracefn
+                "VerifyBrowserSmoke summary: %d passed, %d ignored (floor %d)."
+                passed
+                ignored
+                browserScenarioFloor
+
+            if result.ExitCode <> 0 then
+                failwithf "VerifyBrowserSmoke: the harness exited %d." result.ExitCode
+
+            if passed < browserScenarioFloor then
+                failwithf
+                    "VerifyBrowserSmoke: only %d scenario(s) passed, below the floor of %d (%d were skipped). A skipped scenario almost always means Chromium is not installed on this machine — run `pwsh %s install chromium`. Do not lower the floor to make this green."
+                    passed
+                    browserScenarioFloor
+                    ignored
+                    installer
+        | _ ->
+            failwith
+                "VerifyBrowserSmoke: the harness printed no Expecto summary — it did not run. The counts are checked rather than the exit status alone precisely because a harness that never started can still exit 0.")
+
     // Template-content compile gate.
     //
     // The `templates/` scaffolds are shipped to consumers via `dotnet

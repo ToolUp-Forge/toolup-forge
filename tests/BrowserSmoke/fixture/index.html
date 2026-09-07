@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+    <head>
+        <title>ToolUp browser smoke fixture</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body>
+        <!-- `data-ready` is set by Fixture.fs once the pump is running.
+             Every scenario waits on that attribute rather than on a
+             sleep, so a slow machine costs seconds and never a flake. -->
+        <div id="fixture"></div>
+        <script type="module" src="/output/Fixture.js"></script>
+    </body>
+</html>

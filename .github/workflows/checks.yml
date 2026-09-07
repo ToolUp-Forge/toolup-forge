@@ -1063,3 +1063,117 @@ jobs:
       # equivalent, read off the restore graph).
       - name: Scaffold, build and pack the packaged-module template (VerifyPackagedModuleTemplate)
         run: dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate
+
+  # ─── Phase 761: the browser gate ───────────────────────────────────
+  #
+  # The repo's first REAL-BROWSER tier, and the reason it exists is that
+  # two shipped acceptances could not be executed by anything here.
+  # Phase 535's "two sessions co-edit the sample doc live" shipped
+  # verified STRUCTURALLY — a contract-tested convergence plus a green
+  # Fable compile — and Phase 24's "drop the network, make a change,
+  # restore it" was operator-run only. Both need a browser: two isolated
+  # origins, IndexedDB, and the browser's own connectivity signal are
+  # not reachable from an Expecto pack or from jsdom.
+  #
+  # ── Its own job, deliberately ──────────────────────────────────────
+  #
+  # `verify-all`'s wall-clock is a shared budget and this launches
+  # browsers, so the harness is outside `ToolUp.Forge.sln` and outside
+  # `BuildConfig.TestPacks` — the default gate is untouched by
+  # construction, not by convention — and it runs here instead. The two
+  # jobs are independent, so this costs the pipeline nothing in
+  # wall-clock: it runs alongside.
+  #
+  # ── It cannot pass vacuously ───────────────────────────────────────
+  #
+  # The scenarios are gated on a locally-installed Chromium and report
+  # Pending, not Failed, without one (the Phase 126 `BrowserGate`
+  # convention). That is right for a fresh checkout and catastrophic
+  # here: a runner with no browser would skip every scenario and report
+  # green. `VerifyBrowserSmoke` therefore installs the browser and then
+  # fails below a scenario floor equal to the shipped count — the same
+  # guard `verify-all` puts on its pack count and `fable-tier` on its
+  # TAP counts, and the third instance of the same lesson.
+  #
+  # ── Each scenario carries its own go-red ───────────────────────────
+  #
+  # Two of the eight scenarios drive a FAULT SWITCH — `?fault=relay`
+  # cuts the co-editing fan-out, `?fault=queue` cuts the offline queue's
+  # hold — and assert that the thing under test then does NOT happen.
+  # Both cut a seam the deployment supplies, not SDK code, so the red is
+  # about the mechanism rather than about a mock. A go-red observed once
+  # by hand is not evidence anyone can re-check; these run every time.
+  #
+  # ── Trigger ────────────────────────────────────────────────────────
+  #
+  # `push` + `pull_request`, matching every other gate here: this repo's
+  # normal integration path is a direct push to `main`, so a PR-only
+  # gate would almost never run, and a gate that does not run is worse
+  # than no gate because it reports green.
+  #
+  # Measured cost: ~2 minutes on the dev machine — ~25s of scenarios and
+  # ~55s of Fable compile, the rest npm and the harness build. Budget
+  # generously on a 2-core runner; `timeout-minutes` stays finite so a
+  # hung browser fails loudly rather than burning the 6-hour default.
+  #
+  # This workflow gates and deploys nothing; this job adds no exception.
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/BrowserSmoke/fixture/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Keyed on the Playwright package version, which is what decides
+      # the browser build the .NET driver demands: a cache hit from a
+      # different version would be a browser the driver refuses, which
+      # the install step below then corrects anyway.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      # The target owns npm ci, the Fable compile, the Vite bundle, the
+      # harness build, Playwright's Chromium install and the run — one
+      # invocation, so this job and a developer necessarily run the same
+      # thing (the VerifyFable precedent).
+      - name: Run the browser smoke scenarios (VerifyBrowserSmoke)
+        run: dotnet run --project Build.fsproj -- VerifyBrowserSmoke
+
+      # Traces and screenshots are written on a FAILING attempt only, so
+      # a green run uploads nothing. A failure here happened on a machine
+      # nobody can log into, and the trace is the whole diagnosis.
+      - name: Upload failure artefacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-artifacts
+          path: tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/bin/Debug/net10.0/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

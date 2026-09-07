@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.BrowserSmoke.Tests — Phase 761's browser-level smoke harness.
+
+    The repo's first real-browser verification tier. Two scenarios,
+    deliberately: the Phase 535 co-editing acceptance ("two sessions
+    co-edit the sample doc live") and the Phase 24 offline acceptance
+    ("drop the network, make a change, restore it"), both of which
+    shipped verified structurally or by hand because nothing here could
+    open a browser.
+
+    SMOKE, NOT AN E2E SUITE. The bar for a scenario belonging here is
+    that it CANNOT be asserted anywhere else: it needs two isolated
+    origins, IndexedDB, or the browser's own connectivity signal. A view
+    that renders, a reducer that reduces, a component that is accessible
+    — those belong in the Fable-tier node:test harness or in an Expecto
+    pack, both of which are seconds where this is minutes. See
+    `../README.md` before adding one.
+
+    NOT IN ToolUp.Forge.sln and NOT IN BuildConfig.TestPacks, on
+    purpose. The default gate's wall-clock is a shared budget, and this
+    harness launches browsers. It runs from its own opt-in target and
+    its own CI job, which is the phase's own acceptance.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The Chromium-availability gate, source-linked from the
+             Phase 126 pack rather than restated: a second copy would be
+             a second answer to "is a browser installed here", and the
+             two would drift. Its module keeps its own name, which is
+             why the scenario files open `ToolUp.Reporting.HtmlPdf.Tests`. -->
+        <Compile Include="..\..\..\src\Reporting\HtmlPdf.Tests\BrowserGate.fs" Link="Support\BrowserGate.fs" />
+        <Compile Include="FixtureHost.fs" />
+        <Compile Include="Harness.fs" />
+        <Compile Include="CoEditSmokeTests.fs" />
+        <Compile Include="OfflineSmokeTests.fs" />
+        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+             ToolUp.Platform.Tests so there is one implementation. -->
+        <Compile Include="..\..\..\src\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The real store the scenarios assert against:
+             `InMemoryCrdtDocumentStore`, off the shipped server tier. The
+             harness stands up the routes Phase 535 deliberately does not
+             mount, and nothing else. -->
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Expecto" />
+        <!-- Already in the repo's central package management since Phase
+             126 (the HTML to PDF renderer). Test-tier here, and a
+             browser is never a runtime dependency of anything shipped
+             (GP 2 / GP 13). -->
+        <PackageReference Include="Microsoft.Playwright" />
+    </ItemGroup>
+</Project>
