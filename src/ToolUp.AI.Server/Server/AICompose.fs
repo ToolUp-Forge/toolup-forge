@@ -328,7 +328,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // Phase 43.C — the AI tier's implementation of the
                 // platform `IProviderEntryProbe` seam. Registering it
                 // here is what turns on BOTH verification-on-add
-                // (`AISettingsHandler.SaveInstance` refuses to persist
+                // (`AISettingsApi.SaveInstance` refuses to persist
                 // an unverified pasted key) and the scheduled
                 // live-status probe (`ComposeJobs.registerProviderOAuth`
                 // binds the job only when this seam is present). A

@@ -6,7 +6,7 @@ module ToolUp.Platform.Tests.InProcess.AgChartExportTests
 // recoverable-error surface, and the placeholder assembly measured against
 // the REAL `ToolUp.Reporting.PlaceholderValue` rather than a stand-in.
 //
-// The interop leg (`AgCharts.getInstance`, `getImageDataURL`, the canvas
+// The interop leg (the AG Charts runtime's `getInstance`, `getImageDataURL`, the canvas
 // background composite) is deliberately thin and carries no .NET runtime —
 // it is exercised by the `samples/MinimalClient` Fable transpile and the
 // build type-check, per the `CellProvenanceTests` precedent.

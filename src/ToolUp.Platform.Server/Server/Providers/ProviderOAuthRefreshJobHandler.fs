@@ -64,7 +64,7 @@ type ProviderOAuthRefreshPayload = {
     Persist: bool
     /// `ProviderEntry.Label` — also the correlation key's `Id`.
     EntryLabel: string
-    /// `IProviderOAuthFlow.Name` that minted the credentials.
+    /// `IOAuthCredentialFlow.Name` of the flow that minted the credentials.
     FlowName: string
 }
 

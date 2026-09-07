@@ -424,7 +424,7 @@ let revocationTests =
         }
 
         // _(A "re-approved feed resumes emitting" case is deliberately
-        //  NOT here. `TemplateApproval.latestFor` resolves an
+        //  NOT here. `TemplateApproval.status` resolves an
         //  `IssuedAt` tie towards `TemplateRevoked`, and the registry
         //  stamps `IssuedAt` from the wall clock truncated to whole
         //  seconds — so a revocation and a re-approval issued in the

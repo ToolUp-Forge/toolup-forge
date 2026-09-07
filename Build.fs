@@ -334,6 +334,16 @@ let main args =
         // a failure because nothing about it says which it is.
         Trace.tracefn "▶ VerifyBrowserSmoke (5/6): build the harness + ensure Chromium"
 
+        // Build FIRST, then ask. `-getProperty:TargetPath` makes MSBuild
+        // EVALUATE the project and print the property without running
+        // the build, so on a clean runner the query below answers with a
+        // path to a dll that does not exist — which is exactly how the
+        // `browser-smoke` job failed on every push from the day it
+        // landed, while passing locally in worktrees whose harness had
+        // already been built by an earlier step. The checked build here
+        // is what `VerifyAll` does before its own per-pack queries.
+        runChecked "dotnet" [ "build"; harnessProject; "--nologo" ] "."
+
         let targetPath =
             proc "dotnet" [ "build"; harnessProject; "--nologo"; "-getProperty:TargetPath" ] "."
             |> CreateProcess.redirectOutput

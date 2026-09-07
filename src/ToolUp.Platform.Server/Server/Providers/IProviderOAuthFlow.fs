@@ -24,7 +24,7 @@ namespace ToolUp.Platform
 // methods would have duplicated the PKCE handling, the CSRF state
 // machinery and the error taxonomy, and would have needed its own
 // route pair. Inheriting means one registration
-// (`ServerApp.withOAuthCredentialFlow`), one set of endpoints, and one
+// (`ServerApp.withOAuthFlow`), one set of endpoints, and one
 // conformance bar — a provider flow is validated by
 // `IOAuthCredentialFlowContract` for the OAuth half and
 // `IProviderOAuthFlowContract` for the binding half.
@@ -60,7 +60,7 @@ namespace ToolUp.Platform
 
 /// A `IOAuthCredentialFlow` that can additionally mint a
 /// provider-profile entry. Register it exactly like any other flow —
-/// `ServerApp.withOAuthCredentialFlow` — and the substrate's
+/// `ServerApp.withOAuthFlow` — and the substrate's
 /// `/api/oauth/{flowName}/authorize?providerEntry={label}` route
 /// becomes available for it.
 type IProviderOAuthFlow =

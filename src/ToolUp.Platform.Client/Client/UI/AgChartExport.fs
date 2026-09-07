@@ -44,7 +44,7 @@
 /// ── Two things that are deliberate ───────────────────────────────────
 ///
 ///   * **An unmounted chart is a value, not an exception.** AG Charts
-///     throws on a destroyed instance and `AgCharts.getInstance` simply
+///     throws on a destroyed instance and the runtime's `getInstance` simply
 ///     answers nothing for an element that never held one. Both reach the
 ///     caller as `Error` carrying a sentence that names what was looked
 ///     for, because an Export button's honest failure is a toast, not a
@@ -296,7 +296,7 @@ let asPlaceholders (imageValue: ChartCapture -> 'value) (captures: (string * Cha
 /// A handle to the chart to capture.
 ///
 /// Three shapes because a page has whichever one it has. The element and
-/// element-id shapes go through `AgCharts.getInstance`, which is keyed on
+/// element-id shapes go through the AG Charts runtime's `getInstance`, which is keyed on
 /// the chart's own container — so a wrapper element resolves too, by
 /// searching its descendants for the container the chart registered.
 type ChartRef =
@@ -320,7 +320,7 @@ let private describe (chart: ChartRef) =
 // body, so this file's initialiser is pure and the .NET test pack can
 // exercise everything above without a JS host.
 
-/// `AgCharts.getInstance` is keyed on the element the chart registered as
+/// The AG Charts runtime's `getInstance` is keyed on the element the chart registered as
 /// its container, and answers `undefined` for anything else.
 ///
 /// The import and the member access are one function ON PURPOSE. A
