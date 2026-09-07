@@ -150,7 +150,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_LOG_LEVEL` | enum: Debug, Info, Warn, Error | Info | no | yes | Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info. |
 | `TOOLUP_METRICS_ENDPOINT` | enum: enabled, disabled | disabled | no | yes | Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink. |
 | `TOOLUP_SLOW_REQUEST_MS` | int | 1000 | no | yes | Milliseconds above which a request is logged as slow. |
-| `TOOLUP_TRACE_CATEGORIES` | string | — | no | yes | Comma/space-separated whitelist of trace categories to emit (e.g. ai.sse,platform.sse). Empty emits no Trace output. |
+| `TOOLUP_TRACE_CATEGORIES` | string | — | no | yes | Comma/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output. |
 
 ## Deployment shape
 

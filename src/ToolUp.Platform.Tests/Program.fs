@@ -517,6 +517,7 @@ let private registeredTests =
         ConfigResolverTests.tests
         ConfigProfileTests.tests
         UnknownConfigKeyValidatorTests.tests
+        TraceCategoriesValidatorTests.tests
         HealthStateTrackerTests.tests
         AlertRuleEngineTests.tests
         ServiceStatusBoardApiHandlerTests.tests

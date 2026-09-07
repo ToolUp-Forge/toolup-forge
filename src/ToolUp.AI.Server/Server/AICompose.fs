@@ -154,6 +154,15 @@ let composeAI (app: AIServerApp) : ServerApp =
     let aiConfig = app.AIConfig
     let moduleAIContexts = app.ModuleAIContexts
 
+    // Phase 9m.C — declare the trace categories this package emits under,
+    // so `TraceCategoriesValidator` can tell an operator that
+    // `TOOLUP_TRACE_CATEGORIES=ai.agnet` selects nothing. Declared here
+    // rather than observed at the emission sites because the preflight
+    // runs at the end of compose, before any trace line exists to observe.
+    // `ai.agent` gates the per-provider-call tracing in `AIAgentEngine`
+    // and `AIAssistantHandler`.
+    Logger.registerCategory "ai.agent"
+
     // Validate tool name uniqueness across modules AND against the
     // platform-reserved built-in tool names (`NarrativeTools.builtInTools`
     // + Phase 36.B's `PlatformAITools.builtIn`). Duplicates fail loudly

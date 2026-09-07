@@ -753,6 +753,12 @@
         <Compile Include="Server\DirectAddIdentityProofValidator.fs" />
         <Compile Include="Server\AutoBootstrapDevAdminModeValidator.fs" />
         <Compile Include="Server\UnknownConfigKeyValidator.fs" />
+        <!-- Phase 9m.C — the value-level companion to the name-level
+             guard above: TOOLUP_TRACE_CATEGORIES values that no composed
+             emission site declared. Anywhere after Server\Logger.fs
+             (the registry it reads) and before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="Server\TraceCategoriesValidator.fs" />
         <Compile Include="Server\CsrfDefaultModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
         <Compile Include="Server\SurfaceCoherenceValidator.fs" />

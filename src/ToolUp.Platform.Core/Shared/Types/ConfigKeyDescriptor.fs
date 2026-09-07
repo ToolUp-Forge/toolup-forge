@@ -1028,7 +1028,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.traceCategories
         Description =
-            "Comma/space-separated whitelist of trace categories to emit (e.g. ai.sse,platform.sse). Empty emits no Trace output."
+            "Comma/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output."
         Type = StringKey
         Default = None
         IsSecret = false
