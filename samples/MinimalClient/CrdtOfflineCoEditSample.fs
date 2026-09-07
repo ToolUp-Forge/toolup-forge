@@ -89,13 +89,18 @@ let holdInQueue (queue: OfflineQueue.IOfflineQueue) (docId: string) (scopeId: st
 
 /// Everything one offline-tolerant co-editing session needs, wired.
 type OfflineCoEdit = {
-    /// The CRDT session — hand `Session.ApplyRemote` the relayed updates
-    /// and `Session.Dispose` to the component's teardown, as before.
+    /// The CRDT session. `Session.Resync` re-anchors on demand; the
+    /// relay subscription below already calls it on every signal.
     Session: CrdtSyncClient.CrdtSession
-    /// The drain coordinator. Its `Stop` must be called alongside
-    /// `Session.Dispose`, or a re-mount leaves two coordinators draining
-    /// one queue.
+    /// The drain coordinator. Its `Stop` must be called alongside the
+    /// session's teardown, or a re-mount leaves two coordinators
+    /// draining one queue — which is what `Dispose` below exists to
+    /// make impossible to get wrong.
     Coordinator: SyncCoordinator.Coordinator
+    /// Tear down all three lifetimes this record holds — the relay
+    /// subscription, the coordinator, and the pump — in the order that
+    /// leaves nothing draining a queue nobody is reading (Phase 764).
+    Dispose: unit -> unit
 }
 
 /// Join `doc` to the co-editing log with the offline queue behind it.
@@ -122,7 +127,12 @@ let start
     let holding =
         CrdtSyncClient.holdAndForward transport (holdInQueue queue docId scopeId)
 
-    let session = CrdtSyncClient.start yjs doc holding.Transport sessionId
+    // `startLive`, not the bare pump: offline tolerance is composed ON
+    // TOP of a live co-editing surface, so this example must stay live
+    // for exactly the reason `CrdtCoEditSample` does (Phase 764). The
+    // subscription is the same one, over the same per-tab stream.
+    let live = CrdtCoEditSample.startLive yjs doc holding.Transport docId sessionId
+    let session = live.Session
 
     // `CatchUp` before `Replay` is the reconnect ordering the phase
     // asks for, and the coordinator enforces it: it runs the channel's
@@ -136,9 +146,19 @@ let start
         Replay = holding.Replay
     }
 
+    let coordinator = SyncCoordinator.startRouted [ crdtChannel ] queue api config
+
     {
         Session = session
-        Coordinator = SyncCoordinator.startRouted [ crdtChannel ] queue api config
+        Coordinator = coordinator
+        Dispose =
+            fun () ->
+                // The coordinator first: it is the only one of the three
+                // that can still call into the session (its `CatchUp` is
+                // `session.Resync`), so stopping it first means the
+                // teardown never races a drain pass.
+                coordinator.Stop()
+                live.Dispose()
     }
 
 /// The Phase 535 text area, with the link allowed to drop.
@@ -184,8 +204,7 @@ let OfflineSharedTextArea
 
         let cleanup: unit -> unit =
             fun () ->
-                joined.Coordinator.Stop()
-                joined.Session.Dispose()
+                joined.Dispose()
                 ytextHandle.current <- None
 
         cleanup)

@@ -42,21 +42,37 @@ ask is which of them could have been one of the rows above.
 ```
 tests/BrowserSmoke/
 ├── fixture/                     the page the browser loads (a Fable app, bundled by Vite)
-│   ├── Fixture.fs               the deployment-owned half: the HTTP API, the fan-out, the fault switches
+│   ├── Fixture.fs               the deployment-owned half: the HTTP API, the page shell, the fault switches
 │   └── package.json             react/ag-* mirror samples/MinimalClient; `yjs` is the CRDT library
 └── ToolUp.BrowserSmoke.Tests/   the harness (an Expecto console runner)
-    ├── FixtureHost.fs           HttpListener: serves the bundle, and the co-edit API over a real ICrdtDocumentStore
+    ├── FixtureHost.fs           HttpListener: the bundle, the co-edit API over a real ICrdtDocumentStore, and the SSE relay endpoint
     ├── Harness.fs               browser lifetime, the waits, the retry, the failure artefacts
     ├── CoEditSmokeTests.fs      scenario 1
     └── OfflineSmokeTests.fs     scenario 2
 ```
 
 The code **under test** is the shipped source: `ToolUp.Platform.CrdtSyncClient`,
+`ToolUp.Platform.NotificationClient`, `NotifyingCrdtDocumentStore`,
 `ToolUp.Offline.Client.{OfflineQueue,SyncCoordinator}`, and — compiled straight from
 `samples/MinimalClient` — the Phase 535 / 760 reference wiring a consumer is told to copy.
 The fixture adds only what a deployment owns: the module-owned route over the CRDT store
-(Phase 535 is seam-first and mounts none), and the fan-out that tells a tab a co-editor
-moved.
+(Phase 535 is seam-first and mounts none), and the notification ENDPOINT the relay's events
+reach a page over.
+
+**The client half of the fan-out is no longer here (Phase 764).** Until then `Fixture.fs`
+polled `session.Resync` on a timer, which meant this gate certified a wiring the sample did
+not ship: `CrdtCoEditSample` caught up once at join and then went quiet, and only the
+fixture stayed live. The subscription now lives in the sample
+(`CrdtCoEditSample.startLive`, over the reserved `_platform.crdt` topic and the tab's one
+`EventSource`), and the page merely starts it — so a regression in the wiring a consumer
+copies is a regression this gate sees.
+
+One consequence is worth knowing before adding a scenario: with the poll gone, **a page
+declares itself `data-ready` only once its notification stream is open**, proven by a hello
+envelope `FixtureHost` writes to each stream as it subscribes it. A page that mounted while
+its `EventSource` was still handshaking can miss the first edit a co-editor makes and, with
+nothing left polling, never ask for it again — so the readiness gate is load-bearing, not
+tidiness.
 
 Neither project is in `ToolUp.Forge.sln` or in `BuildConfig.TestPacks`. That is deliberate:
 `VerifyAll`'s wall-clock is a shared budget and this launches browsers, so the default gate
@@ -88,18 +104,27 @@ hand edit someone once observed:
 
 | Switch | Cuts | The scenario it makes red |
 |---|---|---|
-| `?fault=relay` | the fan-out's `Resync` call | co-edit: the second context never sees the first's edit — while the server still holds it, so the failure is provably the relay and not the transport |
+| `?fault=relay` | the server's fan-out — the page asks the host not to relay its appends, and the host writes them through the undecorated store | co-edit: the second context never sees the first's edit — while the server still holds it, so the failure is provably the relay and not the transport |
 | `?fault=queue` | the offline queue's `Enqueue` | offline: nothing is held while disconnected, so nothing replays on reconnect |
 
 Both cut a seam the **deployment** supplies. Nothing inside the SDK is mocked or modified
 to produce them, which is what makes the red meaningful.
 
-**Cut the smallest thing that names the fault.** `?fault=relay` originally skipped
-registering the poll timer altogether, and on a page with no timer registered nothing else
-the fixture started asynchronously ran either — including the pump's own join-time
-catch-up. The "broken" page was not a page with a cut relay; it was a page that did
-nothing, and a scenario cannot prove the relay is what failed if everything failed. The
-switch now registers the timer and skips only its one call.
+**Cut the smallest thing that names the fault.** `?fault=relay` has been wrong twice, both
+times by cutting too much. It first skipped registering the fixture's poll timer
+altogether, and on a page with no timer registered nothing else the fixture started
+asynchronously ran either — including the pump's own join-time catch-up; the "broken" page
+was not a page with a cut relay, it was a page that did nothing, and a scenario cannot
+prove the relay is what failed if everything failed. It then kept the timer and skipped
+only its one `Resync` call — correct while the poll was the relay, and no longer available
+once the relay moved into the sample, because cutting `subscribeRelay` would break the SDK
+code under test rather than a seam around it.
+
+So the cut moved to the other end of the wire, where the fan-out now is: the page passes
+`relay: false` on its appends and `FixtureHost` writes them through the store with no relay
+decorator. The append is still durable and still retrievable by diff — the publish path is
+untouched — and no event ever announces it. Exactly one thing changes, and it is the thing
+the switch is named for.
 
 ## Flake policy
 
