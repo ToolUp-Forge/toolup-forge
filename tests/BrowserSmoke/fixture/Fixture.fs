@@ -27,13 +27,19 @@ open MinimalClient
 //     seam-first: it registers the substrate and mounts no route, so
 //     every consumer writes this handful of lines — see
 //     `CrdtCoEditSample.CoEditApi`);
-//   * the FAN-OUT. `CrdtSyncClient.start` catches up once on join and
-//     then publishes; a relayed update reaches a tab only when something
-//     tells it to `Resync`. A real deployment subscribes to the reserved
-//     `_platform.crdt` notification topic; the harness polls, because a
-//     notification transport is a much larger surface than the thing
-//     under test and polling makes the timing of the scenarios explicit
-//     rather than incidental.
+//   * the SERVER half of the fan-out — the notification endpoint the
+//     relay's events reach a tab over. `FixtureHost` mounts it and
+//     publishes through the shipped `NotifyingCrdtDocumentStore`.
+//
+// **What this file no longer owns is the CLIENT half.** Until Phase 764
+// it polled `session.Resync` on a timer here, which meant the harness
+// certified a wiring the sample did not ship: `CrdtCoEditSample`
+// caught up once at join and then went quiet, and only the fixture
+// stayed live. The subscription now lives in the sample
+// (`CrdtCoEditSample.startLive`, over the reserved `_platform.crdt`
+// topic and the existing `NotificationClient` stream), and this page
+// simply starts it — so what the scenarios drive is the shipped shape
+// and nothing else.
 //
 // ## The fault switches, and why they live here
 //
@@ -45,9 +51,15 @@ open MinimalClient
 // the two seams a deployment supplies — the fan-out and the hold — and
 // nothing inside the SDK is touched or mocked to produce them.
 //
-//   ?fault=relay — the fan-out poll never starts. Scenario 1 must fail
-//                  to converge: each tab's own edits are published, and
-//                  nothing ever asks for the other's.
+//   ?fault=relay — the page asks the host NOT to relay its appends, and
+//                  the host writes them through the undecorated store.
+//                  Scenario 1 must fail to converge: each tab's own
+//                  edits are published and durable, and no event ever
+//                  announces them. The cut moved server-side with the
+//                  subscription's move client-side — cutting the
+//                  sample's own `subscribeRelay` would break the SDK
+//                  code under test, which is exactly what a go-red must
+//                  not do.
 //   ?fault=queue — the offline queue handed to the Phase 760 wiring
 //                  drops on `Enqueue`. Scenario 2 must fail to apply:
 //                  the update is neither published (offline) nor held.
@@ -87,14 +99,25 @@ let private post (url: string) (payload: obj) : Async<string> =
 // Note what does not cross the wire: the scope. `FixtureHost` resolves
 // it, exactly as `CrdtCoEditSample.transportFor`'s header explains a
 // real handler must (GP 4).
+//
+// `relay` DOES cross it, and only because this is a fixture: it is the
+// `?fault=relay` switch, and it names the one thing the deployment does
+// on the page's behalf that the go-red needs cut. A real handler has no
+// such field — it relays because it composed
+// `EnabledCrdtDocuments`, and nothing on the wire can say otherwise.
 
-let private coEditApi: CrdtCoEditSample.CoEditApi = {
+let private coEditApi (relay: bool) : CrdtCoEditSample.CoEditApi = {
     Append =
         fun (docId, payload, originSession) -> async {
             let! _ =
                 post
                     "/api/coedit/append"
-                    (createObj [ "doc" ==> docId; "session" ==> originSession; "payload" ==> toBase64 payload ])
+                    (createObj [
+                        "doc" ==> docId
+                        "session" ==> originSession
+                        "payload" ==> toBase64 payload
+                        "relay" ==> relay
+                    ])
 
             return ()
         }
@@ -198,11 +221,46 @@ let private mountShell (textAreaId: string) =
     root.appendChild area |> ignore
     status, queued, unbox<Types.HTMLTextAreaElement> area
 
-/// Mark the page ready only once the pump is running, so the harness
-/// waits on a fact rather than on a duration.
+// ─── Readiness ───────────────────────────────────────────────────────
+//
+// `data-ready` means BOTH halves of a live document are up: the pump is
+// running, AND this page's notification stream — the one the sample's
+// relay subscription rides — is open.
+//
+// The second half is not fussiness. A page that declares itself ready
+// while its `EventSource` is still handshaking can miss the first edit
+// a co-editor makes, and with the fixture's old poll gone nothing ever
+// asks for it again: the scenario goes red for a reason that is about
+// this page's boot order and not about the code under test. A real
+// deployment does not have the race — its shell opens the stream at
+// sign-in, long before any document mounts — so waiting for the same
+// state here is modelling a deployment, not working around one.
+//
+// It is a FACT and not a delay: `FixtureHost` writes a hello envelope
+// to each stream the moment it subscribes it, so the first envelope
+// this page receives is proof its own connection is live.
+
+let private mounted = ref false
+let private streamOpen = ref false
+
+let private markReadyWhenLive () =
+    if mounted.Value && streamOpen.Value then
+        let root = document.getElementById "fixture"
+        root.setAttribute ("data-ready", "true")
+
 let private markReady () =
-    let root = document.getElementById "fixture"
-    root.setAttribute ("data-ready", "true")
+    mounted.Value <- true
+    markReadyWhenLive ()
+
+/// Open the notification stream at page boot — the shell's job in a
+/// real app, and the fixture's here. The handler is never disposed
+/// because the page's own lifetime is the subscription's.
+let private openNotificationStream () =
+    NotificationClient.subscribe (fun _ ->
+        if not streamOpen.Value then
+            streamOpen.Value <- true
+            markReadyWhenLive ())
+    |> ignore
 
 // ─── Shared plumbing ─────────────────────────────────────────────────
 
@@ -221,39 +279,13 @@ let private bindTextArea (area: Types.HTMLTextAreaElement) (ytext: obj) =
         fun _ -> CrdtCoEditSample.applyLocalEdit ytext (CrdtCoEditSample.textValue ytext) area.value
     )
 
-/// The fan-out stand-in. A real deployment subscribes to the reserved
-/// `_platform.crdt` topic; this asks for the diff on a timer. Failures
-/// are swallowed by design — a tab whose link is down polls into
-/// nothing, which is exactly the state scenario 1's reconnect clause
-/// puts it in.
-///
-/// **`cut` skips the RESYNC, never the timer.** The `?fault=relay`
-/// switch has to change exactly one thing — whether anything ever asks
-/// for the other participant's edits — because the scenario it serves
-/// asserts that publishing still works while relaying does not. Not
-/// registering the interval at all was the first shape of this switch
-/// and it was wrong: on a page with no timer registered, nothing else
-/// the fixture starts asynchronously ran either (the pump's own join-
-/// time catch-up never issued its request), so the "broken" page was
-/// not a page with a cut relay — it was a page that did nothing, which
-/// proves nothing about the relay. Keeping the timer and skipping its
-/// one call is the minimal cut.
-let private startRelay (cut: bool) (resync: unit -> Async<unit>) =
-    window.setInterval (
-        (fun () ->
-            if not cut then
-                async {
-                    try
-                        do! resync ()
-                    with _ ->
-                        ()
-                }
-                |> Async.StartImmediate),
-        200
-    )
-    |> ignore
-
 // ─── Scenario 1 — co-edit ────────────────────────────────────────────
+//
+// Nothing here keeps the document live. `CrdtCoEditSample.startLive`
+// does, over the reserved `_platform.crdt` topic and the per-tab
+// `NotificationClient` stream — which is the whole point of Phase 764:
+// the page under the browser runs the wiring a consumer is told to
+// copy, so a regression in that wiring turns this scenario red.
 
 let private startCoEdit (docId: string) (sessionId: string) (faultRelay: bool) =
     let status, _, area = mountShell "coedit"
@@ -261,14 +293,15 @@ let private startCoEdit (docId: string) (sessionId: string) (faultRelay: bool) =
     let ytext = CrdtCoEditSample.getText ydoc "content"
     bindTextArea area ytext
 
-    let session =
-        CrdtSyncClient.start
-            CrdtCoEditSample.yjs
-            (unbox<CrdtSyncClient.IYDoc> ydoc)
-            (CrdtCoEditSample.transportFor coEditApi docId sessionId)
-            sessionId
+    let api = coEditApi (not faultRelay)
 
-    startRelay faultRelay session.Resync
+    CrdtCoEditSample.startLive
+        CrdtCoEditSample.yjs
+        (unbox<CrdtSyncClient.IYDoc> ydoc)
+        (CrdtCoEditSample.transportFor api docId sessionId)
+        docId
+        sessionId
+    |> ignore
 
     status.setAttribute ("data-status", "co-editing")
     status.textContent <- "co-editing"
@@ -293,19 +326,21 @@ let private startOffline (docId: string) (sessionId: string) (faultQueue: bool) 
         else
             real
 
+    // The Phase 760 wiring starts live of its own accord now (it
+    // composes `CrdtCoEditSample.startLive`), so this scenario relays
+    // through the same subscription scenario 1 does and the fixture
+    // registers no timer of its own for it.
     let joined =
         CrdtOfflineCoEditSample.start
             CrdtCoEditSample.yjs
             (unbox<CrdtSyncClient.IYDoc> ydoc)
-            (CrdtCoEditSample.transportFor coEditApi docId sessionId)
+            (CrdtCoEditSample.transportFor (coEditApi true) docId sessionId)
             entitySyncApi
             OfflineConfig.defaults
             queue
             docId
             "browser-smoke"
             sessionId
-
-    startRelay false joined.Session.Resync
 
     // The badge, from the coordinator's own derivation — the harness
     // reads `data-status` / `data-count`, never a rendered string.
@@ -337,6 +372,10 @@ let private sessionId = queryParam "session" "smoke-session"
 let private fault = queryParam "fault" ""
 
 do
+    // Before either scenario mounts, so the stream is handshaking while
+    // the pump joins rather than after it.
+    openNotificationStream ()
+
     match queryParam "mode" "coedit" with
     | "offline" -> startOffline docId sessionId (fault = "queue")
     | _ -> startCoEdit docId sessionId (fault = "relay")

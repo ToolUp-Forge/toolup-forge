@@ -7,6 +7,7 @@
 module ToolUp.BrowserSmoke.Tests.FixtureHost
 
 open System
+open System.Collections.Concurrent
 open System.IO
 open System.Net
 open System.Net.Sockets
@@ -14,6 +15,7 @@ open System.Text
 open System.Text.Json
 open System.Threading
 open ToolUp.Platform
+open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── Phase 761 — the harness's server ────────────────────────────────
 //
@@ -33,6 +35,25 @@ open ToolUp.Platform
 // writes for itself — it registers the substrate and mounts no route —
 // so the harness is a consumer of the seam rather than a re-statement
 // of it.
+//
+// ## The relay (Phase 764)
+//
+// So is the fan-out. The store is wrapped in the shipped
+// `NotifyingCrdtDocumentStore` over an `InMemoryNotificationChannel`,
+// and `/api/notifications` below is a plain SSE endpoint over that
+// channel — the same `event:`/`data:` framing the SDK's own handler
+// uses (`SSE.namedFrame`), the same envelope JSON (`FableConverters`,
+// so the `Notification` DU round-trips through `Fable.SimpleJson` on
+// the page). What the harness supplies is the ENDPOINT, which is a
+// deployment's job; the decorator, the channel, the framing and the
+// client subscription are all shipped code, which is what makes a green
+// scenario evidence about the SDK rather than about this file.
+//
+// It is `HttpListener` again rather than Kestrel, for the reason above,
+// and each stream gets a dedicated background thread rather than a
+// pooled one: an SSE connection lives as long as its page, and two
+// co-editing contexts holding two pool threads for the length of a run
+// is how a smoke harness acquires an intermittent hang.
 //
 // ## The port
 //
@@ -101,7 +122,25 @@ let start (distDir: string) : Host =
             "browser-smoke: the fixture bundle is missing at %s. Build it with the VerifyBrowserSmoke target, which runs npm ci + dotnet fable + npm run build in tests/BrowserSmoke/fixture."
             distDir
 
-    let store = InMemoryCrdtDocumentStore() :> ICrdtDocumentStore
+    // Two handles on ONE log. `store` is what a deployment resolves —
+    // the log wrapped in the shipped relay decorator. `silent` is the
+    // same log with no relay, and it exists solely to serve the
+    // `?fault=relay` go-red: an append through it is durable and
+    // retrievable by diff, and announced to nobody. Cutting the fan-out
+    // is therefore one branch on the write path, with every other path
+    // — the client's subscription included — genuinely the shipped one.
+    let silent = InMemoryCrdtDocumentStore() :> ICrdtDocumentStore
+
+    let channel =
+        NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
+
+    let store = NotifyingCrdtDocumentStore(silent, channel) :> ICrdtDocumentStore
+
+    // The client reads these frames with `Fable.SimpleJson`, so the DU
+    // must be written in the shape that decoder expects — the same rule
+    // (and the same converter set) as the SDK's own SSE handler.
+    let jsonOptions = FableConverters.create ()
+
     let port = freeLoopbackPort ()
     let baseUrl = sprintf "http://127.0.0.1:%d" port
     let listener = new HttpListener()
@@ -118,7 +157,20 @@ let start (distDir: string) : Host =
         let docId = root.GetProperty("doc").GetString()
         let session = root.GetProperty("session").GetString()
         let payload = Convert.FromBase64String(root.GetProperty("payload").GetString())
-        store.Append(refFor docId, payload, session) |> Async.RunSynchronously |> ignore
+
+        // Absent means relay, so the field is a fixture affordance
+        // rather than part of the shape a consumer copies.
+        let relay =
+            match root.TryGetProperty "relay" with
+            | true, value -> value.ValueKind <> JsonValueKind.False
+            | _ -> true
+
+        let target = if relay then store else silent
+
+        target.Append(refFor docId, payload, session)
+        |> Async.RunSynchronously
+        |> ignore
+
         writeJson response "{}"
 
     let handleDiff (body: string) (response: HttpListenerResponse) =
@@ -155,6 +207,87 @@ let start (distDir: string) : Host =
                 rows
                 (JsonSerializer.Serialize(Convert.ToBase64String vector.Bytes)))
 
+    /// One SSE stream, for the life of one page.
+    ///
+    /// Blocks its caller until the page goes away — which is why the
+    /// accept loop hands this path a dedicated thread. The idle
+    /// keepalive is not decoration: an `HttpListener` write is the only
+    /// way this harness learns a browser context closed, so the comment
+    /// frame doubles as the disconnect probe and bounds how long a dead
+    /// stream keeps its subscription registered.
+    let handleNotifications (response: HttpListenerResponse) =
+        response.StatusCode <- 200
+        response.ContentType <- "text/event-stream"
+        response.Headers.Add("Cache-Control", "no-cache")
+        response.SendChunked <- true
+
+        use frames = new BlockingCollection<byte[]>()
+
+        // Handed to `Subscribe`, so it runs on the publisher's thread:
+        // it must do nothing but hand the frame off. Serialisation is
+        // cheap and the queue is unbounded, and a throw here would be
+        // swallowed by the channel anyway — better to drop one frame
+        // than to leave a co-editor's publish half-done.
+        let onEnvelope (envelope: NotificationEnvelope) =
+            try
+                let json = JsonSerializer.Serialize(envelope, jsonOptions)
+                frames.Add(SSE.namedFrame (NotificationKind.ofNotification envelope.Notification) json)
+            with _ ->
+                ()
+
+        let subscriptionId = channel.Subscribe(Scope, onEnvelope) |> Async.RunSynchronously
+
+        let write (bytes: byte[]) =
+            try
+                response.OutputStream.Write(bytes, 0, bytes.Length)
+                response.OutputStream.Flush()
+                true
+            with _ ->
+                false
+
+        try
+            // The SDK's own comment frame, so an intermediary flushes
+            // and the browser's `EventSource` opens immediately rather
+            // than when the first co-editor happens to type.
+            let mutable live = write SSE.readyBytes
+
+            // …and then a hello the PAGE can see, because a comment
+            // frame is invisible to `EventSource` listeners by design.
+            //
+            // This exists to make "my stream is open" a FACT the fixture
+            // can wait on. Without it the page declares itself ready
+            // while its subscription is still handshaking, and an edit
+            // published in that window reaches nobody and is never
+            // asked for again — a rare red that says nothing about the
+            // code under test. Written straight to this one response
+            // rather than published, so it announces the connection it
+            // is about and no other.
+            if live then
+                let hello =
+                    NotificationEnvelope.create
+                        Scope
+                        (SystemMessage(SystemMessageLevel.Info, "browser-smoke stream open"))
+
+                live <-
+                    write (
+                        SSE.namedFrame
+                            (NotificationKind.ofNotification hello.Notification)
+                            (JsonSerializer.Serialize(hello, jsonOptions))
+                    )
+
+            while live && not cancellation.IsCancellationRequested do
+                let mutable frame = Array.empty<byte>
+
+                if frames.TryTake(&frame, 1000) then
+                    live <- write frame
+                else
+                    live <- write (Encoding.UTF8.GetBytes ": keepalive\n\n")
+        finally
+            try
+                channel.Unsubscribe subscriptionId |> Async.RunSynchronously
+            with _ ->
+                ()
+
     let serveStatic (path: string) (response: HttpListenerResponse) =
         let relative = if path = "/" then "index.html" else path.TrimStart '/'
         let full = Path.GetFullPath(Path.Combine(distDir, relative))
@@ -181,6 +314,7 @@ let start (distDir: string) : Host =
                 match context.Request.Url.AbsolutePath with
                 | "/api/coedit/append" -> handleAppend (readBody context.Request) context.Response
                 | "/api/coedit/diff" -> handleDiff (readBody context.Request) context.Response
+                | "/api/notifications" -> handleNotifications context.Response
                 | path -> serveStatic path context.Response
             with ex ->
                 printfn "browser-smoke [host] 500 on %s: %s" context.Request.Url.AbsolutePath ex.Message
@@ -196,10 +330,21 @@ let start (distDir: string) : Host =
     let loop = async {
         while not cancellation.IsCancellationRequested do
             let! context = listener.GetContextAsync() |> Async.AwaitTask
+
             // One request per work item: the scenarios drive two browser
-            // contexts that poll concurrently, and a serial loop would
+            // contexts that fetch concurrently, and a serial loop would
             // make the fan-out latency a property of the harness.
-            ThreadPool.QueueUserWorkItem(fun _ -> handle context) |> ignore
+            //
+            // Except the notification stream, which lives as long as its
+            // page: a pooled thread parked for the whole run is how a
+            // pool that also serves every diff and every static asset
+            // starves.
+            if context.Request.Url.AbsolutePath = "/api/notifications" then
+                let stream = Thread(ThreadStart(fun () -> handle context))
+                stream.IsBackground <- true
+                stream.Start()
+            else
+                ThreadPool.QueueUserWorkItem(fun _ -> handle context) |> ignore
     }
 
     Async.Start(loop, cancellation.Token)
