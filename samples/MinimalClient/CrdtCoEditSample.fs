@@ -75,6 +75,159 @@ let transportFor (api: CoEditApi) (docId: string) (sessionId: string) : CrdtSync
     FetchDiff = fun since -> api.Diff(docId, since)
 }
 
+// ─── Phase 764 — staying live after the join ─────────────────────────
+//
+// `CrdtSyncClient.start` catches up ONCE, at join: it reads the diff
+// from an empty cursor, then publishes local edits as the CRDT library
+// emits them. Nothing in the pump ever asks for a co-editor's edits
+// again — so a document wired with the pump alone converges at mount
+// and silently stops relaying afterwards.
+//
+// The piece that closes that gap lives HERE rather than inside the
+// pump, for the same reason the Yjs import does: the fan-out is a
+// transport, and a pump that opened its own connection would be an
+// always-on service every consumer paid for, including the ones that
+// never co-edit (GP 13). Instead the subscription rides the EXISTING
+// per-tab `NotificationClient` stream — the one `EventSource` every
+// other server-driven event already arrives on — so a co-editing page
+// opens no second connection at all.
+
+/// The two fields a relay signal is read for: which document moved, and
+/// who moved it.
+///
+/// Read out of the payload with `JSON.parse` and two property reads
+/// rather than deserialised into `CrdtUpdateEvent`, because the event's
+/// `Payload` is a `byte[]`: the server writes it base64 (the SDK's
+/// `ByteArrayConverter`) and the browser's decoder expects a number
+/// array, so a whole-record decode would fail on the one field this
+/// handler has no use for. Returns `null` for anything it cannot read.
+[<Emit("(function (json) { try { var e = JSON.parse(json); var u = e && e.Update; if (!u || !u.Ref) { return null; } return [String(u.OriginSession), String(u.Ref.DocId)]; } catch (err) { return null; } })($0)")>]
+let private relayTarget (payloadJson: string) : string[] = jsNative
+
+// Read as a raw string rather than through the typed `VisibilityState`
+// enum, per `SyncCoordinator`'s note: the enum's shape has moved
+// between Fable.Browser.Dom majors and this comparison must not.
+[<Emit("(typeof document !== 'undefined' && document !== null && document.visibilityState === 'visible')")>]
+let private documentVisible () : bool = jsNative
+
+/// Subscribe `onRelay` to the reserved `_platform.crdt` topic for one
+/// document, and return the thunk that unsubscribes.
+///
+/// `_platform.crdt` is the key the server's relay
+/// (`NotifyingCrdtDocumentStore`) publishes on after every append and
+/// compaction. The channel gates it by the document ref's own scope, so
+/// this handler is never offered another team's traffic (GP 4) — the
+/// `docId` test below narrows within one scope, and is not the security
+/// boundary.
+///
+/// An event whose `OriginSession` is this tab's own is this tab's echo
+/// and is dropped. A compaction base carries the reserved
+/// `_platform.compaction` origin, which is nobody's session, so it is
+/// never dropped — a joiner may well be missing the content it merges.
+///
+/// **An unreadable payload resyncs rather than being ignored.** The
+/// event still says something on this scope moved, a resync is
+/// idempotent and cheap, and the alternative is a payload-shape change
+/// that stops a document relaying with nothing to see. This is the same
+/// direction the store's own relay takes when a publish fails: prefer
+/// the redundant read to the missed one.
+let subscribeRelay (docId: string) (sessionId: string) (onRelay: unit -> unit) : unit -> unit =
+    NotificationClient.subscribe (fun envelope ->
+        match envelope.Notification with
+        | CustomNotification(key, payloadJson) when key = CrdtTopics.Update ->
+            let target = relayTarget payloadJson
+
+            if isNull (box target) then
+                onRelay ()
+            elif target[1] = docId && target[0] <> sessionId then
+                onRelay ()
+        | _ -> ())
+
+/// One live co-editing session: the Phase 535 pump plus the
+/// subscription that keeps it live.
+type LiveCoEdit = {
+    /// The pump. `Resync` and `ApplyRemote` are unchanged — a caller
+    /// that wants to re-anchor on a visibility change still calls them.
+    Session: CrdtSyncClient.CrdtSession
+    /// Tear down the subscription AND the pump. One thunk because they
+    /// have one lifetime: a view that disposed the session and left the
+    /// handler registered would resync a document nobody is showing.
+    Dispose: unit -> unit
+}
+
+/// Join `docId` and stay live: catch up at join, then resync on every
+/// relay signal.
+///
+/// What arrives on the topic is treated as a SIGNAL, not as content —
+/// the handler calls `Resync`, which reads the diff from the cursor the
+/// session retained. Applying the relayed payload directly would save a
+/// round trip and leave the cursor un-advanced (see `CrdtSyncClient`'s
+/// header), so signal-then-diff is what keeps the next reconnect cheap.
+///
+/// **The join-time catch-up remains the fallback.** A tab whose stream
+/// is down, or whose event the server dropped (the relay swallows
+/// publish failures, deliberately), loses nothing: the retained cursor
+/// recovers it on the next resync. A missed signal costs latency, never
+/// content.
+let startLive
+    (yjs: CrdtSyncClient.IYjs)
+    (doc: CrdtSyncClient.IYDoc)
+    (transport: CrdtSyncClient.CrdtTransport)
+    (docId: string)
+    (sessionId: string)
+    : LiveCoEdit =
+    let session = CrdtSyncClient.start yjs doc transport sessionId
+
+    // A resync that fails is swallowed: a tab whose link is down reads
+    // into nothing, which is exactly the state a reconnect recovers
+    // from — and surfacing it would turn a transient blip into an error
+    // the view has no answer for.
+    let resync () =
+        async {
+            try
+                do! session.Resync()
+            with _ ->
+                ()
+        }
+        |> Async.StartImmediate
+
+    let unsubscribe = subscribeRelay docId sessionId resync
+
+    // The other two moments `CrdtSession.Resync` names as its own
+    // triggers, registered here rather than left to every consumer to
+    // remember. Neither is a service and neither is a timer — they are
+    // listeners with the session's lifetime, and a page that never
+    // loses its link never pays for them (GP 13).
+    //
+    //   * `online` — a stream that was down missed every event
+    //     published while it was down, and the browser's own
+    //     reconnection restores the CONNECTION, not the gap. The
+    //     retained cursor is the only thing that closes the gap, and
+    //     this is the moment to ask it to. Without this a tab that
+    //     drops its link for one edit is dark until it is reloaded.
+    //   * `visibilitychange` — a backgrounded tab is throttled and its
+    //     stream can be dropped by an intermediary; re-anchor when it
+    //     comes back rather than assume nothing was missed.
+    let onOnline = fun (_: Browser.Types.Event) -> resync ()
+
+    let onVisible =
+        fun (_: Browser.Types.Event) ->
+            if documentVisible () then
+                resync ()
+
+    Browser.Dom.window.addEventListener ("online", unbox onOnline)
+    Browser.Dom.document.addEventListener ("visibilitychange", unbox onVisible)
+
+    {
+        Session = session
+        Dispose =
+            fun () ->
+                unsubscribe ()
+                Browser.Dom.window.removeEventListener ("online", unbox onOnline)
+                Browser.Dom.document.removeEventListener ("visibilitychange", unbox onVisible)
+                session.Dispose()
+    }
+
 /// Narrow a whole-value text-area change to the span that actually
 /// changed, by common prefix and suffix.
 ///
@@ -140,8 +293,11 @@ let SharedTextArea
         // never holds a state the document disagrees with.
         observeText ytext (fun () -> setText (textValue ytext))
 
-        let session =
-            CrdtSyncClient.start yjs (unbox<CrdtSyncClient.IYDoc> ydoc) (transportFor api docId sessionId) sessionId
+        // `startLive`, not `CrdtSyncClient.start`: the pump alone
+        // catches up at join and never again, so the text area would
+        // converge at mount and then quietly stop (Phase 764).
+        let live =
+            startLive yjs (unbox<CrdtSyncClient.IYDoc> ydoc) (transportFor api docId sessionId) docId sessionId
 
         // Announce where this participant is, on the presence substrate.
         // The scope is server-resolved, so the client names only the
@@ -150,7 +306,7 @@ let SharedTextArea
 
         let cleanup: unit -> unit =
             fun () ->
-                session.Dispose()
+                live.Dispose()
                 ytextHandle.current <- None
 
         cleanup)

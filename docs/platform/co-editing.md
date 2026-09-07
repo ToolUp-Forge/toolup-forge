@@ -60,14 +60,18 @@ An **unrecognised** vector — one issued by a different store, or by the same s
 A client runs the same three steps whether it is joining for the first time, reconnecting after a blip, or resuming after a day offline. There is deliberately **no separate resume path** to get wrong:
 
 1. `GetDiff(ref, cursor)` — with the retained cursor, or `StateVector.empty` on a cold start. Apply every returned payload, in any order. Retain the new cursor.
-2. Subscribe to `_platform.crdt` on the scope, and apply each `CrdtUpdateEvent` whose `OriginSession` is not this session's own.
+2. Subscribe to `_platform.crdt` on the scope. For each `CrdtUpdateEvent` whose `OriginSession` is not this session's own, either apply it (`session.ApplyRemote`, one round trip cheaper) or treat it as a signal to re-run step 1 (`session.Resync`, which also advances the cursor — what the sample does, and why is under [Wiring a live document](#wiring-a-live-document)).
 3. `Append` each local update as the CRDT library emits it.
 
 A missed live event is a latency problem, not a correctness one — the next `GetDiff` recovers it. That is precisely why the cursor exists rather than the fan-out being made reliable.
 
 Fan-out rides the shipped `INotificationChannel` (Phase 6a) — **no new transport**, the same per-scope SSE pipeline presence, locks and every other server-driven event already use. A publish failure is swallowed rather than retried or surfaced, because the update is already durable in the store by then and every co-editor recovers it on its next catch-up.
 
-### Client wiring
+### Wiring a live document
+
+`CrdtSyncClient.start` is step 1 and step 3 of the protocol above — it catches up once from an empty cursor, then publishes local edits. It is deliberately **not** step 2: subscribing is a transport concern, and a pump that opened a connection of its own would be an always-on service every consumer paid for, including the ones that never co-edit (GP 13). A document wired with the pump alone therefore converges at mount and never again, which is the failure that looks like nothing at all.
+
+Step 2 is three lines in the consuming app, over the notification stream the tab already has:
 
 ```fsharp skip=fragment
 // In the consuming app — the one line that names the vendor.
@@ -77,16 +81,37 @@ let ydoc: obj = createNew (import "Doc" "yjs") ()
 let session =
     CrdtSyncClient.start yjs (unbox<CrdtSyncClient.IYDoc> ydoc) transport sessionId
 
-// Relayed updates from the SSE subscription; the session drops its own echo.
-session.ApplyRemote update
+// Step 2 — the relay. `CrdtTopics.Update` is the reserved
+// `_platform.crdt` key `NotifyingCrdtDocumentStore` publishes on;
+// `NotificationClient` is the tab's ONE `EventSource`, so this opens no
+// connection of its own. Filter to this document, drop this session's
+// own echo, and treat what is left as a SIGNAL: resync from the
+// retained cursor rather than applying the relayed payload, so the
+// cursor advances and the next reconnect stays cheap.
+let unsubscribe =
+    NotificationClient.subscribe (fun envelope ->
+        match envelope.Notification with
+        | CustomNotification(key, payloadJson) when key = CrdtTopics.Update ->
+            // `isForUs` is the consumer's own two-field read of the
+            // payload (`Update.Ref.DocId`, `Update.OriginSession`) —
+            // the sample linked below is the worked version, and it
+            // explains why it reads those two fields rather than
+            // deserialising the whole `CrdtUpdateEvent`.
+            if isForUs payloadJson docId sessionId then
+                session.Resync() |> Async.StartImmediate
+        | _ -> ())
 
-// Reconnect, visibility change, or a periodic re-anchor.
-session.Resync() |> Async.StartImmediate
+// Teardown is one lifetime: dispose the subscription with the session,
+// or a re-mount leaves a handler resyncing a document nobody is showing.
+unsubscribe ()
+session.Dispose()
 ```
+
+**The join-time catch-up is the fallback, and it is why a missed signal is survivable.** A tab whose stream is down, or whose event the relay dropped (a publish failure is swallowed, deliberately — see above), loses no content: the next `Resync` from the retained cursor recovers it. That is the same property that makes the fan-out allowed to be unreliable, and it is the reason the two other moments `CrdtSession.Resync` names — the browser's `online` event and `visibilitychange` — are worth wiring beside the subscription. Neither is a timer or a service; both are listeners with the session's lifetime, and without the first a tab that loses its link for a single edit stays dark until it is reloaded.
 
 `sessionId` is the echo-suppression key, so it identifies a **tab**, not a user — two tabs open by one person are two co-editors.
 
-The runnable reference is [`samples/MinimalClient/CrdtCoEditSample.fs`](../../samples/MinimalClient/CrdtCoEditSample.fs): a shared text area, including the prefix/suffix delta that keeps a whole-value `onChange` from clobbering a co-editor's concurrent edit.
+The runnable reference is [`samples/MinimalClient/CrdtCoEditSample.fs`](../../samples/MinimalClient/CrdtCoEditSample.fs), and `CrdtCoEditSample.startLive` is the whole of the above wired: a shared text area, the subscription, the two re-anchors, one `Dispose`, and the prefix/suffix delta that keeps a whole-value `onChange` from clobbering a co-editor's concurrent edit. It is also what the browser smoke harness drives (`tests/BrowserSmoke/`), so the two-tab convergence claim is asserted against the sample a consumer copies rather than against a harness-local approximation of it.
 
 **The cursor advances on `Resync`, not on a live update.** A relayed update carries no cursor, and an opaque value cannot be advanced by inference. The consequence is benign, and is documented here so nobody "fixes" it: an update applied live may be delivered again by the next `Resync`, which is a no-op in the CRDT. Inferring cursor positions client-side would couple the client to one implementation's encoding to save a few duplicated bytes.
 
@@ -134,7 +159,10 @@ That retention is now wired, and the wiring is deliberately thin because the two
 // 1. A transport that holds what it cannot publish. `hold` is
 //    `byte[] -> Async<unit>` — this file names no queue type.
 let holding = CrdtSyncClient.holdAndForward transport (holdInQueue queue docId scopeId)
-let session = CrdtSyncClient.start yjs ydoc holding.Transport sessionId
+// Live, per the section above — offline tolerance composes on top of a
+// live document, not instead of one.
+let live = CrdtCoEditSample.startLive yjs ydoc holding.Transport docId sessionId
+let session = live.Session
 
 // 2. "Held" means a durable queue entry under the reserved marker, so
 //    the coordinator can recognise it later. `MergeablePayload.mint`
