@@ -2974,6 +2974,12 @@ ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.EmailFromAddress : System.Strin
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.PushEnabled : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SchemaOnlyMaxSampleRows : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SmsEnabled : System.String (literal)
+ToolUp.Platform.ConfigKeys+OperationsDoc (class)
+ToolUp.Platform.ConfigKeys+OperationsDoc.DescriptionHeader : System.String (literal)
+ToolUp.Platform.ConfigKeys+OperationsDoc.DocPath : System.String (literal)
+ToolUp.Platform.ConfigKeys+OperationsDoc.VariableHeader : System.String (literal)
+ToolUp.Platform.ConfigKeys+OperationsDoc.issues(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor], System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.ConfigKeys+OperationsDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor], System.String) : System.String
 ToolUp.Platform.ConfigKeys+ReferenceDoc (class)
 ToolUp.Platform.ConfigKeys+ReferenceDoc.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.ConfigKnobType (class)

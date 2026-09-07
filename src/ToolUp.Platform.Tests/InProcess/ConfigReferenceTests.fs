@@ -36,6 +36,13 @@ let private referenceDocPath () =
 let private schemaPath () =
     Path.Combine(repoRoot (), "docs", "reference", "toolup.config.schema.json")
 
+/// Phase 765 — the operations page, whose description column is the
+/// registry's third projection. The repo-relative path is the module's
+/// own literal, so the generator script, the gate and the conventions
+/// note cite one string.
+let private operationsDocPath () =
+    Path.Combine(repoRoot (), OperationsDoc.DocPath.Replace('/', Path.DirectorySeparatorChar))
+
 let private regenModeOn () =
     match Environment.GetEnvironmentVariable "TOOLUP_REGEN_CONFIG_REFERENCE" with
     | null
@@ -287,6 +294,60 @@ let tests =
                     committed
                     (normalise rendered)
                     "docs/reference/toolup.config.schema.json is stale. Regenerate with `dev-scripts/generate-config-reference.ps1`."
+
+        testCase "docs/operations/env-vars.md descriptions match the registry (regenerable)"
+        <| fun _ ->
+            // Phase 765 — the registry's third projection, and the only
+            // one that is a COLUMN rather than a file. The operations
+            // page is a curated subset of the registry carrying two
+            // facts the registry does not hold (the `ServerConfig` field
+            // and the reader's parse contract), so generating the whole
+            // page would delete them — and leaving it entirely
+            // hand-authored is what let Phase 9m.C move
+            // `TOOLUP_TRACE_CATEGORIES`'s description in the registry
+            // while the operations table went on describing it in one
+            // stale sentence. The description cell of every
+            // registry-backed row is therefore projected and the rest of
+            // the page passed through, under the same regen flag as the
+            // two arms above: one
+            // `dev-scripts/generate-config-reference.ps1` moves all
+            // three artefacts, so a registry edit cannot refresh some
+            // and leave the others lying.
+            let path = operationsDocPath ()
+
+            Expect.isTrue
+                (File.Exists path)
+                (sprintf "%s is missing — the operations page is a projection target, not an optional page." path)
+
+            let committed = File.ReadAllText path |> normalise
+
+            // Checked BEFORE the byte-comparison, and in regeneration
+            // mode too: the compare quantifies over what the page HAS,
+            // so a table that dropped its `Description` column and a row
+            // naming a key that was renamed out of the registry would
+            // both pass it in silence — the projection would simply have
+            // nothing to say about either. Neither is regenerable, so
+            // regenerating over them would be writing a file that is
+            // still wrong.
+            let findings = OperationsDoc.issues all committed
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "%s cannot be fully projected from the config-key registry:%s%s"
+                    OperationsDoc.DocPath
+                    Environment.NewLine
+                    (findings |> List.map (sprintf "  - %s") |> String.concat Environment.NewLine))
+
+            let projected = OperationsDoc.render all committed
+
+            if regenModeOn () then
+                File.WriteAllText(path, projected)
+            else
+                Expect.equal
+                    committed
+                    projected
+                    "docs/operations/env-vars.md carries a description that is not the descriptor's. Regenerate with `dev-scripts/generate-config-reference.ps1` — and if the operations wording is the better one, move it into the ConfigKeyDescriptor so every projection carries it."
 
         testCase "the generated schema admits exactly what a manifest may contain"
         <| fun _ ->

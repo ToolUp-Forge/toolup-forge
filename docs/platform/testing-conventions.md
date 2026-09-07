@@ -294,6 +294,44 @@ baseline, or gets fixed.
 Full convention, the baseline's ratchet, and how context is supplied:
 [`docs-snippets/README.md`](../../docs-snippets/README.md).
 
+## Generated documentation pages, and the one command that moves them (Phases 214 / 697 / 765)
+
+Three committed artefacts are **projections of the config-key registry** (`ConfigKeys.all` in
+`src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs`), not hand-maintained documents:
+
+| Artefact | What is generated | Projected by |
+|---|---|---|
+| `docs/reference/config-reference.md` | the whole file | `ReferenceDoc.render` |
+| `docs/reference/toolup.config.schema.json` | the whole file | `ConfigSchema.render` |
+| `docs/operations/env-vars.md` | the **`Description` column** of every table headed `Variable` | `OperationsDoc.render` |
+
+One command refreshes all three:
+
+```
+pwsh dev-scripts/generate-config-reference.ps1
+```
+
+It runs the `ConfigReference` test list with `TOOLUP_REGEN_CONFIG_REFERENCE=1`, which flips those
+three arms from *comparing* to *writing*. Without the variable they compare, and `VerifyAll` is red
+whenever a committed artefact disagrees with the registry — so **a descriptor edit and its three
+regenerated artefacts land in the same commit**, or the gate says so.
+
+**The operations page is the interesting one, because only a column of it is generated.** Whole-file
+generation was rejected for it: it covers a curated subset of the registry and each row carries two
+facts the registry does not hold — the `ServerConfig` field the value binds to, and the reader's
+parse contract. So the projection rewrites one cell per registry-backed row and passes every other
+byte through; the prose, the other columns, `SERVER_PORT` (no `TOOLUP_` prefix, so no descriptor)
+and the client-side `define` tables all survive regeneration unchanged. **Never hand-edit a
+`Description` cell** — the next regeneration overwrites it. If the page's wording is the better one,
+move it into the `ConfigKeyDescriptor` and every projection gains it at once.
+
+A byte-comparison quantifies over what the page HAS, so two things it cannot see are asserted
+separately by `OperationsDoc.issues`: a table that dropped its `Description` column (the projection
+would then have nothing to say about its keys, and the compare would pass), and a row naming a
+`TOOLUP_*` variable the registry no longer describes (a rename leaves the page documenting a
+variable nothing reads). Both fail by name and neither is regenerable — regenerating over them would
+write a file that is still wrong.
+
 ## Certifying against an external conformance corpus (Phase 602)
 
 Most fixture corpora in this repo are *emitted* from the code they certify — the federation-seam

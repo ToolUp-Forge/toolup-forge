@@ -1028,7 +1028,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.traceCategories
         Description =
-            "Comma/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output."
+            "Comma/semicolon/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output."
         Type = StringKey
         Default = None
         IsSecret = false
@@ -3309,3 +3309,243 @@ module ConfigSchema =
         // `\n` throughout by construction (no `AppendLine`), so the
         // committed bytes are identical on every platform.
         sb.ToString()
+
+/// Phase 765 — the registry's third projection, and the only one that is
+/// a COLUMN rather than a whole file.
+///
+/// `docs/operations/env-vars.md` is the operator-facing page, and it is
+/// not a candidate for whole-file generation: it covers a curated subset
+/// of the registry's keys, and each row carries two facts the registry
+/// does not hold — the `ServerConfig` field the value binds to, and the
+/// reader's parse contract (`Positive integer 1–65535; out-of-range →
+/// fail loud`). Generating the page outright would delete both; leaving
+/// it entirely hand-authored is what let Phase 9m.C move
+/// `TOOLUP_TRACE_CATEGORIES`'s description in the registry while the
+/// operations table went on describing it in one stale sentence.
+///
+/// So the projection is per-CELL. A table opts in by heading its first
+/// column `Variable` and carrying a column headed `Description`; every
+/// row in it whose variable is a registered key has that one cell
+/// rewritten from the descriptor, and every other byte of the file —
+/// prose, the other columns, the tables that did not opt in — is passed
+/// through unchanged. `render` is therefore idempotent and total: the
+/// golden-file arm asserts `committed = render all committed`, so a
+/// descriptor edit that was not regenerated is a red gate rather than a
+/// stale page.
+///
+/// `issues` is the half a byte-comparison structurally cannot do. The
+/// compare quantifies over what the page HAS, so a table that dropped
+/// its `Description` column, or a row naming a key that was renamed out
+/// of the registry, would both pass it silently — the projection would
+/// simply have nothing to say about either. Each is reported by name.
+[<RequireQualifiedAccess>]
+module OperationsDoc =
+    open System
+    open System.Text
+
+    /// The page this module projects into, repo-relative. Named here
+    /// rather than at the test that reads it: the generator script, the
+    /// gate and the conventions note all cite one path.
+    [<Literal>]
+    let DocPath = "docs/operations/env-vars.md"
+
+    /// A table opts in by naming its first column this.
+    [<Literal>]
+    let VariableHeader = "Variable"
+
+    /// …and by carrying a column headed this. Position-independent: the
+    /// column reads best beside the variable in some tables and after
+    /// the parse contract in others, and the projection should not be
+    /// what decides that.
+    [<Literal>]
+    let DescriptionHeader = "Description"
+
+    /// Markdown-escape a cell value — the same escape `ReferenceDoc`
+    /// applies, and for the same reason: an unescaped `|` in a
+    /// description would silently split the row into two columns.
+    let private escape (s: string) = s.Replace("|", "\\|")
+
+    /// Split a markdown table row into its cells, honouring the `\|`
+    /// escape above. A naive `Split('|')` would tear a description
+    /// containing an escaped pipe into two cells and then write it back
+    /// as a malformed row.
+    let private splitCells (row: string) =
+        let t = row.Trim()
+        let acc = ResizeArray<string>()
+        let sb = StringBuilder()
+        let mutable i = 0
+
+        while i < t.Length do
+            if t[i] = '\\' && i + 1 < t.Length && t[i + 1] = '|' then
+                sb.Append "\\|" |> ignore
+                i <- i + 2
+            elif t[i] = '|' then
+                acc.Add(sb.ToString().Trim())
+                sb.Clear() |> ignore
+                i <- i + 1
+            else
+                sb.Append t[i] |> ignore
+                i <- i + 1
+
+        acc.Add(sb.ToString().Trim())
+
+        // The outer pipes contribute one empty segment at each end.
+        match List.ofSeq acc with
+        | [] -> []
+        | _ :: rest -> rest |> List.truncate (max 0 (List.length rest - 1))
+
+    let private isTableRow (line: string) = line.TrimStart(' ').StartsWith "|"
+
+    /// `|---|---|` and its aligned variants.
+    let private isSeparatorRow (line: string) =
+        let cells = splitCells line
+
+        not cells.IsEmpty
+        && cells
+           |> List.forall (fun c ->
+               c.Length > 0
+               && c |> Seq.forall (fun ch -> ch = '-' || ch = ':' || ch = ' ')
+               && c |> Seq.exists (fun ch -> ch = '-'))
+
+    /// The variable a row names, when its first cell is a backticked
+    /// `TOOLUP_*` token. Anything else — `SERVER_PORT`, a `__TOOLUP_*__`
+    /// Vite define, a prose cell — is not a registry key and is left
+    /// alone.
+    let private registryVariableOf (cells: string list) =
+        match cells with
+        | first :: _ when first.Length > 2 && first.StartsWith "`" && first.EndsWith "`" ->
+            let name = first.Substring(1, first.Length - 2)
+            if name.StartsWith "TOOLUP_" then Some name else None
+        | _ -> None
+
+    let private rebuild (cells: string list) = "| " + String.concat " | " cells + " |"
+
+    /// One opted-in table found in the page: where it starts, how wide
+    /// it is, and which column carries the description.
+    type private OptedInTable = {
+        HeaderLine: int
+        CellCount: int
+        DescriptionIndex: int option
+    }
+
+    /// Walk the page once, returning every opted-in table and a map from
+    /// each body-row line index to the table it belongs to.
+    let private scan (lines: string[]) =
+        let tables = ResizeArray<OptedInTable>()
+        let bodyOf = System.Collections.Generic.Dictionary<int, OptedInTable>()
+        let mutable i = 0
+
+        while i < lines.Length do
+            let startsTable =
+                isTableRow lines[i]
+                && not (isSeparatorRow lines[i])
+                && i + 1 < lines.Length
+                && isSeparatorRow lines[i + 1]
+
+            if startsTable then
+                let header = splitCells lines[i]
+
+                match header with
+                | first :: _ when first = VariableHeader ->
+                    let table = {
+                        HeaderLine = i
+                        CellCount = List.length header
+                        DescriptionIndex = header |> List.tryFindIndex (fun c -> c = DescriptionHeader)
+                    }
+
+                    tables.Add table
+                    let mutable j = i + 2
+
+                    while j < lines.Length && isTableRow lines[j] do
+                        bodyOf[j] <- table
+                        j <- j + 1
+
+                    i <- j
+                | _ -> i <- i + 1
+            else
+                i <- i + 1
+
+        List.ofSeq tables, bodyOf
+
+    /// Rewrite the description cell of every registry-backed row in an
+    /// opted-in table; pass every other byte through.
+    ///
+    /// Total by construction: a row whose cell count does not match its
+    /// header, a variable with no descriptor, and a table with no
+    /// `Description` column are all passed through unchanged here and
+    /// reported by `issues` instead. A projection that threw would make
+    /// the gate's failure mode a crash rather than a diff, and a crash
+    /// says nothing about which row is wrong.
+    let render (keys: ConfigKeyDescriptor list) (committed: string) : string =
+        let byVar = keys |> List.map (fun k -> k.EnvVar, k) |> Map.ofList
+        let lines = committed.Replace("\r\n", "\n").Split '\n'
+        let _, bodyOf = scan lines
+
+        let projected =
+            lines
+            |> Array.mapi (fun idx line ->
+                match bodyOf.TryGetValue idx with
+                | true, table ->
+                    match table.DescriptionIndex with
+                    | None -> line
+                    | Some di ->
+                        let cells = splitCells line
+
+                        if List.length cells <> table.CellCount then
+                            line
+                        else
+                            match registryVariableOf cells |> Option.bind (fun n -> Map.tryFind n byVar) with
+                            | None -> line
+                            | Some descriptor ->
+                                cells
+                                |> List.mapi (fun ci c -> if ci = di then escape descriptor.Description else c)
+                                |> rebuild
+                | _ -> line)
+
+        String.Join("\n", projected)
+
+    /// Findings the byte-comparison cannot make: an opted-in table that
+    /// carries no description column, a row whose cell count disagrees
+    /// with its header (so the projection would silently skip it), and a
+    /// `TOOLUP_*` variable the registry does not describe.
+    let issues (keys: ConfigKeyDescriptor list) (committed: string) : string list =
+        let registered = keys |> List.map _.EnvVar |> Set.ofList
+        let lines = committed.Replace("\r\n", "\n").Split '\n'
+        let tables, bodyOf = scan lines
+
+        let missingColumn =
+            tables
+            |> List.filter (fun t -> t.DescriptionIndex.IsNone)
+            |> List.map (fun t ->
+                sprintf
+                    "line %d: a table headed `%s` carries no `%s` column, so the registry's description for its keys is projected nowhere on this page"
+                    (t.HeaderLine + 1)
+                    VariableHeader
+                    DescriptionHeader)
+
+        let rowFindings =
+            bodyOf
+            |> Seq.sortBy _.Key
+            |> Seq.collect (fun kv ->
+                let cells = splitCells lines[kv.Key]
+
+                if List.length cells <> kv.Value.CellCount then
+                    [
+                        sprintf
+                            "line %d: row has %d cells but its header declares %d, so no column can be projected into it"
+                            (kv.Key + 1)
+                            (List.length cells)
+                            kv.Value.CellCount
+                    ]
+                else
+                    match registryVariableOf cells with
+                    | Some name when not (Set.contains name registered) -> [
+                        sprintf
+                            "line %d: names `%s`, which has no ConfigKeyDescriptor — it was renamed or removed from the registry, and this row now documents a variable nothing reads"
+                            (kv.Key + 1)
+                            name
+                      ]
+                    | _ -> [])
+            |> List.ofSeq
+
+        missingColumn @ rowFindings

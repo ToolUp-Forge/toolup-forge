@@ -4,6 +4,22 @@ Single-source reference for the environment variables `ServerConfig.fromEnv` (an
 
 **Precedence (every lifted field):** consumer-authored literal (`{ ServerConfig.defaults with X = ... }`) > env var > **deployment configuration manifest** > **configuration profile** > library-default override-record value (`ServerConfigOverrides.referenceApp`) > `defaults.X`.
 
+> **The `Description` column of every table below is GENERATED** from the central config-key
+> registry (`ConfigKeys.all` in
+> `src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs`), the same source the
+> [configuration reference](../reference/config-reference.md) and
+> [`toolup.config.schema.json`](../reference/toolup.config.schema.json) are projected from. One
+> command refreshes all three — `dev-scripts/generate-config-reference.ps1` — and `VerifyAll` goes
+> red when a committed description disagrees with its descriptor, so this page cannot quietly fall
+> behind the registry the way it did before Phase 765.
+>
+> Everything else on the page is hand-authored and survives regeneration byte-for-byte: the prose,
+> the `Field` / `Default` / `Tokens` / `Parse contract` columns (facts about the *reader*, which the
+> registry does not hold), the client-side `define` tables, and the description of `SERVER_PORT`,
+> which is not a `TOOLUP_*` key and so has no descriptor. **Do not hand-edit a `Description` cell** —
+> the next regeneration overwrites it. Improve the `ConfigKeyDescriptor` instead and every projection
+> moves together.
+
 ## The deployment configuration manifest
 
 A deployment is otherwise 30–50 flat strings smeared across a hosting blade, a compose file and CI secrets: no reviewable artefact, no diff between staging and production, and a typo boots a different subsystem without a murmur. The manifest adds a **declared layer beneath the environment** — one JSON file, hashable and diffable, bound through the same config-key registry this page is generated from. Environment variables stay exactly what they are good at: secrets, per-instance values, and orchestrator injection.
@@ -111,73 +127,73 @@ ConfigProfiles.declare {
 
 ## Core deployment shape
 
-| Variable | Field | Default | Parse contract |
-|---|---|---|---|
-| `SERVER_PORT` | `Port` | `5000` | Positive integer 1–65535; out-of-range / non-integer → fail loud. |
-| `TOOLUP_PUBLIC_BASE_URL` | `PublicBaseUrl` | `None` | Non-empty origin; trailing slash stripped + warn; empty/whitespace → `None` + warn. |
-| `TOOLUP_PUBLIC_PATH` | `PublicPath` | `deploy/public` | Any path string; env wins over the override-record value. |
-| `TOOLUP_PLATFORM_SURFACES` | `Surfaces` | `anonymous` | Comma/semicolon/space-separated tokens: `anonymous`, `anonymous_persistent`, `trial`, `individual`, `team`, `multi_team`, `claim_bearer`. Wins over the override-record value. Unrecognised → warn + fall back. |
-| `TOOLUP_MODULE` | `ModuleFilter` | `None` | Single module key. |
-| `TOOLUP_LOG_LEVEL` | `LogLevel` | `Info` | `Trace`/`Debug`/`Info`/`Warn`/`Error` (case-insensitive). |
-| `TOOLUP_TRACE_CATEGORIES` | `TraceCategories` | _(empty)_ | Comma/semicolon/space-separated category names. |
+| Variable | Field | Default | Parse contract | Description |
+|---|---|---|---|---|
+| `SERVER_PORT` | `Port` | `5000` | Positive integer 1–65535; out-of-range / non-integer → fail loud. | TCP port Kestrel binds. The one variable on this page with no `TOOLUP_` prefix and no descriptor, so this cell is hand-authored: the name predates the registry and orchestrators inject it by convention. |
+| `TOOLUP_PUBLIC_BASE_URL` | `PublicBaseUrl` | `None` | Non-empty origin; trailing slash stripped + warn; empty/whitespace → `None` + warn. | Absolute base URL the deployment is reachable at. Used to build links in emails, share tokens and OAuth redirects. |
+| `TOOLUP_PUBLIC_PATH` | `PublicPath` | `deploy/public` | Any path string; env wins over the override-record value. | Filesystem path served as static public content. |
+| `TOOLUP_PLATFORM_SURFACES` | `Surfaces` | `anonymous` | Comma/semicolon/space-separated tokens: `anonymous`, `anonymous_persistent`, `trial`, `individual`, `team`, `multi_team`, `claim_bearer`. Wins over the override-record value. Unrecognised → warn + fall back. | Comma-separated surface profiles the deployment exposes, for example anonymous, user, multi-team or claim-bearer. |
+| `TOOLUP_MODULE` | `ModuleFilter` | `None` | Single module key. | Restricts the composed surface to a single named module. Intended for local iteration. |
+| `TOOLUP_LOG_LEVEL` | `LogLevel` | `Info` | `Trace`/`Debug`/`Info`/`Warn`/`Error` (case-insensitive). | Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info. |
+| `TOOLUP_TRACE_CATEGORIES` | `TraceCategories` | _(empty)_ | Comma/semicolon/space-separated category names. | Comma/semicolon/space-separated whitelist of trace categories to emit. Matched case-sensitively against the categories composed emission sites declare with Logger.registerCategory; the SDK's own canonical category is ai.agent (per-provider-call tracing in the AI agent loop), and a companion or consumer adds its own. A value matching no declared category emits nothing and is reported by the trace-categories startup validator; the composed set with a currently-enabled marker is on the /dev/inspect Trace categories panel. Empty emits no Trace output. |
 
 ## Boolean / scalar bundle (Phase 71.A.6) + string lists (71.A.8)
 
 All additive and backward-compatible — unset preserves the prior `defaults.X`.
 
-| Variable | Field | Default | Parse contract |
-|---|---|---|---|
-| `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | `IncludePlatformDefaults` | `true` | `1`/`true`/`yes`/`on` ↔ `0`/`false`/`no`/`off`; wins over override; unrecognised → fail loud. |
-| `TOOLUP_ENABLE_DEV_ENDPOINTS` | `EnableDevEndpoints` | `false` | Same; env wins over override. |
-| `TOOLUP_BACKFILL_MISSED_TICKS` | `BackfillMissedTicks` | `false` | Boolean flag. |
-| `TOOLUP_SKIP_PREFLIGHT` | `SkipPreflight` | `false` | Boolean flag. |
-| `TOOLUP_HEALTH_STATE_TRACKING` | `HealthStateTracking` | `false` | Boolean flag. |
-| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | `EnableCitationDevEndpoint` | _(unset)_ | Optional boolean: set → `Some`, unset → `None`. |
-| `TOOLUP_MAX_REQUEST_BODY_BYTES` | `MaxRequestBodyBytes` | _(unset)_ | Positive int64 → `Some`; `none`/`0`/unset → `None`; garbage → `None` + warn. |
-| `TOOLUP_SLOW_RATE_LIMIT_MS` | `SlowRateLimitThreshold` | `5000` | Positive integer milliseconds; garbage → default + warn. |
-| `TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS` | `WebhookUrlAllowedHosts` | _(empty)_ | Comma/semicolon/space-separated host list. |
-| `TOOLUP_PEER_ROUTE_PREFIXES` | `PeerRoutePrefixes` | _(empty)_ | Comma/semicolon/space-separated prefix list. |
+| Variable | Field | Default | Parse contract | Description |
+|---|---|---|---|---|
+| `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | `IncludePlatformDefaults` | `true` | `1`/`true`/`yes`/`on` ↔ `0`/`false`/`no`/`off`; wins over override; unrecognised → fail loud. | Merges the SDK platform default config schema into the composed surface. |
+| `TOOLUP_ENABLE_DEV_ENDPOINTS` | `EnableDevEndpoints` | `false` | Same; env wins over override. | Exposes the /dev/* inspection endpoints. Should stay off in production. |
+| `TOOLUP_BACKFILL_MISSED_TICKS` | `BackfillMissedTicks` | `false` | Boolean flag. | On startup, runs schedule ticks that were missed while the process was down. |
+| `TOOLUP_SKIP_PREFLIGHT` | `SkipPreflight` | `false` | Boolean flag. | Skips the entire startup config preflight. Intended for local iteration; a production deployment that sets it boots unvalidated. |
+| `TOOLUP_HEALTH_STATE_TRACKING` | `HealthStateTracking` | `false` | Boolean flag. | Tracks health-check state transitions, so a probe can report how long a component has been unhealthy. |
+| `TOOLUP_ENABLE_CITATION_DEV_ENDPOINT` | `EnableCitationDevEndpoint` | _(unset)_ | Optional boolean: set → `Some`, unset → `None`. | Exposes the RAG citation inspection dev endpoint. |
+| `TOOLUP_MAX_REQUEST_BODY_BYTES` | `MaxRequestBodyBytes` | _(unset)_ | Positive int64 → `Some`; `none`/`0`/unset → `None`; garbage → `None` + warn. | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
+| `TOOLUP_SLOW_RATE_LIMIT_MS` | `SlowRateLimitThreshold` | `5000` | Positive integer milliseconds; garbage → default + warn. | Milliseconds a request may wait on the rate limiter before that wait is logged as slow. |
+| `TOOLUP_WEBHOOK_URL_ALLOWED_HOSTS` | `WebhookUrlAllowedHosts` | _(empty)_ | Comma/semicolon/space-separated host list. | Comma-separated host allow-list for outbound webhook URLs. Unset allows any host. |
+| `TOOLUP_PEER_ROUTE_PREFIXES` | `PeerRoutePrefixes` | _(empty)_ | Comma/semicolon/space-separated prefix list. | Comma-separated route prefixes served by the cross-deployment peer substrate. |
 
 ## Flat-case subsystem toggles (Phase 71.A.7)
 
 Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary toggles accept `enabled`/`on`/`yes` and `no`/`off`/`disabled` (case-insensitive); an unrecognised token warns and keeps the default. The override-bearing toggles (`Webhooks` / `AuditLog` / `SecurityHardening` / `ShareTokenStore`) resolve env > override > default.
 
-| Variable | Field | Tokens |
-|---|---|---|
-| `TOOLUP_RESULT_STORE` | `ResultStore` | `no` / `inmemory` / `persistent` |
-| `TOOLUP_LINEAGE` | `Lineage` | binary |
-| `TOOLUP_DATA_INGESTION` | `DataIngestion` | binary |
-| `TOOLUP_OAUTH_REFRESHER` | `OAuthRefresher` | binary |
-| `TOOLUP_ENTITY_STORE` | `EntityStore` | binary |
-| `TOOLUP_USAGE_METERING` | `UsageMetering` | binary |
-| `TOOLUP_METRICS_ENDPOINT` | `MetricsEndpoint` | binary |
-| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | `PlatformKnowledgeBase` | binary |
-| `TOOLUP_CONFIG_DRIFT_DETECTION` | `ConfigDriftDetection` | binary |
-| `TOOLUP_RATE_LIMITER` | `RateLimiter` | binary |
-| `TOOLUP_SMOKE_TEST` | `SmokeTest` | binary |
-| `TOOLUP_ASSET_STORE` | `AssetStore` | binary |
-| `TOOLUP_CONSENT_AUDIT` | `ConsentAudit` | binary |
-| `TOOLUP_AD_ANALYTICS` | `AdAnalytics` | binary |
-| `TOOLUP_SERVERLESS_HOST` | `ServerlessHost` | `kestrel` / `serverless` |
-| `TOOLUP_PROCESS_PROFILE` | `ProcessProfile` | `allinone` / `web` / `worker` / `dispatcher` |
-| `TOOLUP_WEBHOOKS` | `Webhooks` | binary (env > override > default) |
-| `TOOLUP_AUDIT_LOG` | `AuditLog` | binary (env > override > default) |
-| `TOOLUP_SHARE_TOKEN_STORE` | `ShareTokenStore` | binary (env > override > default) |
-| `TOOLUP_SECURITY_HARDENING` | `SecurityHardening` | `no` / `default` / `strict` (env > override > default) |
-| `TOOLUP_TEAM_CREATION_POLICY` | `TeamCreationPolicy` | `admin` (PlatformAdminOnly) / `any` (AnyAuthenticatedUser) |
+| Variable | Field | Tokens | Description |
+|---|---|---|---|
+| `TOOLUP_RESULT_STORE` | `ResultStore` | `no` / `inmemory` / `persistent` | Selects the result store backing long-running job output retrieval. |
+| `TOOLUP_LINEAGE` | `Lineage` | binary | Enables the lineage store recording dataset and derivation provenance. |
+| `TOOLUP_DATA_INGESTION` | `DataIngestion` | binary | Enables the data-ingestion pipeline (IDataIngestor plus the background ingestion service). |
+| `TOOLUP_OAUTH_REFRESHER` | `OAuthRefresher` | binary | Enables the background OAuth token refresher for stored data-source credentials. |
+| `TOOLUP_ENTITY_STORE` | `EntityStore` | binary | Enables the IEntityStore substrate (registered entity types and persistence). |
+| `TOOLUP_USAGE_METERING` | `UsageMetering` | binary | Enables per-scope usage metering, the counters feeding quota and billing surfaces. |
+| `TOOLUP_METRICS_ENDPOINT` | `MetricsEndpoint` | binary | Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink. |
+| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | `PlatformKnowledgeBase` | binary | Enables the platform-level knowledge base, the SDK-shipped document KB surface. |
+| `TOOLUP_CONFIG_DRIFT_DETECTION` | `ConfigDriftDetection` | binary | Enables startup detection of drift between persisted config and the composed defaults. |
+| `TOOLUP_RATE_LIMITER` | `RateLimiter` | binary | Enables the request rate-limiter middleware. |
+| `TOOLUP_SMOKE_TEST` | `SmokeTest` | binary | Enables the post-boot smoke-test surface, which is itself guarded by TOOLUP_SMOKE_TOKEN. |
+| `TOOLUP_ASSET_STORE` | `AssetStore` | binary | Enables the IAssetStore substrate for uploaded media and derivative rendering. |
+| `TOOLUP_CONSENT_AUDIT` | `ConsentAudit` | binary | Enables consent-change auditing. |
+| `TOOLUP_AD_ANALYTICS` | `AdAnalytics` | binary | Enables the advertising-analytics surface. |
+| `TOOLUP_SERVERLESS_HOST` | `ServerlessHost` | `kestrel` / `serverless` | Host shape the server assumes: the standard Kestrel host, or a serverless host that skips long-lived background services. |
+| `TOOLUP_PROCESS_PROFILE` | `ProcessProfile` | `allinone` / `web` / `worker` / `dispatcher` | Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only. |
+| `TOOLUP_WEBHOOKS` | `Webhooks` | binary (env > override > default) | Enables outbound webhook delivery (subscriptions, signing, retry). |
+| `TOOLUP_AUDIT_LOG` | `AuditLog` | binary (env > override > default) | Enables the audit log and its sink dispatcher. |
+| `TOOLUP_SHARE_TOKEN_STORE` | `ShareTokenStore` | binary (env > override > default) | Enables the IShareTokenStore substrate backing publishable share links (signed tokens + claim store). |
+| `TOOLUP_SECURITY_HARDENING` | `SecurityHardening` | `no` / `default` / `strict` (env > override > default) | Security-header and hardening posture applied to every response. |
+| `TOOLUP_TEAM_CREATION_POLICY` | `TeamCreationPolicy` | `admin` (PlatformAdminOnly) / `any` (AnyAuthenticatedUser) | Who may create a team: platform admins only, or any authenticated user. |
 
 ## Hybrid subsystem toggles (Phase 71.A.11)
 
 Server DUs whose enabled case carries a payload. The env var selects the **case**; a payload-free / curated-default case is constructed directly, a payload-bearing case **fails loud** at startup naming how to supply the payload (overrides / a `{ defaults with ... }` literal) — it is never silently defaulted. Unset → the configured value.
 
-| Variable | Field | Tokens |
-|---|---|---|
-| `TOOLUP_JOB_SCHEDULER` | `JobScheduler` | `no` / `enabled` (both nilary — full lift) |
-| `TOOLUP_RATE_LIMIT_STORE` | `RateLimitStore` | `no` / `inmemory` / `external` (all nilary) |
-| `TOOLUP_EVENT_STORE` | `EventStore` | `inmemory` / `persistent` (persistent → 90-day retention default) |
-| `TOOLUP_CONVERSATION_STORE` | `ConversationStore` | `no` (off); `enabled` → **fail-loud** (needs `retentionDays`) |
-| `TOOLUP_PUBLIC_RENDERING` | `PublicRendering` | `no` (off); `enabled` → **fail-loud** (needs a `ContentRoot` path) |
-| `TOOLUP_DATA_SUBJECT_REQUESTS` | `DataSubjectRequests` | `disabled` (off); `enabled` → **fail-loud** (DSR needs an explicit `ErasurePolicy` — a compliance decision) |
+| Variable | Field | Tokens | Description |
+|---|---|---|---|
+| `TOOLUP_JOB_SCHEDULER` | `JobScheduler` | `no` / `enabled` (both nilary — full lift) | Selects the in-process IJobScheduler. Dev-shaped: a multi-instance deployment needs a distributed scheduler companion. |
+| `TOOLUP_RATE_LIMIT_STORE` | `RateLimitStore` | `no` / `inmemory` / `external` (all nilary) | Selects where rate-limit counters live. The in-memory store is per-instance and therefore wrong for a multi-instance deployment. |
+| `TOOLUP_EVENT_STORE` | `EventStore` | `inmemory` / `persistent` (persistent → 90-day retention default) | Selects the IEventStore backend. The persistent option uses the blob-backed store with the 90-day retention policy. |
+| `TOOLUP_CONVERSATION_STORE` | `ConversationStore` | `no` (off); `enabled` → **fail-loud** (needs `retentionDays`) | Disables AI conversation persistence. Enabling it requires a retentionDays value, so it must be set in ServerConfig rather than here. |
+| `TOOLUP_PUBLIC_RENDERING` | `PublicRendering` | `no` (off); `enabled` → **fail-loud** (needs a `ContentRoot` path) | Disables server-side public page rendering. Enabling it requires a ContentRoot path, so it must be set in ServerConfig rather than here. |
+| `TOOLUP_DATA_SUBJECT_REQUESTS` | `DataSubjectRequests` | `disabled` (off); `enabled` → **fail-loud** (DSR needs an explicit `ErasurePolicy` — a compliance decision) | Disables the data-subject-request surface. Enabling it requires an explicit ErasurePolicy, a compliance decision, so it must be set in ServerConfig. |
 
 Client (Vite defines) — **off-direction only**; enabling carries a structured config (`AdPanelConfig`) or id that must be set in code, so a non-`no` token leaves the config value as-is:
 
@@ -188,42 +204,42 @@ Client (Vite defines) — **off-direction only**; enabling carries a structured 
 
 ## Transport / security
 
-| Variable | Field | Default |
-|---|---|---|
-| `TOOLUP_REQUIRE_HTTPS` | `RequireHttps` | `false` |
-| `TOOLUP_TRUST_FORWARDED_HEADERS` | `TrustForwardedHeaders` | `true` (fail-loud on unrecognised value) |
-| `TOOLUP_TRUSTED_PROXY_CIDRS` | `TrustedProxyCidrs` | empty (comma-separated CIDRs, e.g. `10.0.0.0/8`; fail-loud on malformed entry — Phase 325) |
-| `TOOLUP_STATIC_PATH_BEHAVIOUR` | `StaticPathBehaviour` | `warn` (`warn`/`require`/`skip`) |
-| `TOOLUP_SSE_AUTH` | `SseAuthMode` | `fallback` (`cookie`/`fallback`) |
-| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | `MaxSseConnectionsPerScope` | `10` (positive int or `none`) |
-| `TOOLUP_SLOW_REQUEST_MS` | `SlowRequestThreshold` | `1000` |
-| `TOOLUP_REPLICA_COUNT` | `ReplicaCount` | `1` |
-| `TOOLUP_CONFIG_FILE` | _(none — names the manifest)_ | unset (probes `./toolup.config.json`); a named file that does not exist refuses startup |
-| `TOOLUP_PROFILE` | _(none — names the configuration profile)_ | unset (no profile imported); a manifest's `"$profile"` entry takes precedence; an unrecognised name refuses startup |
+| Variable | Field | Default | Description |
+|---|---|---|---|
+| `TOOLUP_REQUIRE_HTTPS` | `RequireHttps` | `false` | When true, the platform enforces HTTPS (redirect + HSTS) for browser-facing surfaces. |
+| `TOOLUP_TRUST_FORWARDED_HEADERS` | `TrustForwardedHeaders` | `true` (fail-loud on unrecognised value) | When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps). |
+| `TOOLUP_TRUSTED_PROXY_CIDRS` | `TrustedProxyCidrs` | empty (comma-separated CIDRs, e.g. `10.0.0.0/8`; fail-loud on malformed entry — Phase 325) | Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted. |
+| `TOOLUP_STATIC_PATH_BEHAVIOUR` | `StaticPathBehaviour` | `warn` (`warn`/`require`/`skip`) | How a missing static-content path is treated at boot: warn, refuse to start, or skip silently. |
+| `TOOLUP_SSE_AUTH` | `SseAuthMode` | `fallback` (`cookie`/`fallback`) | When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only. |
+| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | `MaxSseConnectionsPerScope` | `10` (positive int or `none`) | Maximum concurrent SSE connections per scope. |
+| `TOOLUP_SLOW_REQUEST_MS` | `SlowRequestThreshold` | `1000` | Milliseconds above which a request is logged as slow. |
+| `TOOLUP_REPLICA_COUNT` | `ReplicaCount` | `1` | Number of instances this deployment runs behind a load balancer. >1 makes multi-instance config validators refuse single-instance substrates. |
+| `TOOLUP_CONFIG_FILE` | _(none — names the manifest)_ | unset (probes `./toolup.config.json`); a named file that does not exist refuses startup | Path to the deployment configuration manifest (JSON, keys are these env-var names). Set: the named file must exist. Unset: ./toolup.config.json is probed and used when present, else no manifest is loaded. |
+| `TOOLUP_PROFILE` | _(none — names the configuration profile)_ | unset (no profile imported); a manifest's `"$profile"` entry takes precedence; an unrecognised name refuses startup | Name of the configuration profile this deployment imports — a named bundle of keys resolved one rung BELOW the manifest, so any explicit environment or manifest line still wins. A manifest selects one with its "$profile" entry instead, which takes precedence over this variable; an unrecognised name refuses startup and lists the available profiles. |
 
 ## `Accept*` escape-hatch flags
 
 Each is `false` by default; setting it to `1`/`true`/`yes`/`on` opts the deployment past a safety validator that would otherwise refuse startup. **Set one only when you understand why its validator fires.** (Phase 71.A.2 closed the six that were documented-but-unread.)
 
-| Variable | Field |
-|---|---|
-| `TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE` | `AcceptHeaderAuthWhenAuthRequired` |
-| `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | `AcceptPlaintextSecretsWhenAuthRequired` |
-| `TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE` | `AcceptInProcessSchedulerInMultiInstance` |
-| `TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE` | `AcceptInProcessIngestionInMultiInstance` |
-| `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE` | `AcceptSharedEmbeddingCacheInTeamMode` |
-| `TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE` | `AcceptStickyRoutedAiInMultiInstance` |
-| `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE` | `AcceptNoRateLimitWhenAuthRequired` |
-| `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE` | `AcceptUnsignedPublishable` |
-| `TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE` | `AcceptQueryParamSseAuthWhenAuthRequired` |
-| `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE` | `AcceptSameSiteOnlyCsrfWhenAuthRequired` |
-| `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | `AcceptUnboundAudienceWhenAuthRequired` |
-| `TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE` | `AcceptInMemoryOAuthStateInMultiInstance` |
-| `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE` | `AcceptInMemoryShareTokenRateLimiterInMultiInstance` |
-| `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY` | `AcceptForwardedHeadersFromAnyProxy` |
-| `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | `AcceptPendingInviteStoreInMultiInstance` |
-| `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX` | `AcceptEphemeralRagIndex` |
-| `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE` | `AcceptLocalEmbedderAtScale` |
+| Variable | Field | Description |
+|---|---|---|
+| `TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE` | `AcceptHeaderAuthWhenAuthRequired` | Acknowledge running the spoofable HeaderAuthProvider in an authenticated mode (only safe behind a mTLS proxy). |
+| `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | `AcceptPlaintextSecretsWhenAuthRequired` | Allows a plaintext secret store while auth is required. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE` | `AcceptInProcessSchedulerInMultiInstance` | Allows the in-process job scheduler when ReplicaCount is above 1, so scheduled jobs run on every instance. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_INPROCESS_INGESTION_MULTI_INSTANCE` | `AcceptInProcessIngestionInMultiInstance` | Allows in-process ingestion when ReplicaCount is above 1, so a document may be ingested more than once. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE` | `AcceptSharedEmbeddingCacheInTeamMode` | Allows a shared embedding cache in a team-scoped deployment, weakening tenant isolation of cached vectors. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE` | `AcceptStickyRoutedAiInMultiInstance` | Allows sticky-routed AI streaming when ReplicaCount is above 1 without a distributed notification channel. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE` | `AcceptNoRateLimitWhenAuthRequired` | Acknowledge an internet-facing authenticated deployment with no rate limiting. |
+| `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE` | `AcceptUnsignedPublishable` | Allows publishable surfaces without artefact signing. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE` | `AcceptQueryParamSseAuthWhenAuthRequired` | Acknowledge SSE query-param auth fallback in an authenticated mode (leaks the userId in URLs/logs). |
+| `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE` | `AcceptSameSiteOnlyCsrfWhenAuthRequired` | Acknowledge relying on SameSite cookies alone (no server-side CSRF token) for cookie auth. |
+| `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | `AcceptUnboundAudienceWhenAuthRequired` | Acknowledge an unset OIDC audience in an authenticated mode (token-reuse risk). |
+| `TOOLUP_ACCEPT_INMEMORY_OAUTH_STATE_MULTI_INSTANCE` | `AcceptInMemoryOAuthStateInMultiInstance` | Acknowledge the in-memory OAuth state store under a multi-instance deployment (callback may hit a replica without the state). |
+| `TOOLUP_ACCEPT_INMEMORY_SHARE_TOKEN_RATE_LIMITER_MULTI_INSTANCE` | `AcceptInMemoryShareTokenRateLimiterInMultiInstance` | Allows the in-memory share-token rate limiter when ReplicaCount is above 1, making the limit per-instance. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY` | `AcceptForwardedHeadersFromAnyProxy` | Trusts X-Forwarded-* headers from any peer instead of the configured proxy CIDRs, which lets a client spoof its own IP. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | `AcceptPendingInviteStoreInMultiInstance` | Acknowledge the in-memory pending-invite store under a multi-instance deployment (per-replica drift). |
+| `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX` | `AcceptEphemeralRagIndex` | Allows a RAG index that does not survive a restart. Lowers a startup preflight refusal to a warning. |
+| `TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE` | `AcceptLocalEmbedderAtScale` | Allows the local embedding provider at a corpus size it is not built for. Lowers a startup preflight refusal to a warning. |
 
 The two RAG flags (Phase 9m.B) are worth a note, because each governs a validator
 whose default is deliberately different:
