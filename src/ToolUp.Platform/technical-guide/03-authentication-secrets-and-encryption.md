@@ -95,6 +95,7 @@ let oidcConfig: OidcUIConfig = {
     ValidateIdToken = Some true
     BearerToken = None   // None = send the access token (the default)
     SecondaryFlow = None // None = the single-button sign-in screen (the default)
+    RefreshPolicy = None // None = the Phase 755 pre-expiry refresh defaults (the default)
 }
 
 let config = {

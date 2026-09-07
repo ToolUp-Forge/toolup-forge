@@ -74,6 +74,10 @@ let storage =
         // at an S3-compatible store (MinIO, Cloudflare R2, Backblaze B2)
         // and switches the client to path-style addressing.
         EndpointUrl = None
+        // Phase 2c — optional audit sink for 401 / 403 rejections. `None`
+        // (the default) records nothing; `Some auditLog` writes one
+        // `BlobStorageAuthFailed` row per rejected S3 call.
+        AuditLog = None
     }
 
 ServerApp.empty
