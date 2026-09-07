@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -146,6 +146,12 @@
              library server-side — payloads are opaque bytes. -->
         <Compile Include="Server\ICrdtDocumentStore.fs" />
         <Compile Include="Server\InMemoryCrdtDocumentStore.fs" />
+        <!-- Phase 756 — the durable arm of the same seam: an IBlobStorage-backed
+             append log + snapshot fold, so a co-edited document survives a
+             restart. After InMemoryCrdtDocumentStore.fs because it reuses the
+             NotifyingCrdtDocumentStore relay declared there rather than
+             re-implementing fan-out. Still no CRDT library server-side. -->
+        <Compile Include="Server\BlobCrdtDocumentStore.fs" />
         <Compile Include="Server\INotificationSink.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />

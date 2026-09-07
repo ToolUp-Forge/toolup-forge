@@ -611,6 +611,8 @@ ToolUp.Platform.BlobComputeBudgetStore..ctor(ToolUp.Platform.BlobStorage+IBlobSt
 ToolUp.Platform.BlobCountersignatureRegistry (class)
 ToolUp.Platform.BlobCountersignatureRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ICountersignatureSigner)
 ToolUp.Platform.BlobCountersignatureRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ICountersignatureSigner, System.TimeSpan)
+ToolUp.Platform.BlobCrdtDocumentStore (class)
+ToolUp.Platform.BlobCrdtDocumentStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.CrdtSnapshotPolicy, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.BlobDatasetStore (class)
 ToolUp.Platform.BlobDatasetStore..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDatasetCodec)
 ToolUp.Platform.BlobDatasetStoreModule (class)

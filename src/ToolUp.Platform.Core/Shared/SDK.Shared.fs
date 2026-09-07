@@ -3440,6 +3440,13 @@ type ServerConfig = {
     /// the deployment exposes its own API over the resolved store, and
     /// the CRDT library itself is a client-side npm dependency of the
     /// consuming app — the server carries none.
+    ///
+    /// Phase 756 — `PersistentCrdtDocuments policy` selects the durable
+    /// arm instead: the same relay over `BlobCrdtDocumentStore`, which
+    /// keeps each document's log in the composed `IBlobStorage` so a
+    /// co-edited document survives a restart. The in-memory case stays
+    /// the dev default, mirroring `EventStore`'s
+    /// `InMemoryOnly | PersistentBlobBacked _` split.
     CrdtDocuments: CrdtDocumentMode
     /// Phase 637 — server-authoritative module-visibility profiles.
     /// Default `NoModuleVisibility` — no store in DI, no admin API

@@ -3574,16 +3574,25 @@ ToolUp.Platform.CrdtDocumentMode (class)
 ToolUp.Platform.CrdtDocumentMode.EnabledCrdtDocuments : ToolUp.Platform.CrdtDocumentMode { get }
 ToolUp.Platform.CrdtDocumentMode.IsEnabledCrdtDocuments : System.Boolean { get }
 ToolUp.Platform.CrdtDocumentMode.IsNoCrdtDocuments : System.Boolean { get }
+ToolUp.Platform.CrdtDocumentMode.IsPersistentCrdtDocuments : System.Boolean { get }
 ToolUp.Platform.CrdtDocumentMode.NoCrdtDocuments : ToolUp.Platform.CrdtDocumentMode { get }
 ToolUp.Platform.CrdtDocumentMode.Tag : System.Int32 { get }
+ToolUp.Platform.CrdtDocumentMode+PersistentCrdtDocuments (class)
+ToolUp.Platform.CrdtDocumentMode+PersistentCrdtDocuments.Item : ToolUp.Platform.CrdtSnapshotPolicy { get }
 ToolUp.Platform.CrdtDocumentMode+Tags (class)
 ToolUp.Platform.CrdtDocumentMode+Tags.EnabledCrdtDocuments : System.Int32 (literal)
 ToolUp.Platform.CrdtDocumentMode+Tags.NoCrdtDocuments : System.Int32 (literal)
+ToolUp.Platform.CrdtDocumentMode+Tags.PersistentCrdtDocuments : System.Int32 (literal)
 ToolUp.Platform.CrdtSnapshot (class)
 ToolUp.Platform.CrdtSnapshot..ctor(ToolUp.Platform.CrdtDocRef, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate], ToolUp.Platform.StateVector)
 ToolUp.Platform.CrdtSnapshot.Ref : ToolUp.Platform.CrdtDocRef { get }
 ToolUp.Platform.CrdtSnapshot.Updates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate] { get }
 ToolUp.Platform.CrdtSnapshot.Vector : ToolUp.Platform.StateVector { get }
+ToolUp.Platform.CrdtSnapshotPolicy (class)
+ToolUp.Platform.CrdtSnapshotPolicy..ctor(System.Int32)
+ToolUp.Platform.CrdtSnapshotPolicy.SnapshotThreshold : System.Int32 { get }
+ToolUp.Platform.CrdtSnapshotPolicyModule (class)
+ToolUp.Platform.CrdtSnapshotPolicyModule.defaults : ToolUp.Platform.CrdtSnapshotPolicy { get }
 ToolUp.Platform.CrdtTopics (class)
 ToolUp.Platform.CrdtTopics.Update : System.String (literal)
 ToolUp.Platform.CrdtUpdate (class)
