@@ -314,12 +314,31 @@ let buildNotificationStack
     // The relay is a decorator rather than folded into the log so a
     // deployment that replaces the single-instance default with a
     // durable / distributed implementation inherits fan-out unchanged.
+    //
+    // Phase 756 — `PersistentCrdtDocuments policy` swaps the in-memory log
+    // for the blob-backed one and changes nothing else: the relay is the
+    // same decorator over the same seam, which is exactly what the
+    // decorator split was for. Documents then survive a restart, and a
+    // client's retained cursor still resolves afterwards. The in-memory
+    // arm stays the dev default (GP 11), mirroring `EventStore`'s
+    // `InMemoryOnly | PersistentBlobBacked _` split; `resolvedBlobStorage`
+    // is whatever the deployment composed (LocalFileStorage in dev, a
+    // cloud companion in production), so durability is inherited rather
+    // than re-implemented here.
     let crdtDocumentStore: ICrdtDocumentStore option =
         match config.CrdtDocuments with
         | NoCrdtDocuments -> None
         | EnabledCrdtDocuments ->
             Some(
                 NotifyingCrdtDocumentStore(InMemoryCrdtDocumentStore(), resolvedNotificationChannel)
+                :> ICrdtDocumentStore
+            )
+        | PersistentCrdtDocuments policy ->
+            Some(
+                NotifyingCrdtDocumentStore(
+                    BlobCrdtDocumentStore(resolvedBlobStorage, policy),
+                    resolvedNotificationChannel
+                )
                 :> ICrdtDocumentStore
             )
 
@@ -389,7 +408,10 @@ let registerPresenceSubstrate
         services.AddSingleton<IEntityLockStore>(lockStore) |> ignore
 
 /// Phase 535 — register the CRDT co-editing store when
-/// `ServerConfig.CrdtDocuments = EnabledCrdtDocuments`. The relay-wrapped
+/// `ServerConfig.CrdtDocuments` selects either arm — `EnabledCrdtDocuments`
+/// (in-memory) or `PersistentCrdtDocuments _` (blob-backed, Phase 756).
+/// Registration is identical for both: the arm chose the log, not the
+/// service type. The relay-wrapped
 /// instance was constructed in `buildNotificationStack` (over the
 /// resolved notification channel); only the DI registration happens here.
 /// `NoCrdtDocuments` registers nothing — a module that resolves the
