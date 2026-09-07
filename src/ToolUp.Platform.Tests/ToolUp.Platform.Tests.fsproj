@@ -1411,6 +1411,11 @@
              express. -->
         <Compile Include="InProcess\SessionRegistryTests.fs" />
         <Compile Include="InProcess\AdAnalyticsSinkTests.fs" />
+        <!-- Phase 466 — the ad-analytics endpoints' silent-degradation
+             signals: rate-limit-store fail-open and malformed-payload
+             drop, each counted unconditionally and warned under a
+             throttle, over a real Giraffe pipeline. -->
+        <Compile Include="InProcess\AdAnalyticsObservabilityTests.fs" />
         <!-- Phase 62 — IUserClaims contract bindings (NoOp + InMemory). -->
         <Compile Include="InProcess\UserClaimsTests.fs" />
         <!-- Phase 57 follow-up — prerender determinism + hydration-mismatch

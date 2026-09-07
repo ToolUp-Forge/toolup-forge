@@ -185,6 +185,32 @@ module StandardMetrics =
                 Tags = [ "event_type" ]
             }
         }
+        // Phase 466 — the ad-analytics silent-degradation counters.
+        // Both endpoints degrade without failing (rate-limit-store
+        // outage fail-opens; a malformed payload is dropped to a 400),
+        // so neither shows up in the request/error metrics above. The
+        // literals are defined in `AdAnalyticsApiHandler`, which
+        // compiles before this file, beside the code that emits them.
+        {
+            Module = None
+            Definition = {
+                Name = ToolUp.Platform.AdAnalyticsApiHandler.AdAnalyticsMetrics.RateLimitStoreFailuresTotal
+                Kind = Counter
+                Description = "Ad-analytics requests admitted because the rate-limit store failed (fail-open)"
+                Unit = "1"
+                Tags = [ "endpoint" ]
+            }
+        }
+        {
+            Module = None
+            Definition = {
+                Name = ToolUp.Platform.AdAnalyticsApiHandler.AdAnalyticsMetrics.MalformedPayloadsTotal
+                Kind = Counter
+                Description = "Ad-analytics events dropped because the posted payload did not deserialise"
+                Unit = "1"
+                Tags = [ "endpoint" ]
+            }
+        }
     ]
 
     /// SDK standard registrations — registered unconditionally by

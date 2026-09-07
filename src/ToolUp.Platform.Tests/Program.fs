@@ -1191,6 +1191,9 @@ let private registeredTests =
         SessionRegistryTests.blobBackedTests
         AdAnalyticsSinkTests.tests
         AdAnalyticsSinkTests.noOpTests
+        // Phase 466 — the ad-analytics endpoints' silent-degradation
+        // signals: rate-limit-store fail-open and malformed-payload drop.
+        AdAnalyticsObservabilityTests.tests
         UserClaimsTests.tests
         ModuleGroupingValidatorTests.tests
         ModuleIdentityTests.tests

@@ -4,12 +4,14 @@
 module ToolUp.Platform.AdAnalyticsApiHandler
 
 open System
+open System.Collections.Concurrent
 open System.Text
 open Giraffe
 open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Metrics
 
 // ─── Phase 60 — server-side ad-analytics endpoint ─────────────────
 //
@@ -60,6 +62,96 @@ let private ImpressionsPerMinutePerIp = 120
 [<Literal>]
 let private ClicksPerMinutePerIp = 30
 
+// ─── Observability (Phase 466) ────────────────────────────────────
+//
+// Two of the three gates above degrade SILENTLY, and both silences
+// look identical to health from outside: a rate-limit-store outage
+// fail-opens (the correct availability default — see `rateGate`) and
+// so removes the per-IP budget with nothing written anywhere, and a
+// malformed payload is dropped to a bare 400 with no record that ad
+// events are being lost. An operator asking "why did ad events stop"
+// or "why is one address flooding us" had no signal for either.
+//
+// Both now emit a COUNTER unconditionally and a `Warn` under a
+// throttle. The split is the point: the counter is what a dashboard
+// alerts on and must count every occurrence, while the log line is
+// what a human reads and must not be turnable into the denial of
+// service by whatever is causing the failure. Same posture — and the
+// same in-process mechanism — as `ExternalComputeCallback`'s
+// rate-limited refusal warning.
+//
+// The behaviour of the endpoints is deliberately unchanged: fail-open
+// stays fail-open, a malformed payload still answers 400.
+
+/// Metric names emitted by the ad-analytics endpoints.
+///
+/// Registered in `MetricsMiddleware`'s `StandardMetrics.coreRegistrations`,
+/// which compiles after this file — an unregistered series is silently
+/// dropped by the sink, which would reinstate exactly the silence this
+/// phase closes. The definitions live beside the emission (the Phase
+/// 740 convention) so each metric's tag allowlist sits next to the code
+/// that emits those tags.
+module AdAnalyticsMetrics =
+    /// Incremented whenever the Phase 56 `IRateLimitStore` returns an
+    /// error and the handler fail-opens, so a store outage that has
+    /// disabled the per-IP ad budget is dashboard-visible rather than
+    /// inferable only from traffic. Tagged by `endpoint`
+    /// (`impression` / `click`).
+    [<Literal>]
+    let RateLimitStoreFailuresTotal = "toolup.ads.rate_limit_store_failures_total"
+
+    /// Incremented whenever a posted body fails to deserialise into
+    /// `AdImpression` / `AdClick` and the event is dropped. Tagged by
+    /// `endpoint`. NOT tagged by client address — that is unbounded
+    /// caller-controlled cardinality on an anonymous endpoint, which is
+    /// what the sink's series cap exists to refuse; the address is on
+    /// the log line instead, where the throttle bounds it.
+    [<Literal>]
+    let MalformedPayloadsTotal = "toolup.ads.malformed_payloads_total"
+
+/// At most one warning per throttle key per this many minutes, however
+/// many occurrences arrive. Bounds log volume only — the counters
+/// above are unconditional, so the trail stays complete precisely when
+/// the log has gone quiet.
+[<Literal>]
+let private warningWindowMinutes = 5.0
+
+/// Documented mutable-state exception (GP 5), and the same one
+/// `ExternalComputeCallback` takes: a "when did I last warn about this"
+/// suppressor IS state, and this dictionary is the whole of it.
+/// Concurrent by construction; benign race on a simultaneous first
+/// occurrence emits at most one extra line.
+let private lastWarned = ConcurrentDictionary<string, DateTime>()
+
+/// Should the warning for `key` be logged right now? First occurrence
+/// in a window: yes. Subsequent ones: suppressed.
+let private shouldWarn (key: string) : bool =
+    let now = DateTime.UtcNow
+
+    match lastWarned.TryGetValue key with
+    | true, at when (now - at).TotalMinutes < warningWindowMinutes -> false
+    | _ ->
+        lastWarned[key] <- now
+        true
+
+/// Test seam: clear the in-process warning-throttle state so packs do
+/// not inherit each other's suppression windows. Never called from the
+/// request path. Mirrors `ExternalComputeCallback.resetThrottleState`;
+/// deliberately not in the `CacheReset` registry, which covers caches
+/// whose staleness changes another pack's OUTCOME — this one only
+/// suppresses a log line.
+let resetObservabilityState () = lastWarned.Clear()
+
+let private resolveLogger (ctx: HttpContext) : ILogger option =
+    match ctx.RequestServices.GetService(typeof<ILogger>) with
+    | :? ILogger as l -> Some l
+    | _ -> None
+
+let private resolveMetrics (ctx: HttpContext) : IMetricsSink option =
+    match ctx.RequestServices.GetService(typeof<IMetricsSink>) with
+    | :? IMetricsSink as m -> Some m
+    | _ -> None
+
 // ─── Gates ────────────────────────────────────────────────────────
 
 let private clientIp (ctx: HttpContext) : string =
@@ -71,7 +163,9 @@ let private clientIp (ctx: HttpContext) : string =
 /// composed. Returns `Some error` on deny. Store absent → no gate
 /// (validator warns at startup); store failure → fail-open, matching
 /// `RateLimitMiddleware`'s contract (a store outage is the operator's
-/// problem, not the caller's).
+/// problem, not the caller's) — but counted and logged since Phase
+/// 466, because a throttle that has silently switched itself off is
+/// indistinguishable from one that is working.
 let private rateGate
     (ctx: HttpContext)
     (endpoint: string)
@@ -87,9 +181,64 @@ let private rateGate
             match decision with
             | Ok(AllowWithRemaining _) -> return None
             | Ok(DenyWithError rle) -> return Some rle
-            | Error _ -> return None
+            | Error err ->
+                let reason =
+                    match err with
+                    | StoreUnavailable r -> r
+                    | StoreContractViolation r -> r
+
+                resolveMetrics ctx
+                |> Option.iter (fun m ->
+                    m.Increment(AdAnalyticsMetrics.RateLimitStoreFailuresTotal, Map [ "endpoint", endpoint ]))
+
+                // Throttled per ENDPOINT and not per client address: a
+                // store outage fails every caller at once, so an
+                // address-keyed suppressor would emit one line per
+                // distinct client — the flood it exists to prevent.
+                if shouldWarn (sprintf "store-failure|%s" endpoint) then
+                    resolveLogger ctx
+                    |> Option.iter (fun l ->
+                        l.Warn(
+                            sprintf
+                                "[ad-analytics] event=rate_limit_store_failed endpoint=%s reason=%s — the per-IP ad-analytics budget is NOT being enforced while the store is failing; requests are admitted (fail-open, by design). Further warnings for this endpoint are suppressed for %g minutes; %s counts every one."
+                                endpoint
+                                reason
+                                warningWindowMinutes
+                                AdAnalyticsMetrics.RateLimitStoreFailuresTotal
+                        ))
+
+                // Fail-open — unchanged, and the correct availability
+                // default. Phase 466 makes it observable, not different.
+                return None
         | _ -> return None
     }
+
+/// Emit the parse-drop signal: the counter unconditionally, the `Warn`
+/// under the throttle.
+///
+/// Keyed per `(endpoint, client address)` rather than per endpoint: a
+/// malformed payload is usually ONE broken integration or one hostile
+/// caller, so collapsing every address into a single suppressor would
+/// hide a second, genuinely-different breakage behind the first one's
+/// window — while a per-address key still bounds any single caller to
+/// one line per window. The counter is what stays complete.
+let private recordParseDrop (ctx: HttpContext) (endpoint: string) : unit =
+    resolveMetrics ctx
+    |> Option.iter (fun m -> m.Increment(AdAnalyticsMetrics.MalformedPayloadsTotal, Map [ "endpoint", endpoint ]))
+
+    let ip = clientIp ctx
+
+    if shouldWarn (sprintf "parse-drop|%s|%s" endpoint ip) then
+        resolveLogger ctx
+        |> Option.iter (fun l ->
+            l.Warn(
+                sprintf
+                    "[ad-analytics] event=malformed_payload endpoint=%s from=%s — the posted body did not deserialise and the ad event was DROPPED (answered 400). A steady rate here usually means a client/server wire-format skew rather than abuse. Further warnings for this endpoint and address are suppressed for %g minutes; %s counts every one."
+                    endpoint
+                    ip
+                    warningWindowMinutes
+                    AdAnalyticsMetrics.MalformedPayloadsTotal
+            ))
 
 let private writeRateLimited (ctx: HttpContext) (rle: RateLimitedError) : HttpFuncResult = task {
     ctx.SetHttpHeader("Retry-After", string rle.RetryAfterSeconds)
@@ -206,6 +355,7 @@ let private impressionHandler: HttpHandler =
 
                 match event with
                 | None ->
+                    recordParseDrop ctx "impression"
                     ctx.Response.StatusCode <- 400
                     return! ctx.WriteTextAsync "Malformed AdImpression payload"
                 | Some ev when not (validImpression ev) ->
@@ -254,6 +404,7 @@ let private clickHandler: HttpHandler =
 
                 match event with
                 | None ->
+                    recordParseDrop ctx "click"
                     ctx.Response.StatusCode <- 400
                     return! ctx.WriteTextAsync "Malformed AdClick payload"
                 | Some ev when not (validClick ev) ->

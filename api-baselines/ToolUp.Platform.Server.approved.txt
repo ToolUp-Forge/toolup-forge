@@ -96,7 +96,11 @@ ToolUp.Platform.AccessClassificationModule.label(ToolUp.Platform.AccessClassific
 ToolUp.Platform.AccessClassificationModule.ofLabel(System.String) : ToolUp.Platform.AccessClassification
 ToolUp.Platform.AccessClassificationModule.strength(ToolUp.Platform.AccessClassification) : System.Int32
 ToolUp.Platform.AdAnalyticsApiHandler (class)
+ToolUp.Platform.AdAnalyticsApiHandler.resetObservabilityState() : System.Void
 ToolUp.Platform.AdAnalyticsApiHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.AdAnalyticsApiHandler+AdAnalyticsMetrics (class)
+ToolUp.Platform.AdAnalyticsApiHandler+AdAnalyticsMetrics.MalformedPayloadsTotal : System.String (literal)
+ToolUp.Platform.AdAnalyticsApiHandler+AdAnalyticsMetrics.RateLimitStoreFailuresTotal : System.String (literal)
 ToolUp.Platform.AdUnitConfigApi (class)
 ToolUp.Platform.AdUnitConfigApi.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.Platform.AdUnitConfigApi.tryListConfiguredSlotIds(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]]
