@@ -253,6 +253,146 @@ module DrainSelection =
         |> List.sortBy _.Mutation.LocalRevision
         |> List.map _.Mutation
 
+/// A queued payload that MERGES on replay instead of conflicting.
+///
+/// ─── Phase 760 — the offline ⇄ CRDT recognition seam ─────────────────
+///
+/// The design note at the head of this file is right about the general
+/// case: a queued entity write is last-writer-wins, and a stale base
+/// version has to become a user's choice because nothing else can
+/// reconcile two versions of an opaque document. A CRDT update is the
+/// one payload class that escapes it — updates commute, so replaying a
+/// backlog in any order converges and a conflict is not a thing that
+/// can happen. Riding one through `IOfflineSyncApi.Apply` would at best
+/// waste a round trip and at worst park a perfectly mergeable edit in
+/// conflict UI the user cannot meaningfully answer.
+///
+/// **The recognition is a reserved `EntityType`, and that is the whole
+/// mechanism.** The offline companion must not name the CRDT companion
+/// and the CRDT companion must not name the offline companion — they
+/// are independently composable and neither is a dependency of the
+/// other. So the marker is a string prefix on a field the queue already
+/// carries: a producer stamps `toolup.mergeable/<channel>`, the
+/// coordinator recognises the prefix, and the payload is handed to
+/// whatever the DEPLOYMENT registered for that channel. Nothing here
+/// knows what a CRDT is; nothing on the CRDT side knows there is a
+/// queue. The app is the adapter, which is the same shape Phase 535
+/// used for the CRDT library itself.
+///
+/// A prefix rather than a new `QueuedMutation` field, deliberately: the
+/// record is the wire shape the server deserialises, so widening it
+/// would break every full-literal construction and every stored
+/// IndexedDB record written by an older build. `EntityType` is already
+/// an opaque producer-chosen string, and a reserved namespace in it
+/// costs nothing.
+///
+/// The classification lives HERE, in Core, for the reason `DrainSelection`
+/// gives one paragraph up: a rule that lives only inside an
+/// `[<Emit>]`-bearing client file is a rule nothing can assert.
+module MergeablePayload =
+
+    /// The reserved `EntityType` namespace. A deployment's own entity
+    /// types must not begin with it — the name is dotted and
+    /// vendor-qualified precisely so a collision has to be deliberate.
+    [<Literal>]
+    let Prefix = "toolup.mergeable/"
+
+    /// The `EntityType` a producer stamps on a mergeable payload bound
+    /// for `channel`.
+    let entityTypeFor (channel: string) : string = Prefix + channel
+
+    /// The channel a queued `EntityType` names, or `None` when it is an
+    /// ordinary last-writer-wins entity write.
+    ///
+    /// Total: a null or empty type, and the bare prefix with no channel
+    /// after it, all read as "not mergeable". A payload nobody can route
+    /// must fall back to the conservative path, never to a channel named
+    /// by the empty string.
+    ///
+    /// The prefix test is spelled with `Substring` rather than
+    /// `StartsWith(_, StringComparison)` because this file Fable-compiles
+    /// and the overload set differs across hosts; equality on a sliced
+    /// string is the same answer everywhere.
+    let channelOf (entityType: string) : string option =
+        if isNull entityType || entityType.Length <= Prefix.Length then
+            None
+        elif entityType.Substring(0, Prefix.Length) = Prefix then
+            Some(entityType.Substring Prefix.Length)
+        else
+            None
+
+    /// True when this `EntityType` names a mergeable payload.
+    let isMergeable (entityType: string) : bool = (channelOf entityType).IsSome
+
+    /// Mint a queued mutation for one mergeable payload.
+    ///
+    /// `BaseVersion` is `0` — not as a placeholder but as the literal
+    /// truth the field already documents: there is nothing for this
+    /// write to be based on, because it does not overwrite anything.
+    /// `SaveOp` for the same reason; a mergeable delete is expressed
+    /// inside the payload by the substrate that owns it, never by
+    /// removing bytes from a log.
+    let mint
+        (id: MutationId)
+        (channel: string)
+        (streamId: string)
+        (scopeId: string)
+        (enqueuedAt: DateTimeOffset)
+        (localRevision: int)
+        (payload: byte[])
+        : QueuedMutation =
+        {
+            Id = id
+            EnqueuedAt = enqueuedAt
+            ScopeId = scopeId
+            EntityType = entityTypeFor channel
+            EntityId = streamId
+            Operation = SaveOp
+            Payload = payload
+            BaseVersion = 0
+            LocalRevision = localRevision
+        }
+
+    /// How one due mutation replays.
+    type Route =
+        /// An ordinary entity write: replay through `IOfflineSyncApi`
+        /// and settle on the `SyncOutcome`, conflict UI included.
+        | ConflictingWrite
+        /// A mergeable payload: replay through whatever the deployment
+        /// registered for `channel`. There is no conflict outcome to
+        /// settle, which is the entire point of the distinction.
+        | MergeableUpdate of channel: string
+
+    /// Classify one mutation. The single decision both the coordinator
+    /// and its tests read, so neither can hold a different opinion.
+    let route (mutation: QueuedMutation) : Route =
+        match channelOf mutation.EntityType with
+        | Some channel -> MergeableUpdate channel
+        | None -> ConflictingWrite
+
+    /// Split a due batch into the mergeable entries — grouped by
+    /// channel, channels in first-appearance order — and the ordinary
+    /// writes. Both halves keep the input's `LocalRevision` order,
+    /// because a queue's only ordering promise is within one client and
+    /// partitioning must not spend it.
+    let partition (due: QueuedMutation list) : (string * QueuedMutation list) list * QueuedMutation list =
+        let writes = due |> List.filter (fun m -> route m = ConflictingWrite)
+
+        let channels =
+            due
+            |> List.choose (fun m ->
+                match route m with
+                | MergeableUpdate channel -> Some(channel, m)
+                | ConflictingWrite -> None)
+
+        let order = channels |> List.map fst |> List.distinct
+
+        let grouped =
+            order
+            |> List.map (fun channel -> channel, channels |> List.filter (fst >> (=) channel) |> List.map snd)
+
+        grouped, writes
+
 /// Aggregate counts for the status badge. Derived, never stored.
 type QueueStats = {
     Pending: int

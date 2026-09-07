@@ -78,20 +78,29 @@ ToolUp.Offline.Client.ServiceWorkerRegistration+BootResult+WorkerRegistered.scop
 ToolUp.Offline.Client.SyncCoordinator (class)
 ToolUp.Offline.Client.SyncCoordinator.defaultProxy() : ToolUp.Offline.OfflineSyncApi+IOfflineSyncApi
 ToolUp.Offline.Client.SyncCoordinator.drainOnce(ToolUp.Offline.Client.OfflineQueue+IOfflineQueue, ToolUp.Offline.OfflineSyncApi+IOfflineSyncApi, ToolUp.Offline.RetryPolicy, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.Client.SyncCoordinator+DrainReport]
+ToolUp.Offline.Client.SyncCoordinator.drainRouted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.Client.SyncCoordinator+MergeableChannel], ToolUp.Offline.Client.OfflineQueue+IOfflineQueue, ToolUp.Offline.OfflineSyncApi+IOfflineSyncApi, ToolUp.Offline.RetryPolicy, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.Client.SyncCoordinator+DrainReport]
 ToolUp.Offline.Client.SyncCoordinator.retryPolicyOf(ToolUp.Platform.OfflineConfig) : ToolUp.Offline.RetryPolicy
 ToolUp.Offline.Client.SyncCoordinator.start(ToolUp.Offline.Client.OfflineQueue+IOfflineQueue, ToolUp.Offline.OfflineSyncApi+IOfflineSyncApi, ToolUp.Platform.OfflineConfig) : ToolUp.Offline.Client.SyncCoordinator+Coordinator
+ToolUp.Offline.Client.SyncCoordinator.startRouted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.Client.SyncCoordinator+MergeableChannel], ToolUp.Offline.Client.OfflineQueue+IOfflineQueue, ToolUp.Offline.OfflineSyncApi+IOfflineSyncApi, ToolUp.Platform.OfflineConfig) : ToolUp.Offline.Client.SyncCoordinator+Coordinator
 ToolUp.Offline.Client.SyncCoordinator+Coordinator (class)
 ToolUp.Offline.Client.SyncCoordinator+Coordinator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.Client.SyncCoordinator+DrainReport]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.SyncStatus]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
 ToolUp.Offline.Client.SyncCoordinator+Coordinator.Status : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.SyncStatus]] { get }
 ToolUp.Offline.Client.SyncCoordinator+Coordinator.Stop : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Offline.Client.SyncCoordinator+Coordinator.SyncNow : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Offline.Client.SyncCoordinator+DrainReport]] { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport (class)
-ToolUp.Offline.Client.SyncCoordinator+DrainReport..ctor(System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Boolean)
+ToolUp.Offline.Client.SyncCoordinator+DrainReport..ctor(System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Boolean)
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Applied : System.Int32 { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Attempted : System.Int32 { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Conflicted : System.Int32 { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Disconnected : System.Boolean { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Failed : System.Int32 { get }
+ToolUp.Offline.Client.SyncCoordinator+DrainReport.Merged : System.Int32 { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReport.Rejected : System.Int32 { get }
+ToolUp.Offline.Client.SyncCoordinator+DrainReport.Unrouted : System.Int32 { get }
 ToolUp.Offline.Client.SyncCoordinator+DrainReportModule (class)
 ToolUp.Offline.Client.SyncCoordinator+DrainReportModule.empty : ToolUp.Offline.Client.SyncCoordinator+DrainReport { get }
+ToolUp.Offline.Client.SyncCoordinator+MergeableChannel (class)
+ToolUp.Offline.Client.SyncCoordinator+MergeableChannel..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Offline.Client.SyncCoordinator+MergeableChannel.CatchUp : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Offline.Client.SyncCoordinator+MergeableChannel.Channel : System.String { get }
+ToolUp.Offline.Client.SyncCoordinator+MergeableChannel.Replay : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }

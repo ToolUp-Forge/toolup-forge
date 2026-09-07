@@ -39,6 +39,13 @@
          bundle weight (GP 1 / GP 2 / GP 13). Compiling it here puts the
          whole client-tier co-editing surface through the Fable gate. -->
     <Compile Include="CrdtCoEditSample.fs" />
+    <!-- Phase 760 — the same document with the link pulled out. Joins
+         the co-editing pump to the offline queue through the reserved
+         mergeable marker, so a CRDT update caught offline replays on the
+         CRDT path and never reaches conflict UI. Compiled here because
+         the wiring is the CONSUMER's, exactly as the Yjs import above
+         is: neither companion names the other. -->
+    <Compile Include="CrdtOfflineCoEditSample.fs" />
   </ItemGroup>
   <ItemGroup>
     <!-- ProjectReference to ToolUp.Platform.Client drives the full
@@ -46,6 +53,12 @@
          smoke check. The direct package references stay so Fable can
          resolve the same versions the SDK consumes. -->
     <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <!-- Phase 760 — the offline companion's client tier, for the
+         offline-tolerant co-editing example. It also puts that tier
+         through this sample's Fable compile, which nothing did before:
+         the queue and the coordinator are Fable-only by construction, so
+         a plain `dotnet build` cannot prove they transpile. -->
+    <ProjectReference Include="..\..\src\ToolUp.Offline.Client\ToolUp.Offline.Client.fsproj" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
     <!-- 0.4.3 — ToolUp.Elmish.* folded into ToolUp.Platform.Client; the

@@ -18,6 +18,24 @@ ToolUp.Offline.ConflictResolution+Tags.KeepServer : System.Int32 (literal)
 ToolUp.Offline.DrainSelection (class)
 ToolUp.Offline.DrainSelection.eligible(ToolUp.Offline.RetryPolicy, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.QueueEntry]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.QueuedMutation]
 ToolUp.Offline.DrainSelection.isRetryDue(ToolUp.Offline.RetryPolicy, System.DateTimeOffset, ToolUp.Offline.QueueEntry) : System.Boolean
+ToolUp.Offline.MergeablePayload (class)
+ToolUp.Offline.MergeablePayload.Prefix : System.String (literal)
+ToolUp.Offline.MergeablePayload.channelOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Offline.MergeablePayload.entityTypeFor(System.String) : System.String
+ToolUp.Offline.MergeablePayload.isMergeable(System.String) : System.Boolean
+ToolUp.Offline.MergeablePayload.mint(System.String, System.String, System.String, System.String, System.DateTimeOffset, System.Int32, System.Byte[]) : ToolUp.Offline.QueuedMutation
+ToolUp.Offline.MergeablePayload.partition(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.QueuedMutation]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.QueuedMutation]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Offline.QueuedMutation]]
+ToolUp.Offline.MergeablePayload.route(ToolUp.Offline.QueuedMutation) : ToolUp.Offline.MergeablePayload+Route
+ToolUp.Offline.MergeablePayload+Route (class)
+ToolUp.Offline.MergeablePayload+Route.ConflictingWrite : ToolUp.Offline.MergeablePayload+Route { get }
+ToolUp.Offline.MergeablePayload+Route.IsConflictingWrite : System.Boolean { get }
+ToolUp.Offline.MergeablePayload+Route.IsMergeableUpdate : System.Boolean { get }
+ToolUp.Offline.MergeablePayload+Route.Tag : System.Int32 { get }
+ToolUp.Offline.MergeablePayload+Route+MergeableUpdate (class)
+ToolUp.Offline.MergeablePayload+Route+MergeableUpdate.channel : System.String { get }
+ToolUp.Offline.MergeablePayload+Route+Tags (class)
+ToolUp.Offline.MergeablePayload+Route+Tags.ConflictingWrite : System.Int32 (literal)
+ToolUp.Offline.MergeablePayload+Route+Tags.MergeableUpdate : System.Int32 (literal)
 ToolUp.Offline.MutationOp (class)
 ToolUp.Offline.MutationOp.DeleteOp : ToolUp.Offline.MutationOp { get }
 ToolUp.Offline.MutationOp.IsDeleteOp : System.Boolean { get }

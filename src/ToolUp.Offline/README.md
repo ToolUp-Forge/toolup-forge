@@ -34,6 +34,42 @@ badge is mounted. A deployment that upgrades and does not opt in is byte-for-byt
 Queued mutations live **only on the client** until they are applied or discarded. The server holds
 no per-client pending state.
 
+### Mergeable payloads — queued, but never conflicted
+
+One payload class does not want the conflict machinery at all: a **CRDT update**. Updates commute,
+so a backlog replayed in any order converges, and there is no base version for one to be stale
+against. Riding one through `IOfflineSyncApi` would at best waste a round trip and at worst park a
+perfectly mergeable edit in conflict UI the user cannot meaningfully answer.
+
+So the queue carries a reserved `EntityType` namespace, `toolup.mergeable/<channel>`
+(`MergeablePayload.entityTypeFor`). On a drain pass the coordinator recognises the marker and hands
+the payload to whatever the deployment registered under that channel name, instead of replaying it
+through the sync API:
+
+```fsharp skip=fragment
+SyncCoordinator.startRouted
+    [ { Channel = "crdt"; CatchUp = session.Resync; Replay = publishDirect } ]
+    queue
+    api
+    config
+```
+
+Three properties follow, and they are the whole point:
+
+- **Catch-up runs first.** Each registered channel's `CatchUp` runs at the head of the pass, before
+  that channel's backlog and before the ordinary entity drain — so a held update lands on a document
+  that already holds everything the other participants did while this tab was dark.
+- **The channels are independent of the entity queue.** A channel whose transport is down parks its
+  own backlog and nothing else; a server that refuses `IOfflineSyncApi` says nothing about them.
+- **A marked payload with no registered channel stays `Pending`** — it is never quietly replayed as a
+  last-writer-wins entity write, which is the corruption the marker exists to prevent. Register the
+  channel and the backlog drains.
+
+Nothing in this companion knows what a CRDT is, and nothing in the co-editing substrate knows there
+is a queue: the marker is a string, the handler is two functions over `byte[]`, and the deployment
+is the adapter. See [`docs/platform/co-editing.md`](../../docs/platform/co-editing.md) for the other
+half of the wiring and `samples/MinimalClient/CrdtOfflineCoEditSample.fs` for the worked example.
+
 ## Conflict resolution UX
 
 v1 is **last-writer-wins with an explicit user choice.** There is no automatic merge — CRDT-based

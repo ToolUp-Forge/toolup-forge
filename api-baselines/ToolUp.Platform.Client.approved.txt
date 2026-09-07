@@ -3080,6 +3080,7 @@ ToolUp.Platform.ConsentMessages.RejectAll : System.String { get }
 ToolUp.Platform.ConsentMessages.SavePreferences : System.String { get }
 ToolUp.Platform.CrdtSyncClient (class)
 ToolUp.Platform.CrdtSyncClient.documentStateVector(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
+ToolUp.Platform.CrdtSyncClient.holdAndForward(ToolUp.Platform.CrdtSyncClient+CrdtTransport, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : ToolUp.Platform.CrdtSyncClient+HoldAndForward
 ToolUp.Platform.CrdtSyncClient.mergePayloads(ToolUp.Platform.CrdtSyncClient+IYjs, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate]) : System.Byte[]
 ToolUp.Platform.CrdtSyncClient.mergedState(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc) : System.Byte[]
 ToolUp.Platform.CrdtSyncClient.start(ToolUp.Platform.CrdtSyncClient+IYjs, ToolUp.Platform.CrdtSyncClient+IYDoc, ToolUp.Platform.CrdtSyncClient+CrdtTransport, System.String) : ToolUp.Platform.CrdtSyncClient+CrdtSession
@@ -3093,6 +3094,10 @@ ToolUp.Platform.CrdtSyncClient+CrdtTransport (class)
 ToolUp.Platform.CrdtSyncClient+CrdtTransport..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StateVector, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate], ToolUp.Platform.StateVector]]])
 ToolUp.Platform.CrdtSyncClient+CrdtTransport.FetchDiff : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StateVector, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrdtUpdate], ToolUp.Platform.StateVector]]] { get }
 ToolUp.Platform.CrdtSyncClient+CrdtTransport.Publish : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.CrdtSyncClient+HoldAndForward (class)
+ToolUp.Platform.CrdtSyncClient+HoldAndForward..ctor(ToolUp.Platform.CrdtSyncClient+CrdtTransport, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.CrdtSyncClient+HoldAndForward.Replay : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.CrdtSyncClient+HoldAndForward.Transport : ToolUp.Platform.CrdtSyncClient+CrdtTransport { get }
 ToolUp.Platform.CrdtSyncClient+IYDoc (interface)
 ToolUp.Platform.CrdtSyncClient+IYDoc.off(System.String, System.Action`2[System.Byte[], System.Object]) : System.Void
 ToolUp.Platform.CrdtSyncClient+IYDoc.on(System.String, System.Action`2[System.Byte[], System.Object]) : System.Void
