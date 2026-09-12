@@ -1167,6 +1167,53 @@ type AuditViewerMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalAuditViewer of ErasedModule
 
+/// Branding for the composition-inspector admin module (Phase 593).
+/// Auto-injected in any non-Anonymous mode unless
+/// `NoCompositionInspector`.
+type CompositionInspectorConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the built-in composition inspector (Phase 593) — the
+/// governance-legibility surface. Five read-only panels over what this
+/// deployment DECLARED at compose time: the composition manifest, the
+/// surface descriptors, the invariant rule manifest with its preflight
+/// verdict, the grounding / disclosure envelope, and whether the
+/// provenance substrate is composed. Each panel offers its underlying
+/// canonical JSON for export, so a reviewer leaves with the artifact
+/// rather than a screenshot.
+///
+/// Auto-injected in any non-Anonymous mode unless set to
+/// `NoCompositionInspector`. Anonymous deployments have no role concept
+/// to gate on, so the module is omitted there regardless of this
+/// setting — the panels name the deployment's companions, its resolved
+/// config knobs and the purposes it may disclose under, which is a map
+/// of the attack surface and precisely the reconnaissance gift
+/// `AuditViewerMode` and `UsageDashboardMode` describe for their own
+/// content.
+///
+/// **The server-side pairing is composition itself, and there is no
+/// `ServerConfig` knob for it.** The snapshot the panels read is
+/// registered by `ServerApp.run` (and therefore by `AIServerApp.run` /
+/// `RAGServerApp.run`, which delegate to it). A host composed through
+/// the lower-level `compose` entry point registers none, and the
+/// module's panels then say so plainly rather than rendering an empty
+/// composition — which would read as "this deployment composes
+/// nothing".
+///
+/// | `ClientConfig.CompositionInspector` | Composed via | What an Owner/Admin sees |
+/// |---|---|---|
+/// | `NoCompositionInspector` | either | no module, no sidebar entry, no calls |
+/// | `DefaultCompositionInspector` (default) | `ServerApp.run` / `AIServerApp.run` / `RAGServerApp.run` | the five panels over this deployment's declarations |
+/// | `DefaultCompositionInspector` | `compose` directly | the module, each panel stating that no snapshot was recorded at startup |
+type CompositionInspectorMode =
+    /// No composition-inspector module in the sidebar.
+    | NoCompositionInspector
+    /// SDK built-in composition inspector (default).
+    | DefaultCompositionInspector
+    /// SDK built-in with custom name/icon.
+    | ConfiguredCompositionInspector of CompositionInspectorConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalCompositionInspector of ErasedModule
+
 /// Branding for the built-in Home / Overview landing module (Phase
 /// 171).
 type HomeModuleConfig = { Name: string; Icon: ReactElement }
@@ -1994,6 +2041,12 @@ type ClientConfig = {
     /// EnabledAuditLog` server-side — the viewer renders its empty
     /// state otherwise.
     AuditViewer: AuditViewerMode
+    /// Controls the composition inspector admin (Phase 593) — the
+    /// governance-legibility panels. Active in every non-Anonymous mode;
+    /// `NoCompositionInspector` opts out explicitly. Default: SDK
+    /// built-in. The server-side pairing is composition itself — see
+    /// `CompositionInspectorMode` for the two-knob table.
+    CompositionInspector: CompositionInspectorMode
     /// Controls the optional Home / Overview landing module (Phase 171).
     /// **Default: `NoHomeModule`** (off — unlike the admin built-ins) so
     /// existing deployments are unchanged until they opt in (GP 13).
@@ -2459,6 +2512,14 @@ module ClientConfig =
         // rather than data — the same shape UsageDashboard has with
         // NoUsageMetering.
         AuditViewer = DefaultAuditViewer
+        // Phase 593 — on by default, like the other read-only admin
+        // built-ins. Every panel it renders is a projection of what the
+        // deployment already declared at compose time, so on a plain
+        // composition it shows a short, true story rather than nothing;
+        // and the snapshot behind it is a lazy DI singleton, so a
+        // deployment whose operators never open it pays only the
+        // registration.
+        CompositionInspector = DefaultCompositionInspector
         // Phase 171 — off by default (GP 13); existing deployments
         // keep their first-registered module as the landing surface.
         HomeModule = NoHomeModule

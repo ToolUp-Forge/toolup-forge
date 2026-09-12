@@ -1299,6 +1299,12 @@ let private registeredTests =
         AuditViewApiHandlerTests.pagingTests
         AuditViewApiHandlerTests.exportTests
         AuditViewApiHandlerTests.substratePairingTests
+        // Phase 593 - composition-inspector handler.
+        CompositionInspectorHandlerTests.roleGateTests
+        CompositionInspectorHandlerTests.panelTests
+        CompositionInspectorHandlerTests.emptyStateTests
+        CompositionInspectorHandlerTests.exportTests
+        CompositionInspectorHandlerTests.contractShapeTests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through

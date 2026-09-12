@@ -1558,6 +1558,11 @@
              isolation, filters, cursor paging, CSV export and the
              ServerConfig.AuditLog pairing. -->
         <Compile Include="InProcess\AuditViewApiHandlerTests.fs" />
+        <!-- Phase 593 - composition-inspector handler: role gate, the five
+             panels over a reference composition, the three distinct empty
+             states, and the export round-trip against each panel's own
+             getter. -->
+        <Compile Include="InProcess\CompositionInspectorHandlerTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target
