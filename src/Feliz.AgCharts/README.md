@@ -1,8 +1,19 @@
-# Feliz.AgCharts
+# ToolUp.Feliz.AgCharts
 
 Feliz bindings for [AG Charts](https://www.ag-grid.com/charts/) **Community** — typed series (bar,
 line, area, scatter, pie, bubble, error bars), axes and crosslines, legends, tooltips, markers, and a
 chart theme builder, plus the deferred module-registration guard the Enterprise companion pre-empts.
+
+## Install
+
+```xml
+<PackageReference Include="ToolUp.Feliz.AgCharts" Version="0.23.0" />
+```
+
+The **package id** is `ToolUp.Feliz.AgCharts`; the **namespace you open** is `Feliz.AgCharts`. The
+whole binding family ships under the `ToolUp.*` prefix (its sibling's bare id belongs to another
+author on nuget.org, and a family split across two prefixes would mislead about who maintains what).
+The F# surface is unchanged.
 
 ```fsharp
 open Feliz
@@ -28,8 +39,8 @@ app's `package.json`; nothing here pulls the Enterprise distribution.
 
 ## Licensing
 
-This binding is Apache-2.0. AG Charts Community is MIT. **This package grants no AG Charts Enterprise
-usage rights** — for the Enterprise feature set add `Feliz.AgGrid.Enterprise` and supply your own
-AG Grid / AG Charts Enterprise licence key.
+This binding is Apache-2.0 (`PackageLicenseExpression`: `Apache-2.0`). AG Charts Community is MIT.
+**This package grants no AG Charts Enterprise usage rights** — for the Enterprise feature set add
+`ToolUp.Feliz.AgGrid.Enterprise` and supply your own AG Grid / AG Charts Enterprise licence key.
 
 Maintained in [github.com/ToolUp-Forge/toolup-forge](https://github.com/ToolUp-Forge/toolup-forge).

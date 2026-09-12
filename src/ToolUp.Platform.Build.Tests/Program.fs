@@ -21,6 +21,10 @@ let private registeredTests =
         // are not), and the shipped budget's own coherence. No process,
         // no port, no clock.
         PerfBudgetTests.tests
+        // Phase 754 — the template gate's stranger's-package guard: a
+        // declared gate id the repo's own pack did not emit. Pure, so
+        // both directions are probed without packing anything.
+        TemplateGateTests.tests
         // Phase 326 — the ToolUp.Sdk meta-manifest lists exactly the
         // package ids the Publish target pushes. Pure file scanning over
         // the checkout; no build output, no network.
