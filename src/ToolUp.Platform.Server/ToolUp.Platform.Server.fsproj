@@ -842,6 +842,13 @@
         <Compile Include="Server\SurfaceEnforcementMiddleware.fs" />
         <Compile Include="Server\PeerBearerConfigValidator.fs" />
         <Compile Include="Server\MaxRequestBodyBytesValidator.fs" />
+        <!-- Phase 465 — the format/range gate over every registered
+             IntKey, and the unbounded-event-retention warning. Both read
+             only the config registry and the resolution seam, so
+             anywhere before Compose/ComposeConfigValidators.fs, which
+             registers them. -->
+        <Compile Include="Server\IntConfigKeyValidator.fs" />
+        <Compile Include="Server\EventStoreRetentionValidator.fs" />
         <Compile Include="Server\CorsConfigValidator.fs" />
         <Compile Include="Server\LocalSecretFilePermissionsValidator.fs" />
         <Compile Include="Server\OAuthFlowValidator.fs" />

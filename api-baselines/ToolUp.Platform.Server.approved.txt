@@ -3591,6 +3591,9 @@ ToolUp.Platform.EventStoreErasureHandler+EventStoreErasureHandler (class)
 ToolUp.Platform.EventStoreErasureHandler+EventStoreErasureHandler..ctor(ToolUp.Platform.IEventStore)
 ToolUp.Platform.EventStoreErasureHandler+EventStoreExporter (class)
 ToolUp.Platform.EventStoreErasureHandler+EventStoreExporter..ctor(ToolUp.Platform.IEventStore)
+ToolUp.Platform.EventStoreRetentionValidator (class)
+ToolUp.Platform.EventStoreRetentionValidator+EventStoreRetentionValidator (class)
+ToolUp.Platform.EventStoreRetentionValidator+EventStoreRetentionValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.EventTopology (class)
 ToolUp.Platform.EventTopology..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EventTopologyEntry])
 ToolUp.Platform.EventTopology.Participants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EventTopologyEntry] { get }
@@ -5680,6 +5683,10 @@ ToolUp.Platform.IngestionStatusStore (class)
 ToolUp.Platform.IngestionStatusStore.DataType : System.String (literal)
 ToolUp.Platform.IngestionStatusStore.create(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IIngestionStatusStore
 ToolUp.Platform.IngestionStatusStore.createInMemory() : ToolUp.Platform.IIngestionStatusStore
+ToolUp.Platform.IntConfigKeyValidator (class)
+ToolUp.Platform.IntConfigKeyValidator.problemWith(ToolUp.Platform.ConfigKeys+IntKeyRule, System.Boolean, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.IntConfigKeyValidator+IntConfigKeyValidator (class)
+ToolUp.Platform.IntConfigKeyValidator+IntConfigKeyValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.InternetReadinessScorecard (class)
 ToolUp.Platform.InternetReadinessScorecard.assess(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : ToolUp.Platform.InternetReadinessScorecard+InternetReadinessReport
 ToolUp.Platform.InternetReadinessScorecard.catalog : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InternetReadinessScorecard+ControlDescriptor] { get }

@@ -98,6 +98,8 @@ let registerFirstPartyConfigValidators
     addConfigValidator (StaticPathBehaviourValidator.StaticPathBehaviourValidator(config)) // warn dev StaticPathBehaviour in a production-shaped deployment
     addConfigValidator (PeerBearerConfigValidator.PeerBearerConfigValidator(config, secretStore)) // warn PeerRoutePrefixes set but no peer bearer secrets seeded
     addConfigValidator (MaxRequestBodyBytesValidator.MaxRequestBodyBytesValidator(config)) // warn high request-body cap + no rate-limit (memory-DoS surface)
+    addConfigValidator (IntConfigKeyValidator.IntConfigKeyValidator()) // Phase 465 — refuse any registered IntKey whose resolved value is not a number, or is outside the range the key declares (the readers otherwise discard it and run on the default)
+    addConfigValidator (EventStoreRetentionValidator.EventStoreRetentionValidator(config)) // Phase 465 (absorbing 9m.C Gap 4) — warn PersistentBlobBacked with neither MaxAge nor MaxCountPerScope in a production/multi-instance shape (acknowledgement: TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION)
     addConfigValidator (CorsConfigValidator.CorsConfigValidator(config)) // refuse AllowCredentials + wildcard-origin CORS
     addConfigValidator (ForwardedHeadersTrustValidator.ForwardedHeadersTrustValidator(config)) // Phase 325 — refuse unscoped TrustForwardedHeaders (empty TrustedProxyCidrs, no escape hatch) in auth modes; warn anonymous-only; refuse malformed CIDRs
     addConfigValidator (CsrfHardeningValidator.CsrfHardeningValidator(config)) // warn hardening + PublicBaseUrl: split-origin SPA must call CsrfClient.setApiOrigin
