@@ -1,0 +1,34 @@
+{
+  "schema": "toolup.perf-measurements/v1",
+  "label": "fixture — a run comfortably inside the shipped budget",
+  "appDirectory": "samples/MinimalApp/src/MinimalApp.Server/bin/Release/net10.0",
+  "outputAssemblies": [
+    "FSharp.Core.dll",
+    "Giraffe.dll",
+    "MinimalApp.Server.dll",
+    "ToolUp.Platform.Core.dll",
+    "ToolUp.Platform.Server.dll"
+  ],
+  "samples": [
+    {
+      "metric": "coldStartMs",
+      "statistic": "min",
+      "value": 420.1,
+      "samples": 6,
+      "observed": true,
+      "evidence": "'Application started.' observed on stdout for 6/6 boots",
+      "median": 458.0,
+      "max": 477.4
+    },
+    {
+      "metric": "hotPathMs",
+      "statistic": "min",
+      "value": 0.3581,
+      "samples": 300,
+      "observed": true,
+      "evidence": "HTTP 200 from POST /api/PlatformInfoApi/GetPlatformInfo — 300/300 requests returned success",
+      "median": 0.5172,
+      "max": 5.3113
+    }
+  ]
+}

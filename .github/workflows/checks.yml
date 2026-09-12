@@ -1177,3 +1177,99 @@ jobs:
           path: tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/bin/Debug/net10.0/artifacts/
           if-no-files-found: ignore
           retention-days: 7
+
+  # ─── The cold-start / hot-path perf-budget gate ────────────────────
+  #
+  # Phase 192. Phase 16 shipped cold-start MITIGATION and quoted one
+  # number as its acceptance — "Cold start < 2s" — measured once, by
+  # hand, at the moment it shipped. Nothing had measured it since. A
+  # budget asserted once is not a budget; it is a claim with a date on
+  # it, and the substrate has accreted for months underneath it.
+  #
+  # This job runs dev-scripts/perf-budget-gate.ps1, which builds
+  # samples/MinimalApp in Release, boots it to its ready line six times
+  # to measure cold start, drives 300 anonymous requests through the
+  # composed pipeline to measure the hot path, inventories the built
+  # output, and hands everything to the VerifyPerfBudget FAKE target.
+  # Ceilings live in the committed perf-budgets.json, so widening one is
+  # a reviewable diff.
+  #
+  # ── Why a separate job and not a leg of verify-all ─────────────────
+  #
+  # Two reasons, and the first is about honesty rather than time.
+  #
+  #   1. `verify-all` is the repo's twelve Expecto packs run in ONE
+  #      process on a shared runner. Wallclock assertions in there would
+  #      be measured against whatever else that process was doing, which
+  #      is the definition of a flaky gate. Here the sample is the only
+  #      thing the job is running.
+  #   2. `verify-all` is already ~28 minutes and is the critical path.
+  #      This job is a few minutes and runs beside it, so it adds
+  #      nothing to how long a PR waits.
+  #
+  # ── Why it runs on every push and PR, not only on src/ changes ─────
+  #
+  # The phase that specified this asked for it on "every PR touching
+  # src/". A job-level path filter needs a third-party changed-files
+  # action (GitHub's `paths:` is workflow-level, and this workflow gates
+  # far more than src/), and it would buy nothing: the gate is off the
+  # critical path, so the cost of running it always is zero waiting, and
+  # a gate that runs only sometimes is one whose green is ambiguous.
+  # Running it unconditionally is the strictly stronger contract.
+  #
+  # ── This job cannot pass vacuously ─────────────────────────────────
+  #
+  #   1. Every measurement carries an `observed` flag with its evidence.
+  #      A boot whose ready line never appeared, or a request burst that
+  #      did not return success every time, is REFUSED by the decider
+  #      rather than read as a number — which matters because the
+  #      failure mode of a broken measuring half is a suspiciously GOOD
+  #      result, not a bad one.
+  #   2. A budgeted metric the run did not measure is a breach, not a
+  #      skipped line.
+  #   3. `-TeethCheck` re-decides the same real measurements against a
+  #      0.001 ms budget and fails the job if the gate passes it. The
+  #      gate is watched failing on every run, so its green means
+  #      something.
+  perf-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.fsproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Same CI workaround as the other jobs: the dev-machine local feed
+      # at ../../local-nuget-feed does not exist on the runner; an empty
+      # dir lets NuGet enumerate it (0 packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      - name: Measure the minimal shape and decide against perf-budgets.json
+        shell: pwsh
+        run: ./dev-scripts/perf-budget-gate.ps1 -TeethCheck
+
+      # The measurement file is per-run output of one machine at one
+      # moment — gitignored, and meaningless to compare against a later
+      # run on a different runner. It is uploaded on a FAILING attempt
+      # only, because a breach on a machine nobody can log into is
+      # diagnosed from the numbers and nothing else.
+      - name: Upload the measurement file on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-budget-measurements
+          path: artifacts/perf-budget/
+          if-no-files-found: ignore
+          retention-days: 7

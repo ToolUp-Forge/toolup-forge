@@ -10,6 +10,8 @@
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
+        <!-- Phase 192 — cold-start / hot-path perf-budget gate. -->
+        <Compile Include="PerfBudgetTests.fs" />
         <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
              reconciler is source-linked from the repo root rather than
              copied, so this test and the `GenerateSdkManifest` FAKE
@@ -39,6 +41,13 @@
              it. -->
         <None Include="..\..\samples\PublicSite\cwv-budget.json"
               Link="fixtures\cwv\shipped-budget.json"
+              CopyToOutputDirectory="PreserveNewest" />
+        <!-- Phase 192 — the SHIPPED perf budget, linked in for the same
+             reason as the one above: a typo in it fails this pack rather
+             than the first CI gate run, and the tests decide against the
+             same bytes CI does. -->
+        <None Include="..\..\perf-budgets.json"
+              Link="fixtures\perf\shipped-budget.json"
               CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

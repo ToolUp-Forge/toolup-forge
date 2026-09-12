@@ -17,6 +17,11 @@
          VerifyCoreWebVitalsBudget target Build.fs registers. Independent
          of SDK.Build.fs (its own options record, not BuildConfig). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CoreWebVitalsBudget.fs" />
+    <!-- Phase 192 — the cold-start / hot-path perf budget parser + check
+         behind the VerifyPerfBudget target Build.fs registers.
+         Independent of SDK.Build.fs (its own options record, not
+         BuildConfig). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.PerfBudget.fs" />
     <!-- Phase 326 — the ToolUp.Sdk meta-manifest reconciler behind the
          GenerateSdkManifest target Build.fs registers. Repo-root rather
          than inside ToolUp.Platform.Build because it is forge's OWN
