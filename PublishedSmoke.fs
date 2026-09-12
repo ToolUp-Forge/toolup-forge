@@ -37,7 +37,7 @@ open System.Text.RegularExpressions
 /// Package ids the DLL-tier probe adds and builds against.
 ///
 /// **`ToolUp.AI` is deliberately absent, and its absence is the finding
-/// that shaped this list.** The shard that filed this phase named
+/// that shaped this list.** The brief that filed this phase named
 /// `ToolUp.Platform.Core` + `ToolUp.AI` + `ToolUp.Platform.Server`. There
 /// is no `ToolUp.AI` package: `src/ToolUp.AI/` holds a README and two
 /// `.props` files and produces no `.fsproj`, so nothing in the repo packs

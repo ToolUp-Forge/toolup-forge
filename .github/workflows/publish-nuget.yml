@@ -211,7 +211,7 @@ jobs:
   #
   # ── It is NOT a branch-protection required check, and cannot be ─────
   #
-  # The shard asked for one. Branch protection gates pushes and PRs to a
+  # Phase 184 was briefed to add one. Branch protection gates pushes and PRs to a
   # BRANCH; this job runs on a `v*.*.*` TAG push, so it never reports a
   # status GitHub could require on `main`. Adding it to CONTRIBUTING's
   # required-check list would block every PR forever on a check that

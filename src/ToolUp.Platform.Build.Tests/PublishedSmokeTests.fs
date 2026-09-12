@@ -81,7 +81,7 @@ let tests =
             }
 
             test "an id the repo does not publish is NAMED" {
-                // The live instance: the shard filed against this phase
+                // The live instance: the brief that filed this phase
                 // named `ToolUp.AI`, which no project here produces.
                 Expect.equal
                     (PublishedSmoke.unpublishedProbeIds [ "ToolUp.AI.Core"; "ToolUp.AI.Server" ] [ "ToolUp.AI" ])
@@ -111,7 +111,7 @@ let tests =
 
             test "the shipped closure does not name ToolUp.AI" {
                 // Pinned rather than left to review: the id is the one a
-                // reader restoring the shard's task list would re-add.
+                // reader restoring the brief's task list would re-add.
                 Expect.isFalse
                     (PublishedSmoke.probeIds
                      |> List.exists (fun id -> id.Equals("ToolUp.AI", StringComparison.OrdinalIgnoreCase)))

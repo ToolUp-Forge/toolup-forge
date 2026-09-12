@@ -72,9 +72,9 @@ and it needs the version under test to be *published*, which on a developer chec
 construction — `<Version>` is always the next, unreleased number. A gate that is red on a fresh
 clone for a reason nobody can fix is one people learn to skip.
 
-## Two things the phase shard asked for that are not here, and why
+## Two things the original phase brief asked for that are not here, and why
 
-**There is no `ToolUp.AI` package.** The shard's probe list named `ToolUp.Platform.Core` +
+**There is no `ToolUp.AI` package.** The brief's probe list named `ToolUp.Platform.Core` +
 `ToolUp.AI` + `ToolUp.Platform.Server`. `src/ToolUp.AI/` holds a README and two `.props` files and
 produces no `.fsproj`; nothing packs that id and nuget.org serves no blob for it. A probe declaring
 it would have failed every release with `NU1101` — a red asserting "the release is broken" about a
@@ -87,7 +87,7 @@ since Phase 754) one level up, so it is guarded the same way rather than fixed o
 `SdkManifest.expected`, and the Build pack fails if the shipped closure ever names an id the release
 does not push.
 
-**The gate is not a branch-protection required check, and cannot be.** The shard asked for one.
+**The gate is not a branch-protection required check, and cannot be.** The brief asked for one.
 Branch protection gates pushes and pull requests to a **branch**; this job runs on a `v*.*.*`
 **tag** push, so it never reports a status GitHub could require on `main`. Adding it to
 CONTRIBUTING's required-check list would block every PR forever on a check that never arrives —
