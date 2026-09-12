@@ -190,6 +190,32 @@ Plus `.fsproj` + `.Client.props` (MSBuild props injecting client files into the 
 
 **Canonical sample**: `samples/HelloWorld/HelloWorld.Module/` shows the absolute minimum.
 
+### AI-queryability is opt-in, and OFF unless the module says otherwise (Phase 36.C)
+
+A module's data is **not** reachable by the built-in cross-module AI tool family (`_platform.ai.*`)
+until the module declares that it should be:
+
+```fsharp skip=fragment
+ServerModule.create "MoodJournal"
+|> ServerModule.withAIExposure ModuleAIExposure.Queryable
+|> ServerModule.withGuardedApi moodJournalApi
+```
+
+Undeclared means `ModuleAIExposure.NotQueryable`: `list_accessible_modules` still names the module
+but reports `queryable: false`, `list_data_types` omits its data types, and the four reach tools
+refuse with `UnqueryableModule`. **This is the one place the SDK deliberately inverts GP 11** — a
+user installing a third-party module must not have its data become AI-readable as a side effect of
+installing it, so the safer default wins over the byte-for-byte one. Adopting the SDK version that
+carries this phase therefore requires one line per module you want reachable; see
+[`docs/migrations/per-module-ai-queryability.md`](docs/migrations/per-module-ai-queryability.md).
+
+The declaration **narrows only**, exactly like `ServerModule.withGrantPolicy`: a composition root may
+revoke a module author's opt-in, and a call that would widen an explicit `NotQueryable` fails at
+compose time. It is a separate axis from the grant model — `GrantPolicy` governs whether a given
+subject's grant is live, this governs whether the module is on the AI surface for anyone — and both
+are applied, in that order, at every tool site. RBAC is unchanged and still applies on top: opting in
+widens no authority, it only stops the AI family refusing by default.
+
 ```fsharp skip=fragment
 // SharedTypes.fs
 module HelloWorld.SharedTypes

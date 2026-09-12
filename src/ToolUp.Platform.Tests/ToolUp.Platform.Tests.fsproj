@@ -396,6 +396,14 @@
              (it composes 552's verdicts) and after the AI registry surface it
              gates. -->
         <Compile Include="InProcess\GrantGovernanceTests.fs" />
+        <!-- Phase 36.C — the per-module AI-queryability opt-in: the third
+             gate on the `_platform.ai.*` family, asking whether a module's
+             author put its data on the AI surface at all (default OFF),
+             beside the two caller-side gates 36.A and 730 already applied.
+             After GrantGovernanceTests, whose ordering it composes with
+             (PermissionDenied is still answered first), and after the AI
+             registry surface it gates. -->
+        <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
