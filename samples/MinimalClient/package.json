@@ -4,7 +4,8 @@
         "node": ">=18 || >=20 || >=22 || >=24 || >=25"
     },
     "scripts": {},
-    "//": "Mirrors the SDK-bundle dep list every consumer app declares — the Platform.Client tier imports from each of these via Fable.Core.JsInterop. Required for Vite to bundle this sample (`npm run dev` / `vite build`); NOT required for the Fable acceptance gate (`dotnet fable -o output --noCache` resolves npm modules at bundle time, not at transpile time).",
+    "//1": "Mirrors the SDK-bundle dep list every consumer app declares — the Platform.Client tier imports from each of these via Fable.Core.JsInterop. Required for Vite to bundle this sample (`npx vite` / `npx vite build`); NOT required for the Fable acceptance gate (`dotnet fable -o output --noCache` resolves npm modules at bundle time, not at transpile time).",
+    "//2": "The lockfile is committed and the install is `npm ci`, so the tree a bundle is built from is reproducible. `npm install` here would resolve the carets afresh against whatever npm serves that day — and the two lists this sample is kept in step with, `tests/BrowserSmoke/fixture/package.json` (which the browser-smoke gate installs with `npm ci`) and the SDK bundle deps, would then drift silently rather than at a version this tree names. Regenerate after editing the ranges with `npm install --package-lock-only --no-fund --no-audit` and commit both files together.",
     "dependencies": {
         "@clerk/react": "^6.6.4",
         "@dnd-kit/core": "^6.3.1",

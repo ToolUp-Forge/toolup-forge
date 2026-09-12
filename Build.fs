@@ -309,6 +309,47 @@ let main args =
 
         let npm = onPath "npm"
 
+        // ── 0: the compile set this gate is CLAIMED to cover ────────
+        //
+        // Phase 345. `ToolUp.Offline.Client` reaches the Fable compiler
+        // in CI HERE AND NOWHERE ELSE. Exactly two projects in the tree
+        // reference it — this fixture and `samples/MinimalClient` — and
+        // no CI job compiles the sample. (`ToolUp.Platform.Client` is
+        // the better-covered case: `VerifyFable` already drives it
+        // transitively through `ToolUp.AI.Client`. It is asserted below
+        // anyway, because the fixture link-compiles the sample sources
+        // that need it and because a gate should not depend on another
+        // job's reference graph for a claim it makes about itself.)
+        //
+        // A dropped `<ProjectReference>` would therefore not fail — it
+        // would NARROW this gate and stay green, which is the one
+        // outcome a gate must never have. Assert the compile set
+        // instead: a deliberate change to what this covers edits this
+        // list, the CI table in the repo's CLAUDE.md and the tier table
+        // in `docs/platform/testing-conventions.md`, in one commit.
+        let fixtureProject = Path.combine fixtureDir "BrowserSmokeFixture.fsproj"
+
+        if not (File.Exists fixtureProject) then
+            failwithf
+                "VerifyBrowserSmoke: the fixture project `%s` is missing. Nothing below can compile the client tiers this gate claims to cover."
+                fixtureProject
+
+        let fixtureProjectText = File.ReadAllText fixtureProject
+
+        let gatedClientTiers = [ "ToolUp.Platform.Client"; "ToolUp.Offline.Client" ]
+
+        let missingTiers =
+            gatedClientTiers
+            |> List.filter (fun tier ->
+                not (fixtureProjectText.Contains(sprintf "%s\\%s.fsproj" tier tier))
+                && not (fixtureProjectText.Contains(sprintf "%s/%s.fsproj" tier tier)))
+
+        if not missingTiers.IsEmpty then
+            failwithf
+                "VerifyBrowserSmoke: the fixture no longer project-references %s. That does not fail this gate on its own — it SHRINKS it, silently, to whatever is left, while `docs/platform/testing-conventions.md` and CLAUDE.md still say those tiers are transpiled here. For ToolUp.Offline.Client there is no other CI transpile at all. Restore the reference in `%s`, or change what those two documents claim in the same commit."
+                (String.concat " and " missingTiers)
+                fixtureProject
+
         // ── 1-4: the page the browser will be pointed at ────────────
         //
         // `ci`, not `install` — the lockfile is committed, so the bundle
