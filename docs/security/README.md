@@ -9,6 +9,7 @@ when evaluating a deployment built on ToolUp Platform.
 | [`PLATFORM-SECURITY-RULES.md`](PLATFORM-SECURITY-RULES.md) | Compliance officer / security reviewer / procurement | "What does this platform enforce, structurally, and how do I verify each claim?" |
 | [`../../SECURITY.md`](../../SECURITY.md) | Security researcher | "How do I report a vulnerability, and what response will I get?" |
 | [`../platform/security.md`](../platform/security.md) | Deployment operator | "What threat surfaces does *my* composition expose, and which knobs harden them?" |
+| [`permission-audit-chain.md`](permission-audit-chain.md) | Third-party auditor / counterparty | "How do I check for myself that the record of who was granted what has not been edited?" |
 
 The three are deliberately separate. `PLATFORM-SECURITY-RULES.md` is the
 **versioned artefact** — a stable, citable statement of what the substrate

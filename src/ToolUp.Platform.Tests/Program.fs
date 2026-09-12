@@ -556,6 +556,11 @@ let private registeredTests =
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
+        // Phase 459 — listed here, not merely attributed: the file carries
+        // `[<Tests>]` for symmetry with its neighbours, but
+        // `runTestsWithCLIArgs` runs `allTests`, so an unlisted binding
+        // never executes.
+        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
@@ -706,6 +711,10 @@ let private registeredTests =
         // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
         // / DegradeToFile + fallback spill capacity + poison quarantine).
         AuditFailurePolicyTests.tests
+        // Phase 553.A/D — the in-store permission-event hash chain: tamper /
+        // deletion / fork reported at the right index, pre-553 rows as an
+        // unchained prefix, an unreadable head taking the 9t policy.
+        PermissionAuditChainTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         // Phase 272 — hosted-tree action audit emission (GP 6): authorized/
@@ -1889,6 +1898,10 @@ let private registeredTests =
         // renderer-neutral (fragment / live channel / action authorizer)
         // + the open-core grep-guard + the client-binding shape pin.
         SecondBindingNeutralityTests.tests
+        // Phase 477 — the same grep-guard, widened from the toy sample to
+        // the whole publishable surface (derived from IsPackable, not a
+        // path list), plus the go-red proofs of the matching rule.
+        OpenCoreVocabularyNeutralityTests.tests
         // Phase 265 — reusable ClientHostCapabilities conformance bar:
         // the four-capability host-bridge seam (Navigate / Notify /
         // Dispatch / Call) asserted against the in-tree default and the

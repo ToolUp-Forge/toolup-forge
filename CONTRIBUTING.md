@@ -83,17 +83,16 @@ env-gated and report **Pending**, not Failed, when their API keys are absent.
 Branch protection is a repository setting, not a file in this tree, so it is
 recorded here rather than configured here.
 
-**`main` is protected today, but the five checks it requires are the cheap
-ones.** As of 2026-09-12 the required set is `spdx-headers`, `fantomas`, `dco`,
-`fable-wire-smoke` and `ai-wire-conformance` — headers, formatting, sign-off and
-the wire smoke. Every gate that compiles the solution or runs a test is
-**absent**: `verify-all`, `fable-tier`, `browser-smoke`, `cloud-parity`,
-`templates`, `doc-snippets` and `source-citations` all run on every push and PR,
-go red when they should, and are not enforced. `enforce_admins` is off, so a
-maintainer's direct push lands regardless.
+**`main` requires all twelve checks below (applied 2026-09-12).** Until that date the
+required set was only the five cheap ones — `spdx-headers`, `fantomas`, `dco`,
+`fable-wire-smoke` and `ai-wire-conformance` — and every gate that compiles the solution
+or runs a test (`verify-all`, `fable-tier`, `browser-smoke`, `cloud-parity`, `templates`,
+`doc-snippets`, `source-citations`) ran on every push and PR without being enforced.
+`enforce_admins` is still off, so a maintainer's direct push lands regardless; requiring a
+pull request is not yet switched on.
 
 The intended rule for `main` is **require a pull request, and require these
-status checks to pass** — the seven above are the delta to add:
+status checks to pass** — the twelve, as currently configured:
 
 ```
 verify-all
@@ -120,6 +119,13 @@ branch-protection rule in the same change.
 'pull_request'`), which is exactly why requiring a PR matters: direct pushes to
 `main` skip it, and today the local commit template is all that stands behind
 sign-off on that path.
+
+**`published-package-smoke` is deliberately NOT on this list and must never be added
+(Phase 184).** It lives in `publish-nuget.yml` and runs on a `v*.*.*` **tag** push, so
+it never reports a status against a branch. Branch protection would then wait forever
+for a check that cannot arrive — the same "a required check that no longer reports is
+absent, not enforced" hazard as a renamed job, but permanent. Its enforcement is on the
+release run itself: a red probe is a red tag. Only jobs in `checks.yml` belong above.
 
 ## Developer Certificate of Origin (DCO)
 

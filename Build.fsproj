@@ -17,6 +17,23 @@
          VerifyCoreWebVitalsBudget target Build.fs registers. Independent
          of SDK.Build.fs (its own options record, not BuildConfig). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CoreWebVitalsBudget.fs" />
+    <!-- Phase 326 — the ToolUp.Sdk meta-manifest reconciler behind the
+         GenerateSdkManifest target Build.fs registers. Repo-root rather
+         than inside ToolUp.Platform.Build because it is forge's OWN
+         release hygiene, not SDK surface a consumer composes against;
+         source-linked (not copied) into ToolUp.Platform.Build.Tests so
+         the FAKE target and the drift test run one implementation. It
+         takes no FAKE dependency for exactly that reason. -->
+    <Compile Include="SdkManifest.fs" />
+    <!-- Phase 184 — the fresh-machine published-package smoke gate's
+         offline-decidable rules, behind the VerifyPublishedPackages
+         target Build.fs registers. Same shape and same reason as
+         SdkManifest.fs above: forge's own release hygiene rather than
+         SDK surface, FAKE-free, and source-linked (not copied) into
+         ToolUp.Platform.Build.Tests so the gate and its go-red proofs
+         run one implementation. Compiled after SdkManifest.fs — the
+         target reconciles its probe closure against `expected`. -->
+    <Compile Include="PublishedSmoke.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

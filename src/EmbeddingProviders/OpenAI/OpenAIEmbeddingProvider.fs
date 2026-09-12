@@ -5,6 +5,7 @@ open System.Diagnostics
 open System.Net.Http
 open System.Text
 open System.Text.Json
+open System.Threading
 open ToolUp.Platform // IEventStore, Events, ModuleEvent (SDK.Shared)
 open ToolUp.Platform.Metrics // IMetricsSink (Phase 9e)
 open ToolUp.Platform.IEmbeddingProvider
@@ -40,6 +41,25 @@ open ToolUp.Platform.Secrets
 // breaker-enabled provider is single-process (the documented rule-4
 // exception, alongside `LocalEmbeddingProvider`). With no breaker
 // (the default) the provider remains distributed-ready.
+//
+// **Breaker scope is PER INSTANCE, not per process (Phase 459 task C).**
+// `consecutiveFailures` / `openUntil` are instance fields: two providers
+// built by two `createWithOptions` calls in one process trip and clear
+// independently, and no transition is broadcast to another silo. That is
+// the deliberate slice — cross-silo coordination would need a breaker
+// state store or an `INotificationChannel` broadcast, which is the
+// distributed track's job, not this file's. The consequence a caller must
+// know is the shape of the wiring: a breaker only protects the calls made
+// through the SAME instance, so a deployment that wants one must build the
+// provider ONCE and hold it. A provider reconstructed per call carries a
+// fresh, permanently-closed breaker and the opt-in buys nothing.
+//
+// **Holding one instance is safe, and is the recommended shape.** The API
+// key is read from `ISecretStore` on EVERY call (see `postEmbedding`), so a
+// long-lived instance honours a rotation on its next call with no restart
+// and no reconstruction — a caching secret store needs Phase 464's
+// `ISecretCacheInvalidation` to see the new value, which is a property of
+// the store, not of the provider's lifetime.
 
 /// Terminal outcome of a single HTTP attempt against the embeddings
 /// endpoint — success carries the parsed document; failure carries the
@@ -53,13 +73,43 @@ type private EmbedAttempt =
         message: string *
         retryAfter: TimeSpan option
 
+// ─── Shared per-process HttpClient (Phase 459 task D) ─────────────
+//
+// Every provider built through the `create*` factories sends through this
+// one client. Constructing an `HttpClient` per provider instance — the
+// prior shape — is the classic .NET socket-exhaustion antipattern: each
+// client owns its own connection pool and its sockets linger in TIME_WAIT
+// for 60–120 s after disposal, so a composition root that builds a
+// provider per ingest batch eventually runs the process out of ephemeral
+// ports. The same shape is already proven here by `ClaudeAIProvider` /
+// `OpenAIProvider` and by `probeClient` below.
+//
+// Sharing is safe because nothing per-call is snapshotted on the client:
+// `BaseAddress` is stable and the `Authorization` header rides on the
+// `HttpRequestMessage`. `Timeout` is the one field that could not be
+// shared — it is instance-wide, while `EmbedderResilience.RequestTimeout`
+// is per provider — so the client carries NO timeout and `sendOnce`
+// enforces the configured one per request with a `CancellationTokenSource`.
+// An infinite client timeout is not an unbounded call: every send this
+// module makes passes that token.
+let private sharedClient =
+    lazy
+        (let c = new HttpClient(BaseAddress = Uri("https://api.openai.com"))
+         c.Timeout <- Timeout.InfiniteTimeSpan
+         c)
+
 /// `batchSize` caps per-call inputs to honour OpenAI's documented limit
 /// (2048) with token-budget headroom. The default 64 keeps total tokens
 /// per call comfortably below the 8192 per-input ceiling for typical
 /// chunk sizes (~512 tokens) so callers don't accidentally trip the
 /// per-request token budget when ingesting long documents.
+///
+/// `client` is supplied by the factory — the shared per-process client
+/// above, or a caller's own through `createWithClient`. The provider never
+/// constructs or disposes one.
 type private OpenAIEmbeddingProviderImpl
     (
+        client: HttpClient,
         secretStore: ISecretStore,
         model: string,
         dimensions: int,
@@ -68,15 +118,6 @@ type private OpenAIEmbeddingProviderImpl
         metrics: IMetricsSink option,
         eventSink: IEventStore option
     ) =
-    // Per-instance client. `Timeout` replaces the BCL default of 100 s
-    // with the configured `RequestTimeout` (default 30 s) so a hung
-    // connection surfaces as a retryable timeout instead of stalling an
-    // ingest slot for a minute and a half.
-    let client =
-        let c = new HttpClient(BaseAddress = Uri("https://api.openai.com"))
-        c.Timeout <- resilience.RequestTimeout
-        c
-
     let latencyMetric = EmbedderMetrics.latencyMetricName "openai"
 
     // ─── Circuit-breaker state (only consulted when opted in) ────
@@ -160,9 +201,18 @@ type private OpenAIEmbeddingProviderImpl
 
         let sw = Stopwatch.StartNew()
 
+        // The configured `RequestTimeout` (default 30 s, replacing the BCL
+        // default of 100 s) is enforced HERE rather than on the client,
+        // which is shared across every provider in the process and so can
+        // carry only one timeout. It covers the body read as well as the
+        // send: a response whose headers arrive promptly and whose body
+        // then stalls is the same hung ingest slot the timeout exists to
+        // free.
+        use cts = new CancellationTokenSource(resilience.RequestTimeout)
+
         try
-            let! response = client.SendAsync(request) |> Async.AwaitTask
-            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+            let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
+            let! body = response.Content.ReadAsStringAsync(cts.Token) |> Async.AwaitTask
             sw.Stop()
 
             if response.IsSuccessStatusCode then
@@ -192,9 +242,10 @@ type private OpenAIEmbeddingProviderImpl
                 return AttemptFailed(cls, Some status, body, retryAfter)
         with
         | :? OperationCanceledException ->
-            // HttpClient.Timeout surfaces as a cancelled task — a
+            // The per-call timeout surfaces as a cancelled task — a
             // transient timeout, not a caller cancellation (the SDK
-            // ingest path doesn't pass a token here).
+            // ingest path doesn't pass a token here, so `cts` is the only
+            // source that can cancel this send).
             sw.Stop()
             recordLatency sw.ElapsedMilliseconds "timeout"
 
@@ -495,6 +546,13 @@ let withEmbedderRetryPolicy (retry: EmbedderRetryPolicy) (o: OpenAIEmbeddingOpti
 
 /// Opt in to the circuit breaker (off by default). Enabling it makes
 /// the provider stateful across calls — single-process only.
+///
+/// Scope is the INSTANCE, not the process and not the fleet: the
+/// failure count and open-until deadline live on the provider this
+/// options record builds, so two providers in one process trip
+/// independently and no transition reaches another silo. Build the
+/// provider ONCE and hold it, or the breaker never accumulates the
+/// consecutive failures it trips on.
 let withEmbedderCircuitBreaker (breaker: EmbedderCircuitBreaker) (o: OpenAIEmbeddingOptions) : OpenAIEmbeddingOptions = {
     o with
         Resilience = {
@@ -517,12 +575,27 @@ let withEmbedderAudit (eventSink: IEventStore) (o: OpenAIEmbeddingOptions) : Ope
         EventSink = Some eventSink
 }
 
-/// Build a provider from a fully-specified options record. The entry
-/// point for resilience / telemetry / audit configuration.
-let createWithOptions (secretStore: ISecretStore) (options: OpenAIEmbeddingOptions) : IEmbeddingProvider =
+/// Build a provider over an explicit `HttpClient` instead of the shared
+/// per-process one. Tests inject a stub `HttpMessageHandler` through this
+/// seam (the shape `GitHubAuthProvider.fromConfigWith` and
+/// `OidcAuthProvider.fromConfigWith` already use); advanced callers pass a
+/// pre-configured client — a proxy, an alternative base address, or one
+/// handed out by `IHttpClientFactory`.
+///
+/// The caller owns the client's lifetime: the provider never disposes it,
+/// and holds no other transport. `HttpClient.Timeout` on the supplied
+/// client is a ceiling only — the configured
+/// `EmbedderResilience.RequestTimeout` is still enforced per call, so a
+/// client with the BCL default 100 s does not lengthen a 30 s call.
+let createWithClient
+    (httpClient: HttpClient)
+    (secretStore: ISecretStore)
+    (options: OpenAIEmbeddingOptions)
+    : IEmbeddingProvider =
     validateDimensions options.Model options.Dimensions
 
     OpenAIEmbeddingProviderImpl(
+        httpClient,
         secretStore,
         options.Model,
         options.Dimensions,
@@ -532,6 +605,13 @@ let createWithOptions (secretStore: ISecretStore) (options: OpenAIEmbeddingOptio
         options.EventSink
     )
     :> IEmbeddingProvider
+
+/// Build a provider from a fully-specified options record. The entry
+/// point for resilience / telemetry / audit configuration. Sends through
+/// the shared per-process `HttpClient` — see `createWithClient` to supply
+/// your own.
+let createWithOptions (secretStore: ISecretStore) (options: OpenAIEmbeddingOptions) : IEmbeddingProvider =
+    createWithClient sharedClient.Value secretStore options
 
 /// Create an `IEmbeddingProvider` that calls the OpenAI Embeddings API.
 ///

@@ -8,7 +8,15 @@
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <PackageId>Feliz.AgGrid.Enterprise</PackageId>
+    <!-- Phase 754 — public nuget.org id under the `ToolUp.*` prefix; see
+         the fuller note in Feliz.AgGrid.fsproj. The assembly keeps the
+         `Feliz.AgGrid.Enterprise` name the architecture-fitness gate
+         asserts on (ArchitectureFitnessTests) and the
+         `Feliz.AgGrid.Enterprise.Client.props` source-injection file
+         keeps its name — that is imported by relative PATH, not resolved
+         from the package id, so renaming it would be churn with no
+         reader on the other end. -->
+    <PackageId>ToolUp.Feliz.AgGrid.Enterprise</PackageId>
     <AssemblyName>Feliz.AgGrid.Enterprise</AssemblyName>
     <Description>Client-side AG Grid / AG Charts Enterprise initialisation companion for the Feliz.AgGrid and Feliz.AgCharts bindings. Licensing-isolated so deployments on the Community distribution don't ship Enterprise code. The binding is Apache-2.0; the AG Grid Enterprise licence key is the deploying organisation's own.</Description>
     <PackageTags>fsharp;fable;feliz;ag-grid;ag-charts;enterprise</PackageTags>

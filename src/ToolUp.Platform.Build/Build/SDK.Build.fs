@@ -91,6 +91,90 @@ let private run proc arg dir = proc arg dir |> Proc.run |> ignore
 let private runParallel processes =
     processes |> Proc.Parallel.run |> ignore
 
+// ─── Template-gate package closure ───────────────────────────────────
+
+/// Phase 754 — the stranger's-package guard.
+///
+/// The template gates (`VerifyTemplates`,
+/// `VerifyPackagedModuleTemplate`) supply the SDK packages the gated
+/// scaffolds reference by packing them from source at a throwaway
+/// version into a scratch feed. Each entry was a bare package-id
+/// STRING, and the project to pack was derived from it by
+/// `sprintf "src/%s/%s.fsproj"` — so the id and the producing project
+/// were the same fact spelled once, and an id this repo does not
+/// produce could not be expressed at all.
+///
+/// That coupling broke the moment a package's `PackageId` stopped
+/// matching its directory (this phase, moving the AG Grid / AG Charts
+/// bindings to `ToolUp.Feliz.*` while their projects stay at
+/// `src/Feliz.*/`), and the failure it was implicitly guarding against
+/// is not hypothetical: Phase 307 found `Feliz.AgGrid` / `Feliz.AgCharts`
+/// missing from the closure, and because BOTH ids exist on nuget.org as
+/// unrelated packages by another author, restore did not fail — it
+/// silently served a STRANGER'S package, and only the NU1603 escalation
+/// turned that into an error.
+///
+/// So the id and the project are now declared separately, and the two
+/// are RECONCILED against what the pack actually produced: after the
+/// pack loop, every declared id must appear in the scratch feed as
+/// `<id>.<version>.nupkg`. An id no project in this repo produces has
+/// no such file, and the gate says so by name instead of proceeding to
+/// a restore that will quietly resolve it from nuget.org.
+///
+/// Pure so it is provable in both directions from the Build test pack
+/// (`TemplateGateTests`) — a guard that has never been seen to fail is
+/// not known to work.
+module TemplateGate =
+
+    /// One package the template gate must supply: the id consumers
+    /// resolve, and the in-repo project that produces it. They are not
+    /// the same string in general, and assuming they were is the defect
+    /// this type exists to remove.
+    type GatePackage = {
+        /// The `PackageId` the packed project emits — the name a
+        /// consumer's `PackageReference` resolves, and the name NuGet
+        /// caches under.
+        Id: string
+        /// Repo-relative path to the producing `.fsproj`.
+        Project: string
+    }
+
+    /// Declare a gate package. `id` is the emitted `PackageId`; `project`
+    /// the repo-relative `.fsproj` that emits it.
+    let package id project = { Id = id; Project = project }
+
+    /// Declared ids for which the pack produced no `<id>.<version>.nupkg`,
+    /// in declaration order.
+    ///
+    /// `producedFiles` may be full paths or bare file names — only the
+    /// file name is read. Matching is case-insensitive because NuGet
+    /// package ids are, and a case-only difference between the
+    /// declaration and the emitted `PackageId` would otherwise be
+    /// reported as a stranger's package on a case-sensitive filesystem
+    /// and pass on Windows.
+    let unproducedIds (version: string) (declared: GatePackage list) (producedFiles: string seq) : string list =
+        let produced =
+            producedFiles
+            |> Seq.map (fun path -> IO.Path.GetFileName(path: string))
+            |> Set.ofSeq
+            |> Set.map (fun name -> name.ToLowerInvariant())
+
+        declared
+        |> List.filter (fun p -> not (produced.Contains((sprintf "%s.%s.nupkg" p.Id version).ToLowerInvariant())))
+        |> List.map _.Id
+
+    /// The failure message for `unproducedIds`. Names the ids, the class,
+    /// and the two ways the declaration can be wrong — because the
+    /// remedy differs: a typo is fixed in the list, a genuinely-absent
+    /// package means the closure names something the repo does not own.
+    let report (gate: string) (version: string) (unproduced: string list) =
+        sprintf
+            "%s: %d declared gate package id(s) were NOT produced by this repo's own pack at %s: %s. This is the stranger's-package class (Phase 307): the scratch feed cannot serve the id, so restore falls through to nuget.org and may resolve an UNRELATED package of the same name published by someone else. Either the id is misspelled in the gate closure, or its `Project` does not emit that `PackageId` — check `<PackageId>` in the declared project. Never silence this by removing the id: the packages the closure names are the ones the scaffolds actually resolve."
+            gate
+            (List.length unproduced)
+            version
+            (String.concat ", " unproduced)
+
 // ─── Aggregating gate runner ─────────────────────────────────────────
 
 /// Runs a set of INDEPENDENT gate legs and reports on all of them.
