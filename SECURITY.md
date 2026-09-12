@@ -140,7 +140,7 @@ the primary check.
 On the client the header is attached by a single seam:
 `CsrfClient.installRequestGuard` (in `ToolUp.Platform.Client`) wraps
 `XMLHttpRequest.prototype.{open,send}` exactly once, installed at
-client module-load. Fable.Remoting's proxy transport is XHR-only and
+client module-load. ToolUp.Remoting's proxy transport is XHR-only and
 freezes a proxy's custom-header list at proxy-build time, so a
 send-time guard is the only mechanism that reliably carries the token
 on every proxy call regardless of when the proxy object was

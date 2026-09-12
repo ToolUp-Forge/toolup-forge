@@ -2,7 +2,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-A modular F# full-stack SDK for building production multi-tenant analytical applications. Giraffe over ASP.NET Core (server); Fable + Feliz with an in-tree Elmish runtime (client); in-tree ToolUp.Remoting transport (type-safe wire).
+A modular F# full-stack SDK for building production multi-tenant analytical applications. Giraffe over ASP.NET Core (server); Fable + Feliz with the in-tree ToolUp.Elmish runtime (client); the in-tree ToolUp.Remoting transport (type-safe wire).
 
 > **Status: pre-release (`0.x.y`).** SemVer-on-`0.x` policy — minor bumps may include breaking changes; `1.0.0` is declared once the surface is stable.
 
@@ -57,7 +57,7 @@ For a runnable end-to-end sample — module + server + client — see [`samples/
 Two `dotnet new` paths sit alongside the bare-`PackageReference` shape above; pick whichever matches the deployment shape you're aiming at:
 
 - **`platformsdk-solution`** — full F# full-stack scaffold with `{AppName}-Server` + `{AppName}-Client`, one starter module, `Build.fs`, `compose.yml`, and CI workflow. Production-multi-tenant shape; the right starter for the typical commercial deployment. See [`templates/platformsdk-solution/`](templates/platformsdk-solution/) (and `platformsdk-application` / `platformsdk-module` / `platformsdk-datamanager` / `platformsdk-docker` for adding to an existing solution).
-- **`toolup-safer`** — minimal SAFE-Stack-shaped starter; one chat module, anonymous mode, no auth, no persistence, in-memory only. Useful for SAFE-Stack-familiar developers who want to learn the in-tree Elmish + ToolUp.Remoting primitives via a Tiny Chat demo. **An option**, not the recommended path — for production multi-tenant + auth + persistence, use `platformsdk-solution`. See [`docs/getting-started/safer.md`](docs/getting-started/safer.md).
+- **`toolup-safer`** — minimal SAFE-Stack-shaped starter; one chat module, anonymous mode, no auth, no persistence, in-memory only. Useful for SAFE-Stack-familiar developers who want to learn the in-tree ToolUp.Elmish + ToolUp.Remoting primitives via a Tiny Chat demo. **An option**, not the recommended path — for production multi-tenant + auth + persistence, use `platformsdk-solution`. See [`docs/getting-started/safer.md`](docs/getting-started/safer.md).
 
 ## Documentation
 
@@ -86,7 +86,7 @@ The full appreciative attribution lives in [`NOTICE.md`](NOTICE.md). Short form:
 
 Both upstream projects remain under their original licences (MIT for Fable.Remoting, Apache 2.0 for Fable.Elmish); the relevant attributions are reproduced in [NOTICE.md](NOTICE.md).
 
-**What the Elmish fork adds over upstream Fable.Elmish v5.x:**
+**What ToolUp.Elmish adds over upstream Fable.Elmish v5.x:**
 
 - **`IDispatcher<'msg>`** — typed out-of-band dispatch handle, replacing the `let mutable shellDispatch : (Msg -> unit) option = None` pattern every non-trivial Elmish app reinvents. Carries an `IsActive` flag so background callbacks (SSE reconnect timers, notification listeners) no-op cleanly after `Program.withTermination` fires rather than dispatching against a torn-down loop.
 - **`Prefetch<'a>` + `Prefetch.onAllReady`** — codifies boot-time multi-source data loading (load Configs in parallel with Flags, fire `ReinitActiveModule` when the last one resolves) without ad-hoc `IsConfigsPending` / `IsFlagsPending` bookkeeping fields.
@@ -101,7 +101,7 @@ Both upstream projects remain under their original licences (MIT for Fable.Remot
 - **Bundled `FableJsonConverter`** — F# discriminated unions land as `{ "Case": "X", "Fields": [...] }` on SSE / non-Remoting JSON surfaces too, matching the shape `Fable.SimpleJson` parses on the client. No second JSON-converter pick-list to maintain.
 - **Foundation for categorised error envelopes, typed validation, idempotency-key memoisation, AsyncSeq streaming, and JobHandle long-running operations** as those land in subsequent point releases. The single-source-of-truth dispatcher means each addition arrives without consumer-side middleware changes.
 
-The Elmish runtime's classical Elm Architecture (Init / Update / View / Cmd / Sub) is fully preserved — the additions above are refinements *inside* that pattern, not departures from it. `Program<'arg, 'model, 'msg, 'view>`, `mkProgram`, `mkSimple`, `withSubscription`, `withReactSynchronous`, `Cmd.batch` / `Cmd.ofMsg` / `Cmd.OfAsync.{either, perform, attempt}` all match upstream bit-for-bit.
+ToolUp.Elmish's classical Elm Architecture (Init / Update / View / Cmd / Sub) is fully preserved — the additions above are refinements *inside* that pattern, not departures from it. `Program<'arg, 'model, 'msg, 'view>`, `mkProgram`, `mkSimple`, `withSubscription`, `withReactSynchronous`, `Cmd.batch` / `Cmd.ofMsg` / `Cmd.OfAsync.{either, perform, attempt}` all match upstream bit-for-bit.
 
 ## Package families
 
