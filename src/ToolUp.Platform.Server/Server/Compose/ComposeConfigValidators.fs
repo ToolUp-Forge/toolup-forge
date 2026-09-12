@@ -129,6 +129,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (DirectAddIdentityProofValidator.DirectAddIdentityProofValidator(config, services)) // Phase 549 — refuse DirectAddIdentityProof = RequireDirectoryProof with no IUserDirectory composed (a proof gate with nothing to consult refuses every direct add)
 
+    addConfigValidator (EventStoreChainValidator.validator eventStore) // Phase 9u — refuse a miswired IEventStore decorator chain (position conflict, out-of-declared-order pair, audit replication composed outside webhook dispatch, or a cyclic InnerStore). Structural-class: it reads already-resident in-process objects, so SkipPreflight — the emergency lever for external probes whose dependency may be down — must not wave through a composition whose hooks silently drop events
+
     // Companion-contributed `IConfigValidator` instances (OIDC, Redis,
     // SMTP), wired through `ServerApp.withConfigValidator`. Registered
     // after the first-party set so their preflight messages follow.

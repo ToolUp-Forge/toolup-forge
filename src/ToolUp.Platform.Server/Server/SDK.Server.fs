@@ -447,6 +447,18 @@ let compose
     //   - With webhooks only:            `WebhookHooked -> Inner`
     //   - With job scheduler only:       `JobNotify -> Inner`
     //   - Lightweight default:           `Inner` (no decorators)
+    //
+    // Phase 9u — the order here is not a style choice, and it is not
+    // free-standing either: each decorator declares its intended
+    // `IEventStoreDecorator.DecoratorPosition` (audit replication 100,
+    // webhook dispatch 200, job notify 300 — lower is closer to the inner
+    // store), and `EventStoreChainValidator` walks what was ACTUALLY
+    // composed and refuses boot when the two disagree. Note the sequence
+    // above is fixed by data dependency rather than by the order of these
+    // lets: `buildWebhookSubsystem` (further up) takes the
+    // audit-decorated store as an argument, and `applyEventStoreDecorators`
+    // takes the webhook subsystem. Reordering the chain means changing
+    // those arguments — at which point the validator is what tells you.
     let eventStore =
         applyEventStoreDecorators
             config
@@ -849,6 +861,11 @@ let compose
     // Phase 9m.C — the composed trace-category registry as a
     // `/dev/inspect` panel ("Trace categories").
     registerTraceCategoryDevDiagnosticsContributor services config
+
+    // Phase 9u — the composed decorator chain as a `/dev/inspect` panel
+    // ("Event-store decorator chain"). `eventStore` is the outermost
+    // link; the panel walks inward from it via `IEventStoreDecorator`.
+    registerEventStoreChainDevDiagnosticsContributor services config eventStore
 
     // Phase 1g — webhook DI registrations (extracted to
     // `ComposeJobs.registerWebhookSubsystem`).

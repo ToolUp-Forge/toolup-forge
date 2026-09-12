@@ -27,6 +27,7 @@
              IOAuthCredentialFlowContract, which covers the OAuth half. -->
         <Compile Include="Contracts\IProviderOAuthFlowContract.fs" />
         <Compile Include="Contracts\IEventStoreContract.fs" />
+        <Compile Include="Contracts\IEventStoreDecoratorContract.fs" />
         <Compile Include="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IDataCatalogContract.fs" />
         <Compile Include="Contracts\IResultStoreContract.fs" />
@@ -887,6 +888,7 @@
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
+        <Compile Include="InProcess\EventStoreChainValidatorTests.fs" />
         <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
