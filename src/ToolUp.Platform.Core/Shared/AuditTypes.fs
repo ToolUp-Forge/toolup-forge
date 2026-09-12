@@ -314,6 +314,34 @@ type AnalysisRunPayload = {
     Summary: string
 }
 
+/// Phase 553 — the tamper-evidence link a permission-class audit record
+/// carries. Two hashes, moved as ONE optional field rather than as two
+/// independent optional fields, because a record holding a predecessor
+/// with no self-hash (or the reverse) is a state the chain has no
+/// meaning for and no writer should be able to express.
+///
+/// **Both are bare lowercase 64-hex SHA-256**, matching the two nearest
+/// neighbours in this substrate — the chained-ledger sink's record
+/// digests and the deploy plane's `digestCanonicalForm` — rather than
+/// carrying a `sha256:` algorithm prefix. One spelling per substrate is
+/// worth more than agreement with a distant one.
+type PermissionAuditChainLink = {
+    /// The `ContentHash` of the predecessor permission record in this
+    /// scope, or `PermissionAuditChain.genesisHash` (64 zeros) for the
+    /// first chained record. A record claiming the genesis value asserts
+    /// it is first, so a chain truncated from the FRONT cannot pass
+    /// verification by simply starting later.
+    PrevHash: string
+    /// SHA-256 over this record's canonical form, which frames
+    /// `PrevHash` — so the hash commits to the whole prefix of the
+    /// chain, not merely to this record. Computed server-side; the
+    /// canonical form it is taken over lives in
+    /// `ToolUp.Platform.PermissionAuditChain` (Server tier, because
+    /// hashing needs `System.Security.Cryptography`, which does not
+    /// compile under Fable).
+    ContentHash: string
+}
+
 /// Permission grant or revocation. `ModuleName = ""` denotes a
 /// team-defaults change (the defaults map was replaced wholesale).
 type PermissionChangedPayload = {
@@ -328,6 +356,24 @@ type PermissionChangedPayload = {
     /// Comma-separated list of granted permissions (`Read`, `Write`,
     /// `Admin`). Empty string = revoked.
     Permissions: string
+    /// Phase 553 — the hash-chain link, filled in by the audit log at
+    /// WRITE time. Emission call sites construct this `None`; the log
+    /// reads the scope's current chain head and replaces it. A caller
+    /// that supplies a link is taken at its word (the replicator's
+    /// re-emission path, and the fallback replay service, both re-write
+    /// records that were already chained).
+    ///
+    /// **`None` is the shipped default and absorbs every pre-553
+    /// record.** The converter set this payload persists through
+    /// initialises an absent reference-typed field to `null`, and `None`
+    /// IS null for `FSharpOption`, so a blob written before this field
+    /// existed deserialises to `None` with no version switch and no
+    /// migration — the backward-compatible default GP 11 asks for,
+    /// obtained structurally. Verification reports such records as an
+    /// UNCHAINED PREFIX rather than as a break: a record written before
+    /// the chain existed is not evidence of tampering, and a verifier
+    /// that said otherwise would cry wolf on every upgraded deployment.
+    Chain: PermissionAuditChainLink option
 }
 
 /// Successful out-of-band transactional notification delivery
