@@ -286,6 +286,15 @@ module ModuleSurface =
             // an implied need would name a dependency that is never a
             // composition decision.
             c (nameof m.GrantPolicy) ProvidesFacet
+            // Phase 36.C — the module's declared AI-queryability. Same
+            // classification as `GrantPolicy` immediately above and for the
+            // same reason: a module-DECLARED access posture a composition
+            // reads off the registration, implying no substrate interface.
+            // (The `_platform.ai.*` family is composed by `composeAI`
+            // whether or not any module opts in, so naming it as an implied
+            // need would name a dependency that is never a composition
+            // decision.)
+            c (nameof m.AIExposure) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -409,6 +418,20 @@ module ModuleSurface =
                     entry (nameof m.GrantPolicy) "grant-policy" (GrantPolicy.toToken declared) "" None
                 ]
 
+        // Phase 36.C — emitted only when the module DECLARED an exposure,
+        // on the `BindingStamp` / `GrantPolicy` precedents above: `None` is
+        // this field's "declares nothing" value, so an undeclared module's
+        // surface is byte-identical to its pre-36.C self. Note the emitted
+        // entry is the DECLARATION, not the effective value — an undeclared
+        // module is not queryable, and the surface says nothing rather than
+        // asserting a posture nobody chose.
+        let aiExposure =
+            match m.AIExposure with
+            | None -> []
+            | Some declared -> [
+                entry (nameof m.AIExposure) "ai-exposure" (ModuleAIExposure.toToken declared) "" None
+              ]
+
         let metrics =
             m.Metrics
             |> List.map (fun d -> entry (nameof m.Metrics) "metric" d.Id d.Name (Some(ComponentId.forMetric d.Id)))
@@ -432,6 +455,7 @@ module ModuleSurface =
             jobs
             bindingStamp
             grantPolicy
+            aiExposure
             metrics
             subjects
         ]

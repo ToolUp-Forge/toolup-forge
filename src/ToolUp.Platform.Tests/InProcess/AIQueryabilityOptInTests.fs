@@ -259,6 +259,66 @@ let tests =
                     [ "Typo" ]
                     "the name outside the composed set is named"
 
+            testCase "ModuleSurface classifies AIExposure, and reports it only when declared"
+            <| fun _ ->
+                // The `ServerModule` drift guard fails on any registration
+                // field the descriptor does not classify — deliberately, so
+                // a new field gets classified by a decision rather than by
+                // omission. It caught this one: the first full gate on this
+                // phase went red here, which is the guard working.
+                //
+                // `AIExposure` is `Provides` on the `GrantPolicy`
+                // precedent (a module-declared access posture a composition
+                // reads off the registration, implying no substrate), and
+                // its ENTRY is conditional on the `BindingStamp` one,
+                // because `None` is this field's "declares nothing".
+                let plain = ServerModule.create "Plain"
+                let plainSurface = ModuleSurface.describe plain
+
+                match
+                    plainSurface.Coverage
+                    |> List.filter (fun c -> c.Origin = "server" && c.Field = nameof plain.AIExposure)
+                with
+                | [ c ] -> Expect.equal c.Facet ProvidesFacet "classified as a declaration the module offers"
+                | other -> failtestf "expected exactly one AIExposure coverage row, got %A" other
+
+                Expect.isEmpty plainSurface.Unclassified "the field is classified, so nothing drifts"
+
+                Expect.isEmpty
+                    (plainSurface.Provides |> List.filter (fun e -> e.Kind = "ai-exposure"))
+                    "an undeclared module reports no ai-exposure entry — byte-identical to pre-36.C"
+
+                let declared =
+                    ServerModule.create "MoodJournal"
+                    |> ServerModule.withAIExposure ModuleAIExposure.Queryable
+
+                match
+                    (ModuleSurface.describe declared).Provides
+                    |> List.filter (fun e -> e.Kind = "ai-exposure")
+                with
+                | [ e ] ->
+                    Expect.equal e.Field (nameof declared.AIExposure) "attributed to the registration field"
+                    Expect.equal e.Key (ModuleAIExposure.toToken ModuleAIExposure.Queryable) "the wire token is the key"
+                | other -> failtestf "expected exactly one ai-exposure entry, got %A" other
+
+                // The declaration is reported, not the effective value: a
+                // module that explicitly declined is as much a declaration
+                // as one that opted in, and the surface should say so.
+                match
+                    (ModuleSurface.describe (
+                        ServerModule.create "Payroll"
+                        |> ServerModule.withAIExposure ModuleAIExposure.NotQueryable
+                    ))
+                        .Provides
+                    |> List.filter (fun e -> e.Kind = "ai-exposure")
+                with
+                | [ e ] ->
+                    Expect.equal
+                        e.Key
+                        (ModuleAIExposure.toToken ModuleAIExposure.NotQueryable)
+                        "an explicit refusal is a declaration and is surfaced as one"
+                | other -> failtestf "expected exactly one ai-exposure entry, got %A" other
+
             testCase "the exposure token round-trips, and an unknown token fails CLOSED"
             <| fun _ ->
                 for exposure in [ ModuleAIExposure.NotQueryable; ModuleAIExposure.Queryable ] do
