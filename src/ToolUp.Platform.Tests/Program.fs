@@ -553,6 +553,14 @@ let private registeredTests =
                 // breaks, so it belongs inside the group rather than
                 // beside it.
                 EmbeddingProviderEnvTests.tests
+                // Phase 465 — the int-key format/range gate reads the
+                // WHOLE registry through the resolution seam, so it is
+                // both a mutator (each case sets its own variable) and
+                // the pack's most contaminable reader: any sibling that
+                // leaks a numeric TOOLUP_* would show up as a refusal
+                // here. Same group, same reason.
+                ConfigBoundsValidatorTests.intKeyTests
+                ConfigBoundsValidatorTests.retentionTests
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
