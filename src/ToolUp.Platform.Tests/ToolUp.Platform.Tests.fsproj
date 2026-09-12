@@ -1538,6 +1538,10 @@
              route-attribution registry the opt-in hardening middleware
              resolves against. -->
         <Compile Include="InProcess\ModuleVisibilityContractTests.fs" />
+        <!-- Phase 529 - audit-trail viewer handler: role gate, scope
+             isolation, filters, cursor paging, CSV export and the
+             ServerConfig.AuditLog pairing. -->
+        <Compile Include="InProcess\AuditViewApiHandlerTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target

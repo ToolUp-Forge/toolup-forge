@@ -424,6 +424,24 @@ let buildRouteHandlers
         Api.make (UsageQueryApiHandler.usageQueryApi, routeBuilder = UsageQueryApi.routeBuilder)
     ]
 
+    // Phase 529 — audit-trail viewer route. Auto-injected unconditionally
+    // for the same reason `usageQueryApiHandler` above is: the client
+    // module's default is ON, and a proxy that 404s cannot tell the
+    // operator "this deployment keeps no audit trail" from "this
+    // deployment is broken". The pairing is with `ServerConfig.AuditLog`
+    // — whose default `NoAuditLog` resolves `IAuditLog` to
+    // `NoOpAuditLog`, so nothing is recorded — and the mode is handed to
+    // the handler rather than read off DI because the handler reads the
+    // event store directly (it needs the persisted envelope's `Id` and
+    // `OccurredAt`, which `IAuditLog.GetAuditTrail` drops). Under
+    // `NoAuditLog` it therefore short-circuits to an empty result rather
+    // than surfacing residue a deployment has since switched off.
+    // Owner/Admin gating and caller-scope isolation are enforced inside
+    // the handler. Route shape: `/api/_platform/audit/*`.
+    let auditViewApiHandler: HttpHandler list = [
+        Api.make (AuditViewApiHandler.auditViewApi config.AuditLog, routeBuilder = AuditViewApi.routeBuilder)
+    ]
+
     // Phase 171 — Home / Overview landing route. Auto-injected
     // unconditionally so the client Home module's `IHomeOverviewApi`
     // proxy never 404s; the module itself is opt-in client-side
@@ -763,6 +781,7 @@ let buildRouteHandlers
             @ deploymentReadinessApiHandler
             @ deploymentVerificationApiHandler
             @ usageQueryApiHandler
+            @ auditViewApiHandler
             @ homeOverviewApiHandler
             @ encryptionAdminHandler
             @ externalComputeCallbackHandler

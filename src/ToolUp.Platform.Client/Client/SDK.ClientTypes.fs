@@ -1136,6 +1136,37 @@ type UsageDashboardMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalUsageDashboard of ErasedModule
 
+/// Branding for the audit-trail viewer admin module (Phase 529). Auto-
+/// injected in any non-Anonymous mode unless `NoAuditViewer`.
+type AuditViewerConfig = { Name: string; Icon: ReactElement }
+
+/// Controls the built-in audit-trail viewer (Phase 529). The module
+/// surfaces the deployment's own audit rows — filterable by time
+/// window, event type and actor, paged, with per-event detail and a CSV
+/// export — through the `IAuditViewApi` Owner/Admin surface.
+///
+/// Auto-injected in any non-Anonymous mode unless set to
+/// `NoAuditViewer`. Anonymous deployments have no role concept to gate
+/// on, so the module is omitted there regardless of this setting: an
+/// audit trail is a map of who did what, and showing it to every
+/// visitor is a reconnaissance gift of exactly the kind
+/// `UsageDashboardMode` describes for spend.
+///
+/// Pair with `ServerConfig.AuditLog = EnabledAuditLog` — the viewer
+/// renders its "no audit events" state when the trail is disabled
+/// server-side (the default), and it is harmless to leave the sidebar
+/// entry in place for future enablement. Same pairing, and the same
+/// rationale, as `UsageDashboardMode` with `ServerConfig.UsageMetering`.
+type AuditViewerMode =
+    /// No audit-trail viewer module in the sidebar.
+    | NoAuditViewer
+    /// SDK built-in audit-trail viewer (default).
+    | DefaultAuditViewer
+    /// SDK built-in with custom name/icon.
+    | ConfiguredAuditViewer of AuditViewerConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalAuditViewer of ErasedModule
+
 /// Branding for the built-in Home / Overview landing module (Phase
 /// 171).
 type HomeModuleConfig = { Name: string; Icon: ReactElement }
@@ -1957,6 +1988,12 @@ type ClientConfig = {
     /// EnabledUsageMetering` server-side — the dashboard renders empty
     /// otherwise.
     UsageDashboard: UsageDashboardMode
+    /// Controls the audit-trail viewer admin (Phase 529). Active in
+    /// every non-Anonymous mode; `NoAuditViewer` opts out explicitly.
+    /// Default: SDK built-in. Pair with `ServerConfig.AuditLog =
+    /// EnabledAuditLog` server-side — the viewer renders its empty
+    /// state otherwise.
+    AuditViewer: AuditViewerMode
     /// Controls the optional Home / Overview landing module (Phase 171).
     /// **Default: `NoHomeModule`** (off — unlike the admin built-ins) so
     /// existing deployments are unchanged until they opt in (GP 13).
@@ -2415,6 +2452,13 @@ module ClientConfig =
         PlatformUsers = NoPlatformUsers
         ServiceStatusBoard = DefaultServiceStatusBoard
         UsageDashboard = DefaultUsageDashboard
+        // Phase 529 — on by default, like the other read-only admin
+        // built-ins. The trail it reads is off by default
+        // (`ServerConfig.AuditLog = NoAuditLog`), so a deployment that
+        // has not opted in sees the module's "no audit events" state
+        // rather than data — the same shape UsageDashboard has with
+        // NoUsageMetering.
+        AuditViewer = DefaultAuditViewer
         // Phase 171 — off by default (GP 13); existing deployments
         // keep their first-registered module as the landing surface.
         HomeModule = NoHomeModule
