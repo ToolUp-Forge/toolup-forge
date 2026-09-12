@@ -565,6 +565,12 @@
              PiiSafe markers) and after AuditTypes.fs, whose
              AuditEvent.eventTypeName strings are what EventType carries. -->
         <Compile Include="Shared\AuditViewApi.fs" />
+        <!-- Phase 593 - composition-inspector surface (the five panel view
+             projections + the ICompositionInspectorApi remoting contract).
+             After AuthAttributes.fs (RequiresClaim / Audit / PiiSafe
+             markers). Projections only - the server-tier composition types
+             they mirror are not visible to the Fable client. -->
+        <Compile Include="Shared\CompositionInspectorApi.fs" />
         <!-- Phase 171 — Home / Overview landing API (contract + view
              types + optional IActiveAiProbe DI seam). -->
         <Compile Include="Shared\HomeOverviewApi.fs" />

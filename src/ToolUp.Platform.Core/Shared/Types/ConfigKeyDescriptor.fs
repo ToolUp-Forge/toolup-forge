@@ -532,6 +532,9 @@ module Names =
         "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY"
 
     [<Literal>]
+    let acceptUnlimitedEventRetention = "TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION"
+
+    [<Literal>]
     let backfillMissedTicks = "TOOLUP_BACKFILL_MISSED_TICKS"
 
     [<Literal>]
@@ -2177,6 +2180,15 @@ let all: ConfigKeyDescriptor list = [
         Category = EscapeHatchCategory
     }
     {
+        EnvVar = Names.acceptUnlimitedEventRetention
+        Description =
+            "Accepts a persistent event store that prunes on neither age nor count in a production or multi-instance shape, where the blob trail grows without bound. Silences a startup preflight warning."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = EscapeHatchCategory
+    }
+    {
         EnvVar = Names.moduleBindingAllowUnbound
         Description = "Allows modules that carry no signed binding manifest to load."
         Type = BoolKey
@@ -2520,6 +2532,7 @@ let manifestBindable: Set<string> =
         Names.acceptSharedEmbeddingCacheInTeamMode
         Names.acceptStickyRoutedAiMultiInstance
         Names.acceptUnboundAudienceInAuthMode
+        Names.acceptUnlimitedEventRetention
         Names.acceptUnsignedPublishable
         Names.adAnalytics
         Names.allowDevAdminBootstrap
@@ -2670,6 +2683,193 @@ let escapeHatchKeys: ConfigKeyDescriptor list =
     all
     |> List.filter (fun k -> k.Category = EscapeHatchCategory)
     |> List.sortBy _.EnvVar
+
+// ─── Phase 465 — what an integer-valued key actually accepts ─────────
+//
+// `Type = IntKey` says the value is a number. It does not say WHICH
+// numbers, and until this phase nothing checked even that much: a
+// `TOOLUP_MAX_REQUEST_BODY_BYTES=1MB` was warned about and dropped by
+// `envInt64Opt`, silently reverting the deployment to Kestrel's 30 MB
+// default — the cap the operator had just tried to tighten — while
+// `TOOLUP_MAX_FILE_BYTES` fell back with no message at all. The
+// server-side `IntConfigKeyValidator` refuses both at preflight; what
+// it needs from here is the per-key contract to refuse them against.
+//
+// **Why a table keyed by name rather than a field on the descriptor.**
+// The honest model is bounds ON the type — `IntKey of min * max`. That
+// is a public-surface break (the DU's arity, and every exhaustive match
+// over it) on a package whose release version is frozen, and a
+// contract break shipped under a frozen number is exactly the drift the
+// version discipline exists to stop. The table is additive, and it is
+// the SINGLE source both consumers read: the validator's refusal and
+// the generated reference's Type column are two projections of these
+// rows, so a bound cannot be tightened in one and stale in the other.
+// Folding it into the descriptor is a mechanical move at the next
+// minor.
+//
+// **Unlisted keys are not unchecked.** A key with no row here gets
+// `unconstrained` — integer format, no range — so every `IntKey` in the
+// registry inherits the format check and only the rows below add a
+// range. The rows exist because the reader they describe accepts
+// something the plain rule does not, and each was read off that reader
+// rather than assumed:
+//
+//   * `none` / `0` are explicit "leave it unset" tokens three readers
+//     take (`envInt64Opt`, `parseDefaultTeamStorageQuotaBytes`,
+//     `parseMaxSseConnectionsPerScope`). Refusing them would refuse a
+//     documented spelling.
+//   * `TOOLUP_MAX_FILE_BYTES = 0` disables the per-file ceiling in
+//     `ComposeRuntimeServices`, so the range and the token coexist:
+//     a size must be a real size, and `0` means "no ceiling".
+//   * `TOOLUP_STORE_EVICTION_MINUTES` is declared `IntKey` but parsed
+//     with `Double.TryParse`, so `2.5` works today. The rule says so
+//     rather than the validator refusing a value the reader honours.
+//     (That the descriptor's declared type and its reader disagree is a
+//     registry defect this phase records rather than silently fixes —
+//     changing the declared type moves the generated schema's contract.)
+
+/// How the reader behind an `IntKey` parses its numeric value.
+///
+/// Two cases because the registry has two, not because a taxonomy was
+/// wanted: every int key but one is `Int32`/`Int64.TryParse`, and
+/// `TOOLUP_STORE_EVICTION_MINUTES` is `Double.TryParse`.
+type IntKeyNumericForm =
+    /// `Int32.TryParse` / `Int64.TryParse` — digits, optionally signed.
+    | IntegerOnly
+    /// `Double.TryParse` — a fractional value is honoured by the reader.
+    | IntegerOrDecimal
+
+/// The value contract for one integer-valued config key: the range it
+/// accepts, the non-numeric tokens its reader treats as "unset", and
+/// the numeric form it parses.
+///
+/// Bounds are INCLUSIVE, and stated in the key's own unit (bytes for a
+/// byte cap) so the refusal can quote the number the operator typed
+/// against the number the key accepts.
+type IntKeyRule = {
+    /// The key this rule governs — the join back to the descriptor.
+    EnvVar: string
+    /// Inclusive lower bound, when the key declares one.
+    Min: int64 option
+    /// Inclusive upper bound, when the key declares one.
+    Max: int64 option
+    /// Raw values accepted verbatim, bypassing both the numeric format
+    /// and the range — the reader's own "unset" / "disabled" tokens.
+    /// Compared case-insensitively, as the readers compare them.
+    AcceptedTokens: string list
+    Form: IntKeyNumericForm
+}
+
+[<RequireQualifiedAccess>]
+module IntKeyRule =
+
+    /// The rule an int key has when it declares nothing: integer format,
+    /// no range, no tokens. Every `IntKey` gets at least this.
+    let unconstrained (envVar: string) : IntKeyRule = {
+        EnvVar = envVar
+        Min = None
+        Max = None
+        AcceptedTokens = []
+        Form = IntegerOnly
+    }
+
+    /// True when the rule adds nothing to the bare "it is an integer"
+    /// contract, so a projection can leave it out rather than render an
+    /// empty parenthesis after every int in the table.
+    let isUnconstrained (rule: IntKeyRule) : bool =
+        rule.Min.IsNone
+        && rule.Max.IsNone
+        && List.isEmpty rule.AcceptedTokens
+        && rule.Form = IntegerOnly
+
+    /// The accepted range and tokens as one operator-facing phrase, or
+    /// `None` when there is nothing beyond "an integer" to say.
+    ///
+    /// One function so the preflight refusal and the generated reference
+    /// describe the same contract in the same words — an operator who
+    /// reads the table and then reads the refusal must not have to
+    /// reconcile two phrasings of one rule.
+    let describe (rule: IntKeyRule) : string option =
+        let range =
+            match rule.Min, rule.Max with
+            | Some lo, Some hi -> [ sprintf "%d–%d" lo hi ]
+            | Some lo, None -> [ sprintf ">= %d" lo ]
+            | None, Some hi -> [ sprintf "<= %d" hi ]
+            | None, None -> []
+
+        let form =
+            match rule.Form with
+            | IntegerOnly -> []
+            | IntegerOrDecimal -> [ "fractional values accepted" ]
+
+        let tokens =
+            match rule.AcceptedTokens with
+            | [] -> []
+            | ts -> [ "or " + (ts |> List.map (sprintf "`%s`") |> String.concat " / ") ]
+
+        match range @ form @ tokens with
+        | [] -> None
+        | parts -> Some(String.concat ", " parts)
+
+/// The declared value contracts, one row per key that needs more than
+/// the bare integer format. Keys absent from this list are governed by
+/// `IntKeyRule.unconstrained`.
+///
+/// `1 KB` as the floor on both byte caps is the smallest request any
+/// real deployment serves — below it the cap refuses the platform's own
+/// traffic, so a value there is a unit mistake (`1` meaning 1 MB), which
+/// is the mistake this phase exists to catch. `10 GB` as the ceiling is
+/// an order of magnitude above the largest upload the SDK's blob path is
+/// built for; past it the operator wants a different transport, not a
+/// bigger number.
+let intKeyRules: IntKeyRule list = [
+    {
+        EnvVar = Names.maxRequestBodyBytes
+        Min = Some 1024L
+        Max = Some 10_737_418_240L
+        // `envInt64Opt` reads `none` and `0` as "leave it unset", which
+        // for this key means Kestrel's own 30 MB default.
+        AcceptedTokens = [ "none"; "0" ]
+        Form = IntegerOnly
+    }
+    {
+        EnvVar = Names.maxFileBytes
+        Min = Some 1024L
+        Max = Some 10_737_418_240L
+        // `ComposeRuntimeServices` reads `0` as "no per-file ceiling".
+        AcceptedTokens = [ "0" ]
+        Form = IntegerOnly
+    }
+    {
+        EnvVar = Names.defaultStorageQuotaBytes
+        Min = None
+        Max = None
+        AcceptedTokens = [ "none"; "0" ]
+        Form = IntegerOnly
+    }
+    {
+        EnvVar = Names.maxSseConnectionsPerScope
+        Min = None
+        Max = None
+        AcceptedTokens = [ "none"; "0" ]
+        Form = IntegerOnly
+    }
+    {
+        EnvVar = Names.storeEvictionMinutes
+        Min = None
+        Max = None
+        AcceptedTokens = []
+        Form = IntegerOrDecimal
+    }
+]
+
+/// The value contract for `envVar`. Total: a key with no declared row
+/// resolves to the unconstrained rule, so a caller never has to decide
+/// what an absent row means.
+let intKeyRuleFor (envVar: string) : IntKeyRule =
+    intKeyRules
+    |> List.tryFind (fun r -> r.EnvVar = envVar)
+    |> Option.defaultValue (IntKeyRule.unconstrained envVar)
 
 // ─── Phase 700 — configuration profiles ──────────────────────────────
 //
@@ -2898,11 +3098,19 @@ module ReferenceDoc =
     open System
     open System.Text
 
-    let private typeLabel (t: ConfigKeyType) =
-        match t with
+    /// Phase 465 — an int key renders its declared value contract beside
+    /// the type, from the same `intKeyRules` row the preflight refuses
+    /// against. The descriptor rather than its `Type` is the argument
+    /// because the rule is keyed by name; the alternative is an operator
+    /// who is refused for a bound the reference never mentioned.
+    let private typeLabel (k: ConfigKeyDescriptor) =
+        match k.Type with
         | StringKey -> "string"
         | BoolKey -> "bool"
-        | IntKey -> "int"
+        | IntKey ->
+            match IntKeyRule.describe (intKeyRuleFor k.EnvVar) with
+            | Some contract -> "int (" + contract + ")"
+            | None -> "int"
         | EnumKey choices -> "enum: " + String.concat ", " choices
 
     /// Markdown-escape a cell value: pipes would break the table, and a
@@ -3072,7 +3280,7 @@ module ReferenceDoc =
                     sprintf
                         "| `%s` | %s | %s | %s | %s | %s |"
                         k.EnvVar
-                        (cell (typeLabel k.Type))
+                        (cell (typeLabel k))
                         defaultCell
                         secretCell
                         manifestCell

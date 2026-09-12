@@ -214,6 +214,35 @@ let private hangBudget = TimeSpan.FromSeconds 60.0
 /// can never masquerade as the event it guards.
 let private eventCap = TimeSpan.FromSeconds 30.0
 
+// ─── Phase 718 — which half of that fix is load-bearing ───────────────
+//
+// The margin above is the visible half of the 2026-08-25 repair and it
+// is not the half that closed the flake. Re-measured one variable at a
+// time on a saturated 16-way machine (~99% CPU, 32 concurrent test
+// processes, plus four spinners):
+//
+//   * margins collapsed back to 10 s / 10 s, everything else as it
+//     ships — 30/30 green. Equal budgets raced the POLLING observer
+//     this file used to have; `Stopped` is now completed in the
+//     handler's `finally`, so a hang elapsing under its own steam still
+//     ends the await instead of stranding it. The margin is defence in
+//     depth, not the repair.
+//   * `fastAnswersAfterArrivalOf` removed, margins intact — 30/30 green
+//     TOO, which is this machine's scheduler and NOT a repeal.
+//     `DefaultPeerFanout` is unchanged since Phase 313, so the launch
+//     race the ordering exists to remove is still structurally present;
+//     it was reproduced at 41/100 under heavier contention than this.
+//     Do not read that count as permission to drop the ordering.
+//   * as it ships — 60/60 on the fan-out pair, 25/25 on all nine
+//     Phase 312 cases.
+//
+// Those counts are worth something only because the same harness
+// reddens 3/3 when the headline assertion is inverted, and because it
+// asserts a NON-ZERO test count: the list names carry em-dashes, which
+// defeat `--filter`, so the filter has to be an ASCII substring handed
+// to `--filter-test-list` — and one that matches nothing exits 0 having
+// run nothing at all.
+
 /// Await an event the fixture itself completes — event-driven, never a
 /// polled wall clock, so a saturated scheduler delays the await instead
 /// of failing it. On cap expiry the failure attributes to DELIVERY —

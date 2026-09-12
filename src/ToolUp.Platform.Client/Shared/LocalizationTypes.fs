@@ -1934,6 +1934,88 @@ type AuditLogMessages = {
     ShowingCount: int -> int -> string
 }
 
+/// The built-in composition inspector (`CompositionInspectorUI`, Phase
+/// 593) — five read-only governance panels over what the deployment
+/// declared at compose time.
+type CompositionInspectorMessages = {
+    /// Module heading, shown above every panel.
+    Heading: string
+    /// Sub-heading prose under the module heading.
+    Subheading: string
+    /// Panel tab / page titles, in the order `InspectorPanel.all` lists
+    /// them.
+    CompositionTitle: string
+    SurfacesTitle: string
+    RulesTitle: string
+    DisclosureTitle: string
+    ProvenanceTitle: string
+    /// `Loading` state prompt.
+    Loading: string
+    /// Download-this-panel's-JSON action.
+    ExportJson: string
+    /// The export action's label while a request is in flight.
+    Exporting: string
+    /// Reload action.
+    Refresh: string
+    /// Section heading above a component group; takes the group's name
+    /// and how many entries it has.
+    SectionCount: string -> int -> string
+    /// Section headings in the Composition panel.
+    Modules: string
+    CompanionSlots: string
+    DataTypes: string
+    Tools: string
+    Metrics: string
+    Subjects: string
+    Purposes: string
+    ConfigKnobs: string
+    CanonicalMethods: string
+    /// Column headers shared by the component tables.
+    ColumnId: string
+    ColumnKind: string
+    ColumnLabel: string
+    ColumnImpl: string
+    ColumnName: string
+    ColumnValue: string
+    /// Column headers in the Rules panel.
+    ColumnCode: string
+    ColumnSeverity: string
+    ColumnClass: string
+    ColumnDescription: string
+    ColumnMessage: string
+    /// Column headers in the Disclosure panel.
+    ColumnFacet: string
+    ColumnSubject: string
+    /// Rules-panel sub-headings.
+    RuleManifest: string
+    PreflightFindings: string
+    /// Rules-panel pass state — no rule flagged a defect. Distinct from
+    /// an empty rule list, which would mean no rules ran at all.
+    AllRulesPassed: string
+    /// Takes the capture timestamp, rendered.
+    CapturedAt: string -> string
+    /// Disclosure-panel label for the envelope digest.
+    EnvelopeDigest: string
+    /// Disclosure-panel empty state — a composition that declared no
+    /// grounding at all, which is a legitimate shape rather than a gap.
+    NoDeclarations: string
+    /// Provenance-panel row labels.
+    ProvenanceGraph: string
+    ProvenanceFactEvidence: string
+    ProvenanceArtifacts: string
+    /// Rendered against a provenance substrate that is / is not
+    /// composed.
+    Composed: string
+    NotComposed: string
+    /// Provenance-panel prose stating where the chain walk itself is
+    /// served, since this module deliberately does not serve a second
+    /// one.
+    ProvenanceWalkNote: string
+    /// Empty state for a component group the composition declares none
+    /// of. Takes the group's name.
+    NoneDeclared: string -> string
+}
+
 /// The mapping-aware Data Manager module (`MappingDataManagerUI`) — CSV
 /// upload, the data-quality review step, the target-format picker, the
 /// column-mapping wizard (with its derived-column builder), the dry-run
@@ -2508,6 +2590,7 @@ type MessageCatalog = {
     ServiceStatusBoard: ServiceStatusBoardMessages
     UsageDashboard: UsageDashboardMessages
     AuditLog: AuditLogMessages
+    CompositionInspector: CompositionInspectorMessages
     MappingDataManager: MappingDataManagerMessages
     KnowledgeBase: KnowledgeBaseMessages
 }
