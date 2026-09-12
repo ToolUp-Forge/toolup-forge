@@ -920,6 +920,11 @@
         <!-- Phase 329 — fail-loud DataProtection key-ring backend. -->
         <Compile Include="InProcess\DataProtectionBackendTests.fs" />
         <Compile Include="InProcess\JobSchedulerInstanceValidatorTests.fs" />
+        <!-- Phase 6n — the AI cancel / client-tool-dispatch multi-instance
+             validator: the Error/Warning/Ok ladder, the sticky-routing
+             attestation that DEGRADES rather than clears, and the AI-tier
+             gating that keeps non-AI deployments out of its scope. -->
+        <Compile Include="InProcess\AICancellationDispatchInstanceValidatorTests.fs" />
         <!-- Phase 9b.B — pins the compose-time `registerScheduledJobDeclarations`
              helper: NoJobScheduler warn-and-skip, single declaration
              defaults to `_platform` scope, explicit `Scopes` list fans
@@ -1533,6 +1538,10 @@
              route-attribution registry the opt-in hardening middleware
              resolves against. -->
         <Compile Include="InProcess\ModuleVisibilityContractTests.fs" />
+        <!-- Phase 529 - audit-trail viewer handler: role gate, scope
+             isolation, filters, cursor paging, CSV export and the
+             ServerConfig.AuditLog pairing. -->
+        <Compile Include="InProcess\AuditViewApiHandlerTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target

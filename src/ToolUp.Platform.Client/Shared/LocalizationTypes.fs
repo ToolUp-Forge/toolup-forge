@@ -1875,6 +1875,65 @@ type UsageDashboardMessages = {
     Loading: string
 }
 
+/// The built-in audit-trail viewer module (`AuditLogUI`, Phase 529).
+type AuditLogMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Visible `<label>` text AND accessible name of the event-type
+    /// `<select>` — both read from one field so they cannot drift.
+    EventTypeLabel: string
+    /// The event-type option meaning "no type filter".
+    AllEventTypes: string
+    /// Visible label + accessible name of the actor filter input.
+    ActorLabel: string
+    /// Placeholder prose inside the actor filter input.
+    ActorPlaceholder: string
+    /// Visible label + accessible name of the window-start input.
+    FromLabel: string
+    /// Visible label + accessible name of the window-end input.
+    ToLabel: string
+    /// Apply-the-filters action.
+    ApplyFilters: string
+    /// Clear-every-filter action.
+    ClearFilters: string
+    /// Reload action.
+    Refresh: string
+    /// Export-CSV button label at rest.
+    ExportCsv: string
+    /// Export-CSV button label while the export is in flight.
+    Exporting: string
+    /// Load-the-next-page action.
+    LoadMore: string
+    /// Event-table time column header.
+    ColumnTime: string
+    /// Event-table event-type column header.
+    ColumnEventType: string
+    /// Event-table actor column header.
+    ColumnActor: string
+    /// Event-table summary column header.
+    ColumnSummary: string
+    /// Rendered in the actor cell of a row whose payload names none.
+    UnattributedActor: string
+    /// Accessible name of the row's detail toggle when collapsed.
+    ShowDetail: string
+    /// Accessible name of the row's detail toggle when expanded.
+    HideDetail: string
+    /// Heading above the expanded row's raw payload.
+    PayloadHeading: string
+    /// `Loading` state prompt.
+    Loading: string
+    /// Empty state when the deployment has recorded no audit events at
+    /// all — distinct from `NoMatches`, because the remedy is different
+    /// (enable the trail vs widen the filter).
+    NoEvents: string
+    /// Empty state when the filters exclude every recorded event.
+    NoMatches: string
+    /// Takes the number of rows shown and the number matched.
+    ShowingCount: int -> int -> string
+}
+
 /// The mapping-aware Data Manager module (`MappingDataManagerUI`) — CSV
 /// upload, the data-quality review step, the target-format picker, the
 /// column-mapping wizard (with its derived-column builder), the dry-run
@@ -2448,6 +2507,7 @@ type MessageCatalog = {
     FileManager: FileManagerMessages
     ServiceStatusBoard: ServiceStatusBoardMessages
     UsageDashboard: UsageDashboardMessages
+    AuditLog: AuditLogMessages
     MappingDataManager: MappingDataManagerMessages
     KnowledgeBase: KnowledgeBaseMessages
 }

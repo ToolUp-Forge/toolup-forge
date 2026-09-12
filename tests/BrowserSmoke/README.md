@@ -31,7 +31,8 @@ gate slower without making it stronger:
 |---|---|
 | a pure function, a reducer, a validator | an Expecto pack under `src/*.Tests` (`VerifyAll`) |
 | a client-tier MVU `update`, a rendered view, an a11y floor | the Fable-tier `node:test` harness (`VerifyFable`) |
-| that the client tier still transpiles | `samples/MinimalClient` + `VerifyFable` |
+| that the AI / KnowledgeBase / Platform client tiers still transpile | `VerifyFable` (`src/ToolUp.AI.Client.Tests`; Platform.Client rides in transitively) |
+| that the **Offline** client tier still transpiles | **this gate's own fixture compile** — the only one in CI. See the tier table in [`docs/platform/testing-conventions.md`](../../docs/platform/testing-conventions.md); `samples/MinimalClient` covers it locally, but no CI job compiles the sample |
 | a seam's contract across implementations | the contract packs in `ToolUp.Platform.Tests/Contracts` |
 
 Two scenarios is not a target to grow past. If the count starts climbing, the question to
