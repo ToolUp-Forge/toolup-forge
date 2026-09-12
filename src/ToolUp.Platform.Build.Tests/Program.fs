@@ -15,6 +15,10 @@ let private registeredTests =
         // budget parser's refusals and the check over committed report
         // fixtures. No browser, no server, no network.
         CoreWebVitalsBudgetTests.tests
+        // Phase 326 — the ToolUp.Sdk meta-manifest lists exactly the
+        // package ids the Publish target pushes. Pure file scanning over
+        // the checkout; no build output, no network.
+        SdkManifestTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

@@ -84,6 +84,26 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
+      # Phase 326 — the release cannot publish a package the ToolUp.Sdk
+      # meta-manifest does not advertise, nor a manifest MSBuild cannot
+      # import.
+      #
+      # `ToolUp.Sdk.props` is what a consumer imports to resolve every
+      # ToolUp.* package from one <ToolUpSdkVersion>. It was hand-listed
+      # and had drifted to 57 of 166 published ids (the rest were NU1008
+      # for any consumer), and its header comment nested a second XML
+      # comment, which made the whole import MSB4024 — the manifest
+      # resolved nothing at all. Neither could be seen from inside this
+      # repo, because nothing here imports its own meta-manifest; the
+      # only place the two facts meet is the release that publishes the
+      # packages the manifest is supposed to name. So the check runs
+      # here, on that release.
+      #
+      # BEFORE the login step deliberately: a release that cannot publish
+      # correctly should fail without minting a credential first.
+      - name: Verify the ToolUp.Sdk meta-manifest matches the packable set
+        run: dotnet run --project Build.fsproj -- GenerateSdkManifest --check
+
       # The one-hour temp key comfortably covers the ~10-minute pack that
       # follows; one OIDC token buys exactly one temporary key.
       - name: NuGet login (OIDC → temp API key)
