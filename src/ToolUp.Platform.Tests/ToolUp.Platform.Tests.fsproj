@@ -905,6 +905,11 @@
              and, chiefly, the unset arm's byte-for-byte guarantee.
              Env-mutating: wired into the Phase 653 sequenced group. -->
         <Compile Include="InProcess\EmbeddingProviderEnvTests.fs" />
+        <!-- Phase 459 — the OpenAI embedding provider's per-call key read,
+             the per-instance scope of its circuit breaker, and the one
+             shared HttpClient the create* factories hand out. Stub
+             HttpMessageHandler only; touches no env var and no network. -->
+        <Compile Include="InProcess\EmbeddingProviderKeyRotationTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <!-- Phase 457 — the composed store's at-rest posture: the refusal
              for a non-encrypting store under RequireAuth, the

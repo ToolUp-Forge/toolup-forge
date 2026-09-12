@@ -23,13 +23,34 @@ let validator = createValidator secretStore
 let health = OpenAIEmbeddingProviderHealth.create secretStore
 ```
 
+## Provider lifetime, key rotation, and breaker scope
+
+Three properties that only make sense together — the answer to "how long should I hold one of these?" depends on all three, and they pull in different directions.
+
+**The API key is read from `ISecretStore` on every call.** Nothing is captured at construction. Rotate the secret and the very next embed call carries the new key — no restart, and no reconstruction of the provider. A **revoked** key likewise stops working on the next call rather than at the next deploy, which is the whole point: the startup validator only checks deploy-time presence.
+
+One caveat, and it belongs to the store rather than to the provider: a **caching** `ISecretStore` will keep serving the old value until its cache is evicted. A store that caches implements `ISecretCacheInvalidation` so a rotation broadcasts an eviction; if yours does not, its TTL is the rotation latency.
+
+**Hold ONE provider instance per deployment.** Providers are not singletons by construction — nothing stops you building one per batch — but there is no longer a reason to, and two reasons not to:
+
+* The circuit breaker (below) accumulates state on the instance. A provider rebuilt per call carries a fresh, permanently-closed breaker, so the opt-in buys nothing.
+* Connection pooling. Every provider built through `create` / `createWithOptions` shares one process-wide `HttpClient`, so rebuilding is cheap — but that sharing is what makes it cheap, and it is the SDK's to keep, not something a caller should work around by managing clients itself.
+
+**Circuit-breaker state is scoped to the INSTANCE.** Not to the process, and not to the fleet: `FailureThreshold` counts consecutive failures on one provider object. Two providers built in one process trip and clear independently, and a breaker that opens in one silo broadcasts nothing to another — a second replica keeps calling a provider the first has already given up on. That is deliberate: cross-silo coordination needs a shared breaker-state store or a notification broadcast, which is a distributed-systems concern this companion does not take on. Size `FailureThreshold` and `Cooldown` for the load ONE instance sees, not the fleet's total.
+
+**Supplying your own `HttpClient`.** `createWithClient` takes an explicit client instead of the shared one — for a proxy, an alternative base address, an `IHttpClientFactory`-managed handler, or a stub `HttpMessageHandler` in a test. The caller owns its lifetime; the provider never disposes it. The configured `RequestTimeout` still applies per call, so a client carrying the BCL default 100 s timeout does not lengthen a 30 s call.
+
+```fsharp skip=fragment
+let embedder = createWithClient myHttpClient secretStore OpenAIEmbeddingOptions.defaults
+```
+
 ## Resilience contract
 
 API-backed embedding providers share a resilience contract defined by the SDK's `IEmbeddingProvider` module (`EmbedderResilience` / `EmbedderRetryPolicy` / `EmbedderCircuitBreaker`). Any future API-backed provider (Cohere, Voyage, Anthropic) inherits this pattern by consuming the same config types and classification helpers.
 
 ### Request timeout
 
-Each provider instance sets `HttpClient.Timeout` to `EmbedderResilience.RequestTimeout` (**default 30 s**, replacing the BCL default of 100 s). A hung connection surfaces as a *retryable timeout* instead of stalling an ingest slot for a minute and a half.
+Each call is bounded by `EmbedderResilience.RequestTimeout` (**default 30 s**, replacing the BCL `HttpClient` default of 100 s), covering the body read as well as the send. A hung connection surfaces as a *retryable timeout* instead of stalling an ingest slot for a minute and a half. The bound is applied per request rather than as `HttpClient.Timeout`, because the client is shared across every provider in the process while the timeout is per provider.
 
 ### Retry + failure classification
 
@@ -62,7 +83,7 @@ let embedder =
 
 The breaker trips OPEN after `FailureThreshold` consecutive failed calls and fast-fails every call (raising `EmbeddingProviderCircuitOpenException`) for `Cooldown`, then allows a HALF-OPEN probe — success closes it, failure re-opens for another cooldown.
 
-> **Statefulness.** Enabling the breaker makes the provider *stateful across calls*, so a breaker-enabled provider is **single-process only** (the documented portability rule-4 exception, alongside `LocalEmbeddingProvider`). With no breaker — the default — the provider is stateless per call and distributed-ready.
+> **Statefulness.** Enabling the breaker makes the provider *stateful across calls*, so a breaker-enabled provider is **single-process only** (the documented portability rule-4 exception, alongside `LocalEmbeddingProvider`). With no breaker — the default — the provider is stateless per call and distributed-ready. The state is held on the **instance**, so build the provider once and hold it — see [Provider lifetime, key rotation, and breaker scope](#provider-lifetime-key-rotation-and-breaker-scope).
 
 ### Latency telemetry
 
@@ -105,4 +126,4 @@ Build a tuned provider from `OpenAIEmbeddingOptions.defaults` via the `with*` he
 | `withEmbedderMetrics sink` | Emit `embedder.openai.latency_ms` |
 | `withEmbedderAudit eventStore` | Emit the platform-scoped unavailable audit on an auth failure |
 
-The simple `create` / `createWithModel` / `createWithBatchSize` factories remain and apply the resilience defaults with no metrics / audit sink.
+The simple `create` / `createWithModel` / `createWithBatchSize` factories remain and apply the resilience defaults with no metrics / audit sink. `createWithClient` is the same entry point as `createWithOptions` over a caller-supplied `HttpClient` (see above).
