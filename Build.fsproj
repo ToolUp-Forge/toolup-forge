@@ -17,6 +17,11 @@
          VerifyCoreWebVitalsBudget target Build.fs registers. Independent
          of SDK.Build.fs (its own options record, not BuildConfig). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CoreWebVitalsBudget.fs" />
+    <!-- Phase 192 — the cold-start / hot-path perf budget parser + check
+         behind the VerifyPerfBudget target Build.fs registers.
+         Independent of SDK.Build.fs (its own options record, not
+         BuildConfig). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.PerfBudget.fs" />
     <!-- Phase 326 — the ToolUp.Sdk meta-manifest reconciler behind the
          GenerateSdkManifest target Build.fs registers. Repo-root rather
          than inside ToolUp.Platform.Build because it is forge's OWN
@@ -34,6 +39,13 @@
          run one implementation. Compiled after SdkManifest.fs — the
          target reconciles its probe closure against `expected`. -->
     <Compile Include="PublishedSmoke.fs" />
+    <!-- Phase 762 — the TOOLUP_TEST_LANE vocabulary. Source-linked from
+         the Platform test pack rather than copied: the VerifyAll target
+         below selects PACKS by lane and that pack's entry point selects
+         LISTS by lane, in assemblies that cannot reference each other,
+         and two independent parsers of one variable drift. The file
+         takes no dependency beyond System for exactly this reason. -->
+    <Compile Include="src\ToolUp.Platform.Tests\Support\TestLane.fs" Link="TestLane.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

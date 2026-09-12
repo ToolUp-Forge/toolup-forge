@@ -2,6 +2,9 @@ module ToolUp.Platform.Tests.Program
 
 open System.Reflection
 open Expecto
+// Phase 762 — the `TOOLUP_TEST_LANE` vocabulary, shared with the
+// `VerifyAll` driver by source-link (see Support/TestLane.fs).
+open ToolUp.Forge
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 open ToolUp.Platform.Tests.AI
@@ -2174,17 +2177,80 @@ let private deliberatelyUnregistered = [
     }
 ]
 
+/// Phase 762 — what this pack declares about its own lists for the
+/// `TOOLUP_TEST_LANE` lanes. See `Support/TestLane.fs` for the lane
+/// vocabulary and `Support/TestLaneFilter.fs` for how a declaration is
+/// applied (by physical identity, after the guard).
+///
+/// **`Slow` is measured, not judged.** The rule is: a registered list
+/// costs ≥ 10 s of wall-clock AND its slowest single case is ≥ 2 s —
+/// i.e. it is slow because it holds long-running cases (benchmarks,
+/// timeout clamps, polling waits), not because it holds many cheap ones.
+/// The second clause is what earns the rule its keep: on the 2026-09-12
+/// measurement it correctly leaves `Phase 175 — Public-API approval
+/// baseline` (13.6 s spread over 182 cases, slowest 0.3 s) IN the fast
+/// lane, where a cheap, frequently-broken gate belongs, while a
+/// `≥ 10 s` rule alone would have thrown it out.
+///
+/// Re-derive it — do not trust this list because it is written down:
+///
+///     dotnet src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll \
+///         --junit-summary platform.xml
+///
+/// then group `//testcase/@time` by the second `;`-separated segment of
+/// `@name`. Measured 2026-09-12 on the campaign machine (Debug,
+/// sequenced): 10,325 cases, 716.3 s of case time inside an 884.8 s pack
+/// wall-clock, of which these six lists are 144 cases and 616.0 s — 86 %
+/// of the case time in 1.4 % of the cases. `HnswFidelity` alone is
+/// 560.6 s, and ONE case inside it (`latency smoke`) is 539.3 s: 56 % of
+/// the entire 967 s `VerifyAll`.
+let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
+    Slow = [
+        // 560.6 s / 5 cases — a brute-force-scan latency benchmark.
+        HnswFidelityTests.tests
+        // 12.8 s / 32 cases — slowest case 6.2 s.
+        OcrProviderTests.tests
+        // 12.3 s / 66 cases — slowest case 4.0 s.
+        HttpComputeDispatcherTests.tests
+        // 10.2 s / 16 cases — slowest case 5.0 s.
+        GrantGovernanceTests.tests
+        // 10.1 s / 16 cases — a 10 s timeout-clamp assertion.
+        ConfigValidatorAggregatorTests.tests
+        // 10.0 s / 9 cases — a 10 s cancel-law defect probe.
+        IExternalComputeDispatcherContract.selfTests
+    ]
+    // Deliberately EMPTY, and that is a declaration rather than an
+    // omission. `pure` means "touches no filesystem, process, socket or
+    // environment variable", and no list in this pack has been audited
+    // to that standard — the pack is the filesystem-heavy one by
+    // construction (`LocalFileStorageTests`, `PersistentEventStoreTests`,
+    // the blob-backed store conformance packs). The `pure` lane is
+    // therefore carried by the PACK-level declaration in the repo-root
+    // `Build.fs`, and this pack is not in it. Running this dll under
+    // `TOOLUP_TEST_LANE=pure` runs the registration guard and nothing
+    // else — honest, non-vacuous, and never a false purity claim.
+    // Adding a list here is an opt-in an auditor makes case by case.
+    Pure = []
+}
+
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing.
 /// The floor is a LOWER BOUND (140 against ~170 attributed bindings), so
 /// adding a pack never needs an edit here; it only moves when bindings
 /// are deliberately removed.
+///
+/// Phase 762 — the lane filter is applied AFTER the guard, deliberately:
+/// the guard is about what this pack REGISTERS (all of it, in every
+/// lane), the lane only about what RUNS. Under `full` — the default, and
+/// the only lane a ship may cite — `forLane` returns the guarded tree
+/// physically unchanged.
 let allTests =
     TestRegistrationGuard.withGuardExempting
         (Assembly.GetExecutingAssembly())
         140
         deliberatelyUnregistered
         registeredTests
+    |> TestLaneFilter.forLane laneDeclaration registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).
@@ -2192,4 +2258,16 @@ let allTests =
 // § "Every Expecto pack runs sequenced by default". (Phase 617.)
 [<EntryPoint>]
 let main argv =
+    // Phase 762 — say which lane produced the result, so a log a reader
+    // finds later cannot be mistaken for a full run. Silent under `full`
+    // (the default), so the shipping gate's output is unchanged.
+    let dropped = TestLaneFilter.dropped laneDeclaration registeredTests
+
+    TestLane.announce (
+        sprintf
+            "%d case(s) in %d registered list(s) are not in this run"
+            (dropped |> List.sumBy TestLaneFilter.caseCount)
+            (List.length dropped)
+    )
+
     runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
