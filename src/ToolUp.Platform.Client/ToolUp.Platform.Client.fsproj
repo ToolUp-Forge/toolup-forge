@@ -402,6 +402,10 @@
         <Compile Include="Client\PlatformAdminUI.fs" />
         <Compile Include="Client\PermissionsAdminUI.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
+        <!-- Phase 529 - audit-trail viewer admin module over
+             IAuditViewApi. Auto-injected in non-Anonymous modes unless
+             ClientConfig.AuditViewer = NoAuditViewer. -->
+        <Compile Include="Client\AuditLogUI.fs" />
         <!-- Phase 217 — module-contributed Home-widget registry (read by
              Home.fs; populated at boot by SDK.Client.program). -->
         <Compile Include="Client\HomeWidget.fs" />

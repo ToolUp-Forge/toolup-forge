@@ -118,6 +118,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - Built-in `Team Manager` module — auto-injected when `ClientConfig.Surfaces` includes a `Team` profile
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
 - Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
+- Built-in `Audit Trail` module — auto-injected in any non-Anonymous mode unless `ClientConfig.AuditViewer = NoAuditViewer`. Owner/Admin read surface over the deployment's own audit rows: filter bar, paged table, per-event payload detail, CSV export. Pair with `ServerConfig.AuditLog = EnabledAuditLog` — it renders its "no audit events" state under the default `NoAuditLog`. See [Reading the trail in-app](#reading-the-trail-in-app--auditlogui).
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`
 - Built-in `AI Settings` module — auto-injected when `ClientConfig.Surfaces` includes any non-Anonymous profile
 - Notification client over SSE
@@ -209,6 +210,29 @@ Default `InMemoryEventStore` for dev; `PersistentEventStore` (blob-backed, optio
 The `IAuditLog` interface sits on top of `IEventStore` and records `AuditEvent` cases under `SourceModule = "_platform.audit"`. The shipped events cover authentication (`UserLoggedIn`), team operations (`TeamCreated`, `MemberAdded`, etc.), file operations, encryption-key lifecycle, audit-sink delivery, health-state changes, and many more.
 
 For compliance archival, the `IAuditSink` substrate replicates every `_platform.audit` event to one or more external sinks (Splunk HEC, Datadog Logs, S3 Object Lock archives). Replication is at-most-once steady-state, at-least-once across restart, with per-`(sinkName, scopeId)` cursors in `IBlobStorage`. See [`events.md`](events.md).
+
+### Reading the trail in-app — `AuditLogUI`
+
+The SDK-built-in **Audit Trail** module (`_sdk.AuditLog`) is the operator's read surface over the same rows. It renders a filter bar (time window / event type / actor), a paged newest-first table of `time · event · actor · summary`, a per-row expansion showing the recorded payload, and a CSV export of the whole filtered window. It is read-only: there is no write path onto the trail from the client.
+
+Two knobs, one on each tier, and they do different jobs:
+
+| Knob | Default | Effect |
+|---|---|---|
+| `ServerConfig.AuditLog` | `NoAuditLog` | The substrate. `NoAuditLog` records nothing, and the viewer's own methods short-circuit to an empty result under it — so a deployment that has switched the trail off is never shown residue recorded before it did. |
+| `ClientConfig.AuditViewer` | `DefaultAuditViewer` | The module. `NoAuditViewer` removes the module, its sidebar entry, its routes on the client and every call it would make. `ConfiguredAuditViewer` re-brands it; `ExternalAuditViewer` replaces it. |
+
+The `/api/_platform/audit/*` route is mounted unconditionally, for the same reason `/api/_platform/usage/*` is: a proxy that 404s cannot tell an operator "this deployment keeps no audit trail" from "this deployment is broken", and the module's empty state says the first one plainly. Mounting it costs a route and nothing else — the handler is gated and scope-isolated before it reads anything.
+
+**Access.** Owner/Admin (`TeamRoles.canWriteTeamConfig`) in team mode; any authenticated user in the single-scope modes, who owns the scope they are reading; Anonymous callers refused outright. The gate is server-side on every method, including the export — the sidebar's `NavRole` hides the entry, which is an affordance and never the boundary.
+
+**Scope (GP 4).** No method accepts a scope from the wire. The handler resolves the caller's own scope from `AccessContext` and reads it through `IEventStore`, which is structurally single-scope, so a cross-team read is not merely refused but unrepresentable.
+
+**Exports audit themselves.** `ExportCsv` carries `[<Audit "DataExported">]`, so the remoting dispatcher's audit interceptor writes a `RemotingMethodAudited` row through `IAuditLog` on every successful export — the trail records its own reads-for-export, without the handler having to remember to.
+
+**Two projections are best-effort, and the row type says so.** `Actor` is probed out of the payload by field name (`AuditViewProjection.actorFieldNames`) and is `None` where a payload names nobody: the persisted payload does not carry the resolved `AuditSubject` — that rides the sink-side `AuditEnvelope` only — so there is no field this could read for every case. `Summary` is a bounded one-line rendering of the payload's scalar fields. `Payload` is the stored JSON verbatim, and it is what the detail expansion and the CSV export carry, so nothing in an export is lossy relative to the trail.
+
+**Paging.** Rows are ordered `(OccurredAt desc, Id desc)` — a total order, because the audit log writes bursts and a timestamp alone is not unique. The cursor names one row; a token the server cannot read is refused rather than silently restarting from the newest page.
 
 ## Background jobs
 

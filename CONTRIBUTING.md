@@ -81,8 +81,19 @@ env-gated and report **Pending**, not Failed, when their API keys are absent.
 ### Required checks on `main` (maintainer setup)
 
 Branch protection is a repository setting, not a file in this tree, so it is
-recorded here rather than configured here. The intended rule for `main` is
-**require a pull request, and require these status checks to pass**:
+recorded here rather than configured here.
+
+**`main` is protected today, but the five checks it requires are the cheap
+ones.** As of 2026-09-12 the required set is `spdx-headers`, `fantomas`, `dco`,
+`fable-wire-smoke` and `ai-wire-conformance` — headers, formatting, sign-off and
+the wire smoke. Every gate that compiles the solution or runs a test is
+**absent**: `verify-all`, `fable-tier`, `browser-smoke`, `cloud-parity`,
+`templates`, `doc-snippets` and `source-citations` all run on every push and PR,
+go red when they should, and are not enforced. `enforce_admins` is off, so a
+maintainer's direct push lands regardless.
+
+The intended rule for `main` is **require a pull request, and require these
+status checks to pass** — the seven above are the delta to add:
 
 ```
 verify-all
