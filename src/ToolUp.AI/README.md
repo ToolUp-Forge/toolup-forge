@@ -147,8 +147,8 @@ Deployments that don't want AI use `ServerApp.run` directly (no `AIServerApp` wr
 In the client entry point, wrap the shell Program with `AIClientConfig.withAIAssistant`:
 
 ```fsharp skip=fragment
-open Elmish
-open Elmish.React
+open ToolUp.Elmish
+open ToolUp.Elmish.React
 open ToolUp.Platform
 
 let aiMode =

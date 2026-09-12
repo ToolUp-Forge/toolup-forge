@@ -65,7 +65,7 @@ The raw `IModuleQueryBus.Ask` stays string-based (`Payload: string`) so the wire
 
 ### Serialisation rule (server + client)
 
-Request and response payloads cross the manual JSON boundary — they are not ToolUp.Remoting for the in-process and HTTP paths. The server serialises with `Fable.Remoting.Json.FableJsonConverter` on Newtonsoft; the client serialises with `Fable.SimpleJson`. Both converters agree on the wire shape for records, unions, and `option` types, so the same `'TRequest` / `'TResponse` round-trips losslessly regardless of which side emitted the JSON. Do **not** swap in `DiscriminatedUnionConverter` or `CamelCasePropertyNamesContractResolver` — same rule as SSE (see `AI integration` → `ToolUp.AI/TECHNICAL_GUIDE.md`).
+Request and response payloads cross the manual JSON boundary — they are not ToolUp.Remoting for the in-process and HTTP paths. The server serialises with the `ToolUp.Remoting.Json` converter set; the client serialises with `Fable.SimpleJson`. Both converters agree on the wire shape for records, unions, and `option` types, so the same `'TRequest` / `'TResponse` round-trips losslessly regardless of which side emitted the JSON. Do **not** swap in `DiscriminatedUnionConverter` or `CamelCasePropertyNamesContractResolver` — same rule as SSE (see `AI integration` → `ToolUp.AI/TECHNICAL_GUIDE.md`).
 
 Typed request / response records must live in `ToolUp-SharedTypes` or be primitives (GP 10). Declaring them inside the answering module's project would force the caller to import that project, defeating the bus's whole purpose.
 
