@@ -27,6 +27,7 @@
              IOAuthCredentialFlowContract, which covers the OAuth half. -->
         <Compile Include="Contracts\IProviderOAuthFlowContract.fs" />
         <Compile Include="Contracts\IEventStoreContract.fs" />
+        <Compile Include="Contracts\IEventStoreDecoratorContract.fs" />
         <Compile Include="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IDataCatalogContract.fs" />
         <Compile Include="Contracts\IResultStoreContract.fs" />

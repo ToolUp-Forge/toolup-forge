@@ -21,6 +21,7 @@ module ToolUp.Platform.Tests.InProcess.EventStoreChainValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Tests.Contracts
 
 // ── A minimal terminal store and a configurable decorator ────────────
 
@@ -92,6 +93,14 @@ type private CyclicDecorator() =
         member _.ReadBySource(_, _) = async { return [] }
         member _.ListScopes() = async { return [] }
         member _.Erase(_, _, _, _) = async { return Result.Ok(Unchecked.defaultof<ErasureSummary>) }
+
+/// The webhook dispatcher `HookedEventStore` needs, reduced to what the
+/// contract pack exercises: `Dispatch` must not throw, and `TestFire` is
+/// never reached from a write.
+type private StubWebhookDispatcher() =
+    interface WebhookDispatcher.IWebhookDispatcher with
+        member _.Dispatch(_) = ()
+        member _.TestFire(_, _) = async { return Result.Error "not exercised by the contract pack" }
 
 let private link name position : EventStoreChainLink = {
     Name = name
@@ -324,6 +333,25 @@ let tests =
             let message = expectError result "live inverted chain"
             Expect.stringContains message "Observed chain" "reports what it walked"
         }
+
+        // ── the IEventStoreDecorator contract pack, bound by each of the
+        //    three first-party decorators ──
+        //
+        // The pack asserts that what a decorator SAYS about itself is true
+        // of the object saying it — chiefly that `InnerStore` is the store
+        // it actually writes through, which is what makes the chain walk,
+        // the boot guard and the /dev/inspect panel truthful rather than
+        // merely confident. Each binding closes over its decorator's other
+        // constructor dependencies; the pack supplies the inner store.
+
+        IEventStoreDecoratorContract.tests "AuditReplicationHookedEventStore" (fun inner ->
+            AuditReplicator.AuditReplicationHookedEventStore(inner, ignore) :> IEventStore)
+
+        IEventStoreDecoratorContract.tests "HookedEventStore" (fun inner ->
+            HookedEventStore.HookedEventStore(inner, StubWebhookDispatcher()) :> IEventStore)
+
+        IEventStoreDecoratorContract.tests "JobNotifyEventStore" (fun inner ->
+            JobNotifyEventStore.JobNotifyEventStore(inner, (fun () -> None)) :> IEventStore)
 
         test "the contributor names the panel and reports the walked chain" {
             let inner = StubEventStore()
