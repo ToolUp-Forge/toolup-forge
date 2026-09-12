@@ -3686,6 +3686,24 @@ module Client =
             | _, ConfiguredUsageDashboard cfg -> [ UsageDashboard.create (Some cfg) ]
             | _, ExternalUsageDashboard custom -> [ custom ]
 
+        // Phase 529 — audit-trail viewer. Same Anonymous suppression as
+        // UsageDashboard above and for a sharper version of the same
+        // reason: an audit trail names who did what, and a deployment
+        // with no role concept has nobody it can safely be shown to.
+        // Pair with `ServerConfig.AuditLog = EnabledAuditLog` — the
+        // viewer renders its "no audit events" state when the trail is
+        // off server-side (the default), which is harmless to leave in
+        // place for future enablement. Owner/Admin gating is enforced
+        // server-side; a Member sees the sidebar entry and the table
+        // renders the handler's "only owners and admins" message.
+        let auditViewer =
+            match ClientConfig.requiresAnyAuth config, config.AuditViewer with
+            | false, _
+            | _, NoAuditViewer -> []
+            | _, DefaultAuditViewer -> [ AuditLogUI.create None ]
+            | _, ConfiguredAuditViewer cfg -> [ AuditLogUI.create (Some cfg) ]
+            | _, ExternalAuditViewer custom -> [ custom ]
+
         // Phase 10b — data-ingestion admin. Same Anonymous suppression
         // as TeamConfig / WebhookAdmin / HealthMonitor / UsageDashboard:
         // Anonymous deployments have no role concept and exposing data-
@@ -3792,6 +3810,7 @@ module Client =
             @ sessionSecurity
             @ permissionsAdmin
             @ usageDashboard
+            @ auditViewer
             @ dataIngestionAdmin
             // Platform Management group — appears last in trailing,
             // so its first-occurrence lands at the bottom of the sidebar.
