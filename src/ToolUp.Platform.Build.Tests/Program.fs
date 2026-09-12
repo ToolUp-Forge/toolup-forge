@@ -19,6 +19,10 @@ let private registeredTests =
         // declared gate id the repo's own pack did not emit. Pure, so
         // both directions are probed without packing anything.
         TemplateGateTests.tests
+        // Phase 326 — the ToolUp.Sdk meta-manifest lists exactly the
+        // package ids the Publish target pushes. Pure file scanning over
+        // the checkout; no build output, no network.
+        SdkManifestTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

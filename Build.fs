@@ -6,6 +6,9 @@ open Fake.IO
 open Fake.IO.Globbing.Operators
 open ToolUp.Platform
 open ToolUp.Platform.Build
+// Phase 326 — the ToolUp.Sdk meta-manifest reconciler (repo-root
+// SdkManifest.fs, compiled ahead of this file).
+open ToolUp.Forge
 
 let config = {
     BuildConfig.defaults with
@@ -3504,6 +3507,68 @@ let main args =
         dotnet [ "run"; "--project"; "deploy/azure/Deploy.fsproj"; "--"; "cd" ] "."
         |> Proc.run
         |> ignore)
+
+    // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
+    //
+    // `src/ToolUp.Sdk/build/ToolUp.Sdk.props` is the one-line
+    // coordinated-bump path a consumer imports into their
+    // `Directory.Packages.props`. A published package with no
+    // `<PackageVersion>` entry there is NU1008 for that consumer, and the
+    // file was hand-listed: when this phase measured it, it declared 57
+    // of the 166 ids the `Publish` target pushes. Hand-maintaining a list
+    // that must equal a glob is the defect, not the 109 omissions.
+    //
+    //   dotnet run -- GenerateSdkManifest           rewrite the generated
+    //                                               region in place
+    //   dotnet run -- GenerateSdkManifest --check   report drift, exit 1,
+    //                                               mutate nothing
+    //
+    // The `--check` arm is what `publish-nuget.yml` runs before it packs,
+    // so a release cannot ship a package the manifest does not advertise.
+    // `SdkManifestTests` in the Build Expecto pack asserts the same
+    // property from `VerifyAll`, over the same module — the two are one
+    // implementation with two entry points, which is the only shape that
+    // cannot itself drift.
+    //
+    // Hand-authored prose above the BEGIN GENERATED marker is preserved
+    // verbatim by a rewrite; everything below it is derived.
+    Target.create "GenerateSdkManifest" (fun _ ->
+        let root = Path.getFullName "."
+        // `System.` qualified deliberately: this file opens Fake.Core but
+        // not System, so a bare `Environment` binds to Fake's module.
+        let checkOnly = System.Environment.GetCommandLineArgs() |> Array.contains "--check"
+        let reconciliation = SdkManifest.reconcile root
+
+        // A discovery that finds nothing would report a clean manifest
+        // for the wrong reason — every expected id absent, so no id
+        // missing. Refuse instead: the glob is broken, not the manifest.
+        if List.isEmpty reconciliation.Expected then
+            failwithf
+                "GenerateSdkManifest: discovered NO packable project under %s/src. The Publish glob cannot be empty in this repo, so this is a broken discovery, not an empty manifest — fix SdkManifest.discover rather than trusting a clean result."
+                root
+
+        for exclusion in reconciliation.Excluded do
+            Trace.tracefn "GenerateSdkManifest: excluding %s — %s" exclusion.PackageId exclusion.Rationale
+
+        match SdkManifest.describe reconciliation, checkOnly with
+        | None, _ ->
+            Trace.tracefn
+                "GenerateSdkManifest: the manifest lists exactly the %d published package id(s) (%d excluded by shape)."
+                (List.length reconciliation.Expected)
+                (List.length reconciliation.Excluded)
+
+            if not checkOnly then
+                File.writeString false (SdkManifest.manifestPath root) (SdkManifest.render root)
+                Trace.tracefn "GenerateSdkManifest: rewrote the generated region anyway (formatting is derived too)."
+        | Some report, true -> failwithf "GenerateSdkManifest --check: %s" report
+        | Some report, false ->
+            Trace.tracefn "%s" report
+            File.writeString false (SdkManifest.manifestPath root) (SdkManifest.render root)
+
+            Trace.tracefn
+                "GenerateSdkManifest: wrote %s with %d entry/entries."
+                (SdkManifest.manifestPath root)
+                (List.length reconciliation.Expected))
 
     // Phase 72 — template-pack packaging.
     //
