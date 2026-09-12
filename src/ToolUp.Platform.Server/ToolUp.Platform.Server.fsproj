@@ -586,6 +586,13 @@
              failure policy; before AuditLog.fs (the log spills into it) and
              the replay service (which drains it back into IEventStore). -->
         <Compile Include="Server\AuditFallbackStore.fs" />
+        <!-- Phase 553.A — the in-store permission-event hash chain: the
+             canonical form, the digest over it, the head reading and the
+             pure verifier. After DeployRecords.fs (whose
+             digestCanonicalForm it reuses rather than minting a second
+             SHA-256 helper); before AuditLog.fs, which chains the write
+             path through it. -->
+        <Compile Include="Server\PermissionAuditChain.fs" />
         <Compile Include="Server\AuditLog.fs" />
         <Compile Include="Server\AuditFallbackReplayService.fs" />
         <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied

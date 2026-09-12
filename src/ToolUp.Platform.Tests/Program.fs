@@ -719,6 +719,10 @@ let private registeredTests =
         // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
         // / DegradeToFile + fallback spill capacity + poison quarantine).
         AuditFailurePolicyTests.tests
+        // Phase 553.A/D — the in-store permission-event hash chain: tamper /
+        // deletion / fork reported at the right index, pre-553 rows as an
+        // unchained prefix, an unreadable head taking the 9t policy.
+        PermissionAuditChainTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         // Phase 272 — hosted-tree action audit emission (GP 6): authorized/

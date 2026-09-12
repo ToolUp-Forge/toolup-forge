@@ -568,6 +568,7 @@ let private severityTests =
                         AffectedUserId = "u2"
                         ModuleName = "m"
                         Permissions = "Admin"
+                        Chain = None
                     }
                 ))
                 CefHigh

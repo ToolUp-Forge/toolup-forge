@@ -185,6 +185,23 @@ module StandardMetrics =
                 Tags = [ "event_type" ]
             }
         }
+        // Phase 553 — permission-chain head-unreadable counter. The
+        // audit row still landed; what was lost is its tamper-evidence
+        // link, which is why it is its own counter rather than a tag on
+        // the write-failure one above. `reason` separates an outage
+        // (`read_failed`) from a finding about the chain itself
+        // (`forked` / `unanchored`).
+        {
+            Module = None
+            Definition = {
+                Name = ToolUp.Platform.AuditLog.AuditMetrics.ChainHeadUnreadableTotal
+                Kind = Counter
+                Description =
+                    "Permission audit writes whose scope chain head could not be read (record written unchained)"
+                Unit = "1"
+                Tags = [ "reason" ]
+            }
+        }
         // Phase 466 — the ad-analytics silent-degradation counters.
         // Both endpoints degrade without failing (rate-limit-store
         // outage fail-opens; a malformed payload is dropped to a 400),

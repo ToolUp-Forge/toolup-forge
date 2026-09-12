@@ -418,6 +418,7 @@ ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.ReplayOnce(ToolUp.Platform
 ToolUp.Platform.AuditFallbackStore+AuditFallbackStore.Root : System.String { get }
 ToolUp.Platform.AuditLog (class)
 ToolUp.Platform.AuditLog+AuditMetrics (class)
+ToolUp.Platform.AuditLog+AuditMetrics.ChainHeadUnreadableTotal : System.String (literal)
 ToolUp.Platform.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
 ToolUp.Platform.AuditLog+AuditWriteRefusedException (class)
 ToolUp.Platform.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
@@ -7265,6 +7266,70 @@ ToolUp.Platform.PerScopeKeyResolver+PerScopeKeyResolver.WireToChannel(ToolUp.Pla
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator (class)
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator (class)
 ToolUp.Platform.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolverDistributedValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.PermissionAuditChain (class)
+ToolUp.Platform.PermissionAuditChain.canonicalForm(System.String, System.String, ToolUp.Platform.PermissionChangedPayload) : System.String
+ToolUp.Platform.PermissionAuditChain.chainedEventType : System.String (literal)
+ToolUp.Platform.PermissionAuditChain.contentHash(System.String, System.String, ToolUp.Platform.PermissionChangedPayload) : System.String
+ToolUp.Platform.PermissionAuditChain.framingVersion : System.String (literal)
+ToolUp.Platform.PermissionAuditChain.genesisHash : System.String (literal)
+ToolUp.Platform.PermissionAuditChain.link(System.String, System.String, ToolUp.Platform.PermissionChangedPayload) : ToolUp.Platform.PermissionChangedPayload
+ToolUp.Platform.PermissionAuditChain.permissionPayloads(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PermissionChangedPayload]
+ToolUp.Platform.PermissionAuditChain.readHead(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PermissionChangedPayload]) : ToolUp.Platform.PermissionAuditChain+ChainHeadReading
+ToolUp.Platform.PermissionAuditChain.verify(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PermissionChangedPayload]) : ToolUp.Platform.PermissionAuditChain+PermissionChainReport
+ToolUp.Platform.PermissionAuditChain.verifyScope(ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PermissionAuditChain+PermissionChainReport]
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading (class)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.HeadEmpty : ToolUp.Platform.PermissionAuditChain+ChainHeadReading { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.HeadUnanchored : ToolUp.Platform.PermissionAuditChain+ChainHeadReading { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.IsHeadAt : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.IsHeadEmpty : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.IsHeadForked : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.IsHeadUnanchored : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading.Tag : System.Int32 { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+HeadAt (class)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+HeadAt.Item : System.String { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+HeadForked (class)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+HeadForked.Item : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+Tags (class)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+Tags.HeadAt : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+Tags.HeadEmpty : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+Tags.HeadForked : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+ChainHeadReading+Tags.HeadUnanchored : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreak (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreak..ctor(System.Int32, ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind, System.String)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreak.Detail : System.String { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreak.Kind : ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreak.Position : System.Int32 { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.ForkedChain : ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.IsForkedChain : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.IsMissingGenesis : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.IsOrphanedRecords : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.IsTamperedRecord : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.MissingGenesis : ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.OrphanedRecords : ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.Tag : System.Int32 { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind.TamperedRecord : ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind+Tags (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind+Tags.ForkedChain : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind+Tags.MissingGenesis : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind+Tags.OrphanedRecords : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainBreakKind+Tags.TamperedRecord : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport.IsChainBrokenAt : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport.IsChainIntact : System.Boolean { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport.Tag : System.Int32 { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+ChainBrokenAt (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+ChainBrokenAt.Item : ToolUp.Platform.PermissionAuditChain+PermissionChainBreak { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+ChainIntact (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+ChainIntact.Item : ToolUp.Platform.PermissionAuditChain+PermissionChainSummary { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+Tags (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+Tags.ChainBrokenAt : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainReport+Tags.ChainIntact : System.Int32 (literal)
+ToolUp.Platform.PermissionAuditChain+PermissionChainSummary (class)
+ToolUp.Platform.PermissionAuditChain+PermissionChainSummary..ctor(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.PermissionAuditChain+PermissionChainSummary.ChainedCount : System.Int32 { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainSummary.Head : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.PermissionAuditChain+PermissionChainSummary.UnchainedCount : System.Int32 { get }
 ToolUp.Platform.PermissionStore (class)
 ToolUp.Platform.PermissionStore+IPermissionStore (interface)
 ToolUp.Platform.PermissionStore+IPermissionStore.GetEffectivePermissions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]]

@@ -891,6 +891,15 @@
         <!-- Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction /
              DegradeToFile + fallback spill capacity + poison quarantine). -->
         <Compile Include="InProcess\AuditFailurePolicyTests.fs" />
+        <!-- Phase 553.A/D — the in-store permission-event hash chain: the
+             chain forms, tamper / deletion / fork are reported at the
+             right index, pre-553 rows verify as an unchained prefix, and
+             an unreadable head takes the Phase 9t policy rather than
+             guessing a predecessor. After AuditFailurePolicyTests.fs,
+             whose policy DU it exercises. The scoped counterparty export
+             is deliberately NOT covered here — 553.B/C re-base on Phase
+             677, covered by ChainedAuditLedgerTests.fs. -->
+        <Compile Include="InProcess\PermissionAuditChainTests.fs" />
         <Compile Include="InProcess\DegradedCapabilityRegistryTests.fs" />
         <Compile Include="InProcess\AuthAuditHookTests.fs" />
         <!-- Phase 272 — hosted-tree action audit emission (GP 6): every
