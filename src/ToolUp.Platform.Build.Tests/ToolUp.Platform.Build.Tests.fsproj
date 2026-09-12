@@ -10,6 +10,12 @@
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
+        <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
+             reconciler is source-linked from the repo root rather than
+             copied, so this test and the `GenerateSdkManifest` FAKE
+             target that repairs its findings run one implementation. -->
+        <Compile Include="..\..\SdkManifest.fs" Link="SdkManifest.fs" />
+        <Compile Include="SdkManifestTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
