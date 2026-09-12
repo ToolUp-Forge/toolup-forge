@@ -19,6 +19,10 @@ let private registeredTests =
         // package ids the Publish target pushes. Pure file scanning over
         // the checkout; no build output, no network.
         SdkManifestTests.tests
+        // Phase 259 — every replaceable seam carries a conformance pack,
+        // and every pack is run by an implementation. Pure file scanning
+        // over the checkout; no build output, no network.
+        ConformanceCoverageTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
