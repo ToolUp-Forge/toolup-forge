@@ -2981,6 +2981,8 @@ ToolUp.Platform.ConfigKeys+Names.oidcPreflightTimeoutMs : System.String (literal
 ToolUp.Platform.ConfigKeys+Names.oidcTenantIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcUserIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.peerRoutePrefixes : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.perfBudget : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.perfMeasurements : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformKnowledgeBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformSurfaces : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.processProfile : System.String (literal)
