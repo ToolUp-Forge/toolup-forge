@@ -44,6 +44,29 @@
 # a tag push that cannot publish must fail loudly, because a silently
 # skipped release (a lost secret, a fork tag) reads as a green run.
 # Nothing rotates: the temp key dies within the hour.
+#
+# ─── The `ToolUp.*` glob is a CONSTRAINT, not a description (Phase 754)
+#
+# Every package this workflow can publish must match the policy glob.
+# The Phase 344 AG Grid / AG Charts bindings did not: they packed as
+# `Feliz.AgGrid` / `Feliz.AgCharts` / `Feliz.AgGrid.Enterprise`, outside
+# the glob — and `Feliz.AgGrid` is in any case Compositional-IT's
+# unmaintained package on nuget.org, the one that extraction exists to
+# supersede. A `v*` tag would therefore have pushed three packages the
+# policy refuses, at ids this project does not own. Phase 754 moved them
+# to `ToolUp.Feliz.AgGrid` / `ToolUp.Feliz.AgCharts` /
+# `ToolUp.Feliz.AgGrid.Enterprise` (operator decision 2026-09-01), inside
+# the glob and under ids this project does own.
+#
+# So: a NEW packable project whose `PackageId` falls outside `ToolUp.*`
+# is a release defect, and the `Publish` target packs `src/**/*.fsproj`
+# by GLOB — nothing here enumerates package ids, so nothing here will
+# notice. Set the id, or set `<IsPackable>false</IsPackable>`.
+#
+# The in-repo counterpart to that discipline is the template gate's
+# stranger's-package guard (`TemplateGate.unproducedIds`, Build.fs): it
+# fails when a declared gate id is one this repo does not itself
+# produce, which is the same mistake caught one step earlier.
 
 name: publish-nuget
 
@@ -83,6 +106,26 @@ jobs:
       # `nuget.org` for external deps. No effect on the published nupkgs.
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
+
+      # Phase 326 — the release cannot publish a package the ToolUp.Sdk
+      # meta-manifest does not advertise, nor a manifest MSBuild cannot
+      # import.
+      #
+      # `ToolUp.Sdk.props` is what a consumer imports to resolve every
+      # ToolUp.* package from one <ToolUpSdkVersion>. It was hand-listed
+      # and had drifted to 57 of 166 published ids (the rest were NU1008
+      # for any consumer), and its header comment nested a second XML
+      # comment, which made the whole import MSB4024 — the manifest
+      # resolved nothing at all. Neither could be seen from inside this
+      # repo, because nothing here imports its own meta-manifest; the
+      # only place the two facts meet is the release that publishes the
+      # packages the manifest is supposed to name. So the check runs
+      # here, on that release.
+      #
+      # BEFORE the login step deliberately: a release that cannot publish
+      # correctly should fail without minting a credential first.
+      - name: Verify the ToolUp.Sdk meta-manifest matches the packable set
+        run: dotnet run --project Build.fsproj -- GenerateSdkManifest --check
 
       # The one-hour temp key comfortably covers the ~10-minute pack that
       # follows; one OIDC token buys exactly one temporary key.

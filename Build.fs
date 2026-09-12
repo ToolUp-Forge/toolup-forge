@@ -6,6 +6,9 @@ open Fake.IO
 open Fake.IO.Globbing.Operators
 open ToolUp.Platform
 open ToolUp.Platform.Build
+// Phase 326 — the ToolUp.Sdk meta-manifest reconciler (repo-root
+// SdkManifest.fs, compiled ahead of this file).
+open ToolUp.Forge
 
 let config = {
     BuildConfig.defaults with
@@ -515,34 +518,53 @@ let main args =
     // here does not silently degrade — the NU1603 escalation below turns
     // the resulting version fallback into a build error naming the
     // missing package.
+    //
+    // Phase 754 — each entry declares its PackageId AND the project that
+    // produces it. They were one string, with the project derived as
+    // `src/<id>/<id>.fsproj`; that assumption died when the AG Grid /
+    // AG Charts bindings took `ToolUp.Feliz.*` ids while their projects
+    // stayed at `src/Feliz.*/`. The pack loop below reconciles the two
+    // against what was actually emitted (`TemplateGate.unproducedIds`),
+    // so an id this repo does not produce fails the gate by name rather
+    // than falling through to a stranger's package on nuget.org.
     let templateGatePackages = [
-        "ToolUp.Platform.Core"
-        "ToolUp.Platform.Client"
-        "ToolUp.Platform.Server"
+        TemplateGate.package "ToolUp.Platform.Core" "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj"
+        TemplateGate.package "ToolUp.Platform.Client" "src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj"
+        TemplateGate.package "ToolUp.Platform.Server" "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj"
         // Phase 307 — declared by Platform.Client (the UI toolkit,
         // promoted out of the client tier into its own package). This is
         // exactly the SDK->SDK dependency the note above describes: without
         // it, Platform.Client packed at the gate version would declare a
         // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
         // escalation would fail the gate by name.
-        "ToolUp.Platform.UI"
+        TemplateGate.package "ToolUp.Platform.UI" "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj"
         // Also declared by Platform.Client, since Phase 344 promoted the
         // AG Grid / AG Charts bindings out of the client tier. They were
         // not added here at the time, and the consequence is not benign:
-        // BOTH ids exist on nuget.org (Feliz.AgGrid 0.0.1, Feliz.AgCharts
-        // 0.23.0 — unrelated packages by another author), so restore
-        // silently fell through to a stranger's package and NU1603 turned
-        // that into a hard error. The `templates` CI job has been red on
-        // main since 344 landed. Found and fixed by Phase 307, which hit
-        // it while adding ToolUp.Platform.UI above — the very case the
-        // note at the head of this list describes.
-        "Feliz.AgGrid"
-        "Feliz.AgCharts"
+        // BOTH bare `Feliz.*` ids exist on nuget.org (Feliz.AgGrid 0.0.1,
+        // Feliz.AgCharts 0.23.0 — unrelated packages by another author),
+        // so restore silently fell through to a stranger's package and
+        // NU1603 turned that into a hard error. The `templates` CI job
+        // was red on main from 344 until Phase 307 found it while adding
+        // ToolUp.Platform.UI above — the very case the note at the head
+        // of this list describes.
+        //
+        // Phase 754 settled the ids for good: the packages are
+        // `ToolUp.Feliz.*` now (that prefix is also the glob the repo's
+        // nuget.org Trusted Publishing policy is registered against), and
+        // the id/project split above is what lets the projects keep their
+        // `src/Feliz.*/` directories while the emitted ids move. The
+        // reconciliation after the pack loop is the structural successor
+        // to "someone remembers to add the package": it fails on any id
+        // this repo does not itself emit, which is precisely what a
+        // stranger's package is.
+        TemplateGate.package "ToolUp.Feliz.AgGrid" "src/Feliz.AgGrid/Feliz.AgGrid.fsproj"
+        TemplateGate.package "ToolUp.Feliz.AgCharts" "src/Feliz.AgCharts/Feliz.AgCharts.fsproj"
         // Declared by Platform.Core.
-        "ToolUp.AI.Wire"
+        TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
         // Declared by Platform.Server, and its own ProjectReference.
-        "ToolUp.Graph.InMemory"
-        "ToolUp.Graph.Core"
+        TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
+        TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
     ]
 
     let gatedTemplateProjects = [
@@ -591,23 +613,47 @@ let main args =
 
         for pkg in templateGatePackages do
             let cached =
-                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
 
             if Directory.Exists cached then
                 Trace.tracefn "▶ VerifyTemplates: clearing stale cache entry %s" cached
                 Shell.deleteDir cached
 
         for pkg in templateGatePackages do
-            Trace.tracefn "▶ VerifyTemplates: packing %s @ %s" pkg templateGateVersion
+            if not (File.Exists(Path.getFullName pkg.Project)) then
+                failwithf
+                    "VerifyTemplates: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ VerifyTemplates: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
 
             runChecked "dotnet" [
                 "pack"
-                sprintf "src/%s/%s.fsproj" pkg pkg
+                pkg.Project
                 sprintf "-p:Version=%s" templateGateVersion
                 "-o"
                 feedDir
                 "--nologo"
             ]
+
+        // Phase 754 — the stranger's-package guard. Reconcile every
+        // DECLARED id against what the pack above actually emitted. A
+        // declared id with no `<id>.<version>.nupkg` in the scratch feed
+        // is an id this repo does not produce, and the restore below
+        // would resolve it from nuget.org — which, for the bare `Feliz.*`
+        // ids, meant an unrelated package by another author (Phase 307).
+        // Checked here rather than trusted: the previous shape could not
+        // even express a wrong id, so nothing ever tested that it was
+        // right. Go-red proven in ToolUp.Platform.Build.Tests.
+        match
+            TemplateGate.unproducedIds
+                templateGateVersion
+                templateGatePackages
+                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
+        with
+        | [] -> ()
+        | unproduced -> failwith (TemplateGate.report "VerifyTemplates" templateGateVersion unproduced)
 
         // `RestoreAdditionalProjectSources` ADDS the scratch feed to the
         // repo nuget.config's sources. `--source` would replace them, and
@@ -3462,6 +3508,68 @@ let main args =
         |> Proc.run
         |> ignore)
 
+    // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
+    //
+    // `src/ToolUp.Sdk/build/ToolUp.Sdk.props` is the one-line
+    // coordinated-bump path a consumer imports into their
+    // `Directory.Packages.props`. A published package with no
+    // `<PackageVersion>` entry there is NU1008 for that consumer, and the
+    // file was hand-listed: when this phase measured it, it declared 57
+    // of the 166 ids the `Publish` target pushes. Hand-maintaining a list
+    // that must equal a glob is the defect, not the 109 omissions.
+    //
+    //   dotnet run -- GenerateSdkManifest           rewrite the generated
+    //                                               region in place
+    //   dotnet run -- GenerateSdkManifest --check   report drift, exit 1,
+    //                                               mutate nothing
+    //
+    // The `--check` arm is what `publish-nuget.yml` runs before it packs,
+    // so a release cannot ship a package the manifest does not advertise.
+    // `SdkManifestTests` in the Build Expecto pack asserts the same
+    // property from `VerifyAll`, over the same module — the two are one
+    // implementation with two entry points, which is the only shape that
+    // cannot itself drift.
+    //
+    // Hand-authored prose above the BEGIN GENERATED marker is preserved
+    // verbatim by a rewrite; everything below it is derived.
+    Target.create "GenerateSdkManifest" (fun _ ->
+        let root = Path.getFullName "."
+        // `System.` qualified deliberately: this file opens Fake.Core but
+        // not System, so a bare `Environment` binds to Fake's module.
+        let checkOnly = System.Environment.GetCommandLineArgs() |> Array.contains "--check"
+        let reconciliation = SdkManifest.reconcile root
+
+        // A discovery that finds nothing would report a clean manifest
+        // for the wrong reason — every expected id absent, so no id
+        // missing. Refuse instead: the glob is broken, not the manifest.
+        if List.isEmpty reconciliation.Expected then
+            failwithf
+                "GenerateSdkManifest: discovered NO packable project under %s/src. The Publish glob cannot be empty in this repo, so this is a broken discovery, not an empty manifest — fix SdkManifest.discover rather than trusting a clean result."
+                root
+
+        for exclusion in reconciliation.Excluded do
+            Trace.tracefn "GenerateSdkManifest: excluding %s — %s" exclusion.PackageId exclusion.Rationale
+
+        match SdkManifest.describe reconciliation, checkOnly with
+        | None, _ ->
+            Trace.tracefn
+                "GenerateSdkManifest: the manifest lists exactly the %d published package id(s) (%d excluded by shape)."
+                (List.length reconciliation.Expected)
+                (List.length reconciliation.Excluded)
+
+            if not checkOnly then
+                File.writeString false (SdkManifest.manifestPath root) (SdkManifest.render root)
+                Trace.tracefn "GenerateSdkManifest: rewrote the generated region anyway (formatting is derived too)."
+        | Some report, true -> failwithf "GenerateSdkManifest --check: %s" report
+        | Some report, false ->
+            Trace.tracefn "%s" report
+            File.writeString false (SdkManifest.manifestPath root) (SdkManifest.render root)
+
+            Trace.tracefn
+                "GenerateSdkManifest: wrote %s with %d entry/entries."
+                (SdkManifest.manifestPath root)
+                (List.length reconciliation.Expected))
+
     // Phase 72 — template-pack packaging.
     //
     // The standard Pack target (in ToolUp.Platform.Build) walks
@@ -3642,7 +3750,10 @@ let main args =
     // (Feliz, Fable.*, Expecto, FAKE) comes from nuget.org, which is
     // what a real consumer does.
     let packagedModuleTemplateGatePackages =
-        templateGatePackages @ [ "ToolUp.Platform.Build" ]
+        templateGatePackages
+        @ [
+            TemplateGate.package "ToolUp.Platform.Build" "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj"
+        ]
 
     Target.create "VerifyPackagedModuleTemplate" (fun _ ->
         let runIn exe args dir =
@@ -3727,25 +3838,44 @@ let main args =
 
         for pkg in packagedModuleTemplateGatePackages do
             let cached =
-                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
 
             if Directory.Exists cached then
                 Shell.deleteDir cached
 
         for pkg in packagedModuleTemplateGatePackages do
-            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s @ %s" pkg templateGateVersion
+            if not (File.Exists(Path.getFullName pkg.Project)) then
+                failwithf
+                    "VerifyPackagedModuleTemplate: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
 
             runCheckedIn
                 "dotnet"
                 [
                     "pack"
-                    sprintf "src/%s/%s.fsproj" pkg pkg
+                    pkg.Project
                     sprintf "-p:Version=%s" templateGateVersion
                     "-o"
                     feedDir
                     "--nologo"
                 ]
                 "."
+
+        // Phase 754 — the same stranger's-package reconciliation
+        // VerifyTemplates runs, for the same reason: this gate's closure
+        // is that one plus ToolUp.Platform.Build, and the scaffold below
+        // restores with nuget.org still in its sources.
+        match
+            TemplateGate.unproducedIds
+                templateGateVersion
+                packagedModuleTemplateGatePackages
+                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
+        with
+        | [] -> ()
+        | unproduced -> failwith (TemplateGate.report "VerifyPackagedModuleTemplate" templateGateVersion unproduced)
 
         // ── 2. Instantiate OUTSIDE the repo ──────────────────────────
         //

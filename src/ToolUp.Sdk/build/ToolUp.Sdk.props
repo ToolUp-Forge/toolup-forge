@@ -9,7 +9,7 @@
           </PropertyGroup>
           <Import Project="$(NuGetPackageRoot)toolup.sdk\$(ToolUpSdkVersion)\build\ToolUp.Sdk.props" />
           <ItemGroup>
-            <PackageVersion Include="..." Version="..." />  <!-- non-ToolUp deps -->
+            <PackageVersion Include="..." Version="..." />  (non-ToolUp deps)
           </ItemGroup>
         </Project>
 
@@ -23,126 +23,264 @@
     overrides are still possible — declaring a more specific
     <PackageVersion Include="ToolUp.X" Version="..." /> later in the
     consumer's Directory.Packages.props takes precedence.
+
+    Note the illustrative entry above says "(non-ToolUp deps)" in plain
+    parentheses rather than in a nested XML comment. It was a nested
+    comment until Phase 326, and that made this ENTIRE FILE unloadable:
+    XML forbids a double hyphen inside a comment, so the outer comment
+    terminated at the inner one and MSBuild refused the import with
+    MSB4024, whose text is "An XML comment cannot contain" the offending
+    pair — which cannot be quoted here, for the very reason the rule
+    exists. Every consumer that imported this manifest failed at that
+    error, before any version could resolve at all: the file resolved
+    nothing, rather than resolving too little. Do not reintroduce a
+    nested comment,
+    or a literal double hyphen, anywhere in this file; the generator now
+    refuses to write a manifest that does not parse, and the Build test
+    pack asserts the committed one does.
+
+    Phase 326 (2026-09-12): the entry list below is GENERATED from the
+    projects the `Publish` target packs and pushes — see the marker
+    comment above it for the regeneration command. It was hand-listed
+    until this phase, and had fallen to 59 entries against 163 required
+    (166 published, three excluded by shape): a consumer referencing any
+    of the 105 absent ones under central package management got NU1008
+    from the one file whose entire purpose is to prevent exactly that,
+    and one entry named a package that never existed. The prose that
+    used to sit between the entries
+    is preserved here instead, because a comment interleaved with
+    generated lines cannot survive the generator, and deleting it to make
+    the file mechanical would have thrown away the rationale below.
+
+      * ToolUp.Platform.UI (Phase 307) — the `Toolup.UIToolkit` component
+        set, the icon primitives and the typed prop-helper family,
+        promoted out of ToolUp.Platform.Client into a standalone package
+        (same move, same reasons as Phase 344's Feliz.AgGrid split).
+        `ToolUp.Platform.Client` still depends on it, so an existing
+        consumer needs no fsproj change — it arrives transitively, and
+        every namespace is preserved, so unlike 344 no compat re-export
+        was needed (GP 11). Listed so a consumer that wants the toolkit
+        ALONE can add one PackageReference with no version.
+
+      * ToolUp.Feliz.AgGrid / ToolUp.Feliz.AgCharts (Phase 344, ids
+        settled by Phase 754) — the Community bindings, promoted out of
+        ToolUp.Platform.Client into standalone Apache-2.0 packages so a
+        consumer that renders no grid pays for none of it (GP 13), and
+        one that wants only the binding can take it without the SDK.
+        `ToolUp.Platform.Client` still depends on both, so an existing
+        consumer needs no fsproj change: they arrive transitively, and
+        the compat re-export keeps `open ToolUp.Platform.AgGrid` /
+        `.AgChart` compiling (GP 11).
+
+      * ToolUp.Feliz.AgGrid.Enterprise (Phase 344, id settled by Phase
+        754) — the RENAMED `ToolUp.AgGridEnterprise`: same opt-in
+        companion, same licensing posture (GP 2). A consumer on the old
+        id changes exactly one PackageReference. The old id is
+        deliberately absent — nothing produces a package by that name any
+        more, and a PackageVersion for an id no feed can serve resolves
+        to NU1101 at restore rather than to anything useful. The rename
+        is recorded in ToolUp/SDK-ADOPTION.md. A stale entry of that kind
+        is now REPORTED (as UNPUBLISHED) rather than left for a consumer
+        to find.
+
+      * Why the `ToolUp.` prefix on all three (Phase 754, operator
+        2026-09-01). They packed as bare `Feliz.*` until then, and
+        `Feliz.AgGrid` on nuget.org is Compositional-IT's unmaintained
+        binding — the one this extraction supersedes — so the id was
+        never claimable. Two consequences met here: the repo's nuget.org
+        Trusted Publishing policy is registered against the `ToolUp.*`
+        glob, which the bare ids fall outside, and the template gate had
+        already resolved one of them to a stranger's package (Phase 307,
+        NU1603). The CLR namespaces did not move — a consumer still
+        writes `open Feliz.AgGrid` — so only the PackageReference id
+        changes. This generated list is derived from what the tree packs,
+        so it follows the `<PackageId>` automatically; the note is here
+        because the derivation cannot explain itself.
+  -->
+  <!-- BEGIN GENERATED - do not hand-edit below this line.
+       Every id below is derived from the projects the `Publish` target packs
+       and pushes (`src/**/*.fsproj`, minus the reference-app directories,
+       minus `<IsPackable>false</IsPackable>`).
+
+       Regenerate by running the GenerateSdkManifest target of the repo's
+       Build.fsproj. The command cannot be written out here: an XML comment
+       cannot contain a double hyphen, and the invocation has two. It is in
+       docs/migrations/326-sdk-manifest-reconcile.md, and in the message of
+       every failure that asks for it.
+
+       `SdkManifestTests` in the Build pack fails when this region and the
+       tree disagree, so an added package cannot ship unadvertised and a
+       removed one cannot linger here as an NU1101.
+
+       Published, and deliberately NOT listed:
+         - ToolUp.Cli: <PackAsTool> — installed from a tool manifest (`dotnet tool install`), never a <PackageReference>, so central package management never consults a version for it
+         - ToolUp.RAG.StaticCorpus.Build: <PackAsTool> — installed from a tool manifest (`dotnet tool install`), never a <PackageReference>, so central package management never consults a version for it
+         - ToolUp.Sdk: the meta-package that SHIPS this manifest — a consumer must already pin it in their own Directory.Packages.props for the import to resolve, so an entry here could never be the one that resolves it
   -->
   <ItemGroup>
-    <!-- ToolUp.Platform — the SDK floor -->
-    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
-    <!-- Phase 307 — the `Toolup.UIToolkit` component set, the icon
-         primitives and the typed prop-helper family, promoted out of
-         ToolUp.Platform.Client into a standalone package (same move, same
-         reasons as Phase 344's Feliz.AgGrid split below).
-         `ToolUp.Platform.Client` still depends on it, so an existing
-         consumer needs no fsproj change — it arrives transitively, and
-         every namespace is preserved, so unlike 344 no compat re-export
-         was needed (GP 11). Declared here so a consumer that wants the
-         toolkit ALONE can add one PackageReference with no version. -->
-    <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Cross-tier companions -->
-    <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.RAG.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Forms.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Forms.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Forms.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Analytical-primitive catalog (Phase 11.E.2) -->
-    <PackageVersion Include="ToolUp.Algorithms.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Algorithms.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Algorithm provider companions (Phase 11.E.3) -->
-    <PackageVersion Include="ToolUp.AlgorithmProviders.MathNet" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Module testing scaffold (Phase 11a) -->
-    <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Public-rendering surface (Phase 38) -->
-    <PackageVersion Include="ToolUp.PublicRendering" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Asset store (Phase 39) -->
-    <PackageVersion Include="ToolUp.AssetStore" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Reporting (Phase 23 MVP — Markdown + HTML zero-dep renderers) -->
-    <PackageVersion Include="ToolUp.Reporting.Core" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Reporting.Server" Version="$(ToolUpSdkVersion)" />
-
-    <!-- AI provider companions -->
-    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
-
-    <!-- AI client-resident-tool sample (Phase 46.B reference companion) -->
+    <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.SampleClientTool.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Server" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AI.SampleClientTool.Client" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Embedding provider companions -->
-    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Reranker companions (Phase 14f — ONNX cross-encoder local default) -->
-    <PackageVersion Include="ToolUp.Rerankers.Local" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Auth provider companions -->
-    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Storage / Secrets / VectorStores -->
-    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.AwsSecretsManager" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Audit sinks (Phase 11.C.5 — Platform prefix dropped 2026-05-27) -->
+    <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Wire" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AICookbooks.AgChart" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AICookbooks.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Copilot" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Gemini" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AlgorithmProviders.MathNet" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Algorithms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.AwsKms" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ArtefactSigning.GoogleCloudKms" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AssetStore" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.AzureBlobArchive" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.Cef" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.ChainedLedger" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuditSinks.GcsArchive" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AuditSinks.SplunkHec" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.AuditSinks.DatadogLogs" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Notification channels -->
-    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Metrics + UI -->
+    <PackageVersion Include="ToolUp.AuthProviders.ClerkUI" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.EntraDirectory" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GitHub" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GoogleDirectory" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.GoogleIdentity.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.LdapActiveDirectory" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Shared" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Passkey" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Passkey.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Scim" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.BrandKit" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Client.ModelViewer" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ContainerSchedulers.DockerLocal" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ContentAuthoring" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ContentScanners.ClamAv" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Athena" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.BigQuery" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Common" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Csv" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Excel" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GitHub" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.GoogleAnalytics.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Parquet" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Redshift" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Snowflake" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Sql" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.DataSources.Synapse" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingCaches.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.AwsKms" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Encryption.GoogleCloudKms" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EntityStores.Postgres" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Experiments.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Experiments.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ExternalCompute.Http" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.FeatureFlagProviders.OpenFeature" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Forms.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Graph.AGE" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Graph.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Graph.InMemory" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Graph.Neo4j" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Graph.Projection" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.AwsLambda" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.AzureFunctions" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.DeliveredEgress" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.Docker" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.EdgeCache" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Hosts.GoogleCloudFunctions" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.IngestionQueues.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.InterPlatform" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Media.CloudTranscode" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Media.FFmpeg" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.MediaLibrary" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
-
-    <!-- Phase 344 — AG Grid / AG Charts Feliz bindings.
-
-         `Feliz.AgGrid` + `Feliz.AgCharts` are the Community bindings,
-         promoted out of ToolUp.Platform.Client into standalone Apache-2.0
-         packages so a consumer that renders no grid pays for none of it
-         (GP 13) and a consumer that wants only the binding can take it
-         without the SDK. `ToolUp.Platform.Client` still depends on both,
-         so an existing consumer needs no fsproj change: they arrive
-         transitively, and the compat re-export keeps
-         `open ToolUp.Platform.AgGrid` / `.AgChart` compiling (GP 11).
-
-         `Feliz.AgGrid.Enterprise` is the RENAMED `ToolUp.AgGridEnterprise`
-         — same opt-in companion, same licensing posture (GP 2). A consumer
-         on the old id changes exactly one PackageReference. The old id is
-         deliberately NOT retained here: nothing produces a package by that
-         name any more, and a PackageVersion for an id no feed can serve
-         resolves to NU1101 at restore rather than to anything useful. The
-         rename is recorded in ToolUp/SDK-ADOPTION.md. -->
-    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ModelProviders.Reference" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.OcrProviders.Tesseract" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Offline.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Offline.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Offline.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.OpenXml" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.OpenXml.Spreadsheet" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.OpenXml.SvgRasterizer.Skia" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Build" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.PublicRendering" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.StaticCorpus.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.StaticCorpus.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RateLimit.AzureTableStorage" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RateLimit.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Remoting.Analyzers" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Docx" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.HtmlPdf" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Reporting.Xlsx" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Rerankers.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Scheduling.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AwsSecretsManager" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.AzureKeyVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.GcpSecretManager" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Cjk" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Snowball" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.GoogleCloud" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.TierToken" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Stripe.Webhook" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Tabular" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.TelemetrySinks.Ga4" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.TimeSeriesStores.Timescale" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Pgvector" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Voice.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Voice.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VoiceProviders.AzureSpeech" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VoiceProviders.Whisper" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Webhooks.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Webhooks.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Workflow.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Workflow.Server" Version="$(ToolUpSdkVersion)" />
   </ItemGroup>
+  <!-- END GENERATED - do not hand-edit above this line. -->
 </Project>
