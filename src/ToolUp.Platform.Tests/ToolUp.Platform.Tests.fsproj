@@ -1985,6 +1985,13 @@
              113 action authorizer (default-deny intact), plus the open-core
              grep-guard + the all-four-capabilities client-binding shape pin. -->
         <Compile Include="InProcess\SecondBindingNeutralityTests.fs" />
+        <!-- Phase 477 — tree-wide open-core vocabulary neutrality: the
+             Phase 202 grep-guard widened from the toy sample to the whole
+             publishable surface (packable sources + their READMEs + docs
+             + samples + the root docs), derived from IsPackable metadata
+             so a new packable project is covered with no edit here. Reads
+             the same private token source as the toy guard. -->
+        <Compile Include="InProcess\OpenCoreVocabularyNeutralityTests.fs" />
         <!-- Phase 208 — codified threat-lens security-regression suite: the six
              manual audit lenses (JWT/JWKS crypto, mode-gating/dev-bypass, tenant
              scope isolation, authz/RBAC fail-closed, request-edge auth,
