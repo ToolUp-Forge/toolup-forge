@@ -138,10 +138,81 @@ let config = {
         ]
 }
 
+// ─── Phase 762 — gate lanes (`TOOLUP_TEST_LANE`) ────────────────────
+//
+// `VerifyAll` is ~16 minutes (measured 2026-09-12 on the campaign
+// machine: 967 s over the 23 packs above, of which the Platform pack is
+// 884.8 s — 91.5 %). A dispatched worker has to spend all of it before
+// it learns whether its own change is green, and then spend it AGAIN on
+// the folded tree, which is the only run a ship may cite.
+//
+// The lane rides an environment variable rather than a `verify.ps1`
+// switch because that script is a hard-denied path on the forge roadmap
+// side (`RM-FOOTPRINT-FORBIDDEN`): the recorded gate-script hash must
+// not move, so the lane travels inside the recorded gate COMMAND
+// instead — `$env:TOOLUP_TEST_LANE='fast'; pwsh ./verify.ps1`.
+//
+// Two levels, because the measurement said so. The slow set is entirely
+// INSIDE one pack, so `fast` is a LIST-level decision made in that
+// pack's own entry point (`src/ToolUp.Platform.Tests/Program.fs`) and
+// changes nothing here — every pack still runs. `pure` is a PACK-level
+// decision, made here.
+//
+// Unset ⇒ `full` ⇒ this list, unfiltered: the pre-phase gate, unchanged.
+
+/// Packs whose own test sources touch no filesystem, process, socket or
+/// environment variable — the `pure` lane. 10.5 s of the 967 s total.
+///
+/// Membership is opt-IN and mechanically re-derivable, so it can
+/// under-claim but never over-claim. The audit that seeded it, run over
+/// each pack's `*.fs` outside `bin`/`obj` on 2026-09-12:
+///
+///     grep -rlE 'System\.IO|File\.|Directory\.|Path\.GetTempPath|Process|HttpClient|Socket|Environment\.GetEnvironmentVariable|__SOURCE_DIRECTORY__'
+///
+/// These six matched in ZERO files; every other pack matched in at least
+/// one. The claim is about each pack's TEST sources — what the pack
+/// itself does — not a transitive claim about the SDK assemblies it
+/// binds, and a pack is added here only by re-running that audit.
+let private pureLanePacks =
+    set [
+        "RemotingAnalyzers"
+        "Voice"
+        "AlgorithmProviders"
+        "AssetStore"
+        "Reporting"
+        "Offline"
+    ]
+
+/// `config` for the lane this process runs. Kept as a projection OF
+/// `config` rather than folded into it so the authoritative pack list
+/// above stays one unbroken literal — it is the list `CLAUDE.md` calls
+/// authoritative, and a filter threaded through it would put a lane
+/// decision inside the thing the lane selects FROM.
+let private lanedConfig =
+    match TestLane.current with
+    | TestLane.Lane.Pure -> {
+        config with
+            TestPacks =
+                config.TestPacks
+                |> List.filter (fun pack -> Set.contains pack.Name pureLanePacks)
+      }
+    // `fast` runs every pack; the slow set it drops is inside the
+    // Platform pack and is that pack's own declaration.
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full -> config
+
 [<EntryPoint>]
 let main args =
     init args
-    registerTargets config
+
+    // Phase 762 — name the lane once, so a log cannot be mistaken for a
+    // full run. Silent under `full`, so the shipping gate's output is
+    // byte-for-byte what it was.
+    TestLane.announce (
+        sprintf "VerifyAll will run %d of %d pack(s)" (List.length lanedConfig.TestPacks) (List.length config.TestPacks)
+    )
+
+    registerTargets lanedConfig
 
     // Phase 614 — the Fable-tier test gate as ONE invocation.
     //
@@ -3710,6 +3781,22 @@ let main args =
     // so every other target stays runnable with none of the variables
     // set; the target body resolves and reports its own missing inputs.
     CoreWebVitalsBudgetGate.registerTarget ()
+
+    // Phase 192 — cold-start / hot-path perf-budget gate. Same split as
+    // the Core-Web-Vitals gate directly above, for the same reason: this
+    // is the deciding half only. It reads the committed perf-budgets.json
+    // plus the measurement file a run already wrote, and fails on any
+    // breach — including a budgeted metric the run did not measure and a
+    // measurement the runner could not confirm measured anything. The
+    // measuring half (build samples/MinimalApp, boot it repeatedly to its
+    // ready line, drive the anonymous hot-path request) is
+    // dev-scripts/perf-budget-gate.ps1, which sets TOOLUP_PERF_BUDGET /
+    // TOOLUP_PERF_MEASUREMENTS and invokes this target last.
+    //
+    // Registration is unconditional and reads no environment at startup,
+    // so every other target stays runnable with neither variable set; the
+    // target body resolves and reports its own missing inputs.
+    PerfBudgetGate.registerTarget ()
 
     // Phase 587 — instantiate-then-build smoke gate for the
     // `platformsdk-module-packaged` template.

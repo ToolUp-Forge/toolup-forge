@@ -1279,6 +1279,7 @@ ToolUp.Platform.ComposeRuntimeServices.registerAlertRuleEngine(Microsoft.Extensi
 ToolUp.Platform.ComposeRuntimeServices.registerCachingAndDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerCoreSdkSingletons(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDataCatalog, ToolUp.Platform.IEventStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.INarrativeStore) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerCors(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeRuntimeServices.registerEventStoreChainDevDiagnosticsContributor(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerFileManagementRuntime(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.Usage.IUsageLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerHealthStateTracker(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerMetricsAndObservability(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration], ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.ILogger) : ToolUp.Platform.Metrics.IMetricsSink
@@ -3584,6 +3585,16 @@ ToolUp.Platform.EventKindModule.forModuleAction(System.String, System.String) : 
 ToolUp.Platform.EventKindModule.topic(ToolUp.Platform.EventKind) : System.String
 ToolUp.Platform.EventKindModule.transport(ToolUp.Platform.EventKind) : System.String
 ToolUp.Platform.EventKindModule.value(ToolUp.Platform.EventKind) : System.String
+ToolUp.Platform.EventStoreChainValidator (class)
+ToolUp.Platform.EventStoreChainValidator.ValidatorName : System.String (literal)
+ToolUp.Platform.EventStoreChainValidator.contributor(ToolUp.Platform.IEventStore) : ToolUp.Platform.IDevDiagnosticsContributor
+ToolUp.Platform.EventStoreChainValidator.evaluate(ToolUp.Platform.EventStoreChainDescription) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.EventStoreChainValidator.renderChain(ToolUp.Platform.EventStoreChainDescription) : System.String
+ToolUp.Platform.EventStoreChainValidator.validator(ToolUp.Platform.IEventStore) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.Platform.EventStoreChainValidator+EventStoreChainContributor (class)
+ToolUp.Platform.EventStoreChainValidator+EventStoreChainContributor..ctor(ToolUp.Platform.IEventStore)
+ToolUp.Platform.EventStoreChainValidator+EventStoreChainValidator (class)
+ToolUp.Platform.EventStoreChainValidator+EventStoreChainValidator..ctor(ToolUp.Platform.IEventStore)
 ToolUp.Platform.EventStoreErasureHandler (class)
 ToolUp.Platform.EventStoreErasureHandler.erasureHandler(ToolUp.Platform.IEventStore) : ToolUp.Platform.IDataExporter+IErasureHandler
 ToolUp.Platform.EventStoreErasureHandler.exporter(ToolUp.Platform.IEventStore) : ToolUp.Platform.IDataExporter+IDataExporter
@@ -8027,6 +8038,7 @@ ToolUp.Platform.RegistrationCatalogueModule.tryResolve(ToolUp.Platform.Component
 ToolUp.Platform.RemotingHelpers (class)
 ToolUp.Platform.RemotingHelpers.makeApi`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, impl]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.RemotingHelpers.makePermissionGuardedApi`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.RemotingHelpers.makePermissionGuardedApi`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]  (obsolete)
 ToolUp.Platform.RenewalPolicy (class)
 ToolUp.Platform.RenewalPolicy..ctor(System.TimeSpan, System.TimeSpan)
 ToolUp.Platform.RenewalPolicy.MaxTokenLifetime : System.TimeSpan { get }

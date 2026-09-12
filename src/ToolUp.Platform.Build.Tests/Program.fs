@@ -15,6 +15,12 @@ let private registeredTests =
         // budget parser's refusals and the check over committed report
         // fixtures. No browser, no server, no network.
         CoreWebVitalsBudgetTests.tests
+        // Phase 192 — the cold-start / hot-path perf-budget gate: the
+        // budget parser's refusals, the check over committed measurement
+        // fixtures (including the three shapes that look like a pass and
+        // are not), and the shipped budget's own coherence. No process,
+        // no port, no clock.
+        PerfBudgetTests.tests
         // Phase 754 — the template gate's stranger's-package guard: a
         // declared gate id the repo's own pack did not emit. Pure, so
         // both directions are probed without packing anything.

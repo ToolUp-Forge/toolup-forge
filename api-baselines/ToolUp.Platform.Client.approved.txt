@@ -2184,10 +2184,12 @@ ToolUp.Elmish.ProgramModule.setState`4(ToolUp.Elmish.Program`4[arg, model, msg, 
 ToolUp.Elmish.ProgramModule.update`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]
 ToolUp.Elmish.ProgramModule.view`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]]
 ToolUp.Elmish.ProgramModule.withConsoleTrace`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
+ToolUp.Elmish.ProgramModule.withConsoleTrace`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]  (obsolete)
 ToolUp.Elmish.ProgramModule.withDispatcherHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IDispatcher`1[msg], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withEffectControllerHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IEffectController, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withEffect`4(ToolUp.Elmish.EffectHandle`1[msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
+ToolUp.Elmish.ProgramModule.withErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]  (obsolete)
 ToolUp.Elmish.ProgramModule.withErrorReporter`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withRingBufferCapacity`4(System.Int32, ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withSetState`4(Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
@@ -2320,6 +2322,7 @@ ToolUp.Platform.AdminTiles+LandingState`1+Tags.Tiles : System.Int32 (literal)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles (class)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles.Item : Microsoft.FSharp.Collections.FSharpList`1[t] { get }
 ToolUp.Platform.AgChart (class)
+ToolUp.Platform.AgChart (class)  (obsolete)
 ToolUp.Platform.AgChart.Area : Feliz.AgCharts+SeriesKind { get }
 ToolUp.Platform.AgChart.Bar : Feliz.AgCharts+SeriesKind { get }
 ToolUp.Platform.AgChart.Bottom : Feliz.AgCharts+ChartPosition { get }
@@ -2412,6 +2415,7 @@ ToolUp.Platform.AgChartExport+Sizing (class)
 ToolUp.Platform.AgChartExport+Sizing.requested(ToolUp.Platform.AgChartExport+CaptureOptions, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
 ToolUp.Platform.AgChartExport+Sizing.scaleDimension(System.Double, System.Int32) : System.Int32
 ToolUp.Platform.AgGrid (class)
+ToolUp.Platform.AgGrid (class)  (obsolete)
 ToolUp.Platform.AgGrid.Asc : Feliz.AgGrid+SortDirection { get }
 ToolUp.Platform.AgGrid.AutoHeight : Feliz.AgGrid+DOMLayout { get }
 ToolUp.Platform.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement], Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value]) : Fable.React.ReactElement
@@ -2482,6 +2486,7 @@ ToolUp.Platform.AgGrid+Theme.withParams(Feliz.AgGrid+ThemeParams, System.Object)
 ToolUp.Platform.AgGrid+Theme.withPart(System.Object, System.Object) : System.Object
 ToolUp.Platform.AgGrid+Theme.withoutPart(System.String, System.Object) : System.Object
 ToolUp.Platform.AgGrid+ThemeClass (class)
+ToolUp.Platform.AgGrid+ThemeClass (class)  (obsolete)
 ToolUp.Platform.AgGrid+ThemeClass.Alpine : System.String { get }
 ToolUp.Platform.AgGrid+ThemeClass.AlpineDark : System.String { get }
 ToolUp.Platform.AgGrid+ThemeClass.Balham : System.String { get }

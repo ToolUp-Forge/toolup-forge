@@ -47,6 +47,14 @@
              options record rather than BuildConfig), so it may sit
              anywhere after SDK.BuildTypes.fs. -->
         <Compile Include="Build\SDK.CoreWebVitalsBudget.fs" />
+        <!-- Phase 192 — cold-start / hot-path perf-budget gate: the
+             declarative budget parser, the measurement-run reader, the
+             pure check between them, and the `VerifyPerfBudget` FAKE
+             target dev-scripts/perf-budget-gate.ps1 invokes. Same split
+             as the Core-Web-Vitals gate above and independent of
+             SDK.Build.fs (its own options record, not BuildConfig), so
+             it may sit anywhere after SDK.BuildTypes.fs. -->
+        <Compile Include="Build\SDK.PerfBudget.fs" />
     </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fake.Core.Target" />

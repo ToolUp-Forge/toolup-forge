@@ -828,6 +828,16 @@ module Names =
     [<Literal>]
     let cwvServerMetrics = "TOOLUP_CWV_SERVER_METRICS"
 
+    // Phase 192 — the cold-start / hot-path perf-budget gate's two inputs.
+    // Build-time only, exactly as the three above: the VerifyPerfBudget
+    // target reads them, and a running deployment never consults either.
+
+    [<Literal>]
+    let perfBudget = "TOOLUP_PERF_BUDGET"
+
+    [<Literal>]
+    let perfMeasurements = "TOOLUP_PERF_MEASUREMENTS"
+
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader
 /// gains a new env var; the coverage test fails if a reader consults a
 /// var with no descriptor, and the golden-file test fails until the
@@ -2473,6 +2483,24 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.cwvServerMetrics
         Description =
             "Build-time: optional server-counter snapshot the Core-Web-Vitals gate cross-checks against the browser measurement. Unset skips the server-side signal."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.perfBudget
+        Description =
+            "Build-time: path to the cold-start / hot-path budget file the VerifyPerfBudget target checks against. Read only by that target; never consulted by a running deployment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.perfMeasurements
+        Description =
+            "Build-time: path to the measurement file dev-scripts/perf-budget-gate.ps1 wrote, which the VerifyPerfBudget target decides against. Read only by that target; never consulted by a running deployment."
         Type = StringKey
         Default = None
         IsSecret = false

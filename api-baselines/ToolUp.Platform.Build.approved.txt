@@ -244,6 +244,111 @@ ToolUp.Platform.PackagedModuleManifestSource+Tags (class)
 ToolUp.Platform.PackagedModuleManifestSource+Tags.FromNupkg : System.Int32 (literal)
 ToolUp.Platform.PackagedModuleManifestSource+Tags.FromPackDeclarations : System.Int32 (literal)
 ToolUp.Platform.PackagedModuleManifestSource+Tags.FromStagedDirectory : System.Int32 (literal)
+ToolUp.Platform.PerfBudget (class)
+ToolUp.Platform.PerfBudget..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Int32]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.PerfBudget.AbsentAssemblies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PerfBudget.Baselines : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Double]] { get }
+ToolUp.Platform.PerfBudget.Ceilings : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Double]] { get }
+ToolUp.Platform.PerfBudget.Label : System.String { get }
+ToolUp.Platform.PerfBudget.MinimumSamples : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PerfMetric, System.Int32]] { get }
+ToolUp.Platform.PerfBudget.Statistic : System.String { get }
+ToolUp.Platform.PerfBudget.Subject : System.String { get }
+ToolUp.Platform.PerfBudgetGate (class)
+ToolUp.Platform.PerfBudgetGate.BudgetSchemaToken : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.MeasurementSchemaToken : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.MinStatistic : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.breaches(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
+ToolUp.Platform.PerfBudgetGate.check(ToolUp.Platform.PerfBudget, ToolUp.Platform.PerfMeasurementRun) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
+ToolUp.Platform.PerfBudgetGate.parseBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.parseMeasurements(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfMeasurementRun, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.registerTarget() : System.Void
+ToolUp.Platform.PerfBudgetGate.report(ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : System.String
+ToolUp.Platform.PerfBudgetGate.verify(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGateOptions (class)
+ToolUp.Platform.PerfBudgetGateOptions..ctor(System.String, System.String)
+ToolUp.Platform.PerfBudgetGateOptions.BudgetFile : System.String { get }
+ToolUp.Platform.PerfBudgetGateOptions.MeasurementsFile : System.String { get }
+ToolUp.Platform.PerfBudgetGateOptionsModule (class)
+ToolUp.Platform.PerfBudgetGateOptionsModule.BudgetVariable : System.String (literal)
+ToolUp.Platform.PerfBudgetGateOptionsModule.MeasurementsVariable : System.String (literal)
+ToolUp.Platform.PerfBudgetGateOptionsModule.create(System.String, System.String) : ToolUp.Platform.PerfBudgetGateOptions
+ToolUp.Platform.PerfBudgetGateOptionsModule.fromEnvironment() : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudgetGateOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfFinding (class)
+ToolUp.Platform.PerfFinding.IsAssemblyInventoryEmpty : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsCeilingBreached : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsMeasurementUnobserved : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsMetricNotMeasured : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsStatisticMismatch : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsTooFewSamples : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsWithinCeiling : System.Boolean { get }
+ToolUp.Platform.PerfFinding.IsZeroCostAssemblyPresent : System.Boolean { get }
+ToolUp.Platform.PerfFinding.Tag : System.Int32 { get }
+ToolUp.Platform.PerfFinding+AssemblyInventoryEmpty (class)
+ToolUp.Platform.PerfFinding+AssemblyInventoryEmpty.required : System.Int32 { get }
+ToolUp.Platform.PerfFinding+CeilingBreached (class)
+ToolUp.Platform.PerfFinding+CeilingBreached.ceiling : System.Double { get }
+ToolUp.Platform.PerfFinding+CeilingBreached.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+CeilingBreached.observed : System.Double { get }
+ToolUp.Platform.PerfFinding+MeasurementUnobserved (class)
+ToolUp.Platform.PerfFinding+MeasurementUnobserved.evidence : System.String { get }
+ToolUp.Platform.PerfFinding+MeasurementUnobserved.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+MetricNotMeasured (class)
+ToolUp.Platform.PerfFinding+MetricNotMeasured.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+StatisticMismatch (class)
+ToolUp.Platform.PerfFinding+StatisticMismatch.budgetStatistic : System.String { get }
+ToolUp.Platform.PerfFinding+StatisticMismatch.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+StatisticMismatch.runStatistic : System.String { get }
+ToolUp.Platform.PerfFinding+Tags (class)
+ToolUp.Platform.PerfFinding+Tags.AssemblyInventoryEmpty : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.CeilingBreached : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.MeasurementUnobserved : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.MetricNotMeasured : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.StatisticMismatch : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.TooFewSamples : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.WithinCeiling : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+Tags.ZeroCostAssemblyPresent : System.Int32 (literal)
+ToolUp.Platform.PerfFinding+TooFewSamples (class)
+ToolUp.Platform.PerfFinding+TooFewSamples.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+TooFewSamples.required : System.Int32 { get }
+ToolUp.Platform.PerfFinding+TooFewSamples.samples : System.Int32 { get }
+ToolUp.Platform.PerfFinding+WithinCeiling (class)
+ToolUp.Platform.PerfFinding+WithinCeiling.baseline : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
+ToolUp.Platform.PerfFinding+WithinCeiling.ceiling : System.Double { get }
+ToolUp.Platform.PerfFinding+WithinCeiling.metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfFinding+WithinCeiling.observed : System.Double { get }
+ToolUp.Platform.PerfFinding+ZeroCostAssemblyPresent (class)
+ToolUp.Platform.PerfFinding+ZeroCostAssemblyPresent.assembly : System.String { get }
+ToolUp.Platform.PerfFindingModule (class)
+ToolUp.Platform.PerfFindingModule.isBreach(ToolUp.Platform.PerfFinding) : System.Boolean
+ToolUp.Platform.PerfFindingModule.render(ToolUp.Platform.PerfFinding) : System.String
+ToolUp.Platform.PerfMeasurementRun (class)
+ToolUp.Platform.PerfMeasurementRun..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfSample], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.PerfMeasurementRun.AppDirectory : System.String { get }
+ToolUp.Platform.PerfMeasurementRun.Label : System.String { get }
+ToolUp.Platform.PerfMeasurementRun.OutputAssemblies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PerfMeasurementRun.Samples : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfSample] { get }
+ToolUp.Platform.PerfMetric (class)
+ToolUp.Platform.PerfMetric.ColdStartMs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.HotPathMs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.IsColdStartMs : System.Boolean { get }
+ToolUp.Platform.PerfMetric.IsHotPathMs : System.Boolean { get }
+ToolUp.Platform.PerfMetric.Tag : System.Int32 { get }
+ToolUp.Platform.PerfMetric+Tags (class)
+ToolUp.Platform.PerfMetric+Tags.ColdStartMs : System.Int32 (literal)
+ToolUp.Platform.PerfMetric+Tags.HotPathMs : System.Int32 (literal)
+ToolUp.Platform.PerfMetricModule (class)
+ToolUp.Platform.PerfMetricModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
+ToolUp.Platform.PerfMetricModule.describe(ToolUp.Platform.PerfMetric) : System.String
+ToolUp.Platform.PerfMetricModule.key(ToolUp.Platform.PerfMetric) : System.String
+ToolUp.Platform.PerfMetricModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PerfMetric]
+ToolUp.Platform.PerfSample (class)
+ToolUp.Platform.PerfSample..ctor(ToolUp.Platform.PerfMetric, System.String, System.Double, System.Int32, System.Boolean, System.String)
+ToolUp.Platform.PerfSample.Evidence : System.String { get }
+ToolUp.Platform.PerfSample.Metric : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfSample.Observed : System.Boolean { get }
+ToolUp.Platform.PerfSample.Samples : System.Int32 { get }
+ToolUp.Platform.PerfSample.Statistic : System.String { get }
+ToolUp.Platform.PerfSample.Value : System.Double { get }
 ToolUp.Platform.Prerender (class)
 ToolUp.Platform.Prerender.nodeScript() : System.String
 ToolUp.Platform.Prerender.registerTarget(ToolUp.Platform.Build+BuildConfig, ToolUp.Platform.Prerender+PrerenderTargetOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute]) : System.Void

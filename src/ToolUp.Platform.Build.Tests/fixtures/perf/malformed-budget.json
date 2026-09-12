@@ -1,0 +1,10 @@
+{
+  "schema": "toolup.cwv-budget/v1",
+  "label": "fixture — every defect the budget parser must name at once",
+  "statistic": "median",
+  "ceilings": {
+    "coldStartMs": "fast",
+    "warmStartMs": 100
+  },
+  "absentAssemblies": [ "" ]
+}
