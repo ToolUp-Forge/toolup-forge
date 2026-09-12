@@ -443,10 +443,20 @@
          Apache-2.0 Feliz packages now, and ToolUp.AgGridEnterprise was
          renamed Feliz.AgGrid.Enterprise to join them. They version with the
          rest of the repo (one <Version> in Directory.Build.props), so they
-         resolve off $(ToolUpSdkVersion) like every other package here. -->
-    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
+         resolve off $(ToolUpSdkVersion) like every other package here.
+
+         Phase 754 — the PUBLIC ids are `ToolUp.Feliz.*`. `Feliz.AgGrid`
+         on nuget.org belongs to Compositional-IT, and the repo's Trusted
+         Publishing policy is registered against the `ToolUp.*` glob, so
+         the bare `Feliz.*` ids were both unclaimable and unpublishable.
+         The CLR namespaces are unchanged. The old ids are deliberately
+         NOT retained: nothing produces a package by those names any
+         more, and a PackageVersion for an id this feed cannot serve
+         resolves to a STRANGER'S package (NU1603) rather than to
+         nothing — the exact class Phase 307 hit. -->
+    <PackageVersion Include="ToolUp.Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
 
     <!-- Phase 16c — Cloud umbrella packages. One PackageReference per
          cloud transitively pulls Storage + Secrets + AuditSinks +

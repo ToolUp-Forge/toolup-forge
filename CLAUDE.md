@@ -401,9 +401,24 @@ Written down here so the next reader does not have to re-derive it from `.github
 | **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
 | **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **every `BuildConfig.TestPacks` pack** via `VerifyAll` | **yes** |
 | `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles, via `VerifyDocSnippets` | yes |
+| `source-citations` | every backticked API name in a comment resolves, via `VerifySourceCitations` | yes |
+| `cloud-parity` | the `ToolUp.Cloud.Parity.Tests` pack with the Azurite emulator leg armed | yes |
 | **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; and the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate` | **yes** |
+| **`browser-smoke`** | eight real-browser scenarios via `VerifyBrowserSmoke` — and, as the compile that gets them there, **the only CI transpilation of `ToolUp.Offline.Client`** | **yes** |
 
 Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template.
+
+**Which job transpiles which client tier — the answer is not the one the job names suggest (Phase 345).** Read the reference graph, not the job title:
+
+| Client tier | Transpiled in CI by | Via |
+|---|---|---|
+| `ToolUp.AI.Client`, `ToolUp.KnowledgeBase.Client` | `fable-tier` | `VerifyFable` → `src/ToolUp.AI.Client.Tests`, which references both |
+| `ToolUp.Platform.Client` (+ `Platform.Core`) | `fable-tier` **and** `browser-smoke` | transitively through `ToolUp.AI.Client`; and directly by the browser-smoke fixture |
+| **`ToolUp.Offline.Client`** | **`browser-smoke` only** | `VerifyBrowserSmoke` → `tests/BrowserSmoke/fixture` |
+
+`ToolUp.Offline.Client` is the one with a single point of coverage: exactly two projects in the tree reference it — the fixture and `samples/MinimalClient` — and **no CI job compiles the sample**. The `cd samples/MinimalClient && dotnet fable -o output` step under [Build verification](#build-verification) is the phase-boundary check a developer runs; it has never been a gate. So a `<ProjectReference>` dropped from the fixture would not go red — it would silently narrow the repo's Fable coverage while eight browser scenarios kept passing. `VerifyBrowserSmoke` therefore asserts its own compile set before it installs anything, and its failure names this table.
+
+**`VerifyFable`'s reach was deliberately left where it is** rather than widened to the offline tier: widening it would compile that tier a second time, in a second job, for a `node:test` pack holding no cases over it — wall-clock with no added signal. The sanctioned CI gate for offline-client transpilation is `browser-smoke`, and if that job is ever removed or made non-gating, the transpile is re-homed in the same commit.
 
 Both test gates were local-only until Phase 614. `fable-tier` was demonstrated red on a scratch branch against a deliberately broken `node:test` case before landing, because an unproven CI gate is precisely the failure mode it exists to prevent. `verify-all` shipped dispatch-only because the .NET suite turned out **not to be green on Linux**; Phase 617 fixed the four blockers and promoted it. Neither was ever made green by excluding packs or swallowing exit codes — that trades a gate for a tick.
 

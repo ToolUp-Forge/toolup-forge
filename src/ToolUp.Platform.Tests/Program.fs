@@ -720,6 +720,8 @@ let private registeredTests =
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests
+        // Phase 6n — AI cancel / client-tool-dispatch multi-instance.
+        AICancellationDispatchInstanceValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
         IdempotencyStoreInstanceValidatorTests.tests
@@ -1285,6 +1287,13 @@ let private registeredTests =
         ModuleVisibilityContractTests.scopeWalkTests
         ModuleVisibilityContractTests.foldTests
         ModuleVisibilityContractTests.routeRegistryTests
+        // Phase 529 - audit-trail viewer handler.
+        AuditViewApiHandlerTests.roleGateTests
+        AuditViewApiHandlerTests.scopeIsolationTests
+        AuditViewApiHandlerTests.filterTests
+        AuditViewApiHandlerTests.pagingTests
+        AuditViewApiHandlerTests.exportTests
+        AuditViewApiHandlerTests.substratePairingTests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through
