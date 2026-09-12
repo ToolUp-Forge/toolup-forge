@@ -25,7 +25,20 @@ open ToolUp.Platform.WebhookDispatcher
 /// `BoundedChannelFullMode.DropWrite`, so a saturated dispatcher
 /// drops the event and logs a Warn rather than back-pressuring the
 /// caller. The hook never blocks `Write`.
+/// Phase 9u — position 200 in the canonical chain: outside the audit
+/// replicator (which must see every event before a fan-out hook does),
+/// inside the job-notify wrapper (so an `OnEvent` trigger fires after
+/// dispatch has been handed the event). See `EventStoreChain`.
 type HookedEventStore(inner: IEventStore, dispatcher: IWebhookDispatcher) =
+    interface IEventStoreDecorator with
+        member _.DecoratorName = "HookedEventStore"
+        member _.DecoratorPosition = EventStoreChain.WebhookDispatchPosition
+
+        member _.DecoratorPurpose =
+            "Fires IWebhookDispatcher.Dispatch after every successful write, fanning the event out to matching webhook subscriptions. Non-blocking — a saturated dispatcher queue drops and logs rather than back-pressuring the writer."
+
+        member _.InnerStore = inner
+
     interface IEventStore with
         member _.Write(evt) = async {
             do! inner.Write evt

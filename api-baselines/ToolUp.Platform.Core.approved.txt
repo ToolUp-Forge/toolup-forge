@@ -5197,6 +5197,28 @@ ToolUp.Platform.EventRetentionPolicyModule.byAge(System.TimeSpan) : ToolUp.Platf
 ToolUp.Platform.EventRetentionPolicyModule.byCount(System.Int32) : ToolUp.Platform.EventRetentionPolicy
 ToolUp.Platform.EventRetentionPolicyModule.ninetyDays : ToolUp.Platform.EventRetentionPolicy { get }
 ToolUp.Platform.EventRetentionPolicyModule.unlimited : ToolUp.Platform.EventRetentionPolicy { get }
+ToolUp.Platform.EventStoreChain (class)
+ToolUp.Platform.EventStoreChain.AuditReplicationPosition : System.Int32 (literal)
+ToolUp.Platform.EventStoreChain.InnermostPosition : System.Int32 (literal)
+ToolUp.Platform.EventStoreChain.JobNotifyPosition : System.Int32 (literal)
+ToolUp.Platform.EventStoreChain.OutermostPosition : System.Int32 (literal)
+ToolUp.Platform.EventStoreChain.WebhookDispatchPosition : System.Int32 (literal)
+ToolUp.Platform.EventStoreChain.auditAboveWebhook(ToolUp.Platform.EventStoreChainDescription) : System.Boolean
+ToolUp.Platform.EventStoreChain.canonicalTable : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, System.String]] { get }
+ToolUp.Platform.EventStoreChain.describe(ToolUp.Platform.IEventStore) : ToolUp.Platform.EventStoreChainDescription
+ToolUp.Platform.EventStoreChain.outOfOrderPairs(ToolUp.Platform.EventStoreChainDescription) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[System.String, System.Int32, System.String, System.Int32]]
+ToolUp.Platform.EventStoreChain.positionConflicts(ToolUp.Platform.EventStoreChainDescription) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]
+ToolUp.Platform.EventStoreChain.renderCanonicalTable() : System.String
+ToolUp.Platform.EventStoreChainDescription (class)
+ToolUp.Platform.EventStoreChainDescription..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EventStoreChainLink], System.String, System.Boolean)
+ToolUp.Platform.EventStoreChainDescription.InnerStoreName : System.String { get }
+ToolUp.Platform.EventStoreChainDescription.Links : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EventStoreChainLink] { get }
+ToolUp.Platform.EventStoreChainDescription.Truncated : System.Boolean { get }
+ToolUp.Platform.EventStoreChainLink (class)
+ToolUp.Platform.EventStoreChainLink..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.EventStoreChainLink.Name : System.String { get }
+ToolUp.Platform.EventStoreChainLink.Position : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.EventStoreChainLink.Purpose : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.EventStoreMode (class)
 ToolUp.Platform.EventStoreMode.InMemoryOnly : ToolUp.Platform.EventStoreMode { get }
 ToolUp.Platform.EventStoreMode.IsInMemoryOnly : System.Boolean { get }
@@ -6388,6 +6410,11 @@ ToolUp.Platform.IEventStore.ReadAll(System.String) : Microsoft.FSharp.Control.FS
 ToolUp.Platform.IEventStore.ReadBySource(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
 ToolUp.Platform.IEventStore.ReadByType(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
 ToolUp.Platform.IEventStore.Write(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IEventStoreDecorator (interface)
+ToolUp.Platform.IEventStoreDecorator.DecoratorName : System.String { get }
+ToolUp.Platform.IEventStoreDecorator.DecoratorPosition : System.Int32 { get }
+ToolUp.Platform.IEventStoreDecorator.DecoratorPurpose : System.String { get }
+ToolUp.Platform.IEventStoreDecorator.InnerStore : ToolUp.Platform.IEventStore { get }
 ToolUp.Platform.IEvidencePackGenerator (interface)
 ToolUp.Platform.IEvidencePackGenerator.Generate(ToolUp.Platform.EvidencePackRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackResult, ToolUp.Platform.EvidencePackError]]
 ToolUp.Platform.IFeatureFlagApi (class)

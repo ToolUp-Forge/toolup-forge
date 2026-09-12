@@ -57,6 +57,69 @@ let config = {
 }
 ```
 
+### The decorator chain
+
+What `compose` registers as `IEventStore` is rarely the store above — it is that store wrapped in up
+to three decorators, each hooking `Write` and passing every read straight through:
+
+```
+JobNotifyEventStore                          position 300  (outermost)
+  └── HookedEventStore                       position 200
+        └── AuditReplicationHookedEventStore position 100  (innermost)
+              └── the resolved IEventStore
+```
+
+Each link is conditional — `JobNotifyEventStore` only when a job scheduler is composed,
+`HookedEventStore` only under `Webhooks = EnabledWebhooks`, `AuditReplicationHookedEventStore` only
+when at least one `IAuditSink` is registered — so the lightweight default registers the resolved
+store with no decorators at all and pays nothing (GP 13).
+
+**The order is load-bearing, and getting it wrong produces no error.** Every decorator is a faithful
+`IEventStore`, so a miswired chain persists, reads, type-checks and health-checks exactly as a
+correct one does. What it does differently is drop hooks — silently, for the life of the deployment.
+The two adjacencies and their reasons:
+
+- **Audit replication must sit inside webhook dispatch.** The replicator's contract is that every
+  persisted event is replicable to every registered sink; webhook dispatch is on the fan-out path,
+  not the persistence path, so it runs outside the replicator rather than ahead of it.
+- **Job notification is outermost**, so an `OnEvent` trigger fires only after the replication enqueue
+  and the dispatch hook have both been handed the event.
+
+Since Phase 9u each decorator declares those facts about itself, through `IEventStoreDecorator`
+(`ToolUp.Platform.Core`):
+
+```fsharp skip=fragment
+type IEventStoreDecorator =
+    abstract member DecoratorName: string
+    abstract member DecoratorPosition: int   // lower = closer to the inner store
+    abstract member DecoratorPurpose: string
+    abstract member InnerStore: IEventStore
+```
+
+Two things read those declarations:
+
+- **`EventStoreChainValidator`** — a structural-class `IConfigValidator` that walks the composed
+  chain at boot and refuses startup on a position conflict (two decorators claiming one slot), an
+  adjacent pair whose declared positions do not decrease inward, an audit replicator composed
+  outside the dispatch hook, or a decorator whose `InnerStore` cycles. Structural class, so
+  `SkipPreflight` does not wave it through: that lever is for external probes whose dependency may
+  be down, and a composition whose hooks silently drop events is not an outage to ride out.
+- **The `/dev/inspect` "Event-store decorator chain" panel** — each link with its position and its
+  self-described purpose, the terminal store, and the validator's current verdict. This is the
+  answer to "is the hook I think is running actually in the chain?", which nothing else surfaces.
+
+Positions `0` and `1000` are reserved for "innermost" and "outermost"; `101`–`199`, `201`–`299` and
+`301`–`999` are free. A decorator that does **not** implement the interface is not an error — the
+walk records the chain down to it and reports it as an opaque link (GP 11).
+
+**The chain is not composed from a registration list, and there is no seam for a deployment to add a
+decorator of its own.** All three are constructed by `compose` from `ServerConfig` flags, and their
+order is fixed by data dependency rather than by the order of statements: the webhook subsystem takes
+the audit-decorated store as a constructor argument, and the job-notify wrapper takes the
+webhook-hooked one. The validator therefore checks what was **observed**, not what was declared —
+which is strictly stronger, because it catches a miswire introduced by editing those construction
+sites, and that is the regression the invariant exists to prevent.
+
 ### Module event emission
 
 Modules can publish their own events via `IEventStore.Write`. Conventions:

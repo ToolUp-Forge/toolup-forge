@@ -698,6 +698,7 @@ let private registeredTests =
         SseTraceContributorTests.tests
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
+        EventStoreChainValidatorTests.tests
         AuditLogHealthCheckTests.tests
         // Phase 114 — audit-write failure metric + audit-event registry
         // exhaustiveness gate. Both packs carried `[<Tests>]` (assuming
