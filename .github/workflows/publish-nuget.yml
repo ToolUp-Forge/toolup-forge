@@ -44,6 +44,29 @@
 # a tag push that cannot publish must fail loudly, because a silently
 # skipped release (a lost secret, a fork tag) reads as a green run.
 # Nothing rotates: the temp key dies within the hour.
+#
+# ─── The `ToolUp.*` glob is a CONSTRAINT, not a description (Phase 754)
+#
+# Every package this workflow can publish must match the policy glob.
+# The Phase 344 AG Grid / AG Charts bindings did not: they packed as
+# `Feliz.AgGrid` / `Feliz.AgCharts` / `Feliz.AgGrid.Enterprise`, outside
+# the glob — and `Feliz.AgGrid` is in any case Compositional-IT's
+# unmaintained package on nuget.org, the one that extraction exists to
+# supersede. A `v*` tag would therefore have pushed three packages the
+# policy refuses, at ids this project does not own. Phase 754 moved them
+# to `ToolUp.Feliz.AgGrid` / `ToolUp.Feliz.AgCharts` /
+# `ToolUp.Feliz.AgGrid.Enterprise` (operator decision 2026-09-01), inside
+# the glob and under ids this project does own.
+#
+# So: a NEW packable project whose `PackageId` falls outside `ToolUp.*`
+# is a release defect, and the `Publish` target packs `src/**/*.fsproj`
+# by GLOB — nothing here enumerates package ids, so nothing here will
+# notice. Set the id, or set `<IsPackable>false</IsPackable>`.
+#
+# The in-repo counterpart to that discipline is the template gate's
+# stranger's-package guard (`TemplateGate.unproducedIds`, Build.fs): it
+# fails when a declared gate id is one this repo does not itself
+# produce, which is the same mistake caught one step earlier.
 
 name: publish-nuget
 

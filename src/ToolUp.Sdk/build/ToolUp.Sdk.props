@@ -141,8 +141,13 @@
          name any more, and a PackageVersion for an id no feed can serve
          resolves to NU1101 at restore rather than to anything useful. The
          rename is recorded in ToolUp/SDK-ADOPTION.md. -->
-    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
+    <!-- Phase 754 — the public ids are `ToolUp.Feliz.*` (operator,
+         2026-09-01): `Feliz.AgGrid` is Compositional-IT's on nuget.org,
+         and this repo's Trusted Publishing policy covers the `ToolUp.*`
+         glob. CLR namespaces are unchanged; a consumer changes one
+         PackageReference per binding. -->
+    <PackageVersion Include="ToolUp.Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
   </ItemGroup>
 </Project>

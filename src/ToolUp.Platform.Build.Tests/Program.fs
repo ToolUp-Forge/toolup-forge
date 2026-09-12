@@ -15,6 +15,10 @@ let private registeredTests =
         // budget parser's refusals and the check over committed report
         // fixtures. No browser, no server, no network.
         CoreWebVitalsBudgetTests.tests
+        // Phase 754 — the template gate's stranger's-package guard: a
+        // declared gate id the repo's own pack did not emit. Pure, so
+        // both directions are probed without packing anything.
+        TemplateGateTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

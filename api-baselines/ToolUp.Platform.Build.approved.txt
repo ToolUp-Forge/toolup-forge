@@ -26,6 +26,14 @@ ToolUp.Platform.Build+Proc+Parallel.print(System.ConsoleColor, System.String, Sy
 ToolUp.Platform.Build+Proc+Parallel.printStarting`2(System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.Int32, System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]]]) : System.Void
 ToolUp.Platform.Build+Proc+Parallel.redirect`2(System.Int32, System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]) : Fake.Core.CreateProcess`1[b]
 ToolUp.Platform.Build+Proc+Parallel.run`2(System.Collections.Generic.IEnumerable`1[System.Tuple`2[a, Fake.Core.CreateProcess`1[b]]]) : b[]
+ToolUp.Platform.Build+TemplateGate (class)
+ToolUp.Platform.Build+TemplateGate.package(System.String, System.String) : ToolUp.Platform.Build+TemplateGate+GatePackage
+ToolUp.Platform.Build+TemplateGate.report(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.Build+TemplateGate.unproducedIds(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Build+TemplateGate+GatePackage], System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Build+TemplateGate+GatePackage (class)
+ToolUp.Platform.Build+TemplateGate+GatePackage..ctor(System.String, System.String)
+ToolUp.Platform.Build+TemplateGate+GatePackage.Id : System.String { get }
+ToolUp.Platform.Build+TemplateGate+GatePackage.Project : System.String { get }
 ToolUp.Platform.BuildOutput (class)
 ToolUp.Platform.BuildOutput..ctor(System.String, System.String)
 ToolUp.Platform.BuildOutput.ClientBundlePath : System.String { get }

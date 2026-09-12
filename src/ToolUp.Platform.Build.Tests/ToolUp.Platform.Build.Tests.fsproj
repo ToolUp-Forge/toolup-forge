@@ -10,6 +10,9 @@
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
+        <!-- Phase 754 — the template gate's stranger's-package guard,
+             probed in both directions. -->
+        <Compile Include="TemplateGateTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
