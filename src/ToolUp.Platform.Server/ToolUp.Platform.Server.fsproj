@@ -766,6 +766,13 @@
              (the registry it reads) and before
              Compose/ComposeConfigValidators.fs, which registers it. -->
         <Compile Include="Server\TraceCategoriesValidator.fs" />
+        <!-- Phase 9u — preflight guard + /dev/inspect panel over the
+             composed IEventStore decorator chain. Reads only Platform.Core's
+             EventStoreChain (the position model) and ConfigValidation, never
+             the concrete decorators, so its position is set only by its
+             registrar: anywhere before Compose/ComposeConfigValidators.fs and
+             Compose/ComposeRuntimeServices.fs. -->
+        <Compile Include="Server\EventStoreChainValidator.fs" />
         <Compile Include="Server\CsrfDefaultModeValidator.fs" />
         <Compile Include="Server\AuditLogModeValidator.fs" />
         <Compile Include="Server\SurfaceCoherenceValidator.fs" />
