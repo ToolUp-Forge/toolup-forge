@@ -550,6 +550,14 @@ touches public surface:
   behaviour-preserving default (GP 11). Since Phase 618 the new surface still needs its assemblies'
   baselines regenerated (additions are a named, surgical regen rather than a silent pass), but the
   existing types' baselines stay untouched and no consumer breaks.
+- **Marking a member `[<Obsolete>]` moves the baseline, and the notice is gated (Phase 258).** The
+  renderer emits a SEPARATE `…  (obsolete)` marker line beside the member's unchanged token, so a
+  deprecation scores as an addition (regenerate, commit in the same PR) and never as a removal — the
+  in-place `… [obsolete]` shape is forbidden precisely because the lost token reads as breaking. The
+  same pack also fails a public `[<Obsolete>]` whose message omits a **replacement** or a **removal
+  target**; the failure says "NOTHING IS BROKEN", because it is about a sentence, not a surface.
+  Window, message format, and the removal-only-at-a-major rule:
+  [`docs/platform/deprecation-policy.md`](docs/platform/deprecation-policy.md).
 
 ## F# style + idioms
 
