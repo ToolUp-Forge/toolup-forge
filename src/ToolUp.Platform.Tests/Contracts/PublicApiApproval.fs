@@ -44,17 +44,11 @@ module ToolUp.Platform.Tests.Contracts.PublicApiApproval
 // as many words: the reader of a red CI run is precisely the person who
 // most needs to know they have not broken anything.
 //
-// ── Reconciling with Phase 258 (`[<Obsolete>]` policy) — DECIDED ──
-// Phase 258 (open) teaches this differ that adding `[<Obsolete>]` to an
-// existing public member is ADDITIVE (minor), while removing a member stays
-// breaking (major). With Phase 618 making additions fail too, both phases
-// land on this file, so the interaction is settled here in advance rather
-// than discovered by whichever ships second.
-//
-// The renderer emits no attributes at all today, so an `[<Obsolete>]`
-// marking currently changes no token and is invisible to the gate. When
-// Phase 258 makes obsolescence visible it MUST do so as a SEPARATE marker
-// line (`obsoleteMarker` below) and MUST NOT alter the member's own token:
+// ── Phase 258 (`[<Obsolete>]` deprecation lifecycle) — SHIPPED ──
+// Phase 618 settled this interaction in advance and left the seam
+// (`obsoleteMarker`) with nothing calling it. Phase 258 wired it up and
+// added the message-policy arm. What 618 decided is unchanged and is
+// restated here because it is the reason no comparer exception exists:
 //
 //   SANCTIONED (two lines)                FORBIDDEN (token rewritten in place)
 //     Demo.T.Alpha() : System.Int32         Demo.T.Alpha() : System.Int32 [obsolete]
@@ -67,10 +61,38 @@ module ToolUp.Platform.Tests.Contracts.PublicApiApproval
 // untouched, so the removal arm stays silent and the marker is an ordinary
 // unfolded addition: the deprecation is folded into the baseline in the
 // same PR and reviewed there, which is exactly the checkpoint Phase 258
-// asks for. Phase 258 therefore needs NO exception carved into the
-// comparer — only the rendering convention. Both shapes are pinned by
-// fixtures in `PublicApiApprovalTests.fs` so the rule cannot be undone by
-// accident.
+// asks for. Phase 258 therefore needed NO exception in the comparer —
+// only the rendering convention. Both shapes stay pinned by fixtures in
+// `PublicApiApprovalTests.fs` so the rule cannot be undone by accident.
+//
+// Phase 258 added two things on top of that decision:
+//
+//   1. `renderType` now EMITS the marker. Every rendered token — a type
+//      header included — whose declaring member carries `[<Obsolete>]`
+//      gets its `obsoleteMarker` line beside it. Until this landed the
+//      renderer emitted no attributes at all, so a deprecation was
+//      invisible to the gate and the seam above was dead code: a
+//      convention nothing could violate because nothing exercised it.
+//      Wiring it makes a deprecation a reviewed baseline diff, which is
+//      the whole point of the policy.
+//
+//      The marker deliberately carries NO MESSAGE. Baseline tokens are
+//      compared as an ordered set, so folding the message in would make
+//      every reworded deprecation notice read as a removal-plus-addition
+//      — a BREAKING diff for a copy edit. The message is checked by (2)
+//      instead, where its content is the subject rather than a token.
+//
+//   2. `obsoleteDefect` / `describeObsoleteDefects` — the message policy
+//      from `docs/platform/deprecation-policy.md`, as a gate. An
+//      `[<Obsolete>]` on the public surface must name a REPLACEMENT and a
+//      REMOVAL TARGET; a bare `[<Obsolete>]`, or one whose message omits
+//      either half, fails the pack. Scoped to the rendered public surface
+//      rather than to a source grep, which is why vendored internals are
+//      out of scope by CONSTRUCTION rather than by an exclusion list —
+//      `TypeShape.fs` is `module internal`, carries two upstream
+//      `[<Obsolete>]` members that name no removal target, and is
+//      correctly never seen here. The policy governs what the SDK
+//      publishes; it has no business policing code no consumer can call.
 //
 // ── Regeneration path (`--update`) ──
 // Set `TOOLUP_APPROVE_API=1` and run the Platform pack; every baseline is
@@ -360,6 +382,32 @@ let private isCompilerGenerated (attrs: Collections.Generic.IList<CustomAttribut
     attrs
     |> Seq.exists (fun a -> a.AttributeType.FullName = "System.Runtime.CompilerServices.CompilerGeneratedAttribute")
 
+/// Phase 258 seam — the sanctioned rendering of an `[<Obsolete>]` marking:
+/// a SEPARATE line derived from the member's token, never a rewrite of it.
+/// See the Phase 258 note in this file's header for why the in-place
+/// alternative is forbidden, and why the message is deliberately absent.
+let obsoleteMarker (memberToken: string) = memberToken + "  (obsolete)"
+
+/// Phase 258 — the `[<Obsolete>]` message on a declared member or type.
+///
+/// `None` when the member is not marked. `Some msg` when it is, with `msg`
+/// exactly as authored — `""` for a bare `[<Obsolete>]`, which is the one
+/// shape the message policy rejects outright. Read metadata-only, so it
+/// works under `MetadataLoadContext` like everything else here.
+let private obsoleteMessageOf (attrs: Collections.Generic.IList<CustomAttributeData>) : string option =
+    attrs
+    |> Seq.tryFind (fun a -> a.AttributeType.FullName = "System.ObsoleteAttribute")
+    |> Option.map (fun a ->
+        // `[<Obsolete>]`               → no ctor args
+        // `[<Obsolete("why")>]`        → one string
+        // `[<Obsolete("why", true)>]`  → string first, error-flag second
+        match a.ConstructorArguments |> Seq.tryHead with
+        | Some arg ->
+            match arg.Value with
+            | :? string as s -> s
+            | _ -> ""
+        | None -> "")
+
 // Clean, ASSEMBLY-QUALIFIER-FREE type name. `Type.FullName` bakes the
 // `, Assembly, Version=x.y.z.w, Culture=…, PublicKeyToken=…` suffix into
 // every generic argument — so a routine assembly-version bump would rewrite
@@ -428,16 +476,33 @@ let private methodName (m: MethodInfo) =
     else
         m.Name
 
-let private renderType (t: Type) : string list =
+/// One `[<Obsolete>]`-marked entry of a rendered surface: the member's own
+/// surface token, and the message exactly as authored. `Message = ""` is a
+/// bare `[<Obsolete>]`. Phase 258 — the input the message policy grades.
+type ObsoleteMember = { Token: string; Message: string }
+
+/// A rendered type: its surface lines (member tokens plus any Phase 258
+/// obsolete markers), and the obsolete markings the same walk observed.
+/// Both come out of ONE pass so the pack pays one `MetadataLoadContext`
+/// load per assembly, not two.
+type private RenderedType = {
+    Lines: string list
+    Obsolete: ObsoleteMember list
+}
+
+let private renderType (t: Type) : RenderedType =
     let fullName = if isNull t.FullName then t.Name else t.FullName
     let header = sprintf "%s (%s)" fullName (typeKind t)
 
-    let members =
+    // Each entry is (surface token, the [<Obsolete>] message if marked).
+    let members: (string * string option)[] =
         try
             let ctors =
                 t.GetConstructors memberFlags
                 |> Array.filter (fun c -> methodVisible c && not (isCompilerGenerated (c.GetCustomAttributesData())))
-                |> Array.map (fun c -> sprintf "%s..ctor(%s)" fullName (paramList (c.GetParameters())))
+                |> Array.map (fun c ->
+                    sprintf "%s..ctor(%s)" fullName (paramList (c.GetParameters())),
+                    obsoleteMessageOf (c.GetCustomAttributesData()))
 
             let methods =
                 t.GetMethods memberFlags
@@ -451,7 +516,8 @@ let private renderType (t: Type) : string list =
                         fullName
                         (methodName m)
                         (paramList (m.GetParameters()))
-                        (typeName m.ReturnType))
+                        (typeName m.ReturnType),
+                    obsoleteMessageOf (m.GetCustomAttributesData()))
 
             let props =
                 t.GetProperties memberFlags
@@ -468,7 +534,8 @@ let private renderType (t: Type) : string list =
                         ]
                         |> String.concat "; "
 
-                    sprintf "%s.%s : %s { %s }" fullName p.Name (typeName p.PropertyType) getSet)
+                    sprintf "%s.%s : %s { %s }" fullName p.Name (typeName p.PropertyType) getSet,
+                    obsoleteMessageOf (p.GetCustomAttributesData()))
 
             let fields =
                 t.GetFields memberFlags
@@ -482,7 +549,8 @@ let private renderType (t: Type) : string list =
                         fullName
                         f.Name
                         (typeName f.FieldType)
-                        (if f.IsLiteral then " (literal)" else ""))
+                        (if f.IsLiteral then " (literal)" else ""),
+                    obsoleteMessageOf (f.GetCustomAttributesData()))
 
             let events =
                 t.GetEvents memberFlags
@@ -496,19 +564,38 @@ let private renderType (t: Type) : string list =
                         else
                             typeName e.EventHandlerType
 
-                    sprintf "%s.%s : %s (event)" fullName e.Name handler)
+                    sprintf "%s.%s : %s (event)" fullName e.Name handler,
+                    obsoleteMessageOf (e.GetCustomAttributesData()))
 
             [ ctors; methods; props; fields; events ]
             |> Array.concat
-            |> Array.sortWith (fun a b -> String.CompareOrdinal(a, b))
-            |> List.ofArray
+            |> Array.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
         with ex ->
             // A dependency the resolver couldn't satisfy makes this one
             // type's members unenumerable. Surface it visibly rather than
             // silently dropping the type (which would mask a real removal).
-            [ sprintf "%s  # <members unavailable: %s>" fullName (ex.GetType().Name) ]
+            [|
+                sprintf "%s  # <members unavailable: %s>" fullName (ex.GetType().Name), None
+            |]
 
-    header :: members
+    // The type's own `[<Obsolete>]` (an F# module or a retired type carries
+    // it here, not on its members) leads, then the members in token order.
+    let entries =
+        Array.append [| header, obsoleteMessageOf (t.GetCustomAttributesData()) |] members
+
+    {
+        Lines =
+            entries
+            |> Array.toList
+            |> List.collect (fun (token, marked) ->
+                match marked with
+                | None -> [ token ]
+                | Some _ -> [ token; obsoleteMarker token ])
+        Obsolete =
+            entries
+            |> Array.toList
+            |> List.choose (fun (token, marked) -> marked |> Option.map (fun m -> { Token = token; Message = m }))
+    }
 
 let private exportedTypes (asm: Assembly) =
     try
@@ -526,10 +613,18 @@ let private isRenderableType (t: Type) =
     && not (fn.Contains "<")
     && not (isCompilerGenerated (t.GetCustomAttributesData()))
 
-/// Render the deterministic public-surface text for one packable DLL.
-/// `resolverPaths` is the shared MLC dependency pool. Sorted by type
-/// (ordinal), then by member within each type — re-runs are byte-stable.
-let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
+/// One assembly's rendered surface: the baseline text, and the
+/// `[<Obsolete>]` markings the same walk observed (Phase 258).
+type SurfaceRender = {
+    Text: string
+    Obsolete: ObsoleteMember list
+}
+
+/// Render the deterministic public-surface text for one packable DLL,
+/// together with its `[<Obsolete>]` markings. `resolverPaths` is the shared
+/// MLC dependency pool. Sorted by type (ordinal), then by member within
+/// each type — re-runs are byte-stable.
+let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceRender =
     let tpa =
         (AppContext.GetData "TRUSTED_PLATFORM_ASSEMBLIES" :?> string).Split(Path.PathSeparator)
         |> Array.filter (String.IsNullOrWhiteSpace >> not)
@@ -546,14 +641,16 @@ let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
     use mlc = new MetadataLoadContext(resolver)
     let asm = mlc.LoadFromAssemblyPath dllPath
 
-    let body =
+    let rendered =
         exportedTypes asm
         |> Array.filter isRenderableType
         |> Array.sortWith (fun a b ->
             let an = if isNull a.FullName then a.Name else a.FullName
             let bn = if isNull b.FullName then b.Name else b.FullName
             String.CompareOrdinal(an, bn))
-        |> Array.collect (renderType >> List.toArray)
+        |> Array.map renderType
+
+    let body = rendered |> Array.collect (_.Lines >> List.toArray)
 
     let sb = StringBuilder()
 
@@ -574,7 +671,24 @@ let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
     for line in body do
         sb.AppendLine line |> ignore
 
-    sb.ToString().Replace("\r\n", "\n")
+    {
+        Text = sb.ToString().Replace("\r\n", "\n")
+        Obsolete =
+            rendered
+            |> Array.toList
+            |> List.collect _.Obsolete
+            // A single source deprecation can render more than once (an
+            // F# module's type header and a re-export sharing a token);
+            // grade each distinct marking once.
+            |> List.distinct
+            |> List.sortWith (fun a b -> String.CompareOrdinal(a.Token, b.Token))
+    }
+
+/// The baseline text alone — the shape every existing caller and fixture
+/// wants. `renderSurfaceDetail` is the same walk with the Phase 258
+/// obsolete markings retained.
+let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
+    (renderSurfaceDetail dllPath resolverPaths).Text
 
 // ─── Diff (pure — the comparer the gate + fixtures exercise) ─────────
 
@@ -637,12 +751,6 @@ let compareSurface (baseline: string) (current: string) : SurfaceDrift = {
     Added = addedMembers baseline current
 }
 
-/// Phase 258 seam — the sanctioned rendering of an `[<Obsolete>]` marking:
-/// a SEPARATE line derived from the member's token, never a rewrite of it.
-/// See the "Reconciling with Phase 258" note in this file's header for why
-/// the in-place alternative is forbidden.
-let obsoleteMarker (memberToken: string) = memberToken + "  (obsolete)"
-
 // ─── Failure text (pure — so the wording itself is unit-testable) ────
 
 let private bullets (tokens: string list) =
@@ -688,4 +796,94 @@ let describeDrift (assemblyName: string) (drift: SurfaceDrift) : string option =
             assemblyName
             (regenRecipe assemblyName)
             addedTail
+        |> Some
+// ─── Phase 258 — the deprecation-message policy (pure) ───────────────
+//
+// `docs/platform/deprecation-policy.md` is the prose; this is the gate.
+// A deprecation notice a consumer cannot act on is worse than none: it
+// reports that something is going away and withholds both the thing to
+// move to and the release by which they must have moved. So a public
+// `[<Obsolete>]` must name BOTH halves.
+//
+// Recognition is by phrase, not by a rigid template, and that is
+// deliberate. A template ("Use X instead. Removed in N.0.") would be
+// exactly checkable and would reject the eight conforming notices this
+// SDK already ships — each of which says the right two things in its own
+// words. A gate whose first act is to rewrite compliant prose teaches
+// authors to satisfy the parser rather than the reader. The phrase lists
+// below are therefore permissive about WORDING and strict about the two
+// FACTS; extend them when a genuinely new phrasing appears, rather than
+// bending a notice to fit.
+//
+// The removal target may be a version ("removed in 1.0") or a boundary
+// ("removed in a future major") — the policy doc explains why the
+// vaguer form is admitted while `0.x` runs, and when it stops being.
+
+/// Phrases that name the REPLACEMENT half of a deprecation notice.
+let private replacementPhrases = [
+    "use "
+    "prefer "
+    "replaced by "
+    "replacement"
+    "moved to "
+    "see "
+    "compose "
+    "call "
+]
+
+/// Phrases that name the REMOVAL-TARGET half.
+let private removalPhrases = [
+    "removed in"
+    "removed at"
+    "removal in"
+    "retired in"
+    "retired at"
+    "will be removed"
+]
+
+let private mentionsAny (phrases: string list) (message: string) =
+    let lower = message.ToLowerInvariant()
+    phrases |> List.exists lower.Contains
+
+/// The policy defect in one `[<Obsolete>]` marking, or `None` when it
+/// conforms. Pure, so the policy itself is unit-testable without a build.
+let obsoleteDefect (marking: ObsoleteMember) : string option =
+    if String.IsNullOrWhiteSpace marking.Message then
+        Some "carries no message at all — a bare [<Obsolete>] tells a consumer nothing"
+    else
+        match mentionsAny replacementPhrases marking.Message, mentionsAny removalPhrases marking.Message with
+        | true, true -> None
+        | true, false -> Some "names a replacement but no removal target"
+        | false, true -> Some "names a removal target but no replacement"
+        | false, false -> Some "names neither a replacement nor a removal target"
+
+/// Every non-conforming marking in a rendered surface, paired with its
+/// defect, in token order.
+let obsoleteDefects (markings: ObsoleteMember list) : (ObsoleteMember * string) list =
+    markings
+    |> List.choose (fun m -> obsoleteDefect m |> Option.map (fun defect -> m, defect))
+
+/// The gate's failure text for a set of message defects, or `None` when
+/// every `[<Obsolete>]` on this assembly's public surface conforms.
+let describeObsoleteDefects (assemblyName: string) (defects: (ObsoleteMember * string) list) : string option =
+    match defects with
+    | [] -> None
+    | _ ->
+        let listed =
+            defects
+            |> List.map (fun (m, defect) ->
+                let shown =
+                    if String.IsNullOrWhiteSpace m.Message then
+                        "(empty)"
+                    else
+                        "\"" + m.Message + "\""
+
+                sprintf "  - %s\n      %s: %s" m.Token defect shown)
+            |> String.concat "\n"
+
+        sprintf
+            "%s: %d public [<Obsolete>] marking(s) do not meet the deprecation-message policy:\n%s\n\nEvery deprecation on the public surface must name BOTH a REPLACEMENT (what to move to) and a REMOVAL TARGET (the release by which the member goes away) — a consumer who reads only the compiler warning has to be able to act on it. NOTHING IS BROKEN and no baseline has drifted: this is about the WORDING of a notice, not the shape of the surface.\n\nThe shape:\n\n  [<Obsolete(\"Use Foo.bar instead. Removed in 1.0.\")>]\n\nWhile the SDK is on 0.x, \"removed in a future major\" is an accepted removal target. Full policy, including the deprecation window and the removal-only-at-a-major rule: docs/platform/deprecation-policy.md."
+            assemblyName
+            defects.Length
+            listed
         |> Some

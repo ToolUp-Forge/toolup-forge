@@ -43,7 +43,8 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
             a.Name
             config
     | Some dll ->
-        let rendered = renderSurface dll pool.Value
+        let render = renderSurfaceDetail dll pool.Value
+        let rendered = render.Text
         let baselinePath = Path.Combine(baselineDir root, a.Name + ".approved.txt")
 
         if approveModeFor a.Name then
@@ -65,6 +66,25 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
             let baseline = File.ReadAllText baselinePath
 
             match describeDrift a.Name (compareSurface baseline rendered) with
+            | None -> ()
+            | Some report -> failtest report
+
+            // Phase 258 — the deprecation-message policy, on the SAME
+            // render (one MetadataLoadContext load, not two).
+            //
+            // Deliberately AFTER the drift comparison and only on a
+            // comparison run:
+            //   * drift leads because regenerating the baseline is the
+            //     remedy for it, and a run that reported a message defect
+            //     first would be asking for a source fix while the caller
+            //     is mid-regen;
+            //   * a regeneration run never reaches here, because a policy
+            //     check that can block `TOOLUP_APPROVE_API` turns a
+            //     maintenance operation into a gate.
+            // An assembly with both a drift and a bad message therefore
+            // reports the drift now and the message on the next run. Both
+            // still fail; only the order is fixed.
+            match describeObsoleteDefects a.Name (obsoleteDefects render.Obsolete) with
             | None -> ()
             | Some report -> failtest report
 }
@@ -295,10 +315,10 @@ let private messageFixtures =
         }
     ]
 
-// ── Phase 258 seam (DECIDED here, in advance — see the header note in
-//    Contracts/PublicApiApproval.fs). Phase 258 will render `[<Obsolete>]`
-//    markings; these two fixtures pin which rendering it may use, so the
-//    decision survives as an executable contract rather than prose. ──
+// ── Phase 258 seam (DECIDED by Phase 618 in advance, SHIPPED by 258 —
+//    see the header note in Contracts/PublicApiApproval.fs). These two
+//    fixtures pin which rendering the marker may use, so the decision
+//    survives as an executable contract rather than prose. ──
 let private obsoleteSeamFixtures =
     testList "Phase 258 seam" [
         test "sanctioned obsolete marker scores additive, never breaking" {
@@ -328,12 +348,149 @@ let private obsoleteSeamFixtures =
         }
     ]
 
+// ── Phase 258 — the deprecation-MESSAGE policy. The comparer fixtures
+//    above pin what a deprecation does to the BASELINE; these pin what
+//    the notice itself has to SAY. Pure over `ObsoleteMember`, so the
+//    policy is falsifiable without a build. ──
+let private deprecationPolicyFixtures =
+    let marking token message = { Token = token; Message = message }
+
+    testList "Phase 258 deprecation message policy" [
+        test "a conforming notice passes" {
+            Expect.isNone
+                (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" "Use Demo.T.Beta instead. Removed in 1.0."))
+                "a notice naming a replacement and a removal target must pass"
+        }
+
+        test "a bare [<Obsolete>] fails, and the report says the message is empty" {
+            let defect =
+                Expect.wantSome
+                    (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" ""))
+                    "a bare [<Obsolete>] must fail the policy"
+
+            Expect.stringContains defect "no message" "the defect must name the missing message"
+
+            let report =
+                Expect.wantSome
+                    (describeObsoleteDefects "Demo" (obsoleteDefects [ marking "Demo.T.Alpha() : System.Int32" "" ]))
+                    "the assembly report must fail"
+
+            Expect.stringContains report "Demo.T.Alpha() : System.Int32" "the offending member must be named"
+            Expect.stringContains report "(empty)" "an empty message must be shown as empty, not as blank space"
+
+            Expect.stringContains
+                report
+                "docs/platform/deprecation-policy.md"
+                "the report must point at the policy it is enforcing"
+        }
+
+        test "whitespace is not a message" {
+            Expect.isSome
+                (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" "   "))
+                "a whitespace-only message must fail exactly as an empty one does"
+        }
+
+        test "a replacement with no removal target fails" {
+            let defect =
+                Expect.wantSome
+                    (obsoleteDefect (
+                        marking "Demo.T.Alpha() : System.Int32" "Prefer the Theming API: Demo.T.theme (...)"
+                    ))
+                    "a notice with no removal target must fail"
+
+            Expect.stringContains defect "removal target" "the defect must name the missing half"
+        }
+
+        test "a removal target with no replacement fails" {
+            let defect =
+                Expect.wantSome
+                    (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" "Removed in 1.0."))
+                    "a notice with no replacement must fail"
+
+            Expect.stringContains defect "replacement" "the defect must name the missing half"
+        }
+
+        test "a notice naming neither half says so" {
+            let defect =
+                Expect.wantSome
+                    (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" "Deprecated."))
+                    "a notice naming neither half must fail"
+
+            Expect.stringContains defect "neither" "the defect must say both halves are missing"
+        }
+
+        test "a policy failure is not reported as a surface break" {
+            let report =
+                Expect.wantSome
+                    (describeObsoleteDefects "Demo" (obsoleteDefects [ marking "Demo.T.Alpha() : System.Int32" "" ]))
+                    "the assembly report must fail"
+
+            Expect.stringContains
+                report
+                "NOTHING IS BROKEN"
+                "a wording defect must not read like a removal — the reader of a red run needs to know no baseline drifted"
+
+            Expect.isFalse (report.Contains "BREAKING") "a message defect is not a breaking change"
+        }
+
+        test "the phrasings the SDK's own live deprecations already use are accepted" {
+            // Every one of these is a notice shipped in `src/` at the time
+            // Phase 258 landed. A policy that rejected compliant prose
+            // would teach authors to satisfy the parser, not the reader —
+            // so the recogniser is measured against real notices rather
+            // than against a template invented alongside it.
+            let live = [
+                "Use Program.withErrorReporter + an update interceptor for structured tracing. withConsoleTrace will be removed in a future major."
+                "The AG Grid binding moved to the standalone Feliz.AgGrid package — `open Feliz.AgGrid` instead. This compat module is retired in a future minor."
+                "Vendor-named case — use ProviderAuthUI (\"clerk\", box clerkUIConfig) instead. See docs/migrations/494-vendor-neutral-auth-ui.md. ClerkAuthUI will be removed in a future major version."
+            ]
+
+            for message in live do
+                Expect.isNone
+                    (obsoleteDefect (marking "Demo.T.Alpha() : System.Int32" message))
+                    (sprintf "a live SDK deprecation notice must pass the policy: %s" message)
+        }
+
+        test "clean markings report nothing" {
+            Expect.isNone
+                (describeObsoleteDefects
+                    "Demo"
+                    (obsoleteDefects [
+                        marking "Demo.T.Alpha() : System.Int32" "Use Demo.T.Beta instead. Removed in 1.0."
+                    ]))
+                "an assembly whose deprecations all conform must not fail the gate"
+        }
+
+        // ── Anti-dormancy. The two seam fixtures above would pass with
+        //    the renderer emitting no attributes at all — which is
+        //    exactly the state Phase 618 left behind and Phase 258
+        //    fixed. This asserts the wiring from the committed
+        //    baselines: at least one `(obsolete)` marker is folded in,
+        //    so the renderer demonstrably emits them. Deliberately not
+        //    pinned to a specific member — a deprecation that reaches
+        //    its removal must not redden an unrelated gate. ──
+        test "the committed baselines carry obsolete markers — the renderer emits them" {
+            let markers =
+                Directory.EnumerateFiles(baselineDir root, "*.approved.txt")
+                |> Seq.sumBy (fun f ->
+                    File.ReadLines f
+                    |> Seq.filter (fun l -> l.EndsWith "  (obsolete)")
+                    |> Seq.length)
+
+            Expect.isGreaterThan
+                markers
+                0
+                "no committed baseline carries an obsolete marker, yet src/ ships [<Obsolete>] members — the Phase 258 rendering is not wired, so a deprecation is invisible to this gate"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 175 — Public-API approval baseline" [
         comparerFixtures
         messageFixtures
         obsoleteSeamFixtures
+        deprecationPolicyFixtures
         preconditionFixtures
         assemblyCases
     ]
