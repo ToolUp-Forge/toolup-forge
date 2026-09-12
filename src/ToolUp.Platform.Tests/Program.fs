@@ -556,6 +556,11 @@ let private registeredTests =
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
+        // Phase 459 — listed here, not merely attributed: the file carries
+        // `[<Tests>]` for symmetry with its neighbours, but
+        // `runTestsWithCLIArgs` runs `allTests`, so an unlisted binding
+        // never executes.
+        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
@@ -1883,6 +1888,10 @@ let private registeredTests =
         // renderer-neutral (fragment / live channel / action authorizer)
         // + the open-core grep-guard + the client-binding shape pin.
         SecondBindingNeutralityTests.tests
+        // Phase 477 — the same grep-guard, widened from the toy sample to
+        // the whole publishable surface (derived from IsPackable, not a
+        // path list), plus the go-red proofs of the matching rule.
+        OpenCoreVocabularyNeutralityTests.tests
         // Phase 265 — reusable ClientHostCapabilities conformance bar:
         // the four-capability host-bridge seam (Navigate / Notify /
         // Dispatch / Call) asserted against the in-tree default and the

@@ -17,7 +17,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <PackageId>Feliz.AgGrid</PackageId>
+    <!-- Phase 754 — the PUBLIC nuget.org id, decided by the operator
+         2026-09-01. `Feliz.AgGrid` on nuget.org is Compositional-IT's
+         unmaintained binding (latest 1.0.8) — the one this extraction
+         exists to supersede — so the in-repo id was never claimable, and
+         Phase 307 already proved the failure mode: an unowned id in the
+         template gate fell through to a stranger's package (NU1603).
+         The whole family moves under the established `ToolUp.*` prefix,
+         which is also the glob the repo's nuget.org Trusted Publishing
+         policy is registered against (`publish-nuget.yml`) — so this
+         rename is what makes the three packages publishable at all,
+         not merely safe to publish.
+
+         The CLR surface does NOT move: `AssemblyName` / `RootNamespace`
+         stay `Feliz.AgGrid`, `module Feliz.AgGrid` in AgGrid.fs is
+         unchanged, and every `open Feliz.AgGrid` keeps compiling. A
+         package id is not a module name. Consumers change exactly one
+         PackageReference. -->
+    <PackageId>ToolUp.Feliz.AgGrid</PackageId>
     <AssemblyName>Feliz.AgGrid</AssemblyName>
     <RootNamespace>Feliz.AgGrid</RootNamespace>
     <Description>Feliz bindings for AG Grid Community — typed column definitions, grid props, the grid API surface, the Theming API, and the AgGridProvider module-registration shape. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly.</Description>

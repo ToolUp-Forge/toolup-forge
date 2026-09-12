@@ -93,6 +93,8 @@ namespace ToolUp.Platform
 ///
 /// Every field is literal data written out by hand. Nothing here is
 /// derived from an F# identifier — see the file header.
+// OSS-BOUNDARY-EXEMPT: the vendor namespaces named below are wire values
+// of the public, Apache-2.0 federation-seam specification.
 type SignedShapeSeparator = {
     /// The owning vendor namespace, e.g. `fuaran` or `toolup`. One
     /// segment, subject to `SignedShapeSeparator.isSegment`.
@@ -226,6 +228,9 @@ module SignedShape =
     /// written, which is the mechanism this phase exists to install.
     /// Every string below is literal data; none is derived from the case
     /// name beside it (file header, "What is deliberately NOT derived").
+    // OSS-BOUNDARY-EXEMPT: every `Vendor` below is a wire value of the
+    // public, Apache-2.0 federation-seam specification — the literal
+    // bytes a signature is minted over, not prose about a private layer.
     let parts (shape: SignedShape) : SignedShapeSeparator =
         match shape with
         | SignedShape.CleanRoomTemplate -> {

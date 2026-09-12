@@ -426,6 +426,7 @@ carry one.
 
 Two contracts, and the split is the design:
 
+<!-- OSS-BOUNDARY-EXEMPT: the contract ids below are the public specification's own namespace — wire values, not prose. -->
 | Contract | Carries | Registered with |
 |---|---|---|
 | `fuaran.model-execution` | submission, outcome retrieval, registry query, vintage resolution — all metadata-shaped | `ModelExecutionPeerContract.host` |

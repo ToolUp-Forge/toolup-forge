@@ -1,5 +1,7 @@
 # Federation-seam wire specification — moved
 
+<!-- OSS-BOUNDARY-EXEMPT-FILE: this document exists to name the specification's public home; every reference below is a citation of a public, Apache-2.0 specification this repository conforms to. -->
+
 The normative text and its conformance corpus are no longer in this repository. They live in their
 own public home:
 

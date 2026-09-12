@@ -10,6 +10,9 @@
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
+        <!-- Phase 754 — the template gate's stranger's-package guard,
+             probed in both directions. -->
+        <Compile Include="TemplateGateTests.fs" />
         <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
              reconciler is source-linked from the repo root rather than
              copied, so this test and the `GenerateSdkManifest` FAKE

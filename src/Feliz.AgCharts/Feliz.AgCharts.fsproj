@@ -12,7 +12,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <PackageId>Feliz.AgCharts</PackageId>
+    <!-- Phase 754 — public nuget.org id under the `ToolUp.*` prefix; see
+         the fuller note in Feliz.AgGrid.fsproj. `Feliz.AgCharts` was
+         itself unclaimed, but a mixed family (one taken id worked
+         around, two not) would have been the worse outcome: an
+         `.Enterprise` id extending a base id someone else owns misleads
+         a reader about who maintains what. The CLR surface is unmoved —
+         `module Feliz.AgCharts` and every `open` of it are unchanged. -->
+    <PackageId>ToolUp.Feliz.AgCharts</PackageId>
     <AssemblyName>Feliz.AgCharts</AssemblyName>
     <RootNamespace>Feliz.AgCharts</RootNamespace>
     <Description>Feliz bindings for AG Charts Community — typed series, axes, legends, tooltips, markers and the chart theme builder, plus the deferred module-registration guard the Enterprise companion pre-empts. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly.</Description>
