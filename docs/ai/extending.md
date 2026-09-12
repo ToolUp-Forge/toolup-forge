@@ -439,6 +439,59 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 
 Consumers wanting allowlist enforcement implement `IClientToolAuthorizer` against their own policy shape — typically a default-deny allowlist keyed by module / field / button / page with bounded refusal-event audit. See [SECURITY.md](../../SECURITY.md) for the threat model.
 
+#### Observing denials — `/dev/ai-allowlist`
+
+Writing the refusal event is not the same as anyone seeing it. A denial stream nobody reads makes a
+prompt-injection campaign and a quiet afternoon look identical, so forge ships the read side too.
+
+**`GET /dev/ai-allowlist`** (gated on `ServerConfig.EnableDevEndpoints`, alongside `/dev/ai-latency`
+and `/dev/ai-fastpath`) returns a rolling 60-minute rollup of `_platform.ai.tool_allowlist_denial`
+for the caller's resolved scope — never across scopes:
+
+| Field | What it answers |
+|---|---|
+| `TotalDenialsAllTime` / `TotalDenialsInWindow` | has this ever happened / is it happening now |
+| `DenialsPerMinute` | the number an alerting threshold is sized against |
+| `ByToolName` / `ByActiveModule` / `ByScopeId` | which tool, driven from where |
+| `TopToolModulePairs` | the cut neither single axis gives |
+| `RecentDenials` | the most recent refusals, with sanitised reasons |
+
+Reasons are control-stripped, whitespace-collapsed and truncated before they leave the server, and
+**raw model arguments are never carried** — the model chose them, so under prompt injection they are
+attacker-authored text and an operator console is the wrong place to render them verbatim.
+
+**The same rollup in production, without the dev flag.** The Health Monitor admin module surfaces it
+as a read-only card on its Live tab, through `IHealthMonitorApi.GetAIDenialRollup`, gated on
+`PlatformRole.PlatformAdmin`. Both surfaces read the same `AIDenialRollup` record produced by the
+same function, so they cannot report different numbers. The card is suppressed entirely on a
+deployment that has never recorded a denial. The plumbing is the optional Core DI seam
+`IAIDenialRollupProbe`, which `composeAI` registers — so `ToolUp.Platform.Server` renders AI denials
+without taking a dependency on `ToolUp.AI` (GP 1), and a deployment with no AI composed simply has
+no seam and no card (GP 13).
+
+**Paging on a sustained rate.** A campaign should not wait for someone to refresh a page. Opt in with
+`AIServerApp.withDenialRateAlert`: when one scope's refused calls cross `Threshold` within `Window`,
+a single `SystemMessage` notification is published and then suppressed for `Cooldown` — one incident,
+one alert.
+
+```fsharp skip=fragment
+open ToolUp.AI
+
+AIServerApp.create factory providerProfile
+|> AIServerApp.withDenialRateAlert
+    { AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults with
+        Threshold = 20
+        // Multi-tenant: route the alert to the operator channel rather than
+        // telling the tenant that its session is being probed.
+        AlertScopeId = Some "_platform" }
+|> AIServerApp.run
+```
+
+Two caveats worth reading before sizing a threshold. The counter is **per process**, so an N-silo
+deployment can alert at up to N × the configured rate; `DenialsPerMinute` on the rollup is
+store-backed and therefore silo-complete, and is the number to trust for tuning. And omitting the
+call registers nothing at all — a deployment that has not opted in is byte-for-byte as it was.
+
 #### Client-resident tool authorization contract
 
 Any companion implementing `IClientToolAuthorizer` must clear the SDK's portability bar — the seam is intentionally narrow (sync, value-in / value-out, never-throws), and forge ships two reusable conformance packs so a new implementation can validate against the same invariants the platform default does:

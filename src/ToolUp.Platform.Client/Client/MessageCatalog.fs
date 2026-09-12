@@ -292,6 +292,14 @@ module MessageCatalog =
             DegradedCapabilities = fun count -> $"Degraded capabilities ({count})"
             DegradedCapabilitiesHelp =
                 "A capability wired best-effort at startup and failed without crashing the deployment. The server is up, but the listed capability is down until remediated. Alert on a non-empty set."
+            AIDenials = fun count -> $"AI action denials ({count} in window)"
+            AIDenialsHelp =
+                "Client-tool calls the AI agent loop refused against this deployment's allowlist. A sustained rate in one scope is the shape of a prompt-injection campaign or a mis-scoped allowlist — not routine noise."
+            AIDenialsRate = fun minutes rate -> $"last {minutes} min · {rate}/min"
+            AIDenialsByTool = "By tool"
+            AIDenialsByModule = "By module"
+            AIDenialsRecent = "Most recent"
+            AIDenialsQuiet = "No denials in the current window."
             Remediation = "Remediation"
             AsOf = fun at -> $"as of {at}"
             DegradedSince = fun at -> $"since {at}"

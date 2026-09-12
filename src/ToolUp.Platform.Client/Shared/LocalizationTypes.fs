@@ -313,6 +313,17 @@ type HealthMonitorMessages = {
     /// Takes the degraded-capability count.
     DegradedCapabilities: int -> string
     DegradedCapabilitiesHelp: string
+    /// Phase 47 — takes the denial count in the rolling window.
+    AIDenials: int -> string
+    AIDenialsHelp: string
+    /// Takes the window length in minutes and the formatted per-minute rate.
+    AIDenialsRate: int -> string -> string
+    AIDenialsByTool: string
+    AIDenialsByModule: string
+    AIDenialsRecent: string
+    /// Shown in place of the breakdowns when the window is clean but the
+    /// deployment has recorded denials before.
+    AIDenialsQuiet: string
     Remediation: string
     /// Takes the formatted timestamp.
     AsOf: string -> string

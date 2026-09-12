@@ -589,6 +589,11 @@ Auto-injected by `AIServerApp.run`:
 When `EnableDevEndpoints` is true:
 - `GET /dev/ai-latency` — 60-min rolling stats (JSON)
 - `GET /dev/ai-fastpath` — fast-path Tier stats (JSON; only when a fast-path consumer is registered)
+- `GET /dev/ai-allowlist` — 60-min rolling **action-denial** rollup (JSON): counts and per-minute
+  rate by tool, by active module and by scope, the top denied `(tool, module)` pairs, and the most
+  recent sanitised refusal reasons. Caller-scope only. The same rollup is available in production
+  without `EnableDevEndpoints` through the Health Monitor admin module (`GetAIDenialRollup`,
+  `PlatformAdmin`-gated) — see [`extending.md`](extending.md#observing-denials--devai-allowlist).
 
 ## Configuration knobs
 

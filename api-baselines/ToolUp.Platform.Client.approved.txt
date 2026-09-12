@@ -577,7 +577,8 @@ HealthMonitorUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
 HealthMonitorUI+LoadState`1+Tags.Loading : System.Int32 (literal)
 HealthMonitorUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
 HealthMonitorUI+Model (class)
-HealthMonitorUI+Model..ctor(HealthMonitorUI+Tab, HealthMonitorUI+LoadState`1[ToolUp.Platform.HealthSnapshot], HealthMonitorUI+LoadState`1[ToolUp.Platform.PreflightSnapshotView], HealthMonitorUI+LoadState`1[ToolUp.Platform.JobSchedulerTelemetryView], HealthMonitorUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability]], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+HealthMonitorUI+Model..ctor(HealthMonitorUI+Tab, HealthMonitorUI+LoadState`1[ToolUp.Platform.HealthSnapshot], HealthMonitorUI+LoadState`1[ToolUp.Platform.PreflightSnapshotView], HealthMonitorUI+LoadState`1[ToolUp.Platform.JobSchedulerTelemetryView], HealthMonitorUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability]], HealthMonitorUI+LoadState`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup]], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+HealthMonitorUI+Model.AIDenials : HealthMonitorUI+LoadState`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup]] { get }
 HealthMonitorUI+Model.ActiveTab : HealthMonitorUI+Tab { get }
 HealthMonitorUI+Model.Degraded : HealthMonitorUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability]] { get }
 HealthMonitorUI+Model.Live : HealthMonitorUI+LoadState`1[ToolUp.Platform.HealthSnapshot] { get }
@@ -585,6 +586,7 @@ HealthMonitorUI+Model.Preflight : HealthMonitorUI+LoadState`1[ToolUp.Platform.Pr
 HealthMonitorUI+Model.RecentlyFlipped : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 HealthMonitorUI+Model.SchedulerTelemetry : HealthMonitorUI+LoadState`1[ToolUp.Platform.JobSchedulerTelemetryView] { get }
 HealthMonitorUI+Msg (class)
+HealthMonitorUI+Msg.IsAIDenialsLoaded : System.Boolean { get }
 HealthMonitorUI+Msg.IsDegradedLoaded : System.Boolean { get }
 HealthMonitorUI+Msg.IsLiveLoaded : System.Boolean { get }
 HealthMonitorUI+Msg.IsPreflightLoaded : System.Boolean { get }
@@ -595,6 +597,8 @@ HealthMonitorUI+Msg.IsSwitchTab : System.Boolean { get }
 HealthMonitorUI+Msg.RefreshLive : HealthMonitorUI+Msg { get }
 HealthMonitorUI+Msg.RefreshPreflight : HealthMonitorUI+Msg { get }
 HealthMonitorUI+Msg.Tag : System.Int32 { get }
+HealthMonitorUI+Msg+AIDenialsLoaded (class)
+HealthMonitorUI+Msg+AIDenialsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String] { get }
 HealthMonitorUI+Msg+DegradedLoaded (class)
 HealthMonitorUI+Msg+DegradedLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String] { get }
 HealthMonitorUI+Msg+LiveLoaded (class)
@@ -606,6 +610,7 @@ HealthMonitorUI+Msg+SchedulerTelemetryLoaded.Item : Microsoft.FSharp.Core.FSharp
 HealthMonitorUI+Msg+SwitchTab (class)
 HealthMonitorUI+Msg+SwitchTab.Item : HealthMonitorUI+Tab { get }
 HealthMonitorUI+Msg+Tags (class)
+HealthMonitorUI+Msg+Tags.AIDenialsLoaded : System.Int32 (literal)
 HealthMonitorUI+Msg+Tags.DegradedLoaded : System.Int32 (literal)
 HealthMonitorUI+Msg+Tags.LiveLoaded : System.Int32 (literal)
 HealthMonitorUI+Msg+Tags.PreflightLoaded : System.Int32 (literal)
@@ -3674,7 +3679,14 @@ ToolUp.Platform.HealthMonitorConfig..ctor(System.String, Fable.React.ReactElemen
 ToolUp.Platform.HealthMonitorConfig.Icon : Fable.React.ReactElement { get }
 ToolUp.Platform.HealthMonitorConfig.Name : System.String { get }
 ToolUp.Platform.HealthMonitorMessages (class)
-ToolUp.Platform.HealthMonitorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]])
+ToolUp.Platform.HealthMonitorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]])
+ToolUp.Platform.HealthMonitorMessages.AIDenials : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsByModule : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsByTool : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsHelp : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsQuiet : System.String { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsRate : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
+ToolUp.Platform.HealthMonitorMessages.AIDenialsRecent : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.AsOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.HealthMonitorMessages.ColumnElapsed : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.ColumnKind : System.String { get }

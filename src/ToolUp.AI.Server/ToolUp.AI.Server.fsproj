@@ -56,6 +56,7 @@
              AITypes (Core) + the metric registry / retrieval types (Platform)
              + the metrics seam; placed before the handler that wires it. -->
         <Compile Include="Server\AnswerVerifier.fs" />
+        <Compile Include="Server\AIDenialRateMonitor.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />
@@ -75,6 +76,7 @@
         <Compile Include="Server\UIDecodeErrorHandler.fs" />
         <Compile Include="Server\FastPathTelemetryHandler.fs" />
         <Compile Include="Server\AILatencyHandler.fs" />
+        <Compile Include="Server\AIAllowlistDiagnosticsHandler.fs" />
         <Compile Include="Server\AIProviderUsageMiddleware.fs" />
         <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
         <Compile Include="Server\AIProviderEnvValidator.fs" />

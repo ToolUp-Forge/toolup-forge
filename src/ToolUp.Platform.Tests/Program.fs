@@ -789,6 +789,9 @@ let private registeredTests =
         CrossIndexErasureConformanceTests.tests
         SyntheticClientToolAuthorizerTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
+        // Phase 47 - AI action-denial observability: the rollup and the
+        // sustained-rate alert.
+        AIAllowlistDiagnosticsTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         // Phase 113 — host-neutral default-deny action authorizer:

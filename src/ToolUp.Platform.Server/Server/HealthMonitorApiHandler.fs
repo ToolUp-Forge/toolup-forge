@@ -174,4 +174,30 @@ let healthMonitorApi (ctx: HttpContext) : IHealthMonitorApi =
                     | :? DegradedCapabilities.DegradedCapabilityRegistry as reg -> return Ok(reg.Snapshot())
                     | _ -> return Ok []
                 })
+
+        GetAIDenialRollup =
+            fun () ->
+                withGate (fun () -> async {
+                    // Phase 47 — the AI tier's denial rollup, reached
+                    // through the optional `IAIDenialRollupProbe` seam so
+                    // `Platform.Server` keeps no dependency on `ToolUp.AI`
+                    // (GP 1). Absent seam → `None`, and the panel is
+                    // suppressed rather than showing a misleading zero.
+                    //
+                    // The scope is the CALLER's resolved scope, never a
+                    // parameter (GP 4) — the probe cannot be asked for
+                    // another team's denials.
+                    match ctx.RequestServices.GetService(typeof<IAIDenialRollupProbe>) with
+                    | :? IAIDenialRollupProbe as probe ->
+                        let accessContext = resolveAccessContext ctx
+
+                        let scopeId =
+                            match AccessContext.configScope accessContext with
+                            | Some scope -> scope.ScopeId
+                            | None -> "_platform"
+
+                        let! rollup = probe.Rollup scopeId
+                        return Ok(Some rollup)
+                    | _ -> return Ok None
+                })
     }

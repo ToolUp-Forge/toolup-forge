@@ -535,9 +535,34 @@ let private runFullAgentLoop
                         $"AI tool denial audit write ({auditSource}) failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
         }
 
+        // Phase 47 — the sustained-denial rate monitor and the channel
+        // it alerts through. Resolved once per turn rather than per
+        // denial; a deployment that declared no alert policy has no
+        // monitor registered, so its entire cost is one failed
+        // `GetService` per turn (GP 13).
+        let denialRateMonitor =
+            match ctx.RequestServices.GetService(typeof<AIDenialRateMonitor.AIDenialRateMonitor>) with
+            | :? AIDenialRateMonitor.AIDenialRateMonitor as m -> Some m
+            | _ -> None
+
+        let denialAlertChannel =
+            match ctx.RequestServices.GetService(typeof<INotificationChannel>) with
+            | :? INotificationChannel as c -> Some c
+            | _ -> None
+
         /// G12 allowlist denial stream — unchanged shape and source.
-        let writeDenialAudit (toolName: string) (reason: string) =
-            writeToolDenialAudit "_platform.ai.tool_allowlist_denial" "ToolAllowlistDenied" toolName reason
+        ///
+        /// Phase 47 additionally feeds the rolling denial-rate monitor.
+        /// The audit write is what makes a denial *readable*; the
+        /// monitor is what makes a sustained campaign *noticed* without
+        /// anyone refreshing a page. It runs after the write and never
+        /// affects it — both are best-effort, and the refusal itself
+        /// has already been enforced by the time either runs.
+        let writeDenialAudit (toolName: string) (reason: string) = async {
+            do! writeToolDenialAudit "_platform.ai.tool_allowlist_denial" "ToolAllowlistDenied" toolName reason
+
+            do! AIDenialRateMonitor.observeAndAlert denialRateMonitor denialAlertChannel latencyScope.ScopeId toolName
+        }
 
         /// Phase 36.A — RBAC denial stream. A tool the model named whose
         /// `SourceModule` the caller holds no `Read` on. Distinct source
