@@ -401,7 +401,7 @@ module internal Validation =
                 |> Option.map (fun n -> MaxValueAttribute n :> ValidationAttribute)
             | _ -> None
 
-    /// Extract the input type from an API record field. Fable.Remoting
+    /// Extract the input type from an API record field. ToolUp.Remoting
     /// method signatures are F# function types (`'input -> Async<'output>`);
     /// for multi-argument methods the signature is curried, so we walk
     /// until we hit a non-function (the eventual `Async<'T>`).

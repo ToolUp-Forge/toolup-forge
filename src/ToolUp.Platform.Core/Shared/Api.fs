@@ -6,7 +6,7 @@ namespace ToolUp.Platform
 // Portions of this file were adapted from SAFE.Client.Utils, distributed
 // under the MIT license (Copyright 2017 SAFE-Stack). When ToolUp.Platform
 // replaced the SAFE.Client metapackage with direct dependencies on Fable,
-// Elmish, Feliz, and Fable.Remoting, the DU surface actually consumed by
+// Elmish, Feliz, and ToolUp.Remoting, the DU surface actually consumed by
 // the codebase (`ApiCall`, `RemoteData`) was re-homed here verbatim to
 // preserve call-site syntax. See Shared/Api.fs in the original package
 // for the full MIT license text.

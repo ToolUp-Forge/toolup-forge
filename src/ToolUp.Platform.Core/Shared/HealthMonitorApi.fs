@@ -7,7 +7,7 @@ open System
 
 // ─── HealthMonitorApi (production-safe Owner/Admin surface) ──────────
 //
-// Read-only Fable.Remoting API surfacing live `IHealthCheck` results
+// Read-only ToolUp.Remoting API surfacing live `IHealthCheck` results
 // and the most recent `IConfigValidator` preflight outcomes
 // to authenticated Owner/Admin operators through a built-in
 // admin module — so production deployments don't have to enable the
@@ -126,12 +126,12 @@ type DegradedCapability = {
     Remediation: string
 }
 
-/// Owner/Admin-gated read-only Fable.Remoting surface. Auto-injected
+/// Owner/Admin-gated read-only ToolUp.Remoting surface. Auto-injected
 /// by `compose` — `Anonymous` mode returns `Error` from both methods;
 /// `Team` / `MultiTeam` require Owner or Admin role; `Individual` /
 /// `AuthenticatedEphemeral` require an authenticated user.
 ///
-/// `Result<_, string>` is the established Fable.Remoting failure
+/// `Result<_, string>` is the established ToolUp.Remoting failure
 /// shape (`IWebhookApi`, `IConfigApi`, `IFeatureFlagApi`) — RBAC
 /// denials and transport failures both flow as `Error` so the client
 /// branches uniformly.

@@ -32,7 +32,7 @@
     <PackageVersion>0.4.4</PackageVersion>
     <Title>ToolUp.SAFER — minimal F# full-stack starter (Tiny Chat demo)</Title>
     <Authors>ToolUp Analytics Ltd (UK)</Authors>
-    <Description>Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree Elmish + ToolUp.Remoting fork primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution.</Description>
+    <Description>Minimal F# full-stack starter for the ToolUp Platform SDK. Mirrors the SAFE Stack get-started experience and demonstrates the in-tree ToolUp.Elmish + ToolUp.Remoting primitives via a Tiny Chat demo. Anonymous mode, in-memory only, no auth, no persistence. For production multi-tenant + auth + persistence, use platformsdk-solution.</Description>
     <PackageTags>dotnet-new;templates;F#;ToolUp;SAFE;Fable;Elmish;Feliz;Giraffe</PackageTags>
     <PackageProjectUrl>https://github.com/ToolUp-Forge/toolup-forge</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

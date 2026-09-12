@@ -51,7 +51,7 @@ module ErrorCode =
         | RateLimited rle -> sprintf "rate-limited:limit=%d,retryAfter=%ds" rle.Limit rle.RetryAfterSeconds
         | Module(m, c) -> $"module:{m}:{c}"
 
-/// Localised error envelope returned by SDK-aware Fable.Remoting
+/// Localised error envelope returned by SDK-aware ToolUp.Remoting
 /// handlers. The server populates `MessageKey` with a
 /// `TranslationKey` and `Details` with placeholder substitutions
 /// (`Map<placeholderName, substitutionValue>`); the client's

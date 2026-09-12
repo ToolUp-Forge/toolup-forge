@@ -462,7 +462,7 @@
         <Compile Include="Shared\Types\TeamInviteTypes.fs" />
         <Compile Include="Shared\IPendingInviteStore.fs" />
         <Compile Include="Shared\ITeamInviteApi.fs" />
-        <!-- 0.5.7 — Generic directory-lookup substrate + Fable.Remoting
+        <!-- 0.5.7 — Generic directory-lookup substrate + ToolUp.Remoting
              contract. Companion impls (e.g. ToolUp.AuthProviders.EntraDirectory)
              plug into IUserDirectory; the SDK's TeamManagerUI typeahead
              calls IUserDirectoryApi. Returns Ok [] when no companion
@@ -545,7 +545,7 @@
              before PlatformTenantApi (ListPrincipals returns it).
              Async-free + Fable-compatible. -->
         <Compile Include="Shared\Types\PrincipalRegistryTypes.fs" />
-        <!-- Phase 54 — IPlatformTenantApi Fable.Remoting contract. After
+        <!-- Phase 54 — IPlatformTenantApi ToolUp.Remoting contract. After
              TenantLifecycleTypes (returns LifecycleSummary) + DeployPlaneTypes
              (ProvisionTenant carries ProvisioningRequest). -->
         <Compile Include="Shared\PlatformTenantApi.fs" />

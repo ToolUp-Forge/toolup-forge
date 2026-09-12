@@ -128,7 +128,7 @@ let inline ask<'TRequest, 'TResponse>
 // ─── Client bus implementation ────────────────────────────────────
 
 /// Client-side `IModuleQueryBus`. Tries the in-browser registry first
-/// and falls back to the server's `IModuleQueryBusApi` via Fable.Remoting
+/// and falls back to the server's `IModuleQueryBusApi` via ToolUp.Remoting
 /// when no local handler matches. A single instance is constructed by
 /// `SDK.Client.run` at shell startup and handed to every module through
 /// `ClientModuleContext.QueryBus`.

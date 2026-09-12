@@ -36,7 +36,7 @@ open Toolup.UIToolkit
 // UIs) can adopt the same component.
 
 // Module-level proxy. Single instance shared by every typeahead in the
-// process; Fable.Remoting proxies are stateless so reuse is safe.
+// process; ToolUp.Remoting proxies are stateless so reuse is safe.
 let private directoryApi: IUserDirectoryApi =
     Api.makeProxy<IUserDirectoryApi> (customOptions = UserSession.withRequestHeaders)
 

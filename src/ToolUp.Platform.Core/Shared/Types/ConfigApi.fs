@@ -39,9 +39,9 @@ type ModuleConfigView = {
     Values: Map<string, string>
 }
 
-// ─── Fable.Remoting API surface ─────────────────────────────────
+// ─── ToolUp.Remoting API surface ─────────────────────────────────
 
-/// Admin-facing Fable.Remoting API for inspecting and editing
+/// Admin-facing ToolUp.Remoting API for inspecting and editing
 /// per-scope module configuration. Auto-injected by `compose` in all
 /// modes — the handler gates writes behind `TeamRoles.canWriteTeamConfig`
 /// in Team mode (Owner/Admin only) and short-circuits Anonymous mode
@@ -85,6 +85,6 @@ type IConfigApi = {
 }
 
 module ConfigApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `PlatformApi`, `AISettingsApi`, etc.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"

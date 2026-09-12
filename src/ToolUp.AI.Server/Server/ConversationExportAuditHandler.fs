@@ -19,7 +19,7 @@ open ToolUp.Platform
 // and *whether* the user opted into tool-detail inclusion.
 //
 // Deliberately a thin fire-and-forget endpoint mirroring
-// `FastPathBeaconHandler` rather than a new Fable.Remoting method:
+// `FastPathBeaconHandler` rather than a new ToolUp.Remoting method:
 // it is the codebase's established "client tells server something
 // happened, for audit" pattern, keeps the shared `AIAssistantApi`
 // Remoting contract untouched, and the acceptance criterion ("one

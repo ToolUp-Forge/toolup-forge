@@ -138,7 +138,7 @@ module Cmd =
         }
 
     /// `Cmd.OfRemoting` — intent-named wrapper around `Cmd.OfAsync` for
-    /// RPC call sites. Documents that the underlying call is a Fable.Remoting
+    /// RPC call sites. Documents that the underlying call is a ToolUp.Remoting
     /// (or `ToolUp.Remoting`) proxy invocation rather than arbitrary async,
     /// exposes a `RetryPolicy` knob, and runs through a real interceptor
     /// registry so cross-cutting concerns (correlation id stash, telemetry,

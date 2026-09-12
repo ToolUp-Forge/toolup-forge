@@ -68,7 +68,7 @@ let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit
         return Error "platform admin role required"
 }
 
-/// Build the `IHealthMonitorApi` Fable.Remoting handler. Resolves
+/// Build the `IHealthMonitorApi` ToolUp.Remoting handler. Resolves
 /// `IHealthCheck`s, `IPreflightSnapshot`, and `AccessContext` lazily
 /// from DI per request — same idiom as `WebhookApiHandler.webhookApi`
 /// and `ConfigHandler.configApi`.

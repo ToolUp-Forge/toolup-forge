@@ -5,7 +5,7 @@ open ToolUp.Platform
 
 // ─── 0.5.7 — IUserDirectoryApi handler ──────────────────────────────
 //
-// Server-side implementation of the `IUserDirectoryApi` Fable.Remoting
+// Server-side implementation of the `IUserDirectoryApi` ToolUp.Remoting
 // record (defined in `Core/Shared/Types/UserDirectoryTypes.fs`).
 //
 // Resolves `IUserDirectory` lazily from DI per request — mirrors the

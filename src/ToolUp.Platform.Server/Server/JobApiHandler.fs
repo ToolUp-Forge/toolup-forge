@@ -7,7 +7,7 @@ open ToolUp.Platform.TeamManagement
 
 // ─── JobApi handler factory ──────────────────────────────────────
 //
-// Builds the `JobApi` Fable.Remoting handler. Resolves
+// Builds the `JobApi` ToolUp.Remoting handler. Resolves
 // `IJobScheduler`, `AccessContext`, and (in Team / MultiTeam mode)
 // `ITeamStore` lazily from DI per request. Same pattern as
 // `ConfigHandler.configApi` and `AISettingsHandler`.

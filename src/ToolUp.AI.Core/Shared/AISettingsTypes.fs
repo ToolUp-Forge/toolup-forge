@@ -66,7 +66,7 @@ type AIProviderInstanceSaveRequest = {
 
 // ─── API contract ────────────────────────────────────────────────
 
-/// Fable.Remoting API for per-user / per-team AI settings. Used by
+/// ToolUp.Remoting API for per-user / per-team AI settings. Used by
 /// the settings UI (Phase D) to manage configured providers and
 /// associated API keys.
 ///

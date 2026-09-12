@@ -23,7 +23,7 @@ open ToolUp.Platform.Server
 //
 // Each server-side module exposes a single `serverModule : ServerModule`
 // value that consolidates everything the module contributes: its HTTP
-// handlers (typically one Fable.Remoting api + permission guard),
+// handlers (typically one ToolUp.Remoting api + permission guard),
 // declared `DataType`s, optional RAG `VectorisationHandler`s, and an
 // optional team-editable `ModuleConfigSchema`. The composition root
 // lists these and `ServerApp.addModule` fans each record into the right
@@ -228,7 +228,7 @@ module ServerModule =
         | Ok tightened -> { m with GrantPolicy = tightened }
         | Error refusal -> failwith (GrantRefusal.describe refusal)
 
-    /// Attach a permission-guarded Fable.Remoting api factory. Uses the
+    /// Attach a permission-guarded ToolUp.Remoting api factory. Uses the
     /// module's `Name` as the RBAC key, so callers never duplicate it.
     ///
     /// Phase 69d.tail — the module-access gate (`canAccessModule`) is

@@ -28,7 +28,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 //
 // Handler tests use `teamApi config ctx : TeamApi` (the inner-record
 // builder exposed in `PlatformApiHandler.fs`) so the suite doesn't go
-// through Fable.Remoting's HTTP machinery — matches the
+// through ToolUp.Remoting's HTTP machinery — matches the
 // `PlatformAdminApiHandler.platformAdminApi` testing pattern.
 
 // ─── Fakes ───────────────────────────────────────────────────────────

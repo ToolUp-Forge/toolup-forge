@@ -118,7 +118,7 @@ type PinRequest = {
     Pinned: bool
 }
 
-/// Fable.Remoting surface for the Home/Overview landing module.
+/// ToolUp.Remoting surface for the Home/Overview landing module.
 /// Scoped server-side from the caller's resolved `AccessContext`; requires a
 /// resolved scope (no anonymous access — an Anonymous caller has no
 /// scope to summarise).
@@ -178,7 +178,7 @@ type IHomeWidgetDataProvider =
     abstract Describe: scopeId: string -> Async<Map<string, string>>
 
 module HomeOverviewApi =
-    /// Fable.Remoting route builder. Mirrors `UsageQueryApi`'s shape —
+    /// ToolUp.Remoting route builder. Mirrors `UsageQueryApi`'s shape —
     /// a fixed `/api/_platform/home/*` prefix so the Home client proxy
     /// can discover the endpoint by path alone.
     let routeBuilder (_typeName: string) (methodName: string) =

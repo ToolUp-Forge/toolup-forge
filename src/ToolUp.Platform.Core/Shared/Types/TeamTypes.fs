@@ -97,7 +97,7 @@ type PlatformInfo = { RequiresAuth: bool }
 /// returns it and `TeamApi` is declared further down in this same
 /// file — `TeamTypes.fs` compiles before `SDK.Shared.fs`, so siting
 /// the DU here is what makes it reachable from both the client
-/// Fable.Remoting surface and the `ServerConfig` record without
+/// ToolUp.Remoting surface and the `ServerConfig` record without
 /// introducing a reverse cross-reference.
 type TeamCreationPolicy =
     /// Default. Only callers holding `PlatformRole.PlatformAdmin`
@@ -164,7 +164,7 @@ type DirectAddIdentityProof =
 // Originally a single `PlatformApi` record carrying 14 methods across
 // five concerns (info, team CRUD, permissions, accessibility, data
 // catalog). Split per Tidy-Up "Split PlatformApi as it grows" into
-// five sibling records so each concern has its own Fable.Remoting
+// five sibling records so each concern has its own ToolUp.Remoting
 // proxy route prefix, its own composeable handler, and a clean
 // per-concern test surface. The compose root auto-injects all five
 // via `SDK.Server.compose` — consumers see no change to the

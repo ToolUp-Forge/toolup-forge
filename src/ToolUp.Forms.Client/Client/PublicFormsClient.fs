@@ -6,7 +6,7 @@ module ToolUp.Forms.PublicFormsClient
 open ToolUp.Remoting.Client
 open ToolUp.Forms.PublicFormApi
 
-// ─── Phase 21b — Public-form Fable.Remoting client proxy ────────────
+// ─── Phase 21b — Public-form ToolUp.Remoting client proxy ────────────
 //
 // Deliberately does NOT use `UserSession.withRequestHeaders` — the
 // public surface authenticates via the share token in the request

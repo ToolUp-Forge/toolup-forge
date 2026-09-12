@@ -2,7 +2,7 @@ namespace ToolUp.Reporting
 
 open ToolUp.Platform // 0.5.0 — forge-native auth attributes
 
-// ─── Phase 23 — ReportApi Fable.Remoting contract ────────────────────
+// ─── Phase 23 — ReportApi ToolUp.Remoting contract ────────────────────
 //
 // Typed RPC the client (Reporting admin UI / module-side render
 // callers) consumes. Returns a `RenderOutcome` that distinguishes
@@ -30,7 +30,7 @@ type RenderRpcError =
     | NotAuthorised of reason: string
     | Renderer of RenderError
 
-/// Fable.Remoting contract surface — every method returns
+/// ToolUp.Remoting contract surface — every method returns
 /// `Async<Result<_, _>>` per the SDK convention. The handler is
 /// scope-resolved per request; callers don't pass scopeId.
 ///

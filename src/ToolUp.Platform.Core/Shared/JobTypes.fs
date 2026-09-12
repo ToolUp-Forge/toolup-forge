@@ -407,7 +407,7 @@ type JobResult =
 ///
 /// Lives in the shared layer so the Fable admin UI and module client
 /// code can construct registrations and submit them through the
-/// `JobApi` Fable.Remoting surface.
+/// `JobApi` ToolUp.Remoting surface.
 type JobRegistration = {
     /// Logical scope to register the job under. The scheduler stamps
     /// this verbatim into `JobDefinition.ScopeId`. The handler-side

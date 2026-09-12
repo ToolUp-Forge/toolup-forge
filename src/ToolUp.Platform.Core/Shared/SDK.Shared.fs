@@ -346,7 +346,7 @@ type DataIngestionMode =
     /// `IDataIngestor` + `IDataSourceConfigStore` registered.
     /// Connectors register via DI as `IDataSource` (one per `Kind`).
     /// The data-ingestion API (`IDataIngestionApi`) is auto-injected
-    /// as a Fable.Remoting endpoint when the scheduler is also
+    /// as a ToolUp.Remoting endpoint when the scheduler is also
     /// enabled — `TriggerRefresh` schedules a `Manual` job through
     /// `IJobScheduler`, so apps that want triggered ingestion need
     /// `JobScheduler = InProcessJobScheduler` too.
@@ -1594,7 +1594,7 @@ type PublicRenderingMode =
 ///   * `EnabledAssetStore` — the `ToolUp.AssetStore` companion
 ///     registers `DefaultAssetStore` (wrapping the SDK's
 ///     configured `IBlobStorage` for originals + derivative
-///     cache), mounts the Fable.Remoting `IAssetApi` handler at
+///     cache), mounts the ToolUp.Remoting `IAssetApi` handler at
 ///     `/api/assets/`, the form-multipart upload endpoint at
 ///     `/api/assets/upload`, and (when audit emission is
 ///     enabled at compose time) emits `AssetUploaded` /
@@ -1623,7 +1623,7 @@ type AssetStoreMode =
 ///     `IBlobStorage`), mounts the HTTP-range-serving endpoint
 ///     (`206 Partial Content` for `<video>` seeking), the
 ///     scope-signed expiring-URL minting + verification, and the
-///     Fable.Remoting `IMediaApi` handler. Transcode / HLS
+///     ToolUp.Remoting `IMediaApi` handler. Transcode / HLS
 ///     rendition production is delivered by opt-in sub-companions
 ///     (`ToolUp.Media.FFmpeg`, `ToolUp.Media.CloudTranscode`);
 ///     the default impl range-serves over blob storage with no
@@ -3201,7 +3201,7 @@ type ServerConfig = {
     /// surface (no `/api/assets/*` handlers, no `IAssetStore` DI
     /// singleton, no audit emission). `EnabledAssetStore` brings
     /// up the `ToolUp.AssetStore` companion's `DefaultAssetStore`
-    /// (over the configured `IBlobStorage`), the Fable.Remoting
+    /// (over the configured `IBlobStorage`), the ToolUp.Remoting
     /// `IAssetApi` handler, the multipart upload endpoint, and
     /// audit emission of `AssetUploaded` / `AssetDeleted`. See
     /// `AssetStoreMode` for the strip-imports contract.
@@ -3214,7 +3214,7 @@ type ServerConfig = {
     /// endpoint). `EnabledMediaLibrary` brings up the
     /// `ToolUp.MediaLibrary` companion's `DefaultMediaLibrary` (over
     /// the configured `IBlobStorage`), the `206`-range-serving
-    /// endpoint, scope-signed expiring URLs, and the Fable.Remoting
+    /// endpoint, scope-signed expiring URLs, and the ToolUp.Remoting
     /// `IMediaApi` handler. See `MediaLibraryMode` for the strip-
     /// imports contract.
     MediaLibrary: MediaLibraryMode

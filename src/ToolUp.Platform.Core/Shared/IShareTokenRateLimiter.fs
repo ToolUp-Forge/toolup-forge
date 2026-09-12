@@ -56,7 +56,7 @@ open System
 /// (Forms.Server); distributed deployments wire a companion backed
 /// by Redis / their `IRateLimitStore` (Phase 56) / equivalent.
 ///
-/// Implementations must be thread-safe — Fable.Remoting and the
+/// Implementations must be thread-safe — ToolUp.Remoting and the
 /// public-form handler may invoke from multiple request threads
 /// concurrently against the same token.
 type IShareTokenRateLimiter =

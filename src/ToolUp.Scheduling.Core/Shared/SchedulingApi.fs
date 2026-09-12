@@ -4,7 +4,7 @@ open System
 open ToolUp.Platform // 0.5.0 — forge-native auth attributes
 open ToolUp.Scheduling.SchedulingTypes
 
-// ─── Phase 20 — Fable.Remoting wire contract ────────────────────────
+// ─── Phase 20 — ToolUp.Remoting wire contract ────────────────────────
 //
 // The client-facing API. Method shapes mirror `IBookingScheduler` minus
 // the per-request `scopeId` / actor parameters — those are resolved
@@ -18,7 +18,7 @@ open ToolUp.Scheduling.SchedulingTypes
 // `BookingError.Conflicts` (added to the DU for this layer); other
 // failure modes ride their dedicated cases.
 
-/// Reschedule request payload — a tagged record so Fable.Remoting
+/// Reschedule request payload — a tagged record so ToolUp.Remoting
 /// serialises the three positional arguments as a single named tuple
 /// on the wire.
 type RescheduleRequest = {
@@ -41,7 +41,7 @@ type SlotSearchRequest = {
     SlotDurationMinutes: int
 }
 
-/// Fable.Remoting record-of-functions. Each call goes over HTTP via
+/// ToolUp.Remoting record-of-functions. Each call goes over HTTP via
 /// `ToolUp.Remoting.Client` proxy; server-side handler in
 /// `Server/SchedulingApiHandler.fs` resolves the AccessContext,
 /// applies write gating, and delegates to `IBookingScheduler`.

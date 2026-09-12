@@ -10,7 +10,7 @@ open ToolUp.Platform.Server
 
 // ─── Phase 89 — content admin compose seam ────────────────────────────
 //
-// Mounts the `IContentAdminApi` Fable.Remoting handler
+// Mounts the `IContentAdminApi` ToolUp.Remoting handler
 // (`/api/content-admin/*`) onto a `ServerApp`. Composes additively after
 // the PublicRendering companion (which registers the `IEntityStore`
 // overlay the admin API writes to). The scheduled-publish sweep is wired

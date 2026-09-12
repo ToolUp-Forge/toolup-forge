@@ -23,7 +23,7 @@ open KnowledgeBase.ServerApiAIContext
 
 // ─── API surface composition ──────────────────────────────────────
 
-/// Construct the Fable.Remoting `KnowledgeApi` for the current request.
+/// Construct the ToolUp.Remoting `KnowledgeApi` for the current request.
 /// Resolves per-request dependencies (`KnowledgeApiDeps`) once, then
 /// binds each API method to its handler in `Server/Api/<X>.fs`.
 let knowledgeApi (ctx: HttpContext) : KnowledgeApi =

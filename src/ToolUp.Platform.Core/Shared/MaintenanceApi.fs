@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── MaintenanceApi (Fable.Remoting wire surface) ────────────────
+// ─── MaintenanceApi (ToolUp.Remoting wire surface) ────────────────
 //
 // Owner-only admin API for rebuilding secondary indexes from
 // canonical state. The endpoints are no-ops in the happy path —

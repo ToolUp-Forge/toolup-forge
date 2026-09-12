@@ -268,7 +268,7 @@ let private savePinning
       }
     | _ -> async { return state }
 
-/// Build the `IHomeOverviewApi` Fable.Remoting handler.
+/// Build the `IHomeOverviewApi` ToolUp.Remoting handler.
 let homeOverviewApi (ctx: HttpContext) : IHomeOverviewApi =
     let accessContext = resolveAccessContext ctx
     let scopeId = resolveScopeId accessContext

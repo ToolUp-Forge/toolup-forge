@@ -132,7 +132,7 @@ type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger op
 /// Persist a `UserContact` for `(userId, scopeId)` so the blob-backed
 /// address book picks it up on next lookup. Exposed as a helper
 /// (rather than a write member on the interface) because Phase 6f
-/// doesn't ship a Fable.Remoting admin surface — apps writing to the
+/// doesn't ship a ToolUp.Remoting admin surface — apps writing to the
 /// address book do so server-side from their own user-profile flow.
 /// Future phases may add an `IConfigStore`-style write API.
 let saveContact (storage: IBlobStorage) (scopeId: string) (contact: UserContact) : Async<Result<unit, string>> = async {

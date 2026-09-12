@@ -11,7 +11,7 @@ open ToolUp.Platform.WebhookDispatcher
 // ─── Audit-event payloads ────────────────────────────────────────
 //
 // Persisted audit-event payloads use `FableConverters` because
-// the admin UI deserialises them via Fable.Remoting/SimpleJson.
+// the admin UI deserialises them via ToolUp.Remoting/SimpleJson.
 // Same converter the dispatcher uses for its own audit writes —
 // keep both sides consistent so admin tooling can render any
 // payload uniformly.
@@ -30,7 +30,7 @@ let private generateSecret () : string =
     System.Security.Cryptography.RandomNumberGenerator.GetBytes 32
     |> Convert.ToBase64String
 
-/// Build the `IWebhookApi` Fable.Remoting handler. Resolves
+/// Build the `IWebhookApi` ToolUp.Remoting handler. Resolves
 /// `IWebhookRegistry`, `IWebhookDeliveryLog`, `IWebhookDispatcher`,
 /// `IEventStore`, and `AccessContext` lazily from DI per request —
 /// mirrors `ConfigHandler.configApi` and `FeatureFlagHandler.featureFlagApi`.

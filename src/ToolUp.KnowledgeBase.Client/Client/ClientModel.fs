@@ -187,7 +187,7 @@ type Msg =
     | DownloadVersionSettled of Result<unit, string>
 
 // `withMultipartOptimization` is required for the `byte[]` argument on
-// `UploadDocument`: Fable.Remoting's default JSON transport encodes byte
+// `UploadDocument`: ToolUp.Remoting's default JSON transport encodes byte
 // arrays as a JSON array of ints, which the byte[] converter cannot
 // deserialise into `System.Byte[]` (it expects base64). Multipart
 // sends each byte[]

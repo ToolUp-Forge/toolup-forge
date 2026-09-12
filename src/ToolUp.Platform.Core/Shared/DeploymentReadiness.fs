@@ -192,12 +192,12 @@ module DeploymentReadiness =
             GeneratedAt = generatedAt
         }
 
-/// Platform-Admin-gated read-only Fable.Remoting surface returning the
+/// Platform-Admin-gated read-only ToolUp.Remoting surface returning the
 /// consolidated scorecard. Mirrors `IHealthMonitorApi` /
 /// `IServiceStatusBoardApi`: Anonymous-mode and non-admin callers both
 /// receive `Error` (deployment-wide dependency state is a reconnaissance
 /// gift to surface to every visitor); `Result<_, string>` is the
-/// established Fable.Remoting failure shape. Deployment-wide, never
+/// established ToolUp.Remoting failure shape. Deployment-wide, never
 /// per-tenant (GP 4) — the read carries no tenant-scoped data.
 ///
 /// Mounted only when `ServerConfig.DeploymentReadiness =

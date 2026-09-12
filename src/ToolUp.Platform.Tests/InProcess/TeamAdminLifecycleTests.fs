@@ -16,7 +16,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 //
 // Exercises the four new `TeamApi` admin methods through the inner-record
 // builder `PlatformApiHandler.teamApi config ctx : TeamApi` (no
-// Fable.Remoting HTTP machinery), matching `TeamCreationPolicyTests`.
+// ToolUp.Remoting HTTP machinery), matching `TeamCreationPolicyTests`.
 
 // ─── Fakes / fixtures ────────────────────────────────────────────────
 
