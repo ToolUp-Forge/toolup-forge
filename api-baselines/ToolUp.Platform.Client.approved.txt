@@ -187,6 +187,68 @@ Components.SvgTree+TreeNode`1+Tags.Leaf : System.Int32 (literal)
 Components.SvgTree+TreeNode`1+Tags.Node : System.Int32 (literal)
 Components.ToastCentre (class)
 Components.ToastCentre.ToastCentre() : Fable.React.ReactElement
+CompositionInspectorUI (class)
+CompositionInspectorUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorConfig]) : ToolUp.Platform.ErasedModule
+CompositionInspectorUI.init() : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+CompositionInspectorUI.update(CompositionInspectorUI+Msg, CompositionInspectorUI+Model) : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+CompositionInspectorUI+Model (class)
+CompositionInspectorUI+Model..ctor(CompositionInspectorUI+PanelData`1[ToolUp.Platform.CompositionView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.SurfacesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.RulesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.DisclosureView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.ProvenanceView], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InspectorPanel], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.InspectorPanel, System.String]])
+CompositionInspectorUI+Model.Composition : CompositionInspectorUI+PanelData`1[ToolUp.Platform.CompositionView] { get }
+CompositionInspectorUI+Model.Disclosure : CompositionInspectorUI+PanelData`1[ToolUp.Platform.DisclosureView] { get }
+CompositionInspectorUI+Model.ExportError : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.InspectorPanel, System.String]] { get }
+CompositionInspectorUI+Model.Exporting : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InspectorPanel] { get }
+CompositionInspectorUI+Model.Provenance : CompositionInspectorUI+PanelData`1[ToolUp.Platform.ProvenanceView] { get }
+CompositionInspectorUI+Model.Rules : CompositionInspectorUI+PanelData`1[ToolUp.Platform.RulesView] { get }
+CompositionInspectorUI+Model.Surfaces : CompositionInspectorUI+PanelData`1[ToolUp.Platform.SurfacesView] { get }
+CompositionInspectorUI+Msg (class)
+CompositionInspectorUI+Msg.IsCompositionLoaded : System.Boolean { get }
+CompositionInspectorUI+Msg.IsDisclosureLoaded : System.Boolean { get }
+CompositionInspectorUI+Msg.IsExportComplete : System.Boolean { get }
+CompositionInspectorUI+Msg.IsExportRequested : System.Boolean { get }
+CompositionInspectorUI+Msg.IsProvenanceLoaded : System.Boolean { get }
+CompositionInspectorUI+Msg.IsRefresh : System.Boolean { get }
+CompositionInspectorUI+Msg.IsRulesLoaded : System.Boolean { get }
+CompositionInspectorUI+Msg.IsSurfacesLoaded : System.Boolean { get }
+CompositionInspectorUI+Msg.Refresh : CompositionInspectorUI+Msg { get }
+CompositionInspectorUI+Msg.Tag : System.Int32 { get }
+CompositionInspectorUI+Msg+CompositionLoaded (class)
+CompositionInspectorUI+Msg+CompositionLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CompositionView, System.String] { get }
+CompositionInspectorUI+Msg+DisclosureLoaded (class)
+CompositionInspectorUI+Msg+DisclosureLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DisclosureView, System.String] { get }
+CompositionInspectorUI+Msg+ExportComplete (class)
+CompositionInspectorUI+Msg+ExportComplete.Item1 : ToolUp.Platform.InspectorPanel { get }
+CompositionInspectorUI+Msg+ExportComplete.Item2 : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String] { get }
+CompositionInspectorUI+Msg+ExportRequested (class)
+CompositionInspectorUI+Msg+ExportRequested.Item : ToolUp.Platform.InspectorPanel { get }
+CompositionInspectorUI+Msg+ProvenanceLoaded (class)
+CompositionInspectorUI+Msg+ProvenanceLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProvenanceView, System.String] { get }
+CompositionInspectorUI+Msg+RulesLoaded (class)
+CompositionInspectorUI+Msg+RulesLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RulesView, System.String] { get }
+CompositionInspectorUI+Msg+SurfacesLoaded (class)
+CompositionInspectorUI+Msg+SurfacesLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SurfacesView, System.String] { get }
+CompositionInspectorUI+Msg+Tags (class)
+CompositionInspectorUI+Msg+Tags.CompositionLoaded : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.DisclosureLoaded : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.ExportComplete : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.ExportRequested : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.ProvenanceLoaded : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.Refresh : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.RulesLoaded : System.Int32 (literal)
+CompositionInspectorUI+Msg+Tags.SurfacesLoaded : System.Int32 (literal)
+CompositionInspectorUI+PanelData`1 (class)
+CompositionInspectorUI+PanelData`1.IsPanelFailed : System.Boolean { get }
+CompositionInspectorUI+PanelData`1.IsPanelLoaded : System.Boolean { get }
+CompositionInspectorUI+PanelData`1.IsPanelLoading : System.Boolean { get }
+CompositionInspectorUI+PanelData`1.PanelLoading : CompositionInspectorUI+PanelData`1[T] { get }
+CompositionInspectorUI+PanelData`1.Tag : System.Int32 { get }
+CompositionInspectorUI+PanelData`1+PanelFailed (class)
+CompositionInspectorUI+PanelData`1+PanelFailed.Item : System.String { get }
+CompositionInspectorUI+PanelData`1+PanelLoaded (class)
+CompositionInspectorUI+PanelData`1+PanelLoaded.Item : T { get }
+CompositionInspectorUI+PanelData`1+Tags (class)
+CompositionInspectorUI+PanelData`1+Tags.PanelFailed : System.Int32 (literal)
+CompositionInspectorUI+PanelData`1+Tags.PanelLoaded : System.Int32 (literal)
+CompositionInspectorUI+PanelData`1+Tags.PanelLoading : System.Int32 (literal)
 CsrfClient (class)
 CsrfClient.HeaderName : System.String (literal)
 CsrfClient.currentToken() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
@@ -2907,7 +2969,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -2918,6 +2980,7 @@ ToolUp.Platform.ClientConfig.AuthBridge : Microsoft.FSharp.Core.FSharpOption`1[T
 ToolUp.Platform.ClientConfig.AuthTokenStorage : ToolUp.Platform.AuthTokenStorage { get }
 ToolUp.Platform.ClientConfig.AuthUI : ToolUp.Platform.AuthUIMode { get }
 ToolUp.Platform.ClientConfig.CommandPalette : ToolUp.Platform.CommandPaletteMode { get }
+ToolUp.Platform.ClientConfig.CompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
 ToolUp.Platform.ClientConfig.ConsentProvider : ToolUp.Platform.ConsentProviderMode { get }
 ToolUp.Platform.ClientConfig.DataIngestionAdmin : ToolUp.Platform.DataIngestionAdminMode { get }
 ToolUp.Platform.ClientConfig.DataManager : ToolUp.Platform.DataManagerMode { get }
@@ -3155,6 +3218,76 @@ ToolUp.Platform.CommandPaletteNav+PaletteState..ctor(System.Boolean, System.Stri
 ToolUp.Platform.CommandPaletteNav+PaletteState.Highlight : System.Int32 { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.IsOpen : System.Boolean { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.Query : System.String { get }
+ToolUp.Platform.CompositionInspectorConfig (class)
+ToolUp.Platform.CompositionInspectorConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.CompositionInspectorConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.CompositionInspectorConfig.Name : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages (class)
+ToolUp.Platform.CompositionInspectorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
+ToolUp.Platform.CompositionInspectorMessages.AllRulesPassed : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.CanonicalMethods : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.CapturedAt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnClass : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnCode : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnDescription : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnFacet : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnId : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnImpl : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnKind : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnLabel : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnMessage : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnName : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnSeverity : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnSubject : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ColumnValue : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.CompanionSlots : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Composed : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.CompositionTitle : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ConfigKnobs : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.DataTypes : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.DisclosureTitle : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.EnvelopeDigest : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ExportJson : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Exporting : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Heading : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Loading : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Metrics : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Modules : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.NoDeclarations : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.NoneDeclared : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.CompositionInspectorMessages.NotComposed : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.PreflightFindings : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ProvenanceArtifacts : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ProvenanceFactEvidence : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ProvenanceGraph : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ProvenanceTitle : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.ProvenanceWalkNote : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Purposes : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Refresh : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.RuleManifest : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.RulesTitle : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.SectionCount : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]] { get }
+ToolUp.Platform.CompositionInspectorMessages.Subheading : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Subjects : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.SurfacesTitle : System.String { get }
+ToolUp.Platform.CompositionInspectorMessages.Tools : System.String { get }
+ToolUp.Platform.CompositionInspectorMode (class)
+ToolUp.Platform.CompositionInspectorMode.DefaultCompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
+ToolUp.Platform.CompositionInspectorMode.IsConfiguredCompositionInspector : System.Boolean { get }
+ToolUp.Platform.CompositionInspectorMode.IsDefaultCompositionInspector : System.Boolean { get }
+ToolUp.Platform.CompositionInspectorMode.IsExternalCompositionInspector : System.Boolean { get }
+ToolUp.Platform.CompositionInspectorMode.IsNoCompositionInspector : System.Boolean { get }
+ToolUp.Platform.CompositionInspectorMode.NoCompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
+ToolUp.Platform.CompositionInspectorMode.Tag : System.Int32 { get }
+ToolUp.Platform.CompositionInspectorMode+ConfiguredCompositionInspector (class)
+ToolUp.Platform.CompositionInspectorMode+ConfiguredCompositionInspector.Item : ToolUp.Platform.CompositionInspectorConfig { get }
+ToolUp.Platform.CompositionInspectorMode+ExternalCompositionInspector (class)
+ToolUp.Platform.CompositionInspectorMode+ExternalCompositionInspector.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.CompositionInspectorMode+Tags (class)
+ToolUp.Platform.CompositionInspectorMode+Tags.ConfiguredCompositionInspector : System.Int32 (literal)
+ToolUp.Platform.CompositionInspectorMode+Tags.DefaultCompositionInspector : System.Int32 (literal)
+ToolUp.Platform.CompositionInspectorMode+Tags.ExternalCompositionInspector : System.Int32 (literal)
+ToolUp.Platform.CompositionInspectorMode+Tags.NoCompositionInspector : System.Int32 (literal)
 ToolUp.Platform.Consent.BridgedConsentProvider (class)
 ToolUp.Platform.Consent.BridgedConsentProvider..ctor(ToolUp.Platform.Consent.IConsentManagementBridge)
 ToolUp.Platform.Consent.ConsentBanner (class)
@@ -4150,12 +4283,13 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
 ToolUp.Platform.MessageCatalog.BootDegradation : ToolUp.Platform.BootDegradationMessages { get }
 ToolUp.Platform.MessageCatalog.CommandPalette : ToolUp.Platform.CommandPaletteMessages { get }
+ToolUp.Platform.MessageCatalog.CompositionInspector : ToolUp.Platform.CompositionInspectorMessages { get }
 ToolUp.Platform.MessageCatalog.Consent : ToolUp.Platform.ConsentMessages { get }
 ToolUp.Platform.MessageCatalog.DataIngestion : ToolUp.Platform.DataIngestionMessages { get }
 ToolUp.Platform.MessageCatalog.DataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMessages { get }
