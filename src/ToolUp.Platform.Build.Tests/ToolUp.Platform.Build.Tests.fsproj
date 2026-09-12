@@ -29,6 +29,22 @@
              would first be exercised on the release they protect. -->
         <Compile Include="..\..\PublishedSmoke.fs" Link="PublishedSmoke.fs" />
         <Compile Include="PublishedSmokeTests.fs" />
+        <!-- Phase 260 — the release bump derived from the api-baselines
+             diff. Source-linked from the repo root for the same reason
+             SdkManifest.fs and PublishedSmoke.fs above are: the
+             VerifySemVerBump target and these go-red proofs run one
+             implementation. The target runs once, at a release; this
+             pack decides the rule on every commit, so the release is not
+             the first exercise of it.
+
+             SurfaceDiff.fs is the public-API approval gate's own
+             comparer, source-linked ahead of it so the bump classifies
+             the SAME set difference the gate reports — a second
+             tokeniser would disagree with it about whether a member
+             moved. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\SurfaceDiff.fs" Link="Contracts\SurfaceDiff.fs" />
+        <Compile Include="..\..\SemVerBump.fs" Link="SemVerBump.fs" />
+        <Compile Include="SemVerBumpTests.fs" />
         <!-- Phase 259 — the conformance-pack coverage gate. Pure file
              scanning over the checkout (api-baselines, the Contracts
              directory, the `.fs` tree), so it belongs beside the other

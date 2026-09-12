@@ -4352,4 +4352,151 @@ let main args =
             version
             emitted)
 
+    // ── Phase 260 — the release bump, derived from the api-baselines diff ──
+    //
+    // At 1.0 the version becomes a promise rather than a label, and the
+    // way that promise gets broken is not malice — it is a hand-typed
+    // number decided at the end of a long release day. This target
+    // computes what the surface actually did since the last release and
+    // refuses a version that claims less than that.
+    //
+    //   dotnet run --project Build.fsproj -- VerifySemVerBump
+    //   dotnet run --project Build.fsproj -- VerifySemVerBump --propose
+    //
+    // The default fails on an under-bump; `--propose` only reports, which
+    // is the mode for deciding a number rather than defending one.
+    //
+    // WHAT IT DIFFS, and why it is not what the phase shard asked for.
+    // The shard (2026-06-27) asked for the working surface against the
+    // approved baselines. Phase 618 has since made the approval gate fail
+    // in BOTH directions, so those two are identical on every tree that
+    // passes `verify.ps1` — a bump derived from that difference would say
+    // "unchanged" forever and this check, which only fails on an
+    // under-bump, could never fire. The measurement that survives 618 is
+    // between RELEASES: the committed baselines at the last release tag
+    // against the working tree. See `SemVerBump.fs` for why 618 is what
+    // makes that faithful rather than approximate.
+    //
+    // It is registered here and NOT added to `verify.ps1`. That script is
+    // a hard-denied path on the roadmap side (its hash is recorded gate
+    // evidence), and the question this asks — "is the number you are
+    // about to tag big enough?" — is a release question, not a
+    // per-commit one. The pure decision logic is exercised on every
+    // commit by the Build test pack; the live reading of git runs at
+    // release, from `publish-nuget.yml`, beside Phase 326's manifest
+    // check and for the same reason: it is the moment the two facts meet.
+    Target.create "VerifySemVerBump" (fun _ ->
+        let root = Path.getFullName "."
+        // `System.` qualified deliberately: this file opens Fake.Core but
+        // not System, so a bare `Environment` binds to Fake's module.
+        let proposeOnly =
+            System.Environment.GetCommandLineArgs() |> Array.contains "--propose"
+
+        // `disableTraceCommand` because the read below is one `git show`
+        // per moved baseline — 53 of them on the release this was written
+        // against — and echoing each would bury the classification the
+        // target exists to print under its own plumbing.
+        let gitProc (args: string list) =
+            CreateProcess.fromRawCommand "git" args
+            |> CreateProcess.withWorkingDirectory root
+            |> CreateProcess.redirectOutput
+            |> CreateProcess.disableTraceCommand
+
+        let git (args: string list) =
+            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
+
+        let lines (text: string) =
+            text.Replace("\r\n", "\n").Split('\n')
+            |> Array.map _.Trim()
+            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+            |> List.ofArray
+
+        let propsPath = Path.Combine(root, "Directory.Build.props")
+
+        let declared =
+            match SemVerBump.declaredVersionIn (System.IO.File.ReadAllText propsPath) with
+            | Ok v -> v
+            | Error e -> failwithf "VerifySemVerBump: cannot read the declared SDK version — %s (%s)." e propsPath
+
+        // The release point. `TOOLUP_SEMVER_BASE` names a tag to measure
+        // from explicitly; its NAME must parse as a version, because the
+        // released version is what selects the 0.x-versus-1.x policy
+        // table and what the declared version's advance is measured
+        // against. Without it, the newest tag STRICTLY BELOW the declared
+        // version is used — see `SemVerBump.releasePoint` for why "below"
+        // rather than "newest": on the publish workflow the tag being
+        // released already exists.
+        let tags =
+            match System.Environment.GetEnvironmentVariable "TOOLUP_SEMVER_BASE" with
+            | null
+            | "" -> git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ] |> lines
+            | explicitBase -> [ explicitBase ]
+
+        match SemVerBump.releasesAhead declared tags with
+        | [] -> ()
+        | ahead -> failwithf "%s" (SemVerBump.behindReleaseReport declared ahead)
+
+        let releaseTag, released =
+            match SemVerBump.releasePoint declared tags with
+            | Some pair -> pair
+            | None -> failwithf "%s" (SemVerBump.noReleasePointReport declared (List.length tags))
+
+        // A tag name that parses as a version but names no commit is the
+        // TOOLUP_SEMVER_BASE typo path, and it is the only way to reach
+        // it. Answering it here costs one process and turns a raw
+        // non-zero from the first `git diff` into a sentence.
+        if
+            (gitProc [ "rev-parse"; "--verify"; "--quiet"; releaseTag + "^{commit}" ]
+             |> Proc.run)
+                .ExitCode
+            <> 0
+        then
+            failwithf
+                "VerifySemVerBump: '%s' parses as a version but names no commit in this checkout. If it came from TOOLUP_SEMVER_BASE, check the spelling; otherwise the tag is unfetched — `git fetch --tags --force`."
+                releaseTag
+
+        // Only the baselines that MOVED need reading: a blob identical on
+        // both sides contributes an unchanged classification by
+        // definition, and this keeps the cost proportional to the churn
+        // rather than to the ~165-package baseline set.
+        let changedPaths =
+            git [ "diff"; "--name-only"; releaseTag; "--"; "api-baselines" ] |> lines
+
+        let pathsAtRelease =
+            git [ "ls-tree"; "-r"; "--name-only"; releaseTag; "--"; "api-baselines" ]
+            |> lines
+            |> Set.ofList
+
+        let changes =
+            changedPaths
+            |> List.map (fun path ->
+                let releasedText =
+                    if pathsAtRelease.Contains path then
+                        Some(git [ "show"; sprintf "%s:%s" releaseTag path ])
+                    else
+                        None
+
+                SemVerBump.classifyPackage
+                    (SemVerBump.packageOfBaselinePath path)
+                    releasedText
+                    (SemVerBump.currentBaseline root path))
+
+        let assessment = SemVerBump.assess releaseTag released declared changes
+
+        Trace.tracefn "%s" (SemVerBump.describe assessment)
+
+        match SemVerBump.defect assessment, proposeOnly with
+        | None, _ ->
+            Trace.tracefn
+                "▶ VerifySemVerBump: %s meets the %s bump the surface diff since %s demands."
+                (SemVerBump.Version.render declared)
+                (SemVerBump.Bump.name assessment.Demanded)
+                releaseTag
+        | Some report, true ->
+            Trace.traceImportantfn
+                "VerifySemVerBump --propose: %s\n\n(--propose reports only; the same run without it FAILS.)"
+                report
+        | Some report, false -> failwithf "VerifySemVerBump: %s" report)
+
+
     execute args

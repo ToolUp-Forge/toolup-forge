@@ -145,6 +145,11 @@ open System.IO
 open System.Reflection
 open System.Text
 
+// Phase 260 - the pure comparer, extracted verbatim so the release
+// bump check runs the SAME set difference this gate does. See that
+// file for why a second copy of it would be a correctness defect.
+open ToolUp.Platform.Tests.Contracts.SurfaceDiff
+
 // ─── Repo / config grounding ─────────────────────────────────────────
 
 /// Repo root (toolup-forge) derived from the running test assembly:
@@ -689,67 +694,6 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
 /// obsolete markings retained.
 let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
     (renderSurfaceDetail dllPath resolverPaths).Text
-
-// ─── Diff (pure — the comparer the gate + fixtures exercise) ─────────
-
-// The F# compiler stopped emitting the legacy `(SerializationInfo,
-// StreamingContext)` constructor on exception declarations in SDK
-// 10.0.400 (BinaryFormatter retirement), so whether an assembly carries
-// that member depends on which SDK feature band built it — global.json
-// rolls forward across bands, and 2026-08-19 the hosted runners moved
-// to 10.0.400 while dev machines still carried 10.0.300: eleven
-// assemblies went red in CI on a surface no source change touched. The
-// gate must be insensitive to which side of that compiler change built
-// the DLLs, so the token is excluded from BOTH sides of the comparison
-// (it sits in `significantLines`, the one tokeniser every direction
-// shares). Baselines regenerated under either band stay green; the
-// stale lines fall out of the approved files at the next regen.
-let private isCompilerVersionDependent (l: string) =
-    l.EndsWith "..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)"
-
-let private significantLines (text: string) =
-    text.Replace("\r\n", "\n").Split('\n')
-    |> Array.map _.TrimEnd()
-    |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#") && not (isCompilerVersionDependent l))
-
-/// Significant tokens of `candidates` that `present` does not carry.
-/// Both directions of the comparison are this same set difference — which
-/// is why neither arm can drift from the other in how it tokenises.
-let private missingFrom (present: string) (candidates: string) : string list =
-    let presentSet = significantLines present |> Set.ofArray
-
-    significantLines candidates
-    |> Array.filter (fun l -> not (presentSet.Contains l))
-    |> Array.sortWith (fun a b -> String.CompareOrdinal(a, b))
-    |> List.ofArray
-
-/// Tokens present in `baseline` but absent from `current` — i.e. removed,
-/// renamed, or retyped public members. A non-empty result is a BREAKING
-/// diff.
-let removedMembers (baseline: string) (current: string) : string list = missingFrom current baseline
-
-/// Tokens present in `current` but absent from `baseline` — i.e. new public
-/// types, members, or overloads. Non-breaking, but UNFOLDED: the baseline
-/// must be regenerated and committed with the change (Phase 618).
-let addedMembers (baseline: string) (current: string) : string list = missingFrom baseline current
-
-/// The two-directional comparison. `Removed` is breaking; `Added` is
-/// non-breaking but unfolded. Both fail the gate — see the drift-policy
-/// note in this file's header.
-type SurfaceDrift = {
-    Removed: string list
-    Added: string list
-}
-
-[<RequireQualifiedAccess>]
-module SurfaceDrift =
-    let isClean (d: SurfaceDrift) =
-        List.isEmpty d.Removed && List.isEmpty d.Added
-
-let compareSurface (baseline: string) (current: string) : SurfaceDrift = {
-    Removed = removedMembers baseline current
-    Added = addedMembers baseline current
-}
 
 // ─── Failure text (pure — so the wording itself is unit-testable) ────
 

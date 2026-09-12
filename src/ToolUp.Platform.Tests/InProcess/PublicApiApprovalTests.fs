@@ -18,6 +18,7 @@ module ToolUp.Platform.Tests.InProcess.PublicApiApprovalTests
 
 open System.IO
 open Expecto
+open ToolUp.Platform.Tests.Contracts.SurfaceDiff
 open ToolUp.Platform.Tests.Contracts.PublicApiApproval
 
 let private root = repoRoot ()

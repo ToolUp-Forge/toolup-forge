@@ -39,6 +39,11 @@ let private registeredTests =
         // and every pack is run by an implementation. Pure file scanning
         // over the checkout; no build output, no network.
         ConformanceCoverageTests.tests
+        // Phase 260 — the release bump is derived from the api-baselines
+        // diff, not typed by hand: the per-package classification, the
+        // lockstep roll-up, both SemVer policy tables (0.x and 1.x), and
+        // the under-bump refusal. Pure over strings; no git, no network.
+        SemVerBumpTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

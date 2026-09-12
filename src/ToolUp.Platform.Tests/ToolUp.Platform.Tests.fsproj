@@ -1967,6 +1967,11 @@
              synthetic comparer fixtures (InProcess). MetadataLoadContext
              reflects the packable set metadata-only; baselines live in
              ../../api-baselines/. -->
+        <!-- Phase 260 - the pure baseline comparer, extracted from
+             PublicApiApproval.fs so the release-time SemVer-bump check
+             (repo-root SemVerBump.fs) runs the same set difference this
+             gate does rather than a second copy of it. -->
+        <Compile Include="Contracts\SurfaceDiff.fs" />
         <Compile Include="Contracts\PublicApiApproval.fs" />
         <Compile Include="InProcess\PublicApiApprovalTests.fs" />
         <!-- Phase 195 — analyzer recognition parity: the source-linked

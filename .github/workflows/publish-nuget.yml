@@ -90,7 +90,15 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      # Phase 260 — `fetch-depth: 0` is a PRECONDITION of the version
+      # check below, not a nicety. That check derives the bump by diffing
+      # api-baselines/ at the LAST RELEASE TAG against this tree, and the
+      # default shallow checkout carries neither the tag nor the history
+      # behind it. It fails rather than reporting green on a comparison it
+      # could not make, so a shallow checkout would turn every release red.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -126,6 +134,30 @@ jobs:
       # correctly should fail without minting a credential first.
       - name: Verify the ToolUp.Sdk meta-manifest matches the packable set
         run: dotnet run --project Build.fsproj -- GenerateSdkManifest --check
+
+      # Phase 260 — the release cannot publish a version that claims a
+      # smaller change than the public surface actually made.
+      #
+      # The bump is DERIVED: the committed api-baselines at the last
+      # release tag are diffed against this tree with the same comparer
+      # the public-API approval gate runs (Phase 175/618), each package
+      # classified unchanged / additive / breaking, and the highest class
+      # rolled up to the one lockstep <Version>. A declared version at or
+      # above what that demands passes; below it fails. It never edits
+      # the version — the proposal is advice, the check is a floor.
+      #
+      # It needs the tag history, which is why the checkout above sets
+      # `fetch-depth: 0`.
+      #
+      # Here rather than in `verify.ps1` for the reason the manifest
+      # check above is here: this is the moment the two facts meet. The
+      # RULE it applies is exercised on every commit by the
+      # ToolUp.Platform.Build.Tests pack, so this is not its first run.
+      #
+      # BEFORE the login step, same as above: a release that cannot be
+      # versioned correctly should fail without minting a credential.
+      - name: Verify the declared version matches the public-surface diff
+        run: dotnet run --project Build.fsproj -- VerifySemVerBump
 
       # The one-hour temp key comfortably covers the ~10-minute pack that
       # follows; one OIDC token buys exactly one temporary key.

@@ -39,6 +39,24 @@
          run one implementation. Compiled after SdkManifest.fs — the
          target reconciles its probe closure against `expected`. -->
     <Compile Include="PublishedSmoke.fs" />
+    <!-- Phase 260 — the release bump derived from the api-baselines
+         diff, behind the VerifySemVerBump target Build.fs registers.
+         Same shape and same reason as SdkManifest.fs and
+         PublishedSmoke.fs above: forge's own release hygiene rather than
+         SDK surface, FAKE-free, and source-linked (not copied) into
+         ToolUp.Platform.Build.Tests so the target and its go-red proofs
+         run one implementation.
+
+         SurfaceDiff.fs is the public-API approval gate's own comparer,
+         source-linked ahead of it for the reason the TestLane.fs comment
+         below gives about two parsers of one variable: the bump is a
+         classification OF that set difference, and a second copy of the
+         tokeniser would disagree with the gate about whether a member
+         moved at all. It cannot be reached by compiling
+         PublicApiApproval.fs here — that file needs
+         MetadataLoadContext, which this project does not reference. -->
+    <Compile Include="src\ToolUp.Platform.Tests\Contracts\SurfaceDiff.fs" Link="SurfaceDiff.fs" />
+    <Compile Include="SemVerBump.fs" />
     <!-- Phase 762 — the TOOLUP_TEST_LANE vocabulary. Source-linked from
          the Platform test pack rather than copied: the VerifyAll target
          below selects PACKS by lane and that pack's entry point selects
