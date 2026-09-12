@@ -1533,6 +1533,22 @@ ToolUp.Platform.CompositionDryRunVerdict+Tags.DoesNotCompose : System.Int32 (lit
 ToolUp.Platform.CompositionHotSwap (class)
 ToolUp.Platform.CompositionHotSwap.noEmit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HotSwapEvent, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Platform.CompositionHotSwap.swap`1(ToolUp.Platform.HotSwapMode, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HotSwapEvent, Microsoft.FSharp.Core.Unit], ToolUp.Platform.ComponentOrder, ToolUp.Platform.ComponentRegistry`1[Impl], Microsoft.FSharp.Core.FSharpFunc`2[Impl, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Impl, Microsoft.FSharp.Core.Unit], ToolUp.Platform.ComponentId, Impl) : ToolUp.Platform.HotSwapOutcome
+ToolUp.Platform.CompositionInspectorHandler (class)
+ToolUp.Platform.CompositionInspectorHandler.SnapshotMissingMessage : System.String (literal)
+ToolUp.Platform.CompositionInspectorHandler.SurfacesUnavailableNote : System.String (literal)
+ToolUp.Platform.CompositionInspectorHandler.compositionInspectorApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ICompositionInspectorApi
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot (class)
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot..ctor(ToolUp.Platform.CompositionView, ToolUp.Platform.SurfacesView, ToolUp.Platform.RulesView, ToolUp.Platform.DisclosureView)
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot.Composition : ToolUp.Platform.CompositionView { get }
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot.Disclosure : ToolUp.Platform.DisclosureView { get }
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot.Rules : ToolUp.Platform.RulesView { get }
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot.Surfaces : ToolUp.Platform.SurfacesView { get }
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule (class)
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.composition(ToolUp.Platform.CompositionManifest) : ToolUp.Platform.CompositionView
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.disclosure(ToolUp.Platform.CompositionManifest) : ToolUp.Platform.DisclosureView
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.ofComposition(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences, System.DateTime) : ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.rules(ToolUp.Platform.CompositionManifest, ToolUp.Platform.CompositionReferences, System.DateTime) : ToolUp.Platform.RulesView
+ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshotModule.surfaces : ToolUp.Platform.SurfacesView { get }
 ToolUp.Platform.CompositionManifest (class)
 ToolUp.Platform.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod])
 ToolUp.Platform.CompositionManifest.CanonicalMethods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod] { get }

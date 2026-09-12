@@ -2843,15 +2843,76 @@ module ServerApp =
             // reference set (see `compositionReferences`), so the four
             // module-graph rules check exactly what was registered rather
             // than the `ComponentId`-collapsed manifest projection.
-            appendRegistration
-                withModelExecutionLeg
-                (CompositionValidator.serviceRegistration (compositionManifest app) (compositionReferences app))
+            // Phase 593 — the composition inspector reads the SAME manifest
+            // and reference set, so both are bound once here rather than
+            // projected twice off the same record.
+            let inspectedManifest = compositionManifest app
+            let inspectedReferences = compositionReferences app
+
+            let withCompositionValidator =
+                appendRegistration
+                    withModelExecutionLeg
+                    (CompositionValidator.serviceRegistration inspectedManifest inspectedReferences)
+
+            // Phase 593 — register the composition-inspector snapshot for
+            // `CompositionInspectorHandler` to serve. Registered HERE, beside
+            // the validator above, for the same reason Phase 281 gives: the
+            // manifest projector lives on this record, one compile unit after
+            // `compose`, so the composition root cannot reach it.
+            //
+            // A LAZY singleton factory, deliberately (GP 13): the projection
+            // and the rule evaluation happen on first resolve, so a deployment
+            // whose operators never open the inspector — or which sets
+            // `ClientConfig.CompositionInspector = NoCompositionInspector` —
+            // pays only the registration. The factory closes over the manifest
+            // and reference set the validator already retains, never over
+            // `app`, so nothing new is held for the process lifetime. The
+            // capture timestamp IS read eagerly: it names the boot the snapshot
+            // describes, not the page load that materialised it.
+            let inspectorCapturedAtUtc = DateTime.UtcNow
+
+            appendRegistration withCompositionValidator (fun services ->
+                services.AddSingleton<CompositionInspectorHandler.CompositionInspectorSnapshot>(
+                    Func<IServiceProvider, CompositionInspectorHandler.CompositionInspectorSnapshot>(fun _ ->
+                        CompositionInspectorHandler.CompositionInspectorSnapshot.ofComposition
+                            inspectedManifest
+                            inspectedReferences
+                            inspectorCapturedAtUtc)
+                )
+                |> ignore
+
+                services)
+
+        // Phase 593 — mount the composition-inspector route.
+        //
+        // Appended to the handler list rather than added in
+        // `BuildRouteHandlers` beside every other admin surface, because the
+        // composition types the handler projects compile AFTER the composition
+        // root — see the handler's file header. This is an append-only use of
+        // an existing seam: `compose`'s signature is untouched, and a
+        // deployment composed through `compose` directly (rather than this
+        // fluent root) mounts no inspector route, which is correct — it
+        // registers no snapshot either.
+        //
+        // Mounted unconditionally, as `usageQueryApiHandler` and
+        // `auditViewApiHandler` are: a proxy that 404s cannot tell an operator
+        // "this deployment exposes no inspector" from "this deployment is
+        // broken". `ClientConfig.CompositionInspector = NoCompositionInspector`
+        // removes the module and every call it would make.
+        let handlersWithCompositionInspector =
+            app.Handlers
+            @ [
+                Api.make (
+                    CompositionInspectorHandler.compositionInspectorApi,
+                    routeBuilder = CompositionInspectorApi.routeBuilder
+                )
+            ]
 
         // Phase 16 — `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.
         let host =
             compose
-                app.Handlers
+                handlersWithCompositionInspector
                 app.DataTypes
                 config
                 app.Auth
