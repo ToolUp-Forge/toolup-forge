@@ -360,6 +360,28 @@ ToolUp.Platform.AI.IAIProvider.SendMessage(Microsoft.FSharp.Collections.FSharpLi
 ToolUp.Platform.AI.IAIProvider.SendStructuredMessage(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]
 ToolUp.Platform.AI.IAIProviderDefaults (class)
 ToolUp.Platform.AI.IAIProviderDefaults.sendStructuredViaFallback(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]
+ToolUp.Platform.AIDenialGroupCount (class)
+ToolUp.Platform.AIDenialGroupCount..ctor(System.String, System.Int32)
+ToolUp.Platform.AIDenialGroupCount.Count : System.Int32 { get }
+ToolUp.Platform.AIDenialGroupCount.Key : System.String { get }
+ToolUp.Platform.AIDenialRollup (class)
+ToolUp.Platform.AIDenialRollup..ctor(System.DateTime, System.String, System.Int32, System.Int32, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialToolModulePair], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecentAIDenial])
+ToolUp.Platform.AIDenialRollup.ByActiveModule : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount] { get }
+ToolUp.Platform.AIDenialRollup.ByScopeId : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount] { get }
+ToolUp.Platform.AIDenialRollup.ByToolName : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount] { get }
+ToolUp.Platform.AIDenialRollup.DenialsPerMinute : System.Double { get }
+ToolUp.Platform.AIDenialRollup.GeneratedAt : System.DateTime { get }
+ToolUp.Platform.AIDenialRollup.RecentDenials : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecentAIDenial] { get }
+ToolUp.Platform.AIDenialRollup.ScopeId : System.String { get }
+ToolUp.Platform.AIDenialRollup.TopToolModulePairs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialToolModulePair] { get }
+ToolUp.Platform.AIDenialRollup.TotalDenialsAllTime : System.Int32 { get }
+ToolUp.Platform.AIDenialRollup.TotalDenialsInWindow : System.Int32 { get }
+ToolUp.Platform.AIDenialRollup.WindowMinutes : System.Int32 { get }
+ToolUp.Platform.AIDenialToolModulePair (class)
+ToolUp.Platform.AIDenialToolModulePair..ctor(System.String, System.String, System.Int32)
+ToolUp.Platform.AIDenialToolModulePair.ActiveModule : System.String { get }
+ToolUp.Platform.AIDenialToolModulePair.Count : System.Int32 { get }
+ToolUp.Platform.AIDenialToolModulePair.ToolName : System.String { get }
 ToolUp.Platform.AIMessageContent (class)
 ToolUp.Platform.AIMessageContent..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolResult], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart])
 ToolUp.Platform.AIMessageContent.Content : System.String { get }
@@ -6376,6 +6398,8 @@ ToolUp.Platform.I18nDefaults (class)
 ToolUp.Platform.I18nDefaults.defaultFallback : ToolUp.Platform.LocaleCode { get }
 ToolUp.Platform.I18nDefaults.messageKeyFor(ToolUp.Platform.ErrorCode) : System.String
 ToolUp.Platform.I18nDefaults.sdkTranslations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.LocaleCode, System.String]] { get }
+ToolUp.Platform.IAIDenialRollupProbe (interface)
+ToolUp.Platform.IAIDenialRollupProbe.Rollup(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AIDenialRollup]
 ToolUp.Platform.IActionAuthorizer (interface)
 ToolUp.Platform.IActionAuthorizer.Authorize(ToolUp.Platform.ActionDescriptor, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AuthorizationDecision]
 ToolUp.Platform.IActiveAiProbe (interface)
@@ -6479,7 +6503,8 @@ ToolUp.Platform.IFeatureFlagApi.GetResolvedFlags : Microsoft.FSharp.Core.FSharpF
 ToolUp.Platform.IFeatureFlagApi.ListDeclared : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag]]] { get }
 ToolUp.Platform.IFeatureFlagApi.SetOverride : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.FlagValue], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IHealthMonitorApi (class)
-ToolUp.Platform.IHealthMonitorApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightSnapshotView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String]]])
+ToolUp.Platform.IHealthMonitorApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightSnapshotView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String]]])
+ToolUp.Platform.IHealthMonitorApi.GetAIDenialRollup : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String]]] { get }
 ToolUp.Platform.IHealthMonitorApi.GetCurrentHealth : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, System.String]]] { get }
 ToolUp.Platform.IHealthMonitorApi.GetDegradedCapabilities : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String]]] { get }
 ToolUp.Platform.IHealthMonitorApi.GetJobSchedulerTelemetry : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String]]] { get }
@@ -9745,6 +9770,12 @@ ToolUp.Platform.ReadinessVerdict+Tags (class)
 ToolUp.Platform.ReadinessVerdict+Tags.DegradedReady : System.Int32 (literal)
 ToolUp.Platform.ReadinessVerdict+Tags.NotReady : System.Int32 (literal)
 ToolUp.Platform.ReadinessVerdict+Tags.Ready : System.Int32 (literal)
+ToolUp.Platform.RecentAIDenial (class)
+ToolUp.Platform.RecentAIDenial..ctor(System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.RecentAIDenial.ActiveModule : System.String { get }
+ToolUp.Platform.RecentAIDenial.OccurredAt : System.DateTime { get }
+ToolUp.Platform.RecentAIDenial.Reason : System.String { get }
+ToolUp.Platform.RecentAIDenial.ToolName : System.String { get }
 ToolUp.Platform.RegexAttribute (class)
 ToolUp.Platform.RegexAttribute..ctor(System.String)
 ToolUp.Platform.RegexAttribute.Pattern : System.String { get }

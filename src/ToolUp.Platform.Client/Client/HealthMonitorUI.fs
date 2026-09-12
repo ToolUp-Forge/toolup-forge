@@ -39,6 +39,13 @@ type Model = {
     /// Loaded alongside `Live`; empty on a healthy deployment, in which
     /// case the card is suppressed entirely (GP 13).
     Degraded: LoadState<DegradedCapability list>
+    /// Phase 47 — rolling AI action-denial rollup from
+    /// `GetAIDenialRollup`. Loaded alongside `Live`. `Loaded None` means
+    /// no AI companion is composed (the `IAIDenialRollupProbe` seam is
+    /// absent from DI) and the card is suppressed — distinct from
+    /// `Loaded (Some rollup)` with a zero count, which is a real
+    /// "nothing is being refused" reading and worth showing.
+    AIDenials: LoadState<AIDenialRollup option>
     /// Names of probes whose status changed between the prior and
     /// most recent live snapshot — surfaced via Tailwind
     /// `animate-pulse` for ~1.5s so an admin spotting a freshly-flipped
@@ -55,6 +62,7 @@ type Msg =
     | PreflightLoaded of Result<PreflightSnapshotView, string>
     | SchedulerTelemetryLoaded of Result<JobSchedulerTelemetryView, string>
     | DegradedLoaded of Result<DegradedCapability list, string>
+    | AIDenialsLoaded of Result<AIDenialRollup option, string>
 
 // ─── API proxy ───────────────────────────────────────────────────────
 
@@ -79,6 +87,10 @@ let private loadDegradedCmd () =
     Cmd.OfRemoting.call healthMonitorApi.GetDegradedCapabilities () DegradedLoaded (fun e ->
         DegradedLoaded(Error e.Message))
 
+let private loadAIDenialsCmd () =
+    Cmd.OfRemoting.call healthMonitorApi.GetAIDenialRollup () AIDenialsLoaded (fun e ->
+        AIDenialsLoaded(Error e.Message))
+
 let init () =
     let model = {
         ActiveTab = LiveHealthTab
@@ -86,6 +98,7 @@ let init () =
         Preflight = Loading
         SchedulerTelemetry = Loading
         Degraded = Loading
+        AIDenials = Loading
         RecentlyFlipped = Set.empty
     }
 
@@ -95,6 +108,7 @@ let init () =
         loadPreflightCmd ()
         loadSchedulerTelemetryCmd ()
         loadDegradedCmd ()
+        loadAIDenialsCmd ()
     ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -136,8 +150,14 @@ let update (msg: Msg) (model: Model) =
                 Live = Loading
                 SchedulerTelemetry = Loading
                 Degraded = Loading
+                AIDenials = Loading
         },
-        Cmd.batch [ loadLiveCmd (); loadSchedulerTelemetryCmd (); loadDegradedCmd () ]
+        Cmd.batch [
+            loadLiveCmd ()
+            loadSchedulerTelemetryCmd ()
+            loadDegradedCmd ()
+            loadAIDenialsCmd ()
+        ]
 
     | LiveLoaded(Ok snapshot) ->
         let flipped = flippedNames (currentLiveOpt model) snapshot
@@ -179,6 +199,10 @@ let update (msg: Msg) (model: Model) =
     | DegradedLoaded(Ok entries) -> { model with Degraded = Loaded entries }, Cmd.none
 
     | DegradedLoaded(Error msg) -> { model with Degraded = LoadError msg }, Cmd.none
+
+    | AIDenialsLoaded(Ok rollup) -> { model with AIDenials = Loaded rollup }, Cmd.none
+
+    | AIDenialsLoaded(Error msg) -> { model with AIDenials = LoadError msg }, Cmd.none
 
 // ─── Status-pill renderers ───────────────────────────────────────────
 
@@ -370,6 +394,139 @@ let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: Deg
             ]
         ]
 
+// ─── AI action-denial card (Phase 47) ────────────────────────────────
+
+/// Inline card on the Live tab showing the rolling AI action-denial
+/// rollup — the production-safe twin of the `EnableDevEndpoints`-gated
+/// `/dev/ai-allowlist` endpoint. Same `AIDenialRollup` record, same
+/// numbers; an operator watching a prompt-injection campaign in
+/// production does not have to turn the debug surface on to see it.
+///
+/// **Suppressed entirely when the deployment has never recorded a
+/// denial** (GP 13) — an install with no AI, or one whose allowlist has
+/// never refused anything, sees no card at all. Once it HAS recorded
+/// one, the card stays and honestly reports a clean current window,
+/// because "it has subsided" is exactly what an operator who just
+/// received the alert needs to read.
+///
+/// Renders only what the rollup carries: reasons are already
+/// control-stripped and truncated by the producing tier, and raw model
+/// arguments are never in the payload at all.
+let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) =
+    if rollup.TotalDenialsAllTime = 0 then
+        Html.none
+    else
+        let active = rollup.TotalDenialsInWindow > 0
+
+        let shellCls =
+            if active then
+                "border border-amber-300 bg-amber-50 rounded-lg p-3 mb-4"
+            else
+                "border border-border bg-surface rounded-lg p-3 mb-4"
+
+        let headingCls =
+            if active then
+                "text-sm font-semibold text-amber-800"
+            else
+                "text-sm font-semibold text-gray-700"
+
+        let groupList (heading: string) (rows: AIDenialGroupCount list) =
+            if List.isEmpty rows then
+                Html.none
+            else
+                Html.div [
+                    prop.children [
+                        Html.div [ prop.className "text-xs text-gray-500 font-medium mb-1"; prop.text heading ]
+                        Html.div [
+                            prop.className "flex flex-col gap-0.5"
+                            prop.children (
+                                rows
+                                |> List.truncate 5
+                                |> List.map (fun row ->
+                                    Html.div [
+                                        prop.className "flex items-baseline justify-between gap-3 text-xs"
+                                        prop.children [
+                                            Html.span [ prop.className "font-mono text-gray-700"; prop.text row.Key ]
+                                            Html.span [
+                                                prop.className "font-mono text-gray-500"
+                                                prop.text (string row.Count)
+                                            ]
+                                        ]
+                                    ])
+                            )
+                        ]
+                    ]
+                ]
+
+        let recentRow (d: RecentAIDenial) =
+            Html.div [
+                prop.className "text-xs bg-white border border-border rounded p-2"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-baseline justify-between gap-3"
+                        prop.children [
+                            Html.span [
+                                prop.className "font-mono text-gray-700"
+                                prop.text $"{d.ToolName} · {d.ActiveModule}"
+                            ]
+                            Html.span [ prop.className "text-gray-500"; prop.text (string d.OccurredAt) ]
+                        ]
+                    ]
+                    Html.div [ prop.className "text-gray-600 mt-0.5"; prop.text d.Reason ]
+                ]
+            ]
+
+        Html.div [
+            prop.className shellCls
+            prop.children [
+                Html.div [
+                    prop.className "flex items-baseline justify-between mb-2"
+                    prop.children [
+                        Html.h3 [
+                            prop.className headingCls
+                            prop.text (msgs.AIDenials rollup.TotalDenialsInWindow)
+                        ]
+                        Html.span [
+                            prop.className "text-xs text-gray-500 font-mono"
+                            prop.text (msgs.AIDenialsRate rollup.WindowMinutes (sprintf "%.2f" rollup.DenialsPerMinute))
+                        ]
+                    ]
+                ]
+                Html.p [ prop.className "text-xs text-gray-600 mb-3"; prop.text msgs.AIDenialsHelp ]
+
+                if not active then
+                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.AIDenialsQuiet ]
+                else
+                    Html.div [
+                        prop.className "flex flex-col gap-3"
+                        prop.children [
+                            Html.div [
+                                prop.className "grid grid-cols-1 sm:grid-cols-2 gap-3"
+                                prop.children [
+                                    groupList msgs.AIDenialsByTool rollup.ByToolName
+                                    groupList msgs.AIDenialsByModule rollup.ByActiveModule
+                                ]
+                            ]
+                            if not (List.isEmpty rollup.RecentDenials) then
+                                Html.div [
+                                    prop.children [
+                                        Html.div [
+                                            prop.className "text-xs text-gray-500 font-medium mb-1"
+                                            prop.text msgs.AIDenialsRecent
+                                        ]
+                                        Html.div [
+                                            prop.className "flex flex-col gap-1"
+                                            prop.children (
+                                                rollup.RecentDenials |> List.truncate 5 |> List.map recentRow
+                                            )
+                                        ]
+                                    ]
+                                ]
+                        ]
+                    ]
+            ]
+        ]
+
 let private liveHealthHeader (msgs: HealthMonitorMessages) (snapshot: HealthSnapshot) =
     Html.div [
         prop.className "text-xs text-gray-500"
@@ -476,6 +633,14 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             // the load is in flight.
             match model.Degraded with
             | Loaded entries -> degradedCapabilitiesCard msgs entries
+            | _ -> Html.none
+
+            // Phase 47 — AI action denials. `Loaded None` means no AI
+            // companion is composed, so there is nothing to say; a
+            // `Some` rollup suppresses itself when the deployment has
+            // never recorded a denial.
+            match model.AIDenials with
+            | Loaded(Some rollup) -> aiDenialCard msgs rollup
             | _ -> Html.none
 
             // Phase 9b.A — surface scheduler drift above the probe
