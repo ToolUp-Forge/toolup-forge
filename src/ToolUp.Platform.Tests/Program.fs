@@ -715,6 +715,8 @@ let private registeredTests =
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests
+        // Phase 6n — AI cancel / client-tool-dispatch multi-instance.
+        AICancellationDispatchInstanceValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
         IdempotencyStoreInstanceValidatorTests.tests
