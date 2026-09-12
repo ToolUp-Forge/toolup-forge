@@ -243,6 +243,36 @@ Adding view-level tests is a follow-on once a concrete view-level case lands. Th
 | Client-tier MVU `update` runtime behaviour | `ToolUp.AI.Client.Tests` (this harness) |
 | Live AI provider response shape | `ToolUp.AIProviders.Tests` (env-gated `.NET` Expecto) |
 
+### Which job transpiles which client tier (Phase 345)
+
+The names mislead, so this is written down rather than left to be re-derived from
+[`.github/workflows/checks.yml`](../../.github/workflows/checks.yml).
+
+| Client tier | Transpiled in CI by | Via |
+|---|---|---|
+| `ToolUp.AI.Client`, `ToolUp.KnowledgeBase.Client` | `fable-tier` | `VerifyFable` → `src/ToolUp.AI.Client.Tests`, which references both |
+| `ToolUp.Platform.Client` (+ `Platform.Core`) | `fable-tier` **and** `browser-smoke` | transitively through `ToolUp.AI.Client`; and directly by the browser-smoke fixture |
+| **`ToolUp.Offline.Client`** | **`browser-smoke` only** | `VerifyBrowserSmoke` → `tests/BrowserSmoke/fixture` |
+
+The tier with one point of coverage is the **offline** one. Exactly two projects in the tree
+reference `ToolUp.Offline.Client` — the browser-smoke fixture and `samples/MinimalClient` — and no
+CI job compiles the sample: `cd samples/MinimalClient && dotnet fable -o output` is the developer's
+phase-boundary check, never a gate. `ToolUp.Platform.Client` is the better-covered case and is
+easily misread as the exposed one, because the fixture's own header talks about the client tiers it
+references; `VerifyFable` has driven Platform.Client transitively through
+`ToolUp.AI.Client` since long before the browser gate existed.
+
+Two consequences worth knowing before you change either job:
+
+- **A dropped `<ProjectReference>` in the fixture would not go red — it would narrow the gate and
+  stay green**, with eight browser scenarios still passing. `VerifyBrowserSmoke` therefore asserts
+  the fixture's compile set before it installs anything, and its failure names this table. Changing
+  what the gate covers means editing that list and this section in the same commit.
+- **Widening `VerifyFable` to the offline tier was considered and rejected.** It would compile that
+  tier a second time, in a second job, for a `node:test` pack holding no cases over it — wall-clock
+  with no added signal. The sanctioned gate for offline-client transpilation is `browser-smoke`; if
+  that job is ever removed or made non-gating, the transpile is re-homed in the same commit.
+
 ## What this convention does NOT do
 
 - It does not force `testSequenced` everywhere. Expecto's parallel-within-testList execution is a real productivity feature.
