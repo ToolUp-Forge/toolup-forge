@@ -2775,6 +2775,8 @@ ToolUp.Platform.ConfigKeys.ToolingCategory : System.String (literal)
 ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys.builtInProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile] { get }
 ToolUp.Platform.ConfigKeys.escapeHatchKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
+ToolUp.Platform.ConfigKeys.intKeyRuleFor(System.String) : ToolUp.Platform.ConfigKeys+IntKeyRule
+ToolUp.Platform.ConfigKeys.intKeyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+IntKeyRule] { get }
 ToolUp.Platform.ConfigKeys.isManifestBindable(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.isToolingKey(System.String) : System.Boolean
 ToolUp.Platform.ConfigKeys.manifestBindable : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -2822,6 +2824,26 @@ ToolUp.Platform.ConfigKeys+ConfigProfile.Values : Microsoft.FSharp.Collections.F
 ToolUp.Platform.ConfigKeys+ConfigSchema (class)
 ToolUp.Platform.ConfigKeys+ConfigSchema.Dialect : System.String (literal)
 ToolUp.Platform.ConfigKeys+ConfigSchema.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm (class)
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IntegerOnly : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IntegerOrDecimal : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IsIntegerOnly : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm.IsIntegerOrDecimal : System.Boolean { get }
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm.Tag : System.Int32 { get }
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm+Tags (class)
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm+Tags.IntegerOnly : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+IntKeyNumericForm+Tags.IntegerOrDecimal : System.Int32 (literal)
+ToolUp.Platform.ConfigKeys+IntKeyRule (class)
+ToolUp.Platform.ConfigKeys+IntKeyRule..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ConfigKeys+IntKeyNumericForm)
+ToolUp.Platform.ConfigKeys+IntKeyRule.AcceptedTokens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConfigKeys+IntKeyRule.EnvVar : System.String { get }
+ToolUp.Platform.ConfigKeys+IntKeyRule.Form : ToolUp.Platform.ConfigKeys+IntKeyNumericForm { get }
+ToolUp.Platform.ConfigKeys+IntKeyRule.Max : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConfigKeys+IntKeyRule.Min : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConfigKeys+IntKeyRuleModule (class)
+ToolUp.Platform.ConfigKeys+IntKeyRuleModule.describe(ToolUp.Platform.ConfigKeys+IntKeyRule) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ConfigKeys+IntKeyRuleModule.isUnconstrained(ToolUp.Platform.ConfigKeys+IntKeyRule) : System.Boolean
+ToolUp.Platform.ConfigKeys+IntKeyRuleModule.unconstrained(System.String) : ToolUp.Platform.ConfigKeys+IntKeyRule
 ToolUp.Platform.ConfigKeys+Names (class)
 ToolUp.Platform.ConfigKeys+Names.acceptEphemeralRagIndex : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptEphemeralShareTokenKey : System.String (literal)
@@ -2843,6 +2865,7 @@ ToolUp.Platform.ConfigKeys+Names.acceptSameSiteOnlyCsrfInAuthMode : System.Strin
 ToolUp.Platform.ConfigKeys+Names.acceptSharedEmbeddingCacheInTeamMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptStickyRoutedAiMultiInstance : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptUnboundAudienceInAuthMode : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.acceptUnlimitedEventRetention : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptUnsignedPublishable : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.adAnalytics : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.adminToken : System.String (literal)
