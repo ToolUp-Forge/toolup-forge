@@ -23,6 +23,12 @@ let private registeredTests =
         // package ids the Publish target pushes. Pure file scanning over
         // the checkout; no build output, no network.
         SdkManifestTests.tests
+        // Phase 184 — the fresh-machine published-package smoke gate's
+        // rules: the probe closure, the version under test, the
+        // index-availability read, the outside-the-repo invariant and the
+        // workflow lint, each proven in both directions. Pure over
+        // fixtures plus the committed publish-nuget.yml; no network.
+        PublishedSmokeTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
