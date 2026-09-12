@@ -29,6 +29,10 @@ let private registeredTests =
         // workflow lint, each proven in both directions. Pure over
         // fixtures plus the committed publish-nuget.yml; no network.
         PublishedSmokeTests.tests
+        // Phase 259 — every replaceable seam carries a conformance pack,
+        // and every pack is run by an implementation. Pure file scanning
+        // over the checkout; no build output, no network.
+        ConformanceCoverageTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
