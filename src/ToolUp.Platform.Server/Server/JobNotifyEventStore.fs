@@ -37,12 +37,26 @@ open ToolUp.Platform
 // those events were never notified, and leaving them past the cursor
 // is exactly what lets the scheduler's startup catch-up scan recover
 // them.
+//
+// **Phase 9u — position 300**, the outermost link of the canonical
+// chain: an `OnEvent` trigger fires only after the audit replicator has
+// enqueued the event and the webhook dispatch hook has been handed it.
+// See `EventStoreChain`.
 type JobNotifyEventStore
     (
         inner: IEventStore,
         schedulerLookup: unit -> IJobScheduler option,
         ?watermark: JobTriggerWatermark.JobTriggerWatermark
     ) =
+    interface IEventStoreDecorator with
+        member _.DecoratorName = "JobNotifyEventStore"
+        member _.DecoratorPosition = EventStoreChain.JobNotifyPosition
+
+        member _.DecoratorPurpose =
+            "Calls IJobScheduler.NotifyEventWritten after every successful write, which is what makes Trigger.OnEvent jobs auto-fire, and advances the shared trigger watermark when EventTriggerCatchUp is on."
+
+        member _.InnerStore = inner
+
     interface IEventStore with
         member _.Write(evt) = async {
             do! inner.Write evt

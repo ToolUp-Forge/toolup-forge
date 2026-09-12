@@ -447,6 +447,14 @@
         <Compile Include="Shared\SignedShapeSeparator.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
+        <!-- Phase 9u — the event-store decorator chain's position model
+             (IEventStoreDecorator + the EventStoreChain walk/check). After
+             SDK.Shared.fs, which declares the IEventStore it decorates;
+             before Server\EventStoreChainValidator.fs in Platform.Server,
+             which is the preflight guard over it. Pure / Fable-safe
+             (interface + records + list folds, no reflection beyond
+             GetType().Name). -->
+        <Compile Include="Shared\IEventStoreDecorator.fs" />
         <Compile Include="Shared\IRateLimiter.fs" />
         <Compile Include="Shared\RateLimitDescriptor.fs" />
         <!-- Phase 30a — signed module artefact format (ArtifactManifest,

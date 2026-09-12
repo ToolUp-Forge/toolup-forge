@@ -87,6 +87,30 @@ let registerTraceCategoryDevDiagnosticsContributor (services: IServiceCollection
         services.AddSingleton<IDevDiagnosticsContributor>(TraceCategoriesValidator.contributor config)
         |> ignore
 
+/// Phase 9u. `IDevDiagnosticsContributor` for the composed `IEventStore`
+/// decorator chain — which decorators wrap the resolved store, in what
+/// order, what each does to a write, and how that measures against the
+/// canonical position table. Gated on `EnableDevEndpoints` on the same
+/// terms as the two panels above, and registered separately so a
+/// deployment that composes neither SSE nor trace categories still gets it.
+///
+/// The preflight guard (`EventStoreChainValidator`, registered in
+/// `ComposeConfigValidators`) speaks once at boot and only when the chain
+/// is wrong; this panel is what an operator reads when the chain is
+/// *right* and something else is suspected — the question "is the hook I
+/// think is running actually in the chain?" has had no answer until now.
+///
+/// Takes the fully-decorated store `compose` registers as `IEventStore`,
+/// which is the outermost link: the walk goes inward from there.
+let registerEventStoreChainDevDiagnosticsContributor
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (eventStore: IEventStore)
+    : unit =
+    if config.EnableDevEndpoints then
+        services.AddSingleton<IDevDiagnosticsContributor>(EventStoreChainValidator.contributor eventStore)
+        |> ignore
+
 /// Register the core SDK singletons that every consumer resolves
 /// from DI: logger, dataTypes, blob storage, data-object store, data
 /// catalog, event store, audit log, auth provider, secret store, SSE
