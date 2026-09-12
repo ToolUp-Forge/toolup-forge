@@ -1341,6 +1341,13 @@
              (reads it); before ServerApp (run folds the validator into the
              extension ServiceConfig hook). -->
         <Compile Include="Server\CompositionValidator.fs" />
+        <!-- Phase 593 - composition-inspector handler + its compose-time
+             snapshot. AFTER CompositionManifest.fs / GroundingEnvelopeSeal.fs
+             / CompositionValidator.fs (it projects all three) and BEFORE
+             ServerApp.fs (run takes the snapshot and appends the route). That
+             ordering is why this route is not mounted by BuildRouteHandlers
+             like every other admin surface - see the file header. -->
+        <Compile Include="Server\CompositionInspectorHandler.fs" />
         <Compile Include="Server\ServerApp.fs" />
         <!-- Phase 166 — detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->

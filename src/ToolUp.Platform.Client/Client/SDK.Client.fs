@@ -3704,6 +3704,25 @@ module Client =
             | _, ConfiguredAuditViewer cfg -> [ AuditLogUI.create (Some cfg) ]
             | _, ExternalAuditViewer custom -> [ custom ]
 
+        // Phase 593 — composition inspector. Same Anonymous suppression
+        // as AuditViewer above, for the same class of reason: the panels
+        // enumerate this deployment's companions, its resolved config
+        // knobs and the purposes it may disclose under, which is a map
+        // of the attack surface. Owner/Admin gating is enforced
+        // server-side; a Member sees the sidebar entry and each panel
+        // renders the handler's "only owners and admins" message.
+        //
+        // No `ServerConfig` pairing to state here — the snapshot the
+        // panels read is registered by `ServerApp.run` itself, so a
+        // deployment composed through the fluent root always has one.
+        let compositionInspector =
+            match ClientConfig.requiresAnyAuth config, config.CompositionInspector with
+            | false, _
+            | _, NoCompositionInspector -> []
+            | _, DefaultCompositionInspector -> [ CompositionInspectorUI.create None ]
+            | _, ConfiguredCompositionInspector cfg -> [ CompositionInspectorUI.create (Some cfg) ]
+            | _, ExternalCompositionInspector custom -> [ custom ]
+
         // Phase 10b — data-ingestion admin. Same Anonymous suppression
         // as TeamConfig / WebhookAdmin / HealthMonitor / UsageDashboard:
         // Anonymous deployments have no role concept and exposing data-
@@ -3821,6 +3840,15 @@ module Client =
             @ migrationAdmin
             @ tenantLifecycleAdmin
             @ platformUsers
+            // Phase 593 — appended at the END of the Platform Management
+            // block, not beside `auditViewer` where it was first written.
+            // The sidebar renders groups in FIRST-OCCURRENCE order across
+            // the composed list, so a "Platform Management" module listed
+            // up in the Team Management region would pull the whole
+            // Platform Management group above Team Management for every
+            // existing deployment (GP 11). Last in the block also keeps
+            // the per-module order additive.
+            @ compositionInspector
 
         let composed = home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
 
