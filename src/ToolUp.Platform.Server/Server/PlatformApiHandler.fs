@@ -887,6 +887,11 @@ let permissionApiHandler (_config: ServerConfig) =
                                         AffectedUserId = memberId
                                         ModuleName = moduleName
                                         Permissions = permissionsToCsv permissions
+                                        // Phase 553 — the chain link is
+                                        // filled in by the audit log, which
+                                        // is the only place that can read
+                                        // the scope's current head.
+                                        Chain = None
                                     })
                             | Error _ -> ()
 
@@ -922,6 +927,7 @@ let permissionApiHandler (_config: ServerConfig) =
                                         AffectedUserId = ""
                                         ModuleName = ""
                                         Permissions = defaultsSummary defaults
+                                        Chain = None
                                     })
                             | Error _ -> ()
 
@@ -956,6 +962,7 @@ let permissionApiHandler (_config: ServerConfig) =
                                         AffectedUserId = ""
                                         ModuleName = moduleName
                                         Permissions = ModuleExposure.toToken state
+                                        Chain = None
                                     })
                             | Error _ -> ()
 

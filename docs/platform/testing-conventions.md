@@ -377,7 +377,7 @@ over this implementation rather than derived from it, and resolved at test time.
 model-execution wire face is the first surface certified this way
 (`src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs`), against the
 **model-execution wire specification** — `MODEL_EXECUTION_WIRE.md` and its conformance corpus,
-published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0). This repo
+published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0). <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. --> This repo
 conforms to that specification; it does not define the format, and where any in-repo description
 of the wire disagrees with the specification, the specification wins.
 

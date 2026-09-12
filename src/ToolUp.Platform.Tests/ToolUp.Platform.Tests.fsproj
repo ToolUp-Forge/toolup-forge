@@ -891,6 +891,15 @@
         <!-- Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction /
              DegradeToFile + fallback spill capacity + poison quarantine). -->
         <Compile Include="InProcess\AuditFailurePolicyTests.fs" />
+        <!-- Phase 553.A/D — the in-store permission-event hash chain: the
+             chain forms, tamper / deletion / fork are reported at the
+             right index, pre-553 rows verify as an unchained prefix, and
+             an unreadable head takes the Phase 9t policy rather than
+             guessing a predecessor. After AuditFailurePolicyTests.fs,
+             whose policy DU it exercises. The scoped counterparty export
+             is deliberately NOT covered here — 553.B/C re-base on Phase
+             677, covered by ChainedAuditLedgerTests.fs. -->
+        <Compile Include="InProcess\PermissionAuditChainTests.fs" />
         <Compile Include="InProcess\DegradedCapabilityRegistryTests.fs" />
         <Compile Include="InProcess\AuthAuditHookTests.fs" />
         <!-- Phase 272 — hosted-tree action audit emission (GP 6): every
@@ -905,6 +914,11 @@
              and, chiefly, the unset arm's byte-for-byte guarantee.
              Env-mutating: wired into the Phase 653 sequenced group. -->
         <Compile Include="InProcess\EmbeddingProviderEnvTests.fs" />
+        <!-- Phase 459 — the OpenAI embedding provider's per-call key read,
+             the per-instance scope of its circuit breaker, and the one
+             shared HttpClient the create* factories hand out. Stub
+             HttpMessageHandler only; touches no env var and no network. -->
+        <Compile Include="InProcess\EmbeddingProviderKeyRotationTests.fs" />
         <Compile Include="InProcess\OAuthSecretEncryptionModeValidatorTests.fs" />
         <!-- Phase 457 — the composed store's at-rest posture: the refusal
              for a non-encrypting store under RequireAuth, the
@@ -937,6 +951,7 @@
         <Compile Include="InProcess\NotificationsExplicitOffTests.fs" />
         <Compile Include="InProcess\RateLimitModeValidatorTests.fs" />
         <Compile Include="InProcess\RateLimitConfigValidatorTests.fs" />
+        <Compile Include="InProcess\ConfigBoundsValidatorTests.fs" />
         <Compile Include="InProcess\RateLimitConfigHelpersTests.fs" />
         <Compile Include="InProcess\SseAuthModeValidatorTests.fs" />
         <Compile Include="InProcess\OidcAudienceBindingValidatorTests.fs" />
@@ -1542,6 +1557,11 @@
              isolation, filters, cursor paging, CSV export and the
              ServerConfig.AuditLog pairing. -->
         <Compile Include="InProcess\AuditViewApiHandlerTests.fs" />
+        <!-- Phase 593 - composition-inspector handler: role gate, the five
+             panels over a reference composition, the three distinct empty
+             states, and the export round-trip against each panel's own
+             getter. -->
+        <Compile Include="InProcess\CompositionInspectorHandlerTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target
@@ -1980,6 +2000,13 @@
              113 action authorizer (default-deny intact), plus the open-core
              grep-guard + the all-four-capabilities client-binding shape pin. -->
         <Compile Include="InProcess\SecondBindingNeutralityTests.fs" />
+        <!-- Phase 477 — tree-wide open-core vocabulary neutrality: the
+             Phase 202 grep-guard widened from the toy sample to the whole
+             publishable surface (packable sources + their READMEs + docs
+             + samples + the root docs), derived from IsPackable metadata
+             so a new packable project is covered with no edit here. Reads
+             the same private token source as the toy guard. -->
+        <Compile Include="InProcess\OpenCoreVocabularyNeutralityTests.fs" />
         <!-- Phase 208 — codified threat-lens security-regression suite: the six
              manual audit lenses (JWT/JWKS crypto, mode-gating/dev-bypass, tenant
              scope isolation, authz/RBAC fail-closed, request-edge auth,

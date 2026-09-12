@@ -129,6 +129,13 @@ which it joins the list above.
 `main` skip it, and today the local commit template is all that stands behind
 sign-off on that path.
 
+**`published-package-smoke` is deliberately NOT on this list and must never be added
+(Phase 184).** It lives in `publish-nuget.yml` and runs on a `v*.*.*` **tag** push, so
+it never reports a status against a branch. Branch protection would then wait forever
+for a check that cannot arrive — the same "a required check that no longer reports is
+absent, not enforced" hazard as a renamed job, but permanent. Its enforcement is on the
+release run itself: a red probe is a red tag. Only jobs in `checks.yml` belong above.
+
 ## Developer Certificate of Origin (DCO)
 
 ToolUp uses the **Developer Certificate of Origin (DCO)** — not a
