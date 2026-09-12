@@ -425,8 +425,9 @@ Written down here so the next reader does not have to re-derive it from `.github
 | `cloud-parity` | the `ToolUp.Cloud.Parity.Tests` pack with the Azurite emulator leg armed | yes |
 | **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; and the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate` | **yes** |
 | **`browser-smoke`** | eight real-browser scenarios via `VerifyBrowserSmoke` — and, as the compile that gets them there, **the only CI transpilation of `ToolUp.Offline.Client`** | **yes** |
+| `perf-budget` | the minimal shape's cold start + hot path against the committed `perf-budgets.json`, via `dev-scripts/perf-budget-gate.ps1` | runs; **not yet a required check** |
 
-Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template.
+Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template. `perf-budget` likewise runs on every push and PR but is not in the branch-protection rule yet — the state the seven test gates were in before 2026-09-12; see [`CONTRIBUTING.md`](CONTRIBUTING.md#required-checks-on-main-maintainer-setup).
 
 **Which job transpiles which client tier — the answer is not the one the job names suggest (Phase 345).** Read the reference graph, not the job title:
 
@@ -569,6 +570,14 @@ touches public surface:
   behaviour-preserving default (GP 11). Since Phase 618 the new surface still needs its assemblies'
   baselines regenerated (additions are a named, surgical regen rather than a silent pass), but the
   existing types' baselines stay untouched and no consumer breaks.
+- **Marking a member `[<Obsolete>]` moves the baseline, and the notice is gated (Phase 258).** The
+  renderer emits a SEPARATE `…  (obsolete)` marker line beside the member's unchanged token, so a
+  deprecation scores as an addition (regenerate, commit in the same PR) and never as a removal — the
+  in-place `… [obsolete]` shape is forbidden precisely because the lost token reads as breaking. The
+  same pack also fails a public `[<Obsolete>]` whose message omits a **replacement** or a **removal
+  target**; the failure says "NOTHING IS BROKEN", because it is about a sentence, not a surface.
+  Window, message format, and the removal-only-at-a-major rule:
+  [`docs/platform/deprecation-policy.md`](docs/platform/deprecation-policy.md).
 
 ## F# style + idioms
 

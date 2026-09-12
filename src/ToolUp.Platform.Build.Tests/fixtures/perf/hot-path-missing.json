@@ -1,0 +1,18 @@
+{
+  "schema": "toolup.perf-measurements/v1",
+  "label": "fixture — a run that quietly stopped measuring one budgeted metric",
+  "appDirectory": "samples/MinimalApp/src/MinimalApp.Server/bin/Release/net10.0",
+  "outputAssemblies": [ "MinimalApp.Server.dll" ],
+  "samples": [
+    {
+      "metric": "coldStartMs",
+      "statistic": "min",
+      "value": 420.1,
+      "samples": 6,
+      "observed": true,
+      "evidence": "'Application started.' observed on stdout for 6/6 boots",
+      "median": 458.0,
+      "max": 477.4
+    }
+  ]
+}

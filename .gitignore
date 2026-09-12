@@ -64,3 +64,12 @@ docs-snippets/generated/
 # A checkout of the federation-seam specification home, which this repository
 # certifies against but does not own. See docs/interplatform/FEDERATION_WIRE.md.
 /fuaran-federation-spec/
+
+# Phase 192 — the perf-budget gate's measurement file, and (retroactively)
+# the Core-Web-Vitals gate's Lighthouse reports beside it. Both are
+# per-run output of a gate, read by the deciding half in the same run and
+# meaningless afterwards: a measurement is of one machine at one moment,
+# so committing one would invite a later reader to compare against a
+# number that never described their machine. The BUDGETS are tracked —
+# they are the reviewed thing.
+/artifacts/

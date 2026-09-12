@@ -666,6 +666,7 @@ Feliz.AgGrid+Theme.withParams(Feliz.AgGrid+ThemeParams, System.Object) : System.
 Feliz.AgGrid+Theme.withPart(System.Object, System.Object) : System.Object
 Feliz.AgGrid+Theme.withoutPart(System.String, System.Object) : System.Object
 Feliz.AgGrid+ThemeClass (class)
+Feliz.AgGrid+ThemeClass (class)  (obsolete)
 Feliz.AgGrid+ThemeClass.Alpine : System.String { get }
 Feliz.AgGrid+ThemeClass.AlpineDark : System.String { get }
 Feliz.AgGrid+ThemeClass.Balham : System.String { get }

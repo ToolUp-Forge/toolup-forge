@@ -537,7 +537,7 @@ type DOMLayout =
 /// Legacy string theme classes. Deprecated in favour of the Theming API
 /// (`AgGrid.theme` + the `Theme` builder below), which is the AG Grid v31+
 /// recommended path. Kept for consumers still on CSS-class theming.
-[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...)">]
+[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...). ThemeClass will be removed in a future major.">]
 module ThemeClass =
     let Alpine = "ag-theme-alpine"
     let AlpineDark = "ag-theme-alpine-dark"
