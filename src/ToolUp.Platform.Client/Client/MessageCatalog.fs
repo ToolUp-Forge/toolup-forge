@@ -1188,6 +1188,36 @@ module MessageCatalog =
             ClickRefresh = "Click Refresh."
             Loading = "Loading…"
         }
+        AuditLog = {
+            Heading = "Audit Trail"
+            Subheading = "Every recorded action in this scope — who did what, and when. Read-only, Owner / Admin only."
+            EventTypeLabel = "Event type"
+            AllEventTypes = "All event types"
+            ActorLabel = "Actor"
+            ActorPlaceholder = "Any actor"
+            FromLabel = "From"
+            ToLabel = "To"
+            ApplyFilters = "Apply"
+            ClearFilters = "Clear filters"
+            Refresh = "Refresh"
+            ExportCsv = "Export CSV"
+            Exporting = "Exporting…"
+            LoadMore = "Load older events"
+            ColumnTime = "Time (UTC)"
+            ColumnEventType = "Event"
+            ColumnActor = "Actor"
+            ColumnSummary = "Summary"
+            UnattributedActor = "—"
+            ShowDetail = "Show event detail"
+            HideDetail = "Hide event detail"
+            PayloadHeading = "Recorded payload"
+            Loading = "Loading…"
+            NoEvents =
+                "No audit events recorded for this scope. Events appear once the deployment sets ServerConfig.AuditLog = EnabledAuditLog and an audited action runs."
+            NoMatches =
+                "No events match these filters. Widen the time window, or clear the event-type and actor filters."
+            ShowingCount = fun shown matched -> $"Showing {shown} of {matched} matching events"
+        }
         MappingDataManager = {
             ReingestionFailed = fun msg -> $"Re-ingestion failed: {msg}"
             FileReadFailed = fun name -> $"Couldn't read '{name}' — the file may be unreadable."

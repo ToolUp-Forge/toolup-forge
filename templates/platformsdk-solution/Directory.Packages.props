@@ -16,12 +16,17 @@
     resolve and trigger the package download.
 
     After first restore, build/ToolUp.Sdk.props is on disk and the
-    Import fires, pulling in every other ToolUp.* PackageVersion (the
-    full meta-manifest set — currently 51 packages: ToolUp.Platform +
-    AI + RAG + KnowledgeBase + Forms + Scheduling + Reporting +
-    Testing + AssetStore + PublicRendering + every provider companion).
-    Any of those packages can then be PackageReference'd from a new
+    Import fires, pulling in every other ToolUp.* PackageVersion — the
+    full meta-manifest set, which is every package the SDK publishes
+    (ToolUp.Platform + AI + RAG + KnowledgeBase + Forms + Scheduling +
+    Reporting + Testing + AssetStore + PublicRendering + every provider
+    companion). Any of those can then be PackageReference'd from a new
     fsproj without scaffold edits.
+
+    No count is given here on purpose: this comment said "51 packages"
+    while the manifest carried 59 and the SDK published 166, and Phase
+    326 made the manifest generated precisely so the number stops being
+    hand-kept anywhere. The authoritative list is the manifest itself.
 
     The 4 fallback entries duplicate ToolUp.Sdk's own metadata; when
     the Import fires on later restores, MSBuild's last-write-wins

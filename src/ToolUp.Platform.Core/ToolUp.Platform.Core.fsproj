@@ -559,6 +559,12 @@
         <Compile Include="Shared\PlatformAdminApi.fs" />
         <Compile Include="Shared\UsageTypes.fs" />
         <Compile Include="Shared\UsageQueryApi.fs" />
+        <!-- Phase 529 - audit-trail viewer surface (wire records + the
+             IAuditViewApi remoting contract + the payload-projection
+             constants). After AuthAttributes.fs (RequiresClaim / Audit /
+             PiiSafe markers) and after AuditTypes.fs, whose
+             AuditEvent.eventTypeName strings are what EventType carries. -->
+        <Compile Include="Shared\AuditViewApi.fs" />
         <!-- Phase 171 — Home / Overview landing API (contract + view
              types + optional IActiveAiProbe DI seam). -->
         <Compile Include="Shared\HomeOverviewApi.fs" />

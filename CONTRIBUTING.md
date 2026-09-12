@@ -8,14 +8,15 @@ maintenance commitment, and how to sign your work.
 ## Table of contents
 
 1. [Quick start](#quick-start)
-2. [Developer Certificate of Origin (DCO)](#developer-certificate-of-origin-dco)
-3. [Three-tier maintenance model](#three-tier-maintenance-model)
-4. [Contribution flow by type](#contribution-flow-by-type)
-5. [Promotion from community to first-party](#promotion-from-community-to-first-party)
-6. [Style and conventions](#style-and-conventions)
-7. [Security-affecting changes](#security-affecting-changes)
-8. [Maintainer setup](#maintainer-setup)
-9. [Where to ask questions](#where-to-ask-questions)
+2. [What CI checks](#what-ci-checks)
+3. [Developer Certificate of Origin (DCO)](#developer-certificate-of-origin-dco)
+4. [Three-tier maintenance model](#three-tier-maintenance-model)
+5. [Contribution flow by type](#contribution-flow-by-type)
+6. [Promotion from community to first-party](#promotion-from-community-to-first-party)
+7. [Style and conventions](#style-and-conventions)
+8. [Security-affecting changes](#security-affecting-changes)
+9. [Maintainer setup](#maintainer-setup)
+10. [Where to ask questions](#where-to-ask-questions)
 
 ---
 
@@ -28,15 +29,103 @@ maintenance commitment, and how to sign your work.
    Unsigned commits will be rejected at review time and by the
    [`checks.yml`](.github/workflows/checks.yml) CI workflow, which scans every PR
    commit for a `Signed-off-by:` trailer matching the commit author.
-5. **Run the build** locally:
+5. **Run the gates** locally — the same commands CI runs, so a green run here
+   predicts a green run there:
    ```
-   dotnet build
-   dotnet test
+   dotnet build ToolUp.Forge.sln
+   dotnet run --project Build.fsproj -- VerifyAll
    dotnet fantomas --check .
    ```
+   **Do not run `dotnet test`.** The test projects are Expecto console runners
+   (`<OutputType>Exe</OutputType>` with their own `Program.fs`), so `dotnet test`
+   discovers nothing, runs nothing, and exits 0 — a silent false green.
+   `VerifyAll` is the aggregator that actually runs every pack. If your change
+   touches client-tier F#, add `dotnet run --project Build.fsproj -- VerifyFable`;
+   see [What CI checks](#what-ci-checks) for the rest.
 6. **Open a pull request** against `main` with a clear description of the
    change and the rationale. Reference any related issues.
 7. A maintainer will review per the [contribution-flow timelines](#contribution-flow-by-type).
+
+## What CI checks
+
+Every push to `main` and every pull request against it runs
+[`.github/workflows/checks.yml`](.github/workflows/checks.yml). It compiles the
+solution and runs the tests — a PR that breaks either goes red before a
+maintainer reads it.
+
+| Check | What it verifies | Run it locally |
+|---|---|---|
+| `verify-all` | `dotnet build ToolUp.Forge.sln`, then **every Expecto pack** via `VerifyAll` | `dotnet run --project Build.fsproj -- VerifyAll` |
+| `fable-tier` | the AI client tier transpiles under Fable and its `node:test` cases pass | `dotnet run --project Build.fsproj -- VerifyFable` |
+| `browser-smoke` | eight real-browser scenarios; the compile behind them is the only CI transpile of the Offline client tier | `dotnet run --project Build.fsproj -- VerifyBrowserSmoke` |
+| `fable-wire-smoke` | `ToolUp.AI.Wire` compiles and round-trips on both the .NET and Fable hosts | `dotnet run --project src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj` |
+| `ai-wire-conformance` | the connector mappers produce identical output on both hosts, over one corpus | `dotnet run --project src/ToolUp.AI.Wire.Conformance/ToolUp.AI.Wire.Conformance.fsproj` |
+| `cloud-parity` | the cloud-parity pack with the Azurite emulator leg armed | `docker compose -f compose.parity.yml up -d --wait azurite`, then run `src/ToolUp.Cloud.Parity.Tests` with `TOOLUP_PARITY_AZURITE=UseDevelopmentStorage=true` |
+| `templates` | the `dotnet new` scaffolds under `templates/` compile, and the packaged-module template scaffolds/builds/packs | `dotnet run --project Build.fsproj -- VerifyTemplates` and `-- VerifyPackagedModuleTemplate` |
+| `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles | `dotnet run --project Build.fsproj -- VerifyDocSnippets` |
+| `source-citations` | every backticked API name in a comment still resolves | `dotnet run --project Build.fsproj -- VerifySourceCitations` |
+| `fantomas` | formatting, repo-wide | `dotnet fantomas --check .` |
+| `spdx-headers` | the Apache-2.0 SPDX header on every Fable-packed source file | `dotnet run --project Build.fsproj -- AddHeaders --check` |
+| `dco` | a `Signed-off-by:` trailer on every commit — **pull requests only** | `git commit -s` |
+
+Two of these cannot pass vacuously by design, which is worth knowing if you are
+adding a gate of your own: `verify-all` reads the pack count out of `VerifyAll`'s
+summary and fails below a floor, because the target legitimately exits 0 with an
+empty pack list; `fable-tier` and `browser-smoke` assert their pass counts for
+the same reason (`node --test` exits 0 having matched no file, and a runner with
+no browser would skip every scenario).
+
+Fork PRs pass without any repository secrets. The live-API provider arms are
+env-gated and report **Pending**, not Failed, when their API keys are absent.
+
+### Required checks on `main` (maintainer setup)
+
+Branch protection is a repository setting, not a file in this tree, so it is
+recorded here rather than configured here.
+
+**`main` requires all twelve checks below (applied 2026-09-12).** Until that date the
+required set was only the five cheap ones — `spdx-headers`, `fantomas`, `dco`,
+`fable-wire-smoke` and `ai-wire-conformance` — and every gate that compiles the solution
+or runs a test (`verify-all`, `fable-tier`, `browser-smoke`, `cloud-parity`, `templates`,
+`doc-snippets`, `source-citations`) ran on every push and PR without being enforced.
+`enforce_admins` is still off, so a maintainer's direct push lands regardless; requiring a
+pull request is not yet switched on.
+
+The intended rule for `main` is **require a pull request, and require these
+status checks to pass** — the twelve, as currently configured:
+
+```
+verify-all
+fable-tier
+browser-smoke
+fable-wire-smoke
+ai-wire-conformance
+cloud-parity
+templates
+doc-snippets
+source-citations
+fantomas
+spdx-headers
+dco
+```
+
+Those strings are the **job ids** in `checks.yml`; no job overrides its display
+name, so they are also the check names GitHub matches against. Renaming a job
+therefore silently drops its protection — a required check that no longer
+reports is not enforced, it is absent — so a rename updates this list and the
+branch-protection rule in the same change.
+
+`dco` is the one entry that is PR-only (`if: github.event_name ==
+'pull_request'`), which is exactly why requiring a PR matters: direct pushes to
+`main` skip it, and today the local commit template is all that stands behind
+sign-off on that path.
+
+**`published-package-smoke` is deliberately NOT on this list and must never be added
+(Phase 184).** It lives in `publish-nuget.yml` and runs on a `v*.*.*` **tag** push, so
+it never reports a status against a branch. Branch protection would then wait forever
+for a check that cannot arrive — the same "a required check that no longer reports is
+absent, not enforced" hazard as a renamed job, but permanent. Its enforcement is on the
+release run itself: a red probe is a red tag. Only jobs in `checks.yml` belong above.
 
 ## Developer Certificate of Origin (DCO)
 

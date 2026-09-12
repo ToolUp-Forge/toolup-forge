@@ -556,6 +556,11 @@ let private registeredTests =
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
+        // Phase 459 — listed here, not merely attributed: the file carries
+        // `[<Tests>]` for symmetry with its neighbours, but
+        // `runTestsWithCLIArgs` runs `allTests`, so an unlisted binding
+        // never executes.
+        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
@@ -719,6 +724,8 @@ let private registeredTests =
         NotificationSilentlySkippedTests.tests
         EncryptedSecretStoreModeValidatorTests.tests
         JobSchedulerInstanceValidatorTests.tests
+        // Phase 6n — AI cancel / client-tool-dispatch multi-instance.
+        AICancellationDispatchInstanceValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
         IdempotencyStoreInstanceValidatorTests.tests
@@ -1284,6 +1291,13 @@ let private registeredTests =
         ModuleVisibilityContractTests.scopeWalkTests
         ModuleVisibilityContractTests.foldTests
         ModuleVisibilityContractTests.routeRegistryTests
+        // Phase 529 - audit-trail viewer handler.
+        AuditViewApiHandlerTests.roleGateTests
+        AuditViewApiHandlerTests.scopeIsolationTests
+        AuditViewApiHandlerTests.filterTests
+        AuditViewApiHandlerTests.pagingTests
+        AuditViewApiHandlerTests.exportTests
+        AuditViewApiHandlerTests.substratePairingTests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through
@@ -1878,6 +1892,10 @@ let private registeredTests =
         // renderer-neutral (fragment / live channel / action authorizer)
         // + the open-core grep-guard + the client-binding shape pin.
         SecondBindingNeutralityTests.tests
+        // Phase 477 — the same grep-guard, widened from the toy sample to
+        // the whole publishable surface (derived from IsPackable, not a
+        // path list), plus the go-red proofs of the matching rule.
+        OpenCoreVocabularyNeutralityTests.tests
         // Phase 265 — reusable ClientHostCapabilities conformance bar:
         // the four-capability host-bridge seam (Navigate / Notify /
         // Dispatch / Call) asserted against the in-tree default and the

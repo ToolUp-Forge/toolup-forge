@@ -1650,6 +1650,19 @@ ToolUp.Platform.AuditEventDecodeFailedPayload.FailedEventTypes : Microsoft.FShar
 ToolUp.Platform.AuditEventDecodeFailedPayload.SinkName : System.String { get }
 ToolUp.Platform.AuditEventModule (class)
 ToolUp.Platform.AuditEventModule.eventTypeName(ToolUp.Platform.AuditEvent) : System.String
+ToolUp.Platform.AuditEventPage (class)
+ToolUp.Platform.AuditEventPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEventView], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.Platform.AuditEventPage.Events : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEventView] { get }
+ToolUp.Platform.AuditEventPage.MatchedCount : System.Int32 { get }
+ToolUp.Platform.AuditEventPage.NextCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditEventView (class)
+ToolUp.Platform.AuditEventView..ctor(System.Guid, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
+ToolUp.Platform.AuditEventView.Actor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditEventView.EventType : System.String { get }
+ToolUp.Platform.AuditEventView.Id : System.Guid { get }
+ToolUp.Platform.AuditEventView.OccurredAt : System.DateTime { get }
+ToolUp.Platform.AuditEventView.Payload : System.String { get }
+ToolUp.Platform.AuditEventView.Summary : System.String { get }
 ToolUp.Platform.AuditFailurePolicy (class)
 ToolUp.Platform.AuditFailurePolicy.DegradeToFile : ToolUp.Platform.AuditFailurePolicy { get }
 ToolUp.Platform.AuditFailurePolicy.IsDegradeToFile : System.Boolean { get }
@@ -1755,6 +1768,24 @@ ToolUp.Platform.AuditSubjectModule.fromSubject(ToolUp.Platform.Subject) : ToolUp
 ToolUp.Platform.AuditSubjectModule.kind(ToolUp.Platform.AuditSubject) : ToolUp.Platform.AuditSubjectKind
 ToolUp.Platform.AuditSubjectModule.kindString(ToolUp.Platform.AuditSubjectKind) : System.String
 ToolUp.Platform.AuditSubjectModule.sanitise(ToolUp.Platform.Subject) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.Platform.AuditTrailQuery (class)
+ToolUp.Platform.AuditTrailQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.Platform.AuditTrailQuery.Actor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditTrailQuery.Cursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditTrailQuery.EventType : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AuditTrailQuery.From : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AuditTrailQuery.PageSize : System.Int32 { get }
+ToolUp.Platform.AuditTrailQuery.To : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AuditViewApi (class)
+ToolUp.Platform.AuditViewApi.DefaultPageSize : System.Int32 (literal)
+ToolUp.Platform.AuditViewApi.MaxPageSize : System.Int32 (literal)
+ToolUp.Platform.AuditViewApi.clampPageSize(System.Int32) : System.Int32
+ToolUp.Platform.AuditViewApi.defaultQuery : ToolUp.Platform.AuditTrailQuery { get }
+ToolUp.Platform.AuditViewApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.AuditViewProjection (class)
+ToolUp.Platform.AuditViewProjection.SummaryMaxFields : System.Int32 (literal)
+ToolUp.Platform.AuditViewProjection.SummaryMaxLength : System.Int32 (literal)
+ToolUp.Platform.AuditViewProjection.actorFieldNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth (class)
 ToolUp.Platform.Auth+AuthenticatedUser (class)
 ToolUp.Platform.Auth+AuthenticatedUser..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
@@ -6289,6 +6320,11 @@ ToolUp.Platform.IAnswerProvenanceAnchors.TryCertificateRef(System.String, System
 ToolUp.Platform.IAuditLog (interface)
 ToolUp.Platform.IAuditLog.GetAuditTrail(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]]
 ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IAuditViewApi (class)
+ToolUp.Platform.IAuditViewApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditEventPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]])
+ToolUp.Platform.IAuditViewApi.ExportCsv : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
+ToolUp.Platform.IAuditViewApi.ListEventTypes : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]] { get }
+ToolUp.Platform.IAuditViewApi.Query : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditEventPage, System.String]]] { get }
 ToolUp.Platform.IAuthAuditHook (interface)
 ToolUp.Platform.IAuthAuditHook.RecordDenial(ToolUp.Platform.AuthDenial) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IBindingRevocationList (interface)

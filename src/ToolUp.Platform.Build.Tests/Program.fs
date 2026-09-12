@@ -15,6 +15,24 @@ let private registeredTests =
         // budget parser's refusals and the check over committed report
         // fixtures. No browser, no server, no network.
         CoreWebVitalsBudgetTests.tests
+        // Phase 754 — the template gate's stranger's-package guard: a
+        // declared gate id the repo's own pack did not emit. Pure, so
+        // both directions are probed without packing anything.
+        TemplateGateTests.tests
+        // Phase 326 — the ToolUp.Sdk meta-manifest lists exactly the
+        // package ids the Publish target pushes. Pure file scanning over
+        // the checkout; no build output, no network.
+        SdkManifestTests.tests
+        // Phase 184 — the fresh-machine published-package smoke gate's
+        // rules: the probe closure, the version under test, the
+        // index-availability read, the outside-the-repo invariant and the
+        // workflow lint, each proven in both directions. Pure over
+        // fixtures plus the committed publish-nuget.yml; no network.
+        PublishedSmokeTests.tests
+        // Phase 259 — every replaceable seam carries a conformance pack,
+        // and every pack is run by an implementation. Pure file scanning
+        // over the checkout; no build output, no network.
+        ConformanceCoverageTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

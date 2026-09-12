@@ -1,0 +1,187 @@
+# Conformance-pack coverage baseline (Phase 259).
+#
+# GENERATED — regenerate rather than hand-edit the two ratchet sections.
+# [EXEMPT] is the exception: it is hand-authored and carried through a
+# regeneration verbatim, because a rationale a machine can rewrite is a
+# rationale nobody wrote.
+#
+# Each row is COVERAGE DEBT. The gate fails on drift in EITHER direction:
+# a name that appears and is not here (a seam nobody packed, a pack only
+# one implementation runs), and a name here that has since been fixed and
+# must be removed. So the list may only SHRINK — that is the whole ratchet,
+# and it needs no threshold to tune.
+#
+# The universe is DERIVED, never listed: a replaceable seam is a public
+# interface (api-baselines) with two or more production implementations.
+# A new seam therefore arrives here on its own rather than being forgotten.
+#
+# At generation: 51 of 146 replaceable seams packed; 33 of 96 bindable packs bound twice or more.
+
+# Replaceable seams carrying no contract pack. Author the pack and drop the row.
+[UNPACKED]
+IAIProviderFactory
+IAnalyserCache
+IAnonymousSessionMigrator
+IAnswerProvenanceAnchors
+IArtefactSigner
+IAuditLog
+IAuthTracer
+IBindingRevocationList
+IBindingTransparencyLog
+IBlobEncryptionKeyResolver
+IBudgetLedger
+ICefLineTransport
+ICertificateIssuanceLog
+ICitationCounters
+ICommutativeCipher
+ICompositionCapabilityGate
+IComputeBudgetStore
+IConditionalBlobStorage
+IConfigStore
+IContentScanner
+ICspContributor
+IDataExporter
+IDatasetCodec
+IDeploymentVerificationEvidence
+IDevDiagnosticsContributor
+IEmbeddingCache
+IEmbeddingProvider
+IEnumerableContentSource
+IErasureHandler
+IEvidenceChainEvidence
+IExposureSink
+IExternalCompletionSink
+IFeedStateStore
+IFormStore
+IGrantConsentVerifier
+IGraphStore
+IGroundingEnvelopeMutator
+IHostActionAuditHook
+IHostI18nResolver
+IHostRenderTelemetrySink
+IHostedTreeUsageExport
+IIndexNowStateStore
+IIngestionQueueStore
+IIngestionRecoverySurface
+IIngestionStatusObserver
+IIngestionStatusStore
+IJobHandler
+IJobProgressReporter
+IJobProgressSink
+ILogger
+IMediaDerivation
+IMediaTranscoder
+IModelRegistrationNovelty
+IModuleBindingVerifier
+INarrativeRenderer
+INarrativeStore
+INoiseEntropy
+IOcrProvider
+IOfflineQueue
+IOriginalPreviewSeam
+IPeerAuthProvider
+IPeerCallScopedAuth
+IPeerJobResultStore
+IPeerReplayGuard
+IPlatformRuntimeConfigStore
+IPrivacyBudgetLedger
+IRagTelemetry
+IRemotingTelemetry
+IRenderCacheInvalidation
+IReranker
+IResolvedContentSource
+IRetrievalPipeline
+IRetrievalTracer
+IRoundObserver
+IRoundStateStore
+IScopeEnumerator
+IScopedEmbeddingProviderFactory
+ISeamAuthorityEvidence
+ISeamAuthorityGate
+ISecretStoreAtRestPosture
+IServerHost
+ISignedUrlBlobStorage
+ISigningKeyLedger
+ISparseAnalyzer
+IStorageScopeResolver
+ITeamStore
+ITenantLifecyclePreview
+ITenantLifecycleProvisionContext
+ITraceLogger
+ITranscriptionProvider
+IUserDirectory
+IValidationContext
+IVectorStore
+IWebhookIdempotencyStore
+IWorkerKeyRegistry
+
+# Packs exercised by exactly one implementation. GP 12 treats the interface
+# as unproven until a second one runs the same pack. Bind one and drop the row.
+[SINGLE-BOUND]
+ClientHostCapabilitiesContract
+ComponentRegistryContract
+IAIProviderContract
+IActionAuthorizerContract
+IActivitySinkContract
+IArtifactSignerContract
+IArtifactVerifierContract
+IAssetStoreContract
+IBuildOrchestratorContract
+IClientToolAuthorizerContract
+IColumnMappingStoreContract
+IConsentProviderContract
+ICrdtDocumentStoreContract
+IDataCatalogContract
+IDataObjectStoreContract
+IDataSubjectRequestContract
+IDatasetStoreContract
+IDeployPipelineContract
+IEgressGateContract
+IEntityLockStoreContract
+IEvidencePackGeneratorContract
+IExternalComputeDispatcherContract
+IExternalHandleStoreContract
+IFeatureFlagStoreContract
+IGrantConsentStoreContract
+IJobSchedulerContract
+IJobStoreContract
+ILifecycleLockContract
+ILineageStoreContract
+ILiveSessionHostContract
+IMetricsSinkContract
+IModelEvaluationPlanMetricsContract
+IModelFitProviderContract
+IModelRegistryContract
+IModelScorerContract
+IModuleQueryBusContract
+INotificationAddressBookContract
+IOAuth1aFlowContract
+IOAuthStateStoreContract
+IOAuthTokenRefresherContract
+IPeerAuditTransparencyContract
+IPeerBearerAuthContract
+IPeerCapabilityNegotiationContract
+IPeerNonFSharpSdkContract
+IPendingInviteStoreContract
+IPermissionStoreContract
+IPlatformAIKeyStoreContract
+IPlatformPeerContract
+IPresenceTrackerContract
+IProviderProfileContract
+IPublicContentApiContract
+IRateLimitStoreContract
+IRateLimiterContract
+IServiceAccountStoreContract
+ISessionRegistryContract
+IShareTokenStoreContract
+ISubjectResolverContract
+ITeamQuotaPolicyContract
+ITenantFleetContract
+ITenantLifecycleContract
+IUploadValidatorContract
+IUserSchemaStoreContract
+ModuleContract
+
+# Seams that will never carry a pack, with the reason. `<name>: <why>`.
+# Hand-authored; a regeneration preserves these rows.
+[EXEMPT]

@@ -469,6 +469,8 @@ ToolUp.Platform.AuditReplicatorOptionsModule (class)
 ToolUp.Platform.AuditReplicatorOptionsModule.defaults : ToolUp.Platform.AuditReplicatorOptions { get }
 ToolUp.Platform.AuditReplicatorRetryPolicy (class)
 ToolUp.Platform.AuditReplicatorRetryPolicy.defaults : ToolUp.Platform.RetryPolicy { get }
+ToolUp.Platform.AuditViewApiHandler (class)
+ToolUp.Platform.AuditViewApiHandler.auditViewApi(ToolUp.Platform.AuditLogMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditViewApi
 ToolUp.Platform.Auth.IdentitySanitiser (class)
 ToolUp.Platform.Auth.IdentitySanitiser.MaxLength : System.Int32 (literal)
 ToolUp.Platform.Auth.IdentitySanitiser.sanitiseScopeId(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]

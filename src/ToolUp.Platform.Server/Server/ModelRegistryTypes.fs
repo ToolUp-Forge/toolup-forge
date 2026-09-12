@@ -158,6 +158,8 @@ module ModelArtifactStatus =
 /// error. Same posture as `ModelSpecRef.SpecHashAlgorithm` — carried
 /// verbatim, never acted on.
 type ProvenanceAttachment = {
+    // OSS-BOUNDARY-EXEMPT: the example media type is a wire value of the
+    // public, Apache-2.0 model-execution specification.
     /// IANA-shaped media type of `Bytes` (e.g. `application/json`,
     /// `application/vnd.fuaran.model-spec`). Recorded, never interpreted.
     MediaType: string
@@ -185,6 +187,8 @@ module ProvenanceAttachment =
     /// slot holds, and giving it its own field would mean two append-only
     /// stores to keep honest instead of one. Forge still never reads it —
     /// the label says which reader to hand it to, and forge is not one.
+    // OSS-BOUNDARY-EXEMPT: a wire value of the public, Apache-2.0
+    // model-execution specification.
     [<Literal>]
     let SpecPayloadMediaType = "application/vnd.fuaran.model-spec"
 

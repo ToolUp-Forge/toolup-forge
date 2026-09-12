@@ -1087,6 +1087,9 @@
         <Compile Include="Server\Compose\ProcessProfileGate.fs" />
         <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
+        <!-- Phase 529 - audit-trail viewer handler. After AuditLog.fs
+             (the substrate it pairs with) and Api.fs (makeApi). -->
+        <Compile Include="Server\AuditViewApiHandler.fs" />
         <!-- Phase 171 — Home / Overview landing aggregation handler. -->
         <Compile Include="Server\HomeOverviewApiHandler.fs" />
         <Compile Include="Server\ServiceStatusBoardApiHandler.fs" />

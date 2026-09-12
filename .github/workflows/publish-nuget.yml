@@ -44,6 +44,29 @@
 # a tag push that cannot publish must fail loudly, because a silently
 # skipped release (a lost secret, a fork tag) reads as a green run.
 # Nothing rotates: the temp key dies within the hour.
+#
+# ─── The `ToolUp.*` glob is a CONSTRAINT, not a description (Phase 754)
+#
+# Every package this workflow can publish must match the policy glob.
+# The Phase 344 AG Grid / AG Charts bindings did not: they packed as
+# `Feliz.AgGrid` / `Feliz.AgCharts` / `Feliz.AgGrid.Enterprise`, outside
+# the glob — and `Feliz.AgGrid` is in any case Compositional-IT's
+# unmaintained package on nuget.org, the one that extraction exists to
+# supersede. A `v*` tag would therefore have pushed three packages the
+# policy refuses, at ids this project does not own. Phase 754 moved them
+# to `ToolUp.Feliz.AgGrid` / `ToolUp.Feliz.AgCharts` /
+# `ToolUp.Feliz.AgGrid.Enterprise` (operator decision 2026-09-01), inside
+# the glob and under ids this project does own.
+#
+# So: a NEW packable project whose `PackageId` falls outside `ToolUp.*`
+# is a release defect, and the `Publish` target packs `src/**/*.fsproj`
+# by GLOB — nothing here enumerates package ids, so nothing here will
+# notice. Set the id, or set `<IsPackable>false</IsPackable>`.
+#
+# The in-repo counterpart to that discipline is the template gate's
+# stranger's-package guard (`TemplateGate.unproducedIds`, Build.fs): it
+# fails when a declared gate id is one this repo does not itself
+# produce, which is the same mistake caught one step earlier.
 
 name: publish-nuget
 
@@ -83,6 +106,26 @@ jobs:
       # `nuget.org` for external deps. No effect on the published nupkgs.
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
+
+      # Phase 326 — the release cannot publish a package the ToolUp.Sdk
+      # meta-manifest does not advertise, nor a manifest MSBuild cannot
+      # import.
+      #
+      # `ToolUp.Sdk.props` is what a consumer imports to resolve every
+      # ToolUp.* package from one <ToolUpSdkVersion>. It was hand-listed
+      # and had drifted to 57 of 166 published ids (the rest were NU1008
+      # for any consumer), and its header comment nested a second XML
+      # comment, which made the whole import MSB4024 — the manifest
+      # resolved nothing at all. Neither could be seen from inside this
+      # repo, because nothing here imports its own meta-manifest; the
+      # only place the two facts meet is the release that publishes the
+      # packages the manifest is supposed to name. So the check runs
+      # here, on that release.
+      #
+      # BEFORE the login step deliberately: a release that cannot publish
+      # correctly should fail without minting a credential first.
+      - name: Verify the ToolUp.Sdk meta-manifest matches the packable set
+        run: dotnet run --project Build.fsproj -- GenerateSdkManifest --check
 
       # The one-hour temp key comfortably covers the ~10-minute pack that
       # follows; one OIDC token buys exactly one temporary key.
@@ -130,3 +173,83 @@ jobs:
           name: sbom-cyclonedx
           path: "artifacts/*.cdx.json"
           if-no-files-found: warn
+
+  # ─── Phase 184 — the fresh-machine smoke gate ────────────────────────
+  #
+  # "A fresh machine can `dotnet add package` the SDK and build it" was a
+  # Wave-5.5 exit criterion, run ONCE by hand. Nothing re-ran it after any
+  # later tag. Every gate in `checks.yml` proves something about the TREE;
+  # a nupkg is a different artefact, and the classes that live only in it
+  # — a transitive dependency a same-repo project reference silently
+  # supplied, a `fable/`-packed source path that stops extracting —
+  # surface first in a consumer's `dotnet add package`, not in CI.
+  #
+  # It restores from nuget.org ANONYMOUSLY, which is also what makes it
+  # honest: no credential, no local feed, exactly the path an external
+  # adopter takes. It publishes nothing.
+  #
+  # ── `needs: publish`, and the wait that follows ─────────────────────
+  #
+  # A push is ACCEPTED before it is INDEXED. Probing the moment the push
+  # returns records a false red about a release that is fine (the Phase
+  # 255 lesson), so the target polls the flat-container index for the
+  # version and only then scaffolds. `needs:` orders the two jobs; the
+  # poll absorbs the minutes between.
+  #
+  # ── Why the job is three lines ──────────────────────────────────────
+  #
+  # The `VerifyFable` precedent recorded twice in `checks.yml`: the target
+  # owns the whole mechanism, so CI and a developer necessarily run the
+  # same thing. Here it also protects the gate's one load-bearing
+  # property — the probe is scaffolded OUTSIDE the checkout, because
+  # nuget.config files merge up the directory tree and MSBuild walks
+  # Directory.Build.props upward, so a probe under the repo would resolve
+  # through forge's own sources and go GREEN over a release no consumer
+  # can restore. Inlining `dotnet add package` as steps here would lose
+  # that silently, which is why `PublishedSmoke.smokeJobFindings` lints
+  # this job for it from the Build test pack on every push.
+  #
+  # ── It is NOT a branch-protection required check, and cannot be ─────
+  #
+  # Phase 184 was briefed to add one. Branch protection gates pushes and PRs to a
+  # BRANCH; this job runs on a `v*.*.*` TAG push, so it never reports a
+  # status GitHub could require on `main`. Adding it to CONTRIBUTING's
+  # required-check list would block every PR forever on a check that
+  # never arrives — the exact hazard that section already warns about for
+  # a renamed job. What enforcement there is, is here: a red probe is a
+  # red release run, on the tag, with the packages already pushed and
+  # therefore immutable. The remedy for a red is a new patch version, and
+  # the gate's value is that it is CI saying so rather than an adopter.
+  #
+  # ── Cost ────────────────────────────────────────────────────────────
+  #
+  # Off the critical path by construction — a separate job that only the
+  # publish path reaches, so day-to-day PR builds pay nothing (GP 13).
+  # The `timeout-minutes` sits above the target's own 20-minute index
+  # budget so a slow index fails with the target's message (which names
+  # both readings) rather than as a bare job timeout.
+  published-package-smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Same CI workaround as every other job here: the dev-machine local
+      # feed at ../../local-nuget-feed does not exist on the runner. This
+      # is for the CHECKOUT's own restore of Build.fsproj — the probe
+      # itself is scaffolded outside the repo with a `<clear />`d
+      # nuget.config, so this source can never reach it.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+
+      # The version is read off ${{ github.ref }} inside the target, so no
+      # copy of the number lives here to drift from the tag that was just
+      # published.
+      - name: Restore and compile the published packages on a clean path (VerifyPublishedPackages)
+        run: dotnet run --project Build.fsproj -- VerifyPublishedPackages

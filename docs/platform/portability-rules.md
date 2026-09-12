@@ -127,14 +127,33 @@ Every distributed-friendly interface has a contract test pack in `ToolUp.Platfor
 
 And run the pack against their impl in their own test suite. The pack tests behaviour, not implementation — the same N tests pass for `InProcessJobScheduler`, a future Akka.NET impl, and a future Orleans impl.
 
-Current packs:
-- `IJobSchedulerContract` (15 tests)
-- `IModuleQueryBusContract` (9 tests)
-- `IShareTokenStoreContract` (11 tests)
-- `IDataSourceContract` (7 tests)
-- `IEntityStoreContract` + `IEntityQueryContract` (22 tests combined)
-
 A "distributed companion" not bundled with its conformance run is the wrong shape — without the test pack as evidence, the portability claim is unverified.
+
+**There is no list of current packs here, deliberately.** This section carried one until Phase 259, and it named five packs against the 97 the tree was by then shipping — a prose registry of a growing set is wrong by the time it is read, and a reader who trusted it would have concluded that ninety-two seams were unproven when they were not. `src/ToolUp.Platform.Tests/Contracts/` is the list, and the paragraph below is what keeps it honest.
+
+## The pack ships with the interface (Phase 259)
+
+**A new substrate interface ships its conformance pack in the same phase that introduces it, and the coverage gate proves it.** Not a review habit — `ConformanceCoverage` in `ToolUp.Platform.Build.Tests` runs in `VerifyAll` and fails the build.
+
+The gate derives everything from the checkout; nothing about which interfaces matter is written down by hand, because a hand-written universe is exactly how a new seam gets forgotten:
+
+- **A *replaceable seam*** is a public interface — one the `api-baselines/*.approved.txt` files export, so the set is already generated and already drift-gated in both directions — that has **two or more production implementations**. That is GP 12's own definition, read off the tree rather than asserted about it, and it means a second implementation of anything pulls its interface into the must-pack set with no edit anywhere.
+- **Every replaceable seam must carry a pack** at `src/ToolUp.Platform.Tests/Contracts/<Interface>Contract.fs`.
+- **Every pack must be *run*.** A pack exposing a `tests` entry point that nothing calls proves nothing at all, and is an outright failure with no baseline behind it. A pack run by only ONE implementation is the weaker case rule 12 cares about — the interface is not proven portable until a second implementation passes the same tests.
+
+**The two shortfalls are ratcheted, not thresholded.** When the gate landed, 51 of 146 replaceable seams carried a pack and 63 of 96 bindable packs had a single implementation. Demanding either outright would have been red on arrival, and a gate that is red on arrival is one people learn to step over. So both are pinned in `src/ToolUp.Platform.Tests/Contracts/conformance-coverage.approved.txt`, and — exactly like the api-baselines it is modelled on — **drift fails in either direction**: a seam or a pack that appears without a row fails immediately, and a row whose debt has since been paid must be removed. The list may only shrink. That is the whole ratchet plan; there is no number to tune and no schedule to remember.
+
+Three things follow for an author:
+
+1. **Adding a second implementation of an unpacked seam fails the build.** That is the intended moment to write the pack — the point at which portability stops being hypothetical.
+2. **A seam that genuinely cannot be packed gets an `[EXEMPT]` row with a reason**, not silence. The reason is hand-authored and survives regeneration; an exemption that stops excusing anything is itself reported.
+3. **To accept the tree's current shape wholesale**, regenerate with the same switch the api-baselines use:
+
+   ```powershell
+   $env:TOOLUP_APPROVE_API = "1"; dotnet run --project Build.fsproj -- VerifyAll; $env:TOOLUP_APPROVE_API = $null
+   ```
+
+   Approve mode passes trivially, so re-run without the variable before believing a green.
 
 ## How this interacts with companion authoring
 
