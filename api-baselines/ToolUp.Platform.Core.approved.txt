@@ -9056,9 +9056,14 @@ ToolUp.Platform.PermissionApi.GetTeamPermissions : Microsoft.FSharp.Core.FSharpF
 ToolUp.Platform.PermissionApi.SetMemberPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetModuleExposure : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PermissionApi.SetTeamDefaults : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.PermissionAuditChainLink (class)
+ToolUp.Platform.PermissionAuditChainLink..ctor(System.String, System.String)
+ToolUp.Platform.PermissionAuditChainLink.ContentHash : System.String { get }
+ToolUp.Platform.PermissionAuditChainLink.PrevHash : System.String { get }
 ToolUp.Platform.PermissionChangedPayload (class)
-ToolUp.Platform.PermissionChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.PermissionChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionAuditChainLink])
 ToolUp.Platform.PermissionChangedPayload.AffectedUserId : System.String { get }
+ToolUp.Platform.PermissionChangedPayload.Chain : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionAuditChainLink] { get }
 ToolUp.Platform.PermissionChangedPayload.ModuleName : System.String { get }
 ToolUp.Platform.PermissionChangedPayload.Permissions : System.String { get }
 ToolUp.Platform.PermissionChangedPayload.TeamId : System.String { get }
