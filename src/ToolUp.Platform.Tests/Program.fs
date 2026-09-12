@@ -556,6 +556,11 @@ let private registeredTests =
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
+        // Phase 459 — listed here, not merely attributed: the file carries
+        // `[<Tests>]` for symmetry with its neighbours, but
+        // `runTestsWithCLIArgs` runs `allTests`, so an unlisted binding
+        // never executes.
+        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
