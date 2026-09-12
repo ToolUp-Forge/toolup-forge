@@ -1,5 +1,7 @@
 # 2026-08-18 — Federation wire rename + the signed-shape separator registry (breaking)
 
+<!-- OSS-BOUNDARY-EXEMPT-FILE: this migration note records the normative wire values themselves, before and after; the post-rename values are the public specification's own namespace, so the tables cannot be neutralised without destroying the record they exist to keep. -->
+
 **What changes.** Nine normative wire values moved across four commits on 2026-08-18. Eight were renamed to strip an implementation brand from the federation-seam specification ahead of its public cut; the ninth harmonised the one remaining version suffix that disagreed with the rest. **Every one of them is a breaking wire change: a signature minted under an old value does not verify under the new one.** Verification fails closed, as it should, but it fails.
 
 There is no compatibility window and none is offered. Peers on both sides of a seam move together.
