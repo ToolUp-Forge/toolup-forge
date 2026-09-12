@@ -25,6 +25,13 @@
          the FAKE target and the drift test run one implementation. It
          takes no FAKE dependency for exactly that reason. -->
     <Compile Include="SdkManifest.fs" />
+    <!-- Phase 762 — the TOOLUP_TEST_LANE vocabulary. Source-linked from
+         the Platform test pack rather than copied: the VerifyAll target
+         below selects PACKS by lane and that pack's entry point selects
+         LISTS by lane, in assemblies that cannot reference each other,
+         and two independent parsers of one variable drift. The file
+         takes no dependency beyond System for exactly this reason. -->
+    <Compile Include="src\ToolUp.Platform.Tests\Support\TestLane.fs" Link="TestLane.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -2290,6 +2290,13 @@
              the Phase 480 bilateral surface it now implements. -->
         <Compile Include="InProcess\CountersignatureRegistryTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
+        <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
+             the shared vocabulary (System-only, source-linked into
+             Build.fsproj so the VerifyAll driver and this pack parse the
+             variable through ONE implementation); TestLaneFilter.fs is
+             the Expecto-shaped half only this pack compiles. -->
+        <Compile Include="Support\TestLane.fs" />
+        <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
