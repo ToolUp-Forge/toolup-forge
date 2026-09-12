@@ -518,34 +518,53 @@ let main args =
     // here does not silently degrade — the NU1603 escalation below turns
     // the resulting version fallback into a build error naming the
     // missing package.
+    //
+    // Phase 754 — each entry declares its PackageId AND the project that
+    // produces it. They were one string, with the project derived as
+    // `src/<id>/<id>.fsproj`; that assumption died when the AG Grid /
+    // AG Charts bindings took `ToolUp.Feliz.*` ids while their projects
+    // stayed at `src/Feliz.*/`. The pack loop below reconciles the two
+    // against what was actually emitted (`TemplateGate.unproducedIds`),
+    // so an id this repo does not produce fails the gate by name rather
+    // than falling through to a stranger's package on nuget.org.
     let templateGatePackages = [
-        "ToolUp.Platform.Core"
-        "ToolUp.Platform.Client"
-        "ToolUp.Platform.Server"
+        TemplateGate.package "ToolUp.Platform.Core" "src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj"
+        TemplateGate.package "ToolUp.Platform.Client" "src/ToolUp.Platform.Client/ToolUp.Platform.Client.fsproj"
+        TemplateGate.package "ToolUp.Platform.Server" "src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj"
         // Phase 307 — declared by Platform.Client (the UI toolkit,
         // promoted out of the client tier into its own package). This is
         // exactly the SDK->SDK dependency the note above describes: without
         // it, Platform.Client packed at the gate version would declare a
         // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
         // escalation would fail the gate by name.
-        "ToolUp.Platform.UI"
+        TemplateGate.package "ToolUp.Platform.UI" "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj"
         // Also declared by Platform.Client, since Phase 344 promoted the
         // AG Grid / AG Charts bindings out of the client tier. They were
         // not added here at the time, and the consequence is not benign:
-        // BOTH ids exist on nuget.org (Feliz.AgGrid 0.0.1, Feliz.AgCharts
-        // 0.23.0 — unrelated packages by another author), so restore
-        // silently fell through to a stranger's package and NU1603 turned
-        // that into a hard error. The `templates` CI job has been red on
-        // main since 344 landed. Found and fixed by Phase 307, which hit
-        // it while adding ToolUp.Platform.UI above — the very case the
-        // note at the head of this list describes.
-        "Feliz.AgGrid"
-        "Feliz.AgCharts"
+        // BOTH bare `Feliz.*` ids exist on nuget.org (Feliz.AgGrid 0.0.1,
+        // Feliz.AgCharts 0.23.0 — unrelated packages by another author),
+        // so restore silently fell through to a stranger's package and
+        // NU1603 turned that into a hard error. The `templates` CI job
+        // was red on main from 344 until Phase 307 found it while adding
+        // ToolUp.Platform.UI above — the very case the note at the head
+        // of this list describes.
+        //
+        // Phase 754 settled the ids for good: the packages are
+        // `ToolUp.Feliz.*` now (that prefix is also the glob the repo's
+        // nuget.org Trusted Publishing policy is registered against), and
+        // the id/project split above is what lets the projects keep their
+        // `src/Feliz.*/` directories while the emitted ids move. The
+        // reconciliation after the pack loop is the structural successor
+        // to "someone remembers to add the package": it fails on any id
+        // this repo does not itself emit, which is precisely what a
+        // stranger's package is.
+        TemplateGate.package "ToolUp.Feliz.AgGrid" "src/Feliz.AgGrid/Feliz.AgGrid.fsproj"
+        TemplateGate.package "ToolUp.Feliz.AgCharts" "src/Feliz.AgCharts/Feliz.AgCharts.fsproj"
         // Declared by Platform.Core.
-        "ToolUp.AI.Wire"
+        TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
         // Declared by Platform.Server, and its own ProjectReference.
-        "ToolUp.Graph.InMemory"
-        "ToolUp.Graph.Core"
+        TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
+        TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
     ]
 
     let gatedTemplateProjects = [
@@ -594,23 +613,47 @@ let main args =
 
         for pkg in templateGatePackages do
             let cached =
-                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
 
             if Directory.Exists cached then
                 Trace.tracefn "▶ VerifyTemplates: clearing stale cache entry %s" cached
                 Shell.deleteDir cached
 
         for pkg in templateGatePackages do
-            Trace.tracefn "▶ VerifyTemplates: packing %s @ %s" pkg templateGateVersion
+            if not (File.Exists(Path.getFullName pkg.Project)) then
+                failwithf
+                    "VerifyTemplates: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ VerifyTemplates: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
 
             runChecked "dotnet" [
                 "pack"
-                sprintf "src/%s/%s.fsproj" pkg pkg
+                pkg.Project
                 sprintf "-p:Version=%s" templateGateVersion
                 "-o"
                 feedDir
                 "--nologo"
             ]
+
+        // Phase 754 — the stranger's-package guard. Reconcile every
+        // DECLARED id against what the pack above actually emitted. A
+        // declared id with no `<id>.<version>.nupkg` in the scratch feed
+        // is an id this repo does not produce, and the restore below
+        // would resolve it from nuget.org — which, for the bare `Feliz.*`
+        // ids, meant an unrelated package by another author (Phase 307).
+        // Checked here rather than trusted: the previous shape could not
+        // even express a wrong id, so nothing ever tested that it was
+        // right. Go-red proven in ToolUp.Platform.Build.Tests.
+        match
+            TemplateGate.unproducedIds
+                templateGateVersion
+                templateGatePackages
+                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
+        with
+        | [] -> ()
+        | unproduced -> failwith (TemplateGate.report "VerifyTemplates" templateGateVersion unproduced)
 
         // `RestoreAdditionalProjectSources` ADDS the scratch feed to the
         // repo nuget.config's sources. `--source` would replace them, and
@@ -3707,7 +3750,10 @@ let main args =
     // (Feliz, Fable.*, Expecto, FAKE) comes from nuget.org, which is
     // what a real consumer does.
     let packagedModuleTemplateGatePackages =
-        templateGatePackages @ [ "ToolUp.Platform.Build" ]
+        templateGatePackages
+        @ [
+            TemplateGate.package "ToolUp.Platform.Build" "src/ToolUp.Platform.Build/ToolUp.Platform.Build.fsproj"
+        ]
 
     Target.create "VerifyPackagedModuleTemplate" (fun _ ->
         let runIn exe args dir =
@@ -3792,25 +3838,44 @@ let main args =
 
         for pkg in packagedModuleTemplateGatePackages do
             let cached =
-                Path.Combine(globalPackages, pkg.ToLowerInvariant(), templateGateVersion)
+                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
 
             if Directory.Exists cached then
                 Shell.deleteDir cached
 
         for pkg in packagedModuleTemplateGatePackages do
-            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s @ %s" pkg templateGateVersion
+            if not (File.Exists(Path.getFullName pkg.Project)) then
+                failwithf
+                    "VerifyPackagedModuleTemplate: gate package %s declares project %s, which does not exist. Fix the `Project` in `templateGatePackages`."
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ VerifyPackagedModuleTemplate: packing %s (%s) @ %s" pkg.Id pkg.Project templateGateVersion
 
             runCheckedIn
                 "dotnet"
                 [
                     "pack"
-                    sprintf "src/%s/%s.fsproj" pkg pkg
+                    pkg.Project
                     sprintf "-p:Version=%s" templateGateVersion
                     "-o"
                     feedDir
                     "--nologo"
                 ]
                 "."
+
+        // Phase 754 — the same stranger's-package reconciliation
+        // VerifyTemplates runs, for the same reason: this gate's closure
+        // is that one plus ToolUp.Platform.Build, and the scaffold below
+        // restores with nuget.org still in its sources.
+        match
+            TemplateGate.unproducedIds
+                templateGateVersion
+                packagedModuleTemplateGatePackages
+                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
+        with
+        | [] -> ()
+        | unproduced -> failwith (TemplateGate.report "VerifyPackagedModuleTemplate" templateGateVersion unproduced)
 
         // ── 2. Instantiate OUTSIDE the repo ──────────────────────────
         //
@@ -3953,5 +4018,251 @@ let main args =
             runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
 
         Trace.tracefn "▶ VerifyPackagedModuleTemplate: scaffold -> build -> conformance -> pack, green")
+
+    // ─── Phase 184 — the fresh-machine published-package smoke gate ──
+    //
+    // "A fresh machine can `dotnet add package` the SDK and build it"
+    // was a Wave-5.5 exit criterion, run ONCE by hand and never again.
+    // Every other gate in this repo proves something about the TREE; a
+    // nupkg is a different artefact, and the classes that only appear in
+    // it — a transitive `PackageReference` that a same-repo project
+    // reference silently supplies, a `fable/`-packed source path that
+    // stops extracting — surface first in a consumer's install.
+    //
+    // Usage:
+    //   dotnet run --project Build.fsproj -- VerifyPublishedPackages
+    //   TOOLUP_PUBLISHED_REF=v0.22.0 dotnet run ... (probe a past release)
+    //
+    // ── Deliberately NOT in `TestPacks` and NOT in `verify.ps1` ──────
+    //
+    // It needs the network and it needs the version under test to be
+    // PUBLISHED, so on a developer's checkout — where `<Version>` is by
+    // construction the next, unreleased number — the honest answer is
+    // "nothing to probe yet". A gate that is red on a fresh clone for a
+    // reason nobody can fix is one people learn to skip. It runs on the
+    // release tag, where the version exists, and its offline-decidable
+    // rules live in `PublishedSmoke.fs` where the Build pack gates them
+    // on every push. The `VerifyBrowserSmoke` precedent: outside the
+    // default gate by CONSTRUCTION, not by convention.
+    //
+    // ── Why the target owns the mechanism ────────────────────────────
+    //
+    // The `VerifyFable` precedent, stated twice in `checks.yml`: the
+    // workflow job is a thin `dotnet run`, so CI and a developer
+    // necessarily run the same thing. Here it also protects the gate's
+    // one load-bearing property — that the probe is scaffolded OUTSIDE
+    // this repository — which workflow shell steps in the checkout would
+    // silently lose. `PublishedSmoke.smokeJobFindings` lints the workflow
+    // for exactly that bypass.
+    Target.create "VerifyPublishedPackages" (fun _ ->
+        let repoRoot = Path.getFullName "."
+
+        let runIn exe args dir =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory dir
+            |> CreateProcess.redirectOutput
+            |> Proc.run
+
+        let runCheckedIn label exe args dir =
+            Trace.tracefn "▶ VerifyPublishedPackages: %s — %s %s" label exe (String.concat " " args)
+            let r = runIn exe args dir
+
+            if r.ExitCode <> 0 then
+                printfn "%s" (r.Result.Output + r.Result.Error)
+
+                failwithf
+                    "VerifyPublishedPackages: %s failed — `%s %s` exited %d in %s. This is the fresh-machine probe: the packages restored from nuget.org do not %s. Read the captured output above; it is a consumer's first experience of this release."
+                    label
+                    exe
+                    (String.concat " " args)
+                    r.ExitCode
+                    dir
+                    label
+
+        // ── 1. Which version ─────────────────────────────────────────
+        //
+        // Read off the tag that triggered the run, so no copy of the
+        // number can drift from the one the publish job just pushed.
+        // `TOOLUP_PUBLISHED_REF` lets a developer aim the probe at a past
+        // release; `GITHUB_REF` is only consulted when it IS a tag, so a
+        // `workflow_dispatch` falls through to `<Version>` — which is
+        // what a dispatch packs.
+        let tagRef =
+            [ "TOOLUP_PUBLISHED_REF"; "GITHUB_REF" ]
+            |> List.tryPick (fun name ->
+                match Environment.environVarOrNone name with
+                | Some v when not (System.String.IsNullOrWhiteSpace v) -> Some(v.Trim())
+                | _ -> None)
+            |> Option.filter (fun r -> r.StartsWith "refs/tags/" || r.StartsWith "v")
+
+        let propsText = File.ReadAllText(Path.Combine(repoRoot, "Directory.Build.props"))
+
+        let version =
+            match PublishedSmoke.versionUnderTest tagRef propsText with
+            | Ok v -> v
+            | Error message -> failwith message
+
+        Trace.tracefn
+            "▶ VerifyPublishedPackages: probing %s (from %s)"
+            version
+            (match tagRef with
+             | Some r -> "ref " + r
+             | None -> "Directory.Build.props <Version>")
+
+        // ── 2. Every probe id is one this repo actually publishes ────
+        //
+        // Reconciled against `SdkManifest.expected`, which COMPUTES the
+        // packable set from the same glob `Publish` pushes — never a
+        // second hand-written list. The shard that filed this phase named
+        // `ToolUp.AI`, which no project here produces and nuget.org does
+        // not serve; that is the stranger's-package class one level up
+        // and this is the guard for it.
+        match PublishedSmoke.unpublishedProbeIds (SdkManifest.expected repoRoot) PublishedSmoke.probeIds with
+        | [] -> ()
+        | unpublished -> failwith (PublishedSmoke.unpublishedProbeReport unpublished)
+
+        // ── 3. Wait for nuget.org to INDEX the push ──────────────────
+        //
+        // A push is accepted before it is served. Probing immediately
+        // records a false red about a release that is fine (the Phase 255
+        // lesson), so this waits, and says how long it waited when it
+        // gives up rather than claiming the package does not exist.
+        let timeout =
+            match Environment.environVarOrNone "TOOLUP_PUBLISHED_INDEX_TIMEOUT_MINUTES" with
+            | Some v ->
+                match System.Double.TryParse v with
+                | true, m when m > 0.0 -> System.TimeSpan.FromMinutes m
+                | _ ->
+                    failwithf
+                        "VerifyPublishedPackages: TOOLUP_PUBLISHED_INDEX_TIMEOUT_MINUTES=%s is not a positive number."
+                        v
+            | None -> System.TimeSpan.FromMinutes 20.0
+
+        use http =
+            new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 30.0)
+
+        let awaitIndexed (packageId: string) =
+            let url = PublishedSmoke.flatContainerIndexUrl packageId
+            let started = System.DateTime.UtcNow
+            let mutable lastBody = ""
+            let mutable served = false
+
+            while not served && System.DateTime.UtcNow - started < timeout do
+                lastBody <-
+                    try
+                        http.GetStringAsync(url).GetAwaiter().GetResult()
+                    with e ->
+                        // A transient 404 IS the expected pre-index answer
+                        // and the storage layer returns it as a throwing
+                        // status, so this is a poll result, not a failure.
+                        sprintf "(request failed: %s)" e.Message
+
+                served <- PublishedSmoke.indexServes version lastBody
+
+                if not served then
+                    Trace.tracefn "  … %s %s not indexed yet; waiting" packageId version
+                    System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds 30.0)
+
+            if not served then
+                failwith (
+                    PublishedSmoke.indexTimeoutReport packageId version (System.DateTime.UtcNow - started) lastBody
+                )
+
+            Trace.tracefn "▶ VerifyPublishedPackages: nuget.org serves %s %s" packageId version
+
+        for packageId in PublishedSmoke.probeIds do
+            awaitIndexed packageId
+
+        // ── 4. Scaffold OUTSIDE the repository ───────────────────────
+        //
+        // nuget.config files merge UP the directory tree and MSBuild
+        // walks `Directory.Build.props` upward, so a probe under the
+        // checkout would resolve through forge's own sources — including
+        // the workspace-shared local feed — and go green over a package
+        // set no consumer can restore. A short temp path also keeps
+        // Windows MAX_PATH away from fsc, which fails by emitting no dll
+        // and no error.
+        let probeRoot = Path.Combine(Path.GetTempPath(), "tu-pubsmoke")
+
+        if not (PublishedSmoke.isOutsideRepo repoRoot probeRoot) then
+            failwith (PublishedSmoke.insideRepoReport repoRoot probeRoot)
+
+        Shell.deleteDir probeRoot
+        Directory.ensure probeRoot
+        File.WriteAllText(Path.Combine(probeRoot, "nuget.config"), PublishedSmoke.nugetConfig)
+
+        // The repo's own SDK band, so the probe compiles under the same
+        // toolchain the release was built with. Copied rather than
+        // restated: one declared version.
+        File.Copy(Path.Combine(repoRoot, "global.json"), Path.Combine(probeRoot, "global.json"))
+
+        let writeProbe (name: string) (projectText: string) (namespaces: string list) =
+            let dir = Path.Combine(probeRoot, name)
+            Directory.ensure dir
+            File.WriteAllText(Path.Combine(dir, "Probe.fsproj"), projectText)
+            File.WriteAllText(Path.Combine(dir, "Probe.fs"), PublishedSmoke.probeSource namespaces)
+            dir
+
+        // ── 5. DLL tier: restore + build ─────────────────────────────
+        //
+        // The transitive-dependency probe. A package whose nuspec omits a
+        // dependency that a project reference used to supply restores
+        // fine in this repo and fails here, which is the whole point.
+        let dllDir =
+            writeProbe "dll" (PublishedSmoke.dllProbeProject version) PublishedSmoke.dllProbeNamespaces
+
+        runCheckedIn "restore the published packages" "dotnet" [ "restore"; "--nologo" ] dllDir
+        runCheckedIn "build against the published packages" "dotnet" [ "build"; "--no-restore"; "--nologo" ] dllDir
+
+        // ── 6. Fable tier: the packed SOURCE, not the DLL ────────────
+        //
+        // `ToolUp.Platform.Client` ships its source under `fable/` and
+        // Fable compiles that, so this is the only check that the packed
+        // layout extracts and transpiles. It catches a server-only file
+        // leaking into the Fable set and a `PackagePath` regression that
+        // a DLL-only build cannot see.
+        let fableDir =
+            writeProbe "fable" (PublishedSmoke.fableProbeProject version) PublishedSmoke.fableProbeNamespaces
+
+        // The Fable tool version is the repo's own, copied from the
+        // client-tier harness's manifest rather than restated here: a
+        // second pinned version would drift from the compiler the tree is
+        // actually verified against.
+        let toolManifestSource =
+            Path.Combine(repoRoot, "src/ToolUp.AI.Client.Tests/.config/dotnet-tools.json")
+
+        if not (File.Exists toolManifestSource) then
+            failwithf
+                "VerifyPublishedPackages: no Fable tool manifest at %s to copy. The probe pins the same Fable version the tree is verified against rather than restating one; re-point this path if the client-tier harness moved."
+                toolManifestSource
+
+        Directory.ensure (Path.Combine(fableDir, ".config"))
+        File.Copy(toolManifestSource, Path.Combine(fableDir, ".config", "dotnet-tools.json"))
+
+        runCheckedIn "restore the Fable tool" "dotnet" [ "tool"; "restore" ] fableDir
+        runCheckedIn "restore the published client tier" "dotnet" [ "restore"; "--nologo" ] fableDir
+
+        runCheckedIn "transpile the packed fable/ sources" "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fableDir
+
+        // Fable exits 0 having written nothing if it matched no sources,
+        // the same vacuous-green shape `VerifyFable` guards with its TAP
+        // counts and `VerifyDocSnippets` with its extraction floor.
+        let emitted =
+            let outputDir = Path.Combine(fableDir, "output")
+
+            if Directory.Exists outputDir then
+                Directory.GetFiles(outputDir, "*.js", SearchOption.AllDirectories).Length
+            else
+                0
+
+        if emitted = 0 then
+            failwithf
+                "VerifyPublishedPackages: `dotnet fable` exited 0 but wrote no .js under %s/output. Fable exits 0 when it matched no source, so an empty output is indistinguishable from a pass by exit status alone — it means the published package's `fable/` payload did not extract."
+                fableDir
+
+        Trace.tracefn
+            "▶ VerifyPublishedPackages: %s installs and compiles from nuget.org on a clean resolve path (%d .js emitted from the packed client tier)"
+            version
+            emitted)
 
     execute args

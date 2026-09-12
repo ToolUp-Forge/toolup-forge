@@ -75,6 +75,23 @@ module AuditMetrics =
     [<Literal>]
     let WriteFailuresTotal = "toolup.audit.write_failures_total"
 
+    /// Phase 553 — counter incremented when a permission-class audit
+    /// write could not read its scope's hash-chain head, so the record
+    /// was written UNCHAINED (or refused, under `RefuseAction`).
+    ///
+    /// A separate counter rather than a tag on `WriteFailuresTotal`
+    /// because it is a different event with a different remedy: the
+    /// audit row still landed, and what was lost is the tamper-evidence
+    /// link. Folding it into the write-failure counter would inflate the
+    /// "audit rows are being dropped" alert with events where nothing
+    /// was dropped. Tagged by `reason` — `read_failed` (the store read
+    /// threw), `forked` (more than one head), `unanchored` (chained
+    /// records with no head at all) — because the three have genuinely
+    /// different causes: the first is an outage, the other two are
+    /// findings about the chain.
+    [<Literal>]
+    let ChainHeadUnreadableTotal = "toolup.audit.chain_head_unreadable_total"
+
 // ─── Phase 114 — audit-event codec registry ──────────────────────
 //
 // One declarative table mapping every `AuditEvent` union case to its
@@ -1935,9 +1952,94 @@ type EventStoreAuditLog
 
         logger.Warn(sprintf "[AuditLog] write failed scope=%s eventType=%s: %s" scopeId eventTypeName ex.Message)
 
+    /// Phase 553.A — read the scope's permission-chain head.
+    ///
+    /// `Ok prevHash` is the value the incoming record chains onto;
+    /// `Error (reason, detail)` means the head is UNREADABLE and the
+    /// caller must take the Phase 9t failure policy rather than guess a
+    /// predecessor. Guessing is the one thing this must never do: a
+    /// record chained onto a stale or invented head forks the stream
+    /// silently, and a silent fork is precisely the state the chain
+    /// exists to make impossible.
+    let readChainHead (scopeId: string) = async {
+        match! Async.Catch(eventStore.ReadBySource(scopeId, AuditSourceModule.value)) with
+        | Choice2Of2 ex -> return Error("read_failed", ex.Message)
+        | Choice1Of2 events ->
+            let payloads =
+                events
+                |> List.filter (fun e -> e.EventType = PermissionAuditChain.chainedEventType)
+                |> List.choose decodeAuditEvent
+                |> PermissionAuditChain.permissionPayloads
+
+            match PermissionAuditChain.readHead payloads with
+            | PermissionAuditChain.HeadEmpty -> return Ok PermissionAuditChain.genesisHash
+            | PermissionAuditChain.HeadAt head -> return Ok head
+            | PermissionAuditChain.HeadForked candidates ->
+                return
+                    Error(
+                        "forked",
+                        sprintf "%d competing chain heads: %s" (List.length candidates) (String.concat ", " candidates)
+                    )
+            | PermissionAuditChain.HeadUnanchored ->
+                return Error("unanchored", "every chained record is referenced as a predecessor — no head exists")
+    }
+
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {
             let eventTypeName = AuditEvent.eventTypeName audit
+
+            // Phase 553.A — chain the permission stream. The link is
+            // formed HERE rather than at the emission call sites because
+            // this is the only place that can read the scope's current
+            // head; a call site that supplies its own link (the fallback
+            // replay path re-writing an already-chained record) is left
+            // alone.
+            //
+            // The head read costs one `ReadBySource` per permission
+            // write. That is deliberate and affordable: permission
+            // changes are administrative — a human in a team-admin
+            // surface — so the read happens per click, not per request,
+            // and there is no correct cheaper answer. A cached head
+            // would fork the moment a second instance wrote, and the
+            // store promises no ordering to derive one from.
+            let! audit = async {
+                match audit with
+                | PermissionChanged payload when Option.isNone payload.Chain ->
+                    match! readChainHead scopeId with
+                    | Ok prevHash -> return PermissionChanged(PermissionAuditChain.link scopeId prevHash payload)
+                    | Error(reason, detail) ->
+                        (resolveMetrics ()).Increment(AuditMetrics.ChainHeadUnreadableTotal, Map [ "reason", reason ])
+
+                        logger.Warn(
+                            sprintf
+                                "[AuditLog] permission chain head unreadable scope=%s reason=%s: %s — recording the event UNCHAINED"
+                                scopeId
+                                reason
+                                detail
+                        )
+
+                        // Phase 9t, applied to the chain rather than to
+                        // the write: a deployment that has said it would
+                        // rather fail the action than complete it
+                        // un-audited has equally said it would rather
+                        // fail than complete it un-EVIDENCED.
+                        if policy = RefuseAction then
+                            raise (
+                                AuditWriteRefusedException(
+                                    scopeId,
+                                    eventTypeName,
+                                    exn (sprintf "permission chain head unreadable (%s): %s" reason detail)
+                                )
+                            )
+
+                        // `LogAndContinue` / `DegradeToFile`: record it
+                        // unchained rather than dropping it. The gap is
+                        // not hidden — the verifier counts every
+                        // unchained record, and on a deployment that has
+                        // always chained a non-zero count IS the finding.
+                        return audit
+                | _ -> return audit
+            }
 
             // Serialisation is separated from the store write so the
             // DegradeToFile branch has an envelope to spill — a record

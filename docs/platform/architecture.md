@@ -119,6 +119,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
 - Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
 - Built-in `Audit Trail` module — auto-injected in any non-Anonymous mode unless `ClientConfig.AuditViewer = NoAuditViewer`. Owner/Admin read surface over the deployment's own audit rows: filter bar, paged table, per-event payload detail, CSV export. Pair with `ServerConfig.AuditLog = EnabledAuditLog` — it renders its "no audit events" state under the default `NoAuditLog`. See [Reading the trail in-app](#reading-the-trail-in-app--auditlogui).
+- Built-in `Composition` module — auto-injected in any non-Anonymous mode unless `ClientConfig.CompositionInspector = NoCompositionInspector`. Owner/Admin read surface over what this deployment declared at compose time: five pages (composition manifest / surface descriptors / invariant rules with their preflight verdict / grounding + disclosure envelope / provenance substrate), each exporting its own canonical JSON. No server-side knob to pair — the snapshot is registered by `ServerApp.run`. See [Reading the composition in-app](#reading-the-composition-in-app--compositioninspectorui).
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`
 - Built-in `AI Settings` module — auto-injected when `ClientConfig.Surfaces` includes any non-Anonymous profile
 - Notification client over SSE
@@ -233,6 +234,39 @@ The `/api/_platform/audit/*` route is mounted unconditionally, for the same reas
 **Two projections are best-effort, and the row type says so.** `Actor` is probed out of the payload by field name (`AuditViewProjection.actorFieldNames`) and is `None` where a payload names nobody: the persisted payload does not carry the resolved `AuditSubject` — that rides the sink-side `AuditEnvelope` only — so there is no field this could read for every case. `Summary` is a bounded one-line rendering of the payload's scalar fields. `Payload` is the stored JSON verbatim, and it is what the detail expansion and the CSV export carry, so nothing in an export is lossy relative to the trail.
 
 **Paging.** Rows are ordered `(OccurredAt desc, Id desc)` — a total order, because the audit log writes bursts and a timestamp alone is not unique. The cursor names one row; a token the server cannot read is refused rather than silently restarting from the newest page.
+
+## Reading the composition in-app — `CompositionInspectorUI`
+
+The platform can already *prove* a great deal about itself — the composition manifest, the invariant rule manifest and its preflight verdict, the grounding / disclosure envelope, the provenance graph. Every one of those proofs is developer-shaped: a JSON export, a validator code, a test assertion. The SDK-built-in **Composition** module (`_sdk.CompositionInspector`) renders the same declarations as five read-only pages a non-engineer can read, each with its underlying canonical JSON on a download button — so a reviewer leaves with the artifact rather than a screenshot.
+
+| Page | Route | What it renders |
+|---|---|---|
+| Composition | `composition` | The manifest: modules, companion slots (with the impl sub-id where one is bound), data types, AI tools, grounding metrics and subjects, disclosure purposes, composition config knobs, canonical-method selectors. |
+| Surfaces | `surfaces` | The surface-descriptor family, where the composition captured any — see the caveat below. |
+| Rules | `rules` | `CompositionValidator.classifiedRuleManifest` (code · severity · class · description) beside this deployment's own preflight findings. An empty finding list against a non-empty rule list is the pass state, and it says so as a sentence. |
+| Disclosure | `disclosure` | The `GroundingEnvelope` this composition projects — every declaration by facet — plus the SHA-256 digest a boot seal binds it under, so an exported page matches a recorded seal without re-derivation. |
+| Provenance | `provenance` | Whether `IProvenanceGraph`, `IFactEvidenceSource` and `IArtifactProvenanceSource` are composed. |
+
+Two knobs, and they do different jobs:
+
+| Knob | Default | Effect |
+|---|---|---|
+| Composition entry point | — | The snapshot the pages read is registered by `ServerApp.run` (and therefore by `AIServerApp.run` / `RAGServerApp.run`, which delegate to it). A host composed through the lower-level `compose` registers none, and every page then says so plainly rather than rendering an empty composition — which would read as "this deployment composes nothing". |
+| `ClientConfig.CompositionInspector` | `DefaultCompositionInspector` | The module. `NoCompositionInspector` removes the module, its sidebar entry, its five routes and every call it would make. `ConfiguredCompositionInspector` re-brands it; `ExternalCompositionInspector` replaces it. |
+
+There is no `ServerConfig` knob, deliberately: the substrate this surface reads is the composition itself, and a deployment cannot compose without one.
+
+**Cost when unused (GP 13).** The snapshot is a *lazy* DI singleton — the projection and the rule evaluation run on first resolve, not at boot — so a deployment whose operators never open the inspector pays the registration and nothing else. The factory closes over the manifest and reference set the Phase 281 well-formedness validator already retains, so nothing new is held for the process lifetime.
+
+**Access.** Owner/Admin (`TeamRoles.canWriteTeamConfig`) in team mode; any authenticated user in the single-scope modes; Anonymous refused outright, and the module is not injected in Anonymous deployments at all. The pages name the deployment's companions, its resolved config knobs and the purposes it may disclose under — a map of the attack surface, so the gate is the audit trail's rather than a laxer second one. Enforced server-side on every method including the export.
+
+**Read-only by construction.** No method on `ICompositionInspectorApi` returns `unit`, and a shipped test asserts it over the record's fields — the property `IProvenanceQueryApi` holds, for the same reason: `unit` is the shape a mutation takes, so its absence is what makes "read-only" structural rather than a claim in a comment.
+
+**Exports audit themselves.** `ExportPanel` carries `[<Audit "DataExported">]`, so the dispatcher's audit interceptor records every export of the governance story through the same `IAuditLog`. The exported JSON is the canonical serialisation of the *same projected value* the page's own getter returns, so an export round-trips back into the view type by construction rather than by a second rendering that could drift.
+
+**The Provenance page reports composition; it does not walk.** The chain walk is `IProvenanceQueryApi`'s (see [`provenance-chain.md`](provenance-chain.md)), which applies the `FactExport` disclosure door and the declared depth / node caps. A second walk here would be a second door over one graph, which is how two doors stop agreeing — so this page reports which parts of the substrate are composed and leaves the walk where its policy lives.
+
+**The Surfaces page is empty on an SDK-composed deployment today, and says why.** `ModuleSurface` and `HostEnvelope` are derived from the `ServerModule` records, which `ServerApp.addModule` fans into the app's accumulators and does not retain — so by the time the snapshot is taken there is nothing to describe, and retaining every composed module for the process lifetime so an admin page can render is exactly the cost GP 13 refuses. `PeerSurface` lives in `InterPlatform`, which project-references `ToolUp.Platform.Server`, so the SDK tier structurally cannot read it. The page therefore carries a note stating that no descriptor was captured — explicitly *not* that the deployment composes no modules. `SurfacesView.Descriptors` is on the wire so a composition that later captures descriptors fills it with no wire or client change.
 
 ## Background jobs
 

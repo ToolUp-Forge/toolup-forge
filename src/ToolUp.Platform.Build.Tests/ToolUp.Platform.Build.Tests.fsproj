@@ -10,12 +10,29 @@
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
+        <!-- Phase 754 — the template gate's stranger's-package guard,
+             probed in both directions. -->
+        <Compile Include="TemplateGateTests.fs" />
         <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
              reconciler is source-linked from the repo root rather than
              copied, so this test and the `GenerateSdkManifest` FAKE
              target that repairs its findings run one implementation. -->
         <Compile Include="..\..\SdkManifest.fs" Link="SdkManifest.fs" />
         <Compile Include="SdkManifestTests.fs" />
+        <!-- Phase 184 — the fresh-machine published-package smoke gate's
+             offline-decidable rules. Source-linked from the repo root for
+             the same reason SdkManifest.fs above is: the FAKE target and
+             these go-red proofs run one implementation. The gate itself
+             only runs on a release tag, so without this pack its rules
+             would first be exercised on the release they protect. -->
+        <Compile Include="..\..\PublishedSmoke.fs" Link="PublishedSmoke.fs" />
+        <Compile Include="PublishedSmokeTests.fs" />
+        <!-- Phase 259 — the conformance-pack coverage gate. Pure file
+             scanning over the checkout (api-baselines, the Contracts
+             directory, the `.fs` tree), so it belongs beside the other
+             build-time gates rather than in the runtime Platform pack. -->
+        <Compile Include="ConformanceCoverage.fs" />
+        <Compile Include="ConformanceCoverageTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

@@ -406,6 +406,11 @@
              IAuditViewApi. Auto-injected in non-Anonymous modes unless
              ClientConfig.AuditViewer = NoAuditViewer. -->
         <Compile Include="Client\AuditLogUI.fs" />
+        <!-- Phase 593 - composition-inspector admin module over
+             ICompositionInspectorApi. Auto-injected in non-Anonymous modes
+             unless ClientConfig.CompositionInspector =
+             NoCompositionInspector. -->
+        <Compile Include="Client\CompositionInspectorUI.fs" />
         <!-- Phase 217 — module-contributed Home-widget registry (read by
              Home.fs; populated at boot by SDK.Client.program). -->
         <Compile Include="Client\HomeWidget.fs" />

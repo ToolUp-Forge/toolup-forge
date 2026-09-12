@@ -553,9 +553,22 @@ let private registeredTests =
                 // breaks, so it belongs inside the group rather than
                 // beside it.
                 EmbeddingProviderEnvTests.tests
+                // Phase 465 — the int-key format/range gate reads the
+                // WHOLE registry through the resolution seam, so it is
+                // both a mutator (each case sets its own variable) and
+                // the pack's most contaminable reader: any sibling that
+                // leaks a numeric TOOLUP_* would show up as a refusal
+                // here. Same group, same reason.
+                ConfigBoundsValidatorTests.intKeyTests
+                ConfigBoundsValidatorTests.retentionTests
             ])
         AIProviderHealthTests.claudeTests
         AIProviderHealthTests.openAiTests
+        // Phase 459 — listed here, not merely attributed: the file carries
+        // `[<Tests>]` for symmetry with its neighbours, but
+        // `runTestsWithCLIArgs` runs `allTests`, so an unlisted binding
+        // never executes.
+        EmbeddingProviderKeyRotationTests.tests
         MinimumViableShapeTests.tests
         RedactionAllowlistParityTests.tests
         OidcClassifyTokenTests.tests
@@ -706,6 +719,10 @@ let private registeredTests =
         // Phase 9t — audit-write failure policy (LogAndContinue / RefuseAction
         // / DegradeToFile + fallback spill capacity + poison quarantine).
         AuditFailurePolicyTests.tests
+        // Phase 553.A/D — the in-store permission-event hash chain: tamper /
+        // deletion / fork reported at the right index, pre-553 rows as an
+        // unchained prefix, an unreadable head taking the 9t policy.
+        PermissionAuditChainTests.tests
         DegradedCapabilityRegistryTests.tests
         AuthAuditHookTests.tests
         // Phase 272 — hosted-tree action audit emission (GP 6): authorized/
@@ -1289,6 +1306,12 @@ let private registeredTests =
         AuditViewApiHandlerTests.pagingTests
         AuditViewApiHandlerTests.exportTests
         AuditViewApiHandlerTests.substratePairingTests
+        // Phase 593 - composition-inspector handler.
+        CompositionInspectorHandlerTests.roleGateTests
+        CompositionInspectorHandlerTests.panelTests
+        CompositionInspectorHandlerTests.emptyStateTests
+        CompositionInspectorHandlerTests.exportTests
+        CompositionInspectorHandlerTests.contractShapeTests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through
@@ -1883,6 +1906,10 @@ let private registeredTests =
         // renderer-neutral (fragment / live channel / action authorizer)
         // + the open-core grep-guard + the client-binding shape pin.
         SecondBindingNeutralityTests.tests
+        // Phase 477 — the same grep-guard, widened from the toy sample to
+        // the whole publishable surface (derived from IsPackable, not a
+        // path list), plus the go-red proofs of the matching rule.
+        OpenCoreVocabularyNeutralityTests.tests
         // Phase 265 — reusable ClientHostCapabilities conformance bar:
         // the four-capability host-bridge seam (Navigate / Notify /
         // Dispatch / Call) asserted against the in-tree default and the

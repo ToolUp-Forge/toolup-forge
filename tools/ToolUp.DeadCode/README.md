@@ -98,11 +98,11 @@ all. Reporting them is precisely the failure mode where an analysis flags every
 Fable-packed helper and trains its reader to ignore it.
 
 Narrowing the *public* surface is a real and separate question with its own
-instrument: **[Phase 256](../../../Diametrical/roadmap/phases/256-public-api-surface-minimization-sweep.md)**,
-which triages every symbol in `api-baselines/*.approved.txt` as intended-contract
-vs accidental-plumbing and applies `internal`/`private`.
+instrument: the **public-API surface-minimization sweep**, which triages every symbol
+in `api-baselines/*.approved.txt` as intended-contract vs accidental-plumbing and
+applies `internal`/`private`.
 
-**256 shrinks what is *exposed*; this finds what is *unreachable*.** Neither
+**That sweep shrinks what is *exposed*; this finds what is *unreachable*.** Neither
 subsumes the other, and the motivating instance proves it: `extractEventScopeId`
 was `private`, so it never appeared in a public baseline and 256 structurally
 could not have seen it. Conversely this tool says nothing about an over-exposed

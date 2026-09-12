@@ -8,7 +8,8 @@ You do not need any package from this repository to write a worker. If you find 
 
 ## Conformance
 
-The wire face described here conforms to the **model-execution wire specification** — `MODEL_EXECUTION_WIRE.md` and its conformance corpus, published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0).
+The wire face described here conforms to the **model-execution wire specification** — `MODEL_EXECUTION_WIRE.md` and its conformance corpus, published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0). <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. -->
+
 
 This repository *conforms to* that specification; it does not define the format. **Where anything in this document disagrees with the specification, the specification wins**, and the disagreement is a defect here rather than a local variant. The certification lives in `src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs`, and the rules that make an external corpus worth certifying against are in [`testing-conventions.md`](testing-conventions.md#certifying-against-an-external-conformance-corpus-phase-602).
 

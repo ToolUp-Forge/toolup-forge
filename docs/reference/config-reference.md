@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (192 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (193 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -83,7 +83,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_AZURE_KEY_VAULT_URL` | string | — | no | pending | Vault URL for the Azure Key Vault secret-store companion. |
 | `TOOLUP_AZURE_STORAGE_CONNECTION_STRING` | string | — | yes | never | Azure Blob Storage connection string used when TOOLUP_BLOB_STORAGE=azure. |
 | `TOOLUP_BLOB_STORAGE` | enum: local, azure, s3, gcs | local | no | yes | Selects the IBlobStorage backend. Unrecognised / cloud-without-credentials values warn and fall back to local. |
-| `TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES` | int | — | no | yes | Default per-team storage quota in bytes. Unset means unlimited. |
+| `TOOLUP_DEFAULT_STORAGE_QUOTA_BYTES` | int (or `none` / `0`) | — | no | yes | Default per-team storage quota in bytes. Unset means unlimited. |
 | `TOOLUP_GCP_PROJECT_ID` | string | — | no | pending | GCP project id for the Secret Manager and Cloud Storage companions. |
 | `TOOLUP_GCS_BUCKET` | string | — | no | pending | Target Google Cloud Storage bucket name used when TOOLUP_BLOB_STORAGE=gcs. |
 | `TOOLUP_GCS_CREDENTIALS_JSON` | string | — | yes | never | Service-account credentials JSON for the Google Cloud Storage companion. |
@@ -162,9 +162,9 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_DISTRIBUTED_LOCK` | enum: inprocess, redis | inprocess | no | yes | Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into. |
 | `TOOLUP_ENABLE_DEV_ENDPOINTS` | bool | false | no | yes | Exposes the /dev/* inspection endpoints. Should stay off in production. |
 | `TOOLUP_INCLUDE_PLATFORM_DEFAULTS` | bool | true | no | yes | Merges the SDK platform default config schema into the composed surface. |
-| `TOOLUP_MAX_FILE_BYTES` | int | — | no | yes | Maximum accepted upload size in bytes for file-management endpoints. |
-| `TOOLUP_MAX_REQUEST_BODY_BYTES` | int | — | no | yes | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
-| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | int | 10 | no | yes | Maximum concurrent SSE connections per scope. |
+| `TOOLUP_MAX_FILE_BYTES` | int (1024–10737418240, or `0`) | — | no | yes | Maximum accepted upload size in bytes for file-management endpoints. |
+| `TOOLUP_MAX_REQUEST_BODY_BYTES` | int (1024–10737418240, or `none` / `0`) | — | no | yes | Kestrel per-request body cap in bytes. Unset leaves the framework's 30 MB default. |
+| `TOOLUP_MAX_SSE_CONNECTIONS_PER_SCOPE` | int (or `none` / `0`) | 10 | no | yes | Maximum concurrent SSE connections per scope. |
 | `TOOLUP_MODULE` | string | — | no | yes | Restricts the composed surface to a single named module. Intended for local iteration. |
 | `TOOLUP_NOTIFICATION_CHANNEL` | enum: inmemory, redis | inmemory | no | yes | Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel. |
 | `TOOLUP_PEER_ROUTE_PREFIXES` | string | — | no | yes | Comma-separated route prefixes served by the cross-deployment peer substrate. |
@@ -179,7 +179,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_SKIP_PREFLIGHT` | bool | false | no | yes | Skips the entire startup config preflight. Intended for local iteration; a production deployment that sets it boots unvalidated. |
 | `TOOLUP_SMOKE_TOKEN` | string | — | yes | never | Bearer token guarding the post-deploy smoke-test endpoint (GET /api/_internal/smoke). |
 | `TOOLUP_STATIC_PATH_BEHAVIOUR` | enum: warn, require, skip | warn | no | yes | How a missing static-content path is treated at boot: warn, refuse to start, or skip silently. |
-| `TOOLUP_STORE_EVICTION_MINUTES` | int | 60 | no | yes | Idle minutes before an ephemeral in-memory store entry is evicted. |
+| `TOOLUP_STORE_EVICTION_MINUTES` | int (fractional values accepted) | 60 | no | yes | Idle minutes before an ephemeral in-memory store entry is evicted. |
 | `TOOLUP_STRICT_CONFIG` | bool | false | no | yes | Escalates the unknown-config-key preflight guard from a warning to a startup refusal. Off: a set TOOLUP_* variable whose name is in no registry entry is warned about once at preflight. On: it refuses the boot. |
 | `TOOLUP_TRUSTED_PROXY_CIDRS` | string | — | no | yes | Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted. |
 | `TOOLUP_TRUST_FORWARDED_HEADERS` | bool | false | no | yes | When true, trusts X-Forwarded-* headers from the upstream proxy. Only safe behind a proxy that strips/re-injects them (preflight warns without RequireHttps). |
@@ -208,6 +208,7 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE` | bool | false | no | yes | Allows a shared embedding cache in a team-scoped deployment, weakening tenant isolation of cached vectors. Lowers a startup preflight refusal to a warning. |
 | `TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE` | bool | false | no | yes | Allows sticky-routed AI streaming when ReplicaCount is above 1 without a distributed notification channel. Lowers a startup preflight refusal to a warning. |
 | `TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE` | bool | false | no | yes | Acknowledge an unset OIDC audience in an authenticated mode (token-reuse risk). |
+| `TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION` | bool | false | no | yes | Accepts a persistent event store that prunes on neither age nor count in a production or multi-instance shape, where the blob trail grows without bound. Silences a startup preflight warning. |
 | `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE` | bool | false | no | yes | Allows publishable surfaces without artefact signing. Lowers a startup preflight refusal to a warning. |
 | `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND` | bool | false | no | yes | Allows modules that carry no signed binding manifest to load. |
 | `TOOLUP_MODULE_BINDING_ANCHORS` | string | — | yes | never | Semicolon-separated module-binding trust anchors, each mac:keyId:scope:key or asym:keyId:alg:base64pubkey. |

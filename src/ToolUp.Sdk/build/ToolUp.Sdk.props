@@ -62,25 +62,40 @@
         was needed (GP 11). Listed so a consumer that wants the toolkit
         ALONE can add one PackageReference with no version.
 
-      * Feliz.AgGrid / Feliz.AgCharts (Phase 344) — the Community
-        bindings, promoted out of ToolUp.Platform.Client into standalone
-        Apache-2.0 packages so a consumer that renders no grid pays for
-        none of it (GP 13), and one that wants only the binding can take
-        it without the SDK. `ToolUp.Platform.Client` still depends on
-        both, so an existing consumer needs no fsproj change: they arrive
-        transitively, and the compat re-export keeps
-        `open ToolUp.Platform.AgGrid` / `.AgChart` compiling (GP 11).
+      * ToolUp.Feliz.AgGrid / ToolUp.Feliz.AgCharts (Phase 344, ids
+        settled by Phase 754) — the Community bindings, promoted out of
+        ToolUp.Platform.Client into standalone Apache-2.0 packages so a
+        consumer that renders no grid pays for none of it (GP 13), and
+        one that wants only the binding can take it without the SDK.
+        `ToolUp.Platform.Client` still depends on both, so an existing
+        consumer needs no fsproj change: they arrive transitively, and
+        the compat re-export keeps `open ToolUp.Platform.AgGrid` /
+        `.AgChart` compiling (GP 11).
 
-      * Feliz.AgGrid.Enterprise (Phase 344) — the RENAMED
-        `ToolUp.AgGridEnterprise`: same opt-in companion, same licensing
-        posture (GP 2). A consumer on the old id changes exactly one
-        PackageReference. The old id is deliberately absent — nothing
-        produces a package by that name any more, and a PackageVersion
-        for an id no feed can serve resolves to NU1101 at restore rather
-        than to anything useful. The rename is recorded in
-        ToolUp/SDK-ADOPTION.md. A stale entry of that kind is now
-        REPORTED (as UNPUBLISHED) rather than left for a consumer to
-        find.
+      * ToolUp.Feliz.AgGrid.Enterprise (Phase 344, id settled by Phase
+        754) — the RENAMED `ToolUp.AgGridEnterprise`: same opt-in
+        companion, same licensing posture (GP 2). A consumer on the old
+        id changes exactly one PackageReference. The old id is
+        deliberately absent — nothing produces a package by that name any
+        more, and a PackageVersion for an id no feed can serve resolves
+        to NU1101 at restore rather than to anything useful. The rename
+        is recorded in ToolUp/SDK-ADOPTION.md. A stale entry of that kind
+        is now REPORTED (as UNPUBLISHED) rather than left for a consumer
+        to find.
+
+      * Why the `ToolUp.` prefix on all three (Phase 754, operator
+        2026-09-01). They packed as bare `Feliz.*` until then, and
+        `Feliz.AgGrid` on nuget.org is Compositional-IT's unmaintained
+        binding — the one this extraction supersedes — so the id was
+        never claimable. Two consequences met here: the repo's nuget.org
+        Trusted Publishing policy is registered against the `ToolUp.*`
+        glob, which the bare ids fall outside, and the template gate had
+        already resolved one of them to a stranger's package (Phase 307,
+        NU1603). The CLR namespaces did not move — a consumer still
+        writes `open Feliz.AgGrid` — so only the PackageReference id
+        changes. This generated list is derived from what the tree packs,
+        so it follows the `<PackageId>` automatically; the note is here
+        because the derivation cannot explain itself.
   -->
   <!-- BEGIN GENERATED - do not hand-edit below this line.
        Every id below is derived from the projects the `Publish` target packs
@@ -103,9 +118,6 @@
          - ToolUp.Sdk: the meta-package that SHIPS this manifest — a consumer must already pin it in their own Directory.Packages.props for the import to resolve, so an entry here could never be the one that resolves it
   -->
   <ItemGroup>
-    <PackageVersion Include="Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
-    <PackageVersion Include="Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Client" Version="$(ToolUpSdkVersion)" />
@@ -182,6 +194,9 @@
     <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.FeatureFlagProviders.OpenFeature" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgCharts" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Feliz.AgGrid.Enterprise" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Forms.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Forms.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Forms.Server" Version="$(ToolUpSdkVersion)" />

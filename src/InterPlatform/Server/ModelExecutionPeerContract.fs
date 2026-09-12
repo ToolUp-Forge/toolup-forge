@@ -555,6 +555,8 @@ module ModelExecutionProfile =
     let Version = 1
 
     /// The submitter contract's id.
+    // OSS-BOUNDARY-EXEMPT: a wire value defined by the public, Apache-2.0
+    // model-execution specification; renaming it would break the seam.
     [<Literal>]
     let ContractId = "fuaran.model-execution"
 
@@ -562,6 +564,8 @@ module ModelExecutionProfile =
     /// a separate method group: the two have different release rules,
     /// and one gate over a contract whose methods are governed
     /// differently is a gate whose surface argument does not hold.
+    // OSS-BOUNDARY-EXEMPT: a wire value defined by the public, Apache-2.0
+    // model-execution specification; renaming it would break the seam.
     [<Literal>]
     let DiagnosticsContractId = "fuaran.model-execution.diagnostics"
 
