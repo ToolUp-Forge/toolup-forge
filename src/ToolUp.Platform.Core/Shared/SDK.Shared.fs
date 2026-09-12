@@ -4006,15 +4006,28 @@ module ServerConfig =
 
             Warn
 
+    /// Phase 719 — `cookies` and `cookieonly` select the cookie mode here
+    /// as well as at `AuthProviderFromEnv.tokenLocationFromEnv`.
+    ///
+    /// Both readers consult `TOOLUP_SSE_AUTH` and the registry has
+    /// declared all three cookie spellings since the key was registered,
+    /// but only the auth-provider reader honoured the two aliases: a
+    /// deployment setting `TOOLUP_SSE_AUTH=cookies` got a provider that
+    /// accepts the cookie AND an SSE mode left at `QueryParamFallback` —
+    /// the mode `SseAuthModeValidator` refuses under an auth surface,
+    /// reached through a spelling the reference doc offered. Two readers
+    /// of one key must agree on what the key says.
     let private parseSseAuthMode (logger: ILogger) =
         match envVar ConfigKeys.Names.sseAuth |> Option.map _.ToLowerInvariant() with
-        | Some "cookie" -> CookieRequired
+        | Some "cookie"
+        | Some "cookies"
+        | Some "cookieonly" -> CookieRequired
         | Some "fallback"
         | Some "queryparam"
         | None -> QueryParamFallback
         | Some other ->
             logger.Warn
-                $"TOOLUP_SSE_AUTH={other} not recognised. Valid values: cookie, fallback. Falling back to fallback (default)."
+                $"TOOLUP_SSE_AUTH={other} not recognised. Valid values: cookie (or cookies / cookieonly), fallback (or queryparam). Falling back to fallback (default)."
 
             QueryParamFallback
 

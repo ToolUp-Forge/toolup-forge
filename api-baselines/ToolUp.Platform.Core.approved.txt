@@ -2774,6 +2774,7 @@ ToolUp.Platform.ConfigKeys.PlatformModuleKey : System.String (literal)
 ToolUp.Platform.ConfigKeys.ToolingCategory : System.String (literal)
 ToolUp.Platform.ConfigKeys.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys.builtInProfiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigProfile] { get }
+ToolUp.Platform.ConfigKeys.enabledDisabledChoices : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ConfigKeys.escapeHatchKeys : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor] { get }
 ToolUp.Platform.ConfigKeys.intKeyRuleFor(System.String) : ToolUp.Platform.ConfigKeys+IntKeyRule
 ToolUp.Platform.ConfigKeys.intKeyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+IntKeyRule] { get }

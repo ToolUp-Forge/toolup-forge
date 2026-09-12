@@ -1847,11 +1847,19 @@ let tests =
                 }
 
                 test "the enumerated set is the registry's category, not a name-prefix match" {
-                    // Two members of the escape-hatch category are not
-                    // spelled TOOLUP_ACCEPT_*. A projection that filtered
-                    // on the prefix would drop them silently, and an
-                    // inventory of accepted risk that is silently short is
-                    // worse than no inventory at all.
+                    // A member of the escape-hatch category is not spelled
+                    // TOOLUP_ACCEPT_* (TOOLUP_MODULE_BINDING_ALLOW_UNBOUND).
+                    // A projection that filtered on the prefix would drop
+                    // it silently, and an inventory of accepted risk that
+                    // is silently short is worse than no inventory at all.
+                    //
+                    // Phase 719 took the count from two to one: the other
+                    // non-prefix member, TOOLUP_MODULE_BINDING_ANCHORS, was
+                    // never an acknowledgement at all — it is the trust-
+                    // anchor material verification runs against, and it
+                    // moved to the module-composition category. The
+                    // assertion below is unchanged and still holds; only
+                    // this comment's arithmetic moved.
                     Expect.isNonEmpty escapeHatchKeys "the category is populated"
 
                     Expect.isTrue
@@ -1869,7 +1877,17 @@ let tests =
 
                 test "a secret hatch never renders its value" {
                     match escapeHatchKeys |> List.tryFind _.IsSecret with
-                    | None -> skiptest "no escape hatch is registered secret, so there is no redaction path to exercise"
+                    | None ->
+                        // Phase 719 — expected, and not an oversight: the
+                        // only secret member of the category was
+                        // TOOLUP_MODULE_BINDING_ANCHORS, which was never an
+                        // acknowledgement and has moved out. The report
+                        // keeps redacting by IsSecret rather than by "no
+                        // hatch is secret today", because that is a
+                        // registry fact any later descriptor can change —
+                        // and this arm re-arms itself the moment one does.
+                        skiptest
+                            "no escape hatch is registered secret, so there is no redaction path to exercise (see Phase 719)"
                     | Some secret ->
                         withEnv secret.EnvVar (Some "super-secret-anchor-material") (fun () ->
                             let s =
