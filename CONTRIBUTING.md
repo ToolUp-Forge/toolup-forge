@@ -115,6 +115,15 @@ therefore silently drops its protection — a required check that no longer
 reports is not enforced, it is absent — so a rename updates this list and the
 branch-protection rule in the same change.
 
+**One job runs and is not yet required: `perf-budget`** (the Phase 192
+cold-start / hot-path budget gate). It runs on every push and PR, goes red when
+it should, and is absent from the rule above — the same state the seven test
+gates were in before 2026-09-12. It is listed here rather than added to the
+block because that block records what is *configured*, and writing an
+unconfigured entry into it would be the drift this section exists to prevent.
+Adding it is a maintainer action against the branch-protection rule, after
+which it joins the list above.
+
 `dco` is the one entry that is PR-only (`if: github.event_name ==
 'pull_request'`), which is exactly why requiring a PR matters: direct pushes to
 `main` skip it, and today the local commit template is all that stands behind

@@ -1,0 +1,34 @@
+{
+  "schema": "toolup.perf-measurements/v1",
+  "label": "fixture — the regression the gate exists to catch",
+  "appDirectory": "samples/MinimalApp/src/MinimalApp.Server/bin/Release/net10.0",
+  "outputAssemblies": [
+    "FSharp.Core.dll",
+    "MinimalApp.Server.dll",
+    "ToolUp.Metrics.OpenTelemetry.dll",
+    "ToolUp.Platform.Core.dll",
+    "ToolUp.Platform.Server.dll"
+  ],
+  "samples": [
+    {
+      "metric": "coldStartMs",
+      "statistic": "min",
+      "value": 11840.6,
+      "samples": 6,
+      "observed": true,
+      "evidence": "'Application started.' observed on stdout for 6/6 boots",
+      "median": 12402.0,
+      "max": 14913.2
+    },
+    {
+      "metric": "hotPathMs",
+      "statistic": "min",
+      "value": 41.77,
+      "samples": 300,
+      "observed": true,
+      "evidence": "HTTP 200 from POST /api/PlatformInfoApi/GetPlatformInfo — 300/300 requests returned success",
+      "median": 55.2,
+      "max": 190.4
+    }
+  ]
+}

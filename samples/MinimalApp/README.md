@@ -27,6 +27,19 @@ let main _ =
 
 `ConsoleLogger.fromEnv ()` reads `TOOLUP_LOG_LEVEL` + `TOOLUP_TRACE_CATEGORIES`. `ServerConfig.fromEnv` honours the full `TOOLUP_*` env-var contract documented at [`toolup-forge/docs/platform/composition-roots.md`](../../docs/platform/composition-roots.md). The override record stays `empty` because the Anonymous-mode sample doesn't need the reference-app posture (`webhooks` / `audit` / `default security hardening`); production deployments use `ServerConfigOverrides.referenceApp`.
 
+## This sample is CI's cold-start subject — think before you grow it
+
+Phase 192's perf-budget gate boots this sample six times on every push and PR to measure the
+SDK's cold start, and drives an anonymous request through it to measure the hot path. It is
+measured **because** it is the minimal shape: adding a module, a sink, or anything that logs per
+request changes what those numbers mean, and the gate would then be defending a different thing
+under the same name.
+
+If this sample needs to grow, grow `samples/HelloWorld` instead — that is the reference app, and
+it already carries the module wiring and the worked-example telemetry sinks. See
+[the migration doc](../../docs/migrations/192-cold-start-perf-budget-ci-gate.md) for the budget,
+the statistic and what a red gate means.
+
 ## Scope
 
 Server-only sample by design. The client-side helpers (`BundleConstants` + `ClientConfigDefaults.fromBundleConstants`) require a Vite-driven Fable build pipeline to verify their `[<Emit>]` cross-project propagation; the canonical client-side verification rides on:

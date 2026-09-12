@@ -3711,6 +3711,22 @@ let main args =
     // set; the target body resolves and reports its own missing inputs.
     CoreWebVitalsBudgetGate.registerTarget ()
 
+    // Phase 192 — cold-start / hot-path perf-budget gate. Same split as
+    // the Core-Web-Vitals gate directly above, for the same reason: this
+    // is the deciding half only. It reads the committed perf-budgets.json
+    // plus the measurement file a run already wrote, and fails on any
+    // breach — including a budgeted metric the run did not measure and a
+    // measurement the runner could not confirm measured anything. The
+    // measuring half (build samples/MinimalApp, boot it repeatedly to its
+    // ready line, drive the anonymous hot-path request) is
+    // dev-scripts/perf-budget-gate.ps1, which sets TOOLUP_PERF_BUDGET /
+    // TOOLUP_PERF_MEASUREMENTS and invokes this target last.
+    //
+    // Registration is unconditional and reads no environment at startup,
+    // so every other target stays runnable with neither variable set; the
+    // target body resolves and reports its own missing inputs.
+    PerfBudgetGate.registerTarget ()
+
     // Phase 587 — instantiate-then-build smoke gate for the
     // `platformsdk-module-packaged` template.
     //

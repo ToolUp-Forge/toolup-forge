@@ -48,6 +48,16 @@ open ToolUp.Platform.Metrics
 // emissions are commutative; no cross-shard ordering claimed; tag
 // keys/values are strings; sync interface matches IMetricsSink's
 // documented exemption.
+//
+// **Zero-cost-when-unused is MEASURED, not asserted (Phase 192).** The
+// Phase 9y "default-on DROPPED" conclusion says a deployment that does
+// not register this sink pays nothing for it. Phase 192's perf-budget
+// gate now checks that at the byte level rather than by argument: the
+// minimal sample's build output is inventoried on every CI run and this
+// companion's assembly must be ABSENT from it — not idle in the
+// process, absent from the deployment. A change here that made the
+// minimal shape reference this project turns that gate red. See
+// docs/migrations/192-cold-start-perf-budget-ci-gate.md.
 
 [<Literal>]
 let private DefaultMeterName = "ToolUp"

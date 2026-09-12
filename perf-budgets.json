@@ -1,0 +1,28 @@
+{
+  "schema": "toolup.perf-budget/v1",
+  "label": "Minimal-shape cold start + hot path (default budget)",
+  "subject": "samples/MinimalApp",
+  "statistic": "min",
+  "ceilings": {
+    "coldStartMs": 6000,
+    "hotPathMs": 5
+  },
+  "minimumSamples": {
+    "coldStartMs": 5,
+    "hotPathMs": 100
+  },
+  "baselines": {
+    "coldStartMs": 420,
+    "hotPathMs": 0.36
+  },
+  "absentAssemblies": [
+    "ToolUp.Metrics.OpenTelemetry"
+  ],
+  "notes": {
+    "coldStartMs": "Baseline 420 ms is the minimum of six Release boots of samples/MinimalApp on a QUIET 2026-09-12 dev machine (420/445/456/458/459/477). The same six boots on the SAME machine under load measured 1378/1461/1599/1645/2388/2564 - min 1378, over 3x the quiet minimum. That second run is why the ceiling is 6000 and not Phase 16's 2000: 2 s was measured once by hand on a deployment target and is a fine claim about a deployment, but as a CI ceiling on a shared runner it would flake, and a gate that flakes is a gate people disable. 6000 is ~14x the quiet baseline and ~4.4x the loaded one.",
+    "hotPathMs": "5 ms against a 0.36 ms quiet baseline is deliberately ~14x slack; the loaded run measured min 0.688 ms (median 5.6 ms, which is why the gate reads min and not median). These ceilings exist to catch an ORDER-OF-MAGNITUDE regression - a default path that starts doing I/O, a middleware registered unconditionally, a per-request allocation storm - not a percent-level one. Slack that has gone stale is not left to anyone's memory: every green run prints the measured headroom ratio, and ToolUp.Platform.Build.Tests refuses a ceiling more than 20x its recorded baseline.",
+    "statistic": "Wallclock noise on a shared runner is one-sided - a neighbouring job can only make a boot slower - so the minimum over N runs is the least contaminated estimate, and the only statistic whose spread does not widen as the runner gets busier.",
+    "absentAssemblies": "The zero-cost-when-unused invariant (GP 13, and the Phase 9y 'default-on DROPPED' conclusion) made byte-level rather than timed. A companion nobody registered should not be in the deployment at all - which is checkable exactly, where 'costs no measurable time' is not.",
+    "reviewing-a-change": "Raising a ceiling is a claim that the SDK is now legitimately slower. Say why in this block, in the same diff."
+  }
+}
