@@ -156,6 +156,26 @@ let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : Even
                 targetModule
                 intendedQueryKey
                 redactedPayloadPreview
+        // Phase 503: same out-of-band routing, for the same reason — a
+        // held server-side invocation waiting on the user belongs to the
+        // tab, not to one surface's Elmish model.
+        | Parsed(ToolApprovalRequired(taskId,
+                                      approvalId,
+                                      conversationId,
+                                      toolName,
+                                      sourceModule,
+                                      summary,
+                                      detail,
+                                      redactedArgumentsPreview)) ->
+            ToolUp.AI.Client.ToolApprovalDialog.handleRequired
+                taskId
+                approvalId
+                conversationId
+                toolName
+                sourceModule
+                summary
+                detail
+                redactedArgumentsPreview
         | Parsed evt -> dispatch evt
         | ParseFailure preview ->
             log.Warn $"SSE parse failure: {preview}"

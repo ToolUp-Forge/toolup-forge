@@ -275,6 +275,13 @@ let composeAI (app: AIServerApp) : ServerApp =
     // multi-silo deployment needs SSE/POST affinity.
     let consentRegistry = AIConsentDispatch.AIConsentRegistry()
 
+    // Phase 503: per-process registry of tool invocations held awaiting a
+    // user's approval. Singleton for the same reason, and with the same
+    // multi-instance caveat, as the two registries above — the
+    // `/api/ai/tool-approval` POST has to find the held invocation, so a
+    // multi-silo deployment needs SSE/POST affinity.
+    let approvalRegistry = ToolApprovalDispatch.ToolApprovalRegistry()
+
     // Phase 6h: per-task `CancellationTokenSource` registry for the
     // cancel-mid-stream feature. `aiAssistantApi` registers a CTS
     // when starting the agent loop; `cancelHandler` cancels it when
@@ -320,6 +327,10 @@ let composeAI (app: AIServerApp) : ServerApp =
             >=> ClientToolDispatch.clientToolResultHandler
             // Phase 36.D: cross-module read-consent decision POST.
             POST >=> route "/api/ai/consent" >=> AIConsentHandler.consentDecisionHandler
+            // Phase 503: human-in-the-loop tool-approval decision POST.
+            POST
+            >=> route "/api/ai/tool-approval"
+            >=> ToolApprovalHandler.toolApprovalDecisionHandler
             // Phase 6h: cancel-mid-stream endpoint.
             POST >=> routef "/api/ai/cancel/%O" AICancellationRegistry.cancelHandler
             // Phase 6j.A: fast-path audit beacon.
@@ -421,6 +432,7 @@ let composeAI (app: AIServerApp) : ServerApp =
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
                 .AddSingleton<AIConsentDispatch.AIConsentRegistry>(consentRegistry)
+                .AddSingleton<ToolApprovalDispatch.ToolApprovalRegistry>(approvalRegistry)
                 // Phase 36.D: the deployment's consent posture, resolved by
                 // the tool executors. Registered unconditionally — a tool
                 // reads it per invocation and an absent registration would

@@ -30,6 +30,9 @@ module ToolUp.Platform.Tests.InProcess.ToolApprovalTests
 // have reached them).
 
 open System
+open System.IO
+open System.Text
+open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
 open Expecto
@@ -130,7 +133,7 @@ let private ArgsJson = """{"target":"everything"}"""
 /// Build a registry holding one tool at `location`, with a flag that
 /// records whether its body ever ran. The flag is the no-side-effect
 /// assertion: a refused invocation must leave it false.
-let private buildToolRegistry (location: AIToolLocation) (ran: bool ref) =
+let private buildToolRegistry (location: ToolLocation) (ran: bool ref) =
     let registry = AIToolRegistry.AIToolRegistry()
 
     let definition: AIToolDefinition = {
@@ -239,6 +242,7 @@ let private eventKinds (events: AIStreamEvent list) =
         | MessageDelta _ -> "MessageDelta"
         | MessageComplete _ -> "MessageComplete"
         | ToolCallStarted _ -> "ToolCallStarted"
+        | TaskStatusChanged _ -> "TaskStatusChanged"
         | ToolCallCompleted _ -> "ToolCallCompleted"
         | StreamError _ -> "StreamError"
         | StreamCancelled _ -> "StreamCancelled"
@@ -324,17 +328,18 @@ let tests =
                 (results |> List.exists (fun r -> r.Contains "\"ok\""))
                 "the tool's own result reaches the model after approval"
 
-            let! granted = auditRows store ToolApprovalDispatch.ApprovalAuditSource
+            // Only the REQUEST row here: this case completes the registry
+            // directly, and the grant row is the POST handler's to write —
+            // it is the party that knows a person pressed a button. The
+            // decision rows are asserted through the real handler below.
+            let! rows = auditRows store ToolApprovalDispatch.ApprovalAuditSource
 
-            let types = granted |> List.map _.EventType |> List.distinct |> List.sort
+            let types = rows |> List.map _.EventType |> List.distinct
 
             Expect.equal
                 types
-                [
-                    ToolApprovalDispatch.ApprovalGrantedEvent
-                    ToolApprovalDispatch.ApprovalRequestedEvent
-                ]
-                "the request is audited when it is raised and the grant when it is answered"
+                [ ToolApprovalDispatch.ApprovalRequestedEvent ]
+                "the gate audits the request at the moment it raises the prompt"
         }
 
         testCaseAsync "rejecting aborts the turn with no side effect, and reaches the existing denial stream"
@@ -620,4 +625,137 @@ let tests =
             Expect.equal decision Approved "and delivers the decision to the parked caller"
             Expect.isFalse (registry.TryComplete(second, Approved)) "a replayed completion finds nothing"
         }
+
+        // \u2500\u2500\u2500 The decision POST, through the REAL handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        //
+        // Deliberately not a shortcut into the registry: the permission
+        // re-check, the audit and the completion all live in the handler,
+        // and a test that reimplemented them would assert its own copy
+        // rather than the shipped path.
+
+        testCase "the decision POST records the grant, completes the held invocation, and re-checks permission"
+        <| fun _ ->
+            let store = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let registry = ToolApprovalDispatch.ToolApprovalRegistry()
+
+            let services = ServiceCollection()
+            services.AddSingleton<IEventStore>(store) |> ignore
+
+            services.AddSingleton<ToolApprovalDispatch.ToolApprovalRegistry>(registry)
+            |> ignore
+
+            let provider = services.BuildServiceProvider()
+
+            let post (perms: (string * ModulePermission list) list) (approvalId: Guid) (token: string) =
+                let ctx = DefaultHttpContext()
+                ctx.RequestServices <- provider
+                ctx.Items["ToolUp.UserId"] <- box "alice"
+                ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+
+                let body =
+                    JsonSerializer.Serialize(
+                        ({
+                            ApprovalId = approvalId
+                            Decision = token
+                        }
+                        : ToolApprovalDecisionRequest),
+                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    )
+
+                ctx.Request.Body <- new MemoryStream(Encoding.UTF8.GetBytes body)
+                ctx.Response.Body <- new MemoryStream()
+
+                ToolApprovalHandler.toolApprovalDecisionHandler (fun c -> Task.FromResult(Some c)) ctx
+                |> Async.AwaitTask
+                |> Async.RunSynchronously
+                |> ignore
+
+                ctx.Response.StatusCode
+
+            let mk () : ToolApprovalDispatch.PendingApproval = {
+                ConversationId = Guid.NewGuid()
+                ToolName = ToolName
+                SourceModule = SourceModule
+                ArgumentsDigest = ToolApprovalDispatch.argumentsDigest ArgsJson
+                ArgumentsPreview = ArgsJson
+                ScopeId = "anonymous"
+                UserId = "alice"
+            }
+
+            // (1) a caller with no Read on the source module cannot answer.
+            let refusedId = Guid.NewGuid()
+            let refusedAwait = registry.RegisterPending(refusedId, mk ())
+
+            // A caller with SOME permissions but not this module's. An
+            // EMPTY map is the unrestricted default a deployment with no
+            // permission store runs under (GP 11), so it would authorise
+            // everything and prove nothing.
+            Expect.equal
+                (post [ "Unrelated", [ ModulePermission.Read ] ] refusedId "Approved")
+                403
+                "a caller who cannot read the module cannot answer for it"
+
+            Expect.isFalse refusedAwait.IsCompleted "and the refused decision must not reach the held invocation"
+
+            Expect.isSome
+                (registry.PendingOf refusedId)
+                "the record stays registered \u2014 a refusal must not double as a cancellation lever"
+
+            // (2) an authorised approval completes it and is audited.
+            let perms = [ SourceModule, [ ModulePermission.Read ] ]
+            let grantedId = Guid.NewGuid()
+            let grantedAwait = registry.RegisterPending(grantedId, mk ())
+
+            Expect.equal (post perms grantedId "Approved") 200 "an authorised approval is accepted"
+            Expect.isTrue grantedAwait.IsCompleted "and reaches the held invocation"
+            Expect.equal grantedAwait.Result Approved "as an approval"
+
+            // (3) a rejection likewise, under its own event type.
+            let rejectedId = Guid.NewGuid()
+            let rejectedAwait = registry.RegisterPending(rejectedId, mk ())
+            Expect.equal (post perms rejectedId "Rejected") 200 "a rejection is accepted too"
+            Expect.equal rejectedAwait.Result Rejected "and reaches the held invocation as a refusal"
+
+            // (4) an unrecognised token is a refusal, never an approval.
+            let garbledId = Guid.NewGuid()
+            let garbledAwait = registry.RegisterPending(garbledId, mk ())
+            Expect.equal (post perms garbledId "AllowForConversation") 200 "the POST itself succeeds"
+
+            Expect.equal
+                garbledAwait.Result
+                Rejected
+                "but a token this build cannot interpret is a rejection \u2014 the fail-closed direction"
+
+            // (5) a late click after the budget fired is a quiet 404.
+            Expect.equal
+                (post perms (Guid.NewGuid()) "Approved")
+                404
+                "an unknown approval id is not an error the user should see"
+
+            let rows =
+                store.ReadBySource("anonymous", ToolApprovalDispatch.ApprovalAuditSource)
+                |> Async.RunSynchronously
+                |> Seq.toList
+
+            let types = rows |> List.map _.EventType
+
+            Expect.equal
+                (types
+                 |> List.filter (fun t -> t = ToolApprovalDispatch.ApprovalGrantedEvent)
+                 |> List.length)
+                1
+                "exactly one grant row \u2014 the 403 and the 404 decided nothing and recorded nothing"
+
+            Expect.equal
+                (types
+                 |> List.filter (fun t -> t = ToolApprovalDispatch.ApprovalRejectedEvent)
+                 |> List.length)
+                2
+                "and two rejections: the explicit one and the unreadable token"
+
+            Expect.isTrue
+                (rows |> List.forall (fun r -> r.Payload.Contains "sha256:"))
+                "every decision row carries the arguments digest that identifies the invocation it was about"
+
+            Expect.isTrue (rows |> List.forall (fun r -> r.Payload.Contains ToolName)) "and names the tool"
     ]

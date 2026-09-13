@@ -1316,6 +1316,13 @@
              Execute runs (executor failtests if reached), the symmetric
              403 on /api/ai/tool-result, and the GP-11 unrestricted default. -->
         <Compile Include="InProcess\AIToolDispatchRbacTests.fs" />
+        <!-- Phase 503 — human-in-the-loop tool approval: a held invocation
+             suspends with its body unrun, approving resumes it end to end,
+             rejecting and an unanswered prompt both abort with no side
+             effect, an outer gate's refusal never surfaces a prompt, the
+             gate reaches SERVER-resident tools, and a deployment with no
+             policy composed sees a byte-identical turn. -->
+        <Compile Include="InProcess\ToolApprovalTests.fs" />
         <!-- Phase 565 — grounding certificates: sealed, selective provenance
              disclosure (issue → verify round-trip, tamper detection,
              withheld-value absence, GP-13 no-signer refusal). -->
