@@ -5752,8 +5752,11 @@ ToolUp.Remoting.Client.Proxy.getReturnType(System.Type) : System.Type
 ToolUp.Remoting.Client.Proxy.isAsyncOfByteArray(Fable.SimpleJson.TypeInfo) : System.Boolean
 ToolUp.Remoting.Client.Proxy.isByteArray(Fable.SimpleJson.TypeInfo) : System.Boolean
 ToolUp.Remoting.Client.Proxy.proxyFetch`8(ToolUp.Remoting.Client.RemoteBuilderOptions, System.String, Fable.SimpleJson.RecordField, System.Type) : Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.FSharpFunc`2[c, Microsoft.FSharp.Core.FSharpFunc`2[d, Microsoft.FSharp.Core.FSharpFunc`2[e, Microsoft.FSharp.Core.FSharpFunc`2[f, Microsoft.FSharp.Core.FSharpFunc`2[g, Microsoft.FSharp.Core.FSharpFunc`2[h, Microsoft.FSharp.Control.FSharpAsync`1[System.Object]]]]]]]]]
+ToolUp.Remoting.Client.Proxy.tryReadDecodeError(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Client.ProxyRequestException (class)
 ToolUp.Remoting.Client.ProxyRequestException..ctor(ToolUp.Remoting.Client.HttpResponse, System.String, System.String)
+ToolUp.Remoting.Client.ProxyRequestException..ctor(ToolUp.Remoting.Client.HttpResponse, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError])
+ToolUp.Remoting.Client.ProxyRequestException.DecodeError : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError] { get }
 ToolUp.Remoting.Client.ProxyRequestException.Response : ToolUp.Remoting.Client.HttpResponse { get }
 ToolUp.Remoting.Client.ProxyRequestException.ResponseText : System.String { get }
 ToolUp.Remoting.Client.ProxyRequestException.StatusCode : System.Int32 { get }

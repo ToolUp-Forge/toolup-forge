@@ -197,6 +197,29 @@ module internal Middleware =
                 }
 
                 return! fail e routeInfo options next ctx
+            | DecodeRefused(error, functionName) ->
+                // Phase 783 — same routing as the Giraffe adapter: a
+                // decode refusal is 400 + the `validation` envelope, never
+                // 500 + `Errors.unhandled`. This adapter composes no
+                // pre-flight chain (see the seam-parity note above), so
+                // the refusal is the whole response.
+                ctx.Response.StatusCode <- 400
+
+                let payload =
+                    box {|
+                        methodName = functionName
+                        decodeError = {|
+                            path = error.Path
+                            expected = error.Expected
+                            found = error.Found
+                        |}
+                        message = ToolUp.Remoting.DecodeError.render error
+                    |}
+
+                let envelope =
+                    Errors.categorisedWithSchema options.SchemaVersion ErrorCategory.Validation payload
+
+                return! setBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
             | InvalidHttpVerb -> return! halt next ctx
             | EndpointNotFound -> return! notFound options next ctx
         }

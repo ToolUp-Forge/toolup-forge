@@ -10,6 +10,11 @@ open System.Collections
 open System.Collections.Concurrent
 open System.Collections.Generic
 open FSharp.Reflection
+// Phase 783 — the decode-refusal vocabulary. Every `failwithf` that used
+// to describe a decode failure in prose now refuses with a `DecodeError`
+// naming Expected / Found / Path, carried out through `DecodeException`
+// and converted back to a `Result` at `Reader.TryRead`.
+open ToolUp.Remoting
 open System.Reflection
 open Microsoft.FSharp.NativeInterop
 #if !FABLE_COMPILER && NETCOREAPP2_1_OR_GREATER
@@ -63,7 +68,7 @@ let inline interpretIntegerAs (typ: Type) n =
     elif typ.IsEnum then
         Enum.ToObject(typ, int64 n)
     else
-        failwithf "Cannot interpret integer %A as %s." n typ.Name
+        DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #else
     if Object.ReferenceEquals(typ, typeof<Int32>) then
         int32 n |> box
@@ -98,7 +103,7 @@ let inline interpretIntegerAs (typ: Type) n =
         elif typ.IsEnum then
             float n |> box
         else
-            failwithf "Cannot interpret integer %A as %s." n typ.Name
+            DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #endif
 
 let inline interpretFloatAs (typ: Type) n =
@@ -107,7 +112,7 @@ let inline interpretFloatAs (typ: Type) n =
 #else
     if typ = typeof<float32> then float32 n |> box
     elif typ = typeof<float> then float n |> box
-    else failwithf "Cannot interpret float %A as %s." n typ.Name
+    else DecodeError.failWith typ.Name (sprintf "float %A" n)
 #endif
 
 #if !FABLE_COMPILER
@@ -276,7 +281,7 @@ type Reader(data: byte[]) =
                  let args = t.GetGenericArguments()
 
                  if args.Length <> 2 then
-                     failwithf "Expecting %s, but the data contains a map." t.Name
+                     DecodeError.failWith t.Name "a map"
 
                  let mapDeserializer = typedefof<DictionaryDeserializer<_, _>>.MakeGenericType args
                  let isDictionary = t.GetGenericTypeDefinition() = typedefof<Dictionary<_, _>>
@@ -294,7 +299,7 @@ type Reader(data: byte[]) =
         let args = t.GetGenericArguments()
 
         if args.Length <> 2 then
-            failwithf "Expecting %s, but the data contains a map." t.Name
+            DecodeError.failWith t.Name "a map"
 
         let pairs =
             let arr = Array.zeroCreate len
@@ -320,7 +325,7 @@ type Reader(data: byte[]) =
                  let args = t.GetGenericArguments()
 
                  if args.Length <> 1 then
-                     failwithf "Expecting %s, but the data contains a set." t.Name
+                     DecodeError.failWith t.Name "a set"
 
                  let setDeserializer = typedefof<SetDeserializer<_>>.MakeGenericType args
 
@@ -337,7 +342,7 @@ type Reader(data: byte[]) =
         let args = t.GetGenericArguments()
 
         if args.Length <> 1 then
-            failwithf "Expecting %s, but the data contains a set." t.Name
+            DecodeError.failWith t.Name "a set"
 
         let mutable set = Set.empty
 
@@ -504,7 +509,7 @@ type Reader(data: byte[]) =
                     t.ReadXmlSchema(new System.IO.StringReader(schema))
                     t.ReadXml(new System.IO.StringReader(data)) |> ignore
                     box t
-                | otherwise -> failwithf "Expecting %s at position %d, but the data contains an array." t.Name pos
+                | otherwise -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "an array"
             elif t = typeof<System.Data.DataSet> then
                 match x.ReadRawArray(2, typeof<string>) :?> string array with
                 | [| schema; data |] ->
@@ -512,7 +517,7 @@ type Reader(data: byte[]) =
                     t.ReadXmlSchema(new System.IO.StringReader(schema))
                     t.ReadXml(new System.IO.StringReader(data)) |> ignore
                     box t
-                | otherwise -> failwithf "Expecting %s at position %d, but the data contains an array." t.Name pos
+                | otherwise -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "an array"
 #endif
         elif t = typeof<decimal> || t.FullName = "Microsoft.FSharp.Core.decimal`1" then
 #if !FABLE_COMPILER
@@ -523,7 +528,7 @@ type Reader(data: byte[]) =
             x.ReadRawArray(4, typeof<int>) |> box :?> int[] |> Decimal |> box
 #endif
         else
-            failwithf "Expecting %s at position %d, but the data contains an array." t.Name pos
+            DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "an array"
 
     member x.ReadBin(len, t) =
         if t = typeof<Guid> then
@@ -537,7 +542,7 @@ type Reader(data: byte[]) =
         elif t = typeof<bigint> then
             bigint (x.ReadRawBin len) |> box
         else
-            failwithf "Expecting %s at position %d, but the data contains bin." t.Name pos
+            DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "bin"
 
     member x.Read t =
         match x.ReadByte() with
@@ -588,4 +593,37 @@ type Reader(data: byte[]) =
         | Format.Bin32 ->
             let len = x.ReadUInt32() |> int
             x.ReadBin(len, t)
-        | b -> failwithf "Position %d, byte %d, expected type %s." pos b t.Name
+        | b -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name (sprintf "format byte %d" b)
+
+    /// Phase 783 — the named-refusal entry. Decodes `t` from the current
+    /// position and returns either the value or a `DecodeError` naming
+    /// what was expected, what the bytes held, and the byte offset it was
+    /// at. Nothing here throws for a malformed payload.
+    ///
+    /// **Composition direction.** Phase 783's task text proposed the
+    /// opposite arrangement — `TryRead` primary, `Read` derived as
+    /// `TryRead |> Result.defaultWith raise`. That is not reachable
+    /// without rewriting this reader's interior, which is the work
+    /// [Phase 785] owns: the decode recursion runs through static
+    /// `ConcurrentDictionary` caches whose values are `Type -> obj`
+    /// delegates (`arrayReaderCache`, `mapReaderCache`, `setReaderCache`)
+    /// and through `DictionaryDeserializer` / `ListDeserializer` /
+    /// `SetDeserializer`, which take `read: Type -> obj` by signature.
+    /// Threading a `Result` through those retypes five public generic
+    /// types across two tiers for no behaviour a caller can observe.
+    /// So `Read` stays primary and `TryRead` adapts it, and the two
+    /// arrangements deliver the identical external contract: a total
+    /// `Result`-returning entry, a throwing entry that existing callers
+    /// compile against unchanged (GP 11), and one closed refusal
+    /// vocabulary shared by both.
+    ///
+    /// **The reader is left where the refusal happened.** A failed
+    /// `TryRead` does NOT rewind `pos` — the payload is malformed, so
+    /// there is no well-defined position to rewind to, and the byte
+    /// offset in the refusal's `Path` is the diagnostic. Read one value
+    /// per `Reader` on the refusal path; do not resume.
+    member x.TryRead(t: Type) : Result<obj, DecodeError> =
+        try
+            Ok(x.Read t)
+        with DecodeException error ->
+            Error error

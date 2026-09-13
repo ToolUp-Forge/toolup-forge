@@ -10058,6 +10058,8 @@ ToolUp.Remoting.Json.SystemTextJson.FableConverters (class)
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.addTo(System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.create() : System.Text.Json.JsonSerializerOptions
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared : System.Text.Json.JsonSerializerOptions { get }
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement(System.Text.Json.JsonElement, System.Type, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise`1(System.Text.Json.JsonElement, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter (class)
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.Int64
@@ -10318,11 +10320,15 @@ ToolUp.Remoting.Server.InvocationProps`1.Output : System.IO.Stream { get }
 ToolUp.Remoting.Server.InvocationResult (class)
 ToolUp.Remoting.Server.InvocationResult.EndpointNotFound : ToolUp.Remoting.Server.InvocationResult { get }
 ToolUp.Remoting.Server.InvocationResult.InvalidHttpVerb : ToolUp.Remoting.Server.InvocationResult { get }
+ToolUp.Remoting.Server.InvocationResult.IsDecodeRefused : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult.IsEndpointNotFound : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult.IsException : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult.IsInvalidHttpVerb : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult.IsSuccess : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.InvocationResult+DecodeRefused (class)
+ToolUp.Remoting.Server.InvocationResult+DecodeRefused.error : ToolUp.Remoting.DecodeError { get }
+ToolUp.Remoting.Server.InvocationResult+DecodeRefused.functionName : System.String { get }
 ToolUp.Remoting.Server.InvocationResult+Exception (class)
 ToolUp.Remoting.Server.InvocationResult+Exception.Item1 : System.Exception { get }
 ToolUp.Remoting.Server.InvocationResult+Exception.functionName : System.String { get }
@@ -10330,6 +10336,7 @@ ToolUp.Remoting.Server.InvocationResult+Exception.requestBodyText : Microsoft.FS
 ToolUp.Remoting.Server.InvocationResult+Success (class)
 ToolUp.Remoting.Server.InvocationResult+Success.isBinaryOutput : System.Boolean { get }
 ToolUp.Remoting.Server.InvocationResult+Tags (class)
+ToolUp.Remoting.Server.InvocationResult+Tags.DecodeRefused : System.Int32 (literal)
 ToolUp.Remoting.Server.InvocationResult+Tags.EndpointNotFound : System.Int32 (literal)
 ToolUp.Remoting.Server.InvocationResult+Tags.Exception : System.Int32 (literal)
 ToolUp.Remoting.Server.InvocationResult+Tags.InvalidHttpVerb : System.Int32 (literal)
@@ -10418,6 +10425,8 @@ ToolUp.Remoting.Server.NotEmptyAttribute.Validate(System.Object) : Microsoft.FSh
 ToolUp.Remoting.Server.ParsingArgumentsError (class)
 ToolUp.Remoting.Server.ParsingArgumentsError..ctor(System.String)
 ToolUp.Remoting.Server.ParsingArgumentsError.ParsingArgumentsError : System.String { get }
+ToolUp.Remoting.Server.ParsingArgumentsErrorModule (class)
+ToolUp.Remoting.Server.ParsingArgumentsErrorModule.ofDecodeError(ToolUp.Remoting.DecodeError) : ToolUp.Remoting.Server.ParsingArgumentsError
 ToolUp.Remoting.Server.Patterns (class)
 ToolUp.Remoting.Server.Patterns.|AsyncField|_|(Microsoft.FSharp.Quotations.FSharpExpr) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Remoting.Server.Patterns.|EightArgLambda|_|(Microsoft.FSharp.Quotations.FSharpExpr) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Object]]]
