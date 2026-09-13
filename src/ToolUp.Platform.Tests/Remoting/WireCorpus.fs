@@ -644,8 +644,9 @@ let readJson (c: WireCase) (text: string) : obj =
 
 // ─── The writer's regime, measured before anything is asserted ───────
 //
-// Found by this corpus on its first run, 2026-09-13, and it is the
-// reason the MsgPack suite measures before it asserts.
+// Found by this corpus on its first run, 2026-09-13, FIXED in this phase
+// by operator decision, and kept here as the regression guard for the
+// class. Read it as history plus a live alarm, not as a live defect.
 //
 // `Write.fs` builds its scratch buffers through
 //
@@ -675,11 +676,19 @@ let readJson (c: WireCase) (text: string) : obj =
 // `verify.ps1` builds the solution with no configuration flag — Debug.
 // Nothing in this repository exercised the writer, so nothing looked.
 //
-// This corpus does not fix it: `Write.fs` is remoting source, outside
-// the cross-section this phase declared. What it does is refuse to
-// pretend. The suite asks which regime it is in and asserts accordingly,
-// so a fix turns the full arms back on with no edit here, and a change
-// in the defect's SHAPE is a red run rather than a quiet one.
+// The fix: all three call sites (`writeString`, `writeDecimal`,
+// `writeGuid`) now allocate their own stack buffer instead of taking one
+// from the helper, which is unsound by construction — it returns a `Span`
+// over its OWN frame. `Write.fs` was outside this phase's declared
+// cross-section and the fix was made under an explicit operator decision
+// after the Phase 786 regression guard reproduced the same two defects
+// independently; this corpus is its regression test.
+//
+// The probe below stays, and is now an alarm rather than a quarantine.
+// It costs five writes per process and it is the only thing in this
+// repository that would notice the class coming back — which it could,
+// since the unsound helper is still public surface and any new call site
+// would reintroduce it silently, in Debug only, under a correct header.
 
 /// What the five probes below found. Each field is "the bytes the writer
 /// emitted are the bytes the format says", never a round trip — a round
@@ -771,7 +780,7 @@ let regimeReport (regime: WriterRegime) =
     match regime with
     | Sound -> "MsgPack writer: SOUND — the byte-pin and round-trip arms are live."
     | UnoptimisedStackalloc ->
-        "MsgPack writer: CORRUPT under this build — short strings and decimals are written from a popped stack frame (Write.fs's `inline stackalloc` helper, optimiser OFF). Measured 2026-09-13: `-c Debug` corrupt, `-c Release` correct, `-c Debug -p:Optimize=true` CORRECT, so the discriminator is the optimiser. The writer is not a function of its input here, so the byte-pin and round-trip arms cannot run and say anything true; the committed fixtures are still DECODED and compared, because the reader is unaffected. Fixing Write.fs turns the other arms back on with no edit to the corpus."
+        "MsgPack writer: the 2026-09-13 unoptimised-stackalloc corruption HAS RETURNED. Short strings and decimals are being written out of a popped stack frame again — the three call sites in Write.fs must allocate their own buffer rather than take one from the `stackalloc` helper, which is unsound whenever the F# optimiser does not honour its `inline`. The writer is not a function of its input in this state, so the byte-pin and round-trip arms below stand down rather than pin noise; the committed fixtures are still DECODED and compared, because the reader was never affected."
     | UnknownRegime probe ->
         sprintf
             "MsgPack writer: an UNKNOWN regime — %A. The corpus knows two: sound, and the unoptimised-stackalloc corruption whose signature is short-string and decimal corrupt with long-string, Guid and integer correct. This is neither, so either the defect has changed shape or a new one has arrived; do not touch the quarantine until this is understood."

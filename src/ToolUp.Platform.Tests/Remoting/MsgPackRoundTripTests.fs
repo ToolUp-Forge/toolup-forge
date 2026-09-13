@@ -6,18 +6,26 @@
 ///
 /// ─── Read this first: the suite MEASURES before it asserts ───────────
 ///
-/// On its first run this corpus found that the shipped MsgPack WRITER is
-/// corrupt under the build `verify.ps1` produces. `Write.fs` takes its
+/// On its first run this corpus found that the shipped MsgPack WRITER was
+/// corrupt under the build `verify.ps1` produces. `Write.fs` took its
 /// scratch buffers from a `Span` over `NativePtr.stackalloc` returned by
 /// an `inline` helper; with the F# optimiser off the `inline` is not
 /// honoured, the allocation lands in the helper's own frame, and the
 /// caller reads it back after that frame has been popped and reused. The
-/// writer then stops being a function of its input — two runs of
+/// writer then stopped being a function of its input — two runs of
 /// `writeString "hello"` emitted two different five-byte payloads under a
 /// correct length header, and `1234.56m` decoded as `123456M` because the
 /// scale word was lost. Measured `-c Debug` corrupt, `-c Release`
-/// correct, `-c Debug -p:Optimize=true` CORRECT, so the discriminator is
-/// the optimiser. Full account in `WireCorpus`'s regime section.
+/// correct, `-c Debug -p:Optimize=true` CORRECT, so the discriminator was
+/// the optimiser: production shipped Release and was unaffected, while
+/// every Debug test run in this repository was exchanging corrupt
+/// payloads with nothing looking.
+///
+/// **It is FIXED** — all three call sites now allocate their own buffer —
+/// and the machinery below stays as the regression guard for the class.
+/// The unsound helper is still public surface, so a new call site would
+/// reintroduce it silently, in Debug only, under a correct header; this
+/// probe is the only thing in the repository that would notice.
 ///
 /// A corpus cannot pin bytes a writer does not emit deterministically,
 /// and a suite that quietly skipped its main arm would be the
@@ -28,12 +36,13 @@
 ///     signature, or `UnknownRegime`.
 ///   * Under `Sound` every arm runs: round trip, generated shapes, and
 ///     the committed byte pin.
-///   * Under `UnoptimisedStackalloc` the suite asserts the defect's exact
-///     signature IN BOTH DIRECTIONS (short string and decimal corrupt;
-///     long string, Guid and integer correct) and reports it on every
-///     run. Fixing `Write.fs` makes the regime `Sound` and turns the
-///     other arms back on with NO edit here — the quarantine retires
-///     itself rather than going stale.
+///   * `UnoptimisedStackalloc` means the defect has RETURNED. The suite
+///     asserts its exact signature IN BOTH DIRECTIONS (short string and
+///     decimal corrupt; long string, Guid and integer correct), stands
+///     the write-side arms down rather than pinning noise, and reports it
+///     on every run. This is the path the corpus ran on before the fix,
+///     kept because it is what makes the guard self-retiring in both
+///     directions rather than a comment nobody reads.
 ///   * `UnknownRegime` is a red run, because a defect that has changed
 ///     shape is not a defect anybody has measured.
 ///   * The READER is unaffected in both regimes, so the arm that decodes
