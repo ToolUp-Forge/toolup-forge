@@ -161,6 +161,19 @@
              module-level `Api.makeProxy`, so it cannot be touched from
              the .NET harness at all. Must follow ViewMount.fs. -->
         <Compile Include="KnowledgeVersionHistoryTests.fs" />
+        <!-- Phase 784 — the remoting wire corpus's parity leg. WireCorpus.fs
+             is COMPILED IN from ToolUp.Platform.Tests rather than
+             transcribed, so the value a committed fixture must decode to is
+             ONE F# declaration both hosts read; its encoders and its
+             generator sit behind `#if !FABLE_COMPILER` and do not come with
+             it. The pack decodes `tests/remoting-corpus/*.msgpack` through
+             the MsgPack reader as Fable transpiles it — the reader the
+             browser client actually runs — and compares at the declaration,
+             so the .NET and JavaScript readers are held to one contract.
+             Reached transitively through Platform.Client, like every pack
+             above; no new ProjectReference. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\WireCorpus.fs" />
+        <Compile Include="RemotingCorpusParityTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

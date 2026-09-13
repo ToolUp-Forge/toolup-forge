@@ -11,6 +11,8 @@ open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
 open ToolUp.Platform.Tests.Graph
+// Phase 784 — the remoting wire differential corpus's two suites.
+open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.Support
 
 /// The explicitly-enumerated list this pack runs. `[<Tests>]` alone does
@@ -2181,6 +2183,17 @@ let private registeredTests =
         CountersignatureRegistryTests.storeTests
         CountersignatureRegistryTests.queueTests
         CountersignatureRegistryTests.parityTests
+        // Phase 784 — the remoting wire differential corpus: `write >> read
+        // = id` over one declared population of API-shaped values, on BOTH
+        // wires, compared at the static type so a silent width narrowing is
+        // a failure rather than a plausible number. The pinned half asserts
+        // the committed `tests/remoting-corpus/` bytes and JSON are what the
+        // shipped writers emit today AND that they decode back to the
+        // declared value; the adequacy guard fails the run when any declared
+        // class drew zero. Both suites commit their own falsifier with its
+        // control.
+        MsgPackRoundTripTests.tests
+        StjRoundTripTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

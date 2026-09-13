@@ -79,6 +79,12 @@ let allTests =
         // not surface, and the resolved-vs-edited distinction the pane
         // exists to make legible.
         ModuleVisibilityAdminUITests.tests
+        // Phase 784 — the remoting wire corpus's Fable parity leg: the
+        // committed `tests/remoting-corpus/*.msgpack` fixtures decoded
+        // through the MsgPack reader as Fable transpiles it, compared
+        // against the same F# declaration the .NET suites compare
+        // against. Two readers, one corpus, one set of expected values.
+        RemotingCorpusParityTests.tests
     ]
 
 [<EntryPoint>]
