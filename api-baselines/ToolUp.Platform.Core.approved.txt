@@ -12648,6 +12648,7 @@ ToolUp.Remoting.MsgPack.Format.Array32 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Bin16 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Bin32 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Bin8 : System.Byte (literal)
+ToolUp.Remoting.MsgPack.Format.DefaultMaxDepth : System.Int32 (literal)
 ToolUp.Remoting.MsgPack.Format.False : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Float32 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Float64 : System.Byte (literal)
@@ -12679,7 +12680,7 @@ ToolUp.Remoting.MsgPack.Format.fixstr`1(a) : System.Byte
 ToolUp.Remoting.MsgPack.Read (class)
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Single], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Double], System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs`1(System.Type, a) : System.Object
-ToolUp.Remoting.MsgPack.Read.interpretIntegerAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, System.SByte], System.Type, a) : System.Object
+ToolUp.Remoting.MsgPack.Read.interpretIntegerAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, a], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int64], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt32], Microsoft.FSharp.Core.FSharpFunc`2[a, System.UInt16], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, System.SByte], System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretIntegerAs`1(System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretStringAs(System.Type, System.String) : System.Object
 ToolUp.Remoting.MsgPack.Read+DictionaryDeserializer`2 (class)
@@ -12690,6 +12691,7 @@ ToolUp.Remoting.MsgPack.Read+ListDeserializer`1..ctor()
 ToolUp.Remoting.MsgPack.Read+ListDeserializer`1.Deserialize(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, System.Object]) : System.Object
 ToolUp.Remoting.MsgPack.Read+Reader (class)
 ToolUp.Remoting.MsgPack.Read+Reader..ctor(System.Byte[])
+ToolUp.Remoting.MsgPack.Read+Reader..ctor(System.Byte[], System.Int32)
 ToolUp.Remoting.MsgPack.Read+Reader.Read(System.Type) : System.Object
 ToolUp.Remoting.MsgPack.Read+Reader.ReadArray(System.Int32, System.Type) : System.Object
 ToolUp.Remoting.MsgPack.Read+Reader.ReadBin(System.Int32, System.Type) : System.Object

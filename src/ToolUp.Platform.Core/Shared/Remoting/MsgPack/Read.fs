@@ -24,6 +24,47 @@ open System.Buffers.Binary
 #nowarn "9"
 #nowarn "51"
 
+/// Phase 786 — does an integer lifted off the wire fit the width the
+/// target type declares?
+///
+/// The two halves split on SIGN rather than on the source type, because
+/// both widenings are then exact: any non-negative value of any integer
+/// width converts to `uint64` losslessly, and any negative one converts
+/// to `int64` losslessly (a negative value cannot have come from an
+/// unsigned source). One common domain cannot do that. `float` loses the
+/// low bits above 2^53, which is precisely where the two interesting
+/// cases live; `int64` alone cannot represent a `uint64` above
+/// `Int64.MaxValue`. Those two cross-sign cases — a large `uint64` aimed
+/// at an `int64`, and a negative value aimed at any unsigned target —
+/// are exactly the silent narrowings worth refusing, so the check has to
+/// be exact there rather than merely nearly right.
+let inline private integerFits (lo: int64) (hi: uint64) n =
+    if n >= LanguagePrimitives.GenericZero then
+        uint64 n <= hi
+    else
+        int64 n >= lo
+
+/// Phase 786 — the refusal a failed width check raises. `Expected` names
+/// the target type, so the rendered sentence reads
+/// `expected Int32, got out-of-range integer 4294967296`.
+let inline private refuseWidth (typ: Type) n : obj =
+    DecodeError.failWith typ.Name (sprintf "out-of-range integer %A" n)
+
+/// Phase 786 — how many elements a collection is allowed to reserve room
+/// for on the strength of a length prefix alone, before it has to earn
+/// the rest by actually decoding elements.
+///
+/// The length guard (`Reader.RequireAvailable`) already bounds a prefix
+/// by the bytes remaining, so nothing here can reach a gigabyte. This is
+/// the second half of the same idea: a prefix the guard ADMITS still
+/// buys only a small allocation, and the remainder is paid for element by
+/// element. The ceiling is deliberately well above the size of anything
+/// this transport carries in practice, so the overwhelmingly common case
+/// — a record, a short list, a small map — allocates exactly once, at
+/// exactly the right size, as it did before this phase.
+[<Literal>]
+let private InitialCollectionCapacity = 1024
+
 let interpretStringAs (typ: Type) (str: string) =
 #if FABLE_COMPILER
     box str
@@ -39,69 +80,163 @@ let interpretStringAs (typ: Type) (str: string) =
         FSharpValue.MakeUnion(case, [||])
 #endif
 
+// Phase 786 — every arm decodes at the width its TARGET TYPE declares
+// and refuses a wire value that does not fit, rather than casting it
+// down. The two `#if` branches are kept arm-for-arm identical in this
+// respect: under Fable the same `integerFits` test runs over the JS
+// number (or BigInt) the arm would otherwise have narrowed, so a client
+// and a server disagree about no payload. See `Format.fs`'s header for
+// why these are refusals rather than clamps.
 let inline interpretIntegerAs (typ: Type) n =
 #if !FABLE_COMPILER
     if typ = typeof<Int32> then
-        int32 n |> box
+        if integerFits -2147483648L 2147483647UL n then
+            int32 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<Int64> then
-        int64 n |> box
+        if integerFits Int64.MinValue 9223372036854775807UL n then
+            int64 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<Int16> then
-        int16 n |> box
+        if integerFits -32768L 32767UL n then
+            int16 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<UInt32> then
-        uint32 n |> box
+        if integerFits 0L 4294967295UL n then
+            uint32 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<UInt64> then
-        uint64 n |> box
+        if integerFits 0L 18446744073709551615UL n then
+            uint64 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<UInt16> then
-        uint16 n |> box
+        if integerFits 0L 65535UL n then
+            uint16 n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<TimeSpan> then
-        TimeSpan(int64 n) |> box
+        if integerFits Int64.MinValue 9223372036854775807UL n then
+            TimeSpan(int64 n) |> box
+        else
+            refuseWidth typ n
 #if NET6_0_OR_GREATER
     elif typ = typeof<DateOnly> then
-        DateOnly.FromDayNumber(int32 n) |> box
+        // The bound here is `DateOnly`'s OWN domain (day numbers up to
+        // `DateOnly.MaxValue.DayNumber`), not the int32 range: outside
+        // it `FromDayNumber` raises an `ArgumentOutOfRangeException`,
+        // which would leave `TryRead` as something other than a refusal.
+        if integerFits 0L 3652058UL n then
+            DateOnly.FromDayNumber(int32 n) |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<TimeOnly> then
-        TimeOnly(int64 n) |> box
+        // Likewise `TimeOnly`'s own domain, in ticks, for the same reason.
+        if integerFits 0L 863999999999UL n then
+            TimeOnly(int64 n) |> box
+        else
+            refuseWidth typ n
 #endif
     elif typ = typeof<byte> then
-        byte n |> box
+        if integerFits 0L 255UL n then
+            byte n |> box
+        else
+            refuseWidth typ n
     elif typ = typeof<sbyte> then
-        sbyte n |> box
+        if integerFits -128L 127UL n then
+            sbyte n |> box
+        else
+            refuseWidth typ n
     elif typ.IsEnum then
-        Enum.ToObject(typ, int64 n)
+        // `Enum.ToObject` takes its value as an int64, so a `uint64`
+        // above `Int64.MaxValue` would wrap on the way in — the same
+        // silent narrowing, one indirection further out. The enum's own
+        // underlying width is deliberately NOT checked here: an enum
+        // value outside its declared cases is legal in .NET (flags
+        // combinations are the common case), so the only defensible
+        // bound is the one the conversion itself imposes.
+        if integerFits Int64.MinValue 9223372036854775807UL n then
+            Enum.ToObject(typ, int64 n)
+        else
+            refuseWidth typ n
     else
         DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #else
     if Object.ReferenceEquals(typ, typeof<Int32>) then
-        int32 n |> box
+        if integerFits -2147483648L 2147483647UL n then
+            int32 n |> box
+        else
+            refuseWidth typ n
     else
         // .FullName in Fable is a function call with multiple operations, so let's compute the value just once
         let typeName = typ.FullName
 
         if typeName = "System.Int64" then
-            int64 n |> box
+            if integerFits Int64.MinValue 9223372036854775807UL n then
+                int64 n |> box
+            else
+                refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<Int16>) then
-            int16 n |> box
+            if integerFits -32768L 32767UL n then
+                int16 n |> box
+            else
+                refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<UInt32>) then
-            uint32 n |> box
+            if integerFits 0L 4294967295UL n then
+                uint32 n |> box
+            else
+                refuseWidth typ n
         elif typeName = "System.UInt64" then
-            uint64 n |> box
+            if integerFits 0L 18446744073709551615UL n then
+                uint64 n |> box
+            else
+                refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<UInt16>) then
-            uint16 n |> box
+            if integerFits 0L 65535UL n then
+                uint16 n |> box
+            else
+                refuseWidth typ n
         elif typeName = "System.TimeSpan" then
-            TimeSpan(int64 n) |> box
+            if integerFits Int64.MinValue 9223372036854775807UL n then
+                TimeSpan(int64 n) |> box
+            else
+                refuseWidth typ n
 #if NET6_0_OR_GREATER
 #endif
         elif typeName = "Microsoft.FSharp.Core.int16`1" then
-            int16 n |> box
+            if integerFits -32768L 32767UL n then
+                int16 n |> box
+            else
+                refuseWidth typ n
         elif typeName = "Microsoft.FSharp.Core.int32`1" then
-            int32 n |> box
+            if integerFits -2147483648L 2147483647UL n then
+                int32 n |> box
+            else
+                refuseWidth typ n
         elif typeName = "Microsoft.FSharp.Core.int64`1" then
-            int64 n |> box
+            if integerFits Int64.MinValue 9223372036854775807UL n then
+                int64 n |> box
+            else
+                refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<byte>) then
-            byte n |> box
+            if integerFits 0L 255UL n then
+                byte n |> box
+            else
+                refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<sbyte>) then
-            sbyte n |> box
+            if integerFits -128L 127UL n then
+                sbyte n |> box
+            else
+                refuseWidth typ n
         elif typ.IsEnum then
-            float n |> box
+            if integerFits Int64.MinValue 9223372036854775807UL n then
+                float n |> box
+            else
+                refuseWidth typ n
         else
             DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #endif
@@ -121,17 +256,23 @@ type DictionaryDeserializer<'k, 'v when 'k: equality and 'k: comparison>() =
     static let valueType = typeof<'v>
 
     static member Deserialize(len: int, isDictionary, read: Type -> obj) =
+        // Phase 786 — seed at a bounded capacity and let the collection
+        // grow as entries are actually decoded, rather than reserving
+        // `len` slots on the wire's say-so.
         if isDictionary then
-            let dict = Dictionary<'k, 'v>(len)
+            let dict = Dictionary<'k, 'v>(min len InitialCollectionCapacity)
 
             for _ in 0 .. len - 1 do
                 dict.Add(read keyType :?> 'k, read valueType :?> 'v)
 
             box dict
         else
-            Array.init len (fun _ -> read keyType :?> 'k, read valueType :?> 'v)
-            |> Map.ofArray
-            |> box
+            let pairs = ResizeArray<'k * 'v>(min len InitialCollectionCapacity)
+
+            for _ in 0 .. len - 1 do
+                pairs.Add(read keyType :?> 'k, read valueType :?> 'v)
+
+            pairs |> Map.ofSeq |> box
 
 type ListDeserializer<'a>() =
     static let argType = typeof<'a>
@@ -151,8 +292,25 @@ type SetDeserializer<'a when 'a: comparison>() =
         set |> box
 #endif
 
-type Reader(data: byte[]) =
+/// Reads MessagePack off `data`, refusing anything that nests deeper than
+/// `maxDepth` (Phase 786 — see `Format.fs`'s header for the three bounds
+/// and why each is a refusal). The single-argument constructor applies
+/// `Format.DefaultMaxDepth`, so every existing call site keeps its
+/// behaviour for every payload that was already well-formed (GP 11).
+type Reader(data: byte[], maxDepth: int) =
     let mutable pos = 0
+
+    /// Phase 786 — how many containers deep the reader currently is.
+    /// An instance counter rather than a threaded parameter: the decode
+    /// recursion runs through `Type -> obj` delegate caches and three
+    /// public `*Deserializer` types whose `Deserialize` takes
+    /// `read: Type -> obj`, so a parameter would retype five public
+    /// generic types across two tiers — the interior rewrite Phase 785
+    /// owns. A `Reader` is single-threaded and reads one value, so the
+    /// counter is sound; on the refusal path the reader is finished and
+    /// the count is never unwound (`TryRead` documents the same about
+    /// `pos`).
+    let mutable depth = 0
 
 #if !FABLE_COMPILER
     static let arrayReaderCache = ConcurrentDictionary<Type, (int * Reader) -> obj>()
@@ -174,6 +332,13 @@ type Reader(data: byte[]) =
         else
             bytesInterpretation (data, pos - len)
 #endif
+
+    /// Phase 786 — the pre-786 shape, at the default nesting bound. An
+    /// explicit secondary constructor rather than an optional argument:
+    /// an optional parameter folds both into one widened constructor, so
+    /// the existing one-argument token would disappear from the public
+    /// surface and read as a removal.
+    new(data: byte[]) = Reader(data, Format.DefaultMaxDepth)
 
     member _.ReadByte() =
         pos <- pos + 1
@@ -301,20 +466,19 @@ type Reader(data: byte[]) =
         if args.Length <> 2 then
             DecodeError.failWith t.Name "a map"
 
-        let pairs =
-            let arr = Array.zeroCreate len
+        // Phase 786 — seeded at a bounded capacity and grown as entries
+        // are decoded, rather than reserving `len` slots up front.
+        let pairs = ResizeArray(min len InitialCollectionCapacity)
 
-            for i in 0 .. len - 1 do
-                arr.[i] <- x.Read args.[0] |> box :?> IStructuralComparable, x.Read args.[1]
-
-            arr
+        for _ in 0 .. len - 1 do
+            pairs.Add(x.Read args.[0] |> box :?> IStructuralComparable, x.Read args.[1])
 
         if t.GetGenericTypeDefinition() = typedefof<Dictionary<_, _>> then
-            let dict = Dictionary<_, _> len
-            pairs |> Array.iter dict.Add
+            let dict = Dictionary<_, _>(min len InitialCollectionCapacity)
+            pairs |> Seq.iter dict.Add
             box dict
         else
-            Map.ofArray pairs |> box
+            Map.ofSeq pairs |> box
 #endif
 
     member x.ReadSet(len: int, t: Type) =
@@ -352,21 +516,34 @@ type Reader(data: byte[]) =
         box set
 #endif
 
+    /// Phase 786 — the array is seeded at `min len
+    /// InitialCollectionCapacity` and doubled, capped at `len`, as
+    /// elements are actually decoded. A `len` at or below the ceiling
+    /// therefore allocates exactly once at exactly the right size, as
+    /// before; a larger one pays for its slots by producing elements.
+    /// Because growth is capped at `len`, the array's length is exactly
+    /// `len` once the loop completes and no trim is needed.
     member x.ReadRawArray(len: int, elementType: Type) =
 #if !FABLE_COMPILER
-        let arr = Array.CreateInstance(elementType, len)
+        let mutable arr =
+            Array.CreateInstance(elementType, min len InitialCollectionCapacity)
 
         for i in 0 .. len - 1 do
+            if i >= arr.Length then
+                let grown = Array.CreateInstance(elementType, min len (max 4 (arr.Length * 2)))
+                Array.Copy(arr, grown, arr.Length)
+                arr <- grown
+
             arr.SetValue(x.Read elementType, i)
 
         arr
 #else
-        let arr = Array.zeroCreate len
+        let arr = ResizeArray(min len InitialCollectionCapacity)
 
-        for i in 0 .. len - 1 do
-            arr.[i] <- x.Read elementType
+        for _ in 0 .. len - 1 do
+            arr.Add(x.Read elementType)
 
-        arr
+        arr.ToArray()
 #endif
 
     member x.ReadArray(len, t) =
@@ -544,13 +721,75 @@ type Reader(data: byte[]) =
         else
             DecodeError.failAt [ sprintf "byte %d" pos ] t.Name "bin"
 
+    /// Phase 786 — refuse a length prefix that claims more than the bytes
+    /// remaining can possibly hold, BEFORE anything is allocated from it.
+    ///
+    /// `minBytesPerElement` is the smallest number of bytes one element
+    /// of this shape can occupy on the wire: 1 for an array element, a
+    /// string byte or a bin byte (every MessagePack value is at least one
+    /// byte), 2 for a map entry (a key and a value). So the check is
+    /// exact in the sense that matters — it never refuses a payload that
+    /// could be well-formed, and it admits nothing that could not be.
+    ///
+    /// The `len < 0` arm is not defensive padding: an `Array32` or
+    /// `Map32` length above `Int32.MaxValue` is converted with `int` at
+    /// the call site and arrives NEGATIVE, which is how a claim of two
+    /// gibibytes of elements actually presents itself.
+    member private _.RequireAvailable(len: int, minBytesPerElement: int, what: string) =
+        let remaining = data.Length - pos
+        let affordable = remaining / minBytesPerElement
+
+        if len < 0 || len > affordable then
+            DecodeError.failAt
+                [ sprintf "byte %d" pos ]
+                (sprintf "%s of at most %d element(s)" what affordable)
+                (sprintf "%s of %d element(s), with %d byte(s) remaining" what len remaining)
+
+    /// Phase 786 — descend into a container, refusing past the bound.
+    member private _.EnterContainer() =
+        depth <- depth + 1
+
+        if depth > maxDepth then
+            DecodeError.failAt
+                [ sprintf "byte %d" pos ]
+                (sprintf "nesting at most %d container(s) deep" maxDepth)
+                (sprintf "nesting %d container(s) deep" depth)
+
+    member private _.ExitContainer() = depth <- depth - 1
+
+    /// Phase 786 — the guarded forms the format arms dispatch through:
+    /// length checked against the bytes present, then (for the two
+    /// recursive shapes) the depth bound, then the read itself.
+    member private x.ReadCheckedString(len: int) =
+        x.RequireAvailable(len, 1, "str")
+        x.ReadString len
+
+    member private x.ReadCheckedBin(len: int, t: Type) =
+        x.RequireAvailable(len, 1, "bin")
+        x.ReadBin(len, t)
+
+    member private x.ReadNestedArray(len: int, t: Type) =
+        x.RequireAvailable(len, 1, "array")
+        x.EnterContainer()
+        let value = x.ReadArray(len, t)
+        x.ExitContainer()
+        value
+
+    member private x.ReadNestedMap(len: int, t: Type) =
+        x.RequireAvailable(len, 2, "map")
+        x.EnterContainer()
+        let value = x.ReadMap(len, t)
+        x.ExitContainer()
+        value
+
     member x.Read t =
         match x.ReadByte() with
         // fixstr
-        | b when b ||| 0b00011111uy = 0b10111111uy -> b &&& 0b00011111uy |> int |> x.ReadString |> interpretStringAs t
-        | Format.Str8 -> x.ReadByte() |> int |> x.ReadString |> interpretStringAs t
-        | Format.Str16 -> x.ReadUInt16() |> int |> x.ReadString |> interpretStringAs t
-        | Format.Str32 -> x.ReadUInt32() |> int |> x.ReadString |> interpretStringAs t
+        | b when b ||| 0b00011111uy = 0b10111111uy ->
+            b &&& 0b00011111uy |> int |> x.ReadCheckedString |> interpretStringAs t
+        | Format.Str8 -> x.ReadByte() |> int |> x.ReadCheckedString |> interpretStringAs t
+        | Format.Str16 -> x.ReadUInt16() |> int |> x.ReadCheckedString |> interpretStringAs t
+        | Format.Str32 -> x.ReadUInt32() |> int |> x.ReadCheckedString |> interpretStringAs t
         // fixposnum
         | b when b ||| 0b01111111uy = 0b01111111uy -> interpretIntegerAs t b
         // fixnegnum
@@ -569,30 +808,30 @@ type Reader(data: byte[]) =
         | Format.True -> box true
         | Format.False -> box false
         // fixarr
-        | b when b ||| 0b00001111uy = 0b10011111uy -> x.ReadArray(b &&& 0b00001111uy |> int, t)
+        | b when b ||| 0b00001111uy = 0b10011111uy -> x.ReadNestedArray(b &&& 0b00001111uy |> int, t)
         | Format.Array16 ->
             let len = x.ReadUInt16() |> int
-            x.ReadArray(len, t)
+            x.ReadNestedArray(len, t)
         | Format.Array32 ->
             let len = x.ReadUInt32() |> int
-            x.ReadArray(len, t)
+            x.ReadNestedArray(len, t)
         // fixmap
-        | b when b ||| 0b00001111uy = 0b10001111uy -> x.ReadMap(b &&& 0b00001111uy |> int, t)
+        | b when b ||| 0b00001111uy = 0b10001111uy -> x.ReadNestedMap(b &&& 0b00001111uy |> int, t)
         | Format.Map16 ->
             let len = x.ReadUInt16() |> int
-            x.ReadMap(len, t)
+            x.ReadNestedMap(len, t)
         | Format.Map32 ->
             let len = x.ReadUInt32() |> int
-            x.ReadMap(len, t)
+            x.ReadNestedMap(len, t)
         | Format.Bin8 ->
             let len = x.ReadByte() |> int
-            x.ReadBin(len, t)
+            x.ReadCheckedBin(len, t)
         | Format.Bin16 ->
             let len = x.ReadUInt16() |> int
-            x.ReadBin(len, t)
+            x.ReadCheckedBin(len, t)
         | Format.Bin32 ->
             let len = x.ReadUInt32() |> int
-            x.ReadBin(len, t)
+            x.ReadCheckedBin(len, t)
         | b -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name (sprintf "format byte %d" b)
 
     /// Phase 783 — the named-refusal entry. Decodes `t` from the current
