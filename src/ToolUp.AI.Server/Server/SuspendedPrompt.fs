@@ -126,8 +126,11 @@ type PendingPromptRegistry<'Decision, 'Pending>() =
 /// `abandon` is run when the budget elapses — it is the caller's
 /// `TryAbandon`, which resolves the still-parked source so nothing is
 /// left holding a `TaskCompletionSource` nobody will ever complete.
-let awaitDecision (awaited: Task<'Decision>) (abandon: unit -> unit) : Async<'Decision option> = async {
-    let timeoutTask = Task.Delay SuspendedDispatchTimeoutMs
+///
+/// The budget is a parameter here and fixed at the shared constant in
+/// `awaitDecision` below, which is what production calls.
+let awaitDecisionWithin (budgetMs: int) (awaited: Task<'Decision>) (abandon: unit -> unit) : Async<'Decision option> = async {
+    let timeoutTask = Task.Delay budgetMs
     let! winner = Task.WhenAny(awaited :> Task, timeoutTask) |> Async.AwaitTask
 
     if winner = (awaited :> Task) then
@@ -137,3 +140,10 @@ let awaitDecision (awaited: Task<'Decision>) (abandon: unit -> unit) : Async<'De
         abandon ()
         return None
 }
+
+/// The same wait, on the one shared budget. This is what production
+/// calls; `awaitDecisionWithin` exists because the elapsed arm is the one
+/// arm of every suspended round trip a test suite cannot afford to
+/// exercise at 90 s, and an untested refusal path is the one that rots.
+let awaitDecision (awaited: Task<'Decision>) (abandon: unit -> unit) : Async<'Decision option> =
+    awaitDecisionWithin SuspendedDispatchTimeoutMs awaited abandon

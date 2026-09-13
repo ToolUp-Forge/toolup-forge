@@ -198,11 +198,11 @@ let private userRejectedMessage (toolName: string) =
         "The user was asked to approve this '%s' call and refused it. This is the user's own decision about a consequential action, not a permission and not a deployment setting — do not retry it, do not route the same action through another tool, and do not treat it as PermissionDenied. Tell the user plainly that you did not perform it, and ask what they would like instead."
         toolName
 
-let private unansweredMessage (toolName: string) =
+let private unansweredMessage (toolName: string) (budgetMs: int) =
     sprintf
         "The approval prompt for this '%s' call was not answered within %d seconds, so it did NOT run and nothing was changed. Do not retry it. Say plainly that the action is still outstanding and that it needs the user's confirmation."
         toolName
-        (SuspendedPrompt.SuspendedDispatchTimeoutMs / 1000)
+        (budgetMs / 1000)
 
 /// The refusal used when a policy has declared an invocation
 /// approval-requiring and there is no live turn to ask on.
@@ -277,7 +277,8 @@ let writeApprovalAudit
 /// With no policy composed it does one failed `GetService` and returns
 /// `ApprovalGranted`, so the turn is byte-for-byte what it was before
 /// this phase (GP 11).
-let requireApproval
+let requireApprovalWithin
+    (budgetMs: int)
     (ctx: HttpContext)
     (logger: ILogger)
     (toolName: string)
@@ -373,7 +374,8 @@ let requireApproval
                     )
 
                     let! answered =
-                        SuspendedPrompt.awaitDecision awaited (fun () -> registry.TryAbandon approvalId |> ignore)
+                        SuspendedPrompt.awaitDecisionWithin budgetMs awaited (fun () ->
+                            registry.TryAbandon approvalId |> ignore)
 
                     match answered with
                     | Some Approved -> return ApprovalGranted
@@ -385,9 +387,9 @@ let requireApproval
                         do! writeApprovalAudit store logger ApprovalExpiredEvent pending
 
                         logger.Warn
-                            $"[ToolApproval] no decision for tool '{toolName}' (approvalId={approvalId}, conversation={conversationId}) within {SuspendedPrompt.SuspendedDispatchTimeoutMs / 1000}s; the invocation was refused and did not run."
+                            $"[ToolApproval] no decision for tool '{toolName}' (approvalId={approvalId}, conversation={conversationId}) within {budgetMs / 1000}s; the invocation was refused and did not run."
 
-                        return ApprovalRefused(unansweredMessage toolName)
+                        return ApprovalRefused(unansweredMessage toolName budgetMs)
                 | _ ->
                     // No conversation stamped, no emitter, or no registry
                     // composed: there is nowhere to ask. See
@@ -398,3 +400,31 @@ let requireApproval
 
                     return ApprovalRefused(noPromptChannelMessage toolName)
     }
+
+/// Hold a tool invocation for the user's approval, on the one shared
+/// suspended-dispatch budget. This is what the agent loop calls.
+///
+/// `requireApprovalWithin` takes the budget as a parameter because the
+/// elapsed arm — an approval prompt nobody answers — is the one arm of
+/// this gate a test suite cannot afford to exercise at 90 s, and an
+/// untested refusal path is the one that rots. Production has exactly
+/// one value for it, and it is the value every other suspended dispatch
+/// in the tier waits on.
+let requireApproval
+    (ctx: HttpContext)
+    (logger: ILogger)
+    (toolName: string)
+    (sourceModule: string)
+    (argsJson: string)
+    (activeModule: string option)
+    (activePage: string option)
+    : Async<ApprovalOutcome> =
+    requireApprovalWithin
+        SuspendedPrompt.SuspendedDispatchTimeoutMs
+        ctx
+        logger
+        toolName
+        sourceModule
+        argsJson
+        activeModule
+        activePage
