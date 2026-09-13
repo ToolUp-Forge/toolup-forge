@@ -449,6 +449,38 @@ Every decision writes a `ModuleEvent` under `SourceModule = "_platform.ai.consen
 
 The POST carries **only** a consent id and a decision token. The conversation, the target module and the user are read from the server's own pending-request record, so a client has nothing to lie about.
 
+## Cross-module observability (Phase 36.E)
+
+The four gates above record every **refusal** — an RBAC denial, an attempt on inert authority, a consent decision. None of them records a read that was **allowed**. So "what did the agent actually read out of modules the user never named" had no answer, and neither did the question a user asks after clicking *Allow*. This closes both halves with one stream.
+
+### The row — `AuditEvent.CrossModuleRead`
+
+Every invocation of a `_platform.ai.*` tool writes exactly one `CrossModuleRead` audit row, whatever its outcome. Fields: `ConversationId` / `UserId` / `SourceConvActiveModule` / `TargetModule` / `TargetModules` / `ToolName` / `ComponentId` / `QueryKey` / `LatencyMs` / `ResultBytes` / `Allowed` / `Outcome`.
+
+**PII envelope.** Identifiers and a query discriminator. Never the tool arguments (model-authored and unbounded), never any of the data the read returned. `ResultBytes` is the *size* of the rendered result — the one thing about the body an operator needs in order to see an exfiltration-shaped read.
+
+**Why it is a typed union case and not a `_platform.ai.*` `ModuleEvent`.** Phase 45's `ToolAllowlistDenied` and this phase's own consent rows write raw `ModuleEvent`s under their own `SourceModule`, and that reads like the precedent to follow. It cannot be: the Phase 9g replicator admits an event only when `SourceModule = "_platform.audit"`, so a row minted that way reaches no external sink. A cross-module read is exactly the thing a compliance reviewer expects to find in the deploying organisation's own SIEM rather than only in this deployment's store, so the row is typed — which makes it replicate with **no sink-code change** and makes it queryable through `IAuditLog.GetAuditTrail` like every other audit row.
+
+**One row per invocation, by construction.** Emission is a decorator around each executor (`AICrossModuleAudit.createAuditedTool`), not a call threaded through its body. The six executors have between four and eight early returns each; a hand-threaded emission is a list that loses a row silently every time a branch is added. A seventh tool cannot skip the trail — the registration shape requires it to declare what it reads.
+
+**`TargetModule` is an option, and that is the honest shape.** `Some m` exactly when the read resolved to one module. `_platform.ai.query_entity` names an entity *type*, and the data catalogue may attribute that type to no producer at all or to several — both are real states that the 36.C and 36.D gates already document. `TargetModules` carries the full set either way, so nothing is lost; the option exists so that the grouping key is never a guess, nor a synthesised join of several module names. The rollup labels the empty case `(unattributed)`.
+
+**`LatencyMs` is the whole invocation, gates included.** A read that suspended on a consent prompt carries the time the user took to answer, because from the conversation's point of view that *is* how long the read took. Segment on `Outcome` when the distinction matters. Separating gate-wait from store time would need per-invocation state threaded through a request context that a parallel tool batch shares, which is a substrate change rather than a line of arithmetic.
+
+**The `ComponentId` is the TOOL's** — `ComponentId.forTool ToolName`, Phase 283's tool slot — so a trail joins the `component_id` telemetry dimension on a key that survives a rename, with nothing resolved at run time. The **target module's** stable id is deliberately not carried: the module → `ComponentId` map lives on `ServerApp.ModuleComponentIds`, which is compose-time and registered in no DI container, so a tool executor cannot reach it. Deriving one from the module name instead would be wrong for exactly the modules that declared an explicit id — the case Phase 283 exists to serve — and a correlation key that is silently wrong is worse than one that is absent.
+
+**`SourceConvActiveModule`** is stamped onto the agent loop's background context by `AIAssistantHandler` from `AIMessageRequest.ActiveModule`; it arrives on the request body, so it is not among the middleware-resolved items the background context copies forward. `None` when the user was on no module's page, which is an ordinary state and not a defect.
+
+### Reading the data — `/dev/ai-cross-module`
+
+Gated on `ServerConfig.EnableDevEndpoints` (no `#if DEBUG` half — this tier carries no compile-time gates), mounted by `composeAI` beside `/dev/ai-fastpath`, `/dev/ai-latency` and `/dev/ai-allowlist`, and reported over the same 60-minute window so the four are comparable.
+
+The payload groups by `(targetModule, toolName)` — *"the agent read Payroll"* and *"the agent read Payroll through `get_latest_result`"* are different operator facts — and each group carries `Count`, `AllowedCount`, `DeniedCount`, `DenialRate`, `P50/P95/P99LatencyMs`, `AllowedResultBytes`, and the refusal vocabulary broken out, so a module whose opt-in was never declared looks different from one whose users keep saying no. Top level adds window totals, a whole-window denial rate, `DistinctTargetModules`, `ByOutcome`, and a capped `RecentReads` tail.
+
+**Read path is `IAuditLog.GetAuditTrail`, not a ring buffer.** The rows are typed audit events, and `GetAuditTrail` takes the window and the event type natively, so the bounded read is one call. A ring would be a second source of truth for data the store already holds, and would lose everything on restart — which is the moment an operator is most likely to be reading this. **Caller-scope only (GP 4):** the trail is read under the caller's resolved scope, so another team's reads are structurally unreachable rather than filtered out afterwards.
+
+The rolling-window arithmetic the four rollups share lives in `AIDiagnosticsWindow` (`internal`); `/dev/auth-denials` (Phase 120) is deliberately not a client of it — different assembly, different read path, and it computes no percentiles.
+
 ## Module tools
 
 Modules declare tools via `AIToolDefinition` (in core, `src/ToolUp.Platform.Core/Shared/Types/ModuleAITypes.fs`). The declaration has no execution logic:

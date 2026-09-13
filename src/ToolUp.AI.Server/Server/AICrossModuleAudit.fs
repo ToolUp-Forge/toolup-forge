@@ -79,6 +79,8 @@ module ReadTarget =
     /// The two enumeration tools: no module read, no discriminator.
     let enumeration: ReadTarget = { Modules = []; QueryKey = None }
 
+    /// The three tools that name a module outright, plus the two that
+    /// also carry a discriminator within it.
     let ofModule (moduleName: string option) (queryKey: string option) : ReadTarget = {
         Modules = moduleName |> Option.toList
         QueryKey = queryKey

@@ -48,6 +48,9 @@ open ToolUp.Platform
 // caller's resolved scope, so another team's cross-module reads are
 // structurally unreachable rather than filtered out afterwards.
 
+/// The wire `EventType` discriminator the trail is persisted under —
+/// equal to `AuditEvent.eventTypeName (CrossModuleRead _)`, named here so
+/// the read side and any operator query cut on one literal.
 [<Literal>]
 let EventType = "CrossModuleRead"
 
@@ -75,18 +78,41 @@ let private indentedJsonOptions =
 // Hand-shaped DTO of primitives + lists, matching `/dev/ai-latency`: the
 // report is read by a human or a dashboard, not round-tripped by Fable.
 
-type OutcomeCount = { Outcome: string; Count: int }
-
-type CrossModuleGroup = {
-    TargetModule: string
-    ToolName: string
+/// How many invocations ended in one outcome token.
+type OutcomeCount = {
+    /// The outcome token, in the tool family's own vocabulary — `"ok"`,
+    /// or the `error` discriminator a refusal rendered to the model.
+    Outcome: string
+    /// How many invocations carried it.
     Count: int
+}
+
+/// One `(targetModule, toolName)` bucket. The pair is the grouping key
+/// rather than the module alone because "the agent read Payroll" and
+/// "the agent read Payroll through `get_latest_result`" are different
+/// operator facts.
+type CrossModuleGroup = {
+    /// The module read, or `UnattributedTargetLabel` when the read
+    /// resolved to no single one.
+    TargetModule: string
+    /// The `_platform.ai.*` tool that read it.
+    ToolName: string
+    /// Invocations in this group over the window.
+    Count: int
+    /// Of those, how many reached the data.
     AllowedCount: int
+    /// Of those, how many were refused — by any of the four gates, or by
+    /// an absent store.
     DeniedCount: int
     /// Refusals over invocations in this group, `0.0` when none.
     DenialRate: float
+    /// Median whole-invocation latency, gates included (see
+    /// `CrossModuleReadPayload.LatencyMs` for why that is the
+    /// measurement).
     P50LatencyMs: float
+    /// 95th-percentile whole-invocation latency, nearest-rank.
     P95LatencyMs: float
+    /// 99th-percentile whole-invocation latency, nearest-rank.
     P99LatencyMs: float
     /// Bytes returned by the ALLOWED reads in this group. A refusal
     /// renders a small body, so summing every row would flatter a group
@@ -104,30 +130,53 @@ type CrossModuleGroup = {
 /// "recent" means here — rather than duplicating a clock into the payload
 /// so that two timestamps could disagree.
 type RecentRead = {
+    /// The `_platform.ai.*` tool invoked.
     ToolName: string
+    /// The module read, or `UnattributedTargetLabel`.
     TargetModule: string
+    /// The module the conversation was active in, or `""` when the user
+    /// was on no module's page.
     SourceConvActiveModule: string
+    /// The read's discriminator within the target, or `""` when it had
+    /// none.
     QueryKey: string
+    /// The outcome token — `"ok"`, or the refusal's own discriminator.
     Outcome: string
+    /// Did the read reach the data.
     Allowed: bool
+    /// Whole-invocation wall clock, gates included.
     LatencyMs: float
+    /// Size of the rendered result in bytes, refusals included.
     ResultBytes: int
 }
 
+/// The `/dev/ai-cross-module` payload.
 type CrossModuleReport = {
+    /// When the report was built.
     GeneratedAt: DateTime
+    /// The caller's resolved scope — the only scope the trail was read
+    /// from (GP 4).
     ScopeId: string
+    /// The rolling window, in minutes. Shared with the three sibling
+    /// AI-tier `/dev/*` rollups so the four are comparable.
     WindowMinutes: int
+    /// Every `_platform.ai.*` invocation in the window.
     TotalReadsInWindow: int
+    /// Of those, how many reached the data.
     AllowedInWindow: int
+    /// Of those, how many were refused.
     DeniedInWindow: int
     /// Refusals over invocations across the whole window.
     DenialRate: float
     /// Distinct modules reached in the window, excluding the
     /// unattributed bucket.
     DistinctTargetModules: int
+    /// One entry per `(targetModule, toolName)` pair, busiest first.
     ByTargetAndTool: CrossModuleGroup list
+    /// The whole window's outcome vocabulary, biggest first.
     ByOutcome: OutcomeCount list
+    /// A capped tail of the most recent reads, for eyeballing what the
+    /// agent has just been doing.
     RecentReads: RecentRead list
 }
 
