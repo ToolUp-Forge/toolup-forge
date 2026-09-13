@@ -85,7 +85,7 @@ type ClientToolDispatchRegistry() =
 
 /// Phase 6g.A: serialiser for the result payload. STJ with
 /// `FableConverters` matches the wire format the rest of the AI
-/// surface uses (Fable.Remoting client serialises with the same
+/// surface uses (ToolUp.Remoting client serialises with the same
 /// converter set on the way in, AIStreamEvent rendering uses it on the
 /// way out — see `SSEHandler.jsonOptions`).
 let private resultJsonOptions = FableConverters.create ()

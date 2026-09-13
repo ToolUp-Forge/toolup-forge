@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Offline Server — the offline-sync replay handler: the IOfflineSyncApi Fable.Remoting handler routing queued mutations through IEntityStore.Save with last-writer-wins conflict detection, per-entity-type replay adapters, and opt-in audit emission stamped with the mutation's original enqueue time.</Description>
+        <Description>ToolUp.Offline Server — the offline-sync replay handler: the IOfflineSyncApi ToolUp.Remoting handler routing queued mutations through IEntityStore.Save with last-writer-wins conflict detection, per-entity-type replay adapters, and opt-in audit emission stamped with the mutation's original enqueue time.</Description>
         <PackageTags>fsharp;sdk;server;offline;pwa;sync</PackageTags>
     </PropertyGroup>
     <ItemGroup>

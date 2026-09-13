@@ -309,7 +309,7 @@ let private isComposed<'svc> (ctx: HttpContext) : bool =
 let SnapshotMissingMessage =
     "This deployment did not record a composition snapshot at startup. The inspector is composed by ServerApp.run; a host composed through the lower-level compose entry point registers no snapshot and has nothing to inspect."
 
-/// Build the `ICompositionInspectorApi` Fable.Remoting handler.
+/// Build the `ICompositionInspectorApi` ToolUp.Remoting handler.
 ///
 /// The snapshot is resolved per request rather than captured in the
 /// closure so a test can register one after the handler factory is

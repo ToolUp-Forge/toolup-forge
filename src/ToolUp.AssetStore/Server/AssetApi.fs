@@ -5,7 +5,7 @@ namespace ToolUp.AssetStore
 
 open ToolUp.Platform // 0.5.0 — forge-native auth attributes
 
-/// Fable.Remoting contract for the asset-store API. The
+/// ToolUp.Remoting contract for the asset-store API. The
 /// multipart upload endpoint (`/api/assets/upload`) is the
 /// canonical path for browser file uploads — see
 /// `AssetUploadHandler.uploadHandler` — because raw
@@ -52,7 +52,7 @@ type IAssetApi = {
 
 module AssetApi =
     /// Standard route prefix. Matches the convention used by
-    /// every other Fable.Remoting handler in the SDK.
+    /// every other ToolUp.Remoting handler in the SDK.
     [<Literal>]
     let routeBuilderPrefix = "/api/assets"
 

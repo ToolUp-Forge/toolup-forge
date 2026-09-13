@@ -45,7 +45,7 @@ probe. A deployment that doesn't host media pays nothing.
 | `GET /api/media/stream/{mediaId}` | Scoped (authenticated) stream — honours `Range` → `206` / `416`. |
 | `GET /media/signed/{mediaId}?token=…` | Scope-signed public stream — verifies HMAC signature + expiry + scope before serving. |
 | `GET /api/media/hls/{mediaId}/{file}` | HLS master manifest / variant / segment (present when a transcoder ran). |
-| `POST/GET /api/media/*` | Fable.Remoting `IMediaApi` — `GetMedia` / `ListMedia` / `DeleteMedia` / `GetSignedUrl`, plus the Phase 469 chunk endpoints `BeginUpload` / `AppendChunk` / `CommitUpload` / `AbortUpload`. |
+| `POST/GET /api/media/*` | ToolUp.Remoting `IMediaApi` — `GetMedia` / `ListMedia` / `DeleteMedia` / `GetSignedUrl`, plus the Phase 469 chunk endpoints `BeginUpload` / `AppendChunk` / `CommitUpload` / `AbortUpload`. |
 
 ### Range serving (`206` / `416`)
 
@@ -111,7 +111,7 @@ with the same length, is a no-op** — which is what makes the client loop
 below safe to retry after a request whose response it never saw.
 
 ```fsharp
-// `api` is the Fable.Remoting `IMediaApi` proxy.
+// `api` is the ToolUp.Remoting `IMediaApi` proxy.
 let uploadResumable (api: IMediaApi) (bytes: byte[]) (filename: string) (mimeType: string) = async {
     match! api.BeginUpload(filename, mimeType, int64 bytes.Length, None) with
     | Error e -> return Error e

@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── DataIngestionApi (Fable.Remoting wire surface) ──────────────
+// ─── DataIngestionApi (ToolUp.Remoting wire surface) ──────────────
 //
 // Client-callable API for managing data sources, triggering refreshes,
 // and inspecting ingestion history through the SDK's data-ingestion

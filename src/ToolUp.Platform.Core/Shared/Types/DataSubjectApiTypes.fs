@@ -6,7 +6,7 @@ module ToolUp.Platform.DataSubjectRequestApi
 open System
 open ToolUp.Platform
 
-// ─── Phase 9h — IDataSubjectRequestApi (Fable.Remoting contract) ────
+// ─── Phase 9h — IDataSubjectRequestApi (ToolUp.Remoting contract) ────
 //
 // Admin-facing API. Owner / Admin gated at the handler. Two-phase
 // erasure (preview → confirm) so the admin can review what will be
@@ -16,7 +16,7 @@ open ToolUp.Platform
 //
 // Contract lives in Core so the client-tier `DataSubjectRequestAdminUI`
 // module references the same record shape the server registers via
-// `Fable.Remoting`. The server-side handler factory (which depends on
+// `ToolUp.Remoting`. The server-side handler factory (which depends on
 // `IDataExporter` / `IErasureHandler` extension points) stays in
 // `ToolUp.Platform.Server\Server\DataSubjectRequestApiHandler.fs`.
 
@@ -93,7 +93,7 @@ module DsrNotifications =
     [<Literal>]
     let ExportProgressKey = "_sdk.DataSubjectRequests.ExportProgress"
 
-/// Fable.Remoting contract surface — every method returns
+/// ToolUp.Remoting contract surface — every method returns
 /// `Async<Result<_, string>>` per the SDK convention. **Platform-Admin
 /// only**: every method carries `[<RequiresRole "PlatformAdmin">]` (the
 /// classifier rejects non-admins at dispatch) AND

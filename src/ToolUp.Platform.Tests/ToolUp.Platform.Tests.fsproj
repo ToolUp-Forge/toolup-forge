@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -397,6 +397,14 @@
              (it composes 552's verdicts) and after the AI registry surface it
              gates. -->
         <Compile Include="InProcess\GrantGovernanceTests.fs" />
+        <!-- Phase 36.C — the per-module AI-queryability opt-in: the third
+             gate on the `_platform.ai.*` family, asking whether a module's
+             author put its data on the AI surface at all (default OFF),
+             beside the two caller-side gates 36.A and 730 already applied.
+             After GrantGovernanceTests, whose ordering it composes with
+             (PermissionDenied is still answered first), and after the AI
+             registry surface it gates. -->
+        <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
@@ -1008,6 +1016,10 @@
         <Compile Include="InProcess\CrossIndexErasureConformanceTests.fs" />
         <Compile Include="InProcess\SyntheticClientToolAuthorizerTests.fs" />
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
+        <!-- Phase 47 - the /dev/ai-allowlist denial rollup (shared with the
+             production-safe IAIDenialRollupProbe seam) + the sustained
+             denial-rate alert monitor. -->
+        <Compile Include="InProcess\AIAllowlistDiagnosticsTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <!-- Phase 113 — action-authorizer: policy matching, the

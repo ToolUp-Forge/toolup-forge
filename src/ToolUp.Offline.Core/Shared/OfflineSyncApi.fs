@@ -37,7 +37,7 @@ type SyncResult = {
 }
 
 /// `FetchCurrent` request payload — a tagged record rather than a
-/// tuple so Fable.Remoting serialises the two arguments as named wire
+/// tuple so ToolUp.Remoting serialises the two arguments as named wire
 /// fields (the `RescheduleRequest` convention in `ISchedulingApi`).
 /// Record fields cannot carry named tuple elements in F#, so a bare
 /// `entityType: string * entityId: string` is not expressible here.

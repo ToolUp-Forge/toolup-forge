@@ -16,7 +16,7 @@ open ToolUp.Platform.TeamManagement
 /// and future-proofs direct Fable consumers.
 let private eventJsonOptions = FableConverters.create ()
 
-/// Build the `IFeatureFlagApi` Fable.Remoting handler. Resolves
+/// Build the `IFeatureFlagApi` ToolUp.Remoting handler. Resolves
 /// `FlagEvaluator`, `IFeatureFlagStore`, and `AccessContext` lazily
 /// from DI per request (same pattern as `ConfigHandler`,
 /// `AISettingsHandler`, etc.).

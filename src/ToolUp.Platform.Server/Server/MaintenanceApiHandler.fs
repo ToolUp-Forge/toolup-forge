@@ -6,7 +6,7 @@ open ToolUp.Platform.TeamManagement
 
 // ─── MaintenanceApi handler factory (Phase 9f) ───────────────────
 //
-// Builds the `MaintenanceApi` Fable.Remoting handler. Owner / Admin
+// Builds the `MaintenanceApi` ToolUp.Remoting handler. Owner / Admin
 // gated in `Team` / `MultiTeam` mode (mirrors `JobApiHandler`'s
 // write gate). The two concrete stores (`PersistentEventStore`,
 // `BlobJobStore`) are passed in as constructor closures so this

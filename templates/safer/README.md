@@ -1,6 +1,6 @@
 # ToolUp.SAFER — minimal F# full-stack starter
 
-A minimal F# full-stack starter for the [ToolUp Platform SDK](https://github.com/ToolUp-Forge/toolup-forge), with thanks to the [Compositional IT](https://safe-stack.github.io/) team — SAFER mirrors the SAFE Stack get-started experience for F# developers arriving from that template, and demonstrates the in-tree improvements ToolUp brings to the Elmish + Fable.Remoting layers.
+A minimal F# full-stack starter for the [ToolUp Platform SDK](https://github.com/ToolUp-Forge/toolup-forge), with thanks to the [Compositional IT](https://safe-stack.github.io/) team — SAFER mirrors the SAFE Stack get-started experience for F# developers arriving from that template, and demonstrates the in-tree improvements ToolUp brings to its MVU and RPC layers, ToolUp.Elmish and ToolUp.Remoting.
 
 > **Not affiliated with [SAFEr.Template](https://github.com/Dzoukr/SAFEr.Template)**, Dzoukr's independent SAFE Stack variant on NuGet — different scope, different stack assumptions, different maintainer. This template is published as `ToolUp.Templates.SAFER` and installed as `dotnet new toolup-safer`.
 
@@ -47,9 +47,9 @@ If you've used SAFE Stack, these are the patterns that changed:
 | SAFE Stack | SAFER (ToolUp.Platform) |
 |---|---|
 | Saturn `application { ... }` DSL | `ServerApp.empty \|> ServerApp.withConfig config \|> ServerApp.withLogger logger \|> ServerApp.run` |
-| `Fable.Elmish` PackageReference | Folded into `ToolUp.Platform.Client` (0.4.3 — namespace `Elmish` preserved) |
-| `Fable.Remoting.{Client,Server,Json,Giraffe}` PackageReferences | Folded into `ToolUp.Platform.{Client,Server}` (0.4.4 — namespace `Fable.Remoting.*` preserved) |
-| Manual JSON converter wiring on the server | `FableJsonConverter` ships inside `ToolUp.Platform.Server`; nothing to register |
+| `Fable.Elmish` PackageReference | Replaced by `ToolUp.Elmish`, which ships inside `ToolUp.Platform.Client` — no PackageReference of its own |
+| `Fable.Remoting.{Client,Server,Json,Giraffe}` PackageReferences | Replaced by `ToolUp.Remoting.{Client,Server,Json,Giraffe}`, which ship inside `ToolUp.Platform.{Client,Server}` — no PackageReferences of their own |
+| Manual JSON converter wiring on the server | The `ToolUp.Remoting.Json` converter set ships inside `ToolUp.Platform.Server`; nothing to register |
 | Manual `RemotingBodyNormalizationMiddleware` registration | Folded into the dispatcher itself; `unit -> Async<T>` API methods just work |
 | `Cmd.OfAsync.either api.X arg ok err` | `Cmd.OfRemoting.call api.X arg ok err` |
 | Transient transport-failure retry boilerplate | `Cmd.OfRemoting.callWithRetry retryPolicy api.X arg ok err` with `Cmd.RetryPolicy { MaxAttempts; InitialDelayMs; BackoffMultiplier; MaxDelayMs }` (retry-as-data per GP 12 rule 3) |
@@ -91,7 +91,7 @@ Three lines of code under the imports. `Client.run config modules` is the SDK sh
 
 ## What the SDK shell handles on your behalf
 
-SAFER's user code touches the **consumer-facing** primitives: `Cmd.OfRemoting`, optimistic state, `Cmd.ofEffect` for subscriptions, typed error DUs. The **shell-level** primitives — the things that distinguish the in-tree Elmish fork from upstream Fable.Elmish — are exercised by `Client.run` on your behalf:
+SAFER's user code touches the **consumer-facing** primitives: `Cmd.OfRemoting`, optimistic state, `Cmd.ofEffect` for subscriptions, typed error DUs. The **shell-level** primitives — the things that distinguish ToolUp.Elmish from the upstream Fable.Elmish it was forked from — are exercised by `Client.run` on your behalf:
 
 - **`IDispatcher<'msg>`** with the `IsActive` teardown signal — the dispatch parameter your `update` receives is backed by an `IDispatcher`. The SDK shell flips `IsActive` to `false` on HMR / page-leave; background callbacks (the polling timer, future SSE subscriptions) no-op cleanly instead of dispatching against a dead loop.
 - **`EffectHandle.programLifetime`** — when you eventually wire SSE (see "How to extend"), the shell's effect registry disposes your subscription on hot-reload automatically. No more zombie `EventSource` in DevTools.

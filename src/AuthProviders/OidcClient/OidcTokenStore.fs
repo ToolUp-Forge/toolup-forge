@@ -9,7 +9,7 @@ module ToolUp.AuthProviders.Oidc.OidcTokenStore
 //
 // • Bearer token — short-lived (typical 15 min – 1 h). Stored via
 //   `UserSession.setAuthToken` which is in the core SDK because
-//   `UserSession.withRequestHeaders` attaches it to every Fable.Remoting
+//   `UserSession.withRequestHeaders` attaches it to every ToolUp.Remoting
 //   request. That storage lives in `localStorage` under
 //   `"toolup-auth-token"` — shared state owned by the SDK, not the
 //   OIDC companion.
@@ -113,7 +113,7 @@ let readCorrelationId () : string option =
 
 /// Persist both tokens after a successful token-endpoint exchange.
 /// The bearer token flows through the core `UserSession` so
-/// Fable.Remoting calls pick it up; the refresh token is ours alone.
+/// ToolUp.Remoting calls pick it up; the refresh token is ours alone.
 ///
 /// `bearerToken` is whichever token the deployment's `BearerTokenKind`
 /// selected — the caller has already decided (see

@@ -5,7 +5,7 @@ namespace ToolUp.MediaLibrary
 
 open ToolUp.Platform // 0.5.0 — forge-native auth + audit attributes
 
-// ─── Phase 88 — IMediaApi (Fable.Remoting contract) ───────────────────
+// ─── Phase 88 — IMediaApi (ToolUp.Remoting contract) ───────────────────
 //
 // The metadata + management surface a client uses alongside the raw
 // range-serving endpoints. Identifiers transit as `string` over the wire

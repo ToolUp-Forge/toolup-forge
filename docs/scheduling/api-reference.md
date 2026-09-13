@@ -295,7 +295,7 @@ There is **no `ToolUp.Scheduling.Client` package** — no built-in calendar UI, 
 The shared types and `ISchedulingApi` live in `ToolUp.Scheduling.Core`, which is Fable-compilable, so a consumer builds the proxy itself with the standard ToolUp.Remoting client and `SchedulingApi.routeBuilder`:
 
 ```fsharp skip=fragment
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Remoting.Client
 open ToolUp.Scheduling.SchedulingApi
 

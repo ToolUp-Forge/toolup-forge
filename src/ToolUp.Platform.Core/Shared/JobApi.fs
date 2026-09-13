@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── JobApi (Fable.Remoting wire surface) ────────────────────────
+// ─── JobApi (ToolUp.Remoting wire surface) ────────────────────────
 //
 // Client-callable API for scheduling, listing, cancelling, and
 // triggering jobs through the SDK's background-job substrate.

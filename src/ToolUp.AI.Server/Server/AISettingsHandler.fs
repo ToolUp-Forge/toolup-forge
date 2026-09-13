@@ -77,7 +77,7 @@ let private clearActiveRoute (p: ProviderProfile) : ProviderProfile = {
 
 // ─── Handler factory ─────────────────────────────────────────────
 
-/// Build the AISettingsApi Fable.Remoting handler. Resolves
+/// Build the AISettingsApi ToolUp.Remoting handler. Resolves
 /// `ISecretStore` from DI per request (same pattern as
 /// `AIAssistantHandler.aiAssistantApi`); `IAIProviderFactory` and the
 /// canonical platform `IProviderProfile` store are passed in at

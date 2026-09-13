@@ -9,7 +9,7 @@ open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.FormValidator
 open ToolUp.Forms.IFormStore
 
-// ─── Phase 21b — Public-form Fable.Remoting handler ────────────────
+// ─── Phase 21b — Public-form ToolUp.Remoting handler ────────────────
 //
 // Per-request `IPublicFormApi` builder. Resolves DI dependencies
 // (`IShareTokenStore`, `IFormStore`, `IAuditLog`,

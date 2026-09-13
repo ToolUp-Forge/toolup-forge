@@ -7,7 +7,7 @@ open ToolUp.Platform // 0.4.1 — forge-native auth attributes
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 
-// ─── Phase 21b — Public-form Fable.Remoting wire contract ──────────
+// ─── Phase 21b — Public-form ToolUp.Remoting wire contract ──────────
 //
 // Surface served at `/api/public/forms/...` — gated by share-token
 // validation against `IShareTokenStore` instead of by `AccessContext`.
@@ -59,7 +59,7 @@ type SubmitWithTokenRequest = {
 }
 
 /// `IPublicFormApi` — anonymous, token-gated public surface. Routed
-/// at `/api/public/forms/<MethodName>` by Fable.Remoting via
+/// at `/api/public/forms/<MethodName>` by ToolUp.Remoting via
 /// `routeBuilder` below.
 type IPublicFormApi = {
     /// Resolve the schema referenced by a valid token. Returns ONLY

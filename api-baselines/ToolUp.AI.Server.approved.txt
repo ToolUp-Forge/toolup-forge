@@ -29,6 +29,24 @@ ToolUp.AI.AIAgentEngine+ToolInvocationError+UnknownTool (class)
 ToolUp.AI.AIAgentEngine+ToolInvocationError+UnknownTool.toolName : System.String { get }
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule (class)
 ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toToolResultContent(ToolUp.AI.AIAgentEngine+ToolInvocationError) : System.String
+ToolUp.AI.AIAllowlistDiagnosticsHandler (class)
+ToolUp.AI.AIAllowlistDiagnosticsHandler.DenialEventType : System.String (literal)
+ToolUp.AI.AIAllowlistDiagnosticsHandler.NoModuleLabel : System.String (literal)
+ToolUp.AI.AIAllowlistDiagnosticsHandler.SourceModule : System.String (literal)
+ToolUp.AI.AIAllowlistDiagnosticsHandler.computeRollup(System.String, System.DateTime, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload, System.String, System.DateTime]]) : ToolUp.Platform.AIDenialRollup
+ToolUp.AI.AIAllowlistDiagnosticsHandler.moduleLabel(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
+ToolUp.AI.AIAllowlistDiagnosticsHandler.probe(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore]]) : ToolUp.Platform.IAIDenialRollupProbe
+ToolUp.AI.AIAllowlistDiagnosticsHandler.rollupFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AIDenialRollup]
+ToolUp.AI.AIAllowlistDiagnosticsHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler.sanitiseReason(System.String) : System.String
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload (class)
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Guid, System.Guid)
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.ActivePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.ConversationId : System.Guid { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.Reason : System.String { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.TaskId : System.Guid { get }
+ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload.ToolName : System.String { get }
 ToolUp.AI.AIAssistantHandler (class)
 ToolUp.AI.AIAssistantHandler.aiAssistantApi(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.AI.ModuleAIContext], ToolUp.Platform.SSEConnectionManager, Microsoft.AspNetCore.Http.HttpContext) : System.Tuple`2[ToolUp.AI.AIAssistantApi, ToolUp.AI.AIAssistantHandler+AIStreamingApi]
 ToolUp.AI.AIAssistantHandler+AIStreamingApi (class)
@@ -48,10 +66,11 @@ ToolUp.AI.AICompose (class)
 ToolUp.AI.AICompose.composeAI(ToolUp.AI.AICompose+AIServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withAI(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose+AIServerApp (class)
-ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext])
+ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy])
 ToolUp.AI.AICompose+AIServerApp.AIConfig : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig] { get }
 ToolUp.AI.AICompose+AIServerApp.AIProviderFactory : ToolUp.AI.IAIProviderFactory { get }
 ToolUp.AI.AICompose+AIServerApp.Base : ToolUp.Platform.ServerApp { get }
+ToolUp.AI.AICompose+AIServerApp.DenialRateAlert : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy] { get }
 ToolUp.AI.AICompose+AIServerApp.ModuleAIContexts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext] { get }
 ToolUp.AI.AICompose+AIServerApp.PlatformKeyStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore] { get }
 ToolUp.AI.AICompose+AIServerApp.PlatformProviders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider] { get }
@@ -71,6 +90,7 @@ ToolUp.AI.AICompose+AIServerAppModule.withBackfillMissedTicks(System.Boolean, To
 ToolUp.AI.AICompose+AIServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withCspContributor(ToolUp.Platform.ICspContributor, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withDenialRateAlert(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEntityOutbox(System.Boolean, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
@@ -94,6 +114,21 @@ ToolUp.AI.AICompose+AIServerAppModule.withScheduledJob(ToolUp.Platform.Scheduled
 ToolUp.AI.AICompose+AIServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withUserDirectory(ToolUp.Platform.IUserDirectory, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AIDenialRateMonitor (class)
+ToolUp.AI.AIDenialRateMonitor.alertText(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, System.String, System.String) : System.String
+ToolUp.AI.AIDenialRateMonitor.observeAndAlert(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy (class)
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy..ctor(System.Int32, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy.AlertScopeId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy.Cooldown : System.TimeSpan { get }
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy.Threshold : System.Int32 { get }
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy.Window : System.TimeSpan { get }
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicyModule (class)
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicyModule.defaults : ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy { get }
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor (class)
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor..ctor(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor.Observe(System.String) : System.Boolean
+ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor.Policy : ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy { get }
 ToolUp.AI.AILatencyHandler (class)
 ToolUp.AI.AILatencyHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.AI.AILatencyMetrics (class)
@@ -176,6 +211,7 @@ ToolUp.AI.AIToolRegistry.isSdkReservedToolSource(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolPermittedFor(ToolUp.Platform.AccessContext, ToolUp.Platform.AIToolDefinition) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolSourcePermittedFor(ToolUp.Platform.AccessContext, System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolVisibleOnSurface(ToolUp.AI.AISurface, ToolUp.Platform.AIToolDefinition) : System.Boolean
+ToolUp.AI.AIToolRegistry.moduleAIQueryGate(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]
 ToolUp.AI.AIToolRegistry.moduleGrantGate(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]
 ToolUp.AI.AIToolRegistry.reconstructAccessContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AccessContext
 ToolUp.AI.AIToolRegistry.recordUnauthorizedToolDenial(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AccessContext, System.String, System.String, System.String) : System.Void

@@ -14,7 +14,7 @@ open ToolUp.Platform
 /// `UploadRequest.create`, hands to `IAssetStore.Upload`, and
 /// returns the `AssetRecord` JSON (or a typed error JSON).
 ///
-/// Why not Fable.Remoting? Because raw `byte[]` payloads round-
+/// Why not ToolUp.Remoting? Because raw `byte[]` payloads round-
 /// tripped through MsgPack are awkward for browser file inputs
 /// — Feliz's `<input type="file">` exposes a `File` blob the
 /// browser will chunk-encode for us if we use a `FormData` POST.

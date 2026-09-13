@@ -83,6 +83,52 @@
     <WarningsAsErrors>$(WarningsAsErrors);FS0025</WarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    Phase 261 (2026-09-12) — XML documentation files are EMITTED, repo-wide.
+
+    WHY. The 1.0 surface should be the DOCUMENTED surface: an adopter meets
+    the SDK through hover-docs and the generated reference, not the source.
+    Two things follow from emitting the file, and only the first is the
+    obvious one:
+
+      * the `.xml` sidecar is packed beside each `lib/net10.0/*.dll`, so a
+        consumer's IDE has tooltips at all. Without it, every `///` this
+        repo already carries is invisible the moment the package crosses a
+        project boundary — the docs exist and reach nobody.
+      * it is the only machine-readable statement of WHICH members carry a
+        doc comment, which is what the Phase 261 coverage gate measures.
+        See `docs/platform/doc-coverage.md`.
+
+    SCOPE — repo-wide, and deliberately not conditioned on `IsPackable`.
+    `Directory.Build.props` is imported BEFORE the project body, so
+    `$(IsPackable)` is not yet set here and a condition on it would read as
+    empty for every project. The three projects that genuinely must not
+    emit one already say so in their own `.fsproj` — which is evaluated
+    after this file and therefore wins:
+      • docs-snippets/ToolUp.DocSnippets.fsproj
+      • src/Hosts/Docker/ToolUp.Hosts.Docker.fsproj
+      • templates/safer-pack/ToolUp.Templates.SAFER.fsproj
+    Everything else emitting a sidecar is harmless: a test project's
+    unused `.xml` costs a few hundred KB of `obj/` and is not packed
+    (`IsPackable=false` ships no lib/).
+
+    WARNINGS. F# has NO equivalent of C#'s CS1591 ("missing XML comment for
+    publicly visible type or member") — the F# compiler does not warn on an
+    undocumented member, so turning this on adds no missing-doc noise and
+    the coverage question stays with the gate, where it can be scoped to
+    the tracked public surface rather than to every internal binding. What
+    IT DOES turn on is FS3390 (malformed XML in a doc comment), which is a
+    real defect in a real doc comment and is left at warning severity: it
+    is not in `WarningsAsErrors` above, so it cannot break a build, and it
+    names the file and line for whoever fixes it.
+
+    Measured on the untouched tree before landing: see the census in
+    `docs/platform/doc-coverage.md`.
+  -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Authors>Andrew J. Willshire</Authors>
     <Company>ToolUp Analytics Ltd (UK)</Company>

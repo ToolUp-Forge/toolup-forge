@@ -288,7 +288,7 @@ module CompositionInspectorApi =
     [<Literal>]
     let ViewSchemaVersion = 1
 
-    /// Fable.Remoting route builder. Mirrors `AuditViewApi` /
+    /// ToolUp.Remoting route builder. Mirrors `AuditViewApi` /
     /// `UsageQueryApi`'s `/api/_platform/<area>/<method>` shape, so the
     /// platform's admin surfaces stay discoverable by path alone.
     let routeBuilder (_typeName: string) (methodName: string) =

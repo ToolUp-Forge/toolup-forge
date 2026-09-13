@@ -7,7 +7,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 
-// ─── Phase 7b — IUserSchemaApi Fable.Remoting handler ─────────────────
+// ─── Phase 7b — IUserSchemaApi ToolUp.Remoting handler ─────────────────
 //
 // Builds a per-request `IUserSchemaApi` from the resolved `AccessContext`
 // (scope / userId / role) and the DI-resolved `IUserSchemaStore`. Mirrors

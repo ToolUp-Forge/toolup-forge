@@ -572,7 +572,7 @@ module AssetStoreOptions =
 ///     imports byte-for-byte: a deployment that doesn't opt in
 ///     pays zero runtime cost.
 ///   * `EnabledAssetStore options` — `DefaultAssetStore` is
-///     registered as `IAssetStore`, the Fable.Remoting handler
+///     registered as `IAssetStore`, the ToolUp.Remoting handler
 ///     mounts at `/api/assets/`, and the multipart upload
 ///     endpoint mounts at `/api/assets/upload`.
 type AssetStoreMode =

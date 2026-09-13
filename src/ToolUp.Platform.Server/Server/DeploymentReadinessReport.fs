@@ -221,7 +221,7 @@ let buildReport (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentRead
     return DeploymentReadiness.summarise DateTime.UtcNow preflight smoke drift health
 }
 
-/// Build the `IDeploymentReadinessApi` Fable.Remoting handler.
+/// Build the `IDeploymentReadinessApi` ToolUp.Remoting handler.
 /// `ServerConfig` is closed over at compose time so the handler reads the
 /// per-source mode fields without re-resolving a config singleton per
 /// request — same idiom as `ServiceStatusBoardApiHandler`.

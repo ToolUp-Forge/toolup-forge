@@ -55,7 +55,7 @@ type IPlatformRuntimeConfigStore =
     /// Async read of the current `PlatformKnowledgeBase` mode. Same
     /// value as `Snapshot` — exists for consistency with the API
     /// contract (`PlatformAdminApi.GetPlatformKnowledgeBase` returns
-    /// `Async<_>` because Fable.Remoting requires it).
+    /// `Async<_>` because ToolUp.Remoting requires it).
     abstract GetPlatformKnowledgeBase: unit -> Async<PlatformKnowledgeBaseMode>
 
     /// Update the runtime `PlatformKnowledgeBase` mode. Persists to

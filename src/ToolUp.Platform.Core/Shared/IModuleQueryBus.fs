@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 /// Caller → target-module request envelope. Payload is JSON (produced by
 /// a `FableConverters`-compatible serialiser) so the wire format stays
-/// portable across in-process, Fable.Remoting, and future distributed
+/// portable across in-process, ToolUp.Remoting, and future distributed
 /// (Akka cluster, Orleans) implementations. Typed request / response
 /// records live in `ToolUp-SharedTypes` — shared types never live in
 /// another module's project.
@@ -116,7 +116,7 @@ type IModuleQueryBus =
         context: AccessContext * request: ModuleQueryRequest ->
             Async<Result<ModuleQueryResponse, ModuleQueryError> option>
 
-/// Cross-origin Fable.Remoting surface for client → server queries.
+/// Cross-origin ToolUp.Remoting surface for client → server queries.
 /// The client does not pass an `AccessContext` — the server resolves it
 /// per request from DI (populated by `ScopeResolutionMiddleware`) and
 /// forwards the call to the in-process `IModuleQueryBus`. Keeping this
@@ -135,7 +135,7 @@ type IModuleQueryBusApi = {
 }
 
 module ModuleQueryBusApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `IConfigApi`, `PlatformApi`, etc. — `/api/{typeName}/{methodName}`.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"
 

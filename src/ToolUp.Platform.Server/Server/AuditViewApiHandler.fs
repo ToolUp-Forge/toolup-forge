@@ -262,7 +262,7 @@ let internal renderCsv (views: AuditEventView list) : byte[] =
 
 // ─── Handler ──────────────────────────────────────────────────────────
 
-/// Build the `IAuditViewApi` Fable.Remoting handler.
+/// Build the `IAuditViewApi` ToolUp.Remoting handler.
 ///
 /// `auditLogMode` is captured at compose time from
 /// `ServerConfig.AuditLog`. On the default `NoAuditLog` the deployment

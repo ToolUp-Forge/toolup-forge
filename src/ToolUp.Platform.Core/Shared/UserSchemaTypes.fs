@@ -310,7 +310,7 @@ type UserSchemaError =
     /// The backing store failed.
     | UserSchemaStorageFailure of message: string
 
-// ─── IUserSchemaApi — Fable.Remoting contract ────────────────────────
+// ─── IUserSchemaApi — ToolUp.Remoting contract ────────────────────────
 //
 // User-facing CRUD + evolution surface over `UserAuthoredSchema`. Write
 // paths are Owner/Admin gated (Phase 69d authorization attributes +
@@ -320,7 +320,7 @@ type UserSchemaError =
 // schemas (GP 4). Every state-changing method carries an `[<Audit>]`
 // marker so the dispatcher emits the audit row.
 
-/// Fable.Remoting API for authoring, versioning, and evolving
+/// ToolUp.Remoting API for authoring, versioning, and evolving
 /// user-owned data schemas. Auto-mounted only when
 /// `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`
 /// (default off — zero cost when unused, GP 13).
@@ -367,6 +367,6 @@ type IUserSchemaApi = {
 }
 
 module UserSchemaApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `PlatformApi`, `IWebhookApi`, `IConfigApi`, etc.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"

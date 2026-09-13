@@ -305,7 +305,7 @@ type AISurface =
 
 /// Client → server request when submitting a chat message. A record rather
 /// than a tuple so future metadata (selected file, UI location, etc.) can
-/// be added without changing the Fable.Remoting contract.
+/// be added without changing the ToolUp.Remoting contract.
 type AIMessageRequest = {
     ConversationId: Guid
     Content: string
@@ -340,7 +340,7 @@ type AIMessageRequest = {
     /// `FullPageOnly`, `FullPage` exposes them.
     /// Defaults to `SidePanel` to keep behaviour conservative for
     /// existing client code that doesn't yet attach the field
-    /// (Fable.Remoting will see no field on the wire and fall through
+    /// (ToolUp.Remoting will see no field on the wire and fall through
     /// to default-record-construction; explicit construction sites
     /// must set this field).
     ///
@@ -383,7 +383,7 @@ type AIMessageRequest = {
     RetrievalFilters: Map<string, string> option
 }
 
-// ─── API contract (Fable.Remoting) ──────────────────────────────
+// ─── API contract (ToolUp.Remoting) ──────────────────────────────
 
 /// API for conversation/task management (request/response, not streaming).
 /// Streaming progress is delivered via SSE, not this API.

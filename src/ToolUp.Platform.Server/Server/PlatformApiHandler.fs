@@ -11,7 +11,7 @@ open ToolUp.Platform.RemotingHelpers
 //
 // Originally one `platformApiHandler` returning a `PlatformApi` record
 // of 14 methods. Split per the Tidy-Up "Split PlatformApi as it grows"
-// item into five sibling builders so each Fable.Remoting proxy has its
+// item into five sibling builders so each ToolUp.Remoting proxy has its
 // own route prefix and per-concern test surface:
 //
 //   * `platformInfoApiHandler`   → `PlatformInfoApi`   (1 method)
@@ -144,7 +144,7 @@ let platformInfoApiHandler (config: ServerConfig) =
 /// Extracted as a separate function (rather than inlined into
 /// `teamApiHandler` below the way the other API records still are)
 /// so tests can construct it directly off a `DefaultHttpContext`
-/// without going through Fable.Remoting's HTTP machinery — same
+/// without going through ToolUp.Remoting's HTTP machinery — same
 /// shape as `PlatformAdminApiHandler.platformAdminApi`.
 let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     let teamStore = resolveTeamStore ctx
@@ -833,7 +833,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             }
     }
 
-/// Fable.Remoting route handler wrapping `teamApi`. Route mount path is
+/// ToolUp.Remoting route handler wrapping `teamApi`. Route mount path is
 /// derived from the `TeamApi` record's namespace by ToolUp.Remoting.
 let teamApiHandler (config: ServerConfig) = makeApi (teamApi config)
 

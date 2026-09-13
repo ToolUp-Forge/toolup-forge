@@ -146,7 +146,7 @@ type MediaRendition = {
 
 /// Immutable metadata record for a stored media item (GP 5). Persisted
 /// as JSON alongside the original blob; returned by `Get` / `List` and
-/// over the Fable.Remoting `IMediaApi`.
+/// over the ToolUp.Remoting `IMediaApi`.
 type MediaRecord = {
     Id: MediaId
     OriginalFilename: string

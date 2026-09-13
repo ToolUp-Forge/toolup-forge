@@ -17,6 +17,7 @@ module ToolUp.Platform.Tests.InProcess.PublicApiApprovalTests
 // Contracts/PublicApiApproval.fs.
 
 open System.IO
+open System.Reflection
 open Expecto
 open ToolUp.Platform.Tests.Contracts.SurfaceDiff
 open ToolUp.Platform.Tests.Contracts.PublicApiApproval
@@ -51,6 +52,17 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
         if approveModeFor a.Name then
             Directory.CreateDirectory(baselineDir root) |> ignore
             File.WriteAllText(baselinePath, rendered)
+
+            // Phase 261 — the doc-coverage floor rides the SAME switch, so
+            // a reviewer accepting this assembly's current shape accepts
+            // its current coverage in one pass. Only this assembly's line
+            // is rewritten; the rest of the file is byte-identical.
+            match docFileFor dll with
+            | None -> () // no sidecar: the precondition case names it once
+            | Some xmlPath ->
+                let documented = documentedIdsIn (File.ReadAllText xmlPath)
+
+                writeDocCoverageEntry (docCoveragePath root) (docCoverageOf a.Name render.DocSubjects documented)
         elif approveModeOn () then
             // A scoped regeneration run that does not cover this
             // assembly. Comparing here would fail the run for drift the
@@ -88,6 +100,45 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
             match describeObsoleteDefects a.Name (obsoleteDefects render.Obsolete) with
             | None -> ()
             | Some report -> failtest report
+
+            // Phase 261 — the XML-doc coverage ratchet, on the SAME render
+            // and for the same reason the message policy is here: the
+            // subject set must be exactly the surface the two arms above
+            // just graded, and a second walk could drift from it.
+            //
+            // Ordered LAST deliberately. Drift leads (regenerating is its
+            // remedy), then the deprecation wording, then coverage — a
+            // reader triaging a red run wants the surface break first and
+            // a documentation shortfall last, and an assembly with all
+            // three reports them one run at a time in that order.
+            //
+            // A missing sidecar defers to the `XML documentation files are
+            // emitted` precondition rather than reporting 0% here, exactly
+            // as an unbuilt assembly defers to Phase 731's.
+            match docFileFor dll with
+            | None -> ()
+            | Some xmlPath ->
+                let documented = documentedIdsIn (File.ReadAllText xmlPath)
+                let coverage = docCoverageOf a.Name render.DocSubjects documented
+                let floorPath = docCoveragePath root
+
+                let recorded =
+                    if File.Exists floorPath then
+                        parseDocCoverage (File.ReadAllText floorPath)
+                    else
+                        Map.empty
+
+                match recorded.TryFind a.Name with
+                | None -> failtest (describeMissingDocCoverageFloor a.Name coverage)
+                | Some floor ->
+                    match
+                        describeDocCoverageRegression
+                            floor
+                            coverage
+                            (undocumentedSubjects render.DocSubjects documented)
+                    with
+                    | None -> ()
+                    | Some report -> failtest report
 }
 
 let private assemblyCases =
@@ -149,6 +200,71 @@ let private assemblyCases =
             match describeUnbuilt config inScope.Length (unbuiltAssemblies config inScope) with
             | None -> ()
             | Some report -> failtest report
+        }
+
+        // Phase 261 — the OTHER precondition, and it is a distinct fact
+        // from the one above: an assembly can be built and still carry no
+        // `<name>.xml`, which measures as 0% documented for a reason that
+        // has nothing to do with documentation. Same shape as Phase 731's
+        // for the same reason — named once, deferred to by the per-
+        // assembly cases.
+        test "XML documentation files are emitted" {
+            // Scoped to assemblies that have a tracked public surface at
+            // all: a content-only package ships no code to document, and
+            // requiring a sidecar there would make the precondition
+            // permanently red for a package behaving exactly as intended.
+            // Derived from the committed baselines rather than named —
+            // see `hasTrackedSurface`.
+            let built =
+                packable.Value
+                |> List.filter (fun a -> (resolveDll config a).IsSome && hasTrackedSurface root a.Name)
+
+            match describeMissingDocFiles config built.Length (missingDocFiles config built) with
+            | None -> ()
+            | Some report -> failtest report
+        }
+
+        // Phase 261 — a floor recorded for an assembly the packable walk
+        // no longer discovers is a line nothing can ever grade again. It
+        // costs nothing to leave, which is precisely why a ratchet file
+        // accumulates them until it is decoration. Filter-independent:
+        // discovery is not affected by which test cases run.
+        test "the doc-coverage floor names only discovered assemblies" {
+            let floorPath = docCoveragePath root
+
+            if File.Exists floorPath then
+                let discovered = packable.Value |> List.map _.Name |> Set.ofList
+
+                let stale =
+                    staleDocCoverageFloors discovered (parseDocCoverage (File.ReadAllText floorPath))
+
+                Expect.isEmpty
+                    stale
+                    "api-baselines/doc-coverage.approved.txt records a doc-coverage floor for assemblies the packable walk does not discover — they were renamed or deleted. Remove those lines: a floor for a package that no longer exists can never be graded, and a ratchet file that accumulates them stops being read."
+        }
+
+        // Phase 261 — the vacuity guard. Every arm of the coverage gate
+        // passes trivially if the doc-comment ids this pack computes match
+        // NOTHING in the emitted XML: every assembly measures 0/N, the
+        // floor records 0/N, and the ratchet holds forever at zero while
+        // reporting green. That failure is silent by construction — it
+        // looks exactly like an SDK that documents nothing — so the one
+        // thing worth asserting about the committed floor is that it is
+        // not all zeroes.
+        //
+        // Reads the committed file rather than the live tree, so it holds
+        // under a filtered run and needs no build.
+        test "the committed doc-coverage floor is not vacuous" {
+            let floorPath = docCoveragePath root
+
+            if File.Exists floorPath then
+                let recorded = parseDocCoverage (File.ReadAllText floorPath)
+                let documented = recorded |> Map.toList |> List.sumBy (fun (_, c) -> c.Documented)
+
+                Expect.isGreaterThan
+                    documented
+                    0
+                    "every recorded doc-coverage floor is 0 documented. Either the SDK genuinely documents nothing on its public surface, or the doc-comment ids this pack computes match nothing in the emitted XML — and the second reads exactly like the first while the gate reports green. Check `docTypeRef` / `docMethodName` against an actual <name>.xml before regenerating."
         }
 
         yield! packable.Value |> List.map assemblyCase
@@ -485,6 +601,392 @@ let private deprecationPolicyFixtures =
         }
     ]
 
+
+// ── Phase 261 — the XML-doc coverage gate. Two kinds of fixture, and
+//    both are needed: the grading is pure and is driven from synthetic
+//    data (so every arm is proven to fail as well as to pass), while the
+//    DOC-ID COMPUTATION can only be proven against XML the real F#
+//    compiler emitted — a synthetic id set would prove that the fixture
+//    author and the gate agree, which is not the question. ──
+
+/// Phase 261 — the fixture the id computation is proven against. Its
+/// shape is the point: `Alpha` carries a doc comment and `Beta` does not,
+/// so one assembly's real emitted XML answers both directions.
+///
+/// It lives in the test assembly deliberately. `ToolUp.Platform.Tests`
+/// ends in `.Tests`, so `isPackableProject` excludes it and nothing here
+/// reaches a committed api-baseline or the coverage floor — but it is
+/// still compiled by the same compiler, with the same
+/// `GenerateDocumentationFile`, into the same `<name>.xml` shape as every
+/// shipped package.
+module DocCoverageFixture =
+
+    /// A documented type. This very comment is what the fixture asserts
+    /// the gate can see.
+    type Documented() =
+        /// A documented method.
+        member _.Alpha(n: int) : string = string n
+
+        // Deliberately undocumented — the other direction of the same
+        // measurement. Do not add a doc comment to this member.
+        member _.Beta(n: int) : string = string n
+
+let private docCoverageFixtures =
+    // A minimal documentation file of exactly the shape the compiler
+    // emits, with one entry of each id kind plus prose that must NOT be
+    // mistaken for one.
+    let xml =
+        """<?xml version="1.0" encoding="utf-8"?>
+<doc>
+<assembly><name>Demo</name></assembly>
+<members>
+<member name="T:Demo.Widget">
+<summary>A widget. See <see cref="M:Demo.Widget.Spin(System.Int32)" /> — a cref is not a member entry.</summary>
+</member>
+<member name="M:Demo.Widget.Spin(System.Int32)">
+<summary>Spins.</summary>
+</member>
+<member name="P:Demo.Widget.Name">
+<summary>The name.</summary>
+</member>
+</members>
+</doc>"""
+
+    let subject token docId = { Token = token; DocId = docId }
+
+    // A three-member surface, all three documented by the file above.
+    let fullyDocumented = [
+        subject "Demo.Widget (class)" "T:Demo.Widget"
+        subject "Demo.Widget.Spin(System.Int32) : System.Unit" "M:Demo.Widget.Spin(System.Int32)"
+        subject "Demo.Widget.Name : System.String { get }" "P:Demo.Widget.Name"
+    ]
+
+    testList "Phase 261 doc-coverage gate" [
+        test "documentedIdsIn reads member entries and not crefs" {
+            let ids = documentedIdsIn xml
+
+            Expect.isTrue (ids.Contains "T:Demo.Widget") "the type entry is a documented id"
+            Expect.isTrue (ids.Contains "P:Demo.Widget.Name") "the property entry is a documented id"
+
+            Expect.equal
+                ids.Count
+                3
+                "a <see cref=…> inside a summary is a REFERENCE to a member, not a declaration of one — counting it would inflate coverage with members that carry no doc comment at all"
+        }
+
+        // The phase's stated contract, direction one.
+        test "a fully-documented surface measures 100% and passes its floor" {
+            let coverage = docCoverageOf "Demo" fullyDocumented (documentedIdsIn xml)
+
+            Expect.equal coverage.Documented 3 "all three subjects are keyed by the documentation file"
+            Expect.equal (DocCoverage.percent coverage) 100.0 "coverage is total"
+
+            Expect.isNone
+                (describeDocCoverageRegression
+                    coverage
+                    coverage
+                    (undocumentedSubjects fullyDocumented (documentedIdsIn xml)))
+                "a surface at its recorded floor passes"
+        }
+
+        // The phase's stated contract, direction two — the go-red proof.
+        test "an undocumented public member drops coverage below the floor and FAILS" {
+            let documented = documentedIdsIn xml
+            let floor = docCoverageOf "Demo" fullyDocumented documented
+
+            let grown =
+                fullyDocumented
+                @ [ subject "Demo.Widget.Wobble() : System.Unit" "M:Demo.Widget.Wobble" ]
+
+            let current = docCoverageOf "Demo" grown documented
+
+            Expect.equal current.Documented 3 "the new member is not in the documentation file"
+            Expect.equal current.Total 4 "the surface grew by one"
+
+            match describeDocCoverageRegression floor current (undocumentedSubjects grown documented) with
+            | None ->
+                failtest "an undocumented public member landed and the gate stayed green — the ratchet does not hold"
+            | Some report ->
+                Expect.stringContains report "Demo" "the report names the assembly"
+                Expect.stringContains report "REGRESSED" "the verdict is stated"
+                Expect.stringContains report "Demo.Widget.Wobble" "the undocumented member is named"
+
+                Expect.stringContains
+                    report
+                    "NOTHING IS BROKEN"
+                    "a coverage shortfall is not a surface break, and the reader of a red run needs to be told which one they are looking at"
+
+                Expect.stringContains
+                    report
+                    "doc-coverage.approved.txt"
+                    "the report names the file that records the floor"
+        }
+
+        // The one place this gate departs from Phase 618's both-directions
+        // rule. Pinned so the departure is deliberate rather than an
+        // omission someone later "fixes".
+        test "IMPROVING coverage never fails" {
+            let floor = {
+                Assembly = "Demo"
+                Documented = 1
+                Total = 4
+            }
+
+            let better = {
+                Assembly = "Demo"
+                Documented = 4
+                Total = 4
+            }
+
+            Expect.isNone
+                (describeDocCoverageRegression floor better [])
+                "documenting members must not fail the gate — a floor that is beaten is doing its job, not going stale"
+        }
+
+        test "removing a documented member does not fire this gate" {
+            // total and documented fall together, so the undocumented
+            // count is unchanged. A removal is Phase 618's business; this
+            // gate reporting it too would double-charge one change.
+            let floor = {
+                Assembly = "Demo"
+                Documented = 3
+                Total = 5
+            }
+
+            let after = {
+                Assembly = "Demo"
+                Documented = 2
+                Total = 4
+            }
+
+            Expect.isNone
+                (describeDocCoverageRegression floor after [])
+                "a removal leaves the undocumented count where it was; the removal itself is reported by the surface comparer"
+        }
+
+        test "a deleted doc comment fires even though the surface is unchanged" {
+            let floor = {
+                Assembly = "Demo"
+                Documented = 3
+                Total = 5
+            }
+
+            let after = {
+                Assembly = "Demo"
+                Documented = 2
+                Total = 5
+            }
+
+            Expect.isSome
+                (describeDocCoverageRegression floor after [])
+                "the surface did not move but a member lost its documentation — exactly the drift a fraction-only threshold over a large denominator would hide"
+        }
+
+        test "the floor file round-trips, and a mangled line is dropped rather than guessed" {
+            let entries = [
+                {
+                    Assembly = "Demo.B"
+                    Documented = 1
+                    Total = 2
+                }
+                {
+                    Assembly = "Demo.A"
+                    Documented = 3
+                    Total = 4
+                }
+            ]
+
+            let text = renderDocCoverage entries
+            let parsed = parseDocCoverage text
+
+            Expect.equal parsed.Count 2 "both entries survive the round trip"
+            Expect.equal (parsed.["Demo.A"]).Documented 3 "counts survive the round trip"
+
+            let lines = text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n')
+            let body = lines |> Array.filter (fun l -> not (l.StartsWith "#"))
+
+            Expect.equal
+                body[0]
+                "Demo.A 3/4"
+                "assemblies render in ordinal order, so a re-run produces no reordering diff"
+
+            let mangled = parseDocCoverage (text + "Demo.C 7\n")
+
+            Expect.isFalse
+                (mangled.ContainsKey "Demo.C")
+                "an unparseable line reads as 'no floor recorded', which fails loudly at that assembly, rather than as a silently wrong number"
+        }
+
+        test "an upsert rewrites one line and leaves the rest byte-identical" {
+            let before =
+                renderDocCoverage [
+                    {
+                        Assembly = "Demo.A"
+                        Documented = 3
+                        Total = 4
+                    }
+                    {
+                        Assembly = "Demo.B"
+                        Documented = 1
+                        Total = 2
+                    }
+                ]
+
+            let after =
+                upsertDocCoverage before {
+                    Assembly = "Demo.B"
+                    Documented = 2
+                    Total = 2
+                }
+
+            let parsed = parseDocCoverage after
+
+            Expect.equal (parsed.["Demo.A"]).Documented 3 "the untouched assembly's floor is unchanged"
+            Expect.equal (parsed.["Demo.B"]).Documented 2 "the named assembly's floor moved"
+
+            Expect.stringContains
+                after
+                "Demo.A 3/4"
+                "a scoped regeneration must not rewrite another session's line — the whole point of TOOLUP_APPROVE_API taking names"
+        }
+
+        test "a floor for an undiscovered assembly is reported" {
+            let recorded =
+                parseDocCoverage (
+                    renderDocCoverage [
+                        {
+                            Assembly = "Demo.A"
+                            Documented = 1
+                            Total = 1
+                        }
+                        {
+                            Assembly = "Demo.Renamed"
+                            Documented = 1
+                            Total = 1
+                        }
+                    ]
+                )
+
+            let stale = staleDocCoverageFloors (Set.ofList [ "Demo.A" ]) recorded
+
+            Expect.equal
+                stale
+                [ "Demo.Renamed" ]
+                "a floor nothing can grade again is named, so the file cannot rot into decoration"
+
+            Expect.isEmpty
+                (staleDocCoverageFloors (Set.ofList [ "Demo.A"; "Demo.Renamed" ]) recorded)
+                "and stays quiet otherwise"
+        }
+
+        test "a new package with no recorded floor fails, naming the remedy" {
+            let report =
+                describeMissingDocCoverageFloor "Demo.New" {
+                    Assembly = "Demo.New"
+                    Documented = 0
+                    Total = 7
+                }
+
+            Expect.stringContains report "Demo.New" "the report names the package"
+            Expect.stringContains report "TOOLUP_APPROVE_API" "and the switch that records the floor"
+        }
+
+        test "the missing-documentation-file precondition fires once and stays quiet otherwise" {
+            let a name = {
+                Name = name
+                ProjectPath = name + ".fsproj"
+                ProjectDir = "."
+            }
+
+            Expect.isNone (describeMissingDocFiles "Debug" 3 []) "a tree with every sidebar present says nothing"
+
+            match describeMissingDocFiles "Debug" 3 [ a "Demo.A"; a "Demo.B" ] with
+            | None -> failtest "a built tree with no XML documentation must be reported"
+            | Some report ->
+                Expect.stringContains
+                    report
+                    "GenerateDocumentationFile"
+                    "the report names the property that emits the file"
+
+                Expect.stringContains
+                    report
+                    "not a documentation shortfall"
+                    "a missing sidecar measures as 0% documented, which would otherwise send the reader off to write doc comments for a build-property problem"
+        }
+
+        // The content-only-package exemption, both directions. Pinned
+        // because it is the one place the precondition can be softened,
+        // and a softening that swallowed a real assembly would take the
+        // whole ratchet with it: an assembly wrongly read as
+        // surface-less needs no sidecar, measures nothing, and is never
+        // heard from again.
+        test "an assembly with no tracked surface needs no documentation file" {
+            let scratch =
+                Path.Combine(Path.GetTempPath(), "toolup-doccoverage-" + System.Guid.NewGuid().ToString("N"))
+
+            try
+                Directory.CreateDirectory(Path.Combine(scratch, "api-baselines")) |> ignore
+
+                let write (name: string) (body: string) =
+                    File.WriteAllText(Path.Combine(scratch, "api-baselines", name + ".approved.txt"), body)
+
+                // A content-only package: the generated header and nothing else.
+                write "Demo.ContentOnly" "# Public API baseline — Demo.ContentOnly\n# Do not edit by hand.\n"
+                write "Demo.Real" "# Public API baseline — Demo.Real\nDemo.Widget (class)\n"
+
+                Expect.isFalse
+                    (hasTrackedSurface scratch "Demo.ContentOnly")
+                    "a baseline of comments records no surface, so there is nothing for a documentation file to document"
+
+                Expect.isTrue (hasTrackedSurface scratch "Demo.Real") "one member line is a tracked surface"
+
+                Expect.isTrue
+                    (hasTrackedSurface scratch "Demo.Missing")
+                    "a package with no committed baseline is already failing the drift arm; reading it as surface-less here would let the two findings cancel"
+            finally
+                try
+                    Directory.Delete(scratch, true)
+                with _ ->
+                    ()
+        }
+
+        // The end-to-end arm: the doc-comment ids this pack computes are
+        // checked against XML the real F# compiler emitted for the fixture
+        // above. A synthetic id set cannot prove this — it would only
+        // prove the fixture and the gate agree with each other.
+        test "the computed doc ids match the compiler's own XML" {
+            let selfDll = Assembly.GetExecutingAssembly().Location
+
+            match docFileFor selfDll with
+            | None ->
+                failtestf
+                    "no XML documentation file beside %s — GenerateDocumentationFile is not in effect for the test assembly, so the doc-id computation cannot be proven against real compiler output."
+                    (Path.GetFileName selfDll)
+            | Some xmlPath ->
+                let documented = documentedIdsIn (File.ReadAllText xmlPath)
+                let subjects = (renderSurfaceDetail selfDll pool.Value).DocSubjects
+
+                let find needle =
+                    subjects
+                    |> List.tryFind (fun s -> s.DocId.EndsWith("DocCoverageFixture.Documented." + needle))
+
+                match find "Alpha(System.Int32)", find "Beta(System.Int32)" with
+                | Some alpha, Some beta ->
+                    Expect.isTrue
+                        (documented.Contains alpha.DocId)
+                        (sprintf
+                            "the fixture's DOCUMENTED member reads as undocumented — the computed id %s appears in no <member name=…> entry, so every assembly's coverage is understated and the ratchet holds at a floor that is not the truth"
+                            alpha.DocId)
+
+                    Expect.isFalse
+                        (documented.Contains beta.DocId)
+                        "the fixture's deliberately-undocumented member reads as documented — the match is too loose to measure anything"
+                | _ ->
+                    failtest
+                        "the DocCoverageFixture members were not found on the rendered surface of the test assembly — the fixture was renamed or made non-public, and with it the only proof that the doc-id computation matches real compiler output."
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 175 — Public-API approval baseline" [
@@ -493,5 +995,6 @@ let tests =
         obsoleteSeamFixtures
         deprecationPolicyFixtures
         preconditionFixtures
+        docCoverageFixtures
         assemblyCases
     ]

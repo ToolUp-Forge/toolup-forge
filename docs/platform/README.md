@@ -2,7 +2,7 @@
 
 A modular F# full-stack SDK for building production multi-tenant analytical applications.
 
-ToolUp Platform ships as a set of independently-versioned NuGet packages — pick the ones you need, compose them with your own domain modules, and deploy. Built on Giraffe + ASP.NET Core (server), Fable + Feliz with an in-tree Elmish runtime (client), in-tree ToolUp.Remoting transport (type-safe wire).
+ToolUp Platform ships as a set of independently-versioned NuGet packages — pick the ones you need, compose them with your own domain modules, and deploy. Built on Giraffe + ASP.NET Core (server), Fable + Feliz with the in-tree ToolUp.Elmish runtime (client), the in-tree ToolUp.Remoting transport (type-safe wire).
 
 > The Elmish runtime (forked from [Fable.Elmish](https://github.com/elmish/elmish) v5.x by Eugene Tolmachev + community, Apache 2.0) and the ToolUp.Remoting transport (forked from [Fable.Remoting](https://github.com/Zaid-Ajaj/Fable.Remoting) by Zaid Ajaj, MIT) ship in-tree under `ToolUp.Platform.{Core,Client,Server}`. The namespaces are `ToolUp.Elmish` / `ToolUp.Remoting.*` (renamed from the upstream `Elmish` / `Fable.Remoting.*` to make the divergence visible — consumer call sites move via simple search-and-replace per the [namespace-rename migration doc](../migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md)). See the [forge README](../../README.md#in-tree-client--transport-forks) for the full list of fork additions (typed dispatch handle, lifetime-aware effects, structured error context, prefetch gating, integrated body normalisation, bundled JSON converter) and the appreciative upstream credit posture.
 

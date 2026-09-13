@@ -1178,6 +1178,7 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             if config.EnableDevEndpoints then
                 yield "/dev/ai-fastpath"
                 yield "/dev/ai-latency"
+                yield "/dev/ai-allowlist"
             if citationEndpointEnabled then
                 yield "/dev/rag-citation"
         ]

@@ -56,7 +56,7 @@ Illustrative sample by design — demonstrates the composition shape (Surfaces l
 
 - An `IAuthProvider` for the `Team` shape — `ServerApp.withAuth (AuthProvider.fromEnv logger OidcAuthProvider.fromConfig)` in the composition root.
 - The Vite + `package.json` + `index.html` + `index.css` boot scaffolding the Client tier needs to mount in a browser (see `samples/MinimalClient/` for the in-tree minimal shape).
-- Module-domain code — handlers + Fable.Remoting APIs + per-module data types.
+- Module-domain code — handlers + ToolUp.Remoting APIs + per-module data types.
 
 The point of this sample is the *shape* of the Surfaces composition, not the running app. Consumers adopting the mixed-mode model copy the registration patterns shown here.
 

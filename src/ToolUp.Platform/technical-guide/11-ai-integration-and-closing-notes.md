@@ -15,7 +15,7 @@ The AI assistant runtime (agent loop, SSE streaming, conversation persistence, t
 
 Provider-reported token usage rides on `AIProviderResponse.Usage: TokenUsage option` (`PromptTokens`, `CachedPromptTokens`, `OutputTokens`, plus optional Anthropic-specific `CacheCreationTokens`). Vocabulary is normalised across providers — Anthropic's `cache_read_input_tokens` and OpenAI's `prompt_tokens_details.cached_tokens` both populate `CachedPromptTokens`. Providers without a usage block (or without a prompt cache) declare `Capabilities.SupportsPromptCaching = false` and consumer-side rollups (e.g. `/dev/ai-latency`) hide the cache-hit-rate column for those buckets. See `ToolUp.AI/TECHNICAL_GUIDE.md` "Cache hit rate (Phase 6i.B)" for the full surface.
 
-For full AI architecture — SSE lifecycle, ToolUp.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, Elmish.HMR limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
+For full AI architecture — SSE lifecycle, ToolUp.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, ToolUp.Elmish.HMR limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
 
 The rest of this section covers the one AI-adjacent mechanism that stays in core: the ToolUp.Remoting body-normalisation behaviour.
 
@@ -23,16 +23,16 @@ The rest of this section covers the one AI-adjacent mechanism that stays in core
 
 Browsers send `unit -> Async<T>` API calls in inconsistent shapes: GET with no body, POST with `""`, POST with `null`, POST with a missing body altogether. A naive dispatcher expecting a JSON array (`[]`) breaks on every one of them — methods like `ListConversations`, `GetAvailableTools`, `GetPlatformInfo`, `GetMyTeams`, `GetActiveTeam`, `ListFiles` would all fail.
 
-The in-tree ToolUp.Remoting fork (over upstream Fable.Remoting) folds body normalisation **into the dispatcher itself**, inside `ToolUp.Platform.Server`. Requests carrying the `x-remoting-proxy` header have empty / `""` / `null` bodies promoted to `[]` before the dispatcher reads them; the unit-arg path then proceeds normally. There is no separate `RemotingBodyNormalizationMiddleware` to wire into `compose`, and no `app.UseMiddleware<…>` registration to remember — `dotnet build` is the gate, not a middleware presence check.
+The in-tree ToolUp.Remoting transport folds body normalisation **into the dispatcher itself**, inside `ToolUp.Platform.Server`. Requests carrying the `x-remoting-proxy` header have empty / `""` / `null` bodies promoted to `[]` before the dispatcher reads them; the unit-arg path then proceeds normally. There is no separate `RemotingBodyNormalizationMiddleware` to wire into `compose`, and no `app.UseMiddleware<…>` registration to remember — `dotnet build` is the gate, not a middleware presence check.
 
 The change is invisible to consumer code: `unit -> Async<T>` API methods just work. If a consumer is migrating from a pre-fork SDK version that did rely on `RemotingBodyNormalizationMiddleware`, the registration can be deleted; the dispatcher already handles it.
 
 <!-- AI-specific concerns moved to src/ToolUp.AI/TECHNICAL_GUIDE.md:
      SSE JSON serialisation (the STJ FableConverters options), SSE userId
-     matching, client-side local-state input pattern, Elmish.HMR SSE
+     matching, client-side local-state input pattern, ToolUp.Elmish.HMR SSE
      subscription loss, Vite proxy SSE buffering. -->
 
-AI-specific concerns (SSE JSON serialisation via the `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options, SSE userId matching, client-side local-state input pattern, Elmish.HMR SSE subscription loss, Vite proxy SSE buffering) have all moved to [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Look there for their full explanations.
+AI-specific concerns (SSE JSON serialisation via the `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options, SSE userId matching, client-side local-state input pattern, ToolUp.Elmish.HMR SSE subscription loss, Vite proxy SSE buffering) have all moved to [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Look there for their full explanations.
 
 ## Key Design Constraints
 
@@ -40,7 +40,7 @@ AI-specific concerns (SSE JSON serialisation via the `ToolUp.Remoting.Json.Syste
 
 **Fable compiles one project.** All client-side F# must be in a single Fable compilation unit. This is why modules inject source files via props rather than being separate projects — separate Fable-compiled projects would create cross-assembly issues with anonymous records and type identity.
 
-**The SDK `.fsproj` compiles only shared types.** Files like `UIToolkit.fs`, `SDK.Client.fs`, and `SDK.Server.fs` are marked `<None>` in the SDK project. They are compiled by the consuming Client or Server project via props injection. This is because they depend on packages (Feliz, Giraffe, the in-tree `Fable.Remoting.Giraffe` and `Fable.Remoting.Client` adapters under `ToolUp.Platform.{Server,Client}`) that the SDK project does not reference — the consuming project provides those dependencies.
+**The SDK `.fsproj` compiles only shared types.** Files like `UIToolkit.fs`, `SDK.Client.fs`, and `SDK.Server.fs` are marked `<None>` in the SDK project. They are compiled by the consuming Client or Server project via props injection. This is because they depend on packages (Feliz, Giraffe, the in-tree `ToolUp.Remoting.Giraffe` and `ToolUp.Remoting.Client` adapters under `ToolUp.Platform.{Server,Client}`) that the SDK project does not reference — the consuming project provides those dependencies.
 
 **Do not add server packages to ToolUp.Platform's `paket.references`.** These would flow transitively to the client project, and Fable cannot handle ASP.NET Core assemblies. Server files must compile in the consuming server project's context via `.Server.props`.
 

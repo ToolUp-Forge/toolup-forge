@@ -475,7 +475,7 @@ let private buildSnapshot (config: ServerConfig) (ctx: HttpContext) : Async<Serv
     }
 }
 
-/// Build the `IServiceStatusBoardApi` Fable.Remoting handler.
+/// Build the `IServiceStatusBoardApi` ToolUp.Remoting handler.
 /// `ServerConfig` is closed over at compose time so the handler reads
 /// the section-disable mode fields without re-resolving a config
 /// singleton per request.

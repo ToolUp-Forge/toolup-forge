@@ -186,7 +186,7 @@ let buildAndRunHost
         // Startup validation — `logApiError` resolves `ILogger` per request
         // via `GetRequiredService`. Asserting it once here trades a missing-
         // registration silent failure (where every API error vanishes into
-        // a request-scoped exception that `Fable.Remoting` re-wraps) for a
+        // a request-scoped exception that `ToolUp.Remoting` re-wraps) for a
         // loud startup throw with a clear message. If you got here via a
         // path that bypasses this validation, register an `ILogger` before
         // serving requests.

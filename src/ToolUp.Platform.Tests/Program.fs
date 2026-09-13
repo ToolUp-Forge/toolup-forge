@@ -801,6 +801,9 @@ let private registeredTests =
         CrossIndexErasureConformanceTests.tests
         SyntheticClientToolAuthorizerTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
+        // Phase 47 - AI action-denial observability: the rollup and the
+        // sustained-rate alert.
+        AIAllowlistDiagnosticsTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         // Phase 113 — host-neutral default-deny action authorizer:
@@ -1073,6 +1076,14 @@ let private registeredTests =
         // revoked is now neither listed to the model nor dispatchable by it,
         // with the list filter and the audited boundary sharing ONE decision.
         GrantGovernanceTests.tests
+        // Phase 36.C — the per-module AI-queryability opt-in. The third
+        // gate on the `_platform.ai.*` family, and the one that is about
+        // the DEPLOYMENT rather than the caller: default OFF, so a module
+        // that never opted in is annotated `queryable: false`, filtered out
+        // of `list_data_types`, and refused by the four reach tools with
+        // `UnqueryableModule` — reported after `PermissionDenied`, so a
+        // caller who may not read the module learns nothing from it.
+        AIQueryabilityOptInTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure
