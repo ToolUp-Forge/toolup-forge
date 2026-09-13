@@ -13,7 +13,7 @@ ToolUp.AI.Core 146/386
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 3/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 254/548
+ToolUp.AI.Server 274/584
 ToolUp.AI.Wire 87/220
 ToolUp.AICookbooks.AgChart 7/9
 ToolUp.AICookbooks.AgGridEnterprise 5/7
@@ -120,9 +120,9 @@ ToolUp.OpenXml 102/298
 ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 192/415
-ToolUp.Platform.Client 2037/6101
-ToolUp.Platform.Core 4914/12704
-ToolUp.Platform.Server 5172/10609
+ToolUp.Platform.Client 2041/6113
+ToolUp.Platform.Core 4955/12785
+ToolUp.Platform.Server 5183/10623
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062
