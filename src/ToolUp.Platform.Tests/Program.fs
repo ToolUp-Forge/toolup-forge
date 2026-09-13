@@ -7,7 +7,6 @@ open Expecto
 open ToolUp.Forge
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
-open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
 open ToolUp.Platform.Tests.Graph

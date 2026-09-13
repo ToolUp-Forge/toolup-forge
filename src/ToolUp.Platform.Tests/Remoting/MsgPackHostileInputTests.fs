@@ -32,31 +32,33 @@ open ToolUp.Remoting
 // legitimate payload — so each hostile case is paired with the largest
 // well-formed payload the same guard must still admit.
 //
-// ── Why the well-formed side is part hand-crafted bytes, part
-//    writer round-trip ─────────────────────────────────────────────────
+// ── Why the well-formed side is part hand-built bytes, part writer
+//    round-trip ─────────────────────────────────────────────────────────
 //
 // Building the well-formed fixtures by serialising a value and reading it
-// back is the obvious shape, and it is used below wherever it holds. It
-// does NOT hold for two of the arms, because the WRITER is wrong on this
-// runtime in a way that predates this phase and is not touched by it:
+// back is the obvious shape, and it is used below wherever it holds. The
+// `str` and `decimal` arms are ALSO pinned against hand-built bytes, and
+// that is deliberate rather than belt-and-braces.
 //
-//   * `Write.writeString` emits the correct header and the correct byte
-//     COUNT, then writes zero bytes for the content, for any string short
-//     enough to take its `stackalloc` path (under ~500 characters). The
-//     longer `ArrayPool` path in the same function is correct. Measured
-//     directly: `writeString "probe"` emits `A5 00 00 00 00 00`.
-//   * `Write.writeDecimal` reads the four words of `Decimal.GetBits`
-//     back out of a buffer from the same `stackalloc` helper and gets
-//     whatever the stack held, non-deterministically and not confined to
-//     any one word: one run emitted `12345.6789m` as `123456789m` (the
-//     scale word lost), another emitted `42m` as `180388626474m`.
+// Both arms were discovered broken while this pack was being written, on
+// the EMITTER side: `Write.writeString` put out a correct `A5` header
+// over five bytes of unrelated memory for the string `probe`, and
+// `Write.writeDecimal` lost a word of `Decimal.GetBits`, turning
+// `12345.6789m` into `123456789m` in one run and `42m` into
+// `180388626474m` in another. The cause was `Write.fs`'s `stackalloc`
+// helper returning a `Span` over its OWN frame: honoured as an `inline`
+// the allocation lands in the caller and the span is valid, and with the
+// F# optimiser off it is not honoured, so the caller read whatever the
+// next call reused that stack for. Debug corrupt, Release correct. Phase
+// 784 fixed it by giving each call site its own buffer, and that fix is
+// in this tree.
 //
-// Both are in `MsgPack/Write.fs`, which this phase does not change; both
-// are recorded here rather than worked around silently, because a
-// round-trip fixture over a broken emitter proves nothing about the
-// reader — it only proves the two agree. So the `str` and `decimal` arms
-// below are pinned against hand-built bytes, which is what a decoder test
-// should have been doing anyway.
+// The fixtures stay hand-built because of what the bug was: a round-trip
+// assertion over an emitter cannot distinguish a correct codec from two
+// halves agreeing on nonsense, and it did not distinguish them here. The
+// round trips below are kept too, now that the emitter is sound — they
+// catch a different class, an encoding the reader silently starts
+// accepting a variant of.
 
 /// A recursive shape, so a payload can nest arbitrarily deep through the
 /// reader's union arm. `Leaf` is tag 0, `Node` is tag 1 (declaration
@@ -421,6 +423,15 @@ let tests =
             Expect.equal (roundTrip (Set.ofList [ 3; 1; 2 ])) (Set.ofList [ 1; 2; 3 ]) "a set"
             Expect.equal (roundTrip (7, 8)) (7, 8) "a tuple"
             Expect.equal (roundTrip ([]: int list)) [] "an empty list — a zero length is not an over-claim"
+
+            // The two arms the emitter used to corrupt, round-tripped now
+            // that Phase 784 has fixed it. They would have gone red on
+            // this tree yesterday, which is the point of keeping them.
+            Expect.equal (roundTrip "probe") "probe" "a short string — the emitter's stackalloc path"
+            Expect.equal (roundTrip "") "" "an empty string"
+            Expect.equal (roundTrip "unicode — ✓") "unicode — ✓" "a multi-byte string"
+            Expect.equal (roundTrip 12345.6789m) 12345.6789m "a decimal carrying a scale"
+            Expect.equal (roundTrip (7, "seven")) (7, "seven") "a tuple mixing a number and a string"
 
             let guid = Guid.NewGuid()
             Expect.equal (roundTrip guid) guid "a Guid"
