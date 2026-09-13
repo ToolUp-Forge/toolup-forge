@@ -68,7 +68,21 @@ module Remoting =
     /// Specifies that the API uses binary serialization for responses
     let withBinarySerialization (options: RemoteBuilderOptions) =
         let serializer response returnType =
-            MsgPack.Read.Reader(response).Read returnType
+            // Phase 783 — read through the refusing entry. A malformed
+            // reply raises `DecodeException` carrying a named
+            // `DecodeError`; `Proxy.proxyFetch`'s 200 arm converts it into
+            // a `ProxyRequestException` whose `DecodeError` is `Some`, so
+            // the caller distinguishes "the server's reply did not decode"
+            // from "the server returned an error" without reading prose.
+            //
+            // `CustomResponseSerializer` is `byte[] -> Type -> obj` and
+            // stays that way: making it return a `Result` would retype a
+            // public seam every consumer implements, to say something the
+            // exception already says at the one call site that can act on
+            // it.
+            match MsgPack.Read.Reader(response).TryRead returnType with
+            | Ok value -> value
+            | Error error -> raise (DecodeException error)
 
         {
             options with

@@ -17,7 +17,33 @@ module TypeInfo =
             yield typeDef
     |]
 
+/// Phase 783 — the decode-refusal record, re-exported here so
+/// `open ToolUp.Remoting.Server` is enough to name it.
+///
+/// It is DEFINED in `ToolUp.Platform.Core`
+/// (`Shared/Remoting/DecodeError.fs`, namespace `ToolUp.Remoting`) rather
+/// than in this file, which is what the phase text proposed. It could not
+/// live here: the MsgPack reader that refuses with it is in Core, the
+/// Fable client proxy that branches on it is in `ToolUp.Platform.Client`,
+/// and neither tier references `ToolUp.Platform.Server`. Core is also the
+/// only tier whose source ships under `fable/` in the nupkg, so it is the
+/// only placement from which all three tiers can share ONE vocabulary
+/// (GP 10). Construct it with `ToolUp.Remoting.DecodeError` in scope.
+type DecodeError = ToolUp.Remoting.DecodeError
+
+/// The pre-783 argument-parse error shape. Retained as a rendering of
+/// `DecodeError` rather than as a second vocabulary: `ofDecodeError` is
+/// the only sanctioned way to produce one, so a caller reading the
+/// stringly-typed form and a caller branching on the structured form can
+/// never disagree about what failed.
 type ParsingArgumentsError = { ParsingArgumentsError: string }
+
+[<RequireQualifiedAccess>]
+module ParsingArgumentsError =
+    /// Render a decode refusal into the legacy stringly-typed shape.
+    let ofDecodeError (error: DecodeError) : ParsingArgumentsError = {
+        ParsingArgumentsError = ToolUp.Remoting.DecodeError.render error
+    }
 
 /// Route information that is propagated to error handler when exceptions are thrown
 type RouteInfo<'ctx> = {
@@ -186,6 +212,18 @@ type InvocationResult =
     | EndpointNotFound
     | InvalidHttpVerb
     | Exception of exn * functionName: string * requestBodyText: string option
+    /// Phase 783 — the request did not DECODE. Distinct from `Exception`
+    /// because it is a caller-side mistake, not a server fault: the
+    /// handler never ran, nothing partial was committed, and retrying the
+    /// identical bytes will fail identically. Adapters route it to the
+    /// Phase 69e `ErrorCategory.Validation` envelope + HTTP 400, never to
+    /// `Errors.unhandled` + 500.
+    ///
+    /// Carrying it as its own case rather than as a typed exception
+    /// inside `Exception` is deliberate: an adapter that forgets to
+    /// handle it fails to COMPILE, whereas a missed type test would
+    /// silently fall back to the 500 this phase exists to remove.
+    | DecodeRefused of error: DecodeError * functionName: string
 
 // an example is a list of arguments and the description of the example
 type Example = obj list * string

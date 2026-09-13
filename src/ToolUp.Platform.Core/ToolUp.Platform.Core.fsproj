@@ -613,6 +613,13 @@
              entries to keep the insertion off the contended mid-file
              region. Ships under fable/ with the rest of Core. -->
         <Compile Include="Shared\Interfaces\IContentScanner.fs" />
+        <!-- Phase 783 — the remoting decode-refusal vocabulary
+             (`DecodeError` + the `DecodeException` carrier). MUST precede
+             the MsgPack block below: Read.fs refuses with it. Also
+             consumed by Platform.Server's argument-parse stage and
+             Platform.Client's proxy, which is why it lives in Core (the
+             only tier whose source ships under fable/, GP 10). -->
+        <Compile Include="Shared\Remoting\DecodeError.fs" />
         <!-- 0.4.4 — MsgPack binary format folded in from
              ToolUp.Remoting.MsgPack. Used by Platform.Server's remoting
              dispatcher (Server/Remoting/Proxy.fs) and Platform.Client's

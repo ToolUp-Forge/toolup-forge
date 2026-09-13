@@ -105,7 +105,15 @@ let tests =
                  lambda-shorthand form the SDK standardised on.)"
         }
 
-        test "deserialiseArgWithBackend takes JsonElement (no re-parse)" {
+        // Phase 783 moved the per-argument deserialise CALL out of Proxy.fs
+        // and into the one decode seam in the STJ converter set
+        // (`FableConverters.tryDeserialise`), so that a decode failure can be
+        // caught in one place and refused by name instead of thrown. The
+        // regression this pin guards is unchanged — the per-argument path must
+        // consume the already-parsed `JsonElement` through the generic
+        // `Deserialize<'T>` overload, never re-parse raw JSON text — so the
+        // pin follows the code across the two files rather than being dropped.
+        test "the per-argument deserialise takes JsonElement (no re-parse)" {
             let proxyPath =
                 Path.Combine(repoRoot (), "src", "ToolUp.Platform.Server", "Server", "Remoting", "Proxy.fs")
 
@@ -114,15 +122,35 @@ let tests =
             Expect.stringContains
                 contents
                 "argElement: JsonElement"
-                "deserialiseArgWithBackend must take JsonElement (not string). The previous \
+                "the per-arg deserialise must take JsonElement (not string). The previous \
                  signature took raw JSON text and re-parsed per call."
 
             Expect.stringContains
                 contents
-                "argElement.Deserialize<'inp>(stjOptions)"
-                "Per-arg deserialise must use JsonElement.Deserialize so no re-parse \
-                 happens. JsonSerializer.Deserialize<'inp>(text, opts) would silently \
-                 re-introduce the regression."
+                "FableConverters.tryDeserialise<'inp> argElement stjOptions"
+                "the proxy must hand the already-parsed ELEMENT to the decode seam. Passing \
+                 raw text (or the element's RawText) would re-introduce the N+1 parse the \
+                 fastpath removed, and would do it invisibly."
+
+            let seamPath =
+                Path.Combine(
+                    repoRoot (),
+                    "src",
+                    "ToolUp.Platform.Server",
+                    "Server",
+                    "Remoting",
+                    "Json",
+                    "SystemTextJsonConverter.fs"
+                )
+
+            Expect.stringContains
+                (File.ReadAllText seamPath)
+                "element.Deserialize<'T>(options)"
+                "the seam must use the generic JsonElement.Deserialize overload so no \
+                 re-parse happens, and so the happy path stays byte-identical rather than \
+                 routing through the boxing by-Type overload. \
+                 JsonSerializer.Deserialize<'T>(text, opts) would silently re-introduce \
+                 the regression."
         }
 
         test "Multipart text section parses into JsonElement (not raw text)" {

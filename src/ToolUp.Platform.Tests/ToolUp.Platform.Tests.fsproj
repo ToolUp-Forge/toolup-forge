@@ -2015,6 +2015,13 @@
              (unclassified-set equality), TUR0001/TUR0002 finding shape,
              and source-name normalisation. -->
         <Compile Include="InProcess\RemotingAnalyzerRecognitionTests.fs" />
+        <!-- Phase 783 — decode failures as named refusals. Drives the real
+             dispatcher on a TestServer (malformed argument / non-array
+             body / malformed JSON / arity), plus the closed DecodeError
+             vocabulary, the MsgPack reader's TryRead-vs-Read pair and the
+             client-side recovery. Placed beside the other Remoting packs;
+             no ordering constraint (it references only shipped surface). -->
+        <Compile Include="InProcess\RemotingDecodeRefusalTests.fs" />
         <!-- Phase 196 — adversarial fail-closed test pack. Proves the
              inverse of the Phase 69d/69h happy-path packs: an un-annotated /
              mis-annotated / under-credentialled call FAILS CLOSED rather

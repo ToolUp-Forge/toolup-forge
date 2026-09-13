@@ -12624,6 +12624,24 @@ ToolUp.Platform.WorkflowTransitionedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.ToState : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.UserId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.WorkflowId : System.String { get }
+ToolUp.Remoting.DecodeError (class)
+ToolUp.Remoting.DecodeError..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String)
+ToolUp.Remoting.DecodeError.Expected : System.String { get }
+ToolUp.Remoting.DecodeError.Found : System.String { get }
+ToolUp.Remoting.DecodeError.Path : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.DecodeErrorModule (class)
+ToolUp.Remoting.DecodeErrorModule.at(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String) : ToolUp.Remoting.DecodeError
+ToolUp.Remoting.DecodeErrorModule.create(System.String, System.String) : ToolUp.Remoting.DecodeError
+ToolUp.Remoting.DecodeErrorModule.failAt`1(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String) : a
+ToolUp.Remoting.DecodeErrorModule.failWith`1(System.String, System.String) : a
+ToolUp.Remoting.DecodeErrorModule.fail`1(ToolUp.Remoting.DecodeError) : a
+ToolUp.Remoting.DecodeErrorModule.render(ToolUp.Remoting.DecodeError) : System.String
+ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
+ToolUp.Remoting.DecodeException (class)
+ToolUp.Remoting.DecodeException..ctor()
+ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
+ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.MsgPack.Format (class)
 ToolUp.Remoting.MsgPack.Format.Array16 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Array32 : System.Byte (literal)
@@ -12691,6 +12709,7 @@ ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt16() : System.UInt16
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt32() : System.UInt32
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt64() : System.UInt64
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt8() : System.Byte
+ToolUp.Remoting.MsgPack.Read+Reader.TryRead(System.Type) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1 (class)
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1..ctor()
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1.Deserialize(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, System.Object]) : System.Object

@@ -11,6 +11,9 @@ open System.Text.Json
 open System.Text.Json.Serialization
 open System.Text.Unicode
 open FSharp.Reflection
+// Phase 783 — the closed decode-refusal vocabulary (`DecodeError`), used
+// by `FableConverters.tryDeserialiseElement` at the bottom of this file.
+open ToolUp.Remoting
 
 // =============================================================================
 // Reflection caches
@@ -1510,6 +1513,80 @@ module FableConverters =
         let opts = JsonSerializerOptions()
         addTo opts
         opts
+
+    /// Phase 783 — map a `JsonException` raised anywhere inside
+    /// System.Text.Json (its own reader, or one of the converters above)
+    /// onto the closed refusal vocabulary.
+    ///
+    /// `JsonException.Path` is STJ's own `$.a.b[0]` notation, which is the
+    /// same dot-joined shape `DecodeError.Path` renders — indexers carried
+    /// inside their segment (`b[0]`), never split out. So normalising is
+    /// just splitting on `.` and dropping the `$` root marker; the segment
+    /// text itself passes through unchanged, and a consumer that re-joins
+    /// the list gets STJ's own path back.
+    ///
+    /// A `null` Path (STJ does not always populate it — a converter that
+    /// throws while reading a sub-element often does not) yields an EMPTY
+    /// path, which renders as a root refusal. That is the honest answer:
+    /// the proxy annotates the argument index on the way out, so the
+    /// refusal still says where it was, without this function inventing a
+    /// field name it does not know.
+    let private pathOfJsonException (ex: JsonException) : string list =
+        match ex.Path with
+        | null -> []
+        | p ->
+            p.Split('.')
+            |> Array.filter (fun segment -> segment <> "$" && segment <> "")
+            |> Array.toList
+
+    /// Phase 783 — THE decode seam. Deserialise one `JsonElement` into
+    /// `targetType`, returning a named refusal instead of throwing.
+    ///
+    /// This is the boundary move the phase is about, and it is
+    /// deliberately the ONLY thing that moved on this wire: the converter
+    /// set above still refuses internally by throwing, and rewriting
+    /// those interiors is [Phase 785]'s work. Catching here rather than
+    /// per-converter is what makes the guarantee total — a converter
+    /// added later, or an exception raised by System.Text.Json's own
+    /// reader before any converter is consulted, is covered by
+    /// construction rather than by remembering to convert it.
+    ///
+    /// The `| ex ->` arm is not defensive padding: STJ's converters may
+    /// raise `InvalidOperationException` / `NotSupportedException` /
+    /// `FormatException` for an unsupported shape, and a caller of this
+    /// function has been promised a `Result`. An exception escaping here
+    /// would land back in the generic unhandled envelope — the exact
+    /// outcome the phase removes.
+    let private refusalOf (element: JsonElement) (targetType: Type) (ex: exn) : DecodeError = {
+        Path =
+            match ex with
+            | :? JsonException as jsonEx -> pathOfJsonException jsonEx
+            | _ -> []
+        Expected = targetType.Name
+        Found = sprintf "%s (%s)" (string element.ValueKind) ex.Message
+    }
+
+    let tryDeserialiseElement
+        (element: JsonElement)
+        (targetType: Type)
+        (options: JsonSerializerOptions)
+        : Result<obj, DecodeError> =
+        try
+            Ok(element.Deserialize(targetType, options))
+        with ex ->
+            Error(refusalOf element targetType ex)
+
+    /// Phase 783 — the statically-typed twin of `tryDeserialiseElement`,
+    /// for the dispatcher's argument-parse stage where the target type is
+    /// a type parameter. Same seam, same refusal mapping; the generic
+    /// `Deserialize<'T>` overload is kept on the happy path so
+    /// well-formed traffic is byte-identical to the pre-phase behaviour
+    /// rather than routed through a boxing `unbox`.
+    let tryDeserialise<'T> (element: JsonElement) (options: JsonSerializerOptions) : Result<'T, DecodeError> =
+        try
+            Ok(element.Deserialize<'T>(options))
+        with ex ->
+            Error(refusalOf element typeof<'T> ex)
 
     /// Lazily-initialised singleton for the canonical default-shape options.
     /// Hidden behind the `shared` accessor below — direct mutation is

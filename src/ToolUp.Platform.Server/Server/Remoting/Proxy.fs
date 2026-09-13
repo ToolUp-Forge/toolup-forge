@@ -48,13 +48,25 @@ let private parseArgumentArray
     (expectedArgCount: int)
     (text: string)
     : JsonElement list =
-    use doc = JsonDocument.Parse(text)
+    // Phase 783 — the outer-array parse is part of the decode seam: a
+    // body that is not JSON at all, and a body that is JSON but not an
+    // array, are both caller-side shape mistakes and refuse rather than
+    // throw. `JsonDocument.Parse` itself raises `JsonException` on
+    // malformed input, so the `try` is load-bearing, not defensive.
+    use doc =
+        try
+            JsonDocument.Parse(text)
+        with :? JsonException as ex ->
+            DecodeError.failAt
+                [ sprintf "%s(args)" functionName ]
+                (sprintf "a JSON array of %d argument(s)" expectedArgCount)
+                (sprintf "malformed JSON (%s)" ex.Message)
 
     if doc.RootElement.ValueKind <> JsonValueKind.Array then
-        failwithf
-            "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
-            functionName
-            expectedArgCount
+        DecodeError.failAt
+            [ sprintf "%s(args)" functionName ]
+            (sprintf "a JSON array of %d argument(s)" expectedArgCount)
+            (string doc.RootElement.ValueKind)
 
     doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
@@ -69,13 +81,21 @@ let private parseArgumentArrayBytes
     (expectedArgCount: int)
     (bytes: byte[])
     : JsonElement list =
-    use doc = JsonDocument.Parse(System.ReadOnlyMemory bytes)
+    // Phase 783 — same refusal shape as the text path above.
+    use doc =
+        try
+            JsonDocument.Parse(System.ReadOnlyMemory bytes)
+        with :? JsonException as ex ->
+            DecodeError.failAt
+                [ sprintf "%s(args)" functionName ]
+                (sprintf "a JSON array of %d argument(s)" expectedArgCount)
+                (sprintf "malformed JSON (%s)" ex.Message)
 
     if doc.RootElement.ValueKind <> JsonValueKind.Array then
-        failwithf
-            "The record function '%s' expected %d argument(s) to be received in the form of a JSON array but the input JSON was not an array"
-            functionName
-            expectedArgCount
+        DecodeError.failAt
+            [ sprintf "%s(args)" functionName ]
+            (sprintf "a JSON array of %d argument(s)" expectedArgCount)
+            (string doc.RootElement.ValueKind)
 
     doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
@@ -84,9 +104,19 @@ let private parseArgumentArrayBytes
 /// re-parse. Previously this function took raw JSON text and called
 /// `JsonSerializer.Deserialize<'inp>(text, opts)`, which re-parsed
 /// the slice into its own JsonDocument per argument.
-let private deserialiseArgWithBackend<'inp> (backend: JsonSerializerBackend) (argElement: JsonElement) : 'inp =
+///
+/// Phase 783 — now the refusing form of that deserialise. Routes
+/// through the one seam in `FableConverters` (`tryDeserialise`), so every
+/// exception System.Text.Json or the converter set can raise arrives here
+/// as a `DecodeError` naming the argument's path, its expected type and
+/// what the wire actually held.
+let private tryDeserialiseArgWithBackend<'inp>
+    (backend: JsonSerializerBackend)
+    (argElement: JsonElement)
+    : Result<'inp, DecodeError> =
     match backend with
-    | SystemTextJson stjOptions -> argElement.Deserialize<'inp>(stjOptions)
+    | SystemTextJson stjOptions ->
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise<'inp> argElement stjOptions
 
 type private MsgPackSerializer<'a> =
     static let serializer = MsgPack.Write.makeSerializer<'a> ()
@@ -227,18 +257,26 @@ let rec private makeEndpointProxy<'fieldPart>
         unbox<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> p
 
     // Check that no arguments are left
+    //
+    // Phase 783 — an arity mismatch is a decode refusal, not a server
+    // fault. It is the same class as a mistyped field: the caller sent a
+    // shape the method cannot accept, the handler never runs, and
+    // resending the identical bytes fails identically. Refusing here is
+    // what makes the phase's guarantee total — otherwise a request with
+    // the right field types and the wrong argument COUNT would still
+    // arrive as an uncategorised 500.
+    let arityRefusal (makeProps: MakeEndpointProps) (actual: int) : DecodeError =
+        let typeInfo =
+            typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
+
+        DecodeError.at
+            [ sprintf "%s(args)" makeProps.FieldName ]
+            (sprintf "%d argument(s) of the types %s" (makeProps.FlattenedTypes.Length - 1) typeInfo)
+            (sprintf "%d argument(s)" actual)
+
     let validateArgumentCount props makeProps =
         match props.Arguments with
-        | _ :: _ ->
-            let typeInfo =
-                typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
-
-            failwithf
-                "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input JSON array"
-                makeProps.FieldName
-                (makeProps.FlattenedTypes.Length - 1)
-                typeInfo
-                props.Arguments.Length
+        | _ :: _ -> DecodeError.fail (arityRefusal makeProps props.Arguments.Length)
         | _ -> ()
 
     let writeToOutputMemoryStream isBinaryOutput (props: InvocationPropsInt) result =
@@ -293,10 +331,13 @@ let rec private makeEndpointProxy<'fieldPart>
                         match props.Arguments with
                         | Choice1Of2 bytes :: t ->
                             if typeof<'inp> <> typeof<byte[]> then
-                                failwithf
-                                    "The record function '%s' expected an argument of type %s, but got binary input"
-                                    makeProps.FieldName
+                                // Phase 783 — a multipart binary section
+                                // landing on a non-`byte[]` parameter is a
+                                // shape refusal like any other.
+                                DecodeError.failAt
+                                    [ sprintf "%s(args)" makeProps.FieldName ]
                                     typeof<'inp>.Name
+                                    "binary input"
 
                             let inp = box bytes :?> 'inp
                             outp (f inp) { props with Arguments = t }
@@ -307,21 +348,26 @@ let rec private makeEndpointProxy<'fieldPart>
                             // Previous behaviour was N+1 parses (outer array
                             // parse + per-argument re-parse from text); the
                             // new shape is one parse total.
-                            let inp = deserialiseArgWithBackend<'inp> makeProps.JsonSerializer argElement
-                            outp (f inp) { props with Arguments = t }
+                            //
+                            // Phase 783 — the deserialise now returns a
+                            // `Result`. `Error` is annotated with the
+                            // argument's index and raised as a refusal;
+                            // `makeApiProxy`'s handler below turns it into
+                            // `InvocationResult.DecodeRefused`, so `f` is
+                            // never applied. The happy path is unchanged.
+                            let argIndex = makeProps.FlattenedTypes.Length - 1 - props.Arguments.Length
+
+                            match tryDeserialiseArgWithBackend<'inp> makeProps.JsonSerializer argElement with
+                            | Ok inp -> outp (f inp) { props with Arguments = t }
+                            | Error error ->
+                                error
+                                |> DecodeError.under (sprintf "args[%d]" (max argIndex 0))
+                                |> DecodeError.under makeProps.FieldName
+                                |> DecodeError.fail
                         | [] when typeof<'inp> = typeof<unit> ->
                             let inp = box () :?> _
                             outp (f inp) { props with Arguments = [] }
-                        | [] ->
-                            let typeInfo =
-                                typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
-
-                            failwithf
-                                "The record function '%s' expected %d argument(s) of the types %s but got %d argument(s) in the input"
-                                makeProps.FieldName
-                                (makeProps.FlattenedTypes.Length - 1)
-                                typeInfo
-                                props.Arguments.Length)
+                        | [] -> DecodeError.fail (arityRefusal makeProps props.Arguments.Length))
             }
     | _ ->
         // Phase 69c — streaming methods returning IAsyncEnumerable<'T>
@@ -470,7 +516,32 @@ let makeApiProxy<'impl, 'ctx>
                                 }
 
                                 return! fieldProxy (props.ImplementationBuilder() |> shape.Get) props'
-                        with e ->
+                        // Phase 783 — a decode refusal short-circuits to
+                        // its own result case BEFORE the generic exception
+                        // arm below. This is the one place the refusal
+                        // leaves the proxy, and it is deliberately the
+                        // SAME seam the generic arm already used rather
+                        // than a new stage: the decode happens deep inside
+                        // the curried `fieldProxy` recursion, so there is
+                        // no earlier point at which the refusal exists.
+                        //
+                        // Note what did NOT move. The phase text proposed
+                        // short-circuiting "before any pre-flight work
+                        // that assumed a decoded value (69e validation,
+                        // 69f idempotency hashing of the parsed args)".
+                        // Neither pre-flight assumes one:
+                        // `Validation.parseFirstArgFromBody` wraps its
+                        // parse in `try … with _ -> None` and defers to
+                        // this proxy by design, and 69f hashes the RAW
+                        // request body, not parsed arguments. Reordering
+                        // would also have been a regression — it would put
+                        // argument decoding ahead of auth and rate-limit,
+                        // handing an unauthenticated caller field-level
+                        // detail about the method's shape and charging no
+                        // budget for it.
+                        with
+                        | DecodeException error -> return InvocationResult.DecodeRefused(error, shape.MemberInfo.Name)
+                        | e ->
                             // Phase 69m — when the cached-bytes path was
                             // taken, `requestBodyText` is None on the happy
                             // path. Materialise text from cached bytes here

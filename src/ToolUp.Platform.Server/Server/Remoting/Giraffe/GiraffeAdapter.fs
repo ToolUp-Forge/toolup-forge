@@ -1462,6 +1462,56 @@ module GiraffeUtil =
 
                                             emitTelemetry (MethodOutcome.Failed e)
                                             return! fail e routeInfo options next ctx
+                                    | DecodeRefused(error, functionName) ->
+                                        // Phase 783 — the request did not
+                                        // decode. A named refusal, not a
+                                        // fault: 400 + the Phase 69e
+                                        // `validation` envelope, so a
+                                        // client that already branches on
+                                        // `category` needs no new code to
+                                        // tell "you sent the wrong shape"
+                                        // from "the server fell over".
+                                        // The handler never ran.
+                                        //
+                                        // The payload mirrors the 69e
+                                        // violation envelope's shape
+                                        // (`methodName` + structured
+                                        // detail) so both arrive under one
+                                        // category with one parse. `path`
+                                        // is the segment list, not the
+                                        // rendered string, because a
+                                        // client branching on the field
+                                        // must not have to re-split prose;
+                                        // `message` carries the rendered
+                                        // sentence for logs and for the
+                                        // clients that only display it.
+                                        ctx.Response.StatusCode <- 400
+                                        emitTelemetry (MethodOutcome.Failed(ToolUp.Remoting.DecodeException error))
+
+                                        let payload =
+                                            box {|
+                                                methodName = functionName
+                                                decodeError = {|
+                                                    path = error.Path
+                                                    expected = error.Expected
+                                                    found = error.Found
+                                                |}
+                                                message = ToolUp.Remoting.DecodeError.render error
+                                            |}
+
+                                        let envelope =
+                                            Errors.categorisedWithSchema
+                                                options.SchemaVersion
+                                                ErrorCategory.Validation
+                                                payload
+
+                                        return!
+                                            setJsonBody
+                                                options.JsonSerializer
+                                                envelope
+                                                options.DiagnosticsLogger
+                                                next
+                                                ctx
                                     | InvalidHttpVerb -> return halt
                                     | EndpointNotFound -> return! notFound options next ctx
             }
