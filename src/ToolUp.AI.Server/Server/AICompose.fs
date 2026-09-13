@@ -102,6 +102,12 @@ type AIServerApp = {
     PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
+    /// Phase 47 — when to raise a sustained-action-denial alert.
+    /// `None` (the default) registers no monitor at all: a deployment
+    /// that has not opted in pays one failed `GetService` per agent
+    /// turn and nothing else (GP 13). Set via
+    /// `AIServerApp.withDenialRateAlert`.
+    DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -260,9 +266,12 @@ let composeAI (app: AIServerApp) : ServerApp =
     // endpoints share the gate:
     //   * `/dev/ai-fastpath` — Phase 6j.A Tier-1 hit-rate stats
     //   * `/dev/ai-latency`  — Phase 6i.A per-turn latency rollup
+    //   * `/dev/ai-allowlist` — Phase 47 action-denial rollup
     let fastPathDevHandlers =
         if config.EnableDevEndpoints then
-            FastPathTelemetryHandler.routes @ AILatencyHandler.routes
+            FastPathTelemetryHandler.routes
+            @ AILatencyHandler.routes
+            @ AIAllowlistDiagnosticsHandler.routes
         else
             []
 
@@ -346,6 +355,28 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // platform-tier Home overview via the Core IActiveAiProbe
                 // seam (GP 1: Platform.Server stays AI-dependency-free).
                 .AddSingleton<IActiveAiProbe>(ActiveAiProbe.create aiProviderFactory)
+                // Phase 47 — expose the AI action-denial rollup to the
+                // platform-tier health-monitor admin surface via the Core
+                // `IAIDenialRollupProbe` seam, for the same GP 1 reason
+                // as `IActiveAiProbe` above. This is the PRODUCTION route
+                // to the data `/dev/ai-allowlist` serves: gated on
+                // `PlatformRole.PlatformAdmin` by the health-monitor
+                // handler, so an operator does not need
+                // `EnableDevEndpoints` on in production to watch a
+                // prompt-injection campaign.
+                //
+                // The `IEventStore` is resolved lazily per call, not
+                // captured here — the store is registered by core
+                // `compose`, and the resolution order between the two
+                // layers is not something this registration should
+                // depend on.
+                .AddSingleton<IAIDenialRollupProbe>(
+                    System.Func<IServiceProvider, IAIDenialRollupProbe>(fun sp ->
+                        AIAllowlistDiagnosticsHandler.probe (fun () ->
+                            match sp.GetService(typeof<IEventStore>) with
+                            | :? IEventStore as store -> Some store
+                            | _ -> None))
+                )
                 // Phase 70 — register the Platform-Admin-managed AI key
                 // store. When the consumer passed `withPlatformAIKeyStore`
                 // explicitly, register that instance directly. When
@@ -379,6 +410,18 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // the env vars).
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIProviderEnvValidator.create aiProviderFactory)
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIModelEnvValidator.create aiProviderFactory)
+
+        // Phase 47 — the sustained-denial rate monitor. Registered ONLY
+        // when the deployment declared a policy via
+        // `AIServerApp.withDenialRateAlert`; otherwise nothing exists to
+        // resolve and the agent loop's probe returns null (GP 13).
+        let s =
+            match app.DenialRateAlert with
+            | None -> s
+            | Some policy ->
+                s.AddSingleton<AIDenialRateMonitor.AIDenialRateMonitor>(
+                    AIDenialRateMonitor.AIDenialRateMonitor(policy, fun () -> DateTime.UtcNow)
+                )
 
         // Phase 9m.A — opt-in startup probe (default OFF). Registered
         // only when TOOLUP_AI_PROBE_ON_STARTUP=1 — pays nothing for
@@ -433,6 +476,7 @@ module AIServerApp =
         PlatformProviders = []
         AIConfig = None
         ModuleAIContexts = []
+        DenialRateAlert = None
     }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into an
@@ -460,6 +504,7 @@ module AIServerApp =
             PlatformProviders = []
             AIConfig = None
             ModuleAIContexts = []
+            DenialRateAlert = None
         }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*` / `add*`) ───
@@ -794,6 +839,28 @@ module AIServerApp =
     let withPlatformAIKeyStore (store: IPlatformAIKeyStore) (app: AIServerApp) : AIServerApp = {
         app with
             PlatformKeyStore = Some store
+    }
+
+    /// Phase 47 — opt into sustained-action-denial alerting. When a
+    /// scope's refused client-tool calls cross `Threshold` within
+    /// `Window`, one Owner/Admin `SystemMessage` is published (then
+    /// suppressed for `Cooldown`), because a prompt-injection campaign
+    /// against the G12 allowlist is a security incident and should not
+    /// wait for someone to refresh a diagnostics page.
+    ///
+    /// Omitted → no monitor is registered and the deployment is
+    /// byte-for-byte as it was (GP 13 / GP 11). Start from
+    /// `AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults` and tune;
+    /// read `AIDenialRateAlertPolicy`'s own docs for the per-process
+    /// counting caveat before sizing a threshold on a multi-silo
+    /// deployment.
+    ///
+    ///     AIServerApp.withDenialRateAlert
+    ///         { AIDenialRateMonitor.AIDenialRateAlertPolicy.defaults with
+    ///             AlertScopeId = Some "_platform" }
+    let withDenialRateAlert (policy: AIDenialRateMonitor.AIDenialRateAlertPolicy) (app: AIServerApp) : AIServerApp = {
+        app with
+            DenialRateAlert = Some policy
     }
 
     /// Phase 70 A.5 — additively declare a platform provider on the

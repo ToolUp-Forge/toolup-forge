@@ -34,7 +34,7 @@ let private decodeOAuthRefreshPayload<'T> (json: string) : 'T option =
 
 // ─── IDataIngestionApi handler factory ───────────────────────────
 //
-// Builds the `IDataIngestionApi` Fable.Remoting handler. Resolves
+// Builds the `IDataIngestionApi` ToolUp.Remoting handler. Resolves
 // `IDataSourceConfigStore`, `IDataIngestor`, optional `IJobScheduler`
 // (for triggered refreshes), `AccessContext`, and (in Team /
 // MultiTeam mode) `ITeamStore` lazily from DI per request. Same

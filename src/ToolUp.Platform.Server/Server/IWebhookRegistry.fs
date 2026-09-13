@@ -12,7 +12,7 @@ open System
 ///
 /// Lives in the server layer (not shared) because implementations
 /// depend on `IBlobStorage` and `FableConverters` for persistence.
-/// The Fable.Remoting admin surface (`IWebhookApi`) is the only thing
+/// The ToolUp.Remoting admin surface (`IWebhookApi`) is the only thing
 /// the browser sees — it exposes a strict subset and resolves the
 /// `scopeId` server-side from `AccessContext`.
 ///

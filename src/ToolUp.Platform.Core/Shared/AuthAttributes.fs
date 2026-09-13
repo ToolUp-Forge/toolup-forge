@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// 0.4.1 — Forge-native authorisation attributes for Fable.Remoting API
+// 0.4.1 — Forge-native authorisation attributes for ToolUp.Remoting API
 // records. Mirrors the shape of `ToolUp.Remoting.Server`'s Phase 69d
 // attributes (`RequiresRole`, `RequiresClaim`, `TenantScoped`,
 // `AllowAnonymous`, `PublicEndpoint`) but lives in `ToolUp.Platform.Core`
@@ -23,7 +23,7 @@ open System
 // boundary translation.
 //
 // Wire shape: these attributes are pure metadata — they're stripped
-// from the JSON-on-the-wire payload by the Fable.Remoting serialiser.
+// from the JSON-on-the-wire payload by the ToolUp.Remoting serialiser.
 // Both client and server reflect the same attribute set at compile
 // time; the server's classifier enforces them at request time.
 

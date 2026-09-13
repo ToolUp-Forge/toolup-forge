@@ -8,7 +8,7 @@ open ToolUp.Platform
 //
 // `IJobHandler` (Phase 9b) implementation that dispatches to
 // `IDataIngestor.RunIngestion`. Registered with the scheduler at
-// compose time under name `JobHandlerName`. The Fable.Remoting
+// compose time under name `JobHandlerName`. The ToolUp.Remoting
 // `IDataIngestionApi.TriggerRefresh` schedules a `Manual`-trigger
 // `JobRegistration` against this handler; cron-driven refreshes
 // schedule `CronTrigger` registrations the same way.

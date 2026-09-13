@@ -36,9 +36,9 @@ type WebhookTestResult = {
     Error: string option
 }
 
-// ─── Fable.Remoting API surface ─────────────────────────────────
+// ─── ToolUp.Remoting API surface ─────────────────────────────────
 
-/// Admin-facing Fable.Remoting API for managing webhook subscriptions
+/// Admin-facing ToolUp.Remoting API for managing webhook subscriptions
 /// and inspecting delivery history. Auto-injected by `compose` in all
 /// non-Anonymous modes — Anonymous deployments have no persistent
 /// scope to attach subscriptions to, so the entire surface short-
@@ -126,6 +126,6 @@ type IWebhookApi = {
 }
 
 module WebhookApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `PlatformApi`, `IConfigApi`, etc.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"

@@ -1,0 +1,33 @@
+{
+  "schema": "toolup.perf-measurements/v1",
+  "label": "fixture — the run that timed a process which never became ready",
+  "appDirectory": "samples/MinimalApp/src/MinimalApp.Server/bin/Release/net10.0",
+  "outputAssemblies": [
+    "FSharp.Core.dll",
+    "MinimalApp.Server.dll",
+    "ToolUp.Platform.Core.dll",
+    "ToolUp.Platform.Server.dll"
+  ],
+  "samples": [
+    {
+      "metric": "coldStartMs",
+      "statistic": "min",
+      "value": 12.4,
+      "samples": 6,
+      "observed": false,
+      "evidence": "no boot reached 'Application started.' within 60s",
+      "median": 13.1,
+      "max": 15.9
+    },
+    {
+      "metric": "hotPathMs",
+      "statistic": "min",
+      "value": 0.4,
+      "samples": 300,
+      "observed": false,
+      "evidence": "HTTP 500 from POST /api/PlatformInfoApi/GetPlatformInfo — 0/300 requests returned success",
+      "median": 0.45,
+      "max": 0.9
+    }
+  ]
+}

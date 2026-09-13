@@ -12,7 +12,7 @@ open ToolUp.Platform.TeamManagement
 /// shape Fable cannot parse. Same pattern as `FeatureFlagHandler`.
 let private eventJsonOptions = FableConverters.create ()
 
-/// Build the `IModuleVisibilityApi` Fable.Remoting handler (Phase 637).
+/// Build the `IModuleVisibilityApi` ToolUp.Remoting handler (Phase 637).
 /// Resolves `IModuleVisibilityStore` and `AccessContext` lazily from DI
 /// per request, the same pattern `FeatureFlagHandler` / `ConfigHandler`
 /// use.

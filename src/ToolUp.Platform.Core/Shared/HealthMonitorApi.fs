@@ -7,7 +7,7 @@ open System
 
 // ─── HealthMonitorApi (production-safe Owner/Admin surface) ──────────
 //
-// Read-only Fable.Remoting API surfacing live `IHealthCheck` results
+// Read-only ToolUp.Remoting API surfacing live `IHealthCheck` results
 // and the most recent `IConfigValidator` preflight outcomes
 // to authenticated Owner/Admin operators through a built-in
 // admin module — so production deployments don't have to enable the
@@ -126,12 +126,114 @@ type DegradedCapability = {
     Remediation: string
 }
 
-/// Owner/Admin-gated read-only Fable.Remoting surface. Auto-injected
+// ─── Phase 47 — AI action-denial rollup (wire records + seam) ────────
+//
+// The `_platform.ai.tool_allowlist_denial` audit stream (Phase 45) is
+// written by the AI tier's agent loop every time the client-tool
+// authorizer refuses a model-driven action. Written, but until Phase 47
+// invisible without hand-querying `IEventStore` — so a prompt-injection
+// campaign or a mis-scoped allowlist looked exactly like silence.
+//
+// These records are the ONE shape both readers render: the debug
+// endpoint `/dev/ai-allowlist` serialises them directly, and the
+// production-safe `HealthMonitorUI` panel receives them over
+// ToolUp.Remoting. They live in Core because only Core ships its source
+// under `fable/` (GP 10) — a duplicate DTO in the AI tier would drift.
+
+/// One grouped denial count. `Key` is the grouping value (a tool name,
+/// an active-module id, or a scope id); `Count` the denials in the
+/// rolling window carrying it.
+type AIDenialGroupCount = { Key: string; Count: int }
+
+/// One top-N `(tool, module)` denial pair — the cut that answers "what
+/// is being refused, and where is it being driven from", which neither
+/// single-axis breakdown can.
+type AIDenialToolModulePair = {
+    ToolName: string
+    /// The `ActiveModule` the chat turn was driving, or `"(none)"` when
+    /// the turn carried no active module.
+    ActiveModule: string
+    Count: int
+}
+
+/// One recent denial, sanitised for operator display.
+///
+/// **PII / injection envelope.** `Reason` is the authorizer's own
+/// refusal string, control-stripped and truncated by the producing
+/// tier. Raw model arguments are NEVER carried here — the model chose
+/// them, so they are attacker-influenced text, and an operator console
+/// is the wrong place to render it verbatim.
+type RecentAIDenial = {
+    ToolName: string
+    ActiveModule: string
+    /// Sanitised + truncated refusal reason.
+    Reason: string
+    OccurredAt: DateTime
+}
+
+/// Rolling-window rollup of AI action denials for one scope.
+///
+/// `TotalDenialsAllTime` is the unwindowed count in the caller's scope
+/// (so a burst that has already aged out of the window is still
+/// visible as history); `TotalDenialsInWindow` and everything below it
+/// describe the trailing `WindowMinutes` only.
+type AIDenialRollup = {
+    GeneratedAt: DateTime
+    /// The caller's resolved scope. Every count below is read from this
+    /// scope alone — cross-team denial enumeration is structurally
+    /// impossible (GP 4).
+    ScopeId: string
+    WindowMinutes: int
+    TotalDenialsAllTime: int
+    TotalDenialsInWindow: int
+    /// `TotalDenialsInWindow / WindowMinutes`. The rate an alerting
+    /// threshold is expressed against.
+    DenialsPerMinute: float
+    ByToolName: AIDenialGroupCount list
+    ByActiveModule: AIDenialGroupCount list
+    ByScopeId: AIDenialGroupCount list
+    TopToolModulePairs: AIDenialToolModulePair list
+    RecentDenials: RecentAIDenial list
+}
+
+/// Optional DI seam (GP 1 / GP 13). The AI companion (`ToolUp.AI`)
+/// implements and registers this so the platform-tier health-monitor
+/// admin surface can render the denial rollup **without**
+/// `Platform.Server` taking a dependency on `ToolUp.AI` — the same
+/// shape `IActiveAiProbe` uses for the Home overview. Absent from DI
+/// when no AI is composed → `GetAIDenialRollup` returns `Ok None` and
+/// the UI suppresses the panel rather than rendering a misleading zero.
+///
+/// **Six-rule portability audit (GP 12), clean.**
+/// 1. *Identity by value* — `scopeId` is a `string`; the return is a
+///    value record of primitives and lists. No live handles.
+/// 2. *Async at every boundary* — the single method returns
+///    `Async<AIDenialRollup>`.
+/// 3. *Retry / supervision as data* — there is none to express: the
+///    read is a pure projection over `IEventStore`, and a store that
+///    cannot answer surfaces its own failure. No callback parameters.
+/// 4. *Stateless handlers between invocations* — the implementation
+///    holds no per-call state; every input arrives as a parameter, so
+///    a grain deactivation between calls is safe.
+/// 5. *No cross-shard ordering promises* — the rollup is an unordered
+///    aggregate over one scope. `RecentDenials` is sorted by
+///    `OccurredAt` *within* the returned value, which is a property of
+///    the projection, not a promise about the store's read order (the
+///    implementation sorts, per `IEventStore`'s own ordering contract).
+/// 6. *Precision at the lower bound* — the window is declared in whole
+///    MINUTES (`WindowMinutes`), and no sub-minute claim is made about
+///    when a denial becomes visible in it.
+type IAIDenialRollupProbe =
+    /// Roll up the AI action denials recorded for `scopeId` over the
+    /// implementation's trailing window.
+    abstract Rollup: scopeId: string -> Async<AIDenialRollup>
+
+/// Owner/Admin-gated read-only ToolUp.Remoting surface. Auto-injected
 /// by `compose` — `Anonymous` mode returns `Error` from both methods;
 /// `Team` / `MultiTeam` require Owner or Admin role; `Individual` /
 /// `AuthenticatedEphemeral` require an authenticated user.
 ///
-/// `Result<_, string>` is the established Fable.Remoting failure
+/// `Result<_, string>` is the established ToolUp.Remoting failure
 /// shape (`IWebhookApi`, `IConfigApi`, `IFeatureFlagApi`) — RBAC
 /// denials and transport failures both flow as `Error` so the client
 /// branches uniformly.
@@ -171,4 +273,18 @@ type IHealthMonitorApi = {
     /// dedicated refresh hits this on every press without amplifying load.
     [<RequiresRole "PlatformAdmin">]
     GetDegradedCapabilities: unit -> Async<Result<DegradedCapability list, string>>
+
+    /// Phase 47 — read the rolling AI action-denial rollup for the
+    /// caller's scope, through the optional `IAIDenialRollupProbe` seam.
+    /// `Ok None` when no AI companion is composed (the seam is absent
+    /// from DI) — the UI suppresses the panel rather than rendering a
+    /// misleading zero, exactly as it does for an absent scheduler.
+    ///
+    /// Production-safe by construction: this path is gated on
+    /// `PlatformRole.PlatformAdmin` like every other method here and
+    /// needs no `EnableDevEndpoints`, so an operator can watch a
+    /// prompt-injection campaign in production without turning the
+    /// debug surface on.
+    [<RequiresRole "PlatformAdmin">]
+    GetAIDenialRollup: unit -> Async<Result<AIDenialRollup option, string>>
 }

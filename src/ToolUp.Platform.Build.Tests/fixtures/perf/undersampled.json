@@ -1,0 +1,28 @@
+{
+  "schema": "toolup.perf-measurements/v1",
+  "label": "fixture — a 'min' drawn from one observation is just that observation",
+  "appDirectory": "samples/MinimalApp/src/MinimalApp.Server/bin/Release/net10.0",
+  "outputAssemblies": [ "MinimalApp.Server.dll" ],
+  "samples": [
+    {
+      "metric": "coldStartMs",
+      "statistic": "min",
+      "value": 401.0,
+      "samples": 1,
+      "observed": true,
+      "evidence": "'Application started.' observed on stdout for 1/1 boots",
+      "median": 401.0,
+      "max": 401.0
+    },
+    {
+      "metric": "hotPathMs",
+      "statistic": "min",
+      "value": 0.31,
+      "samples": 3,
+      "observed": true,
+      "evidence": "HTTP 200 from POST /api/PlatformInfoApi/GetPlatformInfo — 3/3 requests returned success",
+      "median": 0.33,
+      "max": 0.4
+    }
+  ]
+}

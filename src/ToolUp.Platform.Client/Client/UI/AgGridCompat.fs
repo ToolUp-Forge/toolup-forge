@@ -170,7 +170,7 @@ let Desc = SortDirection.Desc
 // ─── Theming ─────────────────────────────────────────────────────
 
 /// Legacy string theme classes. Deprecated in favour of the Theming API.
-[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...)">]
+[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...). ThemeClass will be removed in a future major.">]
 module ThemeClass =
     let Alpine = Feliz.AgGrid.ThemeClass.Alpine
     let AlpineDark = Feliz.AgGrid.ThemeClass.AlpineDark

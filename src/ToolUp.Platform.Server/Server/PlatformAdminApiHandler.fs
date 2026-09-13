@@ -6,7 +6,7 @@ open ToolUp.Platform.RemotingHelpers
 
 // ─── Phase 4b — PlatformAdminApi handler ─────────────────────────────
 //
-// Server-side implementation of the `PlatformAdminApi` Fable.Remoting
+// Server-side implementation of the `PlatformAdminApi` ToolUp.Remoting
 // record (defined in `Core/Shared/PlatformAdminApi.fs`). Resolves
 // `IPlatformAdminStore` and `AccessContext` lazily from DI per request
 // — same idiom as `HealthMonitorApiHandler` / `WebhookApiHandler` /

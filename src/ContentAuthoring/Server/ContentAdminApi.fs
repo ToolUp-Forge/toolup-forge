@@ -15,7 +15,7 @@ open ToolUp.PublicRendering
 // status transitions, and browse / restore revisions. Reuses the
 // lifecycle (`ContentLifecycle`) + versioning (`PublicPageRevisions`)
 // substrate; the existing overlay render path serves whatever this
-// writes. A Fable.Remoting contract so a client module binds to it
+// writes. A ToolUp.Remoting contract so a client module binds to it
 // type-safely.
 
 /// A page row for the admin list view.
@@ -32,7 +32,7 @@ type ContentAdminError =
     | NotFound
     | StorageError of message: string
 
-/// Fable.Remoting contract for the authoring admin surface. `SetStatus`
+/// ToolUp.Remoting contract for the authoring admin surface. `SetStatus`
 /// takes a full `PublishStatus` so a `Scheduled at` carries its publish
 /// time; `RestoreRevision` appends the chosen revision as the new
 /// current version (history preserved).

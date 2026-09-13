@@ -7,11 +7,11 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.SchedulingApi
 open ToolUp.Scheduling.IBookingScheduler
 
-// ─── Phase 20 — Fable.Remoting handler ──────────────────────────
+// ─── Phase 20 — ToolUp.Remoting handler ──────────────────────────
 //
 // Builds a per-request `ISchedulingApi` from the resolved
 // `AccessContext` (scopeId / userId) and an `IBookingScheduler`
-// pulled from DI. `makeApi` is the SDK's standard Fable.Remoting
+// pulled from DI. `makeApi` is the SDK's standard ToolUp.Remoting
 // adapter (`SDK.Server.makeApi`) — it carries the Fable-Remoting
 // JSON pipeline and the SDK's error classifier.
 //

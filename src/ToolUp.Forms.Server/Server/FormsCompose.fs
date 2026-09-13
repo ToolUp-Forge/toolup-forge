@@ -27,7 +27,7 @@ open ToolUp.Forms.PublicFormApiHandler
 // ─── Phase 66 Stream B.6 — Forms public-submit surface declaration ──
 //
 // `PublicFormApiHandler` serves `IPublicFormApi`'s two-method
-// Fable.Remoting surface at `/api/public/forms/<MethodName>` (per
+// ToolUp.Remoting surface at `/api/public/forms/<MethodName>` (per
 // `PublicFormApi.routeBuilder`). Both routes admit only `ClaimBearer`
 // subjects — the share-token claim IS the identity, validated per
 // request by `IShareTokenStore`. They are surfaced to
@@ -774,7 +774,7 @@ module FormsServerApp =
                     analysers
                     ctx)
 
-        // 3b. Phase 21b — public-form Fable.Remoting handler at
+        // 3b. Phase 21b — public-form ToolUp.Remoting handler at
         //     /api/public/forms/. Token-gated (no AccessContext).
         //     Resolves the same IFormStore + IAuditLog as the
         //     authenticated handler, plus the IShareTokenStore that

@@ -11,7 +11,7 @@ open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.AggregationTypes
 
-// ─── Phase 21 — Fable.Remoting wire contract ────────────────────────
+// ─── Phase 21 — ToolUp.Remoting wire contract ────────────────────────
 //
 // The client-facing API. Method shapes mirror `IFormStore` /
 // `IWorkflowEngine` minus per-request `scopeId` / actor parameters —
@@ -239,7 +239,7 @@ type DispatchSummary = {
     SuccessCount: int
 }
 
-/// Fable.Remoting record-of-functions. Each call goes over HTTP via
+/// ToolUp.Remoting record-of-functions. Each call goes over HTTP via
 /// `ToolUp.Remoting.Client` proxy; server-side handler in
 /// `Server/FormApiHandler.fs` resolves the AccessContext, applies
 /// permission gating, and delegates to `IFormStore` / `IWorkflowEngine`.

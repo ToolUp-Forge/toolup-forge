@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 // ─── Phase 9p.A — IServiceStatusBoardApi (unified operator status) ──
 //
-// Platform-Admin-gated read-only Fable.Remoting surface returning a
+// Platform-Admin-gated read-only ToolUp.Remoting surface returning a
 // composite `ServiceStatusSnapshot` plus per-section live refresh
 // methods. The handler composes existing audited interfaces; this is
 // not a new substrate interface and no GP-12 audit applies.
@@ -24,12 +24,12 @@ namespace ToolUp.Platform
 /// Owner / Platform-Admin-gated composite status board. Auto-mounted
 /// by `compose` — Anonymous-mode callers and non-admin callers both
 /// receive `Error`. `Result<_, string>` matches the established
-/// Fable.Remoting failure shape (`IHealthMonitorApi`, `IConfigApi`).
+/// ToolUp.Remoting failure shape (`IHealthMonitorApi`, `IConfigApi`).
 type IServiceStatusBoardApi = {
     /// Build the composite snapshot — fans out to every section
     /// builder in parallel with per-section timeout. Disabled
     /// substrates are skipped (no underlying read; section reports
-    /// `Disabled = true`). One Fable.Remoting call per snapshot.
+    /// `Disabled = true`). One ToolUp.Remoting call per snapshot.
     [<RequiresRole "PlatformAdmin">]
     GetSnapshot: unit -> Async<Result<ServiceStatusSnapshot, string>>
 

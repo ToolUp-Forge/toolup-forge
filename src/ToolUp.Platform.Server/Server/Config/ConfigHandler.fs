@@ -4,7 +4,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 
-/// Build the `IConfigApi` Fable.Remoting handler. Resolves
+/// Build the `IConfigApi` ToolUp.Remoting handler. Resolves
 /// `IConfigStore`, `AccessContext`, and `ITeamStore` lazily from DI per
 /// request (same pattern as `AISettingsHandler` and the built-in
 /// `PlatformApi`). Registered modules come from `ServerConfig.ModuleConfigs`

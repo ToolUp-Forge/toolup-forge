@@ -46,18 +46,18 @@
         <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
-        <!-- 0.4.3 — Elmish runtime folded in from the formerly-separate
+        <!-- 0.4.3 — the MVU runtime folded in from the formerly-separate
              ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
              packages. The runtime is a forge implementation detail
              rather than a separately consumable concern; one package
-             instead of three, one version line instead of three. The
-             `namespace Elmish` is preserved so every `open Elmish` site
-             across forge and downstream consumers continues to compile
-             unchanged. Compile order matches the prior cross-package
-             dependency order (core → React → HMR). -->
+             instead of three, one version line instead of three. Phase 73
+             renamed its namespaces to `ToolUp.Elmish` / `.React` / `.HMR`;
+             consumer `open` sites move per docs/migrations/73-*.md.
+             Compile order matches the prior cross-package dependency
+             order (core → React → HMR). -->
         <!-- 0.4.4 — ToolUp.Remoting.Client folded in. The Fable-side
-             RPC proxy + transport. Compiled BEFORE Elmish so
-             Cmd.OfRemoting in the folded Elmish source can reference
+             RPC proxy + transport. Compiled BEFORE the MVU runtime so
+             Cmd.OfRemoting in the ToolUp.Elmish source can reference
              the Remoting types. -->
         <Compile Include="Client\Remoting\Types.fs" />
         <Compile Include="Client\Remoting\Extensions.fs" />

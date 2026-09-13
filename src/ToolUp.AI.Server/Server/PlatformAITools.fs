@@ -41,6 +41,16 @@ open DataManagementTypes
 /// RBAC-correct path (GP 4). It also works unchanged on a real request
 /// context (the same middleware populates the same items).
 ///
+/// **Phase 36.C — the per-module opt-in.** The six tools additionally
+/// honour each TARGET module's declared `ModuleAIExposure`
+/// (`ServerModule.withAIExposure`), which is **off unless declared**.
+/// `list_accessible_modules` annotates (`queryable: false`);
+/// `list_data_types` filters; the four reach tools refuse with
+/// `UnqueryableModule`. See `aiQueryable` below for why that refusal is
+/// rendered differently from `PermissionDenied` and reported after it,
+/// and `docs/migrations/per-module-ai-queryability.md` for what a
+/// deployment that had adopted 36.B has to do.
+///
 /// Wired automatically by `composeAI`; apps do not register these.
 
 // ─── JSON helpers ────────────────────────────────────────────────
@@ -133,6 +143,42 @@ let private reconstructAccess (ctx: HttpContext) : AccessContext =
 /// `GetService`.
 let private grantLive (ctx: HttpContext) : string -> bool = moduleGrantGate ctx
 
+/// Phase 36.C — the per-module AI-queryability gate: has the TARGET
+/// module's author opted its data into this tool family at all.
+///
+/// **Third gate, third question, and the order they run in is the
+/// contract.** Every reach site below asks, in this order: (1) may this
+/// caller read the module (`hasPermission` / `canAccessModule`); (2) is
+/// the authority behind that permission live (Phase 730's grant gate);
+/// (3) is the module on the AI surface (this). One and two are about the
+/// CALLER and render identically as `PermissionDenied` — the model is
+/// never told which of them stopped it. Three is about the DEPLOYMENT
+/// and renders as `UnqueryableModule`, because it is not a secret, it is
+/// not fixable by any grant, and telling the model "denied" would send
+/// it round a loop it cannot win. That is why the diagnosis is distinct;
+/// it is also why it is reported LAST — a caller who may not read the
+/// module learns nothing about which modules a deployment exposed.
+///
+/// **Default off.** No module opted in ⇒ no registry ⇒ constant `false`.
+let private aiQueryable (ctx: HttpContext) : string -> bool = moduleAIQueryGate ctx
+
+/// The `UnqueryableModule` refusal, in one place so all four reach tools
+/// render it identically and a consumer can match on one shape.
+let private unqueryableModule (moduleName: string) (detail: string) : string =
+    fableSerialize {|
+        error = "UnqueryableModule"
+        targetModule = moduleName
+        message = detail
+    |}
+
+/// The standing explanation, written for the model that reads it: the
+/// remedy is a deployment change, so re-planning as though this were a
+/// permission problem is wasted turns.
+let private notOptedInMessage (moduleName: string) =
+    sprintf
+        "Module '%s' has not opted into the cross-module AI surface, so its data cannot be read through the _platform.ai.* tools. This is a deployment-level declaration, not a permission the current user can be granted — do not retry, and do not treat it as PermissionDenied. Use list_accessible_modules to see which modules report queryable: true."
+        moduleName
+
 /// The caller's resolved storage-scope id — the structural tenant
 /// isolation boundary for entity / result / catalog reads (GP 4). Falls
 /// back to the user id (then `"anonymous"`) when no scope was resolved.
@@ -180,7 +226,7 @@ let private optDateTime (root: JsonElement) (name: string) : DateTime option =
 let private listAccessibleModulesDef: AIToolDefinition = {
     Name = "_platform.ai.list_accessible_modules"
     Description =
-        "List the modules in this deployment the current user may read, each with the permission grants they hold. Use this first to discover what cross-module data is reachable before calling list_data_types / query_module / list_results. `rbacConfigured` is false when the deployment hasn't configured per-module permissions — in that case every module is accessible and each `permissions` list reads `[\"unrestricted\"]`. Module discovery is sourced from the data catalogue (data-producing modules) plus any module named in the user's permission map. Scoped to the current user/team — modules the user can't read are omitted."
+        "List the modules in this deployment the current user may read, each with the permission grants they hold. Use this first to discover what cross-module data is reachable before calling list_data_types / query_module / list_results. `rbacConfigured` is false when the deployment hasn't configured per-module permissions — in that case every module is accessible and each `permissions` list reads `[\"unrestricted\"]`. Module discovery is sourced from the data catalogue (data-producing modules) plus any module named in the user's permission map. Scoped to the current user/team — modules the user can't read are omitted. `queryable` is false for a module that has not opted into the cross-module AI surface: it exists and the user may read it in its own UI, but list_data_types omits its data and query_module / query_entity / list_results / get_latest_result return `{\"error\":\"UnqueryableModule\"}` against it. Query only modules reporting `queryable: true`."
     Parameters = []
     SourceModule = "_platform.ai"
     EmitsActions = None
@@ -211,6 +257,7 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
         |> List.sort
 
     let isGrantLive = grantLive ctx
+    let isQueryable = aiQueryable ctx
 
     let entries =
         allModules
@@ -231,6 +278,18 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
             {|
                 moduleName = m
                 permissions = perms
+                // Phase 36.C — this tool ANNOTATES rather than filters,
+                // and it is the one of the six that does. A module the
+                // caller may read but which has not opted into the AI
+                // surface still exists and is still worth naming: the
+                // model can then route the user to the module's own UI,
+                // or stop planning around data it will never get, rather
+                // than inferring the module is absent and hallucinating
+                // around the gap. Every OTHER tool filters or refuses —
+                // the annotation is a discovery affordance, not a leak of
+                // anything the caller could not already see by holding
+                // the permission.
+                queryable = isQueryable m
             |})
 
     return
@@ -245,7 +304,7 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
 let private listDataTypesDef: AIToolDefinition = {
     Name = "_platform.ai.list_data_types"
     Description =
-        "Enumerate the data types stored in this deployment that the current user can read, with their producing module(s) and (when published) schema. Each entry pairs a data-type id with the accessible modules that produce it — use the id with query_entity (for entity-store types) or the module name with query_module / list_results. Only types with at least one accessible producer module are returned. `hasSchema` plus `schemaDescription` flag whether a column schema is available; fetch finer column detail through the producing module when needed."
+        "Enumerate the data types stored in this deployment that the current user can read, with their producing module(s) and (when published) schema. Each entry pairs a data-type id with the accessible modules that produce it — use the id with query_entity (for entity-store types) or the module name with query_module / list_results. Only types with at least one producer module that is BOTH accessible to the user and opted into the cross-module AI surface (`queryable: true` in list_accessible_modules) are returned; a type whose every producer is out of that surface is omitted entirely. `hasSchema` plus `schemaDescription` flag whether a column schema is available; fetch finer column detail through the producing module when needed."
     Parameters = []
     SourceModule = "_platform.ai"
     EmitsActions = None
@@ -259,6 +318,14 @@ let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<
     let access = reconstructAccess ctx
     // Phase 730 — same silent-listing treatment as `_platform.list_modules`.
     let isGrantLive = grantLive ctx
+    // Phase 36.C — and the AI-queryability opt-in on top, which here
+    // FILTERS rather than annotates: a data type is only listed when at
+    // least one of its producers is both reachable by this caller and on
+    // the AI surface. This is the intersection Phase 36.B's producer
+    // filter was written against and could not yet compute — with no
+    // opt-in declared it had nothing to narrow by, so every accessible
+    // producer counted.
+    let isQueryable = aiQueryable ctx
 
     match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
     | :? IDataCatalog as catalog ->
@@ -271,7 +338,7 @@ let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<
 
                 let accessible =
                     producers
-                    |> List.filter (fun p -> AccessContext.canAccessModule p access && isGrantLive p)
+                    |> List.filter (fun p -> AccessContext.canAccessModule p access && isGrantLive p && isQueryable p)
 
                 return t, accessible
             })
@@ -303,7 +370,7 @@ let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<
 let private queryModuleDef: AIToolDefinition = {
     Name = "_platform.ai.query_module"
     Description =
-        "Call a registered module-to-module query handler by name and key, passing a JSON payload. Thin shell over the platform query bus, which enforces the caller's per-module Read permission: targeting a module the user can't read returns `{\"error\":\"PermissionDenied\"}`. A module not present in this deployment returns `{\"error\":\"ModuleNotFound\"}`; an unknown queryKey returns `{\"error\":\"NoHandler\"}`. On success returns `{ targetModule, queryKey, result }` where `result` is the handler's own JSON response. Discover module names + their query keys via list_accessible_modules and the module's documentation."
+        "Call a registered module-to-module query handler by name and key, passing a JSON payload. Thin shell over the platform query bus, which enforces the caller's per-module Read permission: targeting a module the user can't read returns `{\"error\":\"PermissionDenied\"}`. A module that has not opted into the cross-module AI surface returns `{\"error\":\"UnqueryableModule\"}` — a deployment-level declaration no permission grant can change, so do not retry it. A module not present in this deployment returns `{\"error\":\"ModuleNotFound\"}`; an unknown queryKey returns `{\"error\":\"NoHandler\"}`. On success returns `{ targetModule, queryKey, result }` where `result` is the handler's own JSON response. Discover module names + their query keys via list_accessible_modules and the module's documentation."
     Parameters = [
         {
             Name = "moduleName"
@@ -368,6 +435,24 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
                 error = "InvalidArguments"
                 message = "Required argument 'queryKey' is missing."
             |}
+    // Phase 36.C — the opt-in gate, AFTER the caller-side question and
+    // BEFORE the bus. After, because a caller who may not read the module
+    // must learn nothing about the deployment's AI configuration — the
+    // bus's own `PermissionDenied` still answers them. Before, because
+    // the bus would otherwise EXECUTE the module's handler, and the whole
+    // point of the opt-in is that a module which never opted in is not
+    // reached at all.
+    //
+    // A consequence worth stating: a module name the deployment does not
+    // register, on which the caller nominally holds Read, now reports
+    // `UnqueryableModule` rather than `ModuleNotFound`. Both are true and
+    // neither is reachable, and refusing before dispatch is the half that
+    // has to hold.
+    | Some(Some moduleName, Some _, _) when
+        AccessContext.hasPermission moduleName ModulePermission.Read access
+        && not (aiQueryable ctx moduleName)
+        ->
+        return unqueryableModule moduleName (notOptedInMessage moduleName)
     | Some(Some moduleName, Some queryKey, payload) ->
         match ctx.RequestServices.GetService(typeof<IModuleQueryBus>) with
         | :? IModuleQueryBus as bus ->
@@ -516,7 +601,7 @@ let private parsePredicateJson (s: string) : Result<Predicate option, string> =
 let private queryEntityDef: AIToolDefinition = {
     Name = "_platform.ai.query_entity"
     Description =
-        "Query the typed entity store for the current user's scope by entity type and an optional predicate over declared indexes. Predicates reference declared index fields only; a non-indexed field returns an InvalidIndex error. Predicate JSON shape: {\"op\":\"eq\",\"field\":\"Mood\",\"value\":\"happy\"}; ops are eq/ne/gt/gte/lt/lte (string-ordered), in ({\"op\":\"in\",\"field\":\"x\",\"values\":[...]}), and/or ({\"op\":\"and\",\"left\":{...},\"right\":{...}}), not ({\"op\":\"not\",\"inner\":{...}}). Returns up to `take` (max 100) entity records. Scope-isolated — only the caller's own entities are visible. Discover entity-type ids via list_data_types."
+        "Query the typed entity store for the current user's scope by entity type and an optional predicate over declared indexes. Predicates reference declared index fields only; a non-indexed field returns an InvalidIndex error. Predicate JSON shape: {\"op\":\"eq\",\"field\":\"Mood\",\"value\":\"happy\"}; ops are eq/ne/gt/gte/lt/lte (string-ordered), in ({\"op\":\"in\",\"field\":\"x\",\"values\":[...]}), and/or ({\"op\":\"and\",\"left\":{...},\"right\":{...}}), not ({\"op\":\"not\",\"inner\":{...}}). Returns up to `take` (max 100) entity records. Scope-isolated — only the caller's own entities are visible. An entity type produced only by modules outside the cross-module AI surface returns `{\"error\":\"UnqueryableModule\"}`; no grant fixes that, so do not retry it. Discover entity-type ids via list_data_types, which already lists only queryable producers."
     Parameters = [
         {
             Name = "entityType"
@@ -594,41 +679,87 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
                 message = predErr
             |}
     | Ok(Some entityType, take, Ok wherePred) ->
-        match ctx.RequestServices.GetService(typeof<IEntityStore>) with
-        | :? IEntityStore as store ->
-            let cappedTake = min (max take 1) 100
+        // Phase 36.C — the opt-in gate for the one tool that names a data
+        // shape rather than a module. Attribution runs through the data
+        // catalogue's producers, which is the only module-attribution an
+        // entity type has: `EntityRegistration` carries none (entities are
+        // registered app-level by `ServerApp.withEntity`, not per module).
+        //
+        // So the gate binds exactly where the shard says it does — "an
+        // entity type whose only producer module is non-queryable" — and
+        // an entity type with NO catalogued producer is passed through
+        // unchanged rather than refused. Refusing it was the other
+        // candidate and is worse: it would block an opted-in module's own
+        // entities whenever it happens not to also declare a `DataType`,
+        // with a refusal whose only remedy is unrelated to the opt-in.
+        //
+        // That leaves a real hole — an opted-OUT module's entities stay
+        // reachable here when it declares no `DataType` — and the hole is
+        // recorded rather than papered over: closing it needs module
+        // attribution on `EntityRegistration`, which is a substrate change
+        // of its own, not a line in this gate.
+        let! entityGate = async {
+            match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
+            | :? IDataCatalog as catalog ->
+                let! producers = catalog.GetProducers entityType
 
-            let query: EntityQuery<JsonElement> = {
-                EntityType = entityType
-                Where = wherePred
-                OrderBy = None
-                Skip = 0
-                Take = cappedTake
-            }
+                if List.isEmpty producers then
+                    return None
+                else
+                    let isQueryable = aiQueryable ctx
 
-            let! result = store.Query<JsonElement>(scopeId, query)
+                    if producers |> List.exists isQueryable then
+                        return None
+                    else
+                        return Some(String.Join(", ", producers))
+            | _ -> return None
+        }
 
-            match result with
-            | Ok entities ->
-                return
-                    fableSerialize {|
-                        entityType = entityType
-                        count = List.length entities
-                        entities = entities
-                    |}
-            | Error err ->
-                return
-                    fableSerialize {|
-                        error = "EntityQueryFailed"
-                        entityType = entityType
-                        message = EntityError.message err
-                    |}
-        | _ ->
+        match entityGate with
+        | Some producerNames ->
             return
-                fableSerialize {|
-                    error = "EntityStoreUnavailable"
-                    message = "No entity store is registered in this deployment."
-                |}
+                unqueryableModule
+                    producerNames
+                    (sprintf
+                        "Entity type '%s' is produced only by module(s) that have not opted into the cross-module AI surface (%s), so it cannot be read through the _platform.ai.* tools. This is a deployment-level declaration, not a permission the current user can be granted — do not retry. Use list_accessible_modules to see which modules report queryable: true."
+                        entityType
+                        producerNames)
+        | None ->
+            match ctx.RequestServices.GetService(typeof<IEntityStore>) with
+            | :? IEntityStore as store ->
+                let cappedTake = min (max take 1) 100
+
+                let query: EntityQuery<JsonElement> = {
+                    EntityType = entityType
+                    Where = wherePred
+                    OrderBy = None
+                    Skip = 0
+                    Take = cappedTake
+                }
+
+                let! result = store.Query<JsonElement>(scopeId, query)
+
+                match result with
+                | Ok entities ->
+                    return
+                        fableSerialize {|
+                            entityType = entityType
+                            count = List.length entities
+                            entities = entities
+                        |}
+                | Error err ->
+                    return
+                        fableSerialize {|
+                            error = "EntityQueryFailed"
+                            entityType = entityType
+                            message = EntityError.message err
+                        |}
+            | _ ->
+                return
+                    fableSerialize {|
+                        error = "EntityStoreUnavailable"
+                        message = "No entity store is registered in this deployment."
+                    |}
 }
 
 // ─── _platform.ai.list_results ───────────────────────────────────
@@ -636,7 +767,7 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
 let private listResultsDef: AIToolDefinition = {
     Name = "_platform.ai.list_results"
     Description =
-        "List the persisted analytical results a module has produced in the current user's scope, newest first. Enforces the caller's Read permission on the named module — a module the user can't read returns `{\"error\":\"PermissionDenied\"}`. Each row carries objectId, resultType, version, createdAt, createdBy and dataType (metadata only — fetch a result's content with get_latest_result). Optional dateFrom/dateTo (ISO-8601) filter by creation time; supply both to bound a range. Returns `{\"error\":\"ResultStoreUnavailable\"}` when the deployment has no result store configured."
+        "List the persisted analytical results a module has produced in the current user's scope, newest first. Enforces the caller's Read permission on the named module — a module the user can't read returns `{\"error\":\"PermissionDenied\"}` — and the module's AI-queryability opt-in: a module outside the cross-module AI surface returns `{\"error\":\"UnqueryableModule\"}`, which no grant fixes. Each row carries objectId, resultType, version, createdAt, createdBy and dataType (metadata only — fetch a result's content with get_latest_result). Optional dateFrom/dateTo (ISO-8601) filter by creation time; supply both to bound a range. Returns `{\"error\":\"ResultStoreUnavailable\"}` when the deployment has no result store configured."
     Parameters = [
         {
             Name = "moduleName"
@@ -720,6 +851,13 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
                     error = "PermissionDenied"
                     targetModule = moduleName
                 |}
+        // Phase 36.C — third gate, reported LAST and rendered
+        // DIFFERENTLY. The caller-side pair above is deliberately
+        // indistinguishable to the model; this one is deliberately
+        // distinct, because no grant fixes it and a model told
+        // "PermissionDenied" would keep trying.
+        elif not (aiQueryable ctx moduleName) then
+            return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
             match ctx.RequestServices.GetService(typeof<IResultStore>) with
             | :? IResultStore as store ->
@@ -762,7 +900,7 @@ let private ContentCharCap = 1_000_000
 let private getLatestResultDef: AIToolDefinition = {
     Name = "_platform.ai.get_latest_result"
     Description =
-        "Fetch the latest version of a single persisted result by module + resultType, returning its content (decoded as UTF-8 text — typically JSON) plus version metadata. Enforces the caller's Read permission on the module — a module the user can't read returns `{\"error\":\"PermissionDenied\"}`. Returns `{\"error\":\"NotFound\"}` when no result of that type has been saved in the scope. Content is capped at ~1MB (`truncated` flags when the body was cut). Discover available resultTypes for a module via list_results."
+        "Fetch the latest version of a single persisted result by module + resultType, returning its content (decoded as UTF-8 text — typically JSON) plus version metadata. Enforces the caller's Read permission on the module — a module the user can't read returns `{\"error\":\"PermissionDenied\"}` — and the module's AI-queryability opt-in: a module outside the cross-module AI surface returns `{\"error\":\"UnqueryableModule\"}`, which no grant fixes. Returns `{\"error\":\"NotFound\"}` when no result of that type has been saved in the scope. Content is capped at ~1MB (`truncated` flags when the body was cut). Discover available resultTypes for a module via list_results."
     Parameters = [
         {
             Name = "moduleName"
@@ -837,6 +975,13 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
                     error = "PermissionDenied"
                     targetModule = moduleName
                 |}
+        // Phase 36.C — third gate, reported LAST and rendered
+        // DIFFERENTLY. The caller-side pair above is deliberately
+        // indistinguishable to the model; this one is deliberately
+        // distinct, because no grant fixes it and a model told
+        // "PermissionDenied" would keep trying.
+        elif not (aiQueryable ctx moduleName) then
+            return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
             match ctx.RequestServices.GetService(typeof<IResultStore>) with
             | :? IResultStore as store ->

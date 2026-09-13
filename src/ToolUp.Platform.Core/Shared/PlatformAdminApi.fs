@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── PlatformAdminApi (Fable.Remoting wire surface) ──────────────────
+// ─── PlatformAdminApi (ToolUp.Remoting wire surface) ──────────────────
 //
 // Deployment-wide admin role management. Client-callable API
 // for the built-in `PlatformAdminUI` admin module: query the caller's
@@ -11,7 +11,7 @@ namespace ToolUp.Platform
 //
 // **Scope.** This contract covers admin role management only. The
 // Platform Knowledge Base write surface (the other half of "what
-// Platform Admins can do") lives in a sibling Fable.Remoting record
+// Platform Admins can do") lives in a sibling ToolUp.Remoting record
 // shipped from the `ToolUp.KnowledgeBase` companion. Putting KB methods
 // on this record would force `ToolUp.Platform.Core` to depend on
 // `ToolUp.KnowledgeBase.Core` (`KnowledgeDocument` is defined there) —

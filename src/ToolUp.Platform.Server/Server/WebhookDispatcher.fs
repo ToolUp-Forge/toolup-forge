@@ -18,7 +18,7 @@ open ToolUp.Platform.Tracing
 /// Server-internal dispatcher. The post-write hook installed in
 /// `compose` calls `Dispatch` for every event written to
 /// `IEventStore`; the admin UI's `IWebhookApi.TestFire` calls
-/// `TestFire`. Not exposed through any Fable.Remoting surface.
+/// `TestFire`. Not exposed through any ToolUp.Remoting surface.
 type IWebhookDispatcher =
     /// Enqueue an event for fan-out to every active subscription
     /// in the event's scope whose `EventTypes` filter accepts the
@@ -160,7 +160,7 @@ let private serialiseOutbound (payload: WebhookDeliveryPayload) : byte[] =
 // ─── Audit-event payloads ────────────────────────────────────────
 
 /// Persisted audit-event payloads use `FableConverters` because the
-/// admin UI deserialises them via Fable.Remoting/SimpleJson.
+/// admin UI deserialises them via ToolUp.Remoting/SimpleJson.
 let private auditJsonOptions = FableConverters.create ()
 
 let private toAuditJson (value: 'T) =

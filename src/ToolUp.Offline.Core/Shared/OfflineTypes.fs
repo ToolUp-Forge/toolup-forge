@@ -11,7 +11,7 @@ open System
 // and the server-side sync handler. Everything here is FSharp.Core +
 // BCL primitives so the whole file Fable-compiles (GP 10) — the client
 // tier constructs these values in the browser and the server tier
-// consumes the identical shapes off the Fable.Remoting wire.
+// consumes the identical shapes off the ToolUp.Remoting wire.
 //
 // DESIGN NOTE — last-writer-wins, not CRDT. A queued mutation carries
 // the entity bytes the user produced offline plus the server version

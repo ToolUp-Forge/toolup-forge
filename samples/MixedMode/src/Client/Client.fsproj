@@ -20,9 +20,9 @@
         <IsPackable>false</IsPackable>
         <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
         <!-- Per CLAUDE.md: nullable reference types stay disabled on
-             Fable-touching projects until Feliz / Fable.Remoting /
-             Fable.SimpleJson / Fable.Elmish.HMR ship nullness
-             annotations. -->
+             Fable-touching projects until Feliz / Fable.SimpleJson and
+             the in-tree ToolUp.Remoting / ToolUp.Elmish.HMR sources ship
+             nullness annotations. -->
         <Nullable>disable</Nullable>
     </PropertyGroup>
     <ItemGroup>

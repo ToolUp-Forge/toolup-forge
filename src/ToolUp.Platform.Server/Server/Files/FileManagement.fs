@@ -248,7 +248,7 @@ let mutable private headerTrustWarned = 0
 
 /// Read the user ID for the current request. Prefers the value populated
 /// by `ScopeResolutionMiddleware` (stored in `HttpContext.Items`) to avoid
-/// duplicating an async auth call on the synchronous Fable.Remoting handler
+/// duplicating an async auth call on the synchronous ToolUp.Remoting handler
 /// path. Falls back to the X-User-Id header if the middleware did not run —
 /// a header-trust degradation that warns once (see below).
 let getUserId (ctx: HttpContext) =
@@ -1127,7 +1127,7 @@ let private resolveRuntime (ctx: HttpContext) : FileManagementRuntime =
     | _ -> FileManagementRuntime.empty
 
 /// Raised by `getFileContents` when the requested file is not present in
-/// the request-scoped session store. The Fable.Remoting error handler
+/// the request-scoped session store. The ToolUp.Remoting error handler
 /// classifies this as a 4xx user-action error and logs at `Warn`, so the
 /// user-facing message survives but the dev log isn't polluted with
 /// `[ERR]` lines for every "user clicked Run before uploading" case.

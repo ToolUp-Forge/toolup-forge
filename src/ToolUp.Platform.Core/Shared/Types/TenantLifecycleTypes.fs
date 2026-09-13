@@ -15,7 +15,7 @@ open System
 //
 // These types are the Fable-compatible, async-free data surface that
 // crosses the client/server boundary (the `IPlatformTenantApi`
-// Fable.Remoting contract returns a `LifecycleSummary`, GP 10). The
+// ToolUp.Remoting contract returns a `LifecycleSummary`, GP 10). The
 // `ITenantLifecycle` interface itself + the aggregator that drives it
 // are server-tier (`ToolUp.Platform.Server`).
 //

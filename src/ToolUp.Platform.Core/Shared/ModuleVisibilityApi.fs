@@ -69,6 +69,6 @@ type IModuleVisibilityApi = {
 }
 
 module ModuleVisibilityApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `PlatformApi`, `IConfigApi`, `IFeatureFlagApi`.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"

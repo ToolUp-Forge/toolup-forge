@@ -12,7 +12,7 @@ open KnowledgeBase.ServerApiDocuments
 
 // ─── Phase 4b — Platform KB write surface ─────────────────────────────
 //
-// Server-side implementation of the `IPlatformKnowledgeApi` Fable.Remoting
+// Server-side implementation of the `IPlatformKnowledgeApi` ToolUp.Remoting
 // record (defined in `Core/Shared/PlatformKnowledgeApi.fs`). Sister
 // handler to `KnowledgeBase.Server.knowledgeApi`; shares the underlying
 // `uploadDocument` / `deleteDocument` / `getDocuments` machinery via a
@@ -159,7 +159,7 @@ let private publishPlatformKbRefresh (deps: KnowledgeApiDeps) = async {
             deps.Logger.Error("[PlatformKB] Failed to publish DataRefreshed notification", Some ex)
 }
 
-/// Construct the Fable.Remoting `IPlatformKnowledgeApi` for the current
+/// Construct the ToolUp.Remoting `IPlatformKnowledgeApi` for the current
 /// request. Mirrors `KnowledgeBase.Server.knowledgeApi`'s shape exactly
 /// (build deps once, bind methods to handlers) so the wire-level
 /// behaviour is consistent between the team-side and platform-admin

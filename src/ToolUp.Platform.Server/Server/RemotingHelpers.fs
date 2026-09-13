@@ -7,7 +7,7 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.FileManagement
 
-/// Shared diagnostic logging for Fable.Remoting error handlers. Routes
+/// Shared diagnostic logging for ToolUp.Remoting error handlers. Routes
 /// through the DI-registered `ILogger`. `compose` validates the
 /// registration once at startup and throws if missing, so this lookup
 /// never sees a missing service when the request was reached through
@@ -17,9 +17,9 @@ let private logApiError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpCont
     let logger =
         ServiceProviderServiceExtensions.GetRequiredService<ILogger>(routeInfo.httpContext.RequestServices)
 
-    logger.Error($"Fable.Remoting error on {routeInfo.path}", Some ex)
+    logger.Error($"ToolUp.Remoting error on {routeInfo.path}", Some ex)
 
-/// Classify Fable.Remoting exceptions that represent user-action errors
+/// Classify ToolUp.Remoting exceptions that represent user-action errors
 /// rather than server faults. Returns `Some result` when the exception
 /// is recognised — the caller short-circuits with that result instead of
 /// logging at `Error` with a stack trace. Today this is just the
@@ -33,11 +33,11 @@ let private tryClassifyUserError ex (routeInfo: ToolUp.Remoting.Server.RouteInfo
         let logger =
             ServiceProviderServiceExtensions.GetRequiredService<ILogger>(routeInfo.httpContext.RequestServices)
 
-        logger.Warn($"Fable.Remoting user error on {routeInfo.path}: {msg}")
+        logger.Warn($"ToolUp.Remoting user error on {routeInfo.path}: {msg}")
         Some(ToolUp.Remoting.Server.ErrorResult.Propagate msg)
     | _ -> None
 
-/// Create a Fable.Remoting API handler with standard error handling.
+/// Create a ToolUp.Remoting API handler with standard error handling.
 /// Errors are logged via the DI `ILogger` and propagated to the client
 /// so the UI can surface actionable messages.
 ///
@@ -175,6 +175,6 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
 /// `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]`)
 /// that the dispatcher's startup classifier now enforces default-on.
 /// Deletion target: next major version.
-[<Obsolete("Compose modules via ServerModule.withGuardedApi and declare method-level authorisation with per-method attributes ([<RequiresRole>] / [<TenantScoped>] / [<AllowAnonymous>] / ...) — the startup classifier enforces them default-on (Phase 69d.tail). See docs/migrations/69d-authorization-metadata.md.")>]
+[<Obsolete("Compose modules via ServerModule.withGuardedApi and declare method-level authorisation with per-method attributes ([<RequiresRole>] / [<TenantScoped>] / [<AllowAnonymous>] / ...) — the startup classifier enforces them default-on (Phase 69d.tail). See docs/migrations/69d-authorization-metadata.md. makePermissionGuardedApi will be removed in a future major.")>]
 let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
     permissionGuardedApiCore<'T> moduleName apiBuilder

@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── ITeamInviteApi — Fable.Remoting team-invitation surface ────────
+// ─── ITeamInviteApi — ToolUp.Remoting team-invitation surface ────────
 //
 // Authenticated-only API for issuing, accepting, listing, and
 // revoking team-invitation tokens on top of `IShareTokenStore`. The
@@ -94,7 +94,7 @@ type TeamInviteIssueRequest = {
     MaxUses: int option
 }
 
-/// Fable.Remoting interface for team invitations.
+/// ToolUp.Remoting interface for team invitations.
 type ITeamInviteApi = {
     /// Issue a new invite for the supplied team. Returns the
     /// consumer-facing URL (typically `https://<app>/invite/<token>`)
@@ -202,7 +202,7 @@ type ITeamInviteApi = {
 }
 
 module TeamInviteApi =
-    /// Fable.Remoting `routeBuilder`. Surface lives at
+    /// ToolUp.Remoting `routeBuilder`. Surface lives at
     /// `/api/team-invite/<MethodName>`; authenticated by the existing
     /// `AuthEnforcementMiddleware` (no `withAnonymousRoute`
     /// registration — accepting an invite still requires a sign-in

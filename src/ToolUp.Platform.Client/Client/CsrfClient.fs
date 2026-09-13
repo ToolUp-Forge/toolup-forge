@@ -11,7 +11,7 @@ open ToolUp.Platform
 //
 // This module owns the SINGLE place the client attaches per-request
 // dynamic headers. `installRequestGuard` wraps both the
-// `XMLHttpRequest` transport (Fable.Remoting's only transport) AND
+// `XMLHttpRequest` transport (ToolUp.Remoting's only transport) AND
 // `window.fetch` (used by the AI client-tool-result / cancel /
 // audit-beacon POSTs), reading the live caches at *send* time. It is
 // therefore correct no matter how — or whether — the calling proxy or

@@ -10,7 +10,7 @@ namespace ToolUp.Platform
 ///
 /// Lives in the server layer (not shared) because implementations
 /// depend on server-only infrastructure (`IBlobStorage`, serialisation).
-/// The Fable.Remoting admin API (`IConfigApi`) exposes a strict subset
+/// The ToolUp.Remoting admin API (`IConfigApi`) exposes a strict subset
 /// to the browser; clients never see this interface directly.
 ///
 /// Scope isolation is the caller's responsibility: handlers must

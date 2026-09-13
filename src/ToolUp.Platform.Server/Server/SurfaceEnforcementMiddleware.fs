@@ -153,10 +153,10 @@ module SurfaceRequirementRegistry =
     ///   `UserKind` callers with zero teams legitimately need to
     ///   read these to render the team-management UI.
     ///
-    /// The routes use Fable.Remoting's default builder
+    /// The routes use ToolUp.Remoting's default builder
     /// (`/api/{typeName}/{methodName}`) — for the `TeamApi` record
     /// type that's `/api/TeamApi/...`. Method is always `POST` (the
-    /// Fable.Remoting transport's wire convention). Registry lookup
+    /// ToolUp.Remoting transport's wire convention). Registry lookup
     /// normalises both at insert and resolve time, so the declarations
     /// here win regardless of the casing the client uses.
     let private sdkTeamApiCrudOverrides: ((string * string) * SurfaceRequirement) list = [

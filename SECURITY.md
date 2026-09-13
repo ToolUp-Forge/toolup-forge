@@ -140,7 +140,7 @@ the primary check.
 On the client the header is attached by a single seam:
 `CsrfClient.installRequestGuard` (in `ToolUp.Platform.Client`) wraps
 `XMLHttpRequest.prototype.{open,send}` exactly once, installed at
-client module-load. Fable.Remoting's proxy transport is XHR-only and
+client module-load. ToolUp.Remoting's proxy transport is XHR-only and
 freezes a proxy's custom-header list at proxy-build time, so a
 send-time guard is the only mechanism that reliably carries the token
 on every proxy call regardless of when the proxy object was
@@ -182,6 +182,18 @@ consults the registered authorizer **before** emitting any
 browser, the model is told the action was refused (typed `Denied`
 tool-result), and the refusal is written to `IEventStore` as a
 `_platform.ai.tool_allowlist_denial` event.
+
+That stream is observable rather than merely recorded. `GET /dev/ai-allowlist`
+(behind `ServerConfig.EnableDevEndpoints`) and the `PlatformAdmin`-gated Health
+Monitor admin card (available in production without the dev flag) both render a
+rolling 60-minute denial rollup for the caller's scope — by tool, by module, with
+the top denied `(tool, module)` pairs and the most recent sanitised reasons. A
+deployment can additionally opt into a sustained-rate alert
+(`AIServerApp.withDenialRateAlert`), which publishes one `SystemMessage` per
+campaign: a burst of refused actions is a security incident, and treating it as
+one is the point of writing the audit in the first place. Refusal reasons are
+control-stripped and truncated on the way out, and raw model arguments never
+enter the stream.
 
 **forge ships no implementation of this seam out of the box.** If no
 authorizer is registered, the consult resolves to "allow" — full

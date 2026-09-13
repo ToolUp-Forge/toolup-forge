@@ -143,7 +143,7 @@ an invalid/expired token, or no `IShareTokenStore` → the route declines
 
 ## Authoring admin API
 
-`IContentAdminApi` (Fable.Remoting, `/api/content-admin/*`) is the
+`IContentAdminApi` (ToolUp.Remoting, `/api/content-admin/*`) is the
 server surface a "Content" / "Pages" admin module drives —
 `ListPages` / `GetPage` / `SavePage` / `SetStatus` / `ListRevisions` /
 `RestoreRevision` over the page overlay, reusing the lifecycle +

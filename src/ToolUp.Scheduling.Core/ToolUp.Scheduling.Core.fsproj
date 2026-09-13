@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Scheduling Core — booking-scheduler types (SchedulingTypes, RecurrenceExpander, iCalendar), Fable.Remoting contract.</Description>
+        <Description>ToolUp.Scheduling Core — booking-scheduler types (SchedulingTypes, RecurrenceExpander, iCalendar), ToolUp.Remoting contract.</Description>
         <PackageTags>fsharp;sdk;types;scheduling</PackageTags>
         <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): Scheduling
              companion split into Core/Server. Core carries shared types

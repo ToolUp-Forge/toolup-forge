@@ -5,7 +5,7 @@ namespace ToolUp.AI
 
 open ToolUp.Platform
 
-// ─── Phase 70 — Platform Admin AI keys Fable.Remoting contract ───
+// ─── Phase 70 — Platform Admin AI keys ToolUp.Remoting contract ───
 //
 // Wire surface for the Platform Admin keys module. Every method gates
 // server-side on `AccessContext.canModifyPlatformConfig`; non-admin
@@ -69,7 +69,7 @@ type PlatformAIKeysTeamView = { TeamId: string; DisplayName: string }
 
 // ─── API contract ───────────────────────────────────────────────
 
-/// Fable.Remoting contract for the Platform Admin keys module
+/// ToolUp.Remoting contract for the Platform Admin keys module
 /// (Phase 70 Stream D). Every method is gated on
 /// `canModifyPlatformConfig` server-side; non-admins receive
 /// `Error "platform admin role required"`.

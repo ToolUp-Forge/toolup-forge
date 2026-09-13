@@ -520,7 +520,7 @@ The phase-16 acceptance target is "< 2s cold start" for a minimal `Anonymous` SD
 
 **1. Framework-dependent publish.** Default (`<SelfContained>false</SelfContained>`) cuts publish-output size by 70–80 MB versus self-contained and lowers cold-start I/O cost accordingly. Self-contained is required only if your target runtime doesn't ship the .NET 10 framework yet — confirm runtime availability for each provider's region (see the per-cloud notes at the end of each worked example) before publishing self-contained.
 
-**2. `ReadyToRun` over `PublishTrimmed`.** Trimming is unsafe for F# applications: ToolUp.Remoting's transport layer (the in-tree Fable.Remoting fork) uses reflection to materialise the API record on the server, and any trim pass removes handlers it can't statically prove are reachable. `<PublishReadyToRun>true</PublishReadyToRun>` is safe — it precompiles IL to native ahead of time, eliminating the JIT pass on the cold-start hot path without removing any code. Expect a 30–50% cold-start reduction on the SDK's stateless composition without breaking reflection.
+**2. `ReadyToRun` over `PublishTrimmed`.** Trimming is unsafe for F# applications: ToolUp.Remoting's transport layer uses reflection to materialise the API record on the server, and any trim pass removes handlers it can't statically prove are reachable. `<PublishReadyToRun>true</PublishReadyToRun>` is safe — it precompiles IL to native ahead of time, eliminating the JIT pass on the cold-start hot path without removing any code. Expect a 30–50% cold-start reduction on the SDK's stateless composition without breaking reflection.
 
 ```xml
 <!-- In the consumer's Server fsproj -->

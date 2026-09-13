@@ -38,7 +38,7 @@ open System
 
 // `JobRegistration` lives in the shared layer (`Shared/JobTypes.fs`)
 // so the Fable admin UI and module client code can construct
-// registrations and submit them through the `JobApi` Fable.Remoting
+// registrations and submit them through the `JobApi` ToolUp.Remoting
 // surface.
 
 type IJobScheduler =

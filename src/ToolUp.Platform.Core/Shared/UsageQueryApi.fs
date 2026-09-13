@@ -9,7 +9,7 @@ open System
 // be opened explicitly.
 open ToolUp.Platform
 
-// ─── Usage admin API (Fable.Remoting surface) ────────────────────
+// ─── Usage admin API (ToolUp.Remoting surface) ────────────────────
 //
 // `IUsageQueryApi` is the read-side and CSV-export surface for the
 // admin dashboard (`Client/UsageDashboard.fs`) and any deployment-
@@ -19,7 +19,7 @@ open ToolUp.Platform
 // `IConfigStore` against the `_platform.usage` schema, not here.
 //
 // All methods are scoped server-side from the resolved `AccessContext`.
-// Callers cannot pass an arbitrary scope — Fable.Remoting clients
+// Callers cannot pass an arbitrary scope — ToolUp.Remoting clients
 // MUST surface their own resolved scope through the auth header
 // only. The handler at `Server/UsageQueryApi.fs` overrides any
 // caller-supplied scope with the resolved one before reading.
@@ -39,8 +39,8 @@ type UsageDateRange = { From: DateTime; To: DateTime }
 /// (yyyy-MM-dd / yyyy-MM / kind / userId).
 type UsageAggregateRow = { Bucket: string; Quantity: decimal }
 
-/// Fable.Remoting surface for the usage admin module. Mirrored on
-/// the client by `IUsageQueryApi` proxy (Fable.Remoting record).
+/// ToolUp.Remoting surface for the usage admin module. Mirrored on
+/// the client by `IUsageQueryApi` proxy (ToolUp.Remoting record).
 type IUsageQueryApi = {
     /// Filtered record query. Caller supplies optional resource kind
     /// + date range; the handler scopes to the caller's resolved
@@ -65,7 +65,7 @@ type IUsageQueryApi = {
 }
 
 module UsageQueryApi =
-    /// Fable.Remoting route builder. Mirrors `IUsageQueryApi` member
+    /// ToolUp.Remoting route builder. Mirrors `IUsageQueryApi` member
     /// names; consumed on both the server (registration) and client
     /// (proxy construction).
     let routeBuilder (typeName: string) (methodName: string) =

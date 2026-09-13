@@ -138,7 +138,7 @@ type AzureFunctionHost =
 
         // Body — Functions Worker exposes `Body : Stream`; mount
         // directly on `HttpRequest.Body`. The stream is read-once;
-        // middleware that re-reads it (Fable.Remoting body
+        // middleware that re-reads it (ToolUp.Remoting body
         // normalisation, file-upload handlers) is responsible for
         // its own buffering via `EnableBuffering()`.
         request.Body <- req.Body

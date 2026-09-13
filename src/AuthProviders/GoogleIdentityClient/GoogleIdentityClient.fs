@@ -21,7 +21,7 @@ open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 // The bridge admits that id_token to the SAME store the redirect flow
 // writes (`OidcTokenStore.persistTokens`, i.e. `UserSession.setAuthToken`
 // → `localStorage["toolup-auth-token"]` → the bearer on every
-// Fable.Remoting request). That is the whole of the "one session shape"
+// ToolUp.Remoting request). That is the whole of the "one session shape"
 // requirement: `classifyStoredToken`, `signOut`, and the pre-expiry
 // refresh timer take the projected `OidcUIConfig` and behave exactly as
 // they do for a redirect-flow session. No parallel session machinery

@@ -329,7 +329,7 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
 // as Server-Sent Events (Phase 69c substrate). This record is deliberately
 // NOT in `ToolUp.AI.Core` (Fable-shared): `IAsyncEnumerable` has no Fable
 // client representation, so the typed-streaming wire is consumed as a plain
-// SSE source (fetch / NotificationClient), not via the Fable.Remoting proxy.
+// SSE source (fetch / NotificationClient), not via the ToolUp.Remoting proxy.
 // Streaming methods may carry only `[<AllowAnonymous>]` / `[<PublicEndpoint>]`
 // (the dispatcher refuses to start if a streaming method carries an
 // unenforceable pre-flight attribute); the turn is gated inside the handler
@@ -355,7 +355,7 @@ let private isTerminalStreamEvent =
 
 // ─── API implementation ──────────────────────────────────────────
 
-/// Build the AIAssistantApi Fable.Remoting handler + its typed streaming
+/// Build the AIAssistantApi ToolUp.Remoting handler + its typed streaming
 /// companion (Phase 69c.tail A). Both records are built in one closure so
 /// the streaming method reuses the legacy `SubmitMessage` turn machinery
 /// via the per-turn `typedSink` indirection.
@@ -835,7 +835,7 @@ let aiAssistantApi
                             // Surface the refusal through the existing
                             // SSE failure channel — same shape as a
                             // provider resolution failure or an
-                            // agent-loop exception. The Fable.Remoting
+                            // agent-loop exception. The ToolUp.Remoting
                             // SubmitMessage call already returned the
                             // queued task; the failure event flips it
                             // to AITaskFailed client-side.

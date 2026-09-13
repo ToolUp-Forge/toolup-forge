@@ -157,7 +157,7 @@ module MediaLibraryServerApp =
                 DelegatedUrlSigner = Some signer
         }
 
-    /// Build the `IMediaApi` Fable.Remoting contract from request context.
+    /// Build the `IMediaApi` ToolUp.Remoting contract from request context.
     let private mediaApi (options: MediaLibraryOptions) (ctx: HttpContext) : IMediaApi =
         let lib = ctx.RequestServices.GetService(typeof<IMediaLibrary>) :?> IMediaLibrary
 
@@ -226,7 +226,7 @@ module MediaLibraryServerApp =
     /// Drive the final composition. `NoMediaLibrary` short-circuits to
     /// `ServerApp.run`; `EnabledMediaLibrary` registers the signer +
     /// `IMediaLibrary` + `IUploadSessionStore` DI singletons, mounts the
-    /// range-serving handlers and the Fable.Remoting `IMediaApi`, adds
+    /// range-serving handlers and the ToolUp.Remoting `IMediaApi`, adds
     /// the readiness probe + options validator, and delegates to
     /// `ServerApp.run`.
     let run (app: MediaLibraryServerApp) : int =

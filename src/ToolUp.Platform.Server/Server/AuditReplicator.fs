@@ -140,10 +140,31 @@ type BlobAuditReplicatorCursorStore(blobStorage: IBlobStorage, logger: ILogger) 
 /// state-change events pass through silently.
 ///
 /// Read paths are unchanged; this decorator only intercepts `Write`.
-/// Multiple decorators stack in `compose` — `AuditReplicationHookedEventStore`
-/// wraps `JobNotifyEventStore` wraps `WebhookHookedEventStore` wraps the
-/// inner store, so audit hooks fire alongside webhook hooks.
+///
+/// **Phase 9u — position 100, the INNERMOST of the three decorators
+/// `compose` stacks.** The composed chain is `JobNotifyEventStore` (300)
+/// wrapping `HookedEventStore` (200) wrapping this decorator wrapping the
+/// resolved inner store. The order matters and this end of it is the
+/// load-bearing half: the replicator's contract is that every persisted
+/// event is replicable, so it must see a write before the webhook
+/// dispatch hook, which sits on the fan-out path rather than the
+/// persistence path. `EventStoreChainValidator` refuses boot on the
+/// inversion.
+///
+/// _(The three sentences this note replaces described the chain in the
+/// exact reverse — audit outermost, webhook innermost. The code was
+/// always right; the comment had been wrong since Phase 9g, which is the
+/// kind of drift a machine-checked invariant exists to stop mattering.)_
 type AuditReplicationHookedEventStore(inner: IEventStore, enqueue: ModuleEvent -> unit) =
+    interface IEventStoreDecorator with
+        member _.DecoratorName = "AuditReplicationHookedEventStore"
+        member _.DecoratorPosition = EventStoreChain.AuditReplicationPosition
+
+        member _.DecoratorPurpose =
+            "Enqueues every non-self audit write onto the replicator's per-sink bounded channel, so the live hook mirrors it to each IAuditSink within sub-second steady state."
+
+        member _.InnerStore = inner
+
     interface IEventStore with
         member _.Write(evt) = async {
             do! inner.Write evt

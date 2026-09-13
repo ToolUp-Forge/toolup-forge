@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -27,6 +27,7 @@
              IOAuthCredentialFlowContract, which covers the OAuth half. -->
         <Compile Include="Contracts\IProviderOAuthFlowContract.fs" />
         <Compile Include="Contracts\IEventStoreContract.fs" />
+        <Compile Include="Contracts\IEventStoreDecoratorContract.fs" />
         <Compile Include="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IDataCatalogContract.fs" />
         <Compile Include="Contracts\IResultStoreContract.fs" />
@@ -396,6 +397,14 @@
              (it composes 552's verdicts) and after the AI registry surface it
              gates. -->
         <Compile Include="InProcess\GrantGovernanceTests.fs" />
+        <!-- Phase 36.C — the per-module AI-queryability opt-in: the third
+             gate on the `_platform.ai.*` family, asking whether a module's
+             author put its data on the AI surface at all (default OFF),
+             beside the two caller-side gates 36.A and 730 already applied.
+             After GrantGovernanceTests, whose ordering it composes with
+             (PermissionDenied is still answered first), and after the AI
+             registry surface it gates. -->
+        <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />
@@ -879,6 +888,7 @@
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
+        <Compile Include="InProcess\EventStoreChainValidatorTests.fs" />
         <Compile Include="InProcess\SurfaceCoherenceValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogHealthCheckTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />
@@ -1006,6 +1016,10 @@
         <Compile Include="InProcess\CrossIndexErasureConformanceTests.fs" />
         <Compile Include="InProcess\SyntheticClientToolAuthorizerTests.fs" />
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
+        <!-- Phase 47 - the /dev/ai-allowlist denial rollup (shared with the
+             production-safe IAIDenialRollupProbe seam) + the sustained
+             denial-rate alert monitor. -->
+        <Compile Include="InProcess\AIAllowlistDiagnosticsTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <!-- Phase 113 — action-authorizer: policy matching, the
@@ -2305,6 +2319,13 @@
              the Phase 480 bilateral surface it now implements. -->
         <Compile Include="InProcess\CountersignatureRegistryTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
+        <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
+             the shared vocabulary (System-only, source-linked into
+             Build.fsproj so the VerifyAll driver and this pack parse the
+             variable through ONE implementation); TestLaneFilter.fs is
+             the Expecto-shaped half only this pack compiles. -->
+        <Compile Include="Support\TestLane.fs" />
+        <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

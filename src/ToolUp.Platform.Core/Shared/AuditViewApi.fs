@@ -227,7 +227,7 @@ module AuditViewApi =
         PageSize = DefaultPageSize
     }
 
-    /// Fable.Remoting route builder. Mirrors `UsageQueryApi`'s
+    /// ToolUp.Remoting route builder. Mirrors `UsageQueryApi`'s
     /// `/api/_platform/<area>/<method>` shape so the platform's admin
     /// surfaces are discoverable by path alone.
     let routeBuilder (_typeName: string) (methodName: string) =

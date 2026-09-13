@@ -23,7 +23,7 @@ namespace ToolUp.Platform
 //      notification — the typeahead UI degrades to a plain email input
 //      and the invitee is told out of band.
 //
-//   2. `IUserDirectoryApi` — Fable.Remoting contract. The client
+//   2. `IUserDirectoryApi` — ToolUp.Remoting contract. The client
 //      typeahead component calls `SearchUsers` with a debounced query
 //      prefix; the server proxies through to the registered
 //      `IUserDirectory`. Gated to authenticated subjects only — no
@@ -165,7 +165,7 @@ type IUserDirectory =
     abstract member ResolveUsers: ids: string list -> Async<Result<UserSummary list, string>>
     abstract member NotifyInvitation: notification: InvitationNotification -> Async<Result<unit, string>>
 
-/// Fable.Remoting contract surfaced at `/api/IUserDirectoryApi/*`.
+/// ToolUp.Remoting contract surfaced at `/api/IUserDirectoryApi/*`.
 /// Called by the SDK's directory typeahead with a debounced prefix.
 ///
 /// Gated by `SubjectKind.AuthenticatedUser` at the handler — anonymous

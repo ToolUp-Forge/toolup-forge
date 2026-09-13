@@ -274,6 +274,44 @@ let moduleGrantGate (ctx: HttpContext) : string -> bool =
             | Error _ -> false
     | _ -> fun _ -> true
 
+/// Phase 36.C — a per-module AI-queryability predicate for the acting
+/// request: "has this module's author opted its data into the
+/// cross-module AI surface at all".
+///
+/// **A different question from `moduleGrantGate` above, deliberately
+/// answered by a different value and composed with it rather than
+/// folded into it.** The grant gate asks whether THIS SUBJECT'S grant on
+/// the module is live — a per-request, per-subject lifecycle fact. This
+/// asks whether the module is on the AI surface for ANYONE — a
+/// compose-time declaration with no subject in it. A module can be
+/// granted, `Active` and consented and still be deliberately outside the
+/// AI surface, and the two must be able to say so separately: the
+/// refusals they produce have different remedies (accept the grant vs
+/// change the deployment), which is the whole reason
+/// `UnqueryableModule` is distinct from `PermissionDenied` at the tool
+/// sites.
+///
+/// **Absence means NOT queryable, which is the opposite default from the
+/// gate above and is the point of the phase.** A deployment where no
+/// module opted in registers no `ModuleAIExposureRegistry`, so this is
+/// one failed `GetService` and a constant `false`: the `_platform.ai.*`
+/// family enumerates nothing and dispatches nothing. That is a
+/// behaviour change for every deployment that had adopted 36.B — see
+/// `docs/migrations/per-module-ai-queryability.md`. It is the
+/// safer-by-default half of GP 13 rather than its
+/// byte-for-byte half, and the trade is deliberate: a third-party
+/// module's data must not become AI-readable as a side effect of
+/// installing it.
+///
+/// SDK-reserved tool sources (`_platform.*`) never reach this — it gates
+/// the TARGET module of a cross-module read, not the tool's own
+/// `SourceModule`, which is exactly the split the Phase 36.A exemption
+/// established.
+let moduleAIQueryGate (ctx: HttpContext) : string -> bool =
+    match ctx.RequestServices.GetService(typeof<ModuleAIExposureRegistry>) with
+    | :? ModuleAIExposureRegistry as registry -> ModuleAIExposureRegistry.isQueryable registry
+    | _ -> fun _ -> false
+
 /// Phase 730 — the audited dispatch-time twin of `moduleGrantGate`.
 ///
 /// The list filter above is silent by design (nothing was attempted). A
