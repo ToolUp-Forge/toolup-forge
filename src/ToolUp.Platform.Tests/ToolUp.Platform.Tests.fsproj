@@ -141,6 +141,11 @@
         <Compile Include="Contracts\IRateLimitStoreContract.fs" />
         <Compile Include="Contracts\IIdempotencyStoreContract.fs" />
         <Compile Include="Contracts\IClientToolAuthorizerContract.fs" />
+        <!-- Phase 489 — the agent tool-grant seam's conformance bar. An
+             authorisation floor rather than a persistence convenience:
+             absence is the empty set, a write replaces, the scope is part
+             of the identity, and nothing is cached between calls. -->
+        <Compile Include="Contracts\IAgentToolGrantStoreContract.fs" />
         <!-- Phase 113 — host-neutral action-authorizer conformance bar
              (decision invariants over a fixture's allowed/denied calls). -->
         <Compile Include="Contracts\IActionAuthorizerContract.fs" />

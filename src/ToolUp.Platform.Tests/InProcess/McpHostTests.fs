@@ -53,6 +53,9 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
 open ToolUp.AI
 open ToolUp.AI.McpHost
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Stub provider factory + profile (compose-only; never invoked) ───
 
@@ -839,4 +842,19 @@ let tests =
                     invokable
                     (List.contains name visible)
                     (sprintf "'%s' must be invokable exactly when it is visible" name)
+
+        // ── the grant seam's conformance bar, against BOTH shipped
+        //    implementations over one shared body ──────────────────────
+        //
+        // For the reason every contract pack in this repo exists: an
+        // invariant asserted against one implementation is a property of
+        // that implementation. The pack's cases are an AUTHORISATION
+        // floor — absence is the empty set, a write replaces, the scope
+        // is part of the identity — so a second store that got any of
+        // them wrong would be wrong in the unsafe direction.
+        IAgentToolGrantStoreContract.tests "InMemoryAgentToolGrantStore" (fun () ->
+            AgentToolGrantStore.InMemoryAgentToolGrantStore() :> IAgentToolGrantStore)
+
+        IAgentToolGrantStoreContract.tests "BlobAgentToolGrantStore" (fun () ->
+            AgentToolGrantStore.BlobAgentToolGrantStore(InMemoryBlobStorage() :> IBlobStorage) :> IAgentToolGrantStore)
     ]
