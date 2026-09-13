@@ -589,6 +589,18 @@ let update msg model =
         // dispatch. Match arm exists only to satisfy exhaustiveness.
         | ClientToolInvoke(_, _, _, _, _, _) -> model, Cmd.none
 
+        // Phase 36.D: likewise intercepted by SSEClient and routed into
+        // `ConsentDialog`'s per-tab bridge — a suspended read waiting on
+        // the user belongs to the tab, not to one surface's model. Match
+        // arm exists only to satisfy exhaustiveness.
+        | AIConsentRequired(_, _, _, _, _, _, _) -> model, Cmd.none
+
+        // Phase 503: likewise intercepted by SSEClient and routed into
+        // `ToolApprovalDialog`'s per-tab bridge — a held invocation
+        // waiting on the user belongs to the tab, not to one surface's
+        // model. Match arm exists only to satisfy exhaustiveness.
+        | ToolApprovalRequired(_, _, _, _, _, _, _, _) -> model, Cmd.none
+
         // Phase 523 — numeric-fidelity verdict. The full-page module does
         // not yet render verification badges; ignored for now (a later
         // client phase surfaces it). The verdict is already persisted on the

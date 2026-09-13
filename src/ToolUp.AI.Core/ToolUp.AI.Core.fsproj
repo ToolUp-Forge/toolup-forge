@@ -19,6 +19,19 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\AITypes.fs" />
+        <!-- Phase 36.D — cross-module read-consent wire shapes
+             (AllowDecision / AIConsentMode / the persisted per-conversation
+             state / the POST payload). After AITypes, which carries the
+             `AIConsentRequired` SSE case; before everything else, which
+             does not depend on it. -->
+        <Compile Include="Shared\AIConsentTypes.fs" />
+        <!-- Phase 503 — human-in-the-loop tool-approval seam + wire shapes
+             (IToolApprovalPolicy / ApprovalPrompt / ToolApprovalDecision /
+             the POST payload). After AITypes, which carries the
+             `ToolApprovalRequired` SSE case; independent of AIConsentTypes,
+             and placed beside it because they are the two suspended-prompt
+             contracts. -->
+        <Compile Include="Shared\AIToolApprovalTypes.fs" />
         <!-- Phase 6j.B — the declared-field seam the Tier-3 triage
              resolver reads. Pure records + one async interface; no
              dependency on other AI.Core files. -->

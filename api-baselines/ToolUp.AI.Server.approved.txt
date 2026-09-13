@@ -66,10 +66,11 @@ ToolUp.AI.AICompose (class)
 ToolUp.AI.AICompose.composeAI(ToolUp.AI.AICompose+AIServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withAI(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose+AIServerApp (class)
-ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy])
+ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode)
 ToolUp.AI.AICompose+AIServerApp.AIConfig : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig] { get }
 ToolUp.AI.AICompose+AIServerApp.AIProviderFactory : ToolUp.AI.IAIProviderFactory { get }
 ToolUp.AI.AICompose+AIServerApp.Base : ToolUp.Platform.ServerApp { get }
+ToolUp.AI.AICompose+AIServerApp.ConsentMode : ToolUp.AI.AIConsentMode { get }
 ToolUp.AI.AICompose+AIServerApp.DenialRateAlert : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy] { get }
 ToolUp.AI.AICompose+AIServerApp.ModuleAIContexts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext] { get }
 ToolUp.AI.AICompose+AIServerApp.PlatformKeyStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore] { get }
@@ -82,6 +83,7 @@ ToolUp.AI.AICompose+AIServerAppModule.create(ToolUp.AI.IAIProviderFactory, ToolU
 ToolUp.AI.AICompose+AIServerAppModule.createFrom(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.ServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.run(ToolUp.AI.AICompose+AIServerApp) : System.Int32
 ToolUp.AI.AICompose+AIServerAppModule.withAIConfig(ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withAIConsentMode(ToolUp.AI.AIConsentMode, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAnswerProvenanceAnchors(ToolUp.Platform.IAnswerProvenanceAnchors, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAnswerVerifier(ToolUp.AI.AnswerVerifier+AnswerGateMode, ToolUp.AI.AnswerVerifier+IAnswerVerifier, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
@@ -114,6 +116,49 @@ ToolUp.AI.AICompose+AIServerAppModule.withScheduledJob(ToolUp.Platform.Scheduled
 ToolUp.AI.AICompose+AIServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withUserDirectory(ToolUp.Platform.IUserDirectory, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AIConsentDispatch (class)
+ToolUp.AI.AIConsentDispatch.SuspendedDispatchTimeoutMs : System.Int32 (literal)
+ToolUp.AI.AIConsentDispatch.consentBlobName(System.Guid) : System.String
+ToolUp.AI.AIConsentDispatch.loadState(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AIConsentState]
+ToolUp.AI.AIConsentDispatch.recordDecision(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Guid, System.String, ToolUp.AI.AllowDecision) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.AIConsentDispatch.redactPayloadPreview(System.String) : System.String
+ToolUp.AI.AIConsentDispatch.requireConsent(Microsoft.AspNetCore.Http.HttpContext, System.String, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AIConsentDispatch+ConsentOutcome]
+ToolUp.AI.AIConsentDispatch.resolveMode(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.AIConsentMode
+ToolUp.AI.AIConsentDispatch.saveState(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Guid, ToolUp.AI.AIConsentState) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry (class)
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry..ctor()
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry.PendingOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIConsentDispatch+PendingConsent]
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry.RegisterPending(System.Guid, ToolUp.AI.AIConsentDispatch+PendingConsent) : System.Threading.Tasks.Task`1[ToolUp.AI.AllowDecision]
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry.TryAbandon(System.Guid) : System.Boolean
+ToolUp.AI.AIConsentDispatch+AIConsentRegistry.TryComplete(System.Guid, ToolUp.AI.AllowDecision) : System.Boolean
+ToolUp.AI.AIConsentDispatch+ConsentOutcome (class)
+ToolUp.AI.AIConsentDispatch+ConsentOutcome.ConsentGranted : ToolUp.AI.AIConsentDispatch+ConsentOutcome { get }
+ToolUp.AI.AIConsentDispatch+ConsentOutcome.IsConsentGranted : System.Boolean { get }
+ToolUp.AI.AIConsentDispatch+ConsentOutcome.IsConsentRefused : System.Boolean { get }
+ToolUp.AI.AIConsentDispatch+ConsentOutcome.Tag : System.Int32 { get }
+ToolUp.AI.AIConsentDispatch+ConsentOutcome+ConsentRefused (class)
+ToolUp.AI.AIConsentDispatch+ConsentOutcome+ConsentRefused.reason : System.String { get }
+ToolUp.AI.AIConsentDispatch+ConsentOutcome+Tags (class)
+ToolUp.AI.AIConsentDispatch+ConsentOutcome+Tags.ConsentGranted : System.Int32 (literal)
+ToolUp.AI.AIConsentDispatch+ConsentOutcome+Tags.ConsentRefused : System.Int32 (literal)
+ToolUp.AI.AIConsentDispatch+ItemsKeys (class)
+ToolUp.AI.AIConsentDispatch+ItemsKeys.ConversationId : System.String (literal)
+ToolUp.AI.AIConsentDispatch+ItemsKeys.StreamEmitter : System.String (literal)
+ToolUp.AI.AIConsentDispatch+ItemsKeys.TaskId : System.String (literal)
+ToolUp.AI.AIConsentDispatch+PendingConsent (class)
+ToolUp.AI.AIConsentDispatch+PendingConsent..ctor(System.Guid, System.String, System.String, System.String)
+ToolUp.AI.AIConsentDispatch+PendingConsent.Container : System.String { get }
+ToolUp.AI.AIConsentDispatch+PendingConsent.ConversationId : System.Guid { get }
+ToolUp.AI.AIConsentDispatch+PendingConsent.TargetModule : System.String { get }
+ToolUp.AI.AIConsentDispatch+PendingConsent.UserId : System.String { get }
+ToolUp.AI.AIConsentDispatch+StreamEmitter (class)
+ToolUp.AI.AIConsentDispatch+StreamEmitter..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit])
+ToolUp.AI.AIConsentDispatch+StreamEmitter.Emit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.AIConsentHandler (class)
+ToolUp.AI.AIConsentHandler.ConsentAuditSource : System.String (literal)
+ToolUp.AI.AIConsentHandler.ConsentDeniedEvent : System.String (literal)
+ToolUp.AI.AIConsentHandler.ConsentGrantedEvent : System.String (literal)
+ToolUp.AI.AIConsentHandler.consentDecisionHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.AIDenialRateMonitor (class)
 ToolUp.AI.AIDenialRateMonitor.alertText(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, System.String, System.String) : System.String
 ToolUp.AI.AIDenialRateMonitor.observeAndAlert(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -526,6 +571,16 @@ ToolUp.AI.PlatformAITools.builtIn : Microsoft.FSharp.Collections.FSharpList`1[To
 ToolUp.AI.SSEHandler (class)
 ToolUp.AI.SSEHandler.sendEvent(ToolUp.Platform.SSEConnectionManager, System.String, ToolUp.AI.AIStreamEvent) : System.Void
 ToolUp.AI.SSEHandler.sseHandler(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.AI.SuspendedPrompt (class)
+ToolUp.AI.SuspendedPrompt.SuspendedDispatchTimeoutMs : System.Int32 (literal)
+ToolUp.AI.SuspendedPrompt.awaitDecisionWithin`1(System.Int32, System.Threading.Tasks.Task`1[Decision], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Decision]]
+ToolUp.AI.SuspendedPrompt.awaitDecision`1(System.Threading.Tasks.Task`1[Decision], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Decision]]
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2 (class)
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2..ctor()
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.PendingOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[Pending]
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.RegisterPending(System.Guid, Pending) : System.Threading.Tasks.Task`1[Decision]
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.TryAbandon(System.Guid, Decision) : System.Boolean
+ToolUp.AI.SuspendedPrompt+PendingPromptRegistry`2.TryComplete(System.Guid, Decision) : System.Boolean
 ToolUp.AI.SystemPromptBuilder (class)
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig (class)
 ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)
@@ -554,6 +609,44 @@ ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.activeModuleContext(Tool
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.compose(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.currentNarrativeContext(ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.fromStatic(System.String, ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.AI.ToolApprovalDispatch (class)
+ToolUp.AI.ToolApprovalDispatch.ApprovalAuditSource : System.String (literal)
+ToolUp.AI.ToolApprovalDispatch.ApprovalExpiredEvent : System.String (literal)
+ToolUp.AI.ToolApprovalDispatch.ApprovalGrantedEvent : System.String (literal)
+ToolUp.AI.ToolApprovalDispatch.ApprovalRejectedEvent : System.String (literal)
+ToolUp.AI.ToolApprovalDispatch.ApprovalRequestedEvent : System.String (literal)
+ToolUp.AI.ToolApprovalDispatch.argumentsDigest(System.String) : System.String
+ToolUp.AI.ToolApprovalDispatch.requireApproval(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
+ToolUp.AI.ToolApprovalDispatch.requireApprovalWithin(System.Int32, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
+ToolUp.AI.ToolApprovalDispatch.resolvePolicy(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IToolApprovalPolicy]
+ToolUp.AI.ToolApprovalDispatch.writeApprovalAudit(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.Platform.ILogger, System.String, ToolUp.AI.ToolApprovalDispatch+PendingApproval) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome (class)
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome.ApprovalGranted : ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome { get }
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome.IsApprovalGranted : System.Boolean { get }
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome.IsApprovalRefused : System.Boolean { get }
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome.Tag : System.Int32 { get }
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+ApprovalRefused (class)
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+ApprovalRefused.reason : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags (class)
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags.ApprovalGranted : System.Int32 (literal)
+ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags.ApprovalRefused : System.Int32 (literal)
+ToolUp.AI.ToolApprovalDispatch+PendingApproval (class)
+ToolUp.AI.ToolApprovalDispatch+PendingApproval..ctor(System.Guid, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.ArgumentsDigest : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.ArgumentsPreview : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.ConversationId : System.Guid { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.ScopeId : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.SourceModule : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.ToolName : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.UserId : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry (class)
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry..ctor()
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry.PendingOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolApprovalDispatch+PendingApproval]
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry.RegisterPending(System.Guid, ToolUp.AI.ToolApprovalDispatch+PendingApproval) : System.Threading.Tasks.Task`1[ToolUp.AI.ToolApprovalDecision]
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry.TryAbandon(System.Guid) : System.Boolean
+ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry.TryComplete(System.Guid, ToolUp.AI.ToolApprovalDecision) : System.Boolean
+ToolUp.AI.ToolApprovalHandler (class)
+ToolUp.AI.ToolApprovalHandler.toolApprovalDecisionHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.ToolContext (class)
 ToolUp.AI.ToolContext.emitAction(Microsoft.AspNetCore.Http.HttpContext, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.ToolHelpers (class)

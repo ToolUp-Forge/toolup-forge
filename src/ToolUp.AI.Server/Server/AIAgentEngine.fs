@@ -179,8 +179,16 @@ let private classifyForAgentLoop (err: AIProviderError) =
 /// browser should set its own watchdog (default 30 s) inside this
 /// envelope so the user-facing failure mode is "client gave up"
 /// rather than "server timed out".
-[<Literal>]
-let private ClientResidentToolTimeoutMs = 90_000
+///
+/// Phase 36.D: the value is no longer declared here. A suspended
+/// consent prompt is the same wait — a server thread parked on a
+/// `TaskCompletionSource` only the browser can complete — and two
+/// constants would be two budgets to keep in step. This binding is the
+/// local name for the one declaration in
+/// `AIConsentDispatch.SuspendedDispatchTimeoutMs`; every read below is
+/// unchanged, and so is the value.
+let private ClientResidentToolTimeoutMs =
+    AIConsentDispatch.SuspendedDispatchTimeoutMs
 
 /// Phase 6h follow-up: cap on `IEventStore.Write` for latency
 /// telemetry. The agent loop awaits this on the response path; a
@@ -267,6 +275,28 @@ let private runFullAgentLoop
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
+        // Phase 36.D: stamp the turn's identity and its SSE emitter onto
+        // the context every tool executor already receives.
+        //
+        // A server-resident tool's signature is `HttpContext -> argsJson ->
+        // Async<string>`: it has no conversation and no way to put an event
+        // on the stream, because until the consent gate no server-resident
+        // tool needed either. Widening that signature would retype every
+        // tool in the SDK and every tool a consumer has written, to serve
+        // one gate — so the two facts ride the same per-request items carry
+        // the loop already depends on for scope and permissions, keyed
+        // through the constants that define them so both ends move
+        // together (the discipline Phase 730 set for the grant stamps).
+        //
+        // Unconditional and cheap: three dictionary writes per turn,
+        // whatever the deployment's consent mode. The gate that reads them
+        // is what costs nothing when it is off.
+        ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
+        ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box taskId
+
+        ctx.Items[AIConsentDispatch.ItemsKeys.StreamEmitter] <-
+            box ({ Emit = onEvent }: AIConsentDispatch.StreamEmitter)
+
         // Phase 36.A: the caller's access context, reconstructed from the
         // items the background context carries forward. Resolved ONCE at
         // the top of the loop — permissions do not change mid-turn, and
@@ -941,40 +971,53 @@ let private runFullAgentLoop
 
                                         return Error(Denied(tc.Name, reason))
                                     | Some tool ->
-                                        // Phase 6g.A: route by `Location`. ServerResident
-                                        // — existing path (HttpContext + argsJson →
-                                        // Async<resultJson>). ClientResident — emit
-                                        // ClientToolInvoke SSE event, suspend on the
-                                        // dispatch registry's TCS, await the matching
-                                        // POST or timeout (90 s).
-                                        match tool.Definition.Location with
-                                        | ServerResident ->
-                                            resolvedLocation <- ServerSide
-                                            let! executed = tool.Execute ctx tc.Arguments
-                                            return Ok executed
-                                        | ClientResident ->
-                                            resolvedLocation <- ClientSide
+                                        // ─── Phase 503 — the last two gates, then the
+                                        // routing. The ORDER is the contract.
+                                        //
+                                        // The Phase 46 allowlist consult used to live
+                                        // inside the ClientResident arm below, because
+                                        // it is a client-resident seam. Phase 503's
+                                        // approval gate is not: the actions it exists
+                                        // for — writes, deletions, spend, outbound
+                                        // calls — are SERVER-resident. So the allowlist
+                                        // consult is hoisted here (answering `Allow`
+                                        // for a server-resident tool, which is what its
+                                        // absence always meant), the approval gate runs
+                                        // after it for BOTH locations, and only then
+                                        // does the Location routing happen.
+                                        //
+                                        // After the allowlist, never before: a dialog
+                                        // for an action an outer gate already forbids
+                                        // would leak what the deployment exposes and
+                                        // teach the user to click through.
+                                        resolvedLocation <-
+                                            match tool.Definition.Location with
+                                            | ServerResident -> ServerSide
+                                            | ClientResident -> ClientSide
 
-                                            // G12 allowlist: consult the optional
-                                            // authorization seam BEFORE registering a
-                                            // pending dispatch or emitting the
-                                            // `ClientToolInvoke` SSE. A denied call is
-                                            // never sent to the browser; the model is
-                                            // told via a typed `Denied` tool-result and
-                                            // the refusal is audited. No seam ⇒ `Allow`
-                                            // (GP 13: unchanged behaviour).
-                                            let decision =
-                                                match authorizerOpt with
-                                                | None -> Allow
-                                                | Some auth ->
-                                                    auth.Authorize(
-                                                        tool.Definition.Name,
-                                                        tc.Arguments,
-                                                        activeModule,
-                                                        activePage
-                                                    )
+                                        // G12 allowlist: consult the optional
+                                        // authorization seam BEFORE registering a
+                                        // pending dispatch or emitting the
+                                        // `ClientToolInvoke` SSE. A denied call is
+                                        // never sent to the browser; the model is
+                                        // told via a typed `Denied` tool-result and
+                                        // the refusal is audited. No seam ⇒ `Allow`
+                                        // (GP 13: unchanged behaviour) — and so is
+                                        // every server-resident tool, which this seam
+                                        // has never spoken for.
+                                        let allowlistDecision =
+                                            match tool.Definition.Location, authorizerOpt with
+                                            | ClientResident, Some auth ->
+                                                auth.Authorize(
+                                                    tool.Definition.Name,
+                                                    tc.Arguments,
+                                                    activeModule,
+                                                    activePage
+                                                )
+                                            | _ -> Allow
 
-                                            match decision with
+                                        let! gated = async {
+                                            match allowlistDecision with
                                             | Deny reason ->
                                                 logger.Warn(
                                                     sprintf
@@ -987,73 +1030,123 @@ let private runFullAgentLoop
                                                 do! writeDenialAudit tool.Definition.Name reason
                                                 return Error(Denied(tc.Name, reason))
                                             | Allow ->
-                                                // Phase 36.A: record the tool's
-                                                // source module with the pending
-                                                // call so `/api/ai/tool-result`
-                                                // can re-check the POSTing
-                                                // caller's permission before
-                                                // completing it.
-                                                let pendingTask =
-                                                    dispatchRegistry.RegisterPending(
-                                                        tcId,
-                                                        Some tool.Definition.SourceModule
+                                                // Phase 503 — human-in-the-loop
+                                                // approval. With no `IToolApprovalPolicy`
+                                                // composed this is one failed
+                                                // `GetService` and `ApprovalGranted`, so
+                                                // the turn is what it was (GP 11 / GP 13).
+                                                let! approval =
+                                                    ToolApprovalDispatch.requireApproval
+                                                        ctx
+                                                        logger
+                                                        tool.Definition.Name
+                                                        tool.Definition.SourceModule
+                                                        tc.Arguments
+                                                        activeModule
+                                                        activePage
+
+                                                match approval with
+                                                | ToolApprovalDispatch.ApprovalGranted -> return Ok()
+                                                | ToolApprovalDispatch.ApprovalRefused reason ->
+                                                    // The refusal rides the EXISTING
+                                                    // denial stream, so Phase 47's
+                                                    // /dev/ai-allowlist rollup, the
+                                                    // IAIDenialRollupProbe panel and the
+                                                    // sustained-denial rate monitor all
+                                                    // see it with no second reader. The
+                                                    // DECISION itself is recorded on
+                                                    // `_platform.ai.tool_approval`.
+                                                    logger.Warn(
+                                                        sprintf
+                                                            "Tool '%s' refused by the human-in-the-loop approval gate (activeModule=%A): %s"
+                                                            tool.Definition.Name
+                                                            activeModule
+                                                            reason
                                                     )
 
-                                                // Phase 6g.A: SSE event carries the tool's
-                                                // canonical name (`Definition.Name`, e.g.
-                                                // `_platform.ui.inspect_active_module`), not
-                                                // `tc.Name` which is the provider-sanitised
-                                                // form (`_platform_ui_inspect_active_module`).
-                                                // The client's `ClientToolRuntime.registry`
-                                                // is keyed by the canonical name; using the
-                                                // sanitised one here would miss every lookup.
-                                                onEvent (
-                                                    ClientToolInvoke(
-                                                        taskId,
-                                                        tcId,
-                                                        tool.Definition.Name,
-                                                        tc.Arguments,
-                                                        activeModule,
-                                                        activePage
-                                                    )
+                                                    do! writeDenialAudit tool.Definition.Name reason
+                                                    return Error(Denied(tc.Name, reason))
+                                        }
+
+                                        // Phase 6g.A: route by `Location`. ServerResident
+                                        // — existing path (HttpContext + argsJson →
+                                        // Async<resultJson>). ClientResident — emit
+                                        // ClientToolInvoke SSE event, suspend on the
+                                        // dispatch registry's TCS, await the matching
+                                        // POST or timeout (90 s).
+                                        match gated, tool.Definition.Location with
+                                        | Error err, _ -> return Error err
+                                        | Ok(), ServerResident ->
+                                            let! executed = tool.Execute ctx tc.Arguments
+                                            return Ok executed
+                                        | Ok(), ClientResident ->
+                                            // Phase 36.A: record the tool's
+                                            // source module with the pending
+                                            // call so `/api/ai/tool-result`
+                                            // can re-check the POSTing
+                                            // caller's permission before
+                                            // completing it.
+                                            let pendingTask =
+                                                dispatchRegistry.RegisterPending(
+                                                    tcId,
+                                                    Some tool.Definition.SourceModule
                                                 )
 
-                                                let timeoutTask = Task.Delay(ClientResidentToolTimeoutMs)
+                                            // Phase 6g.A: SSE event carries the tool's
+                                            // canonical name (`Definition.Name`, e.g.
+                                            // `_platform.ui.inspect_active_module`), not
+                                            // `tc.Name` which is the provider-sanitised
+                                            // form (`_platform_ui_inspect_active_module`).
+                                            // The client's `ClientToolRuntime.registry`
+                                            // is keyed by the canonical name; using the
+                                            // sanitised one here would miss every lookup.
+                                            onEvent (
+                                                ClientToolInvoke(
+                                                    taskId,
+                                                    tcId,
+                                                    tool.Definition.Name,
+                                                    tc.Arguments,
+                                                    activeModule,
+                                                    activePage
+                                                )
+                                            )
 
-                                                let! winner =
-                                                    Task.WhenAny(pendingTask :> Task, timeoutTask) |> Async.AwaitTask
+                                            let timeoutTask = Task.Delay(ClientResidentToolTimeoutMs)
 
-                                                if winner = (pendingTask :> Task) then
-                                                    let! executed = pendingTask |> Async.AwaitTask
-                                                    return Ok executed
-                                                else
-                                                    dispatchRegistry.TryAbort(
-                                                        tcId,
-                                                        $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
-                                                    )
-                                                    |> ignore
+                                            let! winner =
+                                                Task.WhenAny(pendingTask :> Task, timeoutTask) |> Async.AwaitTask
 
-                                                    // Operator visibility for the silent-stall
-                                                    // class: SSE stream paused (backgrounded
-                                                    // tab), client registry has no handler for
-                                                    // this canonical tool name, executor returned
-                                                    // without POSTing /api/ai/tool-result, or
-                                                    // multi-instance deployment dispatched the
-                                                    // POST to a different process. Without a log
-                                                    // line the symptom only surfaces as the
-                                                    // model's tool-result message "Client did not
-                                                    // respond …" and an operator cannot
-                                                    // correlate it with anything serverside.
-                                                    logger.Warn
-                                                        $"AI ClientResident tool dispatch timed out after {ClientResidentToolTimeoutMs / 1000}s (conversation={conversationId}, tool={tool.Definition.Name}, toolCallId={tcId}, activeModule={activeModule}, activePage={activePage}). Likely causes: backgrounded client tab, unregistered tool, executor returned without POSTing tool-result, or multi-instance deployment without SSE/POST affinity."
+                                            if winner = (pendingTask :> Task) then
+                                                let! executed = pendingTask |> Async.AwaitTask
+                                                return Ok executed
+                                            else
+                                                dispatchRegistry.TryAbort(
+                                                    tcId,
+                                                    $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
+                                                )
+                                                |> ignore
 
-                                                    return
-                                                        Error(
-                                                            ToolThrew(
-                                                                tc.Name,
-                                                                $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
-                                                            )
+                                                // Operator visibility for the silent-stall
+                                                // class: SSE stream paused (backgrounded
+                                                // tab), client registry has no handler for
+                                                // this canonical tool name, executor returned
+                                                // without POSTing /api/ai/tool-result, or
+                                                // multi-instance deployment dispatched the
+                                                // POST to a different process. Without a log
+                                                // line the symptom only surfaces as the
+                                                // model's tool-result message "Client did not
+                                                // respond …" and an operator cannot
+                                                // correlate it with anything serverside.
+                                                logger.Warn
+                                                    $"AI ClientResident tool dispatch timed out after {ClientResidentToolTimeoutMs / 1000}s (conversation={conversationId}, tool={tool.Definition.Name}, toolCallId={tcId}, activeModule={activeModule}, activePage={activePage}). Likely causes: backgrounded client tab, unregistered tool, executor returned without POSTing tool-result, or multi-instance deployment without SSE/POST affinity."
+
+                                                return
+                                                    Error(
+                                                        ToolThrew(
+                                                            tc.Name,
+                                                            $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
                                                         )
+                                                    )
                                     | None -> return Error(UnknownTool tc.Name)
                                 with
                                 | :? Text.Json.JsonException as ex ->

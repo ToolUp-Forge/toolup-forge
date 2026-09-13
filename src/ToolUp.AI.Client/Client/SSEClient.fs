@@ -135,6 +135,47 @@ let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : Even
         | Parsed(ClientToolInvoke(taskId, toolCallId, toolName, argsJson, activeModule, activePage)) ->
             ToolUp.AI.Client.ClientToolRuntime.handleInvoke taskId toolCallId toolName argsJson activeModule activePage
             |> Async.StartImmediate
+        // Phase 36.D: same out-of-band routing as `ClientToolInvoke`, for
+        // the same reason — a suspended server-side read waiting on the
+        // user is a transport concern, and routing it through one surface's
+        // Elmish model would tie the question to whichever surface happens
+        // to be mounted. `ConsentDialog` holds it in a per-tab bridge and
+        // whichever surface mounted the modal renders it.
+        | Parsed(AIConsentRequired(taskId,
+                                   consentId,
+                                   conversationId,
+                                   toolName,
+                                   targetModule,
+                                   intendedQueryKey,
+                                   redactedPayloadPreview)) ->
+            ToolUp.AI.Client.ConsentDialog.handleRequired
+                taskId
+                consentId
+                conversationId
+                toolName
+                targetModule
+                intendedQueryKey
+                redactedPayloadPreview
+        // Phase 503: same out-of-band routing, for the same reason — a
+        // held server-side invocation waiting on the user belongs to the
+        // tab, not to one surface's Elmish model.
+        | Parsed(ToolApprovalRequired(taskId,
+                                      approvalId,
+                                      conversationId,
+                                      toolName,
+                                      sourceModule,
+                                      summary,
+                                      detail,
+                                      redactedArgumentsPreview)) ->
+            ToolUp.AI.Client.ToolApprovalDialog.handleRequired
+                taskId
+                approvalId
+                conversationId
+                toolName
+                sourceModule
+                summary
+                detail
+                redactedArgumentsPreview
         | Parsed evt -> dispatch evt
         | ParseFailure preview ->
             log.Warn $"SSE parse failure: {preview}"

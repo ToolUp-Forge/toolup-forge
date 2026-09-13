@@ -24,6 +24,14 @@
         <Compile Include="Client\ClientToolRuntime.fs" />
         <Compile Include="Client\FastPathBridge.fs" />
         <Compile Include="Client\PromptAccessoryBridge.fs" />
+        <!-- Phase 36.D — the cross-module read-consent bridge + modal.
+             Routed out of band from SSEClient (like ClientToolRuntime) and
+             mounted by ConversationPanel, so it must precede both. -->
+        <Compile Include="Client\ConsentDialog.fs" />
+        <!-- Phase 503 — the tool-approval bridge + modal. Routed out of
+             band from SSEClient (like ConsentDialog and ClientToolRuntime)
+             and mounted by ConversationPanel, so it must precede both. -->
+        <Compile Include="Client\ToolApprovalDialog.fs" />
         <Compile Include="Client\SSEClient.fs" />
         <Compile Include="Client\SidePanelExtensions.fs" />
         <Compile Include="Client\ConversationPanel.fs" />

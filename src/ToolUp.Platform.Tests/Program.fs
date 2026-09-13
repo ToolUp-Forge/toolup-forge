@@ -1038,6 +1038,14 @@ let private registeredTests =
         // Read; a forged tool name is refused with a typed Denied before the
         // executor runs and lands a _platform.ai.unauthorized_tool audit row.
         AIToolDispatchRbacTests.tests
+        // Phase 503 — human-in-the-loop tool approval. A policy-held
+        // invocation suspends before its body runs, approve resumes it and
+        // reject aborts it with nothing changed, an unanswered prompt
+        // refuses on the shared budget, an outer gate's refusal never
+        // reaches a prompt, the gate covers server-resident tools (which
+        // the client-resident allowlist seam could not), and a deployment
+        // that composes no policy sees an identical event stream.
+        ToolApprovalTests.tests
         // Phase 551 — module-declared grant policy. Fail-closed policy /
         // grant-state parse (no mangled token reads as AdminDiscretion),
         // narrowing-only composition, the write guard per arm, dispatch
@@ -1090,6 +1098,14 @@ let private registeredTests =
         // `UnqueryableModule` — reported after `PermissionDenied`, so a
         // caller who may not read the module learns nothing from it.
         AIQueryabilityOptInTests.tests
+        // Phase 36.D — the per-conversation consent gate. The fourth gate
+        // on the `_platform.ai.*` family and the only one that asks the
+        // USER: the three allow/deny lifetimes, the innermost ordering
+        // asserted as a prompt COUNT of zero behind an outer refusal, the
+        // `/api/ai/consent` round trip authorised from the server's own
+        // pending record, and the six-rule audit on the two new wire
+        // shapes.
+        AIConsentTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

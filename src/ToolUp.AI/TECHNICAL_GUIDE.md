@@ -385,6 +385,147 @@ All six register `Location = ServerResident`, `Surface = Both`, `SourceModule = 
 
 **Out of scope (deferred):** `_platform.ai.write_*` (cross-module mutation needs a different consent model); streaming / paging (initial impl soft-caps at 100 entities / ~1MB result content).
 
+## Consent flow — cross-module reads ask the user (Phase 36.D)
+
+Four gates now stand between the model and a module's data, and the order is the contract. The first three are the **deployment's** answers; the fourth is the **user's**.
+
+| # | Gate | Question | Answered by | Refusal rendered as |
+|---|---|---|---|---|
+| 1 | Phase 36.A RBAC | may this caller read the module | an administrator | `PermissionDenied` |
+| 2 | Phase 730 grant / consent | is the authority behind that permission live | the grant lifecycle | `PermissionDenied` (deliberately indistinguishable from 1) |
+| 3 | Phase 36.C AI-queryability | is the module on the AI surface at all | the module author / composition root | `UnqueryableModule` |
+| 4 | **Phase 36.D consent** | **does the user allow this conversation to read from it** | **the user, in the dialog** | **`UserDenied`** |
+
+Consent is **innermost**, and that is load-bearing rather than incidental: a caller who fails gate 1, 2 or 3 is refused with **no dialog shown at all**, so a prompt can never tell them which modules exist or which ones the deployment exposed. The four refusals are four distinct discriminators because they have four distinct remedies — `UserDenied` is not `PermissionDenied` (the caller *does* hold the permission) and not `UnqueryableModule` (no operator can fix it).
+
+`Phase 45`'s `IClientToolAuthorizer` / `UIControlPolicy` static allowlist composes **outside** all four: an action the operator never allowlisted is refused before any `ClientToolInvoke` and the user is never prompted.
+
+### The round trip
+
+The mechanism is the Phase 6g.A client-resident tool round trip, **reused rather than re-invented** — a server thread parked on a `TaskCompletionSource` that only the browser can complete:
+
+1. A `_platform.ai.*` reach tool (`query_module` / `query_entity` / `list_results` / `get_latest_result`) is about to read from a module. The two ENUMERATION tools never prompt — listing is not reading.
+2. `AIConsentDispatch.requireConsent` consults the per-conversation record. A standing `AllowForConversation` proceeds silently; a standing `Denied` refuses silently.
+3. Otherwise it registers a pending entry, emits an `AIConsentRequired` SSE event, and suspends.
+4. `SSEClient` routes that event **out of band** into `ConsentDialog`'s per-tab bridge — exactly as it routes `ClientToolInvoke` into `ClientToolRuntime`, and for the same reason: a suspended read waiting on the user belongs to the tab, not to one surface's Elmish model. `ConversationPanel.View` mounts the modal once, in both its open and collapsed branches.
+5. The user clicks. The browser POSTs `{ ConsentId, Decision }` to `/api/ai/consent`; `AIConsentHandler` re-checks the caller's `Read` permission on the target module, persists the decision, audits it, and completes the suspended read.
+6. An unanswered prompt resolves as a refusal on the **same suspended-dispatch budget** the client-resident round trip uses (`AIConsentDispatch.SuspendedDispatchTimeoutMs`, 90 s — one declaration, two callers), so the turn fails cleanly rather than hanging.
+
+### The three decisions have three lifetimes
+
+| Decision | This read | The next read from the same module |
+|---|---|---|
+| `AllowOnce` | proceeds | **prompts again** — the allowance was spent |
+| `AllowForConversation` | proceeds | proceeds, no prompt |
+| `Denied` | refused with `UserDenied` | refused again, **without re-prompting** |
+
+`AllowOnce` is still *recorded* — the audit trail and the conversation's own record show it — it simply never satisfies a later lookup. `Denied` is remembered so a user who has said no is not asked once per turn while the model re-plans.
+
+### Modes — `AIServerApp.withAIConsentMode`
+
+| Mode | Behaviour |
+|---|---|
+| `AlwaysAsk` | prompt on every read; the record is neither consulted nor written |
+| `RememberPerConversation` | **the default** — prompt once per target module per conversation |
+| `TrustEverything` | never prompt, no suspended dispatch, no consent audit row |
+
+**The default is a behaviour change, not the byte-for-byte default GP 11 usually asks for** — the second place the SDK inverts that posture after Phase 36.C's opt-in, and for the same reason: shipping this gate off by default would ship nothing. `TrustEverything` is the one way back, and it is then a decision somebody made. See [`../../docs/migrations/36-D-cross-module-read-consent.md`](../../docs/migrations/36-D-cross-module-read-consent.md).
+
+The mode is **server-authoritative** and deliberately not a `ClientConfig` field: the gate runs server-side, so a client-supplied mode would let any caller send `TrustEverything` and disable it.
+
+### Persistence
+
+`ai-conversations/{id}.consent.json` — a fourth sibling beside the conversation's `.json` / `.history.json` / `.meta.json` blobs, in the same scope container. Per-conversation by design; a new conversation asks again, and there is no cross-conversation memory.
+
+The write is a read-modify-write, so two tool calls in one parallel batch can in principle lose one another's decision. The cost of that is a re-prompt and never a spurious allowance, because the value that can be lost is the WRITE and an absent record always prompts.
+
+### Audit
+
+Every decision writes a `ModuleEvent` under `SourceModule = "_platform.ai.consent"`, `EventType = "AIConsentGranted" | "AIConsentDenied"`, with `UserId` / `ConversationId` / `TargetModule` / `Decision` (the stable token, not an F# DU rendering). One source for both outcomes, so an operator asking "what did users allow the agent to read" reads one stream. `TrustEverything` writes none — there is no decision to record.
+
+### Wire shapes
+
+`AIConsentRequired` (SSE) and `AIConsentDecisionRequest` (POST) are **FSharp-primitive-only** — `Guid` and `string` throughout, no server type and no live handle (GP 12 rule 1), asserted mechanically by the `AIConsentTests` portability pack. The decision crosses as its stable token rather than as a DU, because the POST body is hand-written from the browser and a DU on the wire would bind the contract to one serialiser's case encoding; `AllowDecision.ofToken` fails closed to `Denied`.
+
+The POST carries **only** a consent id and a decision token. The conversation, the target module and the user are read from the server's own pending-request record, so a client has nothing to lie about.
+
+## Approval flow — consequential actions ask a person (Phase 503)
+
+The four gates above all answer with a policy the **deployment** decided ahead of time, and all four can only say yes or no. A consequential action — a write, a deletion, a spend, an outbound call — needs a third answer: *ask the person*, about this call, with its arguments on screen.
+
+| # | Gate | Question | Answered by | Refusal rendered as |
+|---|---|---|---|---|
+| 1 | Phase 36.A RBAC | may this caller read the tool's source module | an administrator | `Denied` |
+| 2 | Phase 730 grant / consent | is the authority behind that permission live | the grant lifecycle | `Denied` |
+| 3 | Phase 46 static allowlist | did the operator allowlist this **client-resident** invocation | the composition root | `Denied` |
+| 4 | **Phase 503 approval** | **does a person approve THIS call, with THESE arguments** | **the user, in the dialog** | **`Denied`, naming the user's decision** |
+
+Approval is consulted **after** 1–3 and **before** the server-vs-client routing, in `AIAgentEngine`'s dispatch site. Both halves of that placement are load-bearing:
+
+- **After the allowlist**, because a dialog for an action an outer gate already forbids would leak what the deployment exposes and teach the user to click through. This is the same ordering argument Phase 36.C made for consent.
+- **Before the routing**, because the actions this phase exists for are **server-resident**. `IClientToolAuthorizer` is consulted only inside the ClientResident arm, by its own contract; extending its decision to a third case — which is what this phase's shard proposed — would have delivered a confirmation gate for exactly the tools that do not need one. (It would also have been a breaking change to a released closed DU.) So approval is its own seam, and the allowlist consult is hoisted beside it rather than nested under one location.
+
+### Declaring the policy
+
+The SDK cannot know which of a consumer's tools is consequential — only the deployment knows that `archive_records` is reversible and `delete_records` is not. So there is no default list and no heuristic: a deployment composes an `IToolApprovalPolicy`, or nothing is ever held.
+
+```fsharp skip=fragment
+type SpendApprovalPolicy() =
+    interface IToolApprovalPolicy with
+        member _.Requires(toolName, sourceModule, argsJson, _activeModule, _activePage) =
+            if toolName = "billing.issue_refund" then
+                ApprovalRequired {
+                    Summary = "Issue this refund?"
+                    Detail = "This moves money and cannot be undone from here."
+                }
+            else
+                ApprovalNotRequired
+```
+
+The policy sees the **invocation**, not only the tool: `argsJson` is what lets it hold a deletion whose filter matches everything and wave through one that names a single row. Like `IClientToolAuthorizer` it is synchronous (it runs on the dispatch path) and it must not throw — a policy that raises is treated as *approval-required*, never as a yes.
+
+**This is NOT an inverted default.** Phase 36.C and Phase 36.D each deliberately inverted GP 11 because the SDK knew what they protected. Here it does not, so the gate is off until a deployment declares otherwise, and a deployment that declares nothing pays one failed `GetService` per tool call (GP 13).
+
+### The round trip
+
+The same suspended dispatch the client-resident tool call (6g.A) and the consent prompt (36.D) use — a server thread parked on a `TaskCompletionSource` that only the browser can complete. Since this phase the mechanism itself lives in one place, `SuspendedPrompt`: the registry, the abandon-on-timeout race and the one 90-second budget. `AIConsentRegistry` is a delegating facade over it and `ToolApprovalRegistry` is the second; `ClientToolDispatchRegistry` is deliberately left as it is, its completion carrying a result string and its abandonment raising.
+
+1. The dispatch site consults the policy. `ApprovalNotRequired` — or no policy at all — and the invocation proceeds with nothing emitted and nothing recorded.
+2. `ApprovalRequired` registers a pending record, audits the request, emits `ToolApprovalRequired` on the stream the user is already watching, and parks.
+3. `SSEClient` routes that event **out of band** into `ToolApprovalDialog`'s per-tab bridge — exactly as it routes `ClientToolInvoke` and `AIConsentRequired`. `ConversationPanel.View` mounts the modal once, in both its open and collapsed branches.
+4. The user clicks. The browser POSTs `{ ApprovalId, Decision }` to `/api/ai/tool-approval`; the handler re-checks the caller's `Read` permission on the source module **recorded server-side**, audits the decision, and completes the parked invocation.
+5. An unanswered prompt resolves as a refusal on the shared budget, so the turn fails cleanly rather than hanging.
+
+### Two buttons, and deliberately no third
+
+| Decision | The tool | The next call to the same tool |
+|---|---|---|
+| Approve | runs, exactly as described | prompts again |
+| Don't run it | never runs | prompts again |
+
+There is no "approve this tool for the rest of the conversation". The user is approving **arguments they can see**, and a standing allowance would authorise arguments nobody has read yet — which is the protection this phase adds. Contrast 36.D's `AllowForConversation`, which is safe precisely because its subject is a *module* rather than a *call*.
+
+### It fails CLOSED where consent abstains
+
+A policy that requires approval in a context with no live turn to ask on — no conversation stamped, no emitter, no registry composed — **refuses** the invocation. 36.D's consent gate abstains in the same situation, and the asymmetry is deliberate: consent sits behind three gates that have already permitted the read, whereas here the deployment has affirmatively declared *this* invocation consequential, and running it because nobody was listening is precisely the outcome the declaration exists to prevent.
+
+### Audit — two streams, each the one already read for that question
+
+**The decision trail**, `SourceModule = "_platform.ai.tool_approval"`, four event types: `ToolApprovalRequested` (the gate, when the prompt is raised), `ToolApprovalGranted` / `ToolApprovalRejected` (the POST handler), `ToolApprovalExpired` (the gate, on the budget). Every row carries `UserId`, `ConversationId`, `ToolName`, `SourceModule`, `ArgumentsDigest` (`sha256:` + 64 hex over the exact argument JSON) and `ArgumentsPreview` (the capped rendering the user actually read). The digest and the preview answer different questions — one says what was on screen, the other says exactly which invocation it was.
+
+**The denial stream**: a refusal *additionally* writes the existing `_platform.ai.tool_allowlist_denial` / `ToolAllowlistDenied` row from the agent loop, so it reaches Phase 47's `/dev/ai-allowlist` rollup, the `IAIDenialRollupProbe` admin panel and the sustained-denial rate monitor with no second reader. Reuse of the denial family the tier already has, rather than a parallel one.
+
+A deployment composing no policy writes neither — there is no decision to record.
+
+### Wire shapes
+
+`ToolApprovalRequired` (SSE) and `ToolApprovalDecisionRequest` (POST) are **FSharp-primitive-only** — `Guid` and `string` throughout, no server type and no live handle (GP 12 rule 1). The decision crosses as its stable token rather than as a DU, because the POST body is hand-written from the browser and a DU on the wire would bind the contract to one serialiser's case encoding; `ToolApprovalDecision.ofToken` fails closed to `Rejected`.
+
+The POST carries **only** an approval id and a decision token. The tool, its arguments, the conversation and the user are read from the server's own pending record, so a client has nothing to lie about.
+
+Adoption notes, including the one-line `FS0025` arm an exhaustive `AIStreamEvent` match needs: [`../../docs/migrations/503-human-in-the-loop-tool-approval.md`](../../docs/migrations/503-human-in-the-loop-tool-approval.md).
+
+
 ## Module tools
 
 Modules declare tools via `AIToolDefinition` (in core, `src/ToolUp.Platform.Core/Shared/Types/ModuleAITypes.fs`). The declaration has no execution logic:
