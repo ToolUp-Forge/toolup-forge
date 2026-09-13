@@ -179,8 +179,16 @@ let private classifyForAgentLoop (err: AIProviderError) =
 /// browser should set its own watchdog (default 30 s) inside this
 /// envelope so the user-facing failure mode is "client gave up"
 /// rather than "server timed out".
-[<Literal>]
-let private ClientResidentToolTimeoutMs = 90_000
+///
+/// Phase 36.D: the value is no longer declared here. A suspended
+/// consent prompt is the same wait — a server thread parked on a
+/// `TaskCompletionSource` only the browser can complete — and two
+/// constants would be two budgets to keep in step. This binding is the
+/// local name for the one declaration in
+/// `AIConsentDispatch.SuspendedDispatchTimeoutMs`; every read below is
+/// unchanged, and so is the value.
+let private ClientResidentToolTimeoutMs =
+    AIConsentDispatch.SuspendedDispatchTimeoutMs
 
 /// Phase 6h follow-up: cap on `IEventStore.Write` for latency
 /// telemetry. The agent loop awaits this on the response path; a
@@ -267,6 +275,28 @@ let private runFullAgentLoop
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
+        // Phase 36.D: stamp the turn's identity and its SSE emitter onto
+        // the context every tool executor already receives.
+        //
+        // A server-resident tool's signature is `HttpContext -> argsJson ->
+        // Async<string>`: it has no conversation and no way to put an event
+        // on the stream, because until the consent gate no server-resident
+        // tool needed either. Widening that signature would retype every
+        // tool in the SDK and every tool a consumer has written, to serve
+        // one gate — so the two facts ride the same per-request items carry
+        // the loop already depends on for scope and permissions, keyed
+        // through the constants that define them so both ends move
+        // together (the discipline Phase 730 set for the grant stamps).
+        //
+        // Unconditional and cheap: three dictionary writes per turn,
+        // whatever the deployment's consent mode. The gate that reads them
+        // is what costs nothing when it is off.
+        ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
+        ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box taskId
+
+        ctx.Items[AIConsentDispatch.ItemsKeys.StreamEmitter] <-
+            box ({ Emit = onEvent }: AIConsentDispatch.StreamEmitter)
+
         // Phase 36.A: the caller's access context, reconstructed from the
         // items the background context carries forward. Resolved ONCE at
         // the top of the loop — permissions do not change mid-turn, and
