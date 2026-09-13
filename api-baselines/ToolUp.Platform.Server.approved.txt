@@ -1603,16 +1603,20 @@ ToolUp.Platform.CompositionProfileRefusal (class)
 ToolUp.Platform.CompositionProfileRefusal.CapabilityGateUndeclared : ToolUp.Platform.CompositionProfileRefusal { get }
 ToolUp.Platform.CompositionProfileRefusal.IsCapabilityGateUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsIsolationPostureShortfall : System.Boolean { get }
+ToolUp.Platform.CompositionProfileRefusal.IsRemotingDecodersUnregistered : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsSeamGrantsUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall (class)
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.backend : System.String { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CompositionProfileRefusal+RemotingDecodersUnregistered (class)
+ToolUp.Platform.CompositionProfileRefusal+RemotingDecodersUnregistered.records : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared (class)
 ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared.components : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionProfileRefusal+Tags (class)
 ToolUp.Platform.CompositionProfileRefusal+Tags.CapabilityGateUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.IsolationPostureShortfall : System.Int32 (literal)
+ToolUp.Platform.CompositionProfileRefusal+Tags.RemotingDecodersUnregistered : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.SeamGrantsUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusalModule (class)
 ToolUp.Platform.CompositionProfileRefusalModule.describe(ToolUp.Platform.CompositionProfileRefusal) : System.String
@@ -2633,15 +2637,18 @@ ToolUp.Platform.DeploymentVerificationEvidence (class)
 ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.evidenceChainOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]]
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
+ToolUp.Platform.DeploymentVerificationEvidence.remotingDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
 ToolUp.Platform.DeploymentVerificationReport.ConfigConformanceKeyCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.EvidenceChainFindingCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.RemotingDecoderRecordCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityComponentCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.buildReport(ToolUp.Platform.IDeploymentVerificationEvidence, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
 ToolUp.Platform.DeploymentVerificationReport.deploymentVerificationApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentVerificationApi
@@ -2653,6 +2660,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherConfigConformance() : ToolUp.
 ToolUp.Platform.DeploymentVerificationReport.gatherEvidenceChain(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
 ToolUp.Platform.DeploymentVerificationReport.recordRead(System.IServiceProvider, ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -5385,6 +5393,8 @@ ToolUp.Platform.IRateLimitStore (interface)
 ToolUp.Platform.IRateLimitStore.GetRecentDecisions(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InboundRateLimitKey], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDecisionEvent]]
 ToolUp.Platform.IRateLimitWriter (interface)
 ToolUp.Platform.IRateLimitWriter.IncrementAndCheck(ToolUp.Platform.InboundRateLimitKey, ToolUp.Platform.RateLimitWindow, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.InboundRateLimitDecision, ToolUp.Platform.RateLimitStoreError]]
+ToolUp.Platform.IRemotingDecoderEvidence (interface)
+ToolUp.Platform.IRemotingDecoderEvidence.RemotingDecoders : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity] { get }
 ToolUp.Platform.IReranker (class)
 ToolUp.Platform.IReranker+IReranker (interface)
 ToolUp.Platform.IReranker+IReranker.MaxBatchSize : System.Int32 { get }
@@ -8035,6 +8045,44 @@ ToolUp.Platform.RegistrationCatalogueModule.addModule(ToolUp.Platform.ServerModu
 ToolUp.Platform.RegistrationCatalogueModule.empty : ToolUp.Platform.RegistrationCatalogue { get }
 ToolUp.Platform.RegistrationCatalogueModule.ids(ToolUp.Platform.RegistrationCatalogue) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.RegistrationCatalogueModule.tryResolve(ToolUp.Platform.ComponentId, ToolUp.Platform.RegistrationCatalogue) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerApp, ToolUp.Platform.ServerApp]]]
+ToolUp.Platform.RemotingDecoderBinding (class)
+ToolUp.Platform.RemotingDecoderBinding..ctor(System.String, ToolUp.Platform.RemotingDecoderClass, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
+ToolUp.Platform.RemotingDecoderBinding.DecoderApiRecord : System.String { get }
+ToolUp.Platform.RemotingDecoderBinding.DecoderClass : ToolUp.Platform.RemotingDecoderClass { get }
+ToolUp.Platform.RemotingDecoderBinding.DecoderCorpusCovered : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderBinding.DecoderUncovered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.RemotingDecoderClass (class)
+ToolUp.Platform.RemotingDecoderClass.Algebra : ToolUp.Platform.RemotingDecoderClass { get }
+ToolUp.Platform.RemotingDecoderClass.IsAlgebra : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderClass.IsReflection : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderClass.Reflection : ToolUp.Platform.RemotingDecoderClass { get }
+ToolUp.Platform.RemotingDecoderClass.Tag : System.Int32 { get }
+ToolUp.Platform.RemotingDecoderClass+Tags (class)
+ToolUp.Platform.RemotingDecoderClass+Tags.Algebra : System.Int32 (literal)
+ToolUp.Platform.RemotingDecoderClass+Tags.Reflection : System.Int32 (literal)
+ToolUp.Platform.RemotingDecoderFacet (class)
+ToolUp.Platform.RemotingDecoderFacet..ctor(ToolUp.Platform.CompositionProfile, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RemotingDecoderBinding])
+ToolUp.Platform.RemotingDecoderFacet.FacetBindings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RemotingDecoderBinding] { get }
+ToolUp.Platform.RemotingDecoderFacet.FacetProfile : ToolUp.Platform.CompositionProfile { get }
+ToolUp.Platform.RemotingDecoderFacet.FacetRequired : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderFacetModule (class)
+ToolUp.Platform.RemotingDecoderFacetModule.inspect(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]]) : ToolUp.Platform.RemotingDecoderFacet
+ToolUp.Platform.RemotingDecoderFacetModule.inspectPlatform(ToolUp.Platform.CompositionProfile) : ToolUp.Platform.RemotingDecoderFacet
+ToolUp.Platform.RemotingDecoderFacetModule.reflectionRecords(ToolUp.Platform.RemotingDecoderFacet) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.RemotingDecoderFacetModule.requiresAlgebraDecoders(ToolUp.Platform.CompositionProfile) : System.Boolean
+ToolUp.Platform.RemotingDecoderFacetModule.toIntegrity(ToolUp.Platform.RemotingDecoderFacet) : ToolUp.Platform.RemotingDecoderIntegrity
+ToolUp.Platform.RemotingDecoderFacetModule.verify(ToolUp.Platform.RemotingDecoderFacet) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.Platform.RemotingDecoderIntegrity (class)
+ToolUp.Platform.RemotingDecoderIntegrity..ctor(System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RemotingDecoderRecord])
+ToolUp.Platform.RemotingDecoderIntegrity.DecoderMandatory : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderIntegrity.DecoderProfile : System.String { get }
+ToolUp.Platform.RemotingDecoderIntegrity.DecoderRecords : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RemotingDecoderRecord] { get }
+ToolUp.Platform.RemotingDecoderRecord (class)
+ToolUp.Platform.RemotingDecoderRecord..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
+ToolUp.Platform.RemotingDecoderRecord.RecordApiRecord : System.String { get }
+ToolUp.Platform.RemotingDecoderRecord.RecordClassification : System.String { get }
+ToolUp.Platform.RemotingDecoderRecord.RecordCorpusCovered : System.Boolean { get }
+ToolUp.Platform.RemotingDecoderRecord.RecordUncovered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.RemotingHelpers (class)
 ToolUp.Platform.RemotingHelpers.makeApi`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, impl]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.RemotingHelpers.makePermissionGuardedApi`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]

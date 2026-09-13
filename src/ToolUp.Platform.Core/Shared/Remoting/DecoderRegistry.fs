@@ -67,23 +67,42 @@ module RemotingDecoders =
     /// expression at each call site: "what identifies a wire type here"
     /// must have exactly one answer, or a registration and a lookup can
     /// disagree while both look right.
-    let private keyOf (wireType: Type) : string =
+    ///
+    /// Public rather than private because `register` below is `inline`
+    /// and an inline function may not reach a private binding.
+    let keyFor (wireType: Type) : string =
         let name = wireType.FullName
         if isNull name then wireType.Name else name
+
+    /// Register an already-erased decoder under a key.
+    ///
+    /// The non-inline half of `register`, and the only writer of the
+    /// table. It exists so `register` can be `inline` without the table
+    /// or the key function having to be public state: an inline function
+    /// may not reach a private binding, and the mutable table must stay
+    /// one.
+    let registerByKey (key: string) (decoder: RegisteredDecoder) : unit = table <- Map.add key decoder table
 
     /// Register the algebra decoder for `'T`. Idempotent — a second
     /// registration for the same type replaces the first, which is what
     /// a hot-reload or a re-run of a composition root has to mean.
-    let register<'T> (decoder: Decoder<'T>) : unit =
-        let erased: RegisteredDecoder = fun value -> decoder value |> Result.map box
-        table <- Map.add (keyOf typeof<'T>) erased table
+    ///
+    /// **`inline`, and it has to be.** Fable erases generics at runtime,
+    /// so `typeof<'T>` inside a non-inline generic function has no type
+    /// to report — the compiler refuses it outright ("Cannot get type
+    /// info of generic parameter T"). Inlining resolves `'T` at each call
+    /// site, which is the same fix `WireCorpus.case` needed for the same
+    /// reason. `verify.ps1` has no Fable leg, so this is caught only by
+    /// compiling the client tier.
+    let inline register<'T> (decoder: Decoder<'T>) : unit =
+        registerByKey (keyFor typeof<'T>) (fun value -> decoder value |> Result.map box)
 
     /// The algebra decoder for `wireType`, or `None` — which means the
     /// reflection path, not an error.
-    let tryGet (wireType: Type) : RegisteredDecoder option = Map.tryFind (keyOf wireType) table
+    let tryGet (wireType: Type) : RegisteredDecoder option = Map.tryFind (keyFor wireType) table
 
     /// Whether `wireType` decodes through the algebra in this process.
-    let isRegistered (wireType: Type) : bool = Map.containsKey (keyOf wireType) table
+    let isRegistered (wireType: Type) : bool = Map.containsKey (keyFor wireType) table
 
     /// Every registered type's key, ordered. The enumeration the Phase
     /// 785 composition-profile facet classifies an API record against.
