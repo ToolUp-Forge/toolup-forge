@@ -1310,6 +1310,14 @@
              the two things the marker must NOT be confusable with — a
              policy withhold and a tool invocation error. -->
         <Compile Include="InProcess\AIToolResultBudgetTests.fs" />
+        <!-- Phase 508 — rich AI tool parameter schemas: the recursive schema
+             renders to JSON Schema and reaches the provider definition
+             intact, nested member names and enum values are escaped against
+             an injection-shaped set, a hand-written fragment is refused at
+             compose time, the decode helper enforces the same declaration —
+             and flat declarations emit byte-for-byte what they always did,
+             asserted against the pre-508 formula rather than a snapshot. -->
+        <Compile Include="InProcess\AIToolSchemaTests.fs" />
         <!-- Phase 36.A — AI tool-dispatch RBAC: the per-turn tool list and
              the client-visible listing filtered by the caller's per-module
              Read, a forged tool name refused with a typed Denied before

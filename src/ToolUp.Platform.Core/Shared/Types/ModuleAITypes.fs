@@ -15,7 +15,14 @@ namespace ToolUp.Platform
 /// Kept simple and Fable-compatible (no `System.Text.Json` dependency).
 type ToolParameterSchema = {
     Name: string
-    /// "string" | "number" | "boolean" | "object" | "array"
+    /// The parameter's JSON Schema. Either a bare type name —
+    /// "string" | "number" | "boolean" | "object" | "array" — or
+    /// (Phase 508) a complete rendered JSON-Schema object, which is what
+    /// `ToolSchema.parameter` writes here so a parameter can declare a
+    /// nested object, an array of objects or a closed enum. The two are
+    /// told apart structurally by `ToolSchema.isRendered`; a bare type
+    /// name emits byte-for-byte what it always did (GP 11). Never
+    /// hand-write the rendered form — the renderer owns the escaping.
     Type: string
     Description: string
     Required: bool
@@ -199,3 +206,216 @@ type AIToolDefinition = {
     /// `AIToolRegistry.createTool` does not.
     ResultBudget: AIToolResultBudget
 }
+
+// ─── Phase 508 — rich (recursive) tool parameter schemas ─────────
+//
+// A tool parameter was flat: one type NAME, one description. Anything
+// structured — a nested object, an array of objects, a closed set of
+// allowed values — had to be declared as a bare object / array / string
+// and hand-parsed in the executor, even though every shipped provider
+// accepts full JSON Schema on the wire (Claude's `input_schema`,
+// OpenAI's `parameters`, Gemini's function-declaration parameters) and
+// the MCP host republishes it verbatim. The declaration was the
+// bottleneck, not the transport.
+//
+// `ToolSchemaNode` is that declaration, as immutable data (GP 5), in the
+// tier-shared Core so it is Fable-compilable alongside the rest of the
+// module-facing tool surface (GP 10).
+//
+// **Where the schema RIDES, and why it is not a new field.** A rich
+// parameter is an ordinary `ToolParameterSchema` whose `Type` carries
+// the rendered JSON-Schema object instead of a bare type name;
+// `ToolSchema.parameter` is the only thing that writes it and
+// `ToolSchema.isRendered` the only thing that recognises it. Adding a
+// field to `ToolParameterSchema` (or to `AIToolDefinition`) would retype
+// the compiler-generated constructor, so every tool any consumer has
+// already authored as a full record literal would stop compiling — a
+// breaking change in a record whose whole purpose is to be written out
+// longhand by module authors. Widening what one EXISTING field may hold
+// costs nobody anything: a flat declaration emits byte-for-byte the
+// definition it emitted before (GP 11), and `Name`, `Description`,
+// `Required` and `Default` keep their ordinary meanings, so the
+// top-level required list, the per-module RBAC filter and the MCP
+// projection all read a rich parameter exactly as they read a flat one.
+//
+// The discriminator is safe rather than merely convenient: a flat
+// declaration is emitted with its `Type` string as the JSON-Schema type
+// keyword, so a pre-508 parameter whose `Type` began with an opening
+// brace would have been offering providers a type keyword that does not
+// exist. No tool that WORKS today can collide with the rendered form.
+
+/// One node of a tool parameter's JSON Schema — the recursive
+/// declaration a tool author writes instead of a bare type name.
+///
+/// Deliberately a closed, small vocabulary rather than a general JSON
+/// Schema model: it covers the shapes a tool call actually needs
+/// (objects, arrays, enums, scalars) and nothing a provider would have
+/// to be asked to honour. A tool needing a schema keyword outside it
+/// still has the flat escape hatch it always had.
+type ToolSchemaNode =
+    /// A JSON string. An empty list is a free-form string; a non-empty
+    /// list renders as an enum, which is what turns a set of allowed
+    /// values from prose in a description into a constraint the model is
+    /// held to.
+    | SchemaString of enumValues: string list
+    /// A JSON number (fractional values permitted).
+    | SchemaNumber
+    /// A JSON integer.
+    | SchemaInteger
+    /// A JSON boolean.
+    | SchemaBoolean
+    /// A JSON array whose every element matches the item schema.
+    | SchemaArray of items: ToolSchemaNode
+    /// A JSON object with the declared members. Member order is
+    /// preserved into the rendered schema, so the emitted bytes are
+    /// stable for a given declaration.
+    | SchemaObject of members: ToolSchemaMember list
+
+/// One member of a `SchemaObject`. Field names carry a Member prefix so
+/// they never shadow `ToolParameterSchema`'s own fields where both types
+/// are in scope.
+and ToolSchemaMember = {
+    /// The member's JSON property name.
+    MemberName: string
+    /// Human-readable description for the AI model. An empty string
+    /// omits the description keyword rather than emitting a blank one.
+    MemberDescription: string
+    /// Whether the member appears in the enclosing object's required
+    /// list.
+    MemberRequired: bool
+    /// The member's own schema — recursive, so objects nest and arrays
+    /// carry object items.
+    MemberSchema: ToolSchemaNode
+}
+
+/// Constructors and the JSON-Schema renderer for `ToolSchemaNode`.
+///
+/// The renderer is total: every string it emits is escaped, so a member
+/// name, a description or an enum value carrying a quote, a backslash or
+/// a control character produces valid JSON rather than a malformed
+/// request the provider rejects at send time. That is the same hazard
+/// the flat path has always had to handle, extended to the nested names
+/// and the enum values the flat path never had.
+[<RequireQualifiedAccess>]
+module ToolSchema =
+
+    /// JSON-escape a string so it can be embedded inside a
+    /// double-quoted JSON string literal. Backslashes first, so the
+    /// replacements that follow are not double-escaped.
+    ///
+    /// This is the one implementation in the SDK: the AI companion's
+    /// provider-definition renderer delegates to it rather than keeping
+    /// a second copy that could drift.
+    let jsonEscape (s: string) : string =
+        if isNull (box s) then
+            ""
+        else
+            s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t")
+
+    /// A free-form JSON string.
+    let text = SchemaString []
+
+    /// A JSON string constrained to a closed set of values.
+    let enumOf (values: string list) = SchemaString values
+
+    /// A JSON number.
+    let number = SchemaNumber
+
+    /// A JSON integer.
+    let integer = SchemaInteger
+
+    /// A JSON boolean.
+    let boolean = SchemaBoolean
+
+    /// A JSON array whose elements all match the supplied item schema.
+    let arrayOf (items: ToolSchemaNode) = SchemaArray items
+
+    /// A JSON object with the declared members, in declaration order.
+    let objectOf (members: ToolSchemaMember list) = SchemaObject members
+
+    /// One member of an object schema.
+    let field (name: string) (description: string) (required: bool) (schema: ToolSchemaNode) : ToolSchemaMember = {
+        MemberName = name
+        MemberDescription = description
+        MemberRequired = required
+        MemberSchema = schema
+    }
+
+    let rec private renderNode (description: string) (node: ToolSchemaNode) : string =
+        let descPart =
+            if System.String.IsNullOrEmpty description then
+                ""
+            else
+                ",\"description\":\"" + jsonEscape description + "\""
+
+        let scalar (typeName: string) =
+            "{\"type\":\"" + typeName + "\"" + descPart + "}"
+
+        match node with
+        | SchemaString [] -> scalar "string"
+        | SchemaString values ->
+            let rendered =
+                values |> List.map (fun v -> "\"" + jsonEscape v + "\"") |> String.concat ","
+
+            "{\"type\":\"string\"" + descPart + ",\"enum\":[" + rendered + "]}"
+        | SchemaNumber -> scalar "number"
+        | SchemaInteger -> scalar "integer"
+        | SchemaBoolean -> scalar "boolean"
+        | SchemaArray items -> "{\"type\":\"array\"" + descPart + ",\"items\":" + renderNode "" items + "}"
+        | SchemaObject members ->
+            let properties =
+                members
+                |> List.map (fun m ->
+                    "\""
+                    + jsonEscape m.MemberName
+                    + "\":"
+                    + renderNode m.MemberDescription m.MemberSchema)
+                |> String.concat ","
+
+            let required =
+                members
+                |> List.filter _.MemberRequired
+                |> List.map (fun m -> "\"" + jsonEscape m.MemberName + "\"")
+                |> String.concat ","
+
+            "{\"type\":\"object\""
+            + descPart
+            + ",\"properties\":{"
+            + properties
+            + "},\"required\":["
+            + required
+            + "]}"
+
+    /// Render a node to a complete JSON-Schema object, carrying the
+    /// supplied description when it is non-empty. The result is what
+    /// `ToolParameterSchema.Type` holds for a rich parameter, and what
+    /// the provider-definition renderer splices in verbatim.
+    let render (description: string) (node: ToolSchemaNode) : string = renderNode description node
+
+    /// Whether a `ToolParameterSchema.Type` value is a rendered schema
+    /// object rather than a bare JSON-Schema type name.
+    ///
+    /// Structural, not a marker: a rendered schema is a JSON object, and
+    /// a type NAME never is. See the note above on why no working
+    /// pre-508 declaration can be misread by this.
+    let isRendered (schemaType: string) : bool =
+        if isNull (box schemaType) then
+            false
+        else
+            let trimmed = schemaType.TrimStart()
+            trimmed.Length > 0 && trimmed[0] = '{'
+
+    /// Declare a tool parameter carrying a rich schema. Produces an
+    /// ordinary `ToolParameterSchema` — it registers, filters and
+    /// projects exactly as a flat parameter does; only `Type` differs.
+    ///
+    /// The description lands in BOTH the record's `Description` (so
+    /// every existing reader of that field still sees it) and the
+    /// rendered schema (so the model sees it where JSON Schema puts it).
+    let parameter (name: string) (description: string) (required: bool) (schema: ToolSchemaNode) : ToolParameterSchema = {
+        Name = name
+        Type = render description schema
+        Description = description
+        Required = required
+        Default = None
+    }

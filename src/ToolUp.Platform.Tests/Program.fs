@@ -1032,6 +1032,15 @@ let private registeredTests =
         // the elided size — visible rather than silently truncated, and
         // deliberately unlike both a policy withhold and a tool error.
         AIToolResultBudgetTests.tests
+        // Phase 508 — rich AI tool parameter schemas. A tool parameter can
+        // declare a nested object, an array or a closed enum instead of a
+        // bare type name; the rendered schema reaches the provider
+        // definition (and so the MCP projection) intact and escaped, a
+        // hand-written fragment is refused at compose time, the same
+        // declaration decodes the executor's arguments with a refusal that
+        // names the offending path, and every flat declaration emits
+        // byte-for-byte the definition it emitted before.
+        AIToolSchemaTests.tests
         // Phase 36.A — AI tool-dispatch RBAC. The per-turn tool list, the
         // client-visible listing, the agent-loop dispatch site and the
         // /api/ai/tool-result completion all gate on the caller's per-module

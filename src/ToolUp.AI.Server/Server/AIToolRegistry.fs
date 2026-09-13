@@ -29,8 +29,15 @@ let private sanitizeToolName (name: string) = name.Replace(".", "_")
 /// that the AI provider's `JsonDocument.Parse` rejects at request
 /// time. Order matters: backslashes first so they don't double-escape
 /// the replacements that follow.
-let private jsonEscape (s: string) : string =
-    s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t")
+///
+/// Phase 508 moved the implementation to `ToolSchema.jsonEscape` in the
+/// tier-shared Core, because the recursive schema renderer that lives
+/// there has to escape nested member names and enum values by exactly
+/// the same rules. Two copies of an escaper are two escapers that can
+/// drift, and a drift here is a malformed request the provider rejects
+/// at send time. This stays as the local name every call site below
+/// already uses.
+let private jsonEscape (s: string) : string = ToolSchema.jsonEscape s
 
 /// Phase 6g.A: surface gate. Returns true when the tool's `Surface`
 /// declaration permits the current request's surface. The agent loop
@@ -414,11 +421,44 @@ let recordUnauthorizedToolDenial
 /// interpolation — descriptions routinely contain quoted examples
 /// like `e.g. "country"`, which would otherwise terminate the JSON
 /// string mid-stream and trip the provider's `JsonDocument.Parse`.
+///
+/// **Phase 508 — rich parameters.** A parameter whose `Type` is a
+/// rendered JSON-Schema object (`ToolSchema.isRendered`) contributes
+/// that object verbatim, so a nested object, an array of objects or an
+/// enum reaches the provider — and the MCP projection, which republishes
+/// this same `InputSchema` — intact. Every other parameter takes the
+/// branch it always took, emitting the identical bytes (GP 11); the
+/// top-level required list is unchanged for both, because a rich
+/// parameter is still an ordinary `ToolParameterSchema` carrying
+/// `Required`.
 let toProviderDef (def: AIToolDefinition) : AIProviderToolDef =
+    // A rendered schema is spliced rather than escaped, so a malformed
+    // one would make the whole request body invalid JSON — OpenAI's
+    // mapper throws mid-send, Gemini's degrades the tool to an empty
+    // schema, and the author gets a failure a long way from the cause.
+    // The renderer never produces one, so reaching here means a
+    // hand-written `Type`: a composition error, refused at compose time
+    // beside the Phase 709 budget refusal (this function is called from
+    // `createTool`) rather than at the first turn that offers the tool.
+    let requireWellFormed (p: ToolParameterSchema) =
+        try
+            use _ = System.Text.Json.JsonDocument.Parse p.Type
+            ()
+        with ex ->
+            failwithf
+                "AI tool '%s' declares parameter '%s' with a Type that looks like a rendered JSON schema but is not valid JSON (%s). Build rich parameters with ToolSchema.parameter — it renders and escapes the schema for you — or give Type a bare JSON-Schema type name."
+                def.Name
+                p.Name
+                ex.Message
+
     let properties =
         def.Parameters
         |> List.map (fun p ->
-            $"\"{jsonEscape p.Name}\":{{\"type\":\"{jsonEscape p.Type}\",\"description\":\"{jsonEscape p.Description}\"}}")
+            if ToolSchema.isRendered p.Type then
+                requireWellFormed p
+                $"\"{jsonEscape p.Name}\":{p.Type}"
+            else
+                $"\"{jsonEscape p.Name}\":{{\"type\":\"{jsonEscape p.Type}\",\"description\":\"{jsonEscape p.Description}\"}}")
         |> String.concat ","
 
     let required =

@@ -202,3 +202,236 @@ let wireTools
         | None ->
             failwith
                 $"No executor registered for tool '{def.Name}' — add it to the module's `executors` map in Server.fs.")
+
+// ─── Phase 508 — schema-validated argument decoding ──────────────
+//
+// The helpers above each answer one question about one property, which
+// is why an executor taking a structured argument ends up walking the
+// document by hand: pull a raw sub-object, check a discriminator string,
+// branch, pull the next one. That hand-walk is the thing a declared
+// schema makes unnecessary — the tool already says what it expects, so
+// the executor should be able to hand the declaration back and get
+// either its record or a refusal that names what was wrong.
+//
+// Two properties are deliberate:
+//
+//   * **The refusal is typed and carries a PATH**, not a sentence. A
+//     model that sent `{"filter":{"unit":"furlongs"}}` against an enum
+//     of two values needs to be told which member, what was allowed and
+//     what it sent; a message saying the arguments did not match tells
+//     it to guess. `ToolArgumentRefusal.toMessage` renders exactly that
+//     sentence for the model, and `requireDecoded` raises it as the
+//     `ToolArgumentError` the agent loop already classifies as
+//     `InvalidArguments` rather than as a tool fault worth retrying.
+//
+//   * **Validation runs BEFORE deserialisation, and is the half that
+//     reports.** `FableConverters` is a good deserialiser and a poor
+//     validator — it reports a failure as an exception about a .NET type
+//     the model has never heard of, and it accepts JSON the schema
+//     forbids whenever the target type is more permissive than the
+//     declaration (a string member against an enum is the common case).
+//     Checking the declaration first means the enum, the required-member
+//     set and the array element type are enforced by the thing that
+//     declared them.
+//
+// No type erasure is introduced here: the decode is generic in `'T` and
+// the deserialiser is called at that type, so nothing is boxed and the
+// sanctioned erasure boundaries are untouched.
+
+/// Why a tool's arguments did not match its declared schema.
+type ToolArgumentRefusal = {
+    /// Dotted path to the offending value, relative to the arguments
+    /// object — e.g. "filter.unit" or "items[2].id". Empty for a fault
+    /// in the arguments document itself.
+    Path: string
+    /// What the schema declared at that path, in the vocabulary the
+    /// model was given (a type name, or the enum's values).
+    Expected: string
+    /// What arrived there, truncated. Empty when nothing did.
+    Received: string
+    /// One-sentence account, already model-readable.
+    Message: string
+}
+
+[<RequireQualifiedAccess>]
+module ToolArgumentRefusal =
+
+    /// Render a refusal as the sentence the model should read. Names the
+    /// path, what was expected and what arrived, so the repair is a
+    /// mechanical edit rather than a guess.
+    let toMessage (refusal: ToolArgumentRefusal) : string =
+        let where =
+            if System.String.IsNullOrEmpty refusal.Path then
+                "the arguments"
+            else
+                $"argument '{refusal.Path}'"
+
+        if System.String.IsNullOrEmpty refusal.Received then
+            $"{refusal.Message} ({where} — expected {refusal.Expected})."
+        else
+            $"{refusal.Message} ({where} — expected {refusal.Expected}, received {refusal.Received})."
+
+/// Render a `ToolSchemaNode` as the short expectation phrase a refusal
+/// quotes. Deliberately the model's vocabulary (JSON Schema), not F#'s.
+let private expectationOf (schema: ToolSchemaNode) : string =
+    match schema with
+    | SchemaString [] -> "a string"
+    | SchemaString values -> "one of: " + String.concat ", " values
+    | SchemaNumber -> "a number"
+    | SchemaInteger -> "an integer"
+    | SchemaBoolean -> "a boolean"
+    | SchemaArray _ -> "an array"
+    | SchemaObject _ -> "an object"
+
+let private describe (value: JsonElement) : string =
+    let raw = value.GetRawText()
+
+    if raw.Length > 80 then raw.Substring(0, 80) + "…" else raw
+
+let private refuse (path: string) (schema: ToolSchemaNode) (value: JsonElement) (message: string) = {
+    Path = path
+    Expected = expectationOf schema
+    Received = describe value
+    Message = message
+}
+
+let private joinPath (parent: string) (child: string) =
+    if System.String.IsNullOrEmpty parent then
+        child
+    else
+        parent + "." + child
+
+/// Check a JSON value against a declared `ToolSchemaNode`, reporting the
+/// FIRST violation with its path. First rather than all: the model
+/// repairs one call at a time, and an executor's error string is read as
+/// an instruction, so a list of faults is a worse instruction than the
+/// one that must be fixed first.
+let rec private validateAt (path: string) (schema: ToolSchemaNode) (value: JsonElement) : ToolArgumentRefusal option =
+    match schema with
+    | SchemaString allowed ->
+        if value.ValueKind <> JsonValueKind.String then
+            Some(refuse path schema value "value is not a string")
+        elif List.isEmpty allowed then
+            None
+        elif allowed |> List.contains (value.GetString()) then
+            None
+        else
+            Some(refuse path schema value "value is not one of the allowed values")
+    | SchemaNumber ->
+        if value.ValueKind = JsonValueKind.Number then
+            None
+        else
+            Some(refuse path schema value "value is not a number")
+    | SchemaInteger ->
+        if value.ValueKind <> JsonValueKind.Number then
+            Some(refuse path schema value "value is not a number")
+        else
+            match value.TryGetInt64() with
+            | true, _ -> None
+            | false, _ -> Some(refuse path schema value "value is not an integer")
+    | SchemaBoolean ->
+        if value.ValueKind = JsonValueKind.True || value.ValueKind = JsonValueKind.False then
+            None
+        else
+            Some(refuse path schema value "value is not a boolean")
+    | SchemaArray items ->
+        if value.ValueKind <> JsonValueKind.Array then
+            Some(refuse path schema value "value is not an array")
+        else
+            value.EnumerateArray()
+            |> Seq.indexed
+            |> Seq.tryPick (fun (i, element) -> validateAt $"{path}[{i}]" items element)
+    | SchemaObject members ->
+        if value.ValueKind <> JsonValueKind.Object then
+            Some(refuse path schema value "value is not an object")
+        else
+            members
+            |> List.tryPick (fun m ->
+                let childPath = joinPath path m.MemberName
+
+                // A JSON null on an optional member reads as absent —
+                // the shape `optionalTypedArg` already established, and
+                // the shape models actually emit for "no value".
+                let present =
+                    match value.TryGetProperty m.MemberName with
+                    | true, child when child.ValueKind <> JsonValueKind.Null -> Some child
+                    | _ -> None
+
+                match present with
+                | Some child -> validateAt childPath m.MemberSchema child
+                | None when m.MemberRequired ->
+                    Some {
+                        Path = childPath
+                        Expected = expectationOf m.MemberSchema
+                        Received = ""
+                        Message = "required member is missing"
+                    }
+                | None -> None)
+
+/// Check a JSON value against a declared schema. `Ok ()` when it
+/// conforms; `Error refusal` naming the first violation otherwise.
+let validateSchema (schema: ToolSchemaNode) (value: JsonElement) : Result<unit, ToolArgumentRefusal> =
+    match validateAt "" schema value with
+    | None -> Ok()
+    | Some refusal -> Error refusal
+
+/// Validate one argument against its declared schema and deserialise it
+/// into `'T` via `FableConverters`, so an executor stops hand-walking
+/// the document. Returns a typed refusal rather than raising, so a tool
+/// that would rather answer the model in its own domain shape can.
+///
+/// `schema` is the same value the declaration passed to
+/// `ToolSchema.parameter`; declare it once, use it at both ends.
+let decodeArg<'T> (args: JsonElement) (name: string) (schema: ToolSchemaNode) : Result<'T, ToolArgumentRefusal> =
+    let missing = {
+        Path = name
+        Expected = expectationOf schema
+        Received = ""
+        Message = "required argument is missing"
+    }
+
+    match args.TryGetProperty name with
+    | false, _ -> Error missing
+    | true, value when value.ValueKind = JsonValueKind.Null -> Error missing
+    | true, value ->
+        match validateAt name schema value with
+        | Some refusal -> Error refusal
+        | None ->
+            let raw = value.GetRawText()
+
+            try
+                Ok(JsonSerializer.Deserialize<'T>(raw, fableJsonOptions))
+            with _ ->
+                // The schema matched, so this is a mismatch between the
+                // declaration and the F# type the executor asked for —
+                // a tool defect, not an argument defect. Say so: telling
+                // the model to repair arguments that already conform
+                // sends it round a loop it cannot exit.
+                Error {
+                    Path = name
+                    Expected = expectationOf schema
+                    Received = describe value
+                    Message =
+                        $"arguments matched the declared schema but could not be read as {typeof<'T>.Name} — the tool's declaration and its executor disagree"
+                }
+
+/// Optional variant of `decodeArg`. `Ok None` when the argument is
+/// absent or JSON-null; a refusal when it is present and does not match.
+let decodeOptionalArg<'T>
+    (args: JsonElement)
+    (name: string)
+    (schema: ToolSchemaNode)
+    : Result<'T option, ToolArgumentRefusal> =
+    match args.TryGetProperty name with
+    | false, _ -> Ok None
+    | true, value when value.ValueKind = JsonValueKind.Null -> Ok None
+    | true, _ -> decodeArg<'T> args name schema |> Result.map Some
+
+/// `decodeArg`, raising `ToolArgumentError` on a refusal. The shape an
+/// executor uses when it wants the agent loop's existing
+/// `InvalidArguments` classification and nothing more — the same
+/// contract `requireTypedArg` has, with the schema doing the checking.
+let requireDecoded<'T> (args: JsonElement) (name: string) (schema: ToolSchemaNode) : 'T =
+    match decodeArg<'T> args name schema with
+    | Ok value -> value
+    | Error refusal -> raise (ToolArgumentError(ToolArgumentRefusal.toMessage refusal))
