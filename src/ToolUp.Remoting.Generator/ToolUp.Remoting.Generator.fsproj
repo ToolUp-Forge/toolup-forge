@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      Phase 69k — a DEV-TIME tool, not a shipped package.
+
+      The shard asked for a Roslyn source generator wired into every consumer
+      build (69k.E). Roslyn source generators are a C#/VB compiler feature and
+      the F# compiler does not run them, so the emitted-at-compile-time shape
+      is not constructible here at all; the route taken instead is build-time
+      generation over BUILT metadata, whose output is checked in and compiled
+      like any other source. That removes the two risks the phase's own effort
+      estimate calls its worst — incremental-build correctness and IDE
+      integration — because there is nothing in the compile pipeline to get
+      wrong.
+
+      It is `IsPackable=false` deliberately: publishing the generator is 69k.E,
+      which also needs a `Directory.Build.props` edit this session does not own.
+      Not packing also keeps the tool out of the public-API approval set, which
+      discovers packable `ToolUp.*` assemblies and fails one with no committed
+      baseline — a dev tool has no public contract to hold stable.
+    -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Planning first: it decides every combinator, ordering and refusal.
+         Emit and Dispatch render what Plan decided and choose nothing, which
+         is what lets the contract tests assert against the PLAN rather than
+         against formatted text. -->
+    <Compile Include="Plan.fs" />
+    <Compile Include="Emit.fs" />
+    <Compile Include="Dispatch.fs" />
+    <!-- LAST — the entry point. -->
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core only. The generator reads `FSharpType` metadata and
+         writes strings; it references no platform assembly, so it can plan
+         decoders for a consumer's wire types exactly as it does for the
+         SDK's own. -->
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>
