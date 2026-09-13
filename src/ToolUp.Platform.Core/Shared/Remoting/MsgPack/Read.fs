@@ -24,25 +24,52 @@ open System.Buffers.Binary
 #nowarn "9"
 #nowarn "51"
 
-/// Phase 786 — does an integer lifted off the wire fit the width the
-/// target type declares?
+/// Phase 786 — can this wire value reach the target type without losing
+/// what the wire actually carried?
 ///
-/// The two halves split on SIGN rather than on the source type, because
-/// both widenings are then exact: any non-negative value of any integer
-/// width converts to `uint64` losslessly, and any negative one converts
-/// to `int64` losslessly (a negative value cannot have come from an
-/// unsigned source). One common domain cannot do that. `float` loses the
-/// low bits above 2^53, which is precisely where the two interesting
-/// cases live; `int64` alone cannot represent a `uint64` above
-/// `Int64.MaxValue`. Those two cross-sign cases — a large `uint64` aimed
-/// at an `int64`, and a negative value aimed at any unsigned target —
-/// are exactly the silent narrowings worth refusing, so the check has to
-/// be exact there rather than merely nearly right.
-let inline private integerFits (lo: int64) (hi: uint64) n =
-    if n >= LanguagePrimitives.GenericZero then
-        uint64 n <= hi
+/// `sourceBits` is the width of the WIRE FORMAT the value arrived in and
+/// `targetBits` the width of the type it is going to; `lo`/`hi` are the
+/// target's signed minimum and its maximum as an unsigned magnitude.
+///
+/// The source's width is passed rather than derived. Deriving it from the
+/// value's own static type is exact and one character long — `sizeof<'a>`
+/// inside this `inline` function resolves per call site — and Fable
+/// refuses it outright (`Operators.SizeOf is not supported`). The width
+/// is known at every call site in `Read`, because the format byte is what
+/// chose the read; passing it is the version of this that compiles on
+/// both hosts, which is the only version worth having for a reader whose
+/// one production caller runs under Fable.
+///
+/// Three rules, and the middle one is the one the wire corpus forced.
+///
+///   * A NEGATIVE value never decodes into an unsigned target. No format
+///     this transport emits puts a negative on the wire for an unsigned
+///     field, so a sign flip there is a mutation, not a convention. Into
+///     a SIGNED target a negative source always fits, because a narrower
+///     signed range is contained in a wider one.
+///   * A source NO WIDER than the target always survives — including the
+///     signed/unsigned reinterpretation this encoder depends on. That is
+///     not a loophole, it is the format: `writeSByte` puts `-128y` on the
+///     wire as `uint8 128`, and `writeDecimal`'s four words go through
+///     `write32bitNumber`, so a negative int32 arrives as `uint32
+///     0xFFFFFFFF`. The target type is what recovers the sign, and no bit
+///     is lost either way. Refusing these would refuse well-formed
+///     traffic — the Phase 784 corpus pins three such fixtures.
+///   * A source WIDER than the target is the genuine narrowing, and it is
+///     refused unless the value fits the target's own range. This is the
+///     arm that catches an `int64` payload aimed at an `int` field.
+///
+/// A target whose legal values are a DOMAIN rather than a width — a
+/// `DateOnly` day number, a `TimeOnly` tick count — passes `targetBits`
+/// of 0, which disables the reinterpretation rule and leaves the range
+/// check applying to every source.
+let inline private integerFits (sourceBits: int) (targetBits: int) (lo: int64) (hi: uint64) n =
+    if n < LanguagePrimitives.GenericZero then
+        lo < 0L && int64 n >= lo
+    elif sourceBits <= targetBits then
+        true
     else
-        int64 n >= lo
+        uint64 n <= hi
 
 /// Phase 786 — the refusal a failed width check raises. `Expected` names
 /// the target type, so the rendered sentence reads
@@ -87,40 +114,40 @@ let interpretStringAs (typ: Type) (str: string) =
 // number (or BigInt) the arm would otherwise have narrowed, so a client
 // and a server disagree about no payload. See `Format.fs`'s header for
 // why these are refusals rather than clamps.
-let inline interpretIntegerAs (typ: Type) n =
+let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
 #if !FABLE_COMPILER
     if typ = typeof<Int32> then
-        if integerFits -2147483648L 2147483647UL n then
+        if integerFits sourceBits 32 -2147483648L 2147483647UL n then
             int32 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<Int64> then
-        if integerFits Int64.MinValue 9223372036854775807UL n then
+        if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
             int64 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<Int16> then
-        if integerFits -32768L 32767UL n then
+        if integerFits sourceBits 16 -32768L 32767UL n then
             int16 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<UInt32> then
-        if integerFits 0L 4294967295UL n then
+        if integerFits sourceBits 32 0L 4294967295UL n then
             uint32 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<UInt64> then
-        if integerFits 0L 18446744073709551615UL n then
+        if integerFits sourceBits 64 0L 18446744073709551615UL n then
             uint64 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<UInt16> then
-        if integerFits 0L 65535UL n then
+        if integerFits sourceBits 16 0L 65535UL n then
             uint16 n |> box
         else
             refuseWidth typ n
     elif typ = typeof<TimeSpan> then
-        if integerFits Int64.MinValue 9223372036854775807UL n then
+        if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
             TimeSpan(int64 n) |> box
         else
             refuseWidth typ n
@@ -130,36 +157,36 @@ let inline interpretIntegerAs (typ: Type) n =
         // `DateOnly.MaxValue.DayNumber`), not the int32 range: outside
         // it `FromDayNumber` raises an `ArgumentOutOfRangeException`,
         // which would leave `TryRead` as something other than a refusal.
-        if integerFits 0L 3652058UL n then
+        if integerFits sourceBits 0 0L 3652058UL n then
             DateOnly.FromDayNumber(int32 n) |> box
         else
             refuseWidth typ n
     elif typ = typeof<TimeOnly> then
         // Likewise `TimeOnly`'s own domain, in ticks, for the same reason.
-        if integerFits 0L 863999999999UL n then
+        if integerFits sourceBits 0 0L 863999999999UL n then
             TimeOnly(int64 n) |> box
         else
             refuseWidth typ n
 #endif
     elif typ = typeof<byte> then
-        if integerFits 0L 255UL n then
+        if integerFits sourceBits 8 0L 255UL n then
             byte n |> box
         else
             refuseWidth typ n
     elif typ = typeof<sbyte> then
-        if integerFits -128L 127UL n then
+        if integerFits sourceBits 8 -128L 127UL n then
             sbyte n |> box
         else
             refuseWidth typ n
     elif typ.IsEnum then
-        // `Enum.ToObject` takes its value as an int64, so a `uint64`
-        // above `Int64.MaxValue` would wrap on the way in — the same
-        // silent narrowing, one indirection further out. The enum's own
-        // underlying width is deliberately NOT checked here: an enum
-        // value outside its declared cases is legal in .NET (flags
-        // combinations are the common case), so the only defensible
-        // bound is the one the conversion itself imposes.
-        if integerFits Int64.MinValue 9223372036854775807UL n then
+        // Bounded at the width `Enum.ToObject` takes its value at, which
+        // is 64 bits — so every wire integer reaches it, a `uint64` above
+        // `Int64.MaxValue` arriving as its signed reinterpretation like
+        // any other same-width value. The enum's own UNDERLYING width is
+        // deliberately not checked: a value outside an enum's declared
+        // cases is legal in .NET (flags combinations are the common
+        // case), so there is no narrower bound to defend.
+        if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
             Enum.ToObject(typ, int64 n)
         else
             refuseWidth typ n
@@ -167,7 +194,7 @@ let inline interpretIntegerAs (typ: Type) n =
         DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #else
     if Object.ReferenceEquals(typ, typeof<Int32>) then
-        if integerFits -2147483648L 2147483647UL n then
+        if integerFits sourceBits 32 -2147483648L 2147483647UL n then
             int32 n |> box
         else
             refuseWidth typ n
@@ -176,70 +203,82 @@ let inline interpretIntegerAs (typ: Type) n =
         let typeName = typ.FullName
 
         if typeName = "System.Int64" then
-            if integerFits Int64.MinValue 9223372036854775807UL n then
+            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
                 int64 n |> box
             else
                 refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<Int16>) then
-            if integerFits -32768L 32767UL n then
+            if integerFits sourceBits 16 -32768L 32767UL n then
                 int16 n |> box
             else
                 refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<UInt32>) then
-            if integerFits 0L 4294967295UL n then
+            if integerFits sourceBits 32 0L 4294967295UL n then
                 uint32 n |> box
             else
                 refuseWidth typ n
         elif typeName = "System.UInt64" then
-            if integerFits 0L 18446744073709551615UL n then
+            if integerFits sourceBits 64 0L 18446744073709551615UL n then
                 uint64 n |> box
             else
                 refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<UInt16>) then
-            if integerFits 0L 65535UL n then
+            if integerFits sourceBits 16 0L 65535UL n then
                 uint16 n |> box
             else
                 refuseWidth typ n
         elif typeName = "System.TimeSpan" then
-            if integerFits Int64.MinValue 9223372036854775807UL n then
+            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
                 TimeSpan(int64 n) |> box
             else
                 refuseWidth typ n
 #if NET6_0_OR_GREATER
 #endif
         elif typeName = "Microsoft.FSharp.Core.int16`1" then
-            if integerFits -32768L 32767UL n then
+            if integerFits sourceBits 16 -32768L 32767UL n then
                 int16 n |> box
             else
                 refuseWidth typ n
         elif typeName = "Microsoft.FSharp.Core.int32`1" then
-            if integerFits -2147483648L 2147483647UL n then
+            if integerFits sourceBits 32 -2147483648L 2147483647UL n then
                 int32 n |> box
             else
                 refuseWidth typ n
         elif typeName = "Microsoft.FSharp.Core.int64`1" then
-            if integerFits Int64.MinValue 9223372036854775807UL n then
+            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
                 int64 n |> box
             else
                 refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<byte>) then
-            if integerFits 0L 255UL n then
+            if integerFits sourceBits 8 0L 255UL n then
                 byte n |> box
             else
                 refuseWidth typ n
         elif Object.ReferenceEquals(typ, typeof<sbyte>) then
-            if integerFits -128L 127UL n then
+            if integerFits sourceBits 8 -128L 127UL n then
                 sbyte n |> box
             else
                 refuseWidth typ n
         elif typ.IsEnum then
-            if integerFits Int64.MinValue 9223372036854775807UL n then
+            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
                 float n |> box
             else
                 refuseWidth typ n
         else
             DecodeError.failWith typ.Name (sprintf "integer %A" n)
 #endif
+
+/// The pre-786 entry, kept at its original shape so existing callers
+/// compile and link unchanged (GP 11).
+///
+/// A caller who arrives here has not said what width the value came from,
+/// and there is no way to recover it, so this assumes the widest source
+/// the format has. That is the SAFE assumption rather than the compatible
+/// one: it refuses a narrowing this function used to perform silently,
+/// and it refuses a same-width reinterpretation it cannot know is one.
+/// `Reader` does not come through here — every arm of `Read` knows its
+/// format's width and calls `interpretIntegerAsFrom` with it.
+let inline interpretIntegerAs (typ: Type) n = interpretIntegerAsFrom typ 64 n
 
 let inline interpretFloatAs (typ: Type) n =
 #if FABLE_COMPILER
@@ -791,17 +830,17 @@ type Reader(data: byte[], maxDepth: int) =
         | Format.Str16 -> x.ReadUInt16() |> int |> x.ReadCheckedString |> interpretStringAs t
         | Format.Str32 -> x.ReadUInt32() |> int |> x.ReadCheckedString |> interpretStringAs t
         // fixposnum
-        | b when b ||| 0b01111111uy = 0b01111111uy -> interpretIntegerAs t b
+        | b when b ||| 0b01111111uy = 0b01111111uy -> interpretIntegerAsFrom t 8 b
         // fixnegnum
-        | b when b ||| 0b00011111uy = 0b11111111uy -> sbyte b |> interpretIntegerAs t
-        | Format.Int64 -> x.ReadInt64() |> interpretIntegerAs t
-        | Format.Int32 -> x.ReadInt32() |> interpretIntegerAs t
-        | Format.Int16 -> x.ReadInt16() |> interpretIntegerAs t
-        | Format.Int8 -> x.ReadInt8() |> interpretIntegerAs t
-        | Format.Uint8 -> x.ReadUInt8() |> interpretIntegerAs t
-        | Format.Uint16 -> x.ReadUInt16() |> interpretIntegerAs t
-        | Format.Uint32 -> x.ReadUInt32() |> interpretIntegerAs t
-        | Format.Uint64 -> x.ReadUInt64() |> interpretIntegerAs t
+        | b when b ||| 0b00011111uy = 0b11111111uy -> sbyte b |> interpretIntegerAsFrom t 8
+        | Format.Int64 -> x.ReadInt64() |> interpretIntegerAsFrom t 64
+        | Format.Int32 -> x.ReadInt32() |> interpretIntegerAsFrom t 32
+        | Format.Int16 -> x.ReadInt16() |> interpretIntegerAsFrom t 16
+        | Format.Int8 -> x.ReadInt8() |> interpretIntegerAsFrom t 8
+        | Format.Uint8 -> x.ReadUInt8() |> interpretIntegerAsFrom t 8
+        | Format.Uint16 -> x.ReadUInt16() |> interpretIntegerAsFrom t 16
+        | Format.Uint32 -> x.ReadUInt32() |> interpretIntegerAsFrom t 32
+        | Format.Uint64 -> x.ReadUInt64() |> interpretIntegerAsFrom t 64
         | Format.Float32 -> x.ReadFloat32() |> interpretFloatAs t
         | Format.Float64 -> x.ReadFloat64() |> interpretFloatAs t
         | Format.Nil -> box null

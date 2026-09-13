@@ -131,13 +131,13 @@ let private encode (value: obj) =
 let private roundTrip<'T> (value: 'T) =
     valueOf (encode (box value)) typeof<'T> :?> 'T
 
-/// The four shapes the phase names, plus the two cross-sign narrowings a
-/// `float`-based width test could not have decided. Each entry must
-/// refuse; the pack asserts that once per shape with its own reason, and
-/// once collectively under a time and allocation ceiling.
+/// The four shapes the phase names, plus a narrowing at each end of the
+/// width range and the one cross-sign case that is never a convention.
+/// Each entry must refuse; the pack asserts that once per shape with its
+/// own reason, and once collectively under a time and allocation ceiling.
 let private hostileCorpus = [
     "a narrowed int64", int64Payload 4294967296L, typeof<int>
-    "a uint64 past Int64.MaxValue", uint64Payload UInt64.MaxValue, typeof<int64>
+    "a narrowed int64 at a byte target", int64Payload 128L, typeof<sbyte>
     "a negative value aimed at an unsigned target", [| MsgPack.Format.Int8; 0xFFuy |], typeof<uint32>
     "a 2 GiB array claim", overClaimed MsgPack.Format.Array32 2147483647u, typeof<int[]>
     "an array claim past Int32.MaxValue", overClaimed MsgPack.Format.Array32 2147483648u, typeof<int[]>
@@ -183,25 +183,50 @@ let tests =
                 "including the top of it"
         }
 
-        test "the two cross-sign narrowings refuse — the cases a float range test cannot decide" {
-            // A `uint64` above Int64.MaxValue and a negative value aimed
-            // at an unsigned target are both exactly representable only
-            // in the domain the check widens into. A common `float`
-            // domain loses the low bits at 2^63 and would accept the
-            // first.
-            let big = refusalOf (uint64Payload UInt64.MaxValue) typeof<int64>
-            Expect.equal big.Expected "Int64" "a uint64 past Int64.MaxValue is not an int64"
-
+        test "a negative value aimed at an unsigned target refuses" {
+            // The one cross-sign case that is never a convention: no
+            // format this transport emits puts a negative on the wire for
+            // an unsigned field, so a sign flip there is a mutation.
             let negative = refusalOf [| MsgPack.Format.Int8; 0xFFuy |] typeof<uint32>
-            Expect.equal negative.Expected "UInt32" "and -1 is not a uint32"
+            Expect.equal negative.Expected "UInt32" "-1 is not a uint32"
 
-            // Both values are legitimate for their OWN targets.
+            // The same byte at a signed target is ordinary traffic.
+            Expect.equal (valueOf [| MsgPack.Format.Int8; 0xFFuy |] typeof<int32>) (box -1) "and -1 is an int32"
+        }
+
+        test "a same-width reinterpretation is NOT narrowing, and is accepted" {
+            // The rule the Phase 784 corpus forced, pinned here so it is
+            // not re-tightened by someone reading `refuse silent
+            // narrowing` and stopping there. This encoder writes some
+            // negatives as their unsigned BIT PATTERN, and the target
+            // type is what recovers the sign — so a source no wider than
+            // its target loses nothing and must decode.
+            //
+            // `writeSByte` puts -128y out as `uint8 128`. Refusing this
+            // refuses every sbyte at its own minimum, which is what the
+            // corpus's `width-sbyte-min` fixture caught.
             Expect.equal
-                (valueOf (uint64Payload UInt64.MaxValue) typeof<uint64>)
-                (box UInt64.MaxValue)
-                "the same bytes decode where the target can hold them"
+                (valueOf [| MsgPack.Format.Uint8; 0x80uy |] typeof<sbyte>)
+                (box -128y)
+                "uint8 128 at sbyte is -128, the encoder's own round trip"
 
-            Expect.equal (valueOf [| MsgPack.Format.Int8; 0xFFuy |] typeof<int32>) (box -1) "and so does the negative"
+            // `writeDecimal`'s four words go through `write32bitNumber`,
+            // so a negative int32 arrives as uint32 0xFFFFFFFF.
+            Expect.equal
+                (valueOf [| MsgPack.Format.Uint32; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy |] typeof<int>)
+                (box -1)
+                "uint32 0xFFFFFFFF at int32 is -1, which is how a decimal's sign word travels"
+
+            Expect.equal
+                (valueOf (uint64Payload UInt64.MaxValue) typeof<int64>)
+                (box -1L)
+                "and the same at the widest pair"
+
+            // A source WIDER than the target is the genuine narrowing,
+            // and the same value refuses there. This pair is the whole
+            // discrimination: identical value, different source width.
+            let narrowed = refusalOf (int64Payload 128L) typeof<sbyte>
+            Expect.equal narrowed.Expected "SByte" "int64 128 at sbyte is narrowing, not reinterpretation"
         }
 
         test "the narrow arms — byte, sbyte, int16, uint16 — refuse over-wide values" {

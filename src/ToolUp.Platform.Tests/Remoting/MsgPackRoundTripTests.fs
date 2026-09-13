@@ -243,31 +243,89 @@ let private generatedRoundTrip =
 
 /// One past `Int32.MaxValue`: the smallest `int64` whose `int32`
 /// truncation is a different number rather than the same one.
+///
+/// Note what `writeInt64` does with it: the four high bytes are zero, so
+/// it is emitted as a `Uint32`, and those bytes are indistinguishable
+/// from a well-formed `int32 -2147483648`. That is why the falsifier's
+/// refusal arm uses the value below instead.
 let private beyondInt32 = 2147483648L
+
+/// Past 32 bits in the ENCODING as well as in the value: 2^32 keeps a
+/// non-zero byte above the low four, so `writeInt64` emits a `Uint64` and
+/// the reader sees a 64-bit source it can measure against a 32-bit
+/// target. Phase 786's refusal needs a value the format does not flatten.
+let private unambiguouslyWide = 4294967296L
 
 let private narrowingFalsifier =
     testList "narrowing falsifier" [
-        testCase "an int64 payload read at int32 is REPORTED, not accepted"
+        testCase "an int64 payload WIDER than 32 bits read at int32 is REFUSED"
         <| fun () ->
             // Integers do not touch the corrupt scratch-buffer path, so
             // this arm is live in BOTH regimes — which matters, because
             // it is the acceptance criterion's own go-red case.
+            //
+            // This arm used to assert the opposite, and said so: its
+            // precondition read "the reader narrows with an UNCHECKED
+            // conversion … if this line fails the reader has started
+            // refusing". It has — Phase 786 made the narrowing a named
+            // refusal — so the arm now pins the refusal. It also had to
+            // change its VALUE, and the reason is the arm below.
+            let declared = both WireClass.NumericWidth "falsifier-int64-wide" unambiguouslyWide
+            let bytes = declared.WriteMsgPack()
+
+            match Read.Reader(bytes).TryRead typeof<int32> with
+            | Ok value ->
+                failtestf
+                    "the reader narrowed an int64 payload into an int32 and produced %A. That is the silent wrong ANSWER this row exists to catch."
+                    value
+            | Error error ->
+                Expect.equal error.Expected "Int32" "the refusal names the target width that could not hold the value"
+
+        testCase "and one that is NOT wider cannot be refused by any reader — the format says so"
+        <| fun () ->
+            // The limit of what a reader can do, measured rather than
+            // assumed, and the reason the arm above had to move its value.
+            //
+            // `writeInt64` compacts: 2147483648L has four zero high bytes,
+            // so it goes out as `Uint32 80 00 00 00` — which is BYTE FOR
+            // BYTE a well-formed `int32 -2147483648` payload, the shape
+            // `writeDecimal`'s sign word actually travels in. The two are
+            // not distinguishable on this wire, so refusing one refuses
+            // the other, and the corpus's own `decimal-max` fixture is the
+            // one that would break.
+            //
+            // The narrowing is therefore real and unrefusable HERE. Closing
+            // it is an emitter-side change (a signed value would have to
+            // keep a signed format), which is a wire break and belongs to
+            // whoever takes the closed decoder algebra on.
             let declared = both WireClass.NumericWidth "falsifier-int64" beyondInt32
             let bytes = declared.WriteMsgPack()
 
-            // The deliberate misread: the same bytes, the wrong target type.
-            let misread = Read.Reader(bytes).Read typeof<int32>
-
             Expect.equal
-                (misread :?> int32)
+                (Read.Reader(bytes).Read typeof<int32> :?> int32)
                 Int32.MinValue
-                "precondition: the reader narrows with an UNCHECKED conversion, so the misread must produce a plausible wrong number rather than throwing. If this line fails the reader has started refusing, and the falsifier below is measuring something else."
+                "the same bytes at int32 are a legitimate negative — if this ever refuses, check that `decimal-max` still decodes"
 
-            match declared.Compare misread with
+            match declared.Compare(Read.Reader(bytes).Read typeof<int32>) with
             | Error _ -> ()
             | Ok() ->
                 failtest
-                    "the corpus comparison ACCEPTED an int64 value decoded at int32. This is the defect the type-exact comparison exists to catch; a boxed or rendered comparison would land here."
+                    "the corpus comparison ACCEPTED an int32 against an int64 declaration. The wire cannot catch this one, so the comparison is the only thing that can."
+
+        testCase "a narrowed value is REPORTED by the comparison, not accepted"
+        <| fun () ->
+            // The claim this list was built for, now that the reader
+            // cannot be used to manufacture the wrong-typed value: the
+            // corpus comparison is TYPE-EXACT, so an int32 offered against
+            // an int64 declaration is a mismatch even when the numbers
+            // would compare equal after boxing or rendering.
+            let declared = both WireClass.NumericWidth "falsifier-int64" beyondInt32
+
+            match declared.Compare(box Int32.MinValue) with
+            | Error _ -> ()
+            | Ok() ->
+                failtest
+                    "the corpus comparison ACCEPTED an int32 against an int64 declaration. This is the defect the type-exact comparison exists to catch; a boxed or rendered comparison would land here."
 
         testCase "the control: the same bytes read at int64 fall silent"
         <| fun () ->
@@ -546,30 +604,37 @@ let private refusals =
                 missing
                 (sprintf "these mutation kinds drew nothing, so the refuse-path arm says nothing about them: %A" missing)
 
-        testCase "the MsgPack wire refuses NONE of these — 783's boundary, measured"
+        testCase "exactly these MsgPack mutations are refused — the boundary, measured"
         <| fun () ->
             // The headline result of the refuse-path arm, asserted rather
-            // than left to be inferred from ten individual cases.
+            // than left to be inferred from eleven individual cases.
             //
-            // Phase 783 gave the reader a named refusal and `TryRead`
-            // returns `Result<obj, DecodeError>` — but over a real
-            // malformed-payload population NOT ONE mutation produces a
-            // `DecodeError`. Every one either yields a wrong VALUE or
-            // escapes as a raw BCL exception: `KeyNotFoundException` from
-            // `interpretStringAs` looking a string up as a union case
-            // name, `ArgumentOutOfRangeException` from
-            // `Encoding.UTF8.GetString` trusting a length header past the
-            // end of the buffer, `IndexOutOfRangeException` reading a
-            // record's third field off a two-element array,
+            // This case asserted ABSENCE when it was written: Phase 783
+            // had given the reader a named refusal and `TryRead` returned
+            // `Result<obj, DecodeError>`, and over a real
+            // malformed-payload population NOT ONE mutation produced a
+            // `DecodeError`. It said, in its own failure message, that
+            // the day one closed it should be replaced by the set. Phase
+            // 786 closed two, so this is that replacement, and the set is
+            // now the tripwire in BOTH directions: a refusal gained is
+            // progress to record here, a refusal lost is a regression.
+            //
+            // What is still open is the shape 783 named: refusals are
+            // raised where the decoder KNOWS it is refusing, and the
+            // remaining paths do not know — they index, cast and look up
+            // on the assumption that the payload is well formed.
+            // `KeyNotFoundException` from `interpretStringAs` looking a
+            // string up as a union case name, `IndexOutOfRangeException`
+            // reading a record's third field off a two-element array,
             // `ArgumentException` asking `FSharpType.GetUnionCases` about
-            // `int32`.
+            // `int32`. Closing those is the content of Phase 785's closed
+            // algebra.
             //
-            // That is 783's own stated boundary made concrete: its
-            // refusals are raised where the decoder KNOWS it is refusing,
-            // and these paths do not know — they index, cast and look up
-            // on the assumption that the payload is well formed. Closing
-            // it is the whole content of Phase 785's closed algebra, and
-            // this case is what will go red the day the first one closes.
+            // One row will NOT move when 785 lands, and it is worth
+            // knowing why: `wrong-width-int64-into-int32` is unrefusable
+            // at the reader because `writeInt64` compacts the value into
+            // an encoding a legitimate negative `int32` also uses. That
+            // one needs the emitter, not the algebra.
             let refused =
                 mutations ()
                 |> List.filter (fun m ->
@@ -577,17 +642,21 @@ let private refusals =
                     | Some _, Refused -> true
                     | _ -> false)
                 |> List.map (fun m -> m.Name)
+                |> List.sort
 
-            Expect.isEmpty
+            let expected = [ "truncated-record-body"; "truncated-string-header" ]
+
+            Expect.equal
                 refused
-                (sprintf
-                    "MsgPack mutation(s) are now declared as REFUSED: %s. If Phase 785 has landed, that is the good news and this case is the one that says so — delete it and read the per-mutation cases above. If it has not, the declaration is wrong."
-                    (String.Join(", ", refused)))
+                expected
+                "the set of MsgPack mutations declared REFUSED has changed. If a refusal was GAINED, record it here — that is this case doing its job. If one was LOST, a guard has regressed."
 
         testCase "and it is not vacuous: the population is non-empty and every kind is drawn"
         <| fun () ->
-            // The case above asserts an ABSENCE, which an empty mutation
-            // list would satisfy trivially. This is the floor under it.
+            // The case above asserts a SET drawn from the declarations,
+            // which an empty mutation list would satisfy nearly as
+            // trivially as the absence it used to assert. This is the
+            // floor under it.
             let withPayload = mutations () |> List.filter (fun m -> m.MsgPack.IsSome)
 
             Expect.isTrue

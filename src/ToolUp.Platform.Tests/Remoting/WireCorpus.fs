@@ -1226,8 +1226,12 @@ let mutations () : WireMutation list =
             Target = flatRecord.ClrType
             MsgPack = Some(let b = flatRecord.WriteMsgPack() in b[.. b.Length / 2])
             Json = Some(let t = flatRecord.WriteJson() in t.Substring(0, t.Length / 2))
-            ExpectedMsgPack =
-                ThrewUnnamed "ArgumentOutOfRangeException from Encoding.UTF8.GetString reading past the buffer"
+            // Phase 786 moved this from ThrewUnnamed to Refused: the
+            // reader now checks every length prefix against the bytes
+            // remaining before it reads them, so the truncation is named
+            // rather than escaping as an ArgumentOutOfRangeException out
+            // of Encoding.UTF8.GetString.
+            ExpectedMsgPack = Refused
             ExpectedJson = ThrewUnnamed "JsonDocument.Parse refuses malformed JSON before the converter seam is reached"
         }
         {
@@ -1237,8 +1241,11 @@ let mutations () : WireMutation list =
             // A fixstr header claiming five bytes with two present.
             MsgPack = Some [| 0xA5uy; 0x68uy; 0x65uy |]
             Json = None
-            ExpectedMsgPack =
-                ThrewUnnamed "ArgumentOutOfRangeException from Encoding.UTF8.GetString — the header's length is trusted"
+            // Phase 786 moved this from ThrewUnnamed to Refused, and the
+            // old note — "the header's length is trusted" — is what
+            // stopped being true: a str header is now measured against
+            // the bytes actually present before a byte of it is read.
+            ExpectedMsgPack = Refused
             ExpectedJson = Refused
         }
         {
@@ -1254,19 +1261,36 @@ let mutations () : WireMutation list =
         // ── WrongWidth ──
         // The narrowing the whole corpus is built around, asked of the
         // REFUSAL path. Reading an int64 payload at int32 is a decode that
-        // cannot be right, and it is ACCEPTED: `interpretIntegerAs`
-        // narrows with an unchecked conversion once it knows the target
-        // type, so nothing in the reader is in a position to notice. This
-        // is the most valuable row in the list — a silent wrong ANSWER
-        // rather than a missing error, and exactly what a closed decoder
-        // algebra has to close.
+        // cannot be right, and until Phase 786 it was ACCEPTED:
+        // `interpretIntegerAs` narrowed with an unchecked conversion once
+        // it knew the target type, so nothing in the reader was in a
+        // position to notice — a silent wrong ANSWER rather than a missing
+        // error, which is why this was the most valuable row in the list.
+        //
+        // Phase 786 added the check, and this row STILL reads Accepted —
+        // which is the more interesting answer, and it is about the
+        // FORMAT rather than the reader. `writeInt64` compacts: this
+        // value's four high bytes are zero, so it leaves as
+        // `Uint32 80 00 00 00`, and those bytes are byte for byte a
+        // well-formed `int32 -2147483648` — the shape `writeDecimal`'s
+        // sign word actually travels in, pinned by the `decimal-max`
+        // fixture. A reader that refused this would refuse that.
+        //
+        // So the narrowing here is real and unrefusable at the reader.
+        // Closing it is an emitter-side change (a signed value keeping a
+        // signed format), which is a wire break. What Phase 786 does
+        // refuse is the narrowing the format does NOT flatten — a source
+        // genuinely wider than the target; the `narrowing falsifier` list
+        // measures both directions against each other.
         {
             Name = "wrong-width-int64-into-int32"
             Kind = MutationKind.WrongWidth
             Target = typeof<int32>
             MsgPack = Some(int64Case.WriteMsgPack())
             Json = Some(int64Case.WriteJson())
-            ExpectedMsgPack = Accepted "narrowed by an unchecked conversion in interpretIntegerAs"
+            ExpectedMsgPack =
+                Accepted
+                    "the compacted encoding is indistinguishable from a legitimate int32 -2147483648; unrefusable without an emitter change"
             ExpectedJson = Refused
         }
         {
