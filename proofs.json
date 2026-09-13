@@ -1,0 +1,241 @@
+{
+  "$comment": [
+    "The claims ladder of proofs/README.md, declared as DATA so a registry can read it",
+    "rather than parse prose. Hand-authored and never generated: the point of the manifest is",
+    "that a human decided which rung each claim sits on, and a generator would only be able to",
+    "restate what the code already says.",
+    "",
+    "`level` is a CLOSED set — proved | tested | assumed | policy — and the four map onto the",
+    "README's four rungs: proved, differentially tested, assumed-and-stated, and not-claimed.",
+    "A `policy` entry is an exclusion carrying its reason, because an unstated exclusion reads,",
+    "to whoever finds it later, as a claim that failed.",
+    "",
+    "A `proved` entry names its lemma and the prover pin so an evidence check can resolve the",
+    "lemma in the named module and the pin in the named file. Nothing here is checkable by",
+    "reading this file alone, and that is the intended shape: the manifest says where to look,",
+    "the proof leg (proofs/check.ps1) is what looks.",
+    "",
+    "Every later proof phase in this repository appends its claims here rather than starting a",
+    "second manifest."
+  ],
+  "kind": "proofs",
+  "version": 1,
+  "subject": "ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model",
+  "provers": {
+    "fstar-pinned": {
+      "tool": "fstar",
+      "pin": "proofs/fstar-pin.json",
+      "version": "v2026.09.06",
+      "solver": "z3 4.13.3",
+      "leg": "proofs/check.ps1",
+      "reproducibility": "proof hints no longer exist in this prover, so the pin, a margin on --z3rlimit, and --quake 3 over three cold runs are what stand in for them"
+    }
+  },
+  "claims": [
+    {
+      "id": "decoder-totality",
+      "level": "proved",
+      "statement": "Given a parsed value, no combinator and no decoder built from them can diverge, throw, or reach a state that is neither an accept nor a named refusal. Quantified over ALL decoders, not one lemma per combinator, so it covers anything a consumer or a generator composes out of the algebra.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": ["decode_total"]
+      }
+    },
+    {
+      "id": "outcome-characterisation",
+      "level": "proved",
+      "statement": "Which outcome, for which input, with the exact refusal - expected text, found text and path. The failure classification is exhaustive rather than merely non-empty.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": [
+          "lemma_as_bool_characterised",
+          "lemma_as_string_characterised",
+          "lemma_as_unit_characterised",
+          "lemma_integer_characterised",
+          "lemma_as_float32_decides_on_width",
+          "lemma_field_refuses_short_array",
+          "lemma_union_refuses_unknown_tag"
+        ]
+      }
+    },
+    {
+      "id": "termination-by-structural-measure",
+      "level": "proved",
+      "statement": "The element accessor that both the positional-field and the index combinator are built from returns a value strictly smaller than its input, by the value model's own size measure. A decoder descending through it cannot recur forever, and not because of a depth counter.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "definitions": ["element_at", "size", "lemma_try_item_smaller"],
+        "note": "carried in element_at's REFINED RETURN TYPE, so every descent consumes it at the call site"
+      }
+    },
+    {
+      "id": "width-information-rule",
+      "level": "proved",
+      "statement": "The integer width rule is about INFORMATION, not signed range: a negative value never decodes into an unsigned target and fits a signed target exactly when it clears its minimum; a source no wider than its target always survives, sign reinterpretation included; a source wider than its target must fit its range; and the rule decides for every width class.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": [
+          "lemma_negative_never_unsigned",
+          "lemma_negative_fits_iff_clears_minimum",
+          "lemma_no_wider_always_survives",
+          "lemma_no_wider_always_survives_unsigned",
+          "lemma_wider_must_fit",
+          "lemma_wider_must_fit_unsigned",
+          "lemma_width_rule_decides"
+        ]
+      }
+    },
+    {
+      "id": "accept-licenses-the-cast",
+      "level": "proved",
+      "statement": "On a reader-producible value, an Int32 accept implies the payload carries no more than thirty-two bits of information - the union of the signed and unsigned 32-bit ranges. It deliberately does NOT imply the payload sits in Int32's signed range, because a negative decimal word arrives unsigned and the host's cast reinterprets it. That union is exactly the set on which the cast is a bijection.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": ["lemma_int32_accept_is_32_bit_information"],
+        "premise": "value_wf - the payload is within the width class its format byte declared. The one-pass reader produces only such values by construction; see the assumption `well-formedness-not-enforced-by-type`."
+      }
+    },
+    {
+      "id": "record-round-trip",
+      "level": "proved",
+      "statement": "Over a reference API-record vocabulary - a nested record with a string, a bounded integer and a flag - the encoding of any value decodes, and decodes back to the value it started from. Not merely 'decodes to something': the decoder can never refuse traffic its own encoder produced.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": [
+          "decode_record_total",
+          "decode_record_wf",
+          "decode_encode_roundtrip",
+          "decode_encode_roundtrip_address"
+        ]
+      }
+    },
+    {
+      "id": "model-agrees-with-shipped-code",
+      "level": "tested",
+      "statement": "The extracted model and the shipped algebra decode every covered wire-corpus case and every refuse-path mutation to the same outcome class, the same value, the same runtime type and the same refusal message. This is the only thing that says the proved model is about the code that runs.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
+        "list": "Phase 787 - the proved model as oracle",
+        "cases": [
+          "the extracted model agrees with production over every covered corpus case",
+          "the extracted model agrees with production over every refuse-path mutation",
+          "the model never throws, on any corpus payload, at any covered type",
+          "the reference vocabulary round-trips through the extracted encoder and decoder"
+        ],
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "committed-extraction-is-what-the-prover-produced",
+      "level": "tested",
+      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module. Without this the committed file would be a claim; with it, a checked one.",
+      "evidence": {
+        "runner": "proofs/check.ps1 step 4",
+        "artifact": "proofs/oracle/RemotingDecode.fs"
+      }
+    },
+    {
+      "id": "differential-is-known-to-fail",
+      "level": "tested",
+      "statement": "A committed go-red case hands the model a bridge that has forgotten the source width class, and asserts the comparison catches it. It catches four cases and every one is the width rule losing. A differential never shown to fail agrees with whatever it is shown.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
+        "cases": [
+          "the differential CATCHES a bridge that forgets the source width - the go-red case",
+          "and the width rule is what it catches"
+        ]
+      }
+    },
+    {
+      "id": "toolchain-trusted",
+      "level": "assumed",
+      "statement": "The extractor and the F# compiler are trusted. The theorem is about the model; the code that runs is the extraction, and nothing verifies that the extraction preserves semantics.",
+      "mitigation": "the differential host runs the EXTRACTION, not the model, so an extraction defect that changes behaviour on any corpus payload is caught there"
+    },
+    {
+      "id": "bridge-hand-written",
+      "level": "assumed",
+      "statement": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing.",
+      "mitigation": "short and case-for-case on purpose, and the committed go-red bridge beside it exercises the one field most likely to be got wrong"
+    },
+    {
+      "id": "runtime-shim-hand-written",
+      "level": "assumed",
+      "statement": "The extractor's F# backend ships no runtime, so the nine names it references are supplied by a hand-written shim.",
+      "evidence": { "artifact": "proofs/oracle/Prims.fs" },
+      "mitigation": "small enough to read in a minute; the byte-diff means a model change reaching for a tenth name fails the leg rather than compiling against a widened shim"
+    },
+    {
+      "id": "host-measured-payload-facts",
+      "level": "assumed",
+      "statement": "Three payload facts come from the host rather than the model: a string's length, a binary payload's length, and a float's rendered text. Recomputing any of them would introduce a second implementation free to disagree with the host's - and for string length it demonstrably would, the two runtimes counting different units.",
+      "mitigation": "carried as data on the value model, so the model's refusals quote the host's own numbers"
+    },
+    {
+      "id": "well-formedness-not-enforced-by-type",
+      "level": "assumed",
+      "statement": "The value model admits an integer whose payload exceeds its declared width class. The one-pass reader cannot produce one, but nothing here enforces it.",
+      "mitigation": "the lemmas that need it carry it as an explicit premise rather than assuming it away"
+    },
+    {
+      "id": "reproducibility-rests-on-pin-and-quake",
+      "level": "assumed",
+      "statement": "Proof hints were removed from this prover, so the usual way to pin an SMT search is unavailable. The pinned release and its bundled solver, a margin on the resource limit, and three cold runs under --quake 3 are evidence of stability, not a guarantee of it.",
+      "evidence": { "artifact": "proofs/fstar-pin.json", "runner": ".github/workflows/proofs.yml" }
+    },
+    {
+      "id": "bytes-to-value-pass",
+      "level": "policy",
+      "statement": "The bytes-to-value pass is OUT of the theorem.",
+      "reason": "it is bounded - length against remaining on every length-prefixed read, and a depth ceiling - but bounded is not proved. This is the one place a binary-format proof framework would apply if it is ever wanted. A payload the reader itself refuses never reaches either decoder, and the differential skips it rather than pretending otherwise."
+    },
+    {
+      "id": "json-path",
+      "level": "policy",
+      "statement": "The System.Text.Json decode path is OUT.",
+      "reason": "its value carrier is undecided - the current JSON value model's numeric case cannot carry a 64-bit integer past 2^53, an exact decimal, or the source width"
+    },
+    {
+      "id": "reflection-fallback",
+      "level": "policy",
+      "statement": "The reflection decode path is OUT, by construction rather than by omission.",
+      "reason": "it is an interpreter over an open, possibly recursive type graph walked with a mutable cursor, so 'total on every input' is not a well-formed statement about it - the input includes the type graph. That asymmetry is the whole argument for the closed value model."
+    },
+    {
+      "id": "emitter-side-narrowing",
+      "level": "policy",
+      "statement": "One narrowing is unrefusable at the decoder.",
+      "reason": "the writer compacts a 64-bit value into bytes that ARE a well-formed 32-bit one - the shape a decimal's sign word travels in. The value model faithfully carries a 32-bit source and the information rule admits it, correctly, since refusing it would refuse every negative decimal the corpus pins. Closing it needs a writer that never compacts across a sign boundary, which is a wire break."
+    },
+    {
+      "id": "trailing-element-accepted",
+      "level": "policy",
+      "statement": "A trailing element past a record's declared fields is accepted, not refused.",
+      "reason": "a record decoder reads the positions it declares and ignores what follows, in agreement with the reflection reader. That is what keeps an additive wire change non-breaking, and it is the one evolution property this wire has."
+    },
+    {
+      "id": "semantics-authorisation-tenancy",
+      "level": "policy",
+      "statement": "A decoded value is well-typed. It is not authorised, not tenant-scoped and not semantically valid.",
+      "reason": "those are other boundaries' obligations; a decode theorem that implied them would be claiming something it cannot see"
+    },
+    {
+      "id": "date-only-time-only",
+      "level": "policy",
+      "statement": "The date-only and time-only primitives have no combinator, so no model.",
+      "reason": "one of the two hosts' readers refuses both types outright, so a primitive for them would decode on one host and not the other. This ships a cross-host algebra or it ships nothing."
+    },
+    {
+      "id": "records-not-opted-in",
+      "level": "policy",
+      "statement": "A record still decoding through the reflection path is outside every claim above.",
+      "reason": "the algebra is an opt-in replacement for a decoder that already works; the shipped default is unchanged"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "$comment": [
+    "Phase 787 — the pinned prover for proofs/RemotingDecode.fst.",
+    "F* releases WEEKLY (five releases in the four weeks to 2026-09-13), and a proof is a",
+    "claim about a specific prover: an unpinned toolchain would silently change what the",
+    "green tick means, and proof hints no longer exist to stabilise it (--record_hints and",
+    "--use_hints were removed from F*), so reproducibility rests on this pin, on --quake,",
+    "and on the margin in z3rlimit. The release bundles Z3, so the pin covers the solver too",
+    "— three of them, and z3version names which one is used.",
+    "The hash is over the downloaded archive; proofs/check.ps1 verifies it before extracting",
+    "and refuses to proceed on a mismatch."
+  ],
+  "tool": "fstar",
+  "version": "v2026.09.06",
+  "released": "2026-09-06",
+  "commit": "670fc36f946559624fff48a0d0e8b3722933fbad",
+  "z3version": "4.13.3",
+  "platforms": {
+    "windows-x64": {
+      "asset": "fstar-v2026.09.06-Windows_NT-x86_64.zip",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.06/fstar-v2026.09.06-Windows_NT-x86_64.zip",
+      "sha256": "dbd13ddb75a08b98c1ed3def78728727aa9998d5a1d36ce9b6fc5cff5d9d58be",
+      "bin": "fstar/bin/fstar.exe"
+    },
+    "linux-x64": {
+      "asset": "fstar-v2026.09.06-Linux_x86_64.tar.gz",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.06/fstar-v2026.09.06-Linux-x86_64.tar.gz",
+      "sha256": "",
+      "bin": "fstar/bin/fstar",
+      "$comment": "Declared but NOT hash-pinned: nothing in this repo has run the proof leg on Linux, and an unverified hash recorded as if it were verified is worse than an absent one. check.ps1 refuses a platform whose sha256 is empty and says why. The CI job runs windows-latest for this reason."
+    }
+  },
+  "flags": {
+    "check": ["--cache_checked_modules", "--report_assumes", "error", "--z3rlimit", "60"],
+    "extract": ["--codegen", "FSharp", "--extract", "RemotingDecode"],
+    "quake": ["--quake", "3"],
+    "$comment": "--z3rlimit 60 against a module whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available."
+  }
+}

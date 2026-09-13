@@ -73,3 +73,14 @@ docs-snippets/generated/
 # number that never described their machine. The BUDGETS are tracked —
 # they are the reviewed thing.
 /artifacts/
+
+# Phase 787 — the proof leg's working directories. `proofs/.fstar/` is a
+# ~200 MB pinned toolchain that `proofs/check.ps1` downloads and hash-verifies
+# on demand; `.cache/` is F*'s `.checked` output, deliberately wiped before
+# every run so a repeat check cannot ride a warm cache; `.extract/` is the
+# fresh extraction the byte-diff compares against the COMMITTED
+# `proofs/oracle/RemotingDecode.fs`, which IS tracked — the repository builds
+# and tests against it, so that a contributor never needs a prover.
+/proofs/.fstar/
+/proofs/.cache/
+/proofs/.extract/
