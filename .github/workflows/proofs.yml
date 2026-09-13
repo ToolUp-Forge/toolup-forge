@@ -1,0 +1,86 @@
+# Phase 787 — the decoder totality theorem, on every push.
+#
+# Its own workflow rather than a job in `checks.yml`, for three reasons
+# that are worth stating because "just add a job" is the obvious
+# alternative:
+#
+#   1. It runs on **windows-latest** and every gating job in `checks.yml`
+#      runs on ubuntu. The pin (`proofs/fstar-pin.json`) records a
+#      verified SHA-256 for the Windows asset only — nothing has yet run
+#      this leg on Linux, and a hash written down as if it were verified
+#      is worse than an absent one. `check.ps1` refuses a platform whose
+#      hash is empty and says so, rather than downloading something
+#      nobody checked.
+#   2. It downloads a ~200 MB prover. Keeping that in a separate
+#      workflow keeps it off the critical path of the jobs a contributor
+#      actually waits on, and makes it obvious in the Actions list what
+#      is spending the minutes.
+#   3. Its cache key is the pin, not the source. A job that shares a
+#      cache with the .NET gates would evict or be evicted by them for
+#      no reason — the prover changes when someone deliberately moves the
+#      pin, and never otherwise.
+#
+# `-Runs 3` is the acceptance criterion, not a default: it re-checks the
+# module three times from a COLD cache with `--quake 3`, so every SMT
+# query has to succeed 3/3 on three independent runs. Proof hints no
+# longer exist in F*, so this plus the pin is what reproducibility rests
+# on — a module that passes once may be riding a lucky seed.
+#
+# Nothing here deploys or publishes.
+
+name: proofs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: proofs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  proofs:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Same CI workaround the other workflows carry: nuget.config
+      # references the workspace-shared local feed at
+      # ../../local-nuget-feed for dev-machine iteration, and the runner
+      # has no such folder. An empty dir lets NuGet enumerate it (0
+      # packages) and proceed.
+      - name: Create empty local-feed dir (CI workaround)
+        run: mkdir -p ../../local-nuget-feed
+        shell: bash
+
+      # Keyed on the PIN FILE, so the cache is invalidated exactly when
+      # someone moves the pin and never otherwise. `check.ps1` verifies
+      # the archive hash on download; a restored cache skips the download
+      # entirely, so a poisoned cache would have to match a directory
+      # layout the script then runs `--version` against and reports.
+      - name: Cache the pinned prover
+        uses: actions/cache@v4
+        with:
+          path: proofs/.fstar
+          key: fstar-${{ runner.os }}-${{ hashFiles('proofs/fstar-pin.json') }}
+
+      # The whole leg: resolve the pin, check three times cold under
+      # --quake 3, extract, byte-diff against the committed oracle, build
+      # the oracle project, and run the differential host over the Phase
+      # 784 corpus. Every step refuses rather than warns, and the host
+      # step asserts a CASE COUNT — an Expecto filter that matches
+      # nothing prints "0 tests run … Success!" and exits 0.
+      - name: Check, extract, diff and run the differential host
+        run: pwsh -NoProfile -File ./proofs/check.ps1 -Runs 3
+        shell: pwsh
