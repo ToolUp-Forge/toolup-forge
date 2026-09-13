@@ -41,7 +41,14 @@ open System
 // (it sits in `significantLines`, the one tokeniser every direction
 // shares). Baselines regenerated under either band stay green; the
 // stale lines fall out of the approved files at the next regen.
-let private isCompilerVersionDependent (l: string) =
+//
+// Public since Phase 489's gate fix, for the one reason a predicate like
+// this ever goes public: Phase 261's doc-coverage ratchet walks the SAME
+// `MetadataLoadContext` surface and must exclude the SAME subjects, and a
+// second copy of this string literal is exactly the drift the header
+// above argues against. It is a predicate over a rendered surface TOKEN,
+// which is what both readers hold.
+let isCompilerVersionDependent (l: string) =
     l.EndsWith "..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)"
 
 /// The tokens a comparison sees: non-blank, non-comment lines, minus the
