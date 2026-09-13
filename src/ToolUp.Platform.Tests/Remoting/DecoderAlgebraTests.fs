@@ -6,6 +6,11 @@ open System.Reflection
 open Expecto
 open ToolUp.Remoting
 open ToolUp.Remoting.MsgPack
+// Phase 785's facet and the report section it feeds. Opened BEFORE
+// `WireCorpus` so the corpus's own `Address` / `Outcome` / `Priority`
+// win the last-declaration-wins resolution over anything in this
+// namespace that happens to share a name.
+open ToolUp.Platform
 open ToolUp.Platform.Tests.Remoting.WireCorpus
 
 // ─── Phase 785 — the reflection reader as oracle ─────────────────────
@@ -313,6 +318,58 @@ let private calledMembers (method: MethodBase) : string list =
                         | Some name -> yield name
                         | None -> ()
             ]
+
+/// Emit a value through the shipped writer and read it back through the
+/// decoder registered for its type. Module-level because it takes an
+/// explicit type parameter, which F# admits only on a module or member
+/// binding.
+let private roundTripThroughRegistry<'T> (label: string) (value: 'T) =
+    let bytes =
+        let serializer = Write.makeSerializer<'T> ()
+        use buffer = new MemoryStream()
+        serializer.Invoke(value, buffer)
+        buffer.ToArray()
+
+    match RemotingDecoders.tryGet typeof<'T> with
+    | None -> failtestf "`%s` is not registered, so the client branch would never fire for it" label
+    | Some decoder ->
+        match Read.Reader(bytes).TryReadValue() |> Result.bind decoder with
+        | Error e -> failtestf "`%s` refused its own record: %s" label (DecodeError.render e)
+        | Ok decoded ->
+            Expect.equal
+                (sprintf "%A" decoded)
+                (sprintf "%A" (box value))
+                (sprintf "`%s` did not reproduce the value the writer emitted" label)
+
+// ─── Facet fixtures ──────────────────────────────────────────────────
+
+/// A declaration naming a wire type nothing registers — the reflection
+/// path, expressed as the facet sees it.
+let private unregisteredRecord: (string * string list * bool) list = [
+    "IMadeUpApi", [ "Some.Type.Nobody.Registered" ], true
+]
+
+/// A declaration naming a wire type `PlatformDecoders.registerAll`
+/// registers, with corpus coverage declared.
+let private registeredRecord: (string * string list * bool) list = [
+    "IHealthMonitorApi", [ typeof<Result<ToolUp.Platform.HealthSnapshot, string>>.FullName ], true
+]
+
+/// The report section a declaration produces, end to end: inspect the
+/// registry, mirror the facet, hand it to the report through the same
+/// wither a composition root uses.
+let private sectionFor
+    (profile: ToolUp.Platform.CompositionProfile)
+    (declared: (string * string list * bool) list)
+    : ToolUp.Platform.DeploymentVerification.ReportSection =
+    let integrity =
+        ToolUp.Platform.RemotingDecoderFacet.inspect profile declared
+        |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+
+    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders (
+        ToolUp.Platform.DeploymentVerificationEvidence.none
+        |> ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders (Some integrity)
+    )
 
 // ─── The pack ────────────────────────────────────────────────────────
 
@@ -728,50 +785,271 @@ let tests =
                 PlatformDecoders.registerAll ()
                 let registered = RemotingDecoders.registered () |> Set.ofList
 
-                for record, types in PlatformDecoders.coveredApiRecords do
+                for record, types, _ in PlatformDecoders.coveredApiRecords do
                     let missing = types |> List.filter (fun name -> not (registered.Contains name))
 
                     Expect.isEmpty
                         missing
                         (sprintf "API record `%s` names wire types no decoder is registered for" record)
 
-            testCase "the platform decoders round-trip their own records"
+            // The executable form of `coveredApiRecords`' corpus-coverage
+            // claim: all six method return types go out through the
+            // shipped writer and come back through the registered
+            // algebra decoder. A `true` in that declaration that nothing
+            // exercised would be the deployment's own assertion about
+            // itself, which is exactly what the report's `Verified`
+            // verdict refuses to accept.
+            testCase "every registered platform return type round-trips through the algebra"
             <| fun () ->
                 PlatformDecoders.registerAll ()
 
-                let probe: ToolUp.Platform.HealthSnapshot = {
-                    GeneratedAt = DateTime(2026, 9, 13, 8, 30, 0, DateTimeKind.Utc)
-                    Probes = [
-                        {
-                            Name = "blob_storage"
-                            Kind = "Readiness"
-                            TimeoutMs = 5000
-                            Status = "Healthy"
-                            Message = "ok"
-                            ElapsedMs = 12L
-                        }
-                    ]
+                let probe: ToolUp.Platform.HealthProbeView = {
+                    Name = "blob_storage"
+                    Kind = "Readiness"
+                    TimeoutMs = 5000
+                    Status = "Healthy"
+                    Message = "ok"
+                    ElapsedMs = 12L
                 }
 
-                let bytes =
-                    let serializer =
-                        Write.makeSerializer<Result<ToolUp.Platform.HealthSnapshot, string>> ()
+                let generatedAt = DateTime(2026, 9, 13, 8, 30, 0, DateTimeKind.Utc)
 
-                    use buffer = new MemoryStream()
-                    serializer.Invoke(Ok probe, buffer)
-                    buffer.ToArray()
+                roundTripThroughRegistry<Result<ToolUp.Platform.HealthSnapshot, string>>
+                    "Result<HealthSnapshot, string>"
+                    (Ok {
+                        GeneratedAt = generatedAt
+                        Probes = [ probe ]
+                    })
 
-                match RemotingDecoders.tryGet typeof<Result<ToolUp.Platform.HealthSnapshot, string>> with
-                | None ->
-                    failtest
-                        "`Result<HealthSnapshot, string>` is not registered, so the client branch would never fire for it"
-                | Some decoder ->
-                    match Read.Reader(bytes).TryReadValue() |> Result.bind decoder with
-                    | Error e -> failtestf "the platform decoder refused its own record: %s" (DecodeError.render e)
-                    | Ok decoded ->
-                        Expect.equal
-                            (sprintf "%A" decoded)
-                            (sprintf "%A" (box (Ok probe: Result<ToolUp.Platform.HealthSnapshot, string>)))
-                            "the platform decoder did not reproduce the value the writer emitted"
+                roundTripThroughRegistry<Result<ToolUp.Platform.PreflightSnapshotView, string>>
+                    "Result<PreflightSnapshotView, string>"
+                    (Ok {
+                        HasSnapshot = true
+                        Outcomes = [
+                            {
+                                Name = "config"
+                                Status = "Ok"
+                                Message = ""
+                                ElapsedMs = 3L
+                            }
+                        ]
+                    })
+
+                roundTripThroughRegistry<Result<ToolUp.Platform.JobSchedulerTelemetryView, string>>
+                    "Result<JobSchedulerTelemetryView, string>"
+                    (Ok {
+                        HasScheduler = true
+                        TickMissedCount60Min = 2
+                        LastDriftMs = Some 41L
+                        LastTickMissedAt = Some generatedAt
+                        GeneratedAt = generatedAt
+                    })
+
+                roundTripThroughRegistry<Result<ToolUp.Platform.DegradedCapability list, string>>
+                    "Result<DegradedCapability list, string>"
+                    (Ok [
+                        {
+                            Capability = "crypto-shred-cache-eviction"
+                            DegradedSince = DateTimeOffset(generatedAt, TimeSpan.Zero)
+                            Reason = "subscribe failed"
+                            Impact = "stale key cache"
+                            Remediation = "restart the silo"
+                        }
+                    ])
+
+                roundTripThroughRegistry<Result<ToolUp.Platform.AIDenialRollup option, string>>
+                    "Result<AIDenialRollup option, string>"
+                    (Ok(
+                        Some {
+                            GeneratedAt = generatedAt
+                            ScopeId = "_platform"
+                            WindowMinutes = 60
+                            TotalDenialsAllTime = 9
+                            TotalDenialsInWindow = 3
+                            DenialsPerMinute = 0.05
+                            ByToolName = [ { Key = "read_file"; Count = 2 } ]
+                            ByActiveModule = [ { Key = "(none)"; Count = 1 } ]
+                            ByScopeId = []
+                            TopToolModulePairs = [
+                                {
+                                    ToolName = "read_file"
+                                    ActiveModule = "(none)"
+                                    Count = 2
+                                }
+                            ]
+                            RecentDenials = [
+                                {
+                                    ToolName = "read_file"
+                                    ActiveModule = "(none)"
+                                    Reason = "not allow-listed"
+                                    OccurredAt = generatedAt
+                                }
+                            ]
+                        }
+                    ))
+
+                roundTripThroughRegistry<
+                    Result<ToolUp.Platform.DeploymentVerification.DeploymentVerificationReport, string>
+                 >
+                    "Result<DeploymentVerificationReport, string>"
+                    (Ok {
+                        SchemaVersion = 1
+                        Actor = "operator"
+                        GeneratedAt = generatedAt
+                        Sections = [
+                            {
+                                Id = "boot-seal"
+                                Title = "Sealed composition"
+                                Verdict = ToolUp.Platform.VerificationSectionVerdict.Observed "unsealed"
+                                Findings = [ "no record" ]
+                            }
+                        ]
+                        NotProved = [
+                            {
+                                Id = "decode-is-not-authorisation"
+                                Statement = "..."
+                                Narrowing = None
+                            }
+                        ]
+                        Outcome = ToolUp.Platform.DeploymentVerificationOutcome.PartiallyVerified
+                        VerdictDigest = "abc"
+                    })
+        ]
+
+        // ─── 785.H — the composition-profile facet ───────────────────
+        //
+        // Three outcomes, pinned separately because they are three
+        // different claims: the refusal under the verified profile, the
+        // informational line under every other, and the `Observed`
+        // downgrade for a record the corpus does not cover. A pack that
+        // asserted only the first would let the other two be whatever
+        // the implementation happened to do.
+        testList "the composition-profile facet" [
+            testCase "under the verified profile, an unregistered record REFUSES the boot"
+            <| fun () ->
+                PlatformDecoders.registerAll ()
+
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.CompositionProfile.Verified
+                        unregisteredRecord
+
+                Expect.isTrue facet.FacetRequired "the verified profile must make algebra decoders mandatory"
+
+                match ToolUp.Platform.RemotingDecoderFacet.verify facet with
+                | Ok() -> failtest "the verified profile admitted a record with no algebra decoder"
+                | Error refusal ->
+                    Expect.stringContains
+                        (ToolUp.Platform.CompositionProfileRefusal.describe refusal)
+                        "IMadeUpApi"
+                        "the refusal does not NAME the record, which is the whole of what an operator can act on"
+
+            testCase "under every other profile the same facet is informational and boot proceeds"
+            <| fun () ->
+                PlatformDecoders.registerAll ()
+
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.CompositionProfile.Standard
+                        unregisteredRecord
+
+                Expect.isFalse facet.FacetRequired "the standard profile must not make algebra decoders mandatory"
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (Ok())
+                    "the standard profile refused a boot over a facet that is advisory there"
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.reflectionRecords facet)
+                    [ "IMadeUpApi" ]
+                    "the facet stopped reporting the record it does not refuse over — informational is not silent"
+
+            testCase "a verified deployment that declares no record is not refused"
+            <| fun () ->
+                // GP 11: absence is the no-op. An existing verified
+                // deployment that upgrades to this SDK version declares
+                // nothing to the facet and must boot exactly as it did.
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspect ToolUp.Platform.CompositionProfile.Verified []
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (Ok())
+                    "a facet with nothing declared refused a boot, which turns the facet into the build gate GP 13 keeps it from being"
+
+            testCase "the report reads Verified only for algebra AND corpus coverage"
+            <| fun () ->
+                PlatformDecoders.registerAll ()
+
+                Expect.equal
+                    (VerificationSectionVerdict.label
+                        (sectionFor ToolUp.Platform.CompositionProfile.Verified registeredRecord).Verdict)
+                    "verified"
+                    "a record that decodes through the algebra over corpus-covered shapes did not read Verified"
+
+            testCase "a record the corpus does not cover is downgraded to Observed"
+            <| fun () ->
+                PlatformDecoders.registerAll ()
+
+                let declaredUncovered = [
+                    "IHealthMonitorApi", [ typeof<Result<ToolUp.Platform.HealthSnapshot, string>>.FullName ], false
+                ]
+
+                let integrity =
+                    ToolUp.Platform.RemotingDecoderFacet.inspect
+                        ToolUp.Platform.CompositionProfile.Verified
+                        declaredUncovered
+                    |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+
+                // The algebra half holds — this is a registered decoder —
+                // so the downgrade can only be the corpus half doing its
+                // job.
+                Expect.equal
+                    (integrity.DecoderRecords |> List.map _.RecordClassification)
+                    [ "algebra" ]
+                    "the probe is not exercising the corpus axis: the record did not classify as algebra"
+
+                Expect.equal
+                    (VerificationSectionVerdict.label
+                        (sectionFor ToolUp.Platform.CompositionProfile.Verified declaredUncovered).Verdict)
+                    "observed"
+                    "a record whose shapes the corpus does not cover read as a verification — a deployment's own assertion about itself must never read as a pass"
+
+            testCase "a reflection record is Observed, never Failed"
+            <| fun () ->
+                Expect.equal
+                    (VerificationSectionVerdict.label
+                        (sectionFor ToolUp.Platform.CompositionProfile.Verified unregisteredRecord).Verdict)
+                    "observed"
+                    "the reflection path — the SDK's shipped default and every deployment's baseline before this phase — reddened the report, which is a gate that gets turned off"
+
+            testCase "an evidence value that never heard of the facet reads NotComposed"
+            <| fun () ->
+                let section =
+                    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders
+                        ToolUp.Platform.DeploymentVerificationEvidence.none
+
+                Expect.equal
+                    (VerificationSectionVerdict.label section.Verdict)
+                    "not-composed"
+                    "an undeclared facet did not read NotComposed, so GP 11's absence-is-the-no-op does not hold here"
+
+            testCase "the platform's own records classify as algebra once registered"
+            <| fun () ->
+                PlatformDecoders.registerAll ()
+
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectPlatform ToolUp.Platform.CompositionProfile.Verified
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.reflectionRecords facet)
+                    []
+                    "a platform API record this phase claims to cover is still on the reflection path"
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
+                    (Ok())
+                    "the platform's own records refuse the verified profile"
         ]
     ]

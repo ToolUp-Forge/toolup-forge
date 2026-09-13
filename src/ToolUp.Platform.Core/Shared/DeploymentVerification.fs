@@ -233,6 +233,19 @@ module DeploymentVerification =
     [<Literal>]
     let EvidenceChainSection = "evidence-chain"
 
+    /// Phase 785 — the tenth section: which of this deployment's
+    /// registered API records decode their responses through the closed
+    /// remoting decoder algebra, and which still decode by reflection
+    /// over an open type graph.
+    ///
+    /// The only section whose subject is the DECODE EDGE itself — the
+    /// point where bytes a client did not author become typed values the
+    /// rest of the deployment trusts. Every section above reads a
+    /// substrate that runs after that edge and takes its output as
+    /// given.
+    [<Literal>]
+    let RemotingDecoderSection = "remoting-decoders"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

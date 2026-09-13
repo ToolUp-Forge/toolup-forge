@@ -348,14 +348,27 @@ module PlatformDecoders =
             Decode.result deploymentVerificationReport Decode.asString
         )
 
-    /// The API records this file covers, and the wire types each one
-    /// carries. The Phase 785 facet classifies a record `Algebra` when
-    /// every type named for it is registered.
+    /// The API records this file covers: the record's name, the wire
+    /// types it carries, and whether the wire corpus draws the shapes
+    /// those types are built from.
     ///
     /// Stated as DATA rather than as prose in the header above because
-    /// the facet reads it: a set described only in a comment is a set
-    /// the boot check cannot enumerate.
-    let coveredApiRecords: (string * string list) list = [
+    /// the Phase 785 facet reads it — a set described only in a comment
+    /// is a set the boot check cannot enumerate — and shaped exactly as
+    /// `RemotingDecoderFacet.inspect` takes it, so the platform's own
+    /// declaration and a consumer's go through one function.
+    ///
+    /// **The corpus-coverage flag is `true` for both, and it is not
+    /// free.** Every wire shape these records carry — string, the
+    /// integer widths, float, bool, `DateTime`, `DateTimeOffset`,
+    /// `option`, `list`, a flat record, a nested one, and a union with
+    /// and without fields — is a class the Phase 784 corpus declares and
+    /// draws. The claim is held to that by a case in the Phase 785 pack
+    /// which round-trips all six return types below through the algebra;
+    /// a record whose shapes the corpus did NOT draw declares `false`
+    /// and the report reads `Observed` for it, which is what a
+    /// deployment's own unverified assertion is worth.
+    let coveredApiRecords: (string * string list * bool) list = [
         "IHealthMonitorApi",
         [
             typeof<Result<HealthSnapshot, string>>.FullName
@@ -363,6 +376,7 @@ module PlatformDecoders =
             typeof<Result<JobSchedulerTelemetryView, string>>.FullName
             typeof<Result<DegradedCapability list, string>>.FullName
             typeof<Result<AIDenialRollup option, string>>.FullName
-        ]
-        "IDeploymentVerificationApi", [ typeof<Result<DeploymentVerificationReport, string>>.FullName ]
+        ],
+        true
+        "IDeploymentVerificationApi", [ typeof<Result<DeploymentVerificationReport, string>>.FullName ], true
     ]

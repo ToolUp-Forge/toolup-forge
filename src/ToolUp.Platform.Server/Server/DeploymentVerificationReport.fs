@@ -344,6 +344,60 @@ type ISeamAuthorityEvidence =
 /// substrate, so a chain captured at boot would be a snapshot of an
 /// evidence posture that has moved, and the report would quote it as
 /// current.
+/// Phase 785 — the remoting-decoder facet, mirrored.
+///
+/// Tier-neutral for the reason the seam-authority posture is:
+/// `CompositionProfile` and `RemotingDecoderFacet` both compile AFTER
+/// the route-handler table that mounts this report, even though both
+/// live in this assembly.
+type RemotingDecoderRecord = {
+    /// The API record's name, as the composition root declared it.
+    RecordApiRecord: string
+    /// `"algebra"` or `"reflection"`.
+    RecordClassification: string
+    /// The wire types this record carries with no registered decoder.
+    /// Empty exactly when the classification is `"algebra"`.
+    RecordUncovered: string list
+    /// Whether the wire corpus draws the shapes this record carries.
+    /// Carried separately from the classification because the two
+    /// together are what the section's `Verified` verdict needs, and
+    /// either alone is a claim a deployment makes about itself.
+    RecordCorpusCovered: bool
+}
+
+/// The remoting decode edge's posture (Phase 785), mirrored.
+type RemotingDecoderIntegrity = {
+    /// `CompositionProfile.label` — `"standard"` or `"verified"`.
+    DecoderProfile: string
+    /// Whether a registered algebra decoder is MANDATORY under that
+    /// profile rather than advisory.
+    DecoderMandatory: bool
+    /// One entry per declared API record, in declaration order.
+    DecoderRecords: RemotingDecoderRecord list
+}
+
+/// Phase 785 — the tenth section's source.
+///
+/// A third standalone sibling interface rather than a member on any of
+/// the three above, for the reason Phase 693 recorded when it cut the
+/// first: an abstract member added to a shipped F# interface is a source
+/// break, because F# cannot author a default implementation and every
+/// hand-written object expression stops compiling. The report resolves
+/// this one by type test too, so an evidence value that never heard of
+/// the decode edge still compiles and its tenth section reads
+/// `NotComposed` (GP 11).
+///
+/// A VALUE rather than a thunk, like the seam-authority member and
+/// unlike the chain walk. The facet is a statement about what the
+/// composition root registered at boot; re-reading the registry at
+/// report time would answer "what is registered NOW", which on a
+/// process that registers once is the same answer and on one that does
+/// not is a weaker one.
+type IRemotingDecoderEvidence =
+    /// The decode edge's posture. `None` when this deployment declared
+    /// no API records to the facet.
+    abstract RemotingDecoders: RemotingDecoderIntegrity option
+
 type IEvidenceChainEvidence =
     /// Walk the evidence chain. `None` when no walker is composed.
     /// `Error` carries the walk's typed refusal — an over-cap request or
@@ -383,6 +437,16 @@ module DeploymentVerificationEvidence =
         | :? IEvidenceChainEvidence as source -> source.EvidenceChain
         | _ -> None
 
+    /// Phase 785 — read the remoting-decoder member off an evidence
+    /// value that carries one. `None` for any evidence that does not
+    /// implement the sibling interface, which is every value built
+    /// before this phase. The same single-read-path discipline
+    /// `seamAuthorityOf` established.
+    let remotingDecodersOf (evidence: IDeploymentVerificationEvidence) : RemotingDecoderIntegrity option =
+        match box evidence with
+        | :? IRemotingDecoderEvidence as source -> source.RemotingDecoders
+        | _ -> None
+
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
     /// where a value is required rather than an option.
@@ -399,6 +463,9 @@ module DeploymentVerificationEvidence =
 
           interface IEvidenceChainEvidence with
               member _.EvidenceChain = None
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = None
         }
 
     /// Evidence naming whichever sources the composition root holds. Each
@@ -422,6 +489,9 @@ module DeploymentVerificationEvidence =
 
           interface IEvidenceChainEvidence with
               member _.EvidenceChain = None
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = None
         }
 
     /// Replace the grounding-continuity member, preserving every other
@@ -441,6 +511,7 @@ module DeploymentVerificationEvidence =
         // rides through for exactly the same reason.
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -454,6 +525,9 @@ module DeploymentVerificationEvidence =
 
           interface IEvidenceChainEvidence with
               member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
         }
 
     /// Phase 693 — supply the seam-authority posture, preserving every
@@ -471,6 +545,7 @@ module DeploymentVerificationEvidence =
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
         let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -484,6 +559,9 @@ module DeploymentVerificationEvidence =
 
           interface IEvidenceChainEvidence with
               member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
         }
 
     /// Phase 713 — supply the evidence-chain walk, preserving every other
@@ -499,6 +577,7 @@ module DeploymentVerificationEvidence =
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -512,6 +591,41 @@ module DeploymentVerificationEvidence =
 
           interface IEvidenceChainEvidence with
               member _.EvidenceChain = walk
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
+        }
+
+    /// Phase 785 — supply the remoting-decoder facet, preserving every
+    /// other source.
+    ///
+    /// A wither rather than a sixth argument to `create`, for the reason
+    /// `withSeamAuthority` and `withEvidenceChain` are: widening that
+    /// function's parameter list retypes it, which the public-API
+    /// approval gate reads as a REMOVAL of the five-argument form and
+    /// which breaks every existing call.
+    let withRemotingDecoders
+        (remotingDecoders: RemotingDecoderIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
         }
 
 /// Phase 686 — gather the sections, fold them into the report, and
@@ -1034,6 +1148,132 @@ module DeploymentVerificationReport =
                             seams
                             components
                             declared.Length
+                            binding
+                    ))
+                    findings
+
+    // ─── Phase 785 — the tenth section: the decode edge ──────────────────
+
+    /// How many per-record lines the remoting-decoder section carries.
+    /// A composition can mount more API records than an operator will
+    /// read in one screen; the verdict already carries the counts.
+    [<Literal>]
+    let RemotingDecoderRecordCap = 20
+
+    /// One finding line per API record: how it decodes, what it carries
+    /// that has no decoder, and whether the corpus draws its shapes.
+    ///
+    /// Truncated with an explicit count of what was withheld, for the
+    /// reason the seam-authority section truncates that way: a silent
+    /// truncation would let a large composition present as a small one.
+    let private decoderFindings (records: RemotingDecoderRecord list) : string list =
+        let rendered =
+            records
+            |> List.truncate RemotingDecoderRecordCap
+            |> List.map (fun record ->
+                let corpus =
+                    if record.RecordCorpusCovered then
+                        "corpus covers its shapes"
+                    else
+                        "corpus coverage NOT declared"
+
+                match record.RecordUncovered with
+                | [] -> sprintf "%s: %s, %s" record.RecordApiRecord record.RecordClassification corpus
+                | uncovered ->
+                    sprintf
+                        "%s: %s, %s — no decoder for %s"
+                        record.RecordApiRecord
+                        record.RecordClassification
+                        corpus
+                        (String.concat ", " uncovered))
+
+        let withheld = records.Length - rendered.Length
+
+        if withheld > 0 then
+            rendered @ [ sprintf "(%d further API record(s) not listed)" withheld ]
+        else
+            rendered
+
+    /// The remoting decode edge (Phase 785).
+    ///
+    /// **`Verified` needs the CONJUNCTION, and the section is the place
+    /// that will not take half of it.** A record decodes through the
+    /// closed algebra AND the wire corpus draws the shapes it carries —
+    /// either alone is a deployment's assertion about itself. A record
+    /// on the algebra path whose corpus coverage is undeclared reads
+    /// `Observed`: the decoder is there and nothing has shown it decodes
+    /// what this record actually carries, which is honest and
+    /// emphatically not a verification.
+    ///
+    /// A `Reflection` record is `Observed` too and never `Failed`,
+    /// whatever the profile. Reflection decoding is the SDK's shipped
+    /// default and the path every deployment ran before this phase; a
+    /// section that reddened on it would report the platform's own
+    /// baseline as a defect, and would be turned off. The profile's
+    /// requirement is enforced where the profile enforces everything
+    /// else — at the boot preflight, which refuses the process a start
+    /// rather than colouring a report line.
+    let gatherRemotingDecoders (evidence: IDeploymentVerificationEvidence) : ReportSection =
+        let title = "Remoting decode edge"
+
+        match DeploymentVerificationEvidence.remotingDecodersOf evidence with
+        | None ->
+            section
+                RemotingDecoderSection
+                title
+                (VerificationSectionVerdict.NotComposed
+                    "no API record is declared to the remoting-decoder facet, so nothing here says how this deployment's client responses are decoded")
+                []
+        | Some integrity ->
+            let posture =
+                if integrity.DecoderMandatory then
+                    "mandatory"
+                else
+                    "advisory"
+
+            let binding =
+                sprintf "profile %s, algebra decoders %s" integrity.DecoderProfile posture
+
+            let findings = decoderFindings integrity.DecoderRecords
+            let total = List.length integrity.DecoderRecords
+
+            let verified =
+                integrity.DecoderRecords
+                |> List.filter (fun record -> record.RecordClassification = "algebra" && record.RecordCorpusCovered)
+
+            let reflection =
+                integrity.DecoderRecords
+                |> List.filter (fun record -> record.RecordClassification <> "algebra")
+
+            if total = 0 then
+                section
+                    RemotingDecoderSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf "the facet is composed and declares no API record, so it bounds nothing (%s)" binding
+                    ))
+                    findings
+            elif List.length verified = total then
+                section
+                    RemotingDecoderSection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "all %d declared API record(s) decode through the closed algebra and the wire corpus draws the shapes each carries (%s)"
+                            total
+                            binding
+                    ))
+                    findings
+            else
+                section
+                    RemotingDecoderSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "%d of %d declared API record(s) decode through the closed algebra with corpus-covered shapes; %d still decode by reflection over an open type graph (%s)"
+                            (List.length verified)
+                            total
+                            (List.length reflection)
                             binding
                     ))
                     findings
@@ -1740,6 +1980,28 @@ module DeploymentVerificationReport =
                     else
                         None
             }
+            {
+                // Phase 785 appends, for the reason every statement since
+                // 693 has: the canonical form is order-sensitive.
+                //
+                // The decode edge invites the over-reading that a total
+                // decoder makes a decoded value SAFE. It does not. The
+                // combinators establish that bytes either become the
+                // declared type or become a named refusal; what the
+                // declared type then means — whose tenant it belongs to,
+                // whether the caller may have it, whether it satisfies
+                // the domain's own rules — is every other control in this
+                // deployment, and none of them is narrowed by this one.
+                Id = "decode-is-not-authorisation"
+                Statement =
+                    "The remoting decode edge establishes that client bytes become a value of the declared type or a named refusal, with bounded length and depth. It establishes nothing about that value's authorisation, tenancy or session integrity, nothing about its semantic validity, and nothing about the bytes-to-value pass itself, which is BOUNDED rather than proved. Records on the reflection fallback, and the JSON wire, are outside it entirely."
+                Narrowing =
+                    if isComposed RemotingDecoderSection then
+                        Some
+                            "the section names every declared API record and which of them decode through the closed algebra over corpus-covered shapes, so the boundary is enumerated record by record rather than claimed for the deployment as a whole. What it does not narrow is any of the four clauses above."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -1784,6 +2046,11 @@ module DeploymentVerificationReport =
             // the substrates the others read one at a time.
             let! evidenceChain = gatherEvidenceChain evidence
 
+            // Phase 785. The one section whose subject is the decode
+            // EDGE — where client bytes become typed values the rest of
+            // the deployment takes as given.
+            let remotingDecoders = gatherRemotingDecoders evidence
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
@@ -1802,6 +2069,14 @@ module DeploymentVerificationReport =
                 configConformance
                 acknowledgements
                 evidenceChain
+                // Phase 785 appends for the reason 693, 699 and 713 did:
+                // adding a section moves every deployment's verdict digest
+                // once, which is correct and expected — the report grew.
+                // Inserting it among the nine would move the SECTION LINES
+                // of the ones after it too, so a reader diffing two
+                // canonical forms across the upgrade could not tell a
+                // re-ordering from a re-verdict.
+                remotingDecoders
             ]
 
             let notProved = notProvedFor sections
