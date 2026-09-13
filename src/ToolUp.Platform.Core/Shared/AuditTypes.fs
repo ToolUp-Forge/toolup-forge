@@ -4542,6 +4542,97 @@ type BlobStorageAuthFailedPayload = {
     At: DateTime
 }
 
+/// Phase 36.E — one invocation of the built-in cross-module AI tool
+/// family (`_platform.ai.*`), recorded whatever its outcome.
+///
+/// **Why this is a typed union case rather than an AI-tier
+/// `ModuleEvent`.** Phase 45's `ToolAllowlistDenied` and Phase 36.D's
+/// `AIConsentGranted` / `AIConsentDenied` write raw `ModuleEvent`s under
+/// their own `SourceModule` (`_platform.ai.*`), which reads like the
+/// precedent to follow. It cannot be followed here: the Phase 9g
+/// replicator admits an event only when
+/// `SourceModule = AuditSourceModule.value`, so a row minted that way
+/// never reaches an external sink. This family's whole point is that a
+/// read of one module's data from a conversation about another is
+/// reviewable — including by a reviewer reading the deploying
+/// organisation's own SIEM rather than this deployment's store. So it is
+/// typed, replicated, and queryable through `IAuditLog.GetAuditTrail`
+/// like every other audit row.
+///
+/// **One row per invocation, on every outcome path.** A refusal is the
+/// row that matters most, so `Allowed = false` rows are emitted for the
+/// RBAC / grant / opt-in / consent refusals alike, with `Outcome`
+/// naming which gate spoke. Counting rows — rather than checking that
+/// one exists — is what makes "the trail captures the attempt" mean
+/// something.
+///
+/// **PII envelope.** Identifiers and a query discriminator; never the
+/// tool arguments (model-authored, unbounded) and never any of the data
+/// the read returned. `ResultBytes` is the SIZE of the rendered result,
+/// which is the one thing about the payload an operator needs in order
+/// to see an exfiltration-shaped read.
+type CrossModuleReadPayload = {
+    /// The conversation the read belonged to. `None` when the tool was
+    /// invoked outside a live turn (a contract-pack call, a probe) — the
+    /// same condition under which Phase 36.D's consent gate abstains.
+    ConversationId: Guid option
+    /// The caller the agent loop resolved.
+    UserId: string
+    /// The module the conversation was active in when the read was made
+    /// — the "from" half of "cross-module". `None` when the user was on
+    /// no module's page, which is an ordinary state and not a defect.
+    SourceConvActiveModule: string option
+    /// The module whose data was read — the grouping axis of the
+    /// `/dev/ai-cross-module` rollup. `Some m` exactly when the read
+    /// resolved to ONE module; `None` when it resolved to none or to
+    /// several, both of which `_platform.ai.query_entity` can genuinely
+    /// do (it names an entity type, and the data catalogue may attribute
+    /// that type to zero producers or to many). `TargetModules` carries
+    /// the full set either way, so nothing is lost — the option exists
+    /// so a grouping key is never a guess or a synthesised join of
+    /// several module names.
+    TargetModule: string option
+    /// Every module this read would have touched, resolved the same way
+    /// the Phase 36.C queryability gate and the Phase 36.D consent gate
+    /// resolve it. Empty when the catalogue attributes the entity type
+    /// to no producer — the documented attribution hole both of those
+    /// phases record, surfaced here rather than papered over with a
+    /// fabricated module name.
+    TargetModules: string list
+    /// The `_platform.ai.*` tool that performed the read.
+    ToolName: string
+    /// Phase 283 — the stable component id of the component that
+    /// performed the read, i.e. `ComponentId.forTool ToolName`. Rides the
+    /// payload so a trail joins with the `component_id` telemetry
+    /// dimension on the one key that survives a rename.
+    ComponentId: string
+    /// The read's discriminator within the target: a `query_module`
+    /// query key, a `get_latest_result` result type, a `query_entity`
+    /// entity type. `None` for the tools that take neither.
+    QueryKey: string option
+    /// Wall clock for the WHOLE tool invocation, gates included — not
+    /// just the store call. A read that suspended on a Phase 36.D
+    /// consent prompt therefore carries the time the user took to
+    /// answer, because from the conversation's point of view that is how
+    /// long the read took. Segment on `Outcome` when that distinction
+    /// matters.
+    LatencyMs: float
+    /// Size in bytes of the rendered tool result, refusals included
+    /// (a refusal is small, which is itself the signal).
+    ResultBytes: int
+    /// Did the read reach the data. `false` for every refusal, whichever
+    /// gate produced it.
+    Allowed: bool
+    /// Why, in the tool family's own vocabulary: `"ok"` on the success
+    /// path, otherwise the `error` discriminator the tool rendered to
+    /// the model (`"PermissionDenied"` / `"UnqueryableModule"` /
+    /// `"UserDenied"` / `"NotFound"` / `"InvalidArguments"` / …). A
+    /// string rather than a DU because it mirrors a wire vocabulary the
+    /// tools render for a model, which a closed union here could only
+    /// fall behind.
+    Outcome: string
+}
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -5279,6 +5370,12 @@ type AuditEvent =
     /// deployment is unwell, this says when it started, on which store,
     /// and doing what.
     | BlobStorageAuthFailed of BlobStorageAuthFailedPayload
+    /// Phase 36.E — one invocation of the built-in cross-module AI tool
+    /// family, allowed or refused. The read-side twin of Phase 36.D's
+    /// consent decisions: those record what the user ALLOWED, this
+    /// records what was actually reached, and only the two together
+    /// answer "what did the agent read out of modules nobody named".
+    | CrossModuleRead of CrossModuleReadPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -5482,6 +5579,7 @@ module AuditEvent =
         | EvidenceChainWalked _ -> "EvidenceChainWalked"
         | MediaKeyDelivered _ -> "MediaKeyDelivered"
         | BlobStorageAuthFailed _ -> "BlobStorageAuthFailed"
+        | CrossModuleRead _ -> "CrossModuleRead"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

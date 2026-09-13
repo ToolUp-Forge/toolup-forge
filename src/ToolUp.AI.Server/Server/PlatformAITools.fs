@@ -1147,15 +1147,83 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
                         |}
 }
 
+// ─── Phase 36.E — what each tool is reaching for ─────────────────
+//
+// One `describe` per tool, feeding the audit decorator. They live here,
+// beside the executors, because each names the SAME argument the executor
+// parses: a second parser elsewhere would drift from this file silently,
+// and the row would then record a target the tool never touched.
+//
+// They run BEFORE the executor and must not throw — the decorator guards
+// them anyway, but a `describe` that raised would turn a recorded target
+// into no target at all, which is a quieter failure than it looks.
+
+/// Best-effort read of one string argument, returning `None` on any
+/// malformed body. The executors render `InvalidArguments` for exactly
+/// this case and the row still lands — with no target, which is honest:
+/// a call that named no module reached no module.
+let private argString (argsJson: string) (name: string) : string option =
+    try
+        use doc = JsonDocument.Parse argsJson
+        optString doc.RootElement name
+    with _ ->
+        None
+
+let private describeEnumeration (_: HttpContext) (_: string) : Async<AICrossModuleAudit.ReadTarget> =
+    async.Return AICrossModuleAudit.ReadTarget.enumeration
+
+let private describeNamedModule
+    (queryArg: string option)
+    (_: HttpContext)
+    (argsJson: string)
+    : Async<AICrossModuleAudit.ReadTarget> =
+    async.Return(
+        AICrossModuleAudit.ReadTarget.ofModule
+            (argString argsJson "moduleName")
+            (queryArg |> Option.bind (argString argsJson))
+    )
+
+/// `query_entity` names a data SHAPE rather than a module, so its targets
+/// come from the same place the 36.C and 36.D gates take them: the data
+/// catalogue's producers for the entity type.
+///
+/// Deliberately UNFILTERED by the queryability gate, unlike those two.
+/// They ask "which producers may be read"; the audit row asks "which
+/// modules was this read about", and for a read refused BY that gate the
+/// answer is the producers it would have reached. Filtering here would
+/// record an opt-in refusal as a read of nothing, which is the one
+/// reading that makes the refusal unauditable.
+let private describeEntityQuery (ctx: HttpContext) (argsJson: string) : Async<AICrossModuleAudit.ReadTarget> = async {
+    let entityType = argString argsJson "entityType"
+
+    match entityType, ctx.RequestServices.GetService(typeof<IDataCatalog>) with
+    | Some typeId, (:? IDataCatalog as catalog) ->
+        let! producers = catalog.GetProducers typeId
+
+        return {
+            Modules = producers |> List.distinct |> List.sort
+            QueryKey = entityType
+        }
+    | _ -> return { Modules = []; QueryKey = entityType }
+}
+
 // ─── Registration ────────────────────────────────────────────────
 
 /// The six built-in `_platform.ai.*` cross-module read tools —
 /// auto-registered by `composeAI` alongside `NarrativeTools.builtInTools`.
+///
+/// Registered through `createAuditedTool` (Phase 36.E) so every
+/// invocation lands one `CrossModuleRead` audit row whatever its outcome.
+/// A seventh tool added to this list cannot skip the trail: the
+/// registration shape requires it to declare what it reads.
 let builtIn: RegisteredTool list = [
-    createTool listAccessibleModulesDef executeListModules
-    createTool listDataTypesDef executeListDataTypes
-    createTool queryModuleDef executeQueryModule
-    createTool queryEntityDef executeQueryEntity
-    createTool listResultsDef executeListResults
-    createTool getLatestResultDef executeGetLatestResult
+    AICrossModuleAudit.createAuditedTool listAccessibleModulesDef describeEnumeration executeListModules
+    AICrossModuleAudit.createAuditedTool listDataTypesDef describeEnumeration executeListDataTypes
+    AICrossModuleAudit.createAuditedTool queryModuleDef (describeNamedModule (Some "queryKey")) executeQueryModule
+    AICrossModuleAudit.createAuditedTool queryEntityDef describeEntityQuery executeQueryEntity
+    AICrossModuleAudit.createAuditedTool listResultsDef (describeNamedModule None) executeListResults
+    AICrossModuleAudit.createAuditedTool
+        getLatestResultDef
+        (describeNamedModule (Some "resultType"))
+        executeGetLatestResult
 ]

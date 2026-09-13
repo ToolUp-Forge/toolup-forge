@@ -87,7 +87,8 @@ let private fallThroughOutcomes =
 /// Rolling window for p50/p95 latency stats. The endpoint reports
 /// both the rolling-window slice and the all-time count so an
 /// operator sees both the recent rate and the historical total.
-let private rollingWindow = TimeSpan.FromMinutes 60.0
+/// Shared across the AI-tier `/dev/*` rollups since Phase 36.E.
+let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
 // ─── Wire shape (matches FastPathBeaconHandler.FastPathEventPayload
 //     so the deserialise path round-trips). ─────────────────────
@@ -247,14 +248,10 @@ let computeTriageRollup
 
 // ─── Statistics ─────────────────────────────────────────────────
 
-let private percentile (values: float[]) (p: float) : float =
-    if values.Length = 0 then
-        0.0
-    else
-        let sorted = values |> Array.sort
-        let rank = int (System.Math.Ceiling(p * float sorted.Length)) - 1
-        let clamped = max 0 (min (sorted.Length - 1) rank)
-        sorted[clamped]
+/// Nearest-rank percentile — hoisted into `AIDiagnosticsWindow` by
+/// Phase 36.E when this file's copy became one of three byte-identical
+/// ones. The local name stays so the breakdown builder reads unchanged.
+let private percentile = AIDiagnosticsWindow.percentile
 
 let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : TierBreakdown list =
     events
