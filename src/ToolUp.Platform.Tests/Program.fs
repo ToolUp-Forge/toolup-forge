@@ -2193,6 +2193,14 @@ let private registeredTests =
         // control.
         MsgPackRoundTripTests.tests
         StjRoundTripTests.tests
+        // Phase 785 — the closed decoder algebra, held against the
+        // reflection reader as its oracle over that same corpus: the same
+        // value at the same runtime type on the accept path, a declared
+        // per-mutation table on the refuse path (where the two are
+        // EXPECTED to differ, because the reflection path refuses almost
+        // nothing), the round-trip law, and a committed go-red decoder
+        // that silently widens so the differential is known to fail.
+        DecoderAlgebraTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
