@@ -12640,7 +12640,6 @@ ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharp
 ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
-ToolUp.Remoting.DecodeException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.MsgPack.Format (class)

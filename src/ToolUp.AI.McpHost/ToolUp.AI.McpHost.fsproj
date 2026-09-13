@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <PackageId>ToolUp.AI.McpHost</PackageId>
+        <Description>Opt-in Model Context Protocol server host for ToolUp.Platform — projects the registered AI tool surface to external agent stacks over JSON-RPC 2.0, with per-agent principals, default-deny tool grants, budgets, rate limits and a complete per-interaction audit trail. Off unless composed; zero cost when unused.</Description>
+        <PackageTags>fsharp;sdk;server;ai;agent;mcp;model-context-protocol;json-rpc</PackageTags>
+        <!-- Phase 489. Server-only companion: no Fable client surface.
+             The protocol is implemented directly over System.Text.Json +
+             Giraffe rather than through a vendor MCP SDK (GP 1 / GP 2) —
+             see Server/McpProtocol.fs's header. -->
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Agent principals, tool grants, the resource-envelope
+             vocabulary and the typed refusal DU. Depends on nothing else
+             in this package; first. -->
+        <Compile Include="Shared\McpTypes.fs" />
+        <!-- The grant seam, then its two implementations. Split the way
+             every other store substrate in the SDK is (IXxxStore.fs +
+             XxxStore.fs) so a companion over another substrate has one
+             file to read. -->
+        <Compile Include="Server\IAgentToolGrantStore.fs" />
+        <Compile Include="Server\AgentToolGrantStore.fs" />
+        <!-- The wire. Pure — no HttpContext, no DI, no I/O — so protocol
+             conformance is testable without a server. Compiles before
+             everything that renders a response. -->
+        <Compile Include="Server\McpProtocol.fs" />
+        <!-- The single authorisation decision both tools/list and
+             tools/call are expressed in terms of. Depends on McpProtocol
+             for the tool view it renders. -->
+        <Compile Include="Server\McpAuthorization.fs" />
+        <!-- The interaction trail. Depends on McpProtocol for the
+             sanitiser and the stable error-case labels its rows carry. -->
+        <Compile Include="Server\McpAudit.fs" />
+        <!-- Budgets over the Phase 689 ledger seam and rate limits over
+             the Phase 56 store. Depends only on McpTypes. -->
+        <Compile Include="Server\McpGovernance.fs" />
+        <!-- The endpoint. Depends on all four above. -->
+        <Compile Include="Server\McpHost.fs" />
+        <!-- The composition root. Last: it mounts the handler. -->
+        <Compile Include="Server\McpCompose.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <!-- ToolUp.Remoting.Json.SystemTextJson (FableConverters) + Giraffe +
+         ASP.NET Core flow transitively from ToolUp.Platform.Server.
+         FSharp.Core is implicit via the .NET SDK. No vendor package. -->
+</Project>
