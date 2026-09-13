@@ -1849,6 +1849,18 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> BlobStorageAuthFailed(fromAuditJson<BlobStorageAuthFailedPayload> j)
     }
+    // Phase 36.E — the cross-module AI read trail. A registry row rather
+    // than an AI-tier `ModuleEvent` stream is what puts this family in
+    // front of the Phase 9g replicator at all: `shouldReplicate` admits
+    // `SourceModule = "_platform.audit"` only.
+    {
+        EventType = "CrossModuleRead"
+        TryEncode =
+            (function
+            | CrossModuleRead p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> CrossModuleRead(fromAuditJson<CrossModuleReadPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

@@ -743,6 +743,21 @@ let aiAssistantApi
                 // The original HttpContext is disposed after this response.
                 let bgCtx, bgScope = createBackgroundContext ctx userId
 
+                // Phase 36.E — the "from" half of "cross-module". The
+                // active module arrives on the REQUEST BODY, so it is not
+                // among the middleware-resolved items
+                // `createBackgroundContext` copies forward; a tool
+                // executor has no other route to it. Stamped here, beside
+                // the copy, rather than inside that helper, because it is
+                // the only caller that holds the request.
+                //
+                // Absent when the user was on no module's page, which is
+                // an ordinary state: the audit row then carries `None` and
+                // the rollup labels it, rather than guessing a module.
+                request.ActiveModule
+                |> Option.iter (fun activeModule ->
+                    bgCtx.Items[AICrossModuleAudit.ItemsKeys.ActiveModule] <- box activeModule)
+
                 // Fire the agent loop on a background thread.
                 // Results stream to the client via SSE.
                 // bgScope is disposed after completion or failure.

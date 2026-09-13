@@ -38,8 +38,9 @@ let private SourceModule = "_platform.ai.latency"
 /// Rolling window for percentile stats. Matches the 60-minute
 /// window `FastPathTelemetryHandler` uses so an operator can read
 /// `/dev/ai-fastpath` and `/dev/ai-latency` against a comparable
-/// time slice.
-let private rollingWindow = TimeSpan.FromMinutes 60.0
+/// time slice — Phase 36.E made that a shared declaration rather than
+/// a per-handler constant, so the two cannot drift apart.
+let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
 // ─── JSON deserialiser (must match `latencyJsonOptions` in
 //     AIAgentEngine.fs — both rely on `FableConverters` to
@@ -107,25 +108,13 @@ type private LatencyReport = {
 
 // ─── Statistics ─────────────────────────────────────────────────
 
-let private percentile (values: float[]) (p: float) : float =
-    if values.Length = 0 then
-        0.0
-    else
-        let sorted = values |> Array.sort
-        let rank = int (Math.Ceiling(p * float sorted.Length)) - 1
-        let clamped = max 0 (min (sorted.Length - 1) rank)
-        sorted[clamped]
+/// Nearest-rank percentile, and its partially-populated twin (`None`
+/// when every turn was tool-only). Phase 36.E hoisted both into
+/// `AIDiagnosticsWindow` when this file's copy became one of three;
+/// the local names stay so the breakdown builders below read unchanged.
+let private percentile = AIDiagnosticsWindow.percentile
 
-/// Optional percentile — returns `None` when there are no
-/// non-`None` samples (every turn was tool-only). Otherwise computes
-/// the percentile across the populated values.
-let private percentileOpt (values: float option[]) (p: float) : float option =
-    let populated = values |> Array.choose id
-
-    if populated.Length = 0 then
-        None
-    else
-        Some(percentile populated p)
+let private percentileOpt = AIDiagnosticsWindow.percentileOpt
 
 // ─── Event read + decode ────────────────────────────────────────
 

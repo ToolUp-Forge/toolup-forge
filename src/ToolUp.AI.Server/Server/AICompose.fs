@@ -297,11 +297,13 @@ let composeAI (app: AIServerApp) : ServerApp =
     //   * `/dev/ai-fastpath` — Phase 6j.A Tier-1 hit-rate stats
     //   * `/dev/ai-latency`  — Phase 6i.A per-turn latency rollup
     //   * `/dev/ai-allowlist` — Phase 47 action-denial rollup
+    //   * `/dev/ai-cross-module` — Phase 36.E cross-module read rollup
     let fastPathDevHandlers =
         if config.EnableDevEndpoints then
             FastPathTelemetryHandler.routes
             @ AILatencyHandler.routes
             @ AIAllowlistDiagnosticsHandler.routes
+            @ AICrossModuleObservability.routes
         else
             []
 

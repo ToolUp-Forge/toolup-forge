@@ -51,10 +51,11 @@ let SourceModule = "_platform.ai.tool_allowlist_denial"
 [<Literal>]
 let DenialEventType = "ToolAllowlistDenied"
 
-/// Rolling window for the rollup. Matches `/dev/ai-fastpath` and
-/// `/dev/ai-latency` so an operator comparing the three is comparing
-/// the same slice of time.
-let private rollingWindow = TimeSpan.FromMinutes 60.0
+/// Rolling window for the rollup. Matches `/dev/ai-fastpath`,
+/// `/dev/ai-latency` and `/dev/ai-cross-module` so an operator comparing
+/// them is comparing the same slice of time — one declaration since
+/// Phase 36.E, so they cannot drift apart.
+let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
 /// Cap on `TopToolModulePairs`. Small on purpose — the list answers
 /// "what is the campaign hitting", and a hundred rows answers nothing.

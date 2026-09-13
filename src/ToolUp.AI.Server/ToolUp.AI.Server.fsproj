@@ -53,6 +53,12 @@
              (which reads the one shared suspended-dispatch timeout from
              here and stamps the items the gate reads). -->
         <Compile Include="Server\AIConsentDispatch.fs" />
+        <!-- Phase 36.E — the cross-module read audit decorator. Reads the
+             conversation-id item AIConsentDispatch declares, so it follows
+             that file; MUST precede PlatformAITools, which registers its six
+             tools through it, and AIAssistantHandler, which stamps the
+             active-module item declared here. -->
+        <Compile Include="Server\AICrossModuleAudit.fs" />
         <!-- Phase 503 — the human-in-the-loop approval gate: the policy
              consult, the held-invocation registry and the approval audit
              trail. Depends on AIToolRegistry (the access-context
@@ -105,9 +111,17 @@
         <Compile Include="Server\FastPathBeaconHandler.fs" />
         <Compile Include="Server\ConversationExportAuditHandler.fs" />
         <Compile Include="Server\UIDecodeErrorHandler.fs" />
+        <!-- Phase 36.E — the rolling-window arithmetic the four AI-tier
+             `/dev/*` rollups share (window constant + percentiles). Must
+             precede all four; `internal`, so it adds no public surface. -->
+        <Compile Include="Server\AIDiagnosticsWindow.fs" />
         <Compile Include="Server\FastPathTelemetryHandler.fs" />
         <Compile Include="Server\AILatencyHandler.fs" />
         <Compile Include="Server\AIAllowlistDiagnosticsHandler.fs" />
+        <!-- Phase 36.E — `/dev/ai-cross-module`, the read side of the
+             cross-module audit trail. Mounted by AICompose under the same
+             EnableDevEndpoints gate as its three siblings above. -->
+        <Compile Include="Server\AICrossModuleObservability.fs" />
         <Compile Include="Server\AIProviderUsageMiddleware.fs" />
         <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
         <Compile Include="Server\AIProviderEnvValidator.fs" />

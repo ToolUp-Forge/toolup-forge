@@ -953,6 +953,7 @@ ToolUp.Platform.AuditEvent.IsConversationExported : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationReplayed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationStarted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationTurnAppended : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsCrossModuleRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataStoreReset : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataSubjectRequest : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDatasetDeclassified : System.Boolean { get }
@@ -1186,6 +1187,8 @@ ToolUp.Platform.AuditEvent+ConversationStarted (class)
 ToolUp.Platform.AuditEvent+ConversationStarted.Item : ToolUp.Platform.ConversationStartedPayload { get }
 ToolUp.Platform.AuditEvent+ConversationTurnAppended (class)
 ToolUp.Platform.AuditEvent+ConversationTurnAppended.Item : ToolUp.Platform.ConversationTurnAppendedPayload { get }
+ToolUp.Platform.AuditEvent+CrossModuleRead (class)
+ToolUp.Platform.AuditEvent+CrossModuleRead.Item : ToolUp.Platform.CrossModuleReadPayload { get }
 ToolUp.Platform.AuditEvent+DataStoreReset (class)
 ToolUp.Platform.AuditEvent+DataStoreReset.Item : ToolUp.Platform.DataStoreResetPayload { get }
 ToolUp.Platform.AuditEvent+DataSubjectRequest (class)
@@ -1467,6 +1470,7 @@ ToolUp.Platform.AuditEvent+Tags.ConversationExported : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationReplayed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationStarted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationTurnAppended : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.CrossModuleRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataStoreReset : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataSubjectRequest : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DatasetDeclassified : System.Int32 (literal)
@@ -3746,6 +3750,20 @@ ToolUp.Platform.CredentialStatus+Tags.Connected : System.Int32 (literal)
 ToolUp.Platform.CredentialStatus+Tags.NeedsAuthorization : System.Int32 (literal)
 ToolUp.Platform.CredentialStatus+Tags.NeedsReauthorization : System.Int32 (literal)
 ToolUp.Platform.CredentialStatus+Tags.NotConfigured : System.Int32 (literal)
+ToolUp.Platform.CrossModuleReadPayload (class)
+ToolUp.Platform.CrossModuleReadPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.Int32, System.Boolean, System.String)
+ToolUp.Platform.CrossModuleReadPayload.Allowed : System.Boolean { get }
+ToolUp.Platform.CrossModuleReadPayload.ComponentId : System.String { get }
+ToolUp.Platform.CrossModuleReadPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Platform.CrossModuleReadPayload.LatencyMs : System.Double { get }
+ToolUp.Platform.CrossModuleReadPayload.Outcome : System.String { get }
+ToolUp.Platform.CrossModuleReadPayload.QueryKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CrossModuleReadPayload.ResultBytes : System.Int32 { get }
+ToolUp.Platform.CrossModuleReadPayload.SourceConvActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CrossModuleReadPayload.TargetModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CrossModuleReadPayload.TargetModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CrossModuleReadPayload.ToolName : System.String { get }
+ToolUp.Platform.CrossModuleReadPayload.UserId : System.String { get }
 ToolUp.Platform.DataAccessMode (class)
 ToolUp.Platform.DataAccessMode.IsPersistAccess : System.Boolean { get }
 ToolUp.Platform.DataAccessMode.IsReadAccess : System.Boolean { get }
