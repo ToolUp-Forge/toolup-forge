@@ -7981,6 +7981,28 @@ ToolUp.Platform.ModelScoredPayload.ProviderId : System.String { get }
 ToolUp.Platform.ModelScoredPayload.ProviderVersion : System.String { get }
 ToolUp.Platform.ModelScoredPayload.RowCount : System.Int64 { get }
 ToolUp.Platform.ModelScoredPayload.ScopeId : System.String { get }
+ToolUp.Platform.ModuleAIExposure (class)
+ToolUp.Platform.ModuleAIExposure.IsNotQueryable : System.Boolean { get }
+ToolUp.Platform.ModuleAIExposure.IsQueryable : System.Boolean { get }
+ToolUp.Platform.ModuleAIExposure.NotQueryable : ToolUp.Platform.ModuleAIExposure { get }
+ToolUp.Platform.ModuleAIExposure.Queryable : ToolUp.Platform.ModuleAIExposure { get }
+ToolUp.Platform.ModuleAIExposure.Tag : System.Int32 { get }
+ToolUp.Platform.ModuleAIExposure+Tags (class)
+ToolUp.Platform.ModuleAIExposure+Tags.NotQueryable : System.Int32 (literal)
+ToolUp.Platform.ModuleAIExposure+Tags.Queryable : System.Int32 (literal)
+ToolUp.Platform.ModuleAIExposureModule (class)
+ToolUp.Platform.ModuleAIExposureModule.ofToken(System.String) : ToolUp.Platform.ModuleAIExposure
+ToolUp.Platform.ModuleAIExposureModule.tighten(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure], ToolUp.Platform.ModuleAIExposure) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModuleAIExposure, System.String]
+ToolUp.Platform.ModuleAIExposureModule.toToken(ToolUp.Platform.ModuleAIExposure) : System.String
+ToolUp.Platform.ModuleAIExposureRegistry (class)
+ToolUp.Platform.ModuleAIExposureRegistry..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Platform.ModuleAIExposureRegistry.QueryableModules : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.ModuleAIExposureRegistryModule (class)
+ToolUp.Platform.ModuleAIExposureRegistryModule.empty : ToolUp.Platform.ModuleAIExposureRegistry { get }
+ToolUp.Platform.ModuleAIExposureRegistryModule.isEmpty(ToolUp.Platform.ModuleAIExposureRegistry) : System.Boolean
+ToolUp.Platform.ModuleAIExposureRegistryModule.isQueryable(ToolUp.Platform.ModuleAIExposureRegistry, System.String) : System.Boolean
+ToolUp.Platform.ModuleAIExposureRegistryModule.ofDeclarations(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleAIExposure]]) : ToolUp.Platform.ModuleAIExposureRegistry
+ToolUp.Platform.ModuleAIExposureRegistryModule.orphans(ToolUp.Platform.ModuleAIExposureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.ModuleArtefactRejectedPayload (class)
 ToolUp.Platform.ModuleArtefactRejectedPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String)
 ToolUp.Platform.ModuleArtefactRejectedPayload.ArtifactVersion : System.String { get }

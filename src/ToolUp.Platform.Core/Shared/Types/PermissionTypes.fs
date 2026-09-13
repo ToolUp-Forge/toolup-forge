@@ -544,3 +544,135 @@ module TeamPermissions =
     /// when the subject has none — the pre-551 shape.
     let grantsFor (userId: string) (perms: TeamPermissions) : Map<string, ModuleGrantRecord> =
         perms.Grants |> Map.tryFind userId |> Option.defaultValue Map.empty
+
+/// Phase 36.C — whether a module's data is reachable from the
+/// cross-module AI surface (`_platform.ai.*`, Phase 36.B).
+///
+/// **Default `NotQueryable`, and that is the whole point.** A user
+/// installing a third-party module must not have its data become
+/// AI-readable as a side effect of installing it; the module author
+/// opts in deliberately. Same posture as `withEncryptedBlobStorage` and
+/// `withTransactionalSink` (GP 13's safer-by-default half).
+///
+/// **Distinct from `GrantPolicy`, and the distinction is load-bearing.**
+/// `GrantPolicy` (Phase 551) governs the precondition on granting a
+/// module *to a subject*, and its runtime companion — the Phase 730
+/// gate — answers "is this subject's grant live". This answers a
+/// question with no subject in it at all: "does the module's author
+/// permit the cross-module AI family to reach this module for anyone".
+/// A module can be fully granted, `Active`, consented, and still
+/// deliberately outside the AI surface. The two are therefore separate
+/// values; they are composed into ONE predicate at the `_platform.ai.*`
+/// call sites (`AIToolRegistry.moduleAIQueryGate` beside
+/// `moduleGrantGate`) so there is one ordering and one place to read,
+/// rather than two authorities racing over one question.
+[<RequireQualifiedAccess>]
+type ModuleAIExposure =
+    /// The default. The module is invisible to `_platform.ai.*`: it is
+    /// reported `queryable: false` by `list_accessible_modules`, its
+    /// data types are filtered out of `list_data_types`, and every reach
+    /// tool refuses it with `UnqueryableModule`.
+    | NotQueryable
+    /// The module author has opted this module's data into the
+    /// cross-module AI surface. RBAC and the grant gate still apply on
+    /// top — opting in widens nothing a caller could not already reach
+    /// through the module's own API.
+    | Queryable
+
+module ModuleAIExposure =
+    /// Stable wire token for persistence + introspection.
+    let toToken =
+        function
+        | ModuleAIExposure.NotQueryable -> "not-queryable"
+        | ModuleAIExposure.Queryable -> "queryable"
+
+    /// Parse a persisted token, **fail-closed**: anything unrecognised
+    /// reads as `NotQueryable`. A value this node cannot interpret must
+    /// not be the one that exposes data.
+    let ofToken (token: string) =
+        match
+            (if isNull (box token) then
+                 ""
+             else
+                 token.Trim().ToLowerInvariant())
+        with
+        | "queryable" -> ModuleAIExposure.Queryable
+        | _ -> ModuleAIExposure.NotQueryable
+
+    /// Compose two declarations, **narrowing-only**, mirroring
+    /// `GrantPolicy.tighten` (Phase 551 D15). `NotQueryable` is the
+    /// stricter pole, so a composition root may REVOKE a module's
+    /// AI-queryability but never confer it on a module whose author
+    /// declared it out.
+    ///
+    /// `current = None` is "nothing declared yet", which is why the
+    /// field is an option rather than a plain `NotQueryable`: the
+    /// author's first declaration has to be admitted, and it is
+    /// indistinguishable from a loosening if the undeclared state and
+    /// the explicit refusal are the same value.
+    let tighten
+        (moduleName: string)
+        (current: ModuleAIExposure option)
+        (declared: ModuleAIExposure)
+        : Result<ModuleAIExposure, string> =
+        match current, declared with
+        | None, d -> Ok d
+        | Some ModuleAIExposure.NotQueryable, ModuleAIExposure.Queryable ->
+            Error
+                $"Module '{moduleName}' already declares AI exposure '{toToken ModuleAIExposure.NotQueryable}'; composition may narrow a module's AI-queryability, never widen it. Remove the earlier withAIExposure call rather than overriding it here."
+        | Some _, d -> Ok d
+
+/// Phase 36.C — the compose-time projection of every module's declared
+/// `ModuleAIExposure`, read by the `_platform.ai.*` gate.
+///
+/// Absence is the default, exactly as `ModuleGrantPolicyRegistry` treats
+/// a module carrying `AdminDiscretion`: only modules that opted IN are
+/// held, so `isQueryable` needs no separate "declared nothing" arm and
+/// an all-default deployment yields `empty`.
+///
+/// Deliberately NOT a second field on `ModuleGrantPolicyRegistry`: that
+/// registry's `isEmpty` short-circuits the permission-store decorator,
+/// the scope middleware's grant read and the dispatch guard, so widening
+/// what "empty" means there would change Phase 551's pay-nothing
+/// property at eight call sites for a question none of them ask.
+type ModuleAIExposureRegistry = {
+    /// Module names that declared `Queryable`. Every other name — and
+    /// every deployment with no registry composed at all — is
+    /// `NotQueryable`.
+    QueryableModules: Set<string>
+}
+
+module ModuleAIExposureRegistry =
+    let empty = { QueryableModules = Set.empty }
+
+    /// Build from the accumulated `(moduleName, exposure)` declarations,
+    /// dropping the `NotQueryable` default so an all-default deployment
+    /// yields `empty` and composes nothing.
+    let ofDeclarations (declarations: (string * ModuleAIExposure) list) = {
+        QueryableModules =
+            declarations
+            |> List.filter (fun (_, e) -> e = ModuleAIExposure.Queryable)
+            |> List.map fst
+            |> Set.ofList
+    }
+
+    let isEmpty (registry: ModuleAIExposureRegistry) = registry.QueryableModules.IsEmpty
+
+    /// Whether the module opted into the cross-module AI surface. False
+    /// for any name the registry does not hold — absence and the
+    /// `NotQueryable` default are the same thing by construction.
+    let isQueryable (registry: ModuleAIExposureRegistry) (moduleName: string) =
+        registry.QueryableModules.Contains moduleName
+
+    /// Every name the registry holds that is NOT in the composed module
+    /// set. Empty by construction today (the registry is folded from the
+    /// same `ServerModule` records that produce `ModuleNames`); checked
+    /// at compose because the failure it guards is SILENT — a naming
+    /// drift would leave a module the author opted IN quietly invisible
+    /// to the AI, with nothing to see anywhere.
+    let orphans (registry: ModuleAIExposureRegistry) (moduleNames: string list) =
+        let known = Set.ofList moduleNames
+
+        registry.QueryableModules
+        |> Set.toList
+        |> List.filter (fun name -> not (known.Contains name))

@@ -177,6 +177,28 @@ type ServerModule = {
     /// `AccessContext.ModulePermissions` uses — one axis, not two, so a
     /// policy cannot drift away from the module it governs.
     GrantPolicy: GrantPolicy
+    /// Phase 36.C — whether this module's data is reachable from the
+    /// cross-module AI surface (`_platform.ai.*`, Phase 36.B).
+    /// `None` — nothing declared — is the safer-by-default
+    /// `ModuleAIExposure.NotQueryable`: the module is reported
+    /// `queryable: false`, its data types are filtered out of
+    /// `list_data_types`, and every reach tool refuses it with
+    /// `UnqueryableModule`. Set it with `ServerModule.withAIExposure`,
+    /// which admits only a NARROWING — composition may revoke a
+    /// module's AI-queryability, never confer it (the D15 rule, applied
+    /// to this axis).
+    ///
+    /// An OPTION rather than a plain `NotQueryable` because the author's
+    /// first declaration must be admitted and would otherwise be
+    /// indistinguishable from a loosening. Keyed by this record's
+    /// `Name`, the same axis the grant gate and
+    /// `AccessContext.ModulePermissions` use.
+    ///
+    /// Orthogonal to `GrantPolicy` above: that governs whether a
+    /// SUBJECT's grant is live, this whether the module is on the AI
+    /// surface for anyone. Both are consulted, in that order, at every
+    /// `_platform.ai.*` site.
+    AIExposure: ModuleAIExposure option
 }
 
 module ServerModule =
@@ -200,6 +222,7 @@ module ServerModule =
         Metrics = []
         Subjects = []
         GrantPolicy = GrantPolicy.AdminDiscretion
+        AIExposure = None
     }
 
     /// Phase 551 — declare the module's grant policy: the precondition
@@ -227,6 +250,38 @@ module ServerModule =
         match GrantPolicy.tighten m.Name m.GrantPolicy policy with
         | Ok tightened -> { m with GrantPolicy = tightened }
         | Error refusal -> failwith (GrantRefusal.describe refusal)
+
+    /// Phase 36.C — declare whether this module's data is reachable from
+    /// the cross-module AI surface (`_platform.ai.*`).
+    ///
+    /// **Opt-in, default off.** A module that never calls this is
+    /// invisible to the AI tool family: `list_accessible_modules` still
+    /// names it (so the model can see it exists and re-plan) but marks
+    /// it `queryable: false`; `list_data_types` drops its data types;
+    /// `query_module` / `query_entity` / `list_results` /
+    /// `get_latest_result` refuse it with `UnqueryableModule` — a
+    /// diagnosis deliberately distinct from `PermissionDenied`, because
+    /// the remedy is a deployment change, not a grant.
+    ///
+    /// **Narrowing-only, like `withGrantPolicy`.** A second call may
+    /// take a module from `Queryable` to `NotQueryable`; the reverse
+    /// fails at compose time, naming the module. A composition root can
+    /// revoke what a module author opted in to, never the other way
+    /// round.
+    ///
+    /// Opting in widens no authority: RBAC (`canAccessModule` /
+    /// `hasPermission`) and the Phase 730 grant gate are both still
+    /// applied on top, at every one of those sites.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "MoodJournal"
+    /// |> ServerModule.withAIExposure ModuleAIExposure.Queryable
+    /// |> ServerModule.withGuardedApi moodJournalApi
+    /// ```
+    let withAIExposure (exposure: ModuleAIExposure) (m: ServerModule) : ServerModule =
+        match ModuleAIExposure.tighten m.Name m.AIExposure exposure with
+        | Ok narrowed -> { m with AIExposure = Some narrowed }
+        | Error message -> failwith message
 
     /// Attach a permission-guarded ToolUp.Remoting api factory. Uses the
     /// module's `Name` as the RBAC key, so callers never duplicate it.
@@ -945,6 +1000,22 @@ type ServerApp = {
     /// what makes the registry's keys a subset of the composed module set
     /// by construction rather than by convention.
     ModuleGrantPolicies: (string * GrantPolicy) list
+    /// Phase 36.C — accumulated `(moduleName, declaredAIExposure)` pairs
+    /// for the modules that DECLARED one, in registration order. A module
+    /// that declared nothing contributes no entry — undeclared and
+    /// `NotQueryable` are the same thing, so the absence carries the
+    /// default rather than a row saying so. Projected at `run` time into
+    /// a `ModuleAIExposureRegistry`, registered in DI only when at least
+    /// one module opted IN; with no registration the `_platform.ai.*`
+    /// gate reads every module as not queryable, which is the
+    /// safer-by-default behaviour the phase exists to establish.
+    ///
+    /// Accumulated in the same fold that appends `ModuleNames`, so the
+    /// registry's keys are a subset of the composed module set by
+    /// construction — and the orphan check at `run` asserts it anyway,
+    /// because a drift here fails SILENTLY (a module the author opted in
+    /// would simply stay invisible).
+    ModuleAIExposures: (string * ModuleAIExposure) list
     /// Phase 556 — how grant-event notices to affected principals are
     /// rendered and delivered. `None` means the shipped defaults, NOT
     /// "no notices": the notice loop is the point of the phase, and a
@@ -1027,6 +1098,7 @@ module ServerApp =
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
         ModuleGrantPolicies = []
+        ModuleAIExposures = []
         GrantNotifications = None
         ModelExecutionCompose = None
     }
@@ -2343,6 +2415,15 @@ module ServerApp =
                         // the dispatch gate. One naming axis, so a policy
                         // cannot drift away from its module.
                         ModuleGrantPolicies = app.ModuleGrantPolicies @ [ m.Name, m.GrantPolicy ]
+                        // Phase 36.C — the module's declared AI exposure,
+                        // on the same naming axis, and only when it
+                        // DECLARED one: an undeclared module contributes
+                        // nothing, because absence already means
+                        // `NotQueryable` everywhere the registry is read.
+                        ModuleAIExposures =
+                            match m.AIExposure with
+                            | Some exposure -> app.ModuleAIExposures @ [ m.Name, exposure ]
+                            | None -> app.ModuleAIExposures
                         Config = {
                             app.Config with
                                 SlowRequestThresholdOverrides = mergedSlowRequestOverrides
@@ -2791,6 +2872,38 @@ module ServerApp =
                         failwith
                             $"""Grant-policy registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared GrantPolicy must be keyed by a composed module's Name, or the policy silently stops being enforced."""
 
+            // Phase 36.C — project the accumulated AI-exposure
+            // declarations into the `ModuleAIExposureRegistry` the
+            // `_platform.ai.*` gate reads.
+            //
+            // Registered ONLY when at least one module opted IN. The
+            // asymmetry with the grant registry above is deliberate and is
+            // the safer-by-default rule made structural: an absent grant
+            // registry means "no policy declared ⇒ every grant is live",
+            // whereas an absent exposure registry means "nobody opted in ⇒
+            // nothing is queryable". Both readings are the conservative
+            // one for their own question, and both cost one failed
+            // `GetService` when nothing is declared.
+            //
+            // Same belt-and-braces orphan check, for the same reason and a
+            // sharper one: this failure is silent in the direction that
+            // matters LEAST visibly — a module whose author opted in would
+            // simply never appear to the model, with no refusal, no audit
+            // row and nothing to grep.
+            let withAIExposures =
+                let registry = ModuleAIExposureRegistry.ofDeclarations app.ModuleAIExposures
+
+                if ModuleAIExposureRegistry.isEmpty registry then
+                    withGrantPolicies
+                else
+                    match ModuleAIExposureRegistry.orphans registry app.ModuleNames with
+                    | [] ->
+                        appendRegistration withGrantPolicies (fun s ->
+                            s.AddSingleton<ModuleAIExposureRegistry>(registry))
+                    | orphans ->
+                        failwith
+                            $"""AI-exposure registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared ModuleAIExposure must be keyed by a composed module's Name, or the module stays invisible to the _platform.ai.* tools with no diagnostic anywhere."""
+
             // Phase 556 — the grant-notice settings the observer reads.
             // Registered only when a deployment supplied them AND a policy
             // is declared: with no registration the observer falls back to
@@ -2800,9 +2913,9 @@ module ServerApp =
             let withGrantNotificationSettings =
                 match app.GrantNotifications with
                 | Some settings when not (List.isEmpty app.ModuleGrantPolicies) ->
-                    appendRegistration withGrantPolicies (fun s ->
+                    appendRegistration withAIExposures (fun s ->
                         s.AddSingleton<GrantNotification.GrantNotificationSettings>(settings))
-                | _ -> withGrantPolicies
+                | _ -> withAIExposures
 
             // Phase 728 — the opt-in model-execution leg. `None` (the
             // default) appends no registration, so a composition that does

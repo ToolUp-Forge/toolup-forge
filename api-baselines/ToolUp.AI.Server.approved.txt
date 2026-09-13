@@ -211,6 +211,7 @@ ToolUp.AI.AIToolRegistry.isSdkReservedToolSource(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolPermittedFor(ToolUp.Platform.AccessContext, ToolUp.Platform.AIToolDefinition) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolSourcePermittedFor(ToolUp.Platform.AccessContext, System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isToolVisibleOnSurface(ToolUp.AI.AISurface, ToolUp.Platform.AIToolDefinition) : System.Boolean
+ToolUp.AI.AIToolRegistry.moduleAIQueryGate(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]
 ToolUp.AI.AIToolRegistry.moduleGrantGate(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]
 ToolUp.AI.AIToolRegistry.reconstructAccessContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AccessContext
 ToolUp.AI.AIToolRegistry.recordUnauthorizedToolDenial(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AccessContext, System.String, System.String, System.String) : System.Void
