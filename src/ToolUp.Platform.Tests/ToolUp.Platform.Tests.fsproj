@@ -288,6 +288,12 @@
         <Compile Include="Remoting\WireCorpus.fs" />
         <Compile Include="Remoting\MsgPackRoundTripTests.fs" />
         <Compile Include="Remoting\StjRoundTripTests.fs" />
+        <!-- Phase 785 — the closed decoder algebra, run differentially
+             against the reflection reader over the Phase 784 corpus.
+             AFTER WireCorpus.fs (it consumes the pinned cases and the
+             784.D mutation population) and after the two round-trip
+             packs, whose declarations it reuses rather than re-deriving. -->
+        <Compile Include="Remoting\DecoderAlgebraTests.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />

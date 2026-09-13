@@ -5,6 +5,9 @@ namespace ToolUp.Platform
 
 open System
 open System.Text
+// Phase 785 — the remoting decoder registry the composition-profile
+// facet at the foot of this file classifies an API record against.
+open ToolUp.Remoting
 
 // ─── Phase 657 — boot verification preflight + the verified profile ──
 //
@@ -446,6 +449,12 @@ type CompositionProfileRefusal =
     /// authority is bound to nothing. An EMPTY component list means no
     /// `SeamGrantSignature` was supplied at all.
     | SeamGrantsUndeclared of components: string list
+    /// Phase 785 — the verified profile was declared and one or more
+    /// registered API records carry a wire type with no closed-algebra
+    /// decoder, so their responses decode by reflection over an open type
+    /// graph. `records` names each one, because "some record" is not a
+    /// finding an operator can act on.
+    | RemotingDecodersUnregistered of records: string list
 
 [<RequireQualifiedAccess>]
 module CompositionProfileRefusal =
@@ -459,6 +468,10 @@ module CompositionProfileRefusal =
             $"the verified composition profile requires every component to declare the seams it reaches, and these declare none: {named}. Add a SeamGrant for each (SeamGrant.ofInterfaces [ \"IEntityStore\"; … ]), or run CompositionProfile.Standard."
         | CapabilityGateUndeclared ->
             "the verified composition profile requires a CapabilitySignature: each component's runtime authority is bound to its declared envelope, and a composition that declares no envelopes has nothing to bind. Declare the components' CompanionCapability values and compose the signature, or run CompositionProfile.Standard."
+        | RemotingDecodersUnregistered records ->
+            let named = String.concat "; " records
+
+            $"the verified composition profile requires every registered API record to decode through the closed remoting decoder algebra, and these decode by reflection: {named}. Register a decoder for each wire type they carry (RemotingDecoders.register, see docs/platform/remoting-decoder-algebra.md), or run CompositionProfile.Standard."
         | IsolationPostureShortfall(backend, missing) ->
             let clauses = String.concat "; " missing
 
@@ -1237,3 +1250,181 @@ module VerifiedCompositionProfile =
                 Ok()
             else
                 Error(IsolationPostureShortfall(backend, IsolationPosture.shortfall posture))
+
+// ─── Phase 785 — the remoting-decoder facet ──────────────────────────
+//
+// Opting a record onto the closed decoder algebra is REQUIRED under the
+// verified composition profile and optional everywhere else, and
+// "required" is expressed the way that profile already expresses every
+// requirement: as a facet the boot preflight checks and the deployment
+// verification report carries, never as a build gate. GP 13 holds — a
+// deployment that declares no API records to the facet declares nothing
+// to check, so the lightweight platform is untouched and an existing
+// verified deployment that upgrades does not suddenly refuse to boot.
+//
+// **The record set is DECLARED by the composition root rather than
+// discovered.** Nothing in this tier holds a registry of composed API
+// records: the dispatcher classifies a record's methods when it mounts
+// one, and it keeps no list afterwards. Inventing a discovery mechanism
+// for this facet would put a second, differently-derived answer beside
+// the dispatcher's, which is the shape Phase 686's header rejects for
+// every section it gathers ("this file mints NO verification logic").
+// So the root names what it mounted, exactly as it names its seam
+// grants and its capability signature.
+//
+// **Corpus coverage is declared too, and it is a separate axis from
+// registration for a reason the report depends on.** A record can decode
+// through the algebra over shapes the wire corpus never draws, and a
+// deployment's own assertion that its decoder works is not evidence that
+// it does. Splitting the two lets the report render `Verified` only for
+// the conjunction and `Observed` for everything else — a deployment's
+// assertion about itself never reading as a pass.
+
+/// Phase 785 — how one API record's responses decode.
+[<RequireQualifiedAccess>]
+type RemotingDecoderClass =
+    /// Every wire type this record carries has a registered
+    /// closed-algebra decoder.
+    | Algebra
+    /// At least one does not, and decodes by reflection over the open
+    /// type graph instead.
+    | Reflection
+
+/// Phase 785 — one API record's classification.
+type RemotingDecoderBinding = {
+    /// The API record's name, as the composition root calls it.
+    DecoderApiRecord: string
+    DecoderClass: RemotingDecoderClass
+    /// The wire types this record carries that have no registered
+    /// decoder, in declaration order. Empty exactly when the
+    /// classification is `Algebra`.
+    DecoderUncovered: string list
+    /// Whether the wire corpus draws the shapes this record carries —
+    /// DECLARED by whoever registered the decoders, never inferred here.
+    /// `false` is the honest default and costs the record nothing but a
+    /// `Verified` it had not earned.
+    DecoderCorpusCovered: bool
+}
+
+/// Phase 785 — what the facet found.
+type RemotingDecoderFacet = {
+    /// The profile the deployment declared.
+    FacetProfile: CompositionProfile
+    /// Whether an algebra decoder is MANDATORY under that profile rather
+    /// than advisory. Carried rather than re-derived from the profile,
+    /// the way `SeamAuthorityIntegrity.DeclarationMandatory` is and for
+    /// the same reason: a reader deciding what is demanded should not
+    /// have to know the two move together today.
+    FacetRequired: bool
+    /// One entry per declared API record, in declaration order.
+    FacetBindings: RemotingDecoderBinding list
+}
+
+[<RequireQualifiedAccess>]
+module RemotingDecoderFacet =
+
+    /// Whether the profile makes a registered decoder mandatory.
+    ///
+    /// Its own predicate rather than a `= Verified` test at each call
+    /// site, matching `CompositionProfile.requiresSeamGrants` and
+    /// `requiresCapabilityGate`.
+    let requiresAlgebraDecoders =
+        function
+        | CompositionProfile.Standard -> false
+        | CompositionProfile.Verified -> true
+
+    /// Classify each declared API record against the decoders registered
+    /// in this process.
+    ///
+    /// `declared` is `(record name, the wire types it carries, whether
+    /// the wire corpus draws those shapes)`. Pure, offline, and total: it
+    /// reads the registry and nothing else, so it can be called from a
+    /// composition root, from the report's evidence, and from a test
+    /// without any of the three needing a different answer.
+    let inspect (profile: CompositionProfile) (declared: (string * string list * bool) list) : RemotingDecoderFacet =
+        let registered = RemotingDecoders.registered () |> Set.ofList
+
+        let bindings =
+            declared
+            |> List.map (fun (record, wireTypes, corpusCovered) ->
+                let uncovered =
+                    wireTypes |> List.filter (fun name -> not (registered.Contains name))
+
+                {
+                    DecoderApiRecord = record
+                    DecoderClass =
+                        if List.isEmpty uncovered then
+                            RemotingDecoderClass.Algebra
+                        else
+                            RemotingDecoderClass.Reflection
+                    DecoderUncovered = uncovered
+                    DecoderCorpusCovered = corpusCovered
+                })
+
+        {
+            FacetProfile = profile
+            FacetRequired = requiresAlgebraDecoders profile
+            FacetBindings = bindings
+        }
+
+    /// The platform's own `_platform.*` API records, classified.
+    ///
+    /// The one-liner a composition root that mounts the SDK's surfaces
+    /// and nothing else calls. A root with its own API records composes
+    /// its declarations with `PlatformDecoders.coveredApiRecords` and
+    /// passes the whole list to `inspect`; the two go through the same
+    /// function, so a consumer's record and a platform one are graded
+    /// identically.
+    ///
+    /// It does NOT register anything. `PlatformDecoders.registerAll` is
+    /// an explicit act the root performs; a facet that registered what
+    /// it was about to report on would always report success.
+    let inspectPlatform (profile: CompositionProfile) : RemotingDecoderFacet =
+        inspect profile PlatformDecoders.coveredApiRecords
+
+    /// The records this facet classifies as `Reflection`, in declaration
+    /// order.
+    let reflectionRecords (facet: RemotingDecoderFacet) : string list =
+        facet.FacetBindings
+        |> List.filter (fun binding -> binding.DecoderClass = RemotingDecoderClass.Reflection)
+        |> List.map _.DecoderApiRecord
+
+    /// The boot check.
+    ///
+    /// Under `Verified` a record on the reflection path REFUSES, naming
+    /// every one; under every other profile the facet is informational
+    /// and this returns `Ok` whatever it found. A verified deployment
+    /// that declared no records also returns `Ok` — there is nothing to
+    /// refuse, and refusing an empty declaration would turn the facet
+    /// into the build gate GP 13 keeps it from being.
+    let verify (facet: RemotingDecoderFacet) : Result<unit, CompositionProfileRefusal> =
+        if not facet.FacetRequired then
+            Ok()
+        else
+            match reflectionRecords facet with
+            | [] -> Ok()
+            | records -> Error(RemotingDecodersUnregistered records)
+
+    /// Mirror the facet into the tier-neutral shape the Phase 686 report
+    /// carries.
+    ///
+    /// The mapping lives HERE, beside the facet, rather than in the
+    /// report — the shape Phase 693 established for the seam-authority
+    /// posture and Phase 686's header requires of every section: the
+    /// report mints no verification logic and re-labels a substrate's
+    /// own verdict, so the substrate is what does the labelling.
+    let toIntegrity (facet: RemotingDecoderFacet) : RemotingDecoderIntegrity = {
+        DecoderProfile = CompositionProfile.label facet.FacetProfile
+        DecoderMandatory = facet.FacetRequired
+        DecoderRecords =
+            facet.FacetBindings
+            |> List.map (fun binding -> {
+                RecordApiRecord = binding.DecoderApiRecord
+                RecordClassification =
+                    match binding.DecoderClass with
+                    | RemotingDecoderClass.Algebra -> "algebra"
+                    | RemotingDecoderClass.Reflection -> "reflection"
+                RecordUncovered = binding.DecoderUncovered
+                RecordCorpusCovered = binding.DecoderCorpusCovered
+            })
+    }

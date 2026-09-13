@@ -873,6 +873,149 @@ type Reader(data: byte[], maxDepth: int) =
             x.ReadCheckedBin(len, t)
         | b -> DecodeError.failAt [ sprintf "byte %d" pos ] t.Name (sprintf "format byte %d" b)
 
+    // ─── Phase 785 — the one bytes-to-`Value` pass ───────────────────
+    //
+    // The same format dispatch as `Read` below, producing the CLOSED
+    // value model instead of a reflection-directed `obj`. It inherits
+    // every Phase 786 bound unchanged — it calls the identical guarded
+    // helpers (`RequireAvailable`, `EnterContainer`) rather than
+    // re-deriving them — so nothing here can be weaker than the path
+    // beside it, and a bound added to one is added to both.
+    //
+    // What it does NOT inherit is the reflection: there is no `Type`
+    // argument, no cache lookup, no `FSharpType` call. The width class
+    // the format byte declared is CARRIED rather than applied, so the
+    // decision "does this integer fit the target" moves out of the byte
+    // reader and into a total combinator the caller composes.
+    //
+    // Phase 787's boundary runs exactly here: the totality of this pass
+    // is BOUNDED (length against bytes remaining, nesting against
+    // `maxDepth`) and not proved, because it advances a mutable cursor
+    // over a byte array. Everything above it — `Decode` — is proved
+    // territory, because it is a pure function over an immutable term.
+
+    /// Phase 785 — the `bin` payload as a `byte[]` on both hosts.
+    member private x.ReadBinValue(len: int) : byte[] =
+        x.RequireAvailable(len, 1, "bin")
+#if NETCOREAPP2_1_OR_GREATER && !FABLE_COMPILER
+        (x.ReadRawBin len).ToArray()
+#else
+        x.ReadRawBin len
+#endif
+
+    /// Phase 785 — an array term. Seeded at a bounded capacity and grown
+    /// as elements are actually decoded, exactly as `ReadRawArray` is,
+    /// so a length prefix the guard admits still buys only a small
+    /// allocation up front.
+    member private x.ReadArrayValue(len: int) : Value =
+        x.RequireAvailable(len, 1, "array")
+        x.EnterContainer()
+        let elements = ResizeArray<Value>(min len InitialCollectionCapacity)
+
+        for _ in 1..len do
+            elements.Add(x.ReadValue())
+
+        x.ExitContainer()
+        Value.Arr(List.ofSeq elements)
+
+    /// Phase 785 — a map term. Entries stay in WIRE ORDER: sorting here
+    /// would make the value model lossy about the bytes it came from,
+    /// and the round-trip law Phase 785 states is over those bytes.
+    member private x.ReadMapValue(len: int) : Value =
+        x.RequireAvailable(len, 2, "map")
+        x.EnterContainer()
+        let pairs = ResizeArray<Value * Value>(min len InitialCollectionCapacity)
+
+        for _ in 1..len do
+            let key = x.ReadValue()
+            let value = x.ReadValue()
+            pairs.Add((key, value))
+
+        x.ExitContainer()
+        Value.Map(List.ofSeq pairs)
+
+    /// Phase 785 — read one `Value` from the current position.
+    ///
+    /// Refuses through `DecodeException` exactly as `Read` does, so
+    /// `TryReadValue` converts it back to a `Result` at the same seam
+    /// and the two paths share one refusal vocabulary. There is no
+    /// `ext` arm because this transport has none — see `Format.fs`'s
+    /// header and `Value.fs`'s.
+    /// Phase 785 — refuse a FORMAT BYTE read past the end of the
+    /// payload.
+    ///
+    /// Phase 786 bounded every length prefix against the bytes
+    /// remaining, which is the bound that matters once a value has
+    /// started. The byte that STARTS a value was still unguarded, so an
+    /// empty payload — and the exhausted tail of a container whose
+    /// header promised more elements than the bytes hold — reached
+    /// `ReadByte` and escaped as an `IndexOutOfRangeException`, which is
+    /// not a named refusal and is what Phase 784's
+    /// `truncated-empty-payload` mutation measured.
+    ///
+    /// Guarded HERE rather than in `ReadByte`, and that is a scope
+    /// decision rather than an oversight: `ReadByte` is on the
+    /// reflection reader's hot path too, and moving its behaviour is
+    /// Phase 786's cross-section, not this phase's. The algebra path
+    /// claims totality and so pays for the check; the reflection path
+    /// keeps the behaviour Phase 784 recorded, and the difference is
+    /// exactly what "the algebra refuses strictly more" means.
+    member private _.RequireByte() =
+        if pos >= data.Length then
+            DecodeError.failAt
+                [ sprintf "byte %d" pos ]
+                "a MessagePack value"
+                (sprintf "end of payload after %d byte(s)" data.Length)
+
+    member x.ReadValue() : Value =
+        x.RequireByte()
+
+        match x.ReadByte() with
+        // fixstr
+        | b when b ||| 0b00011111uy = 0b10111111uy -> Value.Str(x.ReadCheckedString(b &&& 0b00011111uy |> int))
+        | Format.Str8 -> Value.Str(x.ReadCheckedString(x.ReadByte() |> int))
+        | Format.Str16 -> Value.Str(x.ReadCheckedString(x.ReadUInt16() |> int))
+        | Format.Str32 -> Value.Str(x.ReadCheckedString(x.ReadUInt32() |> int))
+        // fixposnum — the value IS the format byte, and it is unsigned.
+        | b when b ||| 0b01111111uy = 0b01111111uy -> Value.UInt(uint64 b, IntegerWidth.Fixnum)
+        // fixnegnum — likewise the format byte, read signed.
+        | b when b ||| 0b00011111uy = 0b11111111uy -> Value.Int(int64 (sbyte b), IntegerWidth.Fixnum)
+        | Format.Int64 -> Value.Int(x.ReadInt64(), IntegerWidth.Bits64)
+        | Format.Int32 -> Value.Int(int64 (x.ReadInt32()), IntegerWidth.Bits32)
+        | Format.Int16 -> Value.Int(int64 (x.ReadInt16()), IntegerWidth.Bits16)
+        | Format.Int8 -> Value.Int(int64 (x.ReadInt8()), IntegerWidth.Bits8)
+        | Format.Uint8 -> Value.UInt(uint64 (x.ReadUInt8()), IntegerWidth.Bits8)
+        | Format.Uint16 -> Value.UInt(uint64 (x.ReadUInt16()), IntegerWidth.Bits16)
+        | Format.Uint32 -> Value.UInt(uint64 (x.ReadUInt32()), IntegerWidth.Bits32)
+        | Format.Uint64 -> Value.UInt(x.ReadUInt64(), IntegerWidth.Bits64)
+        | Format.Float32 -> Value.Float(float (x.ReadFloat32()), FloatWidth.Single)
+        | Format.Float64 -> Value.Float(x.ReadFloat64(), FloatWidth.Double)
+        | Format.Nil -> Value.Nil
+        | Format.True -> Value.Bool true
+        | Format.False -> Value.Bool false
+        // fixarr
+        | b when b ||| 0b00001111uy = 0b10011111uy -> x.ReadArrayValue(b &&& 0b00001111uy |> int)
+        | Format.Array16 -> x.ReadArrayValue(x.ReadUInt16() |> int)
+        | Format.Array32 -> x.ReadArrayValue(x.ReadUInt32() |> int)
+        // fixmap
+        | b when b ||| 0b00001111uy = 0b10001111uy -> x.ReadMapValue(b &&& 0b00001111uy |> int)
+        | Format.Map16 -> x.ReadMapValue(x.ReadUInt16() |> int)
+        | Format.Map32 -> x.ReadMapValue(x.ReadUInt32() |> int)
+        | Format.Bin8 -> Value.Bin(x.ReadBinValue(x.ReadByte() |> int))
+        | Format.Bin16 -> Value.Bin(x.ReadBinValue(x.ReadUInt16() |> int))
+        | Format.Bin32 -> Value.Bin(x.ReadBinValue(x.ReadUInt32() |> int))
+        | b -> DecodeError.failAt [ sprintf "byte %d" pos ] "a MessagePack value" (sprintf "format byte %d" b)
+
+    /// Phase 785 — the total entry to the one-pass reader. The same
+    /// contract `TryRead` carries, including that the reader is LEFT
+    /// WHERE THE REFUSAL HAPPENED: read one value per `Reader` on the
+    /// refusal path, and do not resume.
+    member x.TryReadValue() : Result<Value, DecodeError> =
+        try
+            Ok(x.ReadValue())
+        with DecodeException error ->
+            Error error
+
     /// Phase 783 — the named-refusal entry. Decodes `t` from the current
     /// position and returns either the value or a `DecodeError` naming
     /// what was expected, what the bytes held, and the byte offset it was
