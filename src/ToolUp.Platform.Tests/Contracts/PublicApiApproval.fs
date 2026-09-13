@@ -746,6 +746,25 @@ let private renderType (t: Type) : RenderedType =
         DocSubjects =
             entries
             |> Array.toList
+            // SDK FEATURE-BAND DRIFT — the same class Phase 175's comparer
+            // already excludes, and deliberately the same predicate
+            // (`SurfaceDiff.isCompilerVersionDependent`, 36217ab8,
+            // 2026-08-19) rather than a second copy of its literal. Whether
+            // an F# `exception` type carries the legacy
+            // `(SerializationInfo, StreamingContext)` constructor depends on
+            // which SDK feature band built the DLL — `global.json` rolls
+            // forward across bands — and not on any source in this repo. The
+            // Phase 175 diff was made insensitive to that on both sides; this
+            // ratchet's graded `(total - documented)` was not, so one
+            // unchanged tree measured +1 on `ToolUp.Platform.Core` and +9 on
+            // `ToolUp.Platform.Server` under a band CI does not run: a floor
+            // that moves with the toolchain rather than with the docs.
+            // Excluding here takes the subject out of the NUMERATOR and the
+            // DENOMINATOR together, which is the only honest place for it —
+            // a compiler-generated constructor has no source declaration, so
+            // there is nowhere to attach an XML doc comment and this gate's
+            // own first remedy, "document it", is impossible for the class.
+            |> List.filter (fun (token, _, _) -> not (isCompilerVersionDependent token))
             |> List.choose (fun (token, _, docId) -> docId |> Option.map (fun d -> { Token = token; DocId = d }))
     }
 

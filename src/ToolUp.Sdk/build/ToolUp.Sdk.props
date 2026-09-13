@@ -120,6 +120,7 @@
   <ItemGroup>
     <PackageVersion Include="ToolUp.AI.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.McpHost" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Server" Version="$(ToolUpSdkVersion)" />
