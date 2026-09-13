@@ -108,7 +108,7 @@ type McpAuditPayload = {
     /// Number of tools returned by `tools/list`. `None` for every other
     /// event.
     ToolCount: int option
-    /// `McpError.errorCaseName` for a denial, `"ok"` / `"error"` for a
+    /// `McpProtocol.errorCaseName` for a denial, `"ok"` / `"error"` for a
     /// completion. `None` where nothing was decided.
     Outcome: string option
     /// Operator-facing account of a refusal. Sanitised and truncated

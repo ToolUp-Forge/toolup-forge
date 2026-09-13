@@ -17,7 +17,7 @@ An **agent principal** is a [service account](../ToolUp.Platform.Core/Shared/Ser
 
 ## Wiring it
 
-```fsharp
+```fsharp skip=fragment
 open ToolUp.Platform
 open ToolUp.AI.AICompose
 open ToolUp.AI.McpHost
@@ -42,7 +42,7 @@ AIServerApp.create factory providerProfile
 
 Grants are written through `IAgentToolGrantStore`, resolved from DI:
 
-```fsharp
+```fsharp skip=fragment
 let store = services.GetRequiredService<IAgentToolGrantStore>()
 let! _ = store.Write(scopeId, accountId, set [ "sales.summarise"; "sales.forecast" ], adminUserId)
 ```

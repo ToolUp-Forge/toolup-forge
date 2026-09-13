@@ -1044,6 +1044,13 @@
         <Compile Include="InProcess\AIAllowlistDiagnosticsTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
+        <!-- Phase 489 - MCP server host + agent principals: protocol
+             conformance over a client fixture that speaks JSON-RPC 2.0,
+             grant-filtered discovery pinned from both sides, an ungranted
+             tool refused indistinguishably from an unknown one, revocation
+             on the next request, typed budget exhaustion, the two audit
+             streams, and the GP 13 no-handler keystone. -->
+        <Compile Include="InProcess\McpHostTests.fs" />
         <!-- Phase 113 — action-authorizer: policy matching, the
              PermissionStore/tier-backed default's semantics (default-deny,
              grant→Allow, tier gate, cross-scope, fail-closed), contract
@@ -2505,6 +2512,10 @@
              Fable and never reached by the .NET runner. -->
         <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Core\ToolUp.AI.SampleClientTool.Core.fsproj" />
         <ProjectReference Include="..\AI.Samples\ToolUp.AI.SampleClientTool.Server\ToolUp.AI.SampleClientTool.Server.fsproj" />
+        <!-- Phase 489 - the MCP server host companion. Brings ToolUp.AI.Server
+             and ToolUp.Platform.Server transitively; the pack drives the real
+             handler over real JSON-RPC bodies. -->
+        <ProjectReference Include="..\ToolUp.AI.McpHost\ToolUp.AI.McpHost.fsproj" />
         <!-- Phase 11a — Module Testing Framework. Tests project consumes
              the new ToolUp.Platform.Testing fakes + harnesses via project
              reference (in-source delivery until 11.C.2 / cloud-publish). -->

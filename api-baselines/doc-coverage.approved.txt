@@ -10,6 +10,7 @@ Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1237/2422
 ToolUp.AI.Client 57/430
 ToolUp.AI.Core 146/386
+ToolUp.AI.McpHost 133/246
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 3/12
 ToolUp.AI.SampleClientTool.Server 3/4
