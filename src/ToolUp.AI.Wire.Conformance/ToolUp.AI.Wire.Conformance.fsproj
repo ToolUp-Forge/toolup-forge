@@ -28,6 +28,11 @@
              run on each host proves byte-parity. The golden DATA lives in
              ToolUp.AI.Wire.Tests (one source of truth) — source-linked here,
              not duplicated. -->
+        <!-- Phase 508 — the shared fixture module the three mapper fixture
+             files now read (`nestedToolInputSchema`, the rich tool schema all
+             three carry). Compiles first, exactly as it does in the Expecto
+             pack and the Fable smoke; it adds no assertion here. -->
+        <Compile Include="..\ToolUp.AI.Wire.Tests\WireFixtures.fs" />
         <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
         <Compile Include="..\ToolUp.AI.Wire.Tests\OpenAIWireFixtures.fs" />
         <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />

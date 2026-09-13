@@ -5,11 +5,17 @@ module ToolUp.AIProviders.Tests.Program
 
 open Expecto
 open ToolUp.AIProviders.Tests.Tests
+open ToolUp.AIProviders.Tests.Support
 open System.Reflection
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
     testList "ToolUp.AIProviders.Tests" [
+        // Phase 508 — the offline half of the rich-schema acceptance, once
+        // rather than per provider: every provider is handed the same
+        // `AIProviderToolDef`, so asserting it four times would assert one
+        // thing four times. The per-provider live half rides each list below.
+        ProviderTestPack.toolSchemaHandOffTests
         ClaudeProviderTests.tests
         OpenAIProviderTests.tests
         GeminiProviderTests.tests

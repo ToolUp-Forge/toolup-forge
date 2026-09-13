@@ -253,6 +253,41 @@ let private rendererTests =
             Expect.equal rendered "{\"type\":\"string\"}" "no empty description keyword"
         }
 
+        test "the renderer produces the exact schema the provider wire goldens are pinned to" {
+            // `src/ToolUp.AI.Wire.Tests/WireFixtures.fs` hand-authors this
+            // string and each mapper's golden embeds it, proving Claude,
+            // OpenAI (and so the Copilot companion, which compiles the
+            // OpenAI mapper source verbatim) and Gemini all carry a nested
+            // schema to the wire byte for byte. That pack cannot reference
+            // this tier, so this is the join: if the renderer's output
+            // moves, the goldens over there are pinning a schema the SDK
+            // no longer emits, and this case says so.
+            let wireGolden =
+                """{"type":"object","properties":{"filter":{"type":"object","description":"Row filter.","properties":{"metric":{"type":"string","description":"Metric.","enum":["revenue","units"]},"weeks":{"type":"integer"}},"required":["metric"]},"units":{"type":"array","description":"Units.","items":{"type":"string","enum":["metric","imperial"]}}},"required":["filter"]}"""
+
+            let def =
+                defWith "analyse" [
+                    ToolSchema.parameter
+                        "filter"
+                        "Row filter."
+                        true
+                        (ToolSchema.objectOf [
+                            ToolSchema.field "metric" "Metric." true (ToolSchema.enumOf [ "revenue"; "units" ])
+                            ToolSchema.field "weeks" "" false ToolSchema.integer
+                        ])
+                    ToolSchema.parameter
+                        "units"
+                        "Units."
+                        false
+                        (ToolSchema.arrayOf (ToolSchema.enumOf [ "metric"; "imperial" ]))
+                ]
+
+            Expect.equal
+                (toProviderDef def).InputSchema
+                wireGolden
+                "the wire packs' nestedToolInputSchema fixture is still what the registry emits"
+        }
+
         test "the emission is stable — the same declaration renders the same bytes" {
             let once = (toProviderDef (defWith "t" richParameters)).InputSchema
             let twice = (toProviderDef (defWith "t" richParameters)).InputSchema

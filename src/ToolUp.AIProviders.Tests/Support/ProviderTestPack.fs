@@ -296,6 +296,167 @@ let private buildFactory (spec: ProviderSpec) (profile: IProviderProfile) (secre
 
     DefaultAIProviderFactory.create [ builder ] profile secrets StrictBYOK [] None
 
+
+// ─── Phase 508 — the rich-schema tool, offline and live ────────────
+//
+// The acceptance has two halves that belong in different places, and
+// putting them in one case is what would make the whole thing worthless
+// without API keys:
+//
+//   * **Does the schema reach the provider intact?** That is a property
+//     of each connector's wire mapping, it needs no network, and it is
+//     pinned byte-for-byte — on BOTH the .NET and the Fable host — by
+//     the goldens in `src/ToolUp.AI.Wire.Tests` (`nestedToolInputSchema`
+//     in `WireFixtures.fs`, embedded in the Claude, OpenAI and Gemini
+//     request goldens). Those mappers are `module internal`, so this
+//     pack cannot reach them; what it CAN pin offline is the artefact
+//     they are handed — the `AIProviderToolDef` the tool registry
+//     renders — and that is the arm below, which always runs.
+//     The Copilot companion compiles the OpenAI mapper source verbatim
+//     (its `.fsproj` says so, for zero drift), so the OpenAI golden is
+//     its wire assertion too; a fourth copy would assert the same bytes
+//     twice and would go stale independently.
+//
+//   * **Does the model reply with correctly-typed structured
+//     arguments?** That needs a live model, so it sits inside the
+//     env-gated list with the other conformance arms, and it decodes the
+//     reply through the SAME declaration the tool was offered with.
+
+/// The nested object the rich tool declares as its `filter` argument.
+let private filterSchema =
+    ToolSchema.objectOf [
+        ToolSchema.field "metric" "Metric to compute." true (ToolSchema.enumOf [ "revenue"; "units"; "margin" ])
+        ToolSchema.field "weeks" "Weeks of history." false ToolSchema.integer
+    ]
+
+/// The array-of-enum the rich tool declares as its `units` argument.
+let private unitsSchema =
+    ToolSchema.arrayOf (ToolSchema.enumOf [ "metric"; "imperial" ])
+
+/// The record the executor expects to receive — the point of the phase
+/// being that it no longer has to string-parse its way to one.
+type NestedFilter = { metric: string; weeks: int option }
+
+let private nestedSchemaToolDefinition: AIToolDefinition = {
+    Name = "analyse_rows"
+    Description = "Analyse rows of a dataset. Call this rather than answering in prose."
+    Parameters = [
+        ToolSchema.parameter "filter" "Which rows to analyse and how." true filterSchema
+        ToolSchema.parameter "units" "Units to report in." false unitsSchema
+    ]
+    SourceModule = "conformance"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+    IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
+}
+
+let private nestedSchemaProviderDef =
+    AIToolRegistry.toProviderDef nestedSchemaToolDefinition
+
+/// Always-on arm: the tool registry hands every provider a definition
+/// whose schema is nested, enumerated and typed. This is the offline
+/// half of the acceptance; see the note above for where the per-provider
+/// wire half is pinned.
+let toolSchemaHandOffTests =
+    testList "Phase 508 — the rich tool schema handed to every provider" [
+
+        testCase "the provider definition carries the nested object, the enum and the array items"
+        <| fun _ ->
+            use doc = System.Text.Json.JsonDocument.Parse nestedSchemaProviderDef.InputSchema
+            let props = doc.RootElement.GetProperty "properties"
+            let filter = props.GetProperty "filter"
+
+            Expect.equal (filter.GetProperty("type").GetString()) "object" "the filter argument is an object"
+
+            let allowed =
+                filter.GetProperty("properties").GetProperty("metric").GetProperty("enum").EnumerateArray()
+                |> Seq.map _.GetString()
+                |> List.ofSeq
+
+            Expect.equal allowed [ "revenue"; "units"; "margin" ] "its enum member is enumerated on the wire"
+
+            let itemType =
+                props.GetProperty("units").GetProperty("items").GetProperty("type").GetString()
+
+            Expect.equal itemType "string" "the array declares its item schema"
+
+        testCase "a reply matching the declaration decodes into the executor's record"
+        <| fun _ ->
+            // The offline twin of the live arm below: given the arguments
+            // a conforming model would send, the same declaration the
+            // tool was offered with produces the typed value. Without
+            // this, a run with no API keys would assert nothing about the
+            // decode path at all.
+            use doc =
+                System.Text.Json.JsonDocument.Parse """{"filter":{"metric":"revenue","weeks":4},"units":["metric"]}"""
+
+            match ToolHelpers.decodeArg<NestedFilter> doc.RootElement "filter" filterSchema with
+            | Ok filter ->
+                Expect.equal filter.metric "revenue" "the enum member"
+                Expect.equal filter.weeks (Some 4) "the optional integer"
+            | Error refusal -> failtestf "expected Ok; got %s" (ToolHelpers.ToolArgumentRefusal.toMessage refusal)
+    ]
+
+/// Live arm: offer the rich tool, require a tool call, and decode its
+/// arguments through the declaration. Deliberately REQUIRES the call
+/// rather than accepting a prose answer — the canonical round-trip above
+/// already covers "the model may answer either way", and an arm that
+/// accepts prose would pass without ever exercising the thing the phase
+/// shipped.
+let private runNestedSchemaConformance (provider: IAIProvider) = async {
+    let! result =
+        provider.SendMessage(
+            [
+                AIProviderMessage.text
+                    "user"
+                    "Analyse revenue over the last 4 weeks, reported in metric units. Use the analyse_rows tool."
+            ],
+            [ nestedSchemaProviderDef ],
+            Some "You answer by calling the provided tool. Do not reply in prose.",
+            None,
+            canonicalRetryPolicy
+        )
+
+    match result with
+    | Error err -> failtestf "nested-schema tool: expected Ok; got %s" (AIProviderError.toMessage err)
+    | Ok response ->
+        match response.ToolCalls with
+        | [] ->
+            failtestf
+                "nested-schema tool: the model returned no tool call (StopReason=%s, Content=%s) — the arm exists to exercise structured arguments"
+                response.StopReason
+                response.Content
+        | call :: _ ->
+            Expect.equal call.Name "analyse_rows" "the model called the declared tool"
+
+            use doc =
+                try
+                    System.Text.Json.JsonDocument.Parse call.Arguments
+                with ex ->
+                    failtestf "tool-call arguments are not parseable JSON (%s): %s" ex.Message call.Arguments
+
+            match ToolHelpers.decodeArg<NestedFilter> doc.RootElement "filter" filterSchema with
+            | Error refusal ->
+                failtestf
+                    "the model's arguments do not match the declared schema: %s"
+                    (ToolHelpers.ToolArgumentRefusal.toMessage refusal)
+            | Ok filter ->
+                Expect.isFalse
+                    (String.IsNullOrWhiteSpace filter.metric)
+                    "the nested object's required member arrived populated"
+
+            // `units` is optional in the declaration, so its absence is
+            // conformant; present, it must match the array-of-enum.
+            match ToolHelpers.decodeOptionalArg<string list> doc.RootElement "units" unitsSchema with
+            | Error refusal ->
+                failtestf
+                    "the model's optional array argument does not match the declared schema: %s"
+                    (ToolHelpers.ToolArgumentRefusal.toMessage refusal)
+            | Ok _ -> ()
+}
+
 // ─── Pack ──────────────────────────────────────────────────────────
 
 let tests (spec: ProviderSpec) : Test =
@@ -364,6 +525,13 @@ let tests (spec: ProviderSpec) : Test =
                         "factory failed to resolve a configured BYOK entry: %s"
                         (ProviderResolutionError.toMessage err)
                 | Ok provider -> do! runCanonicalRoundTrip provider
+            }
+
+            // ── Phase 508 rich-schema arm ──
+            testCaseAsync "Conformance — a nested-schema tool is called with correctly-typed structured arguments"
+            <| async {
+                let provider = spec.CreateWithApiKey apiKey
+                do! runNestedSchemaConformance provider
             }
 
             // ── Phase 181 behavioural-conformance arms ──

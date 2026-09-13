@@ -45,6 +45,28 @@ let toolRequestTools: AIProviderToolDef list = [
 let toolRequestGolden =
     """{"contents":[{"role":"user","parts":[{"text":"what time is it?"}]}],"systemInstruction":{"parts":[{"text":"You are concise."}]},"tools":[{"functionDeclarations":[{"name":"get_time","description":"Get the current time.","parameters":{"type":"object","properties":{}}}]}],"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}"""
 
+// Phase 508 — a rich tool schema reaching `functionDeclarations[].parameters`.
+// Gemini's mapper degrades an unparseable schema to an empty object rather
+// than throwing, which is the right posture for a blank one and exactly the
+// wrong outcome for a nested one silently mangled: an empty `parameters`
+// reads to the model as a tool that takes no arguments. So the pin is the
+// whole embedded document, byte for byte.
+
+let nestedSchemaRequestMessages = [ AIProviderMessage.text "user" "analyse it" ]
+
+let nestedSchemaRequestTools: AIProviderToolDef list = [
+    {
+        Name = "analyse"
+        Description = "Analyse rows."
+        InputSchema = WireFixtures.nestedToolInputSchema
+    }
+]
+
+let nestedSchemaRequestGolden =
+    """{"contents":[{"role":"user","parts":[{"text":"analyse it"}]}],"tools":[{"functionDeclarations":[{"name":"analyse","description":"Analyse rows.","parameters":"""
+    + WireFixtures.nestedToolInputSchema
+    + """}]}],"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}"""
+
 // ─── Response parse goldens ───────────────────────────────────────
 
 /// A plain text response with usage metadata.

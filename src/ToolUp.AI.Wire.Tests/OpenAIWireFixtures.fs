@@ -28,6 +28,13 @@ let private timeTool: AIProviderToolDef = {
     InputSchema = """{"type":"object","properties":{}}"""
 }
 
+/// Phase 508 — a tool whose parameters are a rendered rich schema.
+let private nestedSchemaTool: AIProviderToolDef = {
+    Name = "analyse"
+    Description = "Analyse rows."
+    InputSchema = WireFixtures.nestedToolInputSchema
+}
+
 /// Assistant turn that called a tool with no text commentary (empty
 /// Content — the `content` member must be omitted, matching the prior
 /// `WhenWritingNull` STJ behaviour).
@@ -119,6 +126,23 @@ let requestFixtures: (string * string * string) list = [
     "multipart-image-base64",
     OpenAIProviderWire.buildRequestBody "gpt-4o" [ imageBytesMessage ] [] None false None,
     """{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AQID"}}]}]}"""
+
+    // Phase 508 — a nested object, an enum and an array-of-enum reach
+    // `function.parameters` unflattened and in the order they were
+    // rendered. The mapper parses the schema and re-emits it through
+    // JsonHost, so this is the assertion that the round trip is
+    // byte-preserving rather than merely structure-preserving.
+    "nested-tool-schema",
+    OpenAIProviderWire.buildRequestBody
+        "gpt-4o"
+        [ AIProviderMessage.text "user" "Analyse it." ]
+        [ nestedSchemaTool ]
+        None
+        false
+        None,
+    """{"model":"gpt-4o","messages":[{"role":"user","content":"Analyse it."}],"tools":[{"type":"function","function":{"name":"analyse","description":"Analyse rows.","parameters":"""
+    + WireFixtures.nestedToolInputSchema
+    + """}}],"tool_choice":"auto"}"""
 ]
 
 // ─── Response fixtures ───────────────────────────────────────────

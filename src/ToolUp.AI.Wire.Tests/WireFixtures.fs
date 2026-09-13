@@ -45,3 +45,28 @@ let fixtures: (string * JsonValue * string) list = [
     ],
     "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"n\":1}"
 ]
+// ─── Phase 508 — the rich tool-schema pass-through fixture ────────
+//
+// Phase 508 let a tool parameter declare a nested object, an array or a
+// closed enum instead of a bare type name, which put a materially bigger
+// JSON Schema on the wire than any mapper had carried before. Each
+// mapper embeds the schema rather than re-flattening it, so what has to
+// be pinned is that the embedded document survives the round trip
+// through each mapper's own JSON host BYTE for byte — member order
+// included, because a mapper that sorted keys or re-encoded escapes
+// would still emit valid JSON and would still parse, and nothing else
+// would notice.
+//
+// It lives here rather than in one mapper's fixtures because all three
+// take it, and both hosts compile this file first.
+
+/// The exact `AIProviderToolDef.InputSchema` the tool registry renders
+/// for a declaration carrying a nested object (with an enum member and
+/// an optional integer member) plus an array-of-enum parameter.
+///
+/// Hand-authored here and asserted equal to the renderer's output by the
+/// SDK-side pack, so the two cannot drift: this pack cannot reference
+/// the Core tier that owns the renderer, and a golden copied from the
+/// thing it is checking proves nothing anyway.
+let nestedToolInputSchema =
+    """{"type":"object","properties":{"filter":{"type":"object","description":"Row filter.","properties":{"metric":{"type":"string","description":"Metric.","enum":["revenue","units"]},"weeks":{"type":"integer"}},"required":["metric"]},"units":{"type":"array","description":"Units.","items":{"type":"string","enum":["metric","imperial"]}}},"required":["filter"]}"""

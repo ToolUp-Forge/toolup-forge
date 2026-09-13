@@ -31,6 +31,13 @@ let tests =
 
                 Expect.equal body toolRequestGolden "byte-stable request with tools"
             }
+
+            test "a nested tool schema reaches functionDeclarations unflattened (Phase 508)" {
+                let body =
+                    GeminiAIProviderWire.buildRequestBody nestedSchemaRequestMessages nestedSchemaRequestTools None None
+
+                Expect.equal body nestedSchemaRequestGolden "the embedded schema survives byte for byte"
+            }
         ]
 
         testList "parseResponse" [

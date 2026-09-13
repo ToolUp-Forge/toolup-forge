@@ -77,12 +77,39 @@ let requestTwoTurn () =
 let requestTwoTurnGolden =
     """{"model":"m","max_tokens":8,"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":"b"}]}"""
 
+/// Phase 508 — a rich tool schema reaching `input_schema`. Claude embeds
+/// the schema as JSON structure, so the pin is that the nested object,
+/// the enum and the array items survive that embed byte for byte — a
+/// mapper that re-encoded or reordered would still send valid JSON and
+/// nothing downstream would notice.
+let requestNestedToolSchema () =
+    ClaudeAIProviderWire.buildRequestBody
+        "m"
+        50
+        [ msgUser "q" ]
+        [
+            {
+                Name = "analyse"
+                Description = "Analyse rows."
+                InputSchema = WireFixtures.nestedToolInputSchema
+            }
+        ]
+        None
+        false
+        None
+
+let requestNestedToolSchemaGolden =
+    """{"model":"m","max_tokens":50,"messages":[{"role":"user","content":"q"}],"tools":[{"name":"analyse","description":"Analyse rows.","input_schema":"""
+    + WireFixtures.nestedToolInputSchema
+    + ""","cache_control":{"type":"ephemeral"}}]}"""
+
 /// Every request fixture as `(name, thunk, golden)` so a host iterates them.
 let requestFixtures: (string * (unit -> string) * string) list = [
     "minimal", requestMinimal, requestMinimalGolden
     "system", requestSystem, requestSystemGolden
     "tool+stream", requestToolStream, requestToolStreamGolden
     "two-turn", requestTwoTurn, requestTwoTurnGolden
+    "nested-tool-schema", requestNestedToolSchema, requestNestedToolSchemaGolden
 ]
 
 // ─── Non-streaming response parse ────────────────────────────────

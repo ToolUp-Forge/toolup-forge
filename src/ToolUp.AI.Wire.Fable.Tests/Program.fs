@@ -72,6 +72,19 @@ let tests =
                     GeminiWireFixtures.toolRequestGolden
                     "tool request bytes")
 
+            // Phase 508 — the rich tool schema on this host too. The
+            // OpenAI and Claude entries ride their fixture lists, so only
+            // Gemini's named-fixture shape needs a case written out.
+            testCase "buildRequestBody — nested tool schema" (fun () ->
+                Expect.equal
+                    (GeminiAIProviderWire.buildRequestBody
+                        GeminiWireFixtures.nestedSchemaRequestMessages
+                        GeminiWireFixtures.nestedSchemaRequestTools
+                        None
+                        None)
+                    GeminiWireFixtures.nestedSchemaRequestGolden
+                    "nested tool schema bytes")
+
             testCase "parseResponse — text + usage" (fun () ->
                 match GeminiAIProviderWire.parseResponse GeminiWireFixtures.textResponseJson with
                 | Ok r ->
