@@ -11561,6 +11561,49 @@ ToolUp.Platform.ToolParameterSchema.Description : System.String { get }
 ToolUp.Platform.ToolParameterSchema.Name : System.String { get }
 ToolUp.Platform.ToolParameterSchema.Required : System.Boolean { get }
 ToolUp.Platform.ToolParameterSchema.Type : System.String { get }
+ToolUp.Platform.ToolSchema (class)
+ToolUp.Platform.ToolSchema.arrayOf(ToolUp.Platform.ToolSchemaNode) : ToolUp.Platform.ToolSchemaNode
+ToolUp.Platform.ToolSchema.boolean : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchema.enumOf(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.ToolSchemaNode
+ToolUp.Platform.ToolSchema.field(System.String, System.String, System.Boolean, ToolUp.Platform.ToolSchemaNode) : ToolUp.Platform.ToolSchemaMember
+ToolUp.Platform.ToolSchema.integer : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchema.isRendered(System.String) : System.Boolean
+ToolUp.Platform.ToolSchema.jsonEscape(System.String) : System.String
+ToolUp.Platform.ToolSchema.number : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchema.objectOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolSchemaMember]) : ToolUp.Platform.ToolSchemaNode
+ToolUp.Platform.ToolSchema.parameter(System.String, System.String, System.Boolean, ToolUp.Platform.ToolSchemaNode) : ToolUp.Platform.ToolParameterSchema
+ToolUp.Platform.ToolSchema.render(System.String, ToolUp.Platform.ToolSchemaNode) : System.String
+ToolUp.Platform.ToolSchema.text : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaMember (class)
+ToolUp.Platform.ToolSchemaMember..ctor(System.String, System.String, System.Boolean, ToolUp.Platform.ToolSchemaNode)
+ToolUp.Platform.ToolSchemaMember.MemberDescription : System.String { get }
+ToolUp.Platform.ToolSchemaMember.MemberName : System.String { get }
+ToolUp.Platform.ToolSchemaMember.MemberRequired : System.Boolean { get }
+ToolUp.Platform.ToolSchemaMember.MemberSchema : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaNode (class)
+ToolUp.Platform.ToolSchemaNode.IsSchemaArray : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.IsSchemaBoolean : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.IsSchemaInteger : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.IsSchemaNumber : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.IsSchemaObject : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.IsSchemaString : System.Boolean { get }
+ToolUp.Platform.ToolSchemaNode.SchemaBoolean : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaNode.SchemaInteger : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaNode.SchemaNumber : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaNode.Tag : System.Int32 { get }
+ToolUp.Platform.ToolSchemaNode+SchemaArray (class)
+ToolUp.Platform.ToolSchemaNode+SchemaArray.items : ToolUp.Platform.ToolSchemaNode { get }
+ToolUp.Platform.ToolSchemaNode+SchemaObject (class)
+ToolUp.Platform.ToolSchemaNode+SchemaObject.members : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolSchemaMember] { get }
+ToolUp.Platform.ToolSchemaNode+SchemaString (class)
+ToolUp.Platform.ToolSchemaNode+SchemaString.enumValues : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ToolSchemaNode+Tags (class)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaArray : System.Int32 (literal)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaBoolean : System.Int32 (literal)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaInteger : System.Int32 (literal)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaNumber : System.Int32 (literal)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaObject : System.Int32 (literal)
+ToolUp.Platform.ToolSchemaNode+Tags.SchemaString : System.Int32 (literal)
 ToolUp.Platform.ToolSummary (class)
 ToolUp.Platform.ToolSummary..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolDataCount], System.Int32)
 ToolUp.Platform.ToolSummary.DataCounts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolDataCount] { get }
@@ -12683,6 +12726,7 @@ ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharp
 ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
+ToolUp.Remoting.DecodeException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.MsgPack.FloatWidth (class)

@@ -336,7 +336,7 @@ let classify (provider: IAIProvider) = async {
 
 ### Server-side tools
 
-`AIToolDefinition` is **metadata only** — it lives in `ToolUp.Platform.Core` so a module can declare tools without referencing the AI companion, and the executor is paired to it at registration time. `Parameters` is a list of one record per parameter, each with a JSON-Schema type name:
+`AIToolDefinition` is **metadata only** — it lives in `ToolUp.Platform.Core` so a module can declare tools without referencing the AI companion, and the executor is paired to it at registration time. `Parameters` is a list of one record per parameter. The simplest form gives each parameter a bare JSON-Schema type name; [Rich parameter schemas](#rich-parameter-schemas--nested-objects-arrays-and-enums) below covers nested objects, arrays and enums.
 
 ```fsharp
 let myAnalysisTool: AIToolDefinition = {
@@ -397,6 +397,92 @@ let myModule =
 
 The agent loop sees the tool in `GetAvailableTools`; the LLM can call it. When called, the executor runs server-side in-process with the caller's `AccessContext` available via the ambient context.
 
+### Rich parameter schemas — nested objects, arrays and enums
+
+A bare type name is all some tools need. It is not enough for a tool whose argument is a
+structured value: `Type = "object"` tells the model a JSON object goes here and nothing about
+what belongs in it, so the argument arrives shaped however the model guessed and the executor
+hand-parses it. Every provider the SDK ships accepts full JSON Schema for a tool's parameters,
+and the MCP host republishes whatever the registry emits, so the declaration was the only thing
+in the way.
+
+`ToolSchema` builds that declaration as data, and `ToolSchema.parameter` turns it into an
+ordinary `ToolParameterSchema`. Declare the schema once and use it at both ends — offered to the
+model, and used by the executor to decode what comes back:
+
+```fsharp
+open System.Text.Json
+open ToolUp.AI.ToolHelpers
+
+/// What the executor wants to receive. The schema below describes it to
+/// the model; `requireDecoded` is what turns one into the other.
+type AnalysisFilter = {
+    metric: string
+    weeks: int option
+}
+
+let filterSchema =
+    ToolSchema.objectOf [
+        ToolSchema.field "metric" "Metric to compute." true (ToolSchema.enumOf [ "revenue"; "units"; "margin" ])
+        ToolSchema.field "weeks" "Weeks of history." false ToolSchema.integer
+    ]
+
+let unitsSchema = ToolSchema.arrayOf (ToolSchema.enumOf [ "metric"; "imperial" ])
+
+let analyseRowsTool: AIToolDefinition = {
+    Name = "my_module.analyse"
+    Description = "Analyse rows of the active dataset."
+    Parameters = [
+        ToolSchema.parameter "filter" "Which rows to analyse and how." true filterSchema
+        ToolSchema.parameter "units" "Units to report in." false unitsSchema
+    ]
+    SourceModule = "MyModule"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+    IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
+}
+
+let analyseRowsExecutor (_ctx: HttpContext) (argsJson: string) : Async<string> = async {
+    let args = JsonDocument.Parse(argsJson).RootElement
+    let filter = requireDecoded<AnalysisFilter> args "filter" filterSchema
+
+    let! result = MyModule.Server.runAnalysis filter.metric (defaultArg filter.weeks 12)
+    return fableSerialize result
+}
+```
+
+The node vocabulary is deliberately small — it covers what a tool call needs rather than all of
+JSON Schema:
+
+| Constructor | Emits |
+|---|---|
+| `ToolSchema.text` | `{ "type": "string" }` |
+| `ToolSchema.enumOf [ … ]` | a string constrained to those values |
+| `ToolSchema.number` / `ToolSchema.integer` / `ToolSchema.boolean` | the scalar types |
+| `ToolSchema.arrayOf node` | an array whose every element matches `node` |
+| `ToolSchema.objectOf [ … ]` | an object built from `ToolSchema.field name description required node` |
+
+Three things about the shape are worth knowing:
+
+- **A rich parameter is an ordinary `ToolParameterSchema`.** `ToolSchema.parameter` renders the
+  schema into its `Type` field, and leaves `Name`, `Description` and `Required` meaning exactly
+  what they meant before — so the tool's top-level `required` list, the per-module RBAC filter
+  and the MCP projection all read it the same way they read a flat parameter. A flat declaration
+  emits byte-for-byte the provider definition it always emitted.
+- **Never hand-write the rendered form.** The renderer owns the escaping, which is the part that
+  is easy to get wrong once member names and enum values are involved: a quoted example in a
+  description terminates the JSON string early and the provider rejects the whole request. A
+  `Type` that looks like a rendered schema but is not valid JSON is refused at compose time,
+  naming the tool and the parameter.
+- **Validation happens before deserialisation.** `requireDecoded` checks the arguments against
+  the declaration first, so an out-of-enum value or a missing nested member is reported as a
+  schema violation naming the path (`filter.metric`) rather than as a .NET deserialisation
+  exception the model cannot act on. Use `decodeArg` / `decodeOptionalArg` for the
+  `Result<_, ToolArgumentRefusal>` form when the tool would rather answer in its own domain
+  shape than raise.
+
 ### Client-resident tools
 
 The substrate (`ClientToolRuntime` + `ClientToolDispatch` + `AICancellationRegistry`) is generic — any companion can register `ClientResident` tools. A typical use is to let the LLM drive the UI (set form fields, click buttons, select rows, navigate). Server-side, a `ClientResident` tool dispatches to the client over SSE; the browser runs the tool and returns the result.
@@ -424,8 +510,8 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 ### Tool authoring rules
 
 - **Tool name format**: `<scope>.<verb>` — e.g. `my_module.analyse`, `_platform.list_documents`, `_platform.ui.set_field`. The `_platform.` prefix is reserved for platform / companion-contributed tools.
-- **Parameter schema is JSON-Schema-shaped.** The model sees `parameters: { type: "object", properties: { ... } }`. Required vs optional is currently implicit (all properties required); future schema versions may add explicit `required` lists.
-- **Executor must handle missing / malformed args gracefully.** An executor returns a plain JSON `string`; there is no error-result type. The `ToolHelpers` argument validators (`requireString`, `requireDecimal`, …) signal a bad argument by *raising* — `ToolArgumentError` for a missing / wrong-typed value, and `JsonException` from the parse — and the agent loop catches both at its dispatch site and classifies them as `InvalidArguments`, so the model is told to repair its arguments rather than to retry the same call.
+- **Parameter schema is JSON-Schema-shaped.** The model sees `parameters: { type: "object", properties: { … }, required: [ … ] }`. The `required` list is built from each parameter's `Required` flag, so an optional parameter is genuinely optional to the model. A parameter's own schema is either a bare type name or, per [Rich parameter schemas](#rich-parameter-schemas--nested-objects-arrays-and-enums), a nested object / array / enum.
+- **Executor must handle missing / malformed args gracefully.** An executor returns a plain JSON `string`; there is no error-result type. The `ToolHelpers` argument validators (`requireString`, `requireDecimal`, `requireDecoded`, …) signal a bad argument by *raising* — `ToolArgumentError` for a missing / wrong-typed value, and `JsonException` from the parse — and the agent loop catches both at its dispatch site and classifies them as `InvalidArguments`, so the model is told to repair its arguments rather than to retry the same call. A tool that declares a rich schema gets the check for free: `requireDecoded` validates against the declaration and names the offending path.
 - **Any other exception is classified as `ToolThrew`.** The turn is not aborted: the loop renders the failure as a tool-result string the model can read (`ToolInvocationError.toToolResultContent`) and continues. Prefer returning a domain-shaped JSON error the model can act on over throwing, and reserve `ToolArgumentError` for genuine argument defects.
 - **Result size**: every tool result passes a per-tool context budget at agent-loop dispatch (`ResultBudget` on the definition). `DefaultResultBudget` resolves to a generous SDK-wide ceiling no well-behaved result approaches; a tool whose result grows with data cardinality declares its own `ResultBudgetChars n` (characters of the returned JSON, must be positive), and an export-shaped tool whose whole point is the payload declares `NoResultBudget`. An over-budget result reaches the model as a typed JSON marker naming the tool and the elided size, with a steer to narrow the query — the call still counts as a success, not an error.
 - **Idempotency**: if a tool writes data, design it idempotent. The agent may retry on transient errors. Idempotency keys flow through the tool args.

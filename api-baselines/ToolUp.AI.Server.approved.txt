@@ -650,6 +650,8 @@ ToolUp.AI.ToolApprovalHandler.toolApprovalDecisionHandler(Microsoft.FSharp.Core.
 ToolUp.AI.ToolContext (class)
 ToolUp.AI.ToolContext.emitAction(Microsoft.AspNetCore.Http.HttpContext, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.ToolHelpers (class)
+ToolUp.AI.ToolHelpers.decodeArg`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.AI.ToolHelpers+ToolArgumentRefusal]
+ToolUp.AI.ToolHelpers.decodeOptionalArg`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.AI.ToolHelpers+ToolArgumentRefusal]
 ToolUp.AI.ToolHelpers.fableDeserialize`1(System.String) : T
 ToolUp.AI.ToolHelpers.fableSerialize(System.Object) : System.String
 ToolUp.AI.ToolHelpers.optionalBool(System.Text.Json.JsonElement, System.String, System.Boolean) : System.Boolean
@@ -657,16 +659,26 @@ ToolUp.AI.ToolHelpers.optionalDecimal(System.Text.Json.JsonElement, System.Strin
 ToolUp.AI.ToolHelpers.optionalString(System.Text.Json.JsonElement, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.ToolHelpers.optionalTypedArg`1(System.Text.Json.JsonElement, System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.AI.ToolHelpers.requireDecimal(System.Text.Json.JsonElement, System.String, System.String) : System.Decimal
+ToolUp.AI.ToolHelpers.requireDecoded`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : T
 ToolUp.AI.ToolHelpers.requireNumber(System.Text.Json.JsonElement, System.String, System.String) : System.Double
 ToolUp.AI.ToolHelpers.requireRawJson(System.Text.Json.JsonElement, System.String, System.String, System.String) : System.String
 ToolUp.AI.ToolHelpers.requireString(System.Text.Json.JsonElement, System.String, System.String) : System.String
 ToolUp.AI.ToolHelpers.requireTypedArg`1(System.Text.Json.JsonElement, System.String, System.String, System.String) : T
+ToolUp.AI.ToolHelpers.validateSchema(ToolUp.Platform.ToolSchemaNode, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AI.ToolHelpers+ToolArgumentRefusal]
 ToolUp.AI.ToolHelpers.wireTools(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
 ToolUp.AI.ToolHelpers+ToolArgumentError (class)
 ToolUp.AI.ToolHelpers+ToolArgumentError..ctor()
 ToolUp.AI.ToolHelpers+ToolArgumentError..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.AI.ToolHelpers+ToolArgumentError..ctor(System.String)
 ToolUp.AI.ToolHelpers+ToolArgumentError.message : System.String { get }
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal (class)
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal..ctor(System.String, System.String, System.String, System.String)
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Expected : System.String { get }
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Message : System.String { get }
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Path : System.String { get }
+ToolUp.AI.ToolHelpers+ToolArgumentRefusal.Received : System.String { get }
+ToolUp.AI.ToolHelpers+ToolArgumentRefusalModule (class)
+ToolUp.AI.ToolHelpers+ToolArgumentRefusalModule.toMessage(ToolUp.AI.ToolHelpers+ToolArgumentRefusal) : System.String
 ToolUp.AI.UIDecodeErrorHandler (class)
 ToolUp.AI.UIDecodeErrorHandler.MaxRawPayloadChars : System.Int32 (literal)
 ToolUp.AI.UIDecodeErrorHandler.truncatePayload(System.String) : System.String
