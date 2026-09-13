@@ -261,6 +261,17 @@
              as the corpus. Consumed by FederationWireCorpus.fs and
              Conformance\ModelExecutionSpecConformance.fs. -->
         <Compile Include="Support\CorpusAnchor.fs" />
+        <!-- Phase 784 — the remoting wire differential corpus. WireCorpus.fs
+             is ONE declaration of API-shaped values consumed by both wire
+             suites and (source-linked, under Fable) by the parity leg in
+             ToolUp.AI.Client.Tests, so the expected value a fixture decodes
+             to is a single F# declaration rather than two transcriptions of
+             it. It must follow Support\CorpusAnchor.fs, whose `excluded`
+             guard it uses to assert the in-repo corpus never resolves into a
+             sibling worktree; the two suites must follow it. -->
+        <Compile Include="Remoting\WireCorpus.fs" />
+        <Compile Include="Remoting\MsgPackRoundTripTests.fs" />
+        <Compile Include="Remoting\StjRoundTripTests.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />

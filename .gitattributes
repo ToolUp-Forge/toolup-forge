@@ -29,3 +29,10 @@
 *.woff2 binary
 *.ttf   binary
 *.eot   binary
+
+# Phase 784 — the remoting wire corpus's pinned MsgPack encodings. NOT left to
+# auto-detection: a short fixture can contain no NUL byte at all (`primitive-string`
+# is `a5 68 65 6c 6c 6f`), so git would classify it as TEXT and the `eol=lf` rule
+# above would rewrite any 0x0d 0x0a pair inside a payload. That is a silent
+# one-byte corruption of a file whose whole purpose is to be byte-exact.
+*.msgpack binary
