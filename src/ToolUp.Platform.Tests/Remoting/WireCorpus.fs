@@ -63,15 +63,29 @@
 /// This file is compiled into BOTH hosts — `ToolUp.Platform.Tests` on
 /// .NET and `ToolUp.AI.Client.Tests` under Fable — so the expected value
 /// a fixture decodes to is ONE F# declaration rather than two
-/// transcriptions of it. The encoders are .NET-only (`makeSerializer`
-/// wants a `Stream`; the STJ converter set is server-tier), so they sit
-/// behind `#if !FABLE_COMPILER`; the declarations, the classes and the
-/// comparison do not.
+/// transcriptions of it. The encoders, the generator and the corpus's
+/// filesystem half are server-tier (`makeSerializer` wants a `Stream`,
+/// the STJ converter set lives in `Platform.Server`, `CorpusAnchor` in
+/// this pack), so they sit behind a conditional; the declarations, the
+/// classes and the comparison do not.
+///
+/// **That conditional is `TOOLUP_WIRE_CORPUS_DOTNET`, declared by
+/// `ToolUp.Platform.Tests.fsproj` alone — NOT `#if !FABLE_COMPILER`,
+/// which is the obvious choice and is wrong.** `ToolUp.AI.Client.Tests`
+/// is a Fable project that is ALSO an ordinary `net10.0` project in
+/// `ToolUp.Forge.sln`, so `dotnet build` compiles this file there with
+/// `FABLE_COMPILER` undefined and with neither `Platform.Server` nor
+/// this pack's own `Support/` in scope. That is three `FS0039`s that a
+/// `dotnet fable` run cannot see and a Platform-pack build cannot see —
+/// only the full-solution gate does, which is where it was caught. A
+/// define the CONSUMING PROJECT declares says what is actually meant —
+/// "this project has the server tier" — rather than "this is not Fable",
+/// which is a different claim that happens to coincide in one project.
 module ToolUp.Platform.Tests.Remoting.WireCorpus
 
 open System
 
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
 open System.IO
 open System.Text
 open System.Text.Json
@@ -125,7 +139,7 @@ type WireClass =
     /// a date — the shape an actual API method returns.
     | NestedRecord
 
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
 /// Every class, in declaration order. Derived by reflection so it cannot
 /// fall behind the union — adding a case without adding a case to the
 /// corpus is then a red adequacy run rather than a silent hole.
@@ -237,7 +251,7 @@ type WireCase = {
     /// Compare a decoded `obj` against the declared value at the static
     /// type. `Ok ()` or a sentence naming what differed.
     Compare: obj -> Result<unit, string>
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
     /// The MsgPack bytes the SHIPPED writer emits for this value.
     WriteMsgPack: unit -> byte[]
     /// The JSON text the SHIPPED converter set emits for this value.
@@ -245,7 +259,7 @@ type WireCase = {
 #endif
 }
 
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
 /// The remoting STJ converter set, exactly as the server composes it. A
 /// fresh instance rather than `FableConverters.shared`: the corpus must
 /// not be able to perturb the process-wide options, and STJ freezes an
@@ -270,7 +284,7 @@ let jsonOptions: JsonSerializerOptions =
 /// has to resolve at the call site) and an inline function may not reach a
 /// private one. Nothing outside this module should call it.
 let typeMismatch (declared: Type) (decoded: obj) : string option =
-#if FABLE_COMPILER
+#if !TOOLUP_WIRE_CORPUS_DOTNET
     ignore declared
     ignore decoded
     None
@@ -333,7 +347,7 @@ let inline case<'T when 'T: equality> (cls: WireClass) (coverage: HostCoverage) 
         ClrType = typeof<'T>
         Value = box value
         Compare = compare
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
         WriteMsgPack =
             fun () ->
                 let serializer = Write.makeSerializer<'T> ()
@@ -569,7 +583,7 @@ let CorpusRelativePath = "tests/remoting-corpus"
 [<Literal>]
 let RefreshVariable = "TOOLUP_REMOTING_CORPUS_REFRESH"
 
-#if !FABLE_COMPILER
+#if TOOLUP_WIRE_CORPUS_DOTNET
 
 /// The repository root of the RUNNING checkout, derived from the test
 /// assembly's own location: `bin/<Config>/net10.0/…dll` → up five.

@@ -4,6 +4,17 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
+        <!-- Phase 784 — Remoting\WireCorpus.fs is source-linked into
+             ToolUp.AI.Client.Tests so the Fable parity leg compares against
+             the same declaration this pack does. Its encoders, its generator
+             and its filesystem half need the server tier and this pack's own
+             Support\CorpusAnchor.fs, neither of which that project has, and
+             `#if !FABLE_COMPILER` does NOT express that: the Fable project is
+             also an ordinary net10.0 project in the solution, so a plain
+             `dotnet build` compiles the file there with FABLE_COMPILER
+             undefined. This define is the honest condition — "the consuming
+             project has the server tier" — and only this project declares it. -->
+        <DefineConstants>$(DefineConstants);TOOLUP_WIRE_CORPUS_DOTNET</DefineConstants>
     </PropertyGroup>
     <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): replaced
          ~100 <Compile Link> entries that hard-linked SDK + companion source
