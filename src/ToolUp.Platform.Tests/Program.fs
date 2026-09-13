@@ -7,6 +7,7 @@ open Expecto
 open ToolUp.Forge
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
 open ToolUp.Platform.Tests.Graph
@@ -1899,6 +1900,11 @@ let private registeredTests =
         // generic unhandled 500; the MsgPack reader's TryRead/Read pair;
         // and the client-side recovery of the refusal from the wire.
         RemotingDecodeRefusalTests.tests
+        // Phase 786 — the same reader under hostile input: width-exact
+        // integers, a length prefix checked against the bytes actually
+        // present, and a bounded nesting depth — each a refusal, each
+        // probed in both directions, under a time and allocation ceiling.
+        MsgPackHostileInputTests.tests
         // Phase 196 — adversarial fail-closed pack: proves un-annotated /
         // mis-annotated / under-credentialled calls refuse to start or fail
         // closed (the inverse of the Phase 69d/69h happy-path coverage), plus

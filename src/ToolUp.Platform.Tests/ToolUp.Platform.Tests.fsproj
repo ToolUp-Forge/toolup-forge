@@ -2000,6 +2000,14 @@
              client-side recovery. Placed beside the other Remoting packs;
              no ordering constraint (it references only shipped surface). -->
         <Compile Include="InProcess\RemotingDecodeRefusalTests.fs" />
+        <!-- Phase 786 — the MsgPack reader under hostile input: a narrowed
+             integer, an over-claimed length prefix, a 10,000-deep nesting
+             and a str running past the buffer, each refusing with its
+             named reason under a time and allocation ceiling; plus the
+             well-formed round-trip guard that the three new bounds leave
+             ordinary traffic alone. First file in the Remoting\ folder;
+             no ordering constraint (it references only shipped surface). -->
+        <Compile Include="Remoting\MsgPackHostileInputTests.fs" />
         <!-- Phase 196 — adversarial fail-closed test pack. Proves the
              inverse of the Phase 69d/69h happy-path packs: an un-annotated /
              mis-annotated / under-credentialled call FAILS CLOSED rather
