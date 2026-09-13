@@ -293,6 +293,81 @@ let private timeSpanTickLoss =
                 "%d drawn TimeSpan value(s) also lose precision through the MsgPack wire, which writes ticks as an int64 and should be exact. The divergence recorded here is then not a JSON-side defect but something wider."
                 (List.length msgPackLossy))
 
+// ─── Refuse-path mutations (784.D) ───────────────────────────────────
+
+/// The JSON half of the refuse-path arm. Same mutation population, same
+/// declared-outcome discipline, different wire — and the differences are
+/// the point: an int64 payload read at int32 is REFUSED here and silently
+/// narrowed on the MsgPack wire, while a quoted number is accepted here
+/// (this converter set enables `AllowReadingFromString`) and refused
+/// there. A corpus that ran the mutations against one wire only would
+/// report each of those as a property of "the decoder".
+///
+/// The seam under test is `FableConverters.tryDeserialiseElement`, which
+/// takes an already-parsed `JsonElement` — so a payload that is not
+/// well-formed JSON never reaches it and is classified as `ThrewUnnamed`
+/// at the parse. That is not a cheat: it is the honest description of
+/// where a dispatcher's refusal actually comes from on this wire, and
+/// writing it down is what will make it visible if Phase 785 moves the
+/// boundary.
+let private refusals =
+    testList "refuse-path mutations" [
+        yield! [
+            for m in mutations () do
+                match m.Json with
+                | None -> ()
+                | Some payload ->
+                    testCase (m.Name + " (" + string m.Kind + ")")
+                    <| fun () ->
+                        let actual, detail = classifyJson m.Target payload
+                        printfn "json refusal — %s: %s | %s" m.Name (describeOutcome actual) detail
+
+                        if not (sameOutcomeClass actual m.ExpectedJson) then
+                            failtestf
+                                "the STJ decoder's behaviour on mutation `%s` has changed class.\n  declared: %s\n  measured: %s (%s)\nIf the decoder was IMPROVED, update the declaration in `WireCorpus.mutations`; if it was not, a refusal has been lost."
+                                m.Name
+                                (describeOutcome m.ExpectedJson)
+                                (describeOutcome actual)
+                                detail
+        ]
+
+        testCase "at least one mutation is actually REFUSED on this wire"
+        <| fun () ->
+            let refused =
+                mutations ()
+                |> List.filter (fun m ->
+                    match m.Json, m.ExpectedJson with
+                    | Some _, Refused -> true
+                    | _ -> false)
+
+            Expect.isNonEmpty
+                refused
+                "no JSON mutation is declared as refused, so this arm is asserting only that the decoder accepts things."
+
+        testCase "the two wires disagree on at least one mutation"
+        <| fun () ->
+            // The differential claim, at the refuse path. If the two wires
+            // ever agreed on everything this case would go red — and that
+            // would be worth knowing, because it would mean one of the two
+            // populations had stopped being exercised.
+            let disagreements =
+                mutations ()
+                |> List.filter (fun m ->
+                    m.MsgPack.IsSome
+                    && m.Json.IsSome
+                    && not (sameOutcomeClass m.ExpectedMsgPack m.ExpectedJson))
+                |> List.map (fun m -> m.Name)
+
+            printfn
+                "wires disagree on %d mutation(s): %s"
+                (List.length disagreements)
+                (String.Join(", ", disagreements))
+
+            Expect.isNonEmpty
+                disagreements
+                "the two wires now agree on every mutation. Either both decoders converged — in which case say so here — or one of the two mutation populations has stopped being exercised."
+    ]
+
 /// The differential claim itself, stated as a test rather than left
 /// implicit in the existence of two suites: both wires are exercised over
 /// the SAME case list, so neither can quietly cover a different
@@ -315,6 +390,7 @@ let tests =
         generatedRoundTrip
         narrowingFalsifier
         fixturePin
+        refusals
         timeSpanTickLoss
         differentialShape
     ]

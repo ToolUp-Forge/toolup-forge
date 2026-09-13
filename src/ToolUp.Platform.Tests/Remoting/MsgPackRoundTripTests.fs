@@ -492,6 +492,103 @@ let private divergences =
             crossHostCases
             "no case is in the cross-host set, so the Fable parity leg would be vacuously green."
 
+// ─── Refuse-path mutations (784.D) ───────────────────────────────────
+
+/// The corpus's other half: what each decoder does with a payload that
+/// does NOT encode a value of the target type. Phase 783 gave the reader
+/// `TryRead`, so there is now a stated right answer to hold it to.
+///
+/// Each mutation declares its measured outcome CLASS and this arm asserts
+/// it. That is deliberately not the same as asserting every mutation is
+/// refused: several are ACCEPTED today, and the most important row in the
+/// list — an int64 payload read at int32 — is accepted with a silently
+/// narrowed value rather than refused. Writing those down as `Accepted`
+/// with their reason is what makes them findings instead of omissions,
+/// and it is what makes this arm go red the day Phase 785's closed
+/// algebra turns one of them into a refusal.
+let private refusals =
+    testList "refuse-path mutations" [
+        yield! [
+            for m in mutations () do
+                match m.MsgPack with
+                | None -> ()
+                | Some payload ->
+                    testCase (m.Name + " (" + string m.Kind + ")")
+                    <| fun () ->
+                        let actual, detail = classifyMsgPack m.Target payload
+                        printfn "msgpack refusal — %s: %s | %s" m.Name (describeOutcome actual) detail
+
+                        if not (sameOutcomeClass actual m.ExpectedMsgPack) then
+                            failtestf
+                                "the MsgPack decoder's behaviour on mutation `%s` has changed class.\n  declared: %s\n  measured: %s (%s)\nIf the decoder was IMPROVED, update the declaration in `WireCorpus.mutations` — that is the whole point of this list going red. If it was not, a refusal has been lost."
+                                m.Name
+                                (describeOutcome m.ExpectedMsgPack)
+                                (describeOutcome actual)
+                                detail
+        ]
+
+        testCase "every mutation kind is represented"
+        <| fun () ->
+            let drawn = mutations () |> List.map (fun m -> m.Kind) |> List.distinct
+
+            let missing = allMutationKinds |> List.filter (fun k -> not (List.contains k drawn))
+
+            Expect.isEmpty
+                missing
+                (sprintf "these mutation kinds drew nothing, so the refuse-path arm says nothing about them: %A" missing)
+
+        testCase "the MsgPack wire refuses NONE of these — 783's boundary, measured"
+        <| fun () ->
+            // The headline result of the refuse-path arm, asserted rather
+            // than left to be inferred from ten individual cases.
+            //
+            // Phase 783 gave the reader a named refusal and `TryRead`
+            // returns `Result<obj, DecodeError>` — but over a real
+            // malformed-payload population NOT ONE mutation produces a
+            // `DecodeError`. Every one either yields a wrong VALUE or
+            // escapes as a raw BCL exception: `KeyNotFoundException` from
+            // `interpretStringAs` looking a string up as a union case
+            // name, `ArgumentOutOfRangeException` from
+            // `Encoding.UTF8.GetString` trusting a length header past the
+            // end of the buffer, `IndexOutOfRangeException` reading a
+            // record's third field off a two-element array,
+            // `ArgumentException` asking `FSharpType.GetUnionCases` about
+            // `int32`.
+            //
+            // That is 783's own stated boundary made concrete: its
+            // refusals are raised where the decoder KNOWS it is refusing,
+            // and these paths do not know — they index, cast and look up
+            // on the assumption that the payload is well formed. Closing
+            // it is the whole content of Phase 785's closed algebra, and
+            // this case is what will go red the day the first one closes.
+            let refused =
+                mutations ()
+                |> List.filter (fun m ->
+                    match m.MsgPack, m.ExpectedMsgPack with
+                    | Some _, Refused -> true
+                    | _ -> false)
+                |> List.map (fun m -> m.Name)
+
+            Expect.isEmpty
+                refused
+                (sprintf
+                    "MsgPack mutation(s) are now declared as REFUSED: %s. If Phase 785 has landed, that is the good news and this case is the one that says so — delete it and read the per-mutation cases above. If it has not, the declaration is wrong."
+                    (String.Join(", ", refused)))
+
+        testCase "and it is not vacuous: the population is non-empty and every kind is drawn"
+        <| fun () ->
+            // The case above asserts an ABSENCE, which an empty mutation
+            // list would satisfy trivially. This is the floor under it.
+            let withPayload = mutations () |> List.filter (fun m -> m.MsgPack.IsSome)
+
+            Expect.isTrue
+                (List.length withPayload >= List.length allMutationKinds)
+                (sprintf
+                    "only %d MsgPack mutation(s) are declared against %d kinds; the absence asserted above would be close to vacuous."
+                    (List.length withPayload)
+                    (List.length allMutationKinds))
+    ]
+
 [<Tests>]
 let tests =
     testList "Remoting MsgPack wire corpus" [
@@ -500,6 +597,7 @@ let tests =
         generatedRoundTrip
         narrowingFalsifier
         fixturePin
+        refusals
         adequacy
         divergences
     ]

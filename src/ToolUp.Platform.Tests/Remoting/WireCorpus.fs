@@ -89,6 +89,9 @@ open System
 open System.IO
 open System.Text
 open System.Text.Json
+// Phase 783's named refusal — the right answer the refuse-path arm holds
+// both decoders to (784.D).
+open ToolUp.Remoting
 open ToolUp.Remoting.MsgPack
 #endif
 
@@ -1066,5 +1069,282 @@ let adequacyReport (label: string) (cases: WireCase list) =
         |> String.concat " "
 
     sprintf "%s: %d case(s) over %d class(es) — %s" label (List.length cases) (List.length allClasses) rows
+
+
+// ─── Refuse-path mutations (784.D) ───────────────────────────────────
+//
+// A corpus that only covers ACCEPT measures half the contract. Phase 783
+// gave both decoders a named refusal — `Reader.TryRead` and
+// `FableConverters.tryDeserialiseElement` return `Result<obj,
+// DecodeError>` — so a malformed payload now has a stated right answer,
+// and this arm is what holds them to it.
+//
+// The outcome each mutation produces is DECLARED, and the three
+// possibilities are kept distinct on purpose. "Refused" is the contract.
+// "Accepted" is a real gap — the decoder read a value out of a payload
+// that does not encode one — and calling that a refusal would make the
+// corpus agree with whatever it is shown. "ThrewUnnamed" is 783's own
+// stated boundary: its decoder interiors are still exception-shaped, and
+// an escape that is not a named refusal is precisely what Phase 785's
+// closed algebra exists to remove. Recording all three means that the day
+// either decoder improves, this list goes red and names the mutation that
+// moved — which is the only way a quarantine retires itself.
+
+/// The mutation classes this arm claims to cover.
+[<RequireQualifiedAccess>]
+type MutationKind =
+    /// A leading format byte replaced with a different, individually
+    /// valid one — the payload is well-formed for some OTHER shape.
+    | WrongTag
+    /// The payload cut short mid-value.
+    | Truncated
+    /// A value written at a width the target type cannot hold.
+    | WrongWidth
+    /// A record written with fewer fields than its type has.
+    | MissingField
+    /// The same with more.
+    | ExtraField
+
+/// What a decoder did with a mutated payload, as measured.
+type RefusalOutcome =
+    /// A named `DecodeError` came back as data. The contract.
+    | Refused
+    /// The decoder produced a VALUE from a payload that does not encode
+    /// one. A gap, not a pass — the note says what it produced.
+    | Accepted of note: string
+    /// Something escaped that is not a named refusal. 783's declared
+    /// boundary; the note says what refused and where.
+    | ThrewUnnamed of note: string
+
+type WireMutation = {
+    Name: string
+    Kind: MutationKind
+    /// The type the mutated payload is decoded AT.
+    Target: Type
+    /// The mutated MsgPack payload, or `None` when the mutation is
+    /// JSON-only.
+    MsgPack: byte[] option
+    /// The mutated JSON text, or `None` when the mutation is
+    /// MsgPack-only.
+    Json: string option
+    /// The measured outcome, per wire. A mutation can be refused on one
+    /// wire and accepted on the other, and that difference is one of the
+    /// things this corpus exists to surface.
+    ExpectedMsgPack: RefusalOutcome
+    ExpectedJson: RefusalOutcome
+}
+
+/// Classify what the MsgPack reader does with a payload. Never throws:
+/// the classification IS the measurement.
+let classifyMsgPack (target: Type) (bytes: byte[]) : RefusalOutcome * string =
+    try
+        match Read.Reader(bytes).TryRead target with
+        | Ok value -> Accepted(sprintf "%A" value), "Ok"
+        | Error e -> Refused, DecodeError.render e
+    with ex ->
+        ThrewUnnamed(ex.GetType().Name), ex.Message
+
+/// The same for the STJ converter set. A payload that is not even
+/// well-formed JSON cannot reach `tryDeserialiseElement` (which takes an
+/// already-parsed `JsonElement`), so the parse is part of what is
+/// classified — that is the real seam a dispatcher sits behind.
+let classifyJson (target: Type) (text: string) : RefusalOutcome * string =
+    try
+        use document = JsonDocument.Parse text
+
+        match
+            ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                document.RootElement
+                target
+                jsonOptions
+        with
+        | Ok value -> Accepted(sprintf "%A" value), "Ok"
+        | Error e -> Refused, DecodeError.render e
+    with ex ->
+        ThrewUnnamed(ex.GetType().Name), ex.Message
+
+/// The mutated population. Derived FROM the pinned cases rather than
+/// written out as byte literals, so a writer change re-derives the
+/// mutations instead of leaving a wall of stale hex behind.
+let mutations () : WireMutation list =
+    let flatRecord = pinnedCases |> List.find (fun c -> c.Name = "record-flat")
+    let listCase = pinnedCases |> List.find (fun c -> c.Name = "list-small")
+    let stringCase = pinnedCases |> List.find (fun c -> c.Name = "primitive-string")
+
+    let int64Case =
+        pinnedCases |> List.find (fun c -> c.Name = "width-int64-beyond-int32")
+
+    [
+        // ── WrongTag ──
+        {
+            Name = "wrong-tag-nil-for-record"
+            Kind = MutationKind.WrongTag
+            Target = flatRecord.ClrType
+            // `c0` is nil: individually valid, structurally wrong for a
+            // three-field record.
+            MsgPack = Some [| 0xC0uy |]
+            Json = Some "null"
+            ExpectedMsgPack = Accepted "nil decodes to a null obj at any target type"
+            ExpectedJson = Accepted "JSON null maps onto a null reference for a record type"
+        }
+        {
+            Name = "wrong-tag-string-for-list"
+            Kind = MutationKind.WrongTag
+            Target = listCase.ClrType
+            MsgPack = Some(Array.append [| 0xA3uy |] (Encoding.UTF8.GetBytes "abc"))
+            Json = Some "\"abc\""
+            ExpectedMsgPack =
+                ThrewUnnamed
+                    "KeyNotFoundException from interpretStringAs, which looks the string up as a string-enum case name of the target union"
+            ExpectedJson = Refused
+        }
+        {
+            Name = "wrong-tag-bool-for-string"
+            Kind = MutationKind.WrongTag
+            Target = stringCase.ClrType
+            MsgPack = Some [| 0xC3uy |]
+            Json = Some "true"
+            ExpectedMsgPack =
+                Accepted
+                    "a bool decodes to a boxed bool whatever the target type, so the cast fails later and elsewhere"
+            ExpectedJson = Refused
+        }
+
+        // ── Truncated ──
+        {
+            Name = "truncated-record-body"
+            Kind = MutationKind.Truncated
+            Target = flatRecord.ClrType
+            MsgPack = Some(let b = flatRecord.WriteMsgPack() in b[.. b.Length / 2])
+            Json = Some(let t = flatRecord.WriteJson() in t.Substring(0, t.Length / 2))
+            ExpectedMsgPack =
+                ThrewUnnamed "ArgumentOutOfRangeException from Encoding.UTF8.GetString reading past the buffer"
+            ExpectedJson = ThrewUnnamed "JsonDocument.Parse refuses malformed JSON before the converter seam is reached"
+        }
+        {
+            Name = "truncated-string-header"
+            Kind = MutationKind.Truncated
+            Target = stringCase.ClrType
+            // A fixstr header claiming five bytes with two present.
+            MsgPack = Some [| 0xA5uy; 0x68uy; 0x65uy |]
+            Json = None
+            ExpectedMsgPack =
+                ThrewUnnamed "ArgumentOutOfRangeException from Encoding.UTF8.GetString — the header's length is trusted"
+            ExpectedJson = Refused
+        }
+        {
+            Name = "truncated-empty-payload"
+            Kind = MutationKind.Truncated
+            Target = stringCase.ClrType
+            MsgPack = Some Array.empty
+            Json = Some ""
+            ExpectedMsgPack = ThrewUnnamed "IndexOutOfRangeException on the very first byte read"
+            ExpectedJson = ThrewUnnamed "an empty document is not JSON; the parse refuses before the converter seam"
+        }
+
+        // ── WrongWidth ──
+        // The narrowing the whole corpus is built around, asked of the
+        // REFUSAL path. Reading an int64 payload at int32 is a decode that
+        // cannot be right, and it is ACCEPTED: `interpretIntegerAs`
+        // narrows with an unchecked conversion once it knows the target
+        // type, so nothing in the reader is in a position to notice. This
+        // is the most valuable row in the list — a silent wrong ANSWER
+        // rather than a missing error, and exactly what a closed decoder
+        // algebra has to close.
+        {
+            Name = "wrong-width-int64-into-int32"
+            Kind = MutationKind.WrongWidth
+            Target = typeof<int32>
+            MsgPack = Some(int64Case.WriteMsgPack())
+            Json = Some(int64Case.WriteJson())
+            ExpectedMsgPack = Accepted "narrowed by an unchecked conversion in interpretIntegerAs"
+            ExpectedJson = Refused
+        }
+        {
+            Name = "wrong-width-string-into-int"
+            Kind = MutationKind.WrongWidth
+            Target = typeof<int32>
+            MsgPack = Some(Array.append [| 0xA1uy |] (Encoding.UTF8.GetBytes "7"))
+            Json = Some "\"7\""
+            ExpectedMsgPack =
+                ThrewUnnamed
+                    "ArgumentException — interpretStringAs asks FSharpType.GetUnionCases for int32, which is not a union"
+            ExpectedJson =
+                Accepted
+                    "the remoting converter set enables JsonNumberHandling.AllowReadingFromString, so a quoted number is a legitimate int on this wire"
+        }
+
+        // ── MissingField / ExtraField ──
+        // A record is an ARRAY on the msgpack wire, so field count is
+        // structural there: a three-field record written as a two-element
+        // array is a different shape, not a shorter one. On the JSON wire
+        // it is a property bag, and both directions are deliberately
+        // tolerant — which is what keeps an additive wire change
+        // non-breaking, and is also why an additive field reads back as
+        // null rather than as a refusal.
+        {
+            Name = "missing-field-record"
+            Kind = MutationKind.MissingField
+            Target = flatRecord.ClrType
+            MsgPack =
+                Some(
+                    Array.concat [
+                        [| 0x92uy |]
+                        [| 0xA1uy |]
+                        Encoding.UTF8.GetBytes "a"
+                        [| 0xA1uy |]
+                        Encoding.UTF8.GetBytes "b"
+                    ]
+                )
+            Json = Some "{\"Line1\":\"a\"}"
+            ExpectedMsgPack =
+                ThrewUnnamed
+                    "IndexOutOfRangeException — the record reader reads field 3 off the end of a 2-element array"
+            ExpectedJson =
+                Accepted
+                    "an absent reference-type field reads back as null rather than refusing — the additive read path this SDK documents"
+        }
+        {
+            Name = "extra-field-record"
+            Kind = MutationKind.ExtraField
+            Target = flatRecord.ClrType
+            MsgPack =
+                Some(
+                    Array.append
+                        (flatRecord.WriteMsgPack() |> Array.mapi (fun i b -> if i = 0 then 0x94uy else b))
+                        (Array.append [| 0xA1uy |] (Encoding.UTF8.GetBytes "x"))
+                )
+            Json = Some "{\"Line1\":\"a\",\"Postcode\":\"b\",\"Country\":\"c\",\"Surplus\":\"x\"}"
+            ExpectedMsgPack =
+                Accepted
+                    "the record reader consumes exactly as many elements as the type has fields and ignores the surplus"
+            ExpectedJson =
+                Accepted
+                    "an unmatched property is ignored by default, which is what keeps an additive wire change non-breaking"
+        }
+    ]
+
+/// Every mutation kind, for this arm's own adequacy check.
+let allMutationKinds: MutationKind list =
+    FSharp.Reflection.FSharpType.GetUnionCases typeof<MutationKind>
+    |> Array.map (fun c -> FSharp.Reflection.FSharpValue.MakeUnion(c, [||]) :?> MutationKind)
+    |> Array.toList
+
+/// Render an outcome for a message without leaking a whole value into it.
+let describeOutcome (outcome: RefusalOutcome) =
+    match outcome with
+    | Refused -> "Refused (a named DecodeError)"
+    | Accepted note -> sprintf "Accepted — %s" note
+    | ThrewUnnamed note -> sprintf "ThrewUnnamed — %s" note
+
+/// Two outcomes match when they are the same CLASS. The notes are prose
+/// for a reader, never part of the assertion: a stale note is a
+/// documentation defect, a changed class is a contract change.
+let sameOutcomeClass (a: RefusalOutcome) (b: RefusalOutcome) =
+    match a, b with
+    | Refused, Refused -> true
+    | Accepted _, Accepted _ -> true
+    | ThrewUnnamed _, ThrewUnnamed _ -> true
+    | _ -> false
 
 #endif
