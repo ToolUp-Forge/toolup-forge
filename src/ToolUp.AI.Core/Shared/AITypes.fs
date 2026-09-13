@@ -259,6 +259,34 @@ type AIStreamEvent =
         targetModule: string *
         intendedQueryKey: string *
         redactedPayloadPreview: string
+    /// Phase 503: ask the user to approve a consequential tool call
+    /// before it runs. Emitted by the agent loop's dispatch site when the
+    /// deployment's `IToolApprovalPolicy` holds this invocation; the tool
+    /// is suspended on a `TaskCompletionSource` keyed by `approvalId`
+    /// until the browser POSTs a `ToolApprovalDecisionRequest` to
+    /// `/api/ai/tool-approval`, or the shared suspended-dispatch timeout
+    /// fires and the invocation is refused.
+    ///
+    /// The payload is FSharp-primitive-only by construction (rule 1 —
+    /// identity by value): every field is a `Guid` or a `string`, so no
+    /// server type and no live handle crosses the wire, and a non-.NET
+    /// client can render the prompt from the JSON alone.
+    ///
+    /// `summary` and `detail` are the DEPLOYMENT's own words about the
+    /// consequence, from the `ApprovalPrompt` its policy returned — the
+    /// SDK cannot know which of a consumer's tools is irreversible.
+    /// `redactedArgumentsPreview` is a short, length-capped rendering of
+    /// the model's own arguments: what the tool would be called WITH,
+    /// never the module's data, which has not been read.
+    | ToolApprovalRequired of
+        taskId: Guid *
+        approvalId: Guid *
+        conversationId: Guid *
+        toolName: string *
+        sourceModule: string *
+        summary: string *
+        detail: string *
+        redactedArgumentsPreview: string
 
 // ─── Client-resident tool result ─────────────────────────────────
 

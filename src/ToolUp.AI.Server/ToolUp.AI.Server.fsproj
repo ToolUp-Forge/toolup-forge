@@ -38,6 +38,13 @@
         <Compile Include="Server\ToolHelpers.fs" />
         <Compile Include="Server\AIToolRegistry.fs" />
         <Compile Include="Server\NarrativeTools.fs" />
+        <!-- Phase 503 — the suspended-dispatch mechanism, once: the
+             pending-prompt registry, the abandon-on-timeout race, and the
+             one budget every suspended round trip in this tier waits on.
+             MUST precede AIConsentDispatch (whose registry is a facade
+             over it) and ToolApprovalDispatch. Depends on nothing but the
+             BCL. -->
+        <Compile Include="Server\SuspendedPrompt.fs" />
         <!-- Phase 36.D — per-conversation cross-module read consent: the
              suspended-dispatch registry, the persisted per-conversation
              record, and the gate the four reach tools call. Depends only
@@ -52,6 +59,13 @@
              tools through it, and AIAssistantHandler, which stamps the
              active-module item declared here. -->
         <Compile Include="Server\AICrossModuleAudit.fs" />
+        <!-- Phase 503 — the human-in-the-loop approval gate: the policy
+             consult, the held-invocation registry and the approval audit
+             trail. Depends on AIToolRegistry (the access-context
+             reconstruction) and AIConsentDispatch (the per-turn items
+             stamps and the argument-preview redaction it shares); MUST
+             precede AIAgentEngine, which calls the gate. -->
+        <Compile Include="Server\ToolApprovalDispatch.fs" />
         <!-- Phase 36.B — built-in cross-module AI read tools (`_platform.ai.*`).
              Depends only on AIToolRegistry + the platform substrate; registered
              by AICompose alongside NarrativeTools.builtInTools. -->
@@ -63,6 +77,10 @@
              depends on AIToolRegistry (the permission re-check) and
              AIConsentDispatch (the registry + the persisted record). -->
         <Compile Include="Server\AIConsentHandler.fs" />
+        <!-- Phase 503 — the `/api/ai/tool-approval` POST handler. Mirrors
+             AIConsentHandler and sits beside it; depends on
+             ToolApprovalDispatch (the registry + the audit writer). -->
+        <Compile Include="Server\ToolApprovalHandler.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
         <!-- Phase 6j.B — Tier-3 fast-path triage. Depends on ToolContext
              (the ModuleAction emit) + the AI.Core field-registry seam;

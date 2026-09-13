@@ -146,6 +146,7 @@ ToolUp.AI.AIStreamEvent.IsMessageDelta : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsStreamCancelled : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsStreamError : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsTaskStatusChanged : System.Boolean { get }
+ToolUp.AI.AIStreamEvent.IsToolApprovalRequired : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsToolCallCompleted : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsToolCallStarted : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.Tag : System.Int32 { get }
@@ -186,11 +187,21 @@ ToolUp.AI.AIStreamEvent+Tags.MessageDelta : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.StreamCancelled : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.StreamError : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.TaskStatusChanged : System.Int32 (literal)
+ToolUp.AI.AIStreamEvent+Tags.ToolApprovalRequired : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.ToolCallCompleted : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+Tags.ToolCallStarted : System.Int32 (literal)
 ToolUp.AI.AIStreamEvent+TaskStatusChanged (class)
 ToolUp.AI.AIStreamEvent+TaskStatusChanged.status : ToolUp.AI.AITaskStatus { get }
 ToolUp.AI.AIStreamEvent+TaskStatusChanged.taskId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired (class)
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.approvalId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.conversationId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.detail : System.String { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.redactedArgumentsPreview : System.String { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.sourceModule : System.String { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.summary : System.String { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.taskId : System.Guid { get }
+ToolUp.AI.AIStreamEvent+ToolApprovalRequired.toolName : System.String { get }
 ToolUp.AI.AIStreamEvent+ToolCallCompleted (class)
 ToolUp.AI.AIStreamEvent+ToolCallCompleted.conversationId : System.Guid { get }
 ToolUp.AI.AIStreamEvent+ToolCallCompleted.result : System.String { get }
@@ -262,6 +273,10 @@ ToolUp.AI.AnswerVerification.Numbers : Microsoft.FSharp.Collections.FSharpList`1
 ToolUp.AI.AnswerVerification.Unmatched : System.Int32 { get }
 ToolUp.AI.AnswerVerification.Unverifiable : System.Int32 { get }
 ToolUp.AI.AnswerVerification.Verified : System.Int32 { get }
+ToolUp.AI.ApprovalPrompt (class)
+ToolUp.AI.ApprovalPrompt..ctor(System.String, System.String)
+ToolUp.AI.ApprovalPrompt.Detail : System.String { get }
+ToolUp.AI.ApprovalPrompt.Summary : System.String { get }
 ToolUp.AI.ClientToolAuthDecision (class)
 ToolUp.AI.ClientToolAuthDecision.Allow : ToolUp.AI.ClientToolAuthDecision { get }
 ToolUp.AI.ClientToolAuthDecision.IsAllow : System.Boolean { get }
@@ -318,6 +333,8 @@ ToolUp.AI.IPlatformAIKeyStore.HasPlatformKey(System.String) : Microsoft.FSharp.C
 ToolUp.AI.IPlatformAIKeyStore.HasTeamKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.AI.IPlatformAIKeyStore.SetPlatformKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.AI.IPlatformAIKeyStore.SetTeamKey(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.AI.IToolApprovalPolicy (interface)
+ToolUp.AI.IToolApprovalPolicy.Requires(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.ToolApprovalRequirement
 ToolUp.AI.ModuleAIContext (class)
 ToolUp.AI.ModuleAIContext..ctor(System.String, System.String)
 ToolUp.AI.ModuleAIContext.ModuleName : System.String { get }
@@ -397,6 +414,32 @@ ToolUp.AI.TeamAIKeyStatus..ctor(System.String, System.String, System.Boolean)
 ToolUp.AI.TeamAIKeyStatus.HasKey : System.Boolean { get }
 ToolUp.AI.TeamAIKeyStatus.ProviderId : System.String { get }
 ToolUp.AI.TeamAIKeyStatus.TeamId : System.String { get }
+ToolUp.AI.ToolApprovalDecision (class)
+ToolUp.AI.ToolApprovalDecision.Approved : ToolUp.AI.ToolApprovalDecision { get }
+ToolUp.AI.ToolApprovalDecision.IsApproved : System.Boolean { get }
+ToolUp.AI.ToolApprovalDecision.IsRejected : System.Boolean { get }
+ToolUp.AI.ToolApprovalDecision.Rejected : ToolUp.AI.ToolApprovalDecision { get }
+ToolUp.AI.ToolApprovalDecision.Tag : System.Int32 { get }
+ToolUp.AI.ToolApprovalDecision+Tags (class)
+ToolUp.AI.ToolApprovalDecision+Tags.Approved : System.Int32 (literal)
+ToolUp.AI.ToolApprovalDecision+Tags.Rejected : System.Int32 (literal)
+ToolUp.AI.ToolApprovalDecisionModule (class)
+ToolUp.AI.ToolApprovalDecisionModule.ofToken(System.String) : ToolUp.AI.ToolApprovalDecision
+ToolUp.AI.ToolApprovalDecisionModule.toToken(ToolUp.AI.ToolApprovalDecision) : System.String
+ToolUp.AI.ToolApprovalDecisionRequest (class)
+ToolUp.AI.ToolApprovalDecisionRequest..ctor(System.Guid, System.String)
+ToolUp.AI.ToolApprovalDecisionRequest.ApprovalId : System.Guid { get }
+ToolUp.AI.ToolApprovalDecisionRequest.Decision : System.String { get }
+ToolUp.AI.ToolApprovalRequirement (class)
+ToolUp.AI.ToolApprovalRequirement.ApprovalNotRequired : ToolUp.AI.ToolApprovalRequirement { get }
+ToolUp.AI.ToolApprovalRequirement.IsApprovalNotRequired : System.Boolean { get }
+ToolUp.AI.ToolApprovalRequirement.IsApprovalRequired : System.Boolean { get }
+ToolUp.AI.ToolApprovalRequirement.Tag : System.Int32 { get }
+ToolUp.AI.ToolApprovalRequirement+ApprovalRequired (class)
+ToolUp.AI.ToolApprovalRequirement+ApprovalRequired.prompt : ToolUp.AI.ApprovalPrompt { get }
+ToolUp.AI.ToolApprovalRequirement+Tags (class)
+ToolUp.AI.ToolApprovalRequirement+Tags.ApprovalNotRequired : System.Int32 (literal)
+ToolUp.AI.ToolApprovalRequirement+Tags.ApprovalRequired : System.Int32 (literal)
 ToolUp.AI.ToolCallRecord (class)
 ToolUp.AI.ToolCallRecord..ctor(System.Guid, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.ToolCallStatus)
 ToolUp.AI.ToolCallRecord.Arguments : System.String { get }

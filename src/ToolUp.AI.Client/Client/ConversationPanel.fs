@@ -1140,7 +1140,12 @@ let View
     // open. Mounting it in the full-page assistant as well would put two
     // hosts in one tab and stack two identical overlays over one question.
     if not isOpen then
-        ConsentDialog.View()
+        // Phase 503 joins the consent modal here. A fragment rather than a
+        // wrapper element: the collapsed panel renders no chrome of its
+        // own, and both dialogs are fixed-position overlays that return
+        // `Html.none` when nothing is pending, so a real node would be a
+        // permanent empty div in every deployment that never prompts.
+        React.Fragment [ ConsentDialog.View(); ToolApprovalDialog.View() ]
     else
         Html.div [
             prop.className "fixed right-0 top-0 h-full bg-white shadow-xl z-20 flex flex-col border-l border-gray-200"
@@ -1425,5 +1430,12 @@ let View
                 // fixed-position overlay, so its position in the tree
                 // affects nothing but where the one mount lives.
                 ConsentDialog.View()
+
+                // Phase 503 — the tool-approval modal, mounted beside the
+                // consent one and on the same argument: one host per tab,
+                // in both branches, because a held invocation belongs to
+                // the conversation rather than to whether the panel is
+                // expanded.
+                ToolApprovalDialog.View()
             ]
         ]
