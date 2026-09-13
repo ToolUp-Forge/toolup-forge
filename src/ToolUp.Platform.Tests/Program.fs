@@ -2205,6 +2205,14 @@ let private registeredTests =
         // nothing), the round-trip law, and a committed go-red decoder
         // that silently widens so the differential is known to fail.
         DecoderAlgebraTests.tests
+        // Phase 69k — the source generator, held to the decoders Phase 785
+        // hand-wrote: the covered set, the per-field decode of the shapes a
+        // generator could plausibly get wrong, the union tags, and a
+        // perturbed pin so the comparison is known to fail. Plus the census
+        // — how far the algebra reaches over the SDK's own API records,
+        // which the facet cannot report because an undeclared record is
+        // absent from it rather than classified `Reflection`.
+        GeneratorFidelityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

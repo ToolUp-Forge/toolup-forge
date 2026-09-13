@@ -294,6 +294,13 @@
              784.D mutation population) and after the two round-trip
              packs, whose declarations it reuses rather than re-deriving. -->
         <Compile Include="Remoting\DecoderAlgebraTests.fs" />
+        <!-- Phase 69k — the source generator's contract pack. AFTER
+             DecoderAlgebraTests.fs, because its fidelity claim is a link in
+             that pack's chain rather than a claim of its own: 785 proved the
+             hand-written decoders agree with the reflection reader over the
+             784 corpus, and this proves the generator plans the same decode.
+             Neither the corpus nor the reader is re-derived here. -->
+        <Compile Include="Remoting\GeneratorFidelityTests.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
@@ -2391,6 +2398,11 @@
     <ItemGroup>
         <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <!-- Phase 69k — the dev-time decoder generator, under contract test
+             by Remoting\GeneratorFidelityTests.fs. It is IsPackable=false and
+             references FSharp.Core only, so it adds nothing to this pack's
+             dependency graph beyond its own assembly. -->
+        <ProjectReference Include="..\ToolUp.Remoting.Generator\ToolUp.Remoting.Generator.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <!-- Phase 520 — grounding fact store companion (IFactStore contract binding). -->
         <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
