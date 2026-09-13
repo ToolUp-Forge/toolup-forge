@@ -294,6 +294,20 @@ ToolUp.AI.Client.ClientToolRuntime+ClientToolContext (class)
 ToolUp.AI.Client.ClientToolRuntime+ClientToolContext..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.Client.ClientToolRuntime+ClientToolContext.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Client.ClientToolRuntime+ClientToolContext.ActivePage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.Client.ConsentDialog (class)
+ToolUp.AI.Client.ConsentDialog.View() : Fable.React.ReactElement
+ToolUp.AI.Client.ConsentDialog.answer(System.Guid, ToolUp.AI.AllowDecision) : System.Void
+ToolUp.AI.Client.ConsentDialog.handleRequired(System.Guid, System.Guid, System.Guid, System.String, System.String, System.String, System.String) : System.Void
+ToolUp.AI.Client.ConsentDialog.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Client.ConsentDialog+PendingConsentRequest], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest (class)
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest..ctor(System.Guid, System.Guid, System.Guid, System.String, System.String, System.String, System.String)
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.ConsentId : System.Guid { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.ConversationId : System.Guid { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.IntendedQueryKey : System.String { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.RedactedPayloadPreview : System.String { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TargetModule : System.String { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TaskId : System.Guid { get }
+ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.ToolName : System.String { get }
 ToolUp.AI.Client.ConversationPanel (class)
 ToolUp.AI.Client.ConversationPanel.ExportMenu(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.KbInventoryBadge(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
