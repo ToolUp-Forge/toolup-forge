@@ -44,7 +44,13 @@ open System
 let private isCompilerVersionDependent (l: string) =
     l.EndsWith "..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)"
 
-let private significantLines (text: string) =
+/// The tokens a comparison sees: non-blank, non-comment lines, minus the
+/// band-dependent ctor above. Public because it is the answer to "does
+/// this baseline text carry any tracked surface at all", which Phase 261's
+/// documentation-coverage gate asks of a baseline before grading it — a
+/// third reader of the one tokeniser, and the reason it is worth having
+/// exactly one.
+let significantLines (text: string) =
     text.Replace("\r\n", "\n").Split('\n')
     |> Array.map _.TrimEnd()
     |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#") && not (isCompilerVersionDependent l))
