@@ -451,6 +451,12 @@
              UnqueryableModule are both still answered first, with no dialog
              shown), and after the in-memory blob + event doubles it wires. -->
         <Compile Include="InProcess\AIConsentTests.fs" />
+        <!-- Phase 36.E — the cross-module read trail and its rollup. After
+             AIConsentTests, whose harness shape it reuses and whose gate it
+             composes with (a consent-denied read still records the attempt),
+             and after the sink companions it drives for the Phase 9g
+             replication-coverage assertions. -->
+        <Compile Include="InProcess\AICrossModuleAuditTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

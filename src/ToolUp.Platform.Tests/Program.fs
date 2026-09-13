@@ -1106,6 +1106,16 @@ let private registeredTests =
         // pending record, and the six-rule audit on the two new wire
         // shapes.
         AIConsentTests.tests
+        // Phase 36.E — the cross-module read TRAIL, and the rollup over
+        // it. The four gates record every refusal and nothing that
+        // succeeded; this records one row per invocation either way. Row
+        // COUNTS rather than presence throughout, the consent-denied
+        // attempt beside its allowed twin, and the Phase 9g replication
+        // asserted through each shipped sink's own projection — because
+        // the reason this row is a typed union case rather than an
+        // AI-tier `ModuleEvent` is that the replicator would never have
+        // seen the latter.
+        AICrossModuleAuditTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure

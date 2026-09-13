@@ -159,6 +159,69 @@ ToolUp.AI.AIConsentHandler.ConsentAuditSource : System.String (literal)
 ToolUp.AI.AIConsentHandler.ConsentDeniedEvent : System.String (literal)
 ToolUp.AI.AIConsentHandler.ConsentGrantedEvent : System.String (literal)
 ToolUp.AI.AIConsentHandler.consentDecisionHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.AI.AICrossModuleAudit (class)
+ToolUp.AI.AICrossModuleAudit.ExceptionOutcome : System.String (literal)
+ToolUp.AI.AICrossModuleAudit.OkOutcome : System.String (literal)
+ToolUp.AI.AICrossModuleAudit.audited(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.AI.AICrossModuleAudit.createAuditedTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
+ToolUp.AI.AICrossModuleAudit.outcomeOf(System.String) : System.String
+ToolUp.AI.AICrossModuleAudit.payloadOf(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.AI.AICrossModuleAudit+ReadTarget, System.Double, System.Int32, System.String) : ToolUp.Platform.CrossModuleReadPayload
+ToolUp.AI.AICrossModuleAudit+ItemsKeys (class)
+ToolUp.AI.AICrossModuleAudit+ItemsKeys.ActiveModule : System.String (literal)
+ToolUp.AI.AICrossModuleAudit+ReadTarget (class)
+ToolUp.AI.AICrossModuleAudit+ReadTarget..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AI.AICrossModuleAudit+ReadTarget.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AICrossModuleAudit+ReadTarget.QueryKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AICrossModuleAudit+ReadTargetModule (class)
+ToolUp.AI.AICrossModuleAudit+ReadTargetModule.enumeration : ToolUp.AI.AICrossModuleAudit+ReadTarget { get }
+ToolUp.AI.AICrossModuleAudit+ReadTargetModule.ofModule(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.AICrossModuleAudit+ReadTarget
+ToolUp.AI.AICrossModuleObservability (class)
+ToolUp.AI.AICrossModuleObservability.EventType : System.String (literal)
+ToolUp.AI.AICrossModuleObservability.UnattributedTargetLabel : System.String (literal)
+ToolUp.AI.AICrossModuleObservability.computeReport(System.String, System.DateTime, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrossModuleReadPayload]) : ToolUp.AI.AICrossModuleObservability+CrossModuleReport
+ToolUp.AI.AICrossModuleObservability.reportFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleObservability+CrossModuleReport]
+ToolUp.AI.AICrossModuleObservability.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.AI.AICrossModuleObservability.targetLabel(ToolUp.Platform.CrossModuleReadPayload) : System.String
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup (class)
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Double, System.Double, System.Double, System.Double, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+OutcomeCount])
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.AllowedCount : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.AllowedResultBytes : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.Count : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.DenialRate : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.Denials : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+OutcomeCount] { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.DeniedCount : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.P50LatencyMs : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.P95LatencyMs : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.P99LatencyMs : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.TargetModule : System.String { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.ToolName : System.String { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport (class)
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport..ctor(System.DateTime, System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.Double, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+CrossModuleGroup], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+OutcomeCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+RecentRead])
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.AllowedInWindow : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.ByOutcome : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+OutcomeCount] { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.ByTargetAndTool : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+CrossModuleGroup] { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.DenialRate : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.DeniedInWindow : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.DistinctTargetModules : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.GeneratedAt : System.DateTime { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.RecentReads : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+RecentRead] { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.ScopeId : System.String { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.TotalReadsInWindow : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+CrossModuleReport.WindowMinutes : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+OutcomeCount (class)
+ToolUp.AI.AICrossModuleObservability+OutcomeCount..ctor(System.String, System.Int32)
+ToolUp.AI.AICrossModuleObservability+OutcomeCount.Count : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+OutcomeCount.Outcome : System.String { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead (class)
+ToolUp.AI.AICrossModuleObservability+RecentRead..ctor(System.String, System.String, System.String, System.String, System.String, System.Boolean, System.Double, System.Int32)
+ToolUp.AI.AICrossModuleObservability+RecentRead.Allowed : System.Boolean { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.LatencyMs : System.Double { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.Outcome : System.String { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.QueryKey : System.String { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.ResultBytes : System.Int32 { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.SourceConvActiveModule : System.String { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.TargetModule : System.String { get }
+ToolUp.AI.AICrossModuleObservability+RecentRead.ToolName : System.String { get }
 ToolUp.AI.AIDenialRateMonitor (class)
 ToolUp.AI.AIDenialRateMonitor.alertText(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, System.String, System.String) : System.String
 ToolUp.AI.AIDenialRateMonitor.observeAndAlert(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
