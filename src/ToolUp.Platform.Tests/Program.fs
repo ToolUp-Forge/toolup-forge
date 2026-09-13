@@ -1086,6 +1086,14 @@ let private registeredTests =
         // `UnqueryableModule` — reported after `PermissionDenied`, so a
         // caller who may not read the module learns nothing from it.
         AIQueryabilityOptInTests.tests
+        // Phase 36.D — the per-conversation consent gate. The fourth gate
+        // on the `_platform.ai.*` family and the only one that asks the
+        // USER: the three allow/deny lifetimes, the innermost ordering
+        // asserted as a prompt COUNT of zero behind an outer refusal, the
+        // `/api/ai/consent` round trip authorised from the server's own
+        // pending record, and the six-rule audit on the two new wire
+        // shapes.
+        AIConsentTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure
