@@ -171,6 +171,71 @@ let private unqueryableModule (moduleName: string) (detail: string) : string =
         message = detail
     |}
 
+/// Phase 36.D — the FOURTH gate, and the only one that asks the USER.
+///
+/// The three gates above are all answered by the deployment: may this
+/// caller read the module, is that authority live, is the module on the AI
+/// surface. This one asks the person in the conversation, once per target
+/// module, whether the agent may go and read their data out of a module
+/// they did not name. It is INNERMOST by the same argument that put 36.C
+/// last: a caller who fails an outer gate is refused before any dialog is
+/// shown, so the dialog can never tell them which modules exist or which
+/// ones a deployment exposed.
+///
+/// The refusal is rendered as `UserDenied` — a fourth discriminator beside
+/// `PermissionDenied` / `UnqueryableModule` / `NotFound`, for a fourth
+/// remedy. `PermissionDenied` would be a lie (the caller holds the
+/// permission), and `UnqueryableModule` would send the model to an
+/// operator for something only the user can change.
+let private userDenied (moduleName: string) (detail: string) : string =
+    fableSerialize {|
+        error = "UserDenied"
+        targetModule = moduleName
+        message = detail
+    |}
+
+/// The consent gate at one reach site, rendered. `None` means proceed.
+let private consentRefusal
+    (ctx: HttpContext)
+    (toolName: string)
+    (targetModule: string)
+    (intendedQueryKey: string)
+    (argsJson: string)
+    : Async<string option> =
+    async {
+        let! outcome = AIConsentDispatch.requireConsent ctx toolName targetModule intendedQueryKey argsJson
+
+        match outcome with
+        | AIConsentDispatch.ConsentGranted -> return None
+        | AIConsentDispatch.ConsentRefused reason -> return Some(userDenied targetModule reason)
+    }
+
+/// Consent over a SET of target modules — the shape `query_entity` needs,
+/// where the data can come from several producers of one entity type.
+///
+/// The first refusal wins and the rest are not asked: the read cannot
+/// happen, so further dialogs would ask the user to authorise something
+/// that is not going to occur either way. An empty set is granted — there
+/// is no module to name, which is the same documented limit 36.C's gate
+/// reaches on an entity type the catalogue cannot attribute.
+let rec private consentRefusalForAll
+    (ctx: HttpContext)
+    (toolName: string)
+    (intendedQueryKey: string)
+    (argsJson: string)
+    (targets: string list)
+    : Async<string option> =
+    async {
+        match targets with
+        | [] -> return None
+        | target :: rest ->
+            let! refusal = consentRefusal ctx toolName target intendedQueryKey argsJson
+
+            match refusal with
+            | Some rendered -> return Some rendered
+            | None -> return! consentRefusalForAll ctx toolName intendedQueryKey argsJson rest
+    }
+
 /// The standing explanation, written for the model that reads it: the
 /// remedy is a deployment change, so re-planning as though this were a
 /// permission problem is wasted turns.
@@ -454,69 +519,87 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
         ->
         return unqueryableModule moduleName (notOptedInMessage moduleName)
     | Some(Some moduleName, Some queryKey, payload) ->
-        match ctx.RequestServices.GetService(typeof<IModuleQueryBus>) with
-        | :? IModuleQueryBus as bus ->
-            let! outcome =
-                bus.Ask(
-                    access,
-                    {
-                        TargetModule = moduleName
-                        QueryKey = queryKey
-                        Payload = payload
-                    }
-                )
+        // Phase 36.D — the user-consent gate, innermost.
+        //
+        // Gated on the caller's own `Read` permission first, deliberately.
+        // Unlike the three other reach tools, this one does not pre-check
+        // permission itself — the BUS answers `PermissionDenied`, and that
+        // is the pre-36.C behaviour the ordering rationale above preserves.
+        // Prompting before the bus has spoken would show a dialog naming a
+        // module the caller may not read, which is exactly the leak the
+        // report-last ordering exists to prevent.
+        let! refusal =
+            if AccessContext.hasPermission moduleName ModulePermission.Read access then
+                consentRefusal ctx queryModuleDef.Name moduleName queryKey payload
+            else
+                async.Return None
 
-            match outcome with
-            | None ->
-                return
-                    fableSerialize {|
-                        error = "ModuleNotFound"
-                        targetModule = moduleName
-                        message = sprintf "Module '%s' is not registered in this deployment." moduleName
-                    |}
-            | Some(Error(PermissionDenied m)) ->
-                return
-                    fableSerialize {|
-                        error = "PermissionDenied"
-                        targetModule = m
-                    |}
-            | Some(Error(NoHandler(m, q))) ->
-                return
-                    fableSerialize {|
-                        error = "NoHandler"
-                        targetModule = m
-                        queryKey = q
-                    |}
-            | Some(Error(HandlerFailed msg)) ->
-                return
-                    fableSerialize {|
-                        error = "HandlerFailed"
-                        message = msg
-                    |}
-            | Some(Ok resp) ->
-                // `resp.Payload` is JSON the handler already produced.
-                // Round-trip it to a self-contained `JsonElement` so the
-                // wrapper serialises as structured JSON, not a quoted string.
-                let resultElement =
-                    let raw =
-                        if String.IsNullOrWhiteSpace resp.Payload then
-                            "null"
-                        else
-                            resp.Payload
+        match refusal with
+        | Some rendered -> return rendered
+        | None ->
+            match ctx.RequestServices.GetService(typeof<IModuleQueryBus>) with
+            | :? IModuleQueryBus as bus ->
+                let! outcome =
+                    bus.Ask(
+                        access,
+                        {
+                            TargetModule = moduleName
+                            QueryKey = queryKey
+                            Payload = payload
+                        }
+                    )
 
-                    JsonSerializer.Deserialize<JsonElement>(raw, fableJsonOptions)
+                match outcome with
+                | None ->
+                    return
+                        fableSerialize {|
+                            error = "ModuleNotFound"
+                            targetModule = moduleName
+                            message = sprintf "Module '%s' is not registered in this deployment." moduleName
+                        |}
+                | Some(Error(PermissionDenied m)) ->
+                    return
+                        fableSerialize {|
+                            error = "PermissionDenied"
+                            targetModule = m
+                        |}
+                | Some(Error(NoHandler(m, q))) ->
+                    return
+                        fableSerialize {|
+                            error = "NoHandler"
+                            targetModule = m
+                            queryKey = q
+                        |}
+                | Some(Error(HandlerFailed msg)) ->
+                    return
+                        fableSerialize {|
+                            error = "HandlerFailed"
+                            message = msg
+                        |}
+                | Some(Ok resp) ->
+                    // `resp.Payload` is JSON the handler already produced.
+                    // Round-trip it to a self-contained `JsonElement` so the
+                    // wrapper serialises as structured JSON, not a quoted string.
+                    let resultElement =
+                        let raw =
+                            if String.IsNullOrWhiteSpace resp.Payload then
+                                "null"
+                            else
+                                resp.Payload
 
+                        JsonSerializer.Deserialize<JsonElement>(raw, fableJsonOptions)
+
+                    return
+                        fableSerialize {|
+                            targetModule = moduleName
+                            queryKey = queryKey
+                            result = resultElement
+                        |}
+            | _ ->
                 return
                     fableSerialize {|
-                        targetModule = moduleName
-                        queryKey = queryKey
-                        result = resultElement
+                        error = "ModuleQueryBusUnavailable"
                     |}
-        | _ ->
-            return
-                fableSerialize {|
-                    error = "ModuleQueryBusUnavailable"
-                |}
 }
 
 // ─── _platform.ai.query_entity ───────────────────────────────────
@@ -698,25 +781,33 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
         // recorded rather than papered over: closing it needs module
         // attribution on `EntityRegistration`, which is a substrate change
         // of its own, not a line in this gate.
+        //
+        // Phase 36.D reads the same attribution one step further: the
+        // producers that ARE on the AI surface are the modules whose data
+        // this read would return, so they are exactly the modules the user
+        // is asked about. `Ok []` (no catalogued producer) therefore
+        // reaches the consent gate with nothing to name, and is granted for
+        // the same reason it passes the 36.C gate.
         let! entityGate = async {
             match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
             | :? IDataCatalog as catalog ->
                 let! producers = catalog.GetProducers entityType
 
                 if List.isEmpty producers then
-                    return None
+                    return Ok []
                 else
                     let isQueryable = aiQueryable ctx
+                    let queryable = producers |> List.filter isQueryable
 
-                    if producers |> List.exists isQueryable then
-                        return None
+                    if List.isEmpty queryable then
+                        return Error(String.Join(", ", producers))
                     else
-                        return Some(String.Join(", ", producers))
-            | _ -> return None
+                        return Ok queryable
+            | _ -> return Ok []
         }
 
         match entityGate with
-        | Some producerNames ->
+        | Error producerNames ->
             return
                 unqueryableModule
                     producerNames
@@ -724,42 +815,50 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
                         "Entity type '%s' is produced only by module(s) that have not opted into the cross-module AI surface (%s), so it cannot be read through the _platform.ai.* tools. This is a deployment-level declaration, not a permission the current user can be granted — do not retry. Use list_accessible_modules to see which modules report queryable: true."
                         entityType
                         producerNames)
-        | None ->
-            match ctx.RequestServices.GetService(typeof<IEntityStore>) with
-            | :? IEntityStore as store ->
-                let cappedTake = min (max take 1) 100
+        | Ok queryableProducers ->
+            // Phase 36.D — the user-consent gate, innermost, asked once per
+            // producing module because the read returns data from all of
+            // them. The first refusal ends the read.
+            let! refusal = consentRefusalForAll ctx queryEntityDef.Name entityType argsJson queryableProducers
 
-                let query: EntityQuery<JsonElement> = {
-                    EntityType = entityType
-                    Where = wherePred
-                    OrderBy = None
-                    Skip = 0
-                    Take = cappedTake
-                }
+            match refusal with
+            | Some rendered -> return rendered
+            | None ->
+                match ctx.RequestServices.GetService(typeof<IEntityStore>) with
+                | :? IEntityStore as store ->
+                    let cappedTake = min (max take 1) 100
 
-                let! result = store.Query<JsonElement>(scopeId, query)
+                    let query: EntityQuery<JsonElement> = {
+                        EntityType = entityType
+                        Where = wherePred
+                        OrderBy = None
+                        Skip = 0
+                        Take = cappedTake
+                    }
 
-                match result with
-                | Ok entities ->
+                    let! result = store.Query<JsonElement>(scopeId, query)
+
+                    match result with
+                    | Ok entities ->
+                        return
+                            fableSerialize {|
+                                entityType = entityType
+                                count = List.length entities
+                                entities = entities
+                            |}
+                    | Error err ->
+                        return
+                            fableSerialize {|
+                                error = "EntityQueryFailed"
+                                entityType = entityType
+                                message = EntityError.message err
+                            |}
+                | _ ->
                     return
                         fableSerialize {|
-                            entityType = entityType
-                            count = List.length entities
-                            entities = entities
+                            error = "EntityStoreUnavailable"
+                            message = "No entity store is registered in this deployment."
                         |}
-                | Error err ->
-                    return
-                        fableSerialize {|
-                            error = "EntityQueryFailed"
-                            entityType = entityType
-                            message = EntityError.message err
-                        |}
-            | _ ->
-                return
-                    fableSerialize {|
-                        error = "EntityStoreUnavailable"
-                        message = "No entity store is registered in this deployment."
-                    |}
 }
 
 // ─── _platform.ai.list_results ───────────────────────────────────
@@ -859,37 +958,46 @@ let private executeListResults (ctx: HttpContext) (argsJson: string) : Async<str
         elif not (aiQueryable ctx moduleName) then
             return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
-            match ctx.RequestServices.GetService(typeof<IResultStore>) with
-            | :? IResultStore as store ->
-                let dateRange =
-                    match dateFrom, dateTo with
-                    | Some f, Some t -> Some(f, t)
-                    | _ -> None
+            // Phase 36.D — the user-consent gate, innermost: the three
+            // gates above are the deployment's answers, this one is the
+            // user's. Reached only after all three have passed, so a
+            // dialog can never name a module the caller may not read.
+            let! refusal = consentRefusal ctx listResultsDef.Name moduleName "" argsJson
 
-                let! results = store.ListResults(scopeId, moduleName, dateRange)
+            match refusal with
+            | Some rendered -> return rendered
+            | None ->
+                match ctx.RequestServices.GetService(typeof<IResultStore>) with
+                | :? IResultStore as store ->
+                    let dateRange =
+                        match dateFrom, dateTo with
+                        | Some f, Some t -> Some(f, t)
+                        | _ -> None
 
-                let rows =
-                    results
-                    |> List.map (fun o -> {|
-                        objectId = o.ObjectId
-                        resultType = resultTypeOf moduleName o.ObjectId
-                        version = o.Version
-                        createdAt = o.CreatedAt
-                        createdBy = o.CreatedBy
-                        dataType = o.DataType
-                    |})
+                    let! results = store.ListResults(scopeId, moduleName, dateRange)
 
-                return
-                    fableSerialize {|
-                        targetModule = moduleName
-                        results = rows
-                    |}
-            | _ ->
-                return
-                    fableSerialize {|
-                        error = "ResultStoreUnavailable"
-                        message = "No result store is configured in this deployment."
-                    |}
+                    let rows =
+                        results
+                        |> List.map (fun o -> {|
+                            objectId = o.ObjectId
+                            resultType = resultTypeOf moduleName o.ObjectId
+                            version = o.Version
+                            createdAt = o.CreatedAt
+                            createdBy = o.CreatedBy
+                            dataType = o.DataType
+                        |})
+
+                    return
+                        fableSerialize {|
+                            targetModule = moduleName
+                            results = rows
+                        |}
+                | _ ->
+                    return
+                        fableSerialize {|
+                            error = "ResultStoreUnavailable"
+                            message = "No result store is configured in this deployment."
+                        |}
 }
 
 // ─── _platform.ai.get_latest_result ──────────────────────────────
@@ -983,51 +1091,60 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
         elif not (aiQueryable ctx moduleName) then
             return unqueryableModule moduleName (notOptedInMessage moduleName)
         else
-            match ctx.RequestServices.GetService(typeof<IResultStore>) with
-            | :? IResultStore as store ->
-                let! outcome = store.GetLatest(scopeId, moduleName, resultType)
+            // Phase 36.D — the user-consent gate, innermost: the three
+            // gates above are the deployment's answers, this one is the
+            // user's. Reached only after all three have passed, so a
+            // dialog can never name a module the caller may not read.
+            let! refusal = consentRefusal ctx getLatestResultDef.Name moduleName resultType argsJson
 
-                match outcome with
-                | Ok(meta, bytes) ->
-                    let decoded = Encoding.UTF8.GetString bytes
-                    let truncated = decoded.Length > ContentCharCap
+            match refusal with
+            | Some rendered -> return rendered
+            | None ->
+                match ctx.RequestServices.GetService(typeof<IResultStore>) with
+                | :? IResultStore as store ->
+                    let! outcome = store.GetLatest(scopeId, moduleName, resultType)
 
-                    let content =
-                        if truncated then
-                            decoded.Substring(0, ContentCharCap)
-                        else
-                            decoded
+                    match outcome with
+                    | Ok(meta, bytes) ->
+                        let decoded = Encoding.UTF8.GetString bytes
+                        let truncated = decoded.Length > ContentCharCap
 
+                        let content =
+                            if truncated then
+                                decoded.Substring(0, ContentCharCap)
+                            else
+                                decoded
+
+                        return
+                            fableSerialize {|
+                                targetModule = moduleName
+                                resultType = resultType
+                                version = meta.Version
+                                createdAt = meta.CreatedAt
+                                createdBy = meta.CreatedBy
+                                dataType = meta.DataType
+                                content = content
+                                truncated = truncated
+                            |}
+                    | Error DataObjectError.NotFound ->
+                        return
+                            fableSerialize {|
+                                error = "NotFound"
+                                targetModule = moduleName
+                                resultType = resultType
+                            |}
+                    | Error err ->
+                        return
+                            fableSerialize {|
+                                error = "ResultReadFailed"
+                                message = dataObjectErrorText err
+                            |}
+                | _ ->
                     return
                         fableSerialize {|
-                            targetModule = moduleName
-                            resultType = resultType
-                            version = meta.Version
-                            createdAt = meta.CreatedAt
-                            createdBy = meta.CreatedBy
-                            dataType = meta.DataType
-                            content = content
-                            truncated = truncated
+                            error = "ResultStoreUnavailable"
+                            message = "No result store is configured in this deployment."
                         |}
-                | Error DataObjectError.NotFound ->
-                    return
-                        fableSerialize {|
-                            error = "NotFound"
-                            targetModule = moduleName
-                            resultType = resultType
-                        |}
-                | Error err ->
-                    return
-                        fableSerialize {|
-                            error = "ResultReadFailed"
-                            message = dataObjectErrorText err
-                        |}
-            | _ ->
-                return
-                    fableSerialize {|
-                        error = "ResultStoreUnavailable"
-                        message = "No result store is configured in this deployment."
-                    |}
 }
 
 // ─── Registration ────────────────────────────────────────────────

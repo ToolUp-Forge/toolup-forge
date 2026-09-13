@@ -38,12 +38,25 @@
         <Compile Include="Server\ToolHelpers.fs" />
         <Compile Include="Server\AIToolRegistry.fs" />
         <Compile Include="Server\NarrativeTools.fs" />
+        <!-- Phase 36.D — per-conversation cross-module read consent: the
+             suspended-dispatch registry, the persisted per-conversation
+             record, and the gate the four reach tools call. Depends only
+             on AI.Core + the platform blob substrate; MUST precede
+             PlatformAITools (which calls the gate) and AIAgentEngine
+             (which reads the one shared suspended-dispatch timeout from
+             here and stamps the items the gate reads). -->
+        <Compile Include="Server\AIConsentDispatch.fs" />
         <!-- Phase 36.B — built-in cross-module AI read tools (`_platform.ai.*`).
              Depends only on AIToolRegistry + the platform substrate; registered
              by AICompose alongside NarrativeTools.builtInTools. -->
         <Compile Include="Server\PlatformAITools.fs" />
         <Compile Include="Server\SSEHandler.fs" />
         <Compile Include="Server\ClientToolDispatch.fs" />
+        <!-- Phase 36.D — the `/api/ai/consent` POST handler. Mirrors
+             ClientToolDispatch's result endpoint and sits beside it;
+             depends on AIToolRegistry (the permission re-check) and
+             AIConsentDispatch (the registry + the persisted record). -->
+        <Compile Include="Server\AIConsentHandler.fs" />
         <Compile Include="Server\AICancellationRegistry.fs" />
         <!-- Phase 6j.B — Tier-3 fast-path triage. Depends on ToolContext
              (the ModuleAction emit) + the AI.Core field-registry seam;

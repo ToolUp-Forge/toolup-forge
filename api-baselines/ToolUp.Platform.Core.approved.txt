@@ -4621,6 +4621,7 @@ ToolUp.Platform.DeploymentVerification.ConfigConformanceSection : System.String 
 ToolUp.Platform.DeploymentVerification.EvidenceChainSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
 ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.RemotingDecoderSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerification.SeamAuthoritySection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.canonicalForm(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]) : System.String
@@ -12624,6 +12625,48 @@ ToolUp.Platform.WorkflowTransitionedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.ToState : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.UserId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.WorkflowId : System.String { get }
+ToolUp.Remoting.Decode (class)
+ToolUp.Remoting.Decode.apply`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[A, B], ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.array`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T[], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Decode.asBool(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asByte : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Byte, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asBytes(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asChar(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Char, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asDateTime(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.DateTime, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asDateTimeOffset(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.DateTimeOffset, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asDecimal(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Decimal, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asFloat(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Double, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asFloat32(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Single, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asGuid(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asInt16 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Int16, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asInt32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asInt64 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asMap`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[K, V], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Decode.asSByte : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.SByte, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asSet`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpSet`1[T], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Decode.asString(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.asTimeSpan : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.TimeSpan, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asUInt16 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.UInt16, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asUInt32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.UInt32, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asUInt64 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.UInt64, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Decode.asUnit(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.bind`2(Microsoft.FSharp.Core.FSharpFunc`2[A, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.case0`1(T, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.MsgPack.Value]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.entries`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[K, V]], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.exactly(System.Int32, ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.MsgPack.Value], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.fail`1(System.String, ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.field`1(System.String, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.index`1(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.items(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.MsgPack.Value], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.list`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[T], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.map`2(Microsoft.FSharp.Core.FSharpFunc`2[A, B], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.option`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Decode.payload`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.MsgPack.Value]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.result`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[E, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[T, E], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Decode.run`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.stringEnum`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, T]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.succeed`1(T, ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Decode.union`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.MsgPack.Value], Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.DecodeError (class)
 ToolUp.Remoting.DecodeError..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String)
 ToolUp.Remoting.DecodeError.Expected : System.String { get }
@@ -12642,6 +12685,15 @@ ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
+ToolUp.Remoting.MsgPack.FloatWidth (class)
+ToolUp.Remoting.MsgPack.FloatWidth.Double : ToolUp.Remoting.MsgPack.FloatWidth { get }
+ToolUp.Remoting.MsgPack.FloatWidth.IsDouble : System.Boolean { get }
+ToolUp.Remoting.MsgPack.FloatWidth.IsSingle : System.Boolean { get }
+ToolUp.Remoting.MsgPack.FloatWidth.Single : ToolUp.Remoting.MsgPack.FloatWidth { get }
+ToolUp.Remoting.MsgPack.FloatWidth.Tag : System.Int32 { get }
+ToolUp.Remoting.MsgPack.FloatWidth+Tags (class)
+ToolUp.Remoting.MsgPack.FloatWidth+Tags.Double : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.FloatWidth+Tags.Single : System.Int32 (literal)
 ToolUp.Remoting.MsgPack.Format (class)
 ToolUp.Remoting.MsgPack.Format.Array16 : System.Byte (literal)
 ToolUp.Remoting.MsgPack.Format.Array32 : System.Byte (literal)
@@ -12677,6 +12729,27 @@ ToolUp.Remoting.MsgPack.Format.fixposnum$W`1(Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Remoting.MsgPack.Format.fixposnum`1(a) : System.Byte
 ToolUp.Remoting.MsgPack.Format.fixstr$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], a) : System.Byte
 ToolUp.Remoting.MsgPack.Format.fixstr`1(a) : System.Byte
+ToolUp.Remoting.MsgPack.IntegerWidth (class)
+ToolUp.Remoting.MsgPack.IntegerWidth.Bits16 : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.Bits32 : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.Bits64 : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.Bits8 : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.Fixnum : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.IsBits16 : System.Boolean { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.IsBits32 : System.Boolean { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.IsBits64 : System.Boolean { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.IsBits8 : System.Boolean { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.IsFixnum : System.Boolean { get }
+ToolUp.Remoting.MsgPack.IntegerWidth.Tag : System.Int32 { get }
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags (class)
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags.Bits16 : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags.Bits32 : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags.Bits64 : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags.Bits8 : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.IntegerWidth+Tags.Fixnum : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.IntegerWidthModule (class)
+ToolUp.Remoting.MsgPack.IntegerWidthModule.bits(ToolUp.Remoting.MsgPack.IntegerWidth) : System.Int32
+ToolUp.Remoting.MsgPack.IntegerWidthModule.label(ToolUp.Remoting.MsgPack.IntegerWidth) : System.String
 ToolUp.Remoting.MsgPack.Read (class)
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Single], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Double], System.Type, a) : System.Object
 ToolUp.Remoting.MsgPack.Read.interpretFloatAs`1(System.Type, a) : System.Object
@@ -12713,10 +12786,58 @@ ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt16() : System.UInt16
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt32() : System.UInt32
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt64() : System.UInt64
 ToolUp.Remoting.MsgPack.Read+Reader.ReadUInt8() : System.Byte
+ToolUp.Remoting.MsgPack.Read+Reader.ReadValue() : ToolUp.Remoting.MsgPack.Value
 ToolUp.Remoting.MsgPack.Read+Reader.TryRead(System.Type) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.MsgPack.Read+Reader.TryReadValue() : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.MsgPack.Value, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1 (class)
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1..ctor()
 ToolUp.Remoting.MsgPack.Read+SetDeserializer`1.Deserialize(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, System.Object]) : System.Object
+ToolUp.Remoting.MsgPack.Value (class)
+ToolUp.Remoting.MsgPack.Value.IsArr : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsBin : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsBool : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsFloat : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsInt : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsMap : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsNil : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsStr : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.IsUInt : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value.Nil : ToolUp.Remoting.MsgPack.Value { get }
+ToolUp.Remoting.MsgPack.Value.Tag : System.Int32 { get }
+ToolUp.Remoting.MsgPack.Value+Arr (class)
+ToolUp.Remoting.MsgPack.Value+Arr.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.MsgPack.Value] { get }
+ToolUp.Remoting.MsgPack.Value+Bin (class)
+ToolUp.Remoting.MsgPack.Value+Bin.Item : System.Byte[] { get }
+ToolUp.Remoting.MsgPack.Value+Bool (class)
+ToolUp.Remoting.MsgPack.Value+Bool.Item : System.Boolean { get }
+ToolUp.Remoting.MsgPack.Value+Float (class)
+ToolUp.Remoting.MsgPack.Value+Float.value : System.Double { get }
+ToolUp.Remoting.MsgPack.Value+Float.width : ToolUp.Remoting.MsgPack.FloatWidth { get }
+ToolUp.Remoting.MsgPack.Value+Int (class)
+ToolUp.Remoting.MsgPack.Value+Int.value : System.Int64 { get }
+ToolUp.Remoting.MsgPack.Value+Int.width : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.Value+Map (class)
+ToolUp.Remoting.MsgPack.Value+Map.entries : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Remoting.MsgPack.Value, ToolUp.Remoting.MsgPack.Value]] { get }
+ToolUp.Remoting.MsgPack.Value+Str (class)
+ToolUp.Remoting.MsgPack.Value+Str.Item : System.String { get }
+ToolUp.Remoting.MsgPack.Value+Tags (class)
+ToolUp.Remoting.MsgPack.Value+Tags.Arr : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Bin : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Bool : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Float : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Int : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Map : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Nil : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.Str : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+Tags.UInt : System.Int32 (literal)
+ToolUp.Remoting.MsgPack.Value+UInt (class)
+ToolUp.Remoting.MsgPack.Value+UInt.value : System.UInt64 { get }
+ToolUp.Remoting.MsgPack.Value+UInt.width : ToolUp.Remoting.MsgPack.IntegerWidth { get }
+ToolUp.Remoting.MsgPack.ValueModule (class)
+ToolUp.Remoting.MsgPack.ValueModule.describe(ToolUp.Remoting.MsgPack.Value) : System.String
+ToolUp.Remoting.MsgPack.ValueModule.signedFits(System.Int32, System.Int32, System.Int64, System.UInt64, System.Int64) : System.Boolean
+ToolUp.Remoting.MsgPack.ValueModule.size(ToolUp.Remoting.MsgPack.Value) : System.Int32
+ToolUp.Remoting.MsgPack.ValueModule.unsignedFits(System.Int32, System.Int32, System.UInt64, System.UInt64) : System.Boolean
 ToolUp.Remoting.MsgPack.Write (class)
 ToolUp.Remoting.MsgPack.Write.makeSerializerObj(System.Type) : System.Action`2[System.Object, System.IO.Stream]
 ToolUp.Remoting.MsgPack.Write.makeSerializer`1() : System.Action`2[T, System.IO.Stream]
@@ -12769,6 +12890,34 @@ ToolUp.Remoting.MsgPack.Write.writeUnion`1(a, System.IO.Stream, System.Action`2[
 ToolUp.Remoting.MsgPack.Write+Fable (class)
 ToolUp.Remoting.MsgPack.Write+Fable.writeObject(System.Object, System.Type, System.Collections.Generic.List`1[System.Byte]) : System.Void
 ToolUp.Remoting.MsgPack.Write+Fable.writeType`1(T, System.Collections.Generic.List`1[System.Byte]) : System.Object
+ToolUp.Remoting.PlatformDecoders (class)
+ToolUp.Remoting.PlatformDecoders.aiDenialGroupCount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AIDenialGroupCount, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.aiDenialRollup : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AIDenialRollup, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.aiDenialToolModulePair : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AIDenialToolModulePair, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.covered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.PlatformDecoders.coveredApiRecords : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]] { get }
+ToolUp.Remoting.PlatformDecoders.degradedCapability : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DegradedCapability, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.deploymentVerificationOutcome : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerificationOutcome, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.deploymentVerificationReport : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.healthProbeView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthProbeView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.healthSnapshot : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.jobSchedulerTelemetryView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.notProvedStatement : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+NotProvedStatement, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.preflightOutcomeView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightOutcomeView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.preflightSnapshotView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightSnapshotView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.recentAIDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RecentAIDenial, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.registerAll() : System.Void
+ToolUp.Remoting.PlatformDecoders.reportSection : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+ReportSection, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.verificationSectionVerdict : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.VerificationSectionVerdict, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.RemotingDecoders (class)
+ToolUp.Remoting.RemotingDecoders.count() : System.Int32
+ToolUp.Remoting.RemotingDecoders.isRegistered(System.Type) : System.Boolean
+ToolUp.Remoting.RemotingDecoders.keyFor(System.Type) : System.String
+ToolUp.Remoting.RemotingDecoders.registerByKey(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : System.Void
+ToolUp.Remoting.RemotingDecoders.register`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : System.Void
+ToolUp.Remoting.RemotingDecoders.registered() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Remoting.RemotingDecoders.resetForTests() : System.Void
+ToolUp.Remoting.RemotingDecoders.tryGet(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
 Toolup.TimeManagement (class)
 Toolup.TimeManagement+ComparisonPeriods (class)
 Toolup.TimeManagement+ComparisonPeriods..ctor(Toolup.TimeManagement+TimeRange, Toolup.TimeManagement+TimeRange)

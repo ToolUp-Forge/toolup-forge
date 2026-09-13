@@ -1116,9 +1116,14 @@ let reportSectionTests =
                     "not-composed"
                     (sprintf "section '%s' keeps its verdict" id)
 
+            // Phase 785 appended the tenth section after this one, and
+            // this assertion is the tripwire that says so. Its subject is
+            // that the eight sections ABOVE keep their position and their
+            // verdict, which they do; the tail grows by exactly the
+            // sections that have been appended since.
             Expect.equal
                 (report.Sections |> List.map _.Id)
-                (priorIds @ [ EvidenceChainSection ])
+                (priorIds @ [ EvidenceChainSection; RemotingDecoderSection ])
                 "the section is APPENDED — inserting it would move every later section's canonical line"
         }
 

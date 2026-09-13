@@ -1090,6 +1090,14 @@ let private registeredTests =
         // `UnqueryableModule` — reported after `PermissionDenied`, so a
         // caller who may not read the module learns nothing from it.
         AIQueryabilityOptInTests.tests
+        // Phase 36.D — the per-conversation consent gate. The fourth gate
+        // on the `_platform.ai.*` family and the only one that asks the
+        // USER: the three allow/deny lifetimes, the innermost ordering
+        // asserted as a prompt COUNT of zero behind an outer refusal, the
+        // `/api/ai/consent` round trip authorised from the server's own
+        // pending record, and the six-rule audit on the two new wire
+        // shapes.
+        AIConsentTests.tests
         // Phase 565 — grounding certificates: sealed, selective provenance
         // disclosure. Issue→verify round-trip (offline against the deployment
         // public key), tamper detection on any byte change, the disclosure
@@ -2197,6 +2205,14 @@ let private registeredTests =
         // control.
         MsgPackRoundTripTests.tests
         StjRoundTripTests.tests
+        // Phase 785 — the closed decoder algebra, held against the
+        // reflection reader as its oracle over that same corpus: the same
+        // value at the same runtime type on the accept path, a declared
+        // per-mutation table on the refuse path (where the two are
+        // EXPECTED to differ, because the reflection path refuses almost
+        // nothing), the round-trip law, and a committed go-red decoder
+        // that silently widens so the differential is known to fail.
+        DecoderAlgebraTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

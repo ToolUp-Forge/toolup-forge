@@ -288,6 +288,12 @@
         <Compile Include="Remoting\WireCorpus.fs" />
         <Compile Include="Remoting\MsgPackRoundTripTests.fs" />
         <Compile Include="Remoting\StjRoundTripTests.fs" />
+        <!-- Phase 785 — the closed decoder algebra, run differentially
+             against the reflection reader over the Phase 784 corpus.
+             AFTER WireCorpus.fs (it consumes the pinned cases and the
+             784.D mutation population) and after the two round-trip
+             packs, whose declarations it reuses rather than re-deriving. -->
+        <Compile Include="Remoting\DecoderAlgebraTests.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
@@ -432,6 +438,12 @@
              (PermissionDenied is still answered first), and after the AI
              registry surface it gates. -->
         <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
+        <!-- Phase 36.D — cross-module read consent: the fourth gate, and
+             the only one that asks the USER. After AIQueryabilityOptInTests,
+             whose ordering it composes with (PermissionDenied and
+             UnqueryableModule are both still answered first, with no dialog
+             shown), and after the in-memory blob + event doubles it wires. -->
+        <Compile Include="InProcess\AIConsentTests.fs" />
         <Compile Include="InProcess\FeatureFlagStoreTests.fs" />
         <Compile Include="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="InProcess\StorageScopeResolverTests.fs" />

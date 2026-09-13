@@ -154,7 +154,12 @@ let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgeme
 /// configuration sections are: folding it into `evidenceSectionIds`
 /// would have made every "every section verified" probe below silently
 /// untrue rather than newly-failing.
-let private chainSectionIds = [ EvidenceChainSection ]
+/// Phase 785 joins this list for the same reason, and by the same
+/// route: the remoting-decoder facet arrives through a sibling
+/// interface `healthyEvidence` does not supply, so it reads
+/// `not-composed` for every arrangement in this pack and its own pack
+/// drives it.
+let private chainSectionIds = [ EvidenceChainSection; RemotingDecoderSection ]
 
 let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds
 

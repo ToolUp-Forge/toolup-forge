@@ -630,8 +630,21 @@
         <Compile Include="Shared\Remoting\MsgPack\TypeShape.fs" />
         <Compile Include="Shared\Remoting\MsgPack\TypeShapeUtils.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Format.fs" />
+        <!-- Phase 785 — the closed value model the one-pass reader
+             produces. After Format.fs (it names no format constants but
+             documents against them) and BEFORE Read.fs, which produces
+             it. -->
+        <Compile Include="Shared\Remoting\MsgPack\Value.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Write.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
+        <!-- Phase 785 — the total combinators over that model, the
+             opt-in registry, and the platform's own hand-written
+             decoders. LAST in Core: PlatformDecoders.fs composes
+             decoders for wire records declared throughout the tier
+             above, so it must see all of them. -->
+        <Compile Include="Shared\Remoting\Decode.fs" />
+        <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
+        <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
     </ItemGroup>
     <!-- Phase 250 — the connector contract value types (AIProviderMessage,
          AIProviderError, AIContentPart, …) relocated to the Fable-safe
