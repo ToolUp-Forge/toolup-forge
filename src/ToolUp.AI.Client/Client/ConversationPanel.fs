@@ -1129,8 +1129,18 @@ let View
     let userHistory =
         messages |> List.filter (fun m -> m.Participant = User) |> List.rev
 
+    // Phase 36.D — the cross-module read-consent modal, mounted here and
+    // only here.
+    //
+    // In BOTH branches on purpose. The panel is composed as shell chrome
+    // (`AIClientConfig.withSidePanel` renders it whether or not it is
+    // expanded), so mounting it here gives the tab exactly one dialog host
+    // for every AI surface — and a suspended read belongs to the
+    // conversation, not to whether the user happens to have the panel
+    // open. Mounting it in the full-page assistant as well would put two
+    // hosts in one tab and stack two identical overlays over one question.
     if not isOpen then
-        Html.none
+        ConsentDialog.View()
     else
         Html.div [
             prop.className "fixed right-0 top-0 h-full bg-white shadow-xl z-20 flex flex-col border-l border-gray-200"
@@ -1410,5 +1420,10 @@ let View
                         ]
                     ]
                 ]
+
+                // The consent modal, as the panel's last child: it is a
+                // fixed-position overlay, so its position in the tree
+                // affects nothing but where the one mount lives.
+                ConsentDialog.View()
             ]
         ]

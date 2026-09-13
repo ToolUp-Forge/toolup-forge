@@ -232,6 +232,33 @@ type AIStreamEvent =
     /// is `Off` (the default) — a deployment that never opts in sees the
     /// pre-523 event stream byte-for-byte (GP 11 / GP 13).
     | AnswerVerified of conversationId: Guid * verification: AnswerVerification
+    /// Phase 36.D: ask the user to consent to a cross-module read before
+    /// it happens. Emitted by a `_platform.ai.*` tool that is about to
+    /// read from `targetModule` in a conversation where the user has not
+    /// already allowed it; the tool is suspended on a
+    /// `TaskCompletionSource` keyed by `consentId` until the browser
+    /// POSTs an `AIConsentDecisionRequest` to `/api/ai/consent`, or the
+    /// shared suspended-dispatch timeout fires.
+    ///
+    /// The payload is FSharp-primitive-only by construction (rule 1 —
+    /// identity by value): every field is a `Guid` or a `string`, so no
+    /// server type and no live handle crosses the wire, and a non-.NET
+    /// client can render the prompt from the JSON alone.
+    ///
+    /// `intendedQueryKey` is the tool-specific discriminator of what is
+    /// about to be read (a query key, a result type, an entity type) and
+    /// is `""` when the tool has none. `redactedPayloadPreview` is a
+    /// short, length-capped rendering of the model's own arguments —
+    /// enough for the user to judge the request, never the module's data,
+    /// which has not been read yet.
+    | AIConsentRequired of
+        taskId: Guid *
+        consentId: Guid *
+        conversationId: Guid *
+        toolName: string *
+        targetModule: string *
+        intendedQueryKey: string *
+        redactedPayloadPreview: string
 
 // ─── Client-resident tool result ─────────────────────────────────
 

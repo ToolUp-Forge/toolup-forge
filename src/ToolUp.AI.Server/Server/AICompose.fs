@@ -108,6 +108,22 @@ type AIServerApp = {
     /// turn and nothing else (GP 13). Set via
     /// `AIServerApp.withDenialRateAlert`.
     DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
+    /// Phase 36.D — whether, and how often, the user is asked before a
+    /// `_platform.ai.*` tool reads from a module they did not name.
+    ///
+    /// **Defaults to `RememberPerConversation`, which is a behaviour
+    /// change rather than the byte-for-byte default GP 11 usually asks
+    /// for** — the second place the SDK inverts that posture, after Phase
+    /// 36.C's opt-in, and for the same reason: shipping this gate off by
+    /// default would ship nothing. A deployment that wants the pre-36.D
+    /// flow declares `TrustEverything` via `withAIConsentMode`, and that
+    /// is then a decision somebody made. See
+    /// `docs/migrations/36-D-cross-module-read-consent.md`.
+    ///
+    /// A plain field rather than an `option`: there is no meaningful
+    /// "undeclared" here — every deployment has a consent posture, and
+    /// the default IS one.
+    ConsentMode: AIConsentMode
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -252,6 +268,13 @@ let composeAI (app: AIServerApp) : ServerApp =
     // POSTs back).
     let dispatchRegistry = ClientToolDispatch.ClientToolDispatchRegistry()
 
+    // Phase 36.D: per-process registry of cross-module reads suspended on
+    // a user consent decision. Singleton for the same reason, and with the
+    // same multi-instance caveat, as `dispatchRegistry` above — the
+    // `/api/ai/consent` POST has to find the suspended read, so a
+    // multi-silo deployment needs SSE/POST affinity.
+    let consentRegistry = AIConsentDispatch.AIConsentRegistry()
+
     // Phase 6h: per-task `CancellationTokenSource` registry for the
     // cancel-mid-stream feature. `aiAssistantApi` registers a CTS
     // when starting the agent loop; `cancelHandler` cancels it when
@@ -295,6 +318,8 @@ let composeAI (app: AIServerApp) : ServerApp =
             POST
             >=> route "/api/ai/tool-result"
             >=> ClientToolDispatch.clientToolResultHandler
+            // Phase 36.D: cross-module read-consent decision POST.
+            POST >=> route "/api/ai/consent" >=> AIConsentHandler.consentDecisionHandler
             // Phase 6h: cancel-mid-stream endpoint.
             POST >=> routef "/api/ai/cancel/%O" AICancellationRegistry.cancelHandler
             // Phase 6j.A: fast-path audit beacon.
@@ -395,6 +420,13 @@ let composeAI (app: AIServerApp) : ServerApp =
                 )
                 .AddSingleton<AIToolRegistry>(registry)
                 .AddSingleton<ClientToolDispatch.ClientToolDispatchRegistry>(dispatchRegistry)
+                .AddSingleton<AIConsentDispatch.AIConsentRegistry>(consentRegistry)
+                // Phase 36.D: the deployment's consent posture, resolved by
+                // the tool executors. Registered unconditionally — a tool
+                // reads it per invocation and an absent registration would
+                // read as the default anyway, so registering it always is
+                // what makes `TrustEverything` actually reachable.
+                .AddSingleton<AIConsentMode>(app.ConsentMode)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
                 // Warn at startup when AI runs multi-instance with the
                 // in-process cancel / client-tool-dispatch registries
@@ -477,6 +509,7 @@ module AIServerApp =
         AIConfig = None
         ModuleAIContexts = []
         DenialRateAlert = None
+        ConsentMode = RememberPerConversation
     }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into an
@@ -505,6 +538,7 @@ module AIServerApp =
             AIConfig = None
             ModuleAIContexts = []
             DenialRateAlert = None
+            ConsentMode = RememberPerConversation
         }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*` / `add*`) ───
@@ -862,6 +896,19 @@ module AIServerApp =
         app with
             DenialRateAlert = Some policy
     }
+
+    /// Phase 36.D — declare how the cross-module read-consent gate
+    /// behaves.
+    ///
+    /// `RememberPerConversation` (the default) prompts once per target
+    /// module per conversation. `AlwaysAsk` prompts on every read.
+    /// `TrustEverything` never prompts — for single-user / self-hosted /
+    /// development deployments where the person driving the agent and the
+    /// person who owns the data are the same person, and the ONLY way back
+    /// to the pre-36.D flow.
+    ///
+    ///     AIServerApp.withAIConsentMode TrustEverything
+    let withAIConsentMode (mode: AIConsentMode) (app: AIServerApp) : AIServerApp = { app with ConsentMode = mode }
 
     /// Phase 70 A.5 — additively declare a platform provider on the
     /// `AIServerApp` pipeline. Each call appends to
