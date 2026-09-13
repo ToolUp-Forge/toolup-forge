@@ -298,7 +298,7 @@ module AssetStoreServerApp =
     /// `ServerConfig.AssetStore = NoAssetStore`, short-circuits
     /// to `ServerApp.run` — byte-for-byte the same shape as the
     /// pre-Phase-39 base path. When `EnabledAssetStore`,
-    /// registers DI singletons, mounts the Fable.Remoting
+    /// registers DI singletons, mounts the ToolUp.Remoting
     /// handler at `/api/assets/` and the multipart upload
     /// handler at `/api/assets/upload`, and delegates to
     /// `ServerApp.run`.
@@ -437,7 +437,7 @@ module AssetStoreServerApp =
                                 :> IAssetStore)
                     )
 
-            // ─── Fable.Remoting handler ──────────────────────────
+            // ─── ToolUp.Remoting handler ──────────────────────────
             let assetApi (ctx: HttpContext) : IAssetApi =
                 let store = ctx.RequestServices.GetService(typeof<IAssetStore>) :?> IAssetStore
 

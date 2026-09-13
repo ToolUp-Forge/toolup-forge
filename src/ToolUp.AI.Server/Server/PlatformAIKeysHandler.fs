@@ -11,7 +11,7 @@ open ToolUp.AI
 
 // ─── Phase 70 — Platform Admin AI keys handler ──────────────────
 //
-// Backs the `PlatformAIKeysApi` Fable.Remoting contract. Every
+// Backs the `PlatformAIKeysApi` ToolUp.Remoting contract. Every
 // method gates on `AccessContext.canModifyPlatformConfig`; non-admin
 // callers receive the same wording the existing
 // `PlatformAdminApiHandler` uses so client-side error banners render
@@ -50,7 +50,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         AccessContext.unrestricted (AnonymousSession userId)
 
-/// Build the `PlatformAIKeysApi` Fable.Remoting handler. Resolves
+/// Build the `PlatformAIKeysApi` ToolUp.Remoting handler. Resolves
 /// `IPlatformAIKeyStore` and `ITeamStore` from DI; the factory's
 /// `PlatformDescriptors` + `BuildPlatform` are consumed from the
 /// passed-in factory (which `composeAI` already has in hand).

@@ -18,7 +18,7 @@ open System.Net.Sockets
 // This module is the registration-time URL guard. Called from
 // `IWebhookRegistry.CreateSubscription` BEFORE the URL hits the
 // registry. Refusal returns a clear `Error string` to the registrar
-// (HTTP 400 via Fable.Remoting).
+// (HTTP 400 via ToolUp.Remoting).
 //
 // Validation pipeline:
 //   1. Parse as absolute URI; refuse non-parseable strings.

@@ -33,7 +33,7 @@ open ToolUp.Platform
 // where, per Phase 229's lesson, it is a gate somebody can point at
 // rather than one that lives entirely in wiring.
 
-/// Fable.Remoting contract for subscription management. Every method
+/// ToolUp.Remoting contract for subscription management. Every method
 /// returns `Async<Result<_, _>>` per the SDK convention.
 type IReportSubscriptionApi = {
     /// Every report producer registered in this deployment, with the

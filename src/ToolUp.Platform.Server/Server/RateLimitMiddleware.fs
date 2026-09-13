@@ -100,9 +100,9 @@ module RateLimitMiddleware =
         | SlidingWindow(duration, _) -> max 1 (int (Math.Ceiling duration.TotalSeconds))
 
     /// Render the typed `RateLimitedError` as the JSON body of the
-    /// 429 response. The wire shape mirrors the Fable.Remoting
+    /// 429 response. The wire shape mirrors the ToolUp.Remoting
     /// envelope so module client code can `JSON.deserialize` it into
-    /// the same record. Hand-rolled rather than via Fable.Remoting
+    /// the same record. Hand-rolled rather than via ToolUp.Remoting
     /// because the middleware sits OUTSIDE the Remoting pipeline
     /// (short-circuits before any handler runs).
     let internal renderDenyBody (rle: RateLimitedError) : byte[] =

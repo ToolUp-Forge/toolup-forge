@@ -6,7 +6,7 @@ module PlatformKnowledgeApi
 open ToolUp.Platform
 open SharedTypes
 
-// ─── PlatformKnowledgeApi (Fable.Remoting wire surface) ───────────────
+// ─── PlatformKnowledgeApi (ToolUp.Remoting wire surface) ───────────────
 //
 // Phase 4b — deployment-wide Knowledge Base content management. This is
 // the SDK's only write path to `VectorScope.Platform`. Sister API to
@@ -99,7 +99,7 @@ type IPlatformKnowledgeApi = {
     /// Client-side UI affordance (a "Promote to Platform KB" button on
     /// each team-side document row, conditionally rendered when the
     /// caller holds `PlatformRole.PlatformAdmin`) is a follow-up;
-    /// operators can call the API directly via the Fable.Remoting
+    /// operators can call the API directly via the ToolUp.Remoting
     /// proxy in the meantime.
     [<RequiresRole "PlatformAdmin">]
     PromoteTeamDocumentToPlatform: string -> Async<Result<KnowledgeDocument, string>>

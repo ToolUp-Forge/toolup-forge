@@ -22,7 +22,7 @@ open ToolUp.Platform.HealthChecks
 // duplication that quietly drifts.
 
 /// Outcome of one probe run. The shape carries enough detail to
-/// populate either the dev report or a Fable.Remoting wire DTO without
+/// populate either the dev report or a ToolUp.Remoting wire DTO without
 /// re-running the probe.
 type ProbeRun = {
     Name: string

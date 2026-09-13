@@ -72,7 +72,7 @@ let tests =
                 "the two IPublicFormApi route paths declare claimBearerOnly"
 
             for ((httpMethod, path), req) in formsOverrides do
-                Expect.equal httpMethod "POST" (sprintf "%s declared as POST (Fable.Remoting convention)" path)
+                Expect.equal httpMethod "POST" (sprintf "%s declared as POST (ToolUp.Remoting convention)" path)
 
                 Expect.equal req SurfaceRequirement.claimBearerOnly (sprintf "%s declares claimBearerOnly" path)
         }

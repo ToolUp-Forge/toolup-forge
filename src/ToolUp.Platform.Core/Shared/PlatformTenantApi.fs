@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform
 
-// ─── IPlatformTenantApi (Phase 54 Fable.Remoting wire surface) ───────
+// ─── IPlatformTenantApi (Phase 54 ToolUp.Remoting wire surface) ───────
 //
 // Deployment-wide tenant-lifecycle operations for the operator/admin
 // surface. Drives the `ITenantLifecycle` aggregator: one
@@ -26,9 +26,9 @@ namespace ToolUp.Platform
 // 404s and no lifecycle hooks are resolved (GP 13 — zero cost when
 // unused).
 //
-// **Route shape.** Fable.Remoting member routes resolve at
+// **Route shape.** ToolUp.Remoting member routes resolve at
 // `/api/_platform/tenants/{methodName}` (the `scopeId` rides in the
-// request body as the first tuple element, per the Fable.Remoting
+// request body as the first tuple element, per the ToolUp.Remoting
 // convention the other `_platform` admin APIs use). The phase's
 // illustrative `POST /api/_platform/tenants/{scopeId}/deprovision`
 // path-param shape is the same operation expressed RESTfully; the
@@ -214,7 +214,7 @@ type IPlatformTenantApi = {
 }
 
 module PlatformTenantApi =
-    /// Fable.Remoting route builder. Mirrors `IPlatformTenantApi` member
+    /// ToolUp.Remoting route builder. Mirrors `IPlatformTenantApi` member
     /// names; consumed on both the server (registration) and client
     /// (proxy construction). Surface lives under the reserved
     /// `/api/_platform/tenants/` prefix so admin clients discover the

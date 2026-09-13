@@ -10,7 +10,7 @@ open ToolUp.Platform.Usage
 
 // ─── Phase 9d — Usage admin API handler ──────────────────────────
 //
-// Production-safe Owner / Admin Fable.Remoting surface that surfaces
+// Production-safe Owner / Admin ToolUp.Remoting surface that surfaces
 // the billing-relevant subset of `IUsageLog`. Mirrors `HealthMonitor-
 // ApiHandler` for RBAC shape:
 //
@@ -71,7 +71,7 @@ let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : s
     | Some teamId -> teamId
     | None -> accessContext.UserId
 
-/// Build the `IUsageQueryApi` Fable.Remoting handler. Resolves
+/// Build the `IUsageQueryApi` ToolUp.Remoting handler. Resolves
 /// `IUsageLog` and `AccessContext` lazily from DI per request.
 let usageQueryApi (ctx: HttpContext) : IUsageQueryApi =
     let accessContext = resolveAccessContext ctx

@@ -10,7 +10,7 @@ open ToolUp.Platform
 // ─── Phase 132 — admin structural backstop ───────────────────────────
 //
 // The raw Giraffe `_platform` admin handlers (`AdUnitConfigApi`,
-// `PremiumUserApi`, `GrantPremiumApiHandler`) are NOT Fable.Remoting
+// `PremiumUserApi`, `GrantPremiumApiHandler`) are NOT ToolUp.Remoting
 // records, so the dispatcher's per-request authorisation classifier
 // never sees them. Their only protection is a hand-written in-handler
 // `AccessContext.canModifyPlatformConfig` check — so a future handler

@@ -129,6 +129,32 @@ type ConfigKeyType =
     /// to the descriptor's `Default`.
     | EnumKey of choices: string list
 
+/// Phase 719 — the token set the enabled/disabled reader family accepts,
+/// declared once because the readers accept it once.
+///
+/// `ServerConfig.fromEnv`'s `enabledDisabledTokens` maps six spellings
+/// onto the two `No* | Enabled*` cases, and every binary toggle in the
+/// registry goes through it. Each of those descriptors used to declare
+/// two of the six, so four working spellings were flagged invalid by the
+/// generated schema on twenty-three keys at once — a projection telling
+/// an operator that the value their deployment is running on is not
+/// allowed.
+///
+/// One shared list rather than twenty-three copies: the readers share a
+/// helper, so the declaration that describes them shares a value. A
+/// seventh token added to the reader is then a one-line change here, and
+/// cannot be added to twenty-two descriptors and forgotten on the
+/// twenty-third. The canonical spelling leads, and the doc's "enum:"
+/// cell renders in this order.
+///
+/// **Not every enabled/disabled-shaped key belongs here.**
+/// `TOOLUP_AUTH_COOKIE_ISSUANCE` and
+/// `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` read their own token
+/// lists (numeric and boolean spellings respectively), so they declare
+/// their own — sharing this one would be a declaration that does not
+/// describe its reader, which is the defect, not the fix.
+let enabledDisabledChoices = [ "enabled"; "on"; "yes"; "disabled"; "no"; "off" ]
+
 /// One environment-variable-backed config key the SDK reads.
 /// Declared once, centrally — the reference doc, `--print-config`, and
 /// the coverage test all read from this single source.
@@ -963,7 +989,11 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.sseAuth
         Description =
             "When set to a cookie value, the OIDC provider also accepts the JWT from the toolup-auth-token cookie so EventSource SSE handshakes authenticate. Unset keeps bearer-header-only."
-        Type = EnumKey [ "cookie"; "cookies"; "cookieonly" ]
+        // Phase 719 — two readers consult this key and both are
+        // declared here: `AuthProviderFromEnv` takes the three cookie
+        // spellings, and `parseSseAuthMode` takes those plus the two
+        // explicit spellings of the default.
+        Type = EnumKey [ "cookie"; "cookies"; "cookieonly"; "fallback"; "queryparam" ]
         Default = Some "(unset — bearer header only)"
         IsSecret = false
         Category = "Auth & identity"
@@ -1025,8 +1055,12 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.logLevel
         Description =
             "Floor for the default ConsoleLogger. Error is never silenced. An unrecognised value warns and uses Info."
-        Type = EnumKey [ "Debug"; "Info"; "Warn"; "Error" ]
-        Default = Some "Info"
+        // Phase 719 — `LogLevel.tryParse` also takes `trace` and
+        // `warning`, and compares lowercased. Declared lowercase like
+        // every other enum in the registry, so the generated schema
+        // states the canonical spelling the readers normalise to.
+        Type = EnumKey [ "trace"; "debug"; "info"; "warn"; "warning"; "error" ]
+        Default = Some "info"
         IsSecret = false
         Category = "Logging & observability"
     }
@@ -1097,8 +1131,11 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.notificationChannel
         Description =
             "Selects the INotificationChannel backend. 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses the single-instance in-memory channel."
-        Type = EnumKey [ "inmemory"; "redis" ]
-        Default = Some "inmemory"
+        // Phase 719 — the reader's in-process tokens are `inprocess` /
+        // `in-process`; `inmemory` was declared and never accepted, so
+        // setting it fell through to the resolver lookup and warned.
+        Type = EnumKey [ "inprocess"; "in-process"; "redis" ]
+        Default = Some "inprocess"
         IsSecret = false
         Category = "Deployment shape"
     }
@@ -1106,7 +1143,9 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.distributedLock
         Description =
             "Phase 9i — selects the IDistributedLock backend (the SDK-wide cross-instance lease primitive). 'redis' requires TOOLUP_REDIS_CONNECTION; unset uses InProcessDistributedLock, which is correct for a single instance and excludes nothing across replicas. Read by DistributedLockSelection.fromEnv, which the composition root threads its companion resolvers into."
-        Type = EnumKey [ "inprocess"; "redis" ]
+        // Phase 719 — `DistributedLockSelection.fromEnv` also takes the
+        // hyphenated spelling.
+        Type = EnumKey [ "inprocess"; "in-process"; "redis" ]
         Default = Some "inprocess"
         IsSecret = false
         Category = "Deployment shape"
@@ -1263,7 +1302,7 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.shareTokenStore
         Description =
             "Enables the IShareTokenStore substrate backing publishable share links (signed tokens + claim store)."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1271,7 +1310,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.webhooks
         Description = "Enables outbound webhook delivery (subscriptions, signing, retry)."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1279,7 +1318,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.auditLog
         Description = "Enables the audit log and its sink dispatcher."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1287,7 +1326,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.oauthRefresher
         Description = "Enables the background OAuth token refresher for stored data-source credentials."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1295,7 +1334,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.entityStore
         Description = "Enables the IEntityStore substrate (registered entity types and persistence)."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1304,7 +1343,7 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.entityOutbox
         Description =
             "Enables the entity outbox, so entity saves publish transactionally instead of being discarded unpublished."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1312,7 +1351,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.usageMetering
         Description = "Enables per-scope usage metering, the counters feeding quota and billing surfaces."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1320,7 +1359,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.computeBudget
         Description = "Enables compute-budget accounting and enforcement for long-running work."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1328,7 +1367,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.platformKnowledgeBase
         Description = "Enables the platform-level knowledge base, the SDK-shipped document KB surface."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1336,7 +1375,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.configDriftDetection
         Description = "Enables startup detection of drift between persisted config and the composed defaults."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1344,7 +1383,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.smokeTest
         Description = "Enables the post-boot smoke-test surface, which is itself guarded by TOOLUP_SMOKE_TOKEN."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1352,7 +1391,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.deploymentReadiness
         Description = "Enables the deployment-readiness report surface."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1360,7 +1399,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.deploymentVerification
         Description = "Enables the one-command post-deployment verification report."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1368,7 +1407,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.assetStore
         Description = "Enables the IAssetStore substrate for uploaded media and derivative rendering."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1376,7 +1415,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.adAnalytics
         Description = "Enables the advertising-analytics surface."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1385,7 +1424,7 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.jobScheduler
         Description =
             "Selects the in-process IJobScheduler. Dev-shaped: a multi-instance deployment needs a distributed scheduler companion."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1394,7 +1433,16 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.auditFailurePolicy
         Description =
             "What happens when an audit sink write fails: log and continue, refuse the action, or degrade to a local file."
-        Type = EnumKey [ "log"; "refuse"; "degrade" ]
+        // Phase 719 — the reader also takes each DU case's full name.
+        Type =
+            EnumKey [
+                "log"
+                "logandcontinue"
+                "refuse"
+                "refuseaction"
+                "degrade"
+                "degradetofile"
+            ]
         Default = Some "log"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1402,7 +1450,8 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.resultStore
         Description = "Selects the result store backing long-running job output retrieval."
-        Type = EnumKey [ "no"; "inmemory"; "persistent" ]
+        // Phase 719 — the reader also takes the hyphenated spelling.
+        Type = EnumKey [ "no"; "inmemory"; "in-memory"; "persistent" ]
         Default = Some "no"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1411,7 +1460,12 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.eventStore
         Description =
             "Selects the IEventStore backend. The persistent option uses the blob-backed store with the 90-day retention policy."
-        Type = EnumKey [ "inmemory"; "persistent" ]
+        // Phase 719 — the reader also takes the hyphenated spelling.
+        // `enabled` is deliberately NOT declared: the hybrid reader
+        // recognises it only to FAIL LOUD naming the payload it cannot
+        // take from an env var, so declaring it would have the schema
+        // offer a value whose only outcome is a refused boot.
+        Type = EnumKey [ "inmemory"; "in-memory"; "persistent" ]
         Default = Some "inmemory"
         IsSecret = false
         Category = "Platform subsystems"
@@ -1477,7 +1531,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.lineage
         Description = "Enables the lineage store recording dataset and derivation provenance."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1485,7 +1539,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.dataIngestion
         Description = "Enables the data-ingestion pipeline (IDataIngestor plus the background ingestion service)."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1493,7 +1547,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.columnMapping
         Description = "Enables the column-mapping subsystem for uploaded tabular data."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1501,7 +1555,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.consentAudit
         Description = "Enables consent-change auditing."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1509,7 +1563,8 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.consentStateStore
         Description = "Selects the consent-state backend."
-        Type = EnumKey [ "off"; "inmemory"; "entity" ]
+        // Phase 719 — the reader takes seven tokens, not three.
+        Type = EnumKey [ "no"; "off"; "disabled"; "inmemory"; "in-memory"; "entity"; "entity-backed" ]
         Default = Some "off"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1518,7 +1573,9 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.dataSubjectRequests
         Description =
             "Disables the data-subject-request surface. Enabling it requires an explicit ErasurePolicy, a compliance decision, so it must be set in ServerConfig."
-        Type = EnumKey [ "disabled" ]
+        // Phase 719 — the reader also takes `no` / `off` for the same
+        // case. `enabled` stays undeclared: it fails loud by design.
+        Type = EnumKey [ "disabled"; "no"; "off" ]
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1526,7 +1583,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.mappingDryRunBlock
         Description = "When enabled, a failed column-mapping dry run blocks the import instead of only warning."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
@@ -1535,7 +1592,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.metricsEndpoint
         Description = "Exposes the Prometheus-style scrape endpoint for the registered IMetricsSink."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Logging & observability"
@@ -1561,7 +1618,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.rateLimiter
         Description = "Enables the request rate-limiter middleware."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
         Category = "Rate limiting"
@@ -1570,7 +1627,8 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.rateLimitStore
         Description =
             "Selects where rate-limit counters live. The in-memory store is per-instance and therefore wrong for a multi-instance deployment."
-        Type = EnumKey [ "no"; "inmemory"; "external" ]
+        // Phase 719 — the reader takes six tokens, not three.
+        Type = EnumKey [ "no"; "off"; "disabled"; "inmemory"; "in-memory"; "external" ]
         Default = Some "no"
         IsSecret = false
         Category = "Rate limiting"
@@ -1611,7 +1669,18 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.staticPathBehaviour
         Description = "How a missing static-content path is treated at boot: warn, refuse to start, or skip silently."
-        Type = EnumKey [ "warn"; "require"; "skip" ]
+        // Phase 719 — the reader also takes each case's long and
+        // hyphenated spellings.
+        Type =
+            EnumKey [
+                "warn"
+                "require"
+                "requireexist"
+                "require-exist"
+                "skip"
+                "skipsilent"
+                "skip-silent"
+            ]
         Default = Some "warn"
         IsSecret = false
         Category = "Deployment shape"
@@ -1629,7 +1698,19 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.processProfile
         Description =
             "Which role this process plays when the deployment is split: everything, web only, worker only, or dispatcher only."
-        Type = EnumKey [ "allinone"; "web"; "worker"; "dispatcher" ]
+        // Phase 719 — the reader also takes the `*only` and hyphenated
+        // spellings of each case.
+        Type =
+            EnumKey [
+                "allinone"
+                "all-in-one"
+                "web"
+                "webonly"
+                "worker"
+                "workeronly"
+                "dispatcher"
+                "dispatcheronly"
+            ]
         Default = Some "allinone"
         IsSecret = false
         Category = "Deployment shape"
@@ -1637,7 +1718,9 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.securityHardening
         Description = "Security-header and hardening posture applied to every response."
-        Type = EnumKey [ "no"; "default"; "strict" ]
+        // Phase 719 — the reader also takes `off` / `disabled` for the
+        // no-hardening case and `on` for the default posture.
+        Type = EnumKey [ "no"; "off"; "disabled"; "default"; "on"; "strict" ]
         Default = Some "no"
         IsSecret = false
         Category = "Deployment shape"
@@ -1701,6 +1784,30 @@ let all: ConfigKeyDescriptor list = [
         Category = "Deployment shape"
     }
     {
+        // Phase 719 — the module-composition lane, beside
+        // `TOOLUP_MODULE_FILTER`, and NOT the escape-hatch category it
+        // used to sit in.
+        //
+        // Every other member of that category ACKNOWLEDGES a specific
+        // preflight refusal — an operator saying "I meant that", which is
+        // why the deployment-verification report enumerates the category
+        // as its accepted-acknowledgements inventory. This key
+        // acknowledges nothing: it is the secret trust-anchor material
+        // module-binding verification is performed AGAINST, and setting
+        // it lowers no refusal. Listed as accepted risk it read as a
+        // waiver the deployment had never taken, which is worse than an
+        // omission — an inventory of accepted risk that is wrong is not
+        // an inventory. Its sibling `TOOLUP_MODULE_BINDING_ALLOW_UNBOUND`
+        // stays a hatch, correctly: that one does lower a refusal.
+        EnvVar = Names.moduleBindingAnchors
+        Description =
+            "Semicolon-separated module-binding trust anchors, each mac:keyId:scope:key or asym:keyId:alg:base64pubkey."
+        Type = StringKey
+        Default = None
+        IsSecret = true
+        Category = "Deployment shape"
+    }
+    {
         EnvVar = Names.trustedProxyCidrs
         Description = "Comma-separated CIDR ranges whose X-Forwarded-* headers are trusted."
         Type = StringKey
@@ -1730,7 +1837,11 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.authCookieIssuance
         Description =
             "Issues the platform auth cookie alongside the bearer token, so SSE can authenticate without a query parameter."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        // Phase 719 — `parseAuthCookieIssuance` reads its own list, which
+        // takes the numeric spellings and not `yes` / `no`. Declared as
+        // the reader has it rather than as the shared family, so the
+        // schema neither refuses `1` nor offers `yes`.
+        Type = EnumKey [ "enabled"; "on"; "1"; "disabled"; "off"; "0" ]
         Default = Some "disabled"
         IsSecret = false
         Category = "Auth & identity"
@@ -1738,7 +1849,17 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.teamCreationPolicy
         Description = "Who may create a team: platform admins only, or any authenticated user."
-        Type = EnumKey [ "platformadminonly"; "anyauthenticateduser" ]
+        // Phase 719 — the reader also takes the hyphenated and short
+        // spellings of both cases.
+        Type =
+            EnumKey [
+                "platformadminonly"
+                "platform-admin-only"
+                "admin"
+                "anyauthenticateduser"
+                "any"
+                "authenticated"
+            ]
         Default = Some "platformadminonly"
         IsSecret = false
         Category = "Auth & identity"
@@ -1747,7 +1868,11 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.requireDirectoryProofForDirectAdd
         Description =
             "Requires a directory existence proof before a direct member add writes a membership row (refuses unknown ids; needs an IUserDirectory)."
-        Type = EnumKey [ "enabled"; "disabled" ]
+        // Phase 719 — Phase 549 gave this key its own list deliberately:
+        // it takes the boolean spellings an operator reaches for on a
+        // `REQUIRE_*` variable AS WELL AS the enabled/disabled family.
+        // Ten tokens, declared because ten are read.
+        Type = EnumKey [ "enabled"; "on"; "yes"; "true"; "1"; "disabled"; "off"; "no"; "false"; "0" ]
         Default = Some "disabled"
         IsSecret = false
         Category = "Auth & identity"
@@ -1990,7 +2115,11 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.conversationStore
         Description =
             "Disables AI conversation persistence. Enabling it requires a retentionDays value, so it must be set in ServerConfig rather than here."
-        Type = EnumKey [ "no" ]
+        // Phase 719 — the reader takes `off` / `disabled` for the same
+        // case. `enabled` stays undeclared: the hybrid reader recognises
+        // it only to fail loud naming the payload an env var cannot
+        // carry, so the schema would be offering a refused boot.
+        Type = EnumKey [ "no"; "off"; "disabled" ]
         Default = Some "no"
         IsSecret = false
         Category = "AI"
@@ -2067,7 +2196,9 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.publicRendering
         Description =
             "Disables server-side public page rendering. Enabling it requires a ContentRoot path, so it must be set in ServerConfig rather than here."
-        Type = EnumKey [ "no" ]
+        // Phase 719 — the reader takes `off` / `disabled` for the same
+        // case; `enabled` fails loud by design and stays undeclared.
+        Type = EnumKey [ "no"; "off"; "disabled" ]
         Default = Some "no"
         IsSecret = false
         Category = "Public surface & rendering"
@@ -2204,15 +2335,6 @@ let all: ConfigKeyDescriptor list = [
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
-        Category = EscapeHatchCategory
-    }
-    {
-        EnvVar = Names.moduleBindingAnchors
-        Description =
-            "Semicolon-separated module-binding trust anchors, each mac:keyId:scope:key or asym:keyId:alg:base64pubkey."
-        Type = StringKey
-        Default = None
-        IsSecret = true
         Category = EscapeHatchCategory
     }
     // --- Storage & secrets ---
@@ -2752,9 +2874,22 @@ let escapeHatchKeys: ConfigKeyDescriptor list =
 //   * `TOOLUP_STORE_EVICTION_MINUTES` is declared `IntKey` but parsed
 //     with `Double.TryParse`, so `2.5` works today. The rule says so
 //     rather than the validator refusing a value the reader honours.
-//     (That the descriptor's declared type and its reader disagree is a
-//     registry defect this phase records rather than silently fixes —
-//     changing the declared type moves the generated schema's contract.)
+//
+//     Phase 719 settled the contract that sentence left open, and chose
+//     the reader: fractional minutes are genuinely supported —
+//     `ServerConfig.EphemeralStoreEvictionMinutes` is a public `float`
+//     and has been read by `Double.TryParse` since Phase 71 — so
+//     narrowing the reader would turn a value deployments accept today
+//     into a preflight refusal, on a package whose release version is
+//     frozen. That is the drift the version discipline exists to stop,
+//     and it is the same argument that keeps the bounds out of the DU
+//     two paragraphs up. What 719 fixed instead is the projection that
+//     was lying: the generated JSON Schema ignored this table entirely
+//     and refused both `2.5` and the `none` tokens beside it, so a
+//     manifest editor flagged the value the deployment was running on.
+//     `ConfigSchema.intTypeClauses` now reads these rows. Folding the form
+//     onto `ConfigKeyType` as an honest `FloatKey` remains the
+//     mechanical move at the next minor, alongside the bounds.
 
 /// How the reader behind an `IntKey` parses its numeric value.
 ///
@@ -2967,9 +3102,19 @@ let builtInProfiles: ConfigProfile list = [
         Requires = []
         Values = [
             Names.replicaCount, "1"
-            Names.notificationChannel, "inmemory"
+            // Phase 719 — `inprocess`, not `inmemory`. The bundle shipped
+            // a token `NotificationChannel.fromEnv` has never accepted:
+            // it fell through the resolver lookup, warned "not
+            // recognised", and landed on the in-process channel by the
+            // fallback path rather than by selection. It reached the
+            // right substrate for the wrong reason, and only the
+            // corrected declaration made it visible.
+            Names.notificationChannel, "inprocess"
             Names.distributedLock, "inprocess"
-            Names.logLevel, "Debug"
+            // Phase 719 — lowercase, with the rest of the registry. The
+            // reader compared case-insensitively either way; the schema's
+            // `enum` does not.
+            Names.logLevel, "debug"
             Names.enableDevEndpoints, "true"
         ]
     }
@@ -3414,11 +3559,79 @@ module ConfigSchema =
     /// `pattern` beside an int constrains only the string arm — a
     /// `pattern` keyword ignores every non-string instance — so `3` stays
     /// valid while `"3.5"` and `"soon"` do not.
-    let private typeClauses (t: ConfigKeyType) =
-        match t with
+    /// One literal token as a case-INSENSITIVE ECMA-262 alternative.
+    ///
+    /// The readers compare their "unset" tokens case-insensitively, and
+    /// JSON Schema's `pattern` has no portable inline-flag syntax, so a
+    /// letter becomes a two-element class and everything else is escaped
+    /// literally. Verbose, and the alternative — emitting only the
+    /// lowercase spelling — would flag `NONE` as invalid in the editor
+    /// while the reader honours it, which is the defect this projection
+    /// exists to stop.
+    let private caseInsensitiveLiteral (token: string) =
+        token
+        |> Seq.map (fun c ->
+            if Char.IsLetter c then
+                sprintf "[%c%c]" (Char.ToUpperInvariant c) (Char.ToLowerInvariant c)
+            elif "\\^$.|?*+()[]{}/".Contains c then
+                "\\" + string c
+            else
+                string c)
+        |> String.concat ""
+
+    /// Phase 719 — the instance constraint for an integer-valued key,
+    /// read off the SAME `intKeyRules` row the preflight refuses against
+    /// and the reference doc's Type column describes.
+    ///
+    /// Until this phase the projection ignored the rule table and emitted
+    /// one clause for every int key: `["integer","string"]` with
+    /// `^-?[0-9]+$`. That refused two things the readers honour — the
+    /// `none` token three readers take as "leave it unset", and the
+    /// fractional value `TOOLUP_STORE_EVICTION_MINUTES` accepts because
+    /// its reader is `Double.TryParse` — so an editor validating a
+    /// manifest flagged the value the deployment was already running on.
+    /// Phase 465 declared both facts; nothing read them here.
+    ///
+    /// The pattern constrains only the STRING arm (a `pattern` keyword
+    /// ignores every non-string instance), which is why `3` stays valid
+    /// while `"soon"` does not. It is deliberately the DOCUMENTED
+    /// contract rather than a transcription of `TryParse`: the readers
+    /// also take a leading `+`, surrounding whitespace and exponent
+    /// notation, none of which the reference table offers and none of
+    /// which a manifest should be written in — the same line
+    /// `isJsonInteger` above already draws for defaults.
+    ///
+    /// Bounds are NOT emitted. `minimum`/`maximum` would apply to the
+    /// numeric arm only, leaving `"512"` valid where `512` was refused —
+    /// a schema stricter in one arm than the other says something the
+    /// reader does not. Being silent about a bound is looser than the
+    /// reader; being wrong about one is the class this phase closes.
+    let private intTypeClauses (envVar: string) =
+        let rule = intKeyRuleFor envVar
+
+        let numericType, numericPattern =
+            match rule.Form with
+            | IntegerOnly -> "integer", "-?[0-9]+"
+            | IntegerOrDecimal -> "number", "-?[0-9]+(?:\\.[0-9]+)?"
+
+        let alternatives =
+            numericPattern :: (rule.AcceptedTokens |> List.map caseInsensitiveLiteral)
+
+        let pattern =
+            match alternatives with
+            | [ single ] -> "^" + single + "$"
+            | many -> "^(?:" + String.concat "|" many + ")$"
+
+        [
+            sprintf "\"type\": [ \"%s\", \"string\" ]" numericType
+            "\"pattern\": " + str pattern
+        ]
+
+    let private typeClauses (k: ConfigKeyDescriptor) =
+        match k.Type with
         | StringKey -> [ "\"type\": \"string\"" ]
         | BoolKey -> [ "\"type\": [ \"boolean\", \"string\" ]" ]
-        | IntKey -> [ "\"type\": [ \"integer\", \"string\" ]"; "\"pattern\": \"^-?[0-9]+$\"" ]
+        | IntKey -> intTypeClauses k.EnvVar
         | EnumKey choices -> [
             "\"type\": \"string\""
             "\"enum\": [ " + (choices |> List.map str |> String.concat ", ") + " ]"
@@ -3503,19 +3716,14 @@ module ConfigSchema =
         let keyProperties =
             bindable
             |> List.map (fun k ->
-                block
-                    "    "
-                    k.EnvVar
-                    ([ "\"description\": " + str k.Description ]
-                     @ typeClauses k.Type
-                     @ defaultClauses k))
+                block "    " k.EnvVar ([ "\"description\": " + str k.Description ] @ typeClauses k @ defaultClauses k))
 
         let properties =
             (schemaProperty :: profileProperty :: keyProperties) |> String.concat ",\n"
 
         let description =
             sprintf
-                "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the %d keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are the documented canonical spellings; readers also accept them case-insensitively and take some undocumented aliases, so a flagged value may still boot — write the documented one. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md."
+                "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the %d keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are every spelling the key's reader accepts, alias spellings included (Phase 719 closed the gap where some were accepted but undeclared); the readers also compare case-insensitively, so a value flagged here for its LETTER CASE alone still boots — write it as listed. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md."
                 bindable.Length
 
         let sb = StringBuilder()

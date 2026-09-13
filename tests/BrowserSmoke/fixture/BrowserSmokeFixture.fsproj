@@ -36,7 +36,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**;dist\**</DefaultItemExcludes>
-    <!-- The Fable ecosystem (Feliz, the in-tree Elmish runtime,
+    <!-- The Fable ecosystem (Feliz, the in-tree ToolUp.Elmish runtime,
          Fable.SimpleJson) pre-dates F# 10's nullable reference types;
          enabling nullness here would cascade "null / not null
          inconsistent" errors through the transitive references. Per the

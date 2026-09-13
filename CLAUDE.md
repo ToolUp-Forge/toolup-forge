@@ -5,11 +5,11 @@
 ToolUp Platform is a modular F# full-stack SDK for building production multi-tenant analytical applications. It ships as a set of independently-versioned NuGet packages under the `ToolUp.*` namespace; consumers compose them with their own domain modules.
 
 Core foundations:
-- **Server**: Giraffe over ASP.NET Core; in-tree ToolUp.Remoting transport (Fable.Remoting fork, distributed inside `ToolUp.Platform.Server`) for type-safe APIs. `namespace Fable.Remoting.*` is preserved, so `open Fable.Remoting.Server` / `open Fable.Remoting.Giraffe` continue to compile unchanged.
-- **Client**: Fable + Feliz (React bindings) with an in-tree Elmish runtime (Fable.Elmish v5.x fork, distributed inside `ToolUp.Platform.Client`). `namespace Elmish` is preserved; consumers see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
+- **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (distributed inside `ToolUp.Platform.Server`) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
+- **Client**: Fable + Feliz (React bindings) with the in-tree **ToolUp.Elmish** MVU runtime (distributed inside `ToolUp.Platform.Client`). Consumers write `open ToolUp.Elmish` and see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
 - **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
 
-See [`README.md`](README.md#in-tree-client--transport-forks) for the full list of fork additions and the source-compat guarantee.
+Both substrates began as forks — ToolUp.Remoting from Zaid Ajaj's Fable.Remoting (MIT), ToolUp.Elmish from Eugene Tolmachev's and the Elmish community's Fable.Elmish (Apache 2.0) — and both upstream projects remain excellent and the right choice for anyone whose use case fits them unmodified. The substantive credit lives in [`NOTICE.md`](NOTICE.md) and under [`README.md` → Standing on shoulders](README.md#in-tree-client--transport-forks), which also lists what the in-tree variants add and drop. Consumer call sites move by search-and-replace per [`docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md`](docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md).
 
 ## Versioning
 
@@ -77,7 +77,7 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 - **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
 - **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
-- **`Client`** — Fable + Feliz shell with the in-tree Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, the app-shell layout, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on and re-exports under their old module names for compatibility. Nor is the `UIToolkit` component set — Phase 307 promoted it, the icon primitives and the typed prop helpers to `ToolUp.Platform.UI`, which the tier likewise depends on; there every namespace is preserved, so no re-export was needed.
+- **`Client`** — Fable + Feliz shell with the in-tree ToolUp.Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, the app-shell layout, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on and re-exports under their old module names for compatibility. Nor is the `UIToolkit` component set — Phase 307 promoted it, the icon primitives and the typed prop helpers to `ToolUp.Platform.UI`, which the tier likewise depends on; there every namespace is preserved, so no re-export was needed.
 - **`UI`** — the toolkit `ToolUp.Platform.Client` composes and re-exposes: `Toolup.UIToolkit.*` (design tokens, typography, form controls, tabular + KPI views, empty / error / loading state views), `ToolUp.Platform.{Icon,Icons}`, and the `{Svg,Data,Aria}Prop` typed `prop.custom` helpers. Depends on `Platform.Core` only, so a consumer can take the components without the SDK client tier. `Layout.fs` — the shell composition half of the same namespace — deliberately stayed in `Client`.
 - **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
 
@@ -190,6 +190,32 @@ Plus `.fsproj` + `.Client.props` (MSBuild props injecting client files into the 
 
 **Canonical sample**: `samples/HelloWorld/HelloWorld.Module/` shows the absolute minimum.
 
+### AI-queryability is opt-in, and OFF unless the module says otherwise (Phase 36.C)
+
+A module's data is **not** reachable by the built-in cross-module AI tool family (`_platform.ai.*`)
+until the module declares that it should be:
+
+```fsharp skip=fragment
+ServerModule.create "MoodJournal"
+|> ServerModule.withAIExposure ModuleAIExposure.Queryable
+|> ServerModule.withGuardedApi moodJournalApi
+```
+
+Undeclared means `ModuleAIExposure.NotQueryable`: `list_accessible_modules` still names the module
+but reports `queryable: false`, `list_data_types` omits its data types, and the four reach tools
+refuse with `UnqueryableModule`. **This is the one place the SDK deliberately inverts GP 11** — a
+user installing a third-party module must not have its data become AI-readable as a side effect of
+installing it, so the safer default wins over the byte-for-byte one. Adopting the SDK version that
+carries this phase therefore requires one line per module you want reachable; see
+[`docs/migrations/per-module-ai-queryability.md`](docs/migrations/per-module-ai-queryability.md).
+
+The declaration **narrows only**, exactly like `ServerModule.withGrantPolicy`: a composition root may
+revoke a module author's opt-in, and a call that would widen an explicit `NotQueryable` fails at
+compose time. It is a separate axis from the grant model — `GrantPolicy` governs whether a given
+subject's grant is live, this governs whether the module is on the AI surface for anyone — and both
+are applied, in that order, at every tool site. RBAC is unchanged and still applies on top: opting in
+widens no authority, it only stops the AI family refusing by default.
+
 ```fsharp skip=fragment
 // SharedTypes.fs
 module HelloWorld.SharedTypes
@@ -201,7 +227,7 @@ let routine (input: string) : string = sprintf "did: %s" input
 
 // ClientModel.fs
 module HelloWorld.ClientModel
-open Elmish
+open ToolUp.Elmish
 open ToolUp.Platform
 type Model = { Text: string }
 type Msg = NoOp
@@ -306,9 +332,9 @@ Client-tier SDK packages ship their `.fs` files under `fable/` in the nupkg; a F
 
 F# 9+ supports nullable reference types via `<Nullable>enable</Nullable>` in a `.fsproj`. The Fable compiler itself supports nullness (Fable 5.0.0+). However, enabling nullness in a Fable consumer causes the compiler to re-compile every transitive Fable dependency in null-aware mode, and any dependency that hasn't been nullness-annotated produces a cascade of warnings (or errors, depending on configuration).
 
-As of 2026-05, the major Fable-ecosystem libraries this SDK consumes or embeds (Feliz, Fable.SimpleJson, the in-tree Elmish runtime, the in-tree ToolUp.Remoting transport) have not been nullness-annotated, and there's no published timeline for that to land.
+As of 2026-05, the major Fable-ecosystem libraries this SDK consumes or embeds (Feliz, Fable.SimpleJson, the in-tree ToolUp.Elmish runtime, the in-tree ToolUp.Remoting transport) have not been nullness-annotated, and there's no published timeline for that to land.
 
-**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.SimpleJson / the in-tree Elmish / ToolUp.Remoting runtimes. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
+**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.SimpleJson / the in-tree ToolUp.Elmish / ToolUp.Remoting runtimes. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
 
 This rule retires when the upstream packages ship nullness annotations.
 
@@ -366,6 +392,26 @@ dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 **Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus every Expecto suite `VerifyAll` runs with 0 failures (`BuildConfig.TestPacks` in `Build.fs` is the authoritative list — **23 packs as of 2026-08-31**; this file deliberately does not restate it, having gone stale twice doing so. `AIProviders` is env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above).
 
 **Shortcut for the full Expecto matrix**: `dotnet run --project Build.fsproj -- VerifyAll` runs every pack in `BuildConfig.TestPacks` sequentially (the authoritative list in `Build.fs`) with a per-pack summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
+
+**Gate lanes — `TOOLUP_TEST_LANE` (Phase 762).** The full gate is ~16 minutes, and a dispatched worker has to spend it twice: once to learn whether its own change is green, once on the folded tree. Set `TOOLUP_TEST_LANE` to spend minutes on the first and the full gate only on the second.
+
+```powershell
+pwsh ./verify.ps1                                     # full (unset) — the pre-phase gate, unchanged
+$env:TOOLUP_TEST_LANE='fast'; pwsh ./verify.ps1       # ~6 min — everything but the measured slow set
+$env:TOOLUP_TEST_LANE='pure'; pwsh ./verify.ps1       # ~seconds — the declared no-filesystem packs
+Remove-Item Env:TOOLUP_TEST_LANE                      # back to full
+```
+
+Measured 2026-09-12 (Debug, sequenced, after a clean solution build): **full 967 s** over 23 packs, of which the Platform pack is **884.8 s (91.5 %)** and all 22 others together are 82.4 s. Inside Platform, 6 registered lists hold **144 of 10,325 cases (1.4 %) and 616.0 s of the 716.3 s of case time (86 %)** — and one case, `HnswFidelity.latency smoke`, is **539.3 s on its own, 56 % of the whole gate**. So `fast` is a *list*-level decision inside that one pack (10,181 cases, ~6 min) and `pure` is a *pack*-level one (6 packs, 10.5 s); every other pack runs unchanged in `fast`.
+
+Four things about it are deliberate, and each is the reason it is not something simpler:
+
+- **It is an environment variable, not a `verify.ps1` switch.** `verify.ps1` is a hard-denied path on the forge roadmap side (`RM-FOOTPRINT-FORBIDDEN`), so its recorded gate-script hash must not move. The lane travels inside the recorded gate *command* instead, which keeps the evidence self-describing without touching the gate file.
+- **A ship may only cite `full`, and unset *is* `full`** — a machine that has never heard of the variable runs exactly the gate it ran before, byte for byte, and prints nothing extra. A non-full lane prints one line naming itself and how much it left out, so a log cannot be mistaken for a full run. An unrecognised value falls back to `full` with a warning, never to a reduced lane: a typo may cost minutes, but it must never report a green over a suite the operator did not choose.
+- **The slow set is measured, not judged.** A list is slow-marked when it costs ≥ 10 s *and* its slowest single case is ≥ 2 s — slow because it holds long-running cases, not because it holds many cheap ones. That second clause keeps `Phase 175 — Public-API approval baseline` (13.6 s over 182 cases, slowest 0.3 s) in the fast lane, where a cheap and frequently-broken gate belongs. Re-derive the split with `--junit-summary` and group `//testcase/@time` by list; the recipe is in `src/ToolUp.Platform.Tests/Program.fs` beside the declaration.
+- **`pure` membership is opt-in at both levels**, so it can under-claim but never over-claim: a pack joins it only by passing the filesystem/process/socket/env grep recorded in `Build.fs`, and a list added to the Platform pack is outside `pure` until someone audits it. The Platform pack declares no pure lists at all (it is the filesystem-heavy pack by construction), so running its dll under `pure` runs the Phase 722 registration guard and nothing else.
+
+The lane filter is applied **after** the Phase 722 registration guard, not before: the guard is about what the pack *registers* (all of it, in every lane), the lane only about what *runs*. Filtering first would make the guard fail under `fast` naming the slow lists as unregistered. Selection is by physical identity, never by label — the same choice the guard makes, for the same reason.
 
 **How `VerifyAll` reaches a pack changed in Phase 731, and the change is worth knowing before you write another harness.** The target now **builds once** (the single `*.sln`/`*.slnx` in the working directory, else each pack project) and then invokes each pack's **built test dll directly** — `dotnet <dll>`, with the assembly asked of MSBuild via `-getProperty:TargetPath` rather than guessed from a `bin/<config>/<tfm>/` convention. It does *not* shell `dotnet run --project` per pack any more, because that launch path intermittently **hangs before the suite starts** (~0% CPU, no output, indistinguishable from a slow pack). The per-pack `PASS` / `FAIL` summary, the target's exit semantics, and the `TOOLUP_TEST_ARGS` pass-through are unchanged — CI parses that summary, so its shape is a contract. A consequence worth having: the Public-API approval gate's "build the solution first" precondition is now satisfied by the canonical invocation itself, not only by the CI job that wraps it. Full rationale: [`docs/platform/testing-conventions.md`](docs/platform/testing-conventions.md).
 
@@ -605,10 +651,10 @@ Method-call lambdas need parens: `AgGrid.onGridReady (_.AutoSizeAllColumns())`.
 
 ### Serialisation
 
-- **ToolUp.Remoting APIs**: handled automatically by the transport (the in-tree Fable.Remoting fork bundled inside `ToolUp.Platform.{Core,Client,Server}`).
+- **ToolUp.Remoting APIs**: handled automatically by the transport (the in-tree ToolUp.Remoting sources bundled inside `ToolUp.Platform.{Core,Client,Server}`).
 - **SSE / non-Remoting JSON**: must use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()` (returns a `System.Text.Json.JsonSerializerOptions` with the full F# converter set registered — Option / DU / tuple / record / CLIMutable / list / Map / Set / decimal / DateTime / DateOnly / TimeOnly / byte[] / DataSet / DataTable / etc.). Construct once at module level, then call `JsonSerializer.Serialize(value, options)` / `JsonSerializer.Deserialize<'T>(json, options)`. The options instance is mutated to set `PropertyNameCaseInsensitive = true` and `Encoder = UnsafeRelaxedJsonEscaping` — match the Fable.SimpleJson wire shape and absorb camelCase inputs without ceremony. Do NOT use plain `JsonSerializerOptions()` without `FableConverters.addTo` — F# DUs / Option / records all break on the wire. The legacy `Fable.Remoting.Json.FableJsonConverter` (Newtonsoft) was retired in the STJ migration — `Newtonsoft.Json` is no longer a forge dependency.
 - **`unit -> Async<T>` API functions**: work because body normalisation is folded into the dispatcher itself (shipped 0.4.0). The standalone `RemotingBodyNormalizationMiddleware` that 0.3.x relied on was retired — `dotnet build` is the gate, not a middleware presence check.
-- **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` need no extra `Fable.Remoting.*` / `ToolUp.Remoting.*` PackageReferences — the transport, the JSON converter set, and the Giraffe / ASP.NET Core adapters all arrive transitively via `ToolUp.Platform.Server`. `System.Text.Json` ships in the BCL.
+- **Consumer dependency contract**: server projects consuming `ToolUp.Platform.Server` need no extra `ToolUp.Remoting.*` PackageReferences — the transport, the JSON converter set, and the Giraffe / ASP.NET Core adapters all arrive transitively via `ToolUp.Platform.Server`. `System.Text.Json` ships in the BCL.
 - **Additive fields on persisted records: the STJ path yields `null`, the SimpleJson path THROWS — handle both.** `FableConverters` initialises absent reference-type fields to `null`, so a blob persisted before a field was added comes back with `null` where a `list`/`Map` should be — and a null F# `list` NREs on every list op (`[]` is the `Empty` singleton, NOT null; only `option`'s `None` is null). Coerce at the store read path AND in the pure consumer (`if isNull (box x.Field) then { x with Field = [] }`; `isNull (box …)` is the Fable-safe check), and test by deserialising a JSON literal that OMITS the field. Meanwhile Fable.SimpleJson's `Json.parseAs<'T>` (browser-localStorage records) is the opposite: a missing field **throws** — and a `try/catch reset` fallback then silently discards ALL the user's persisted state, not just the new field. Backfill absent fields into the raw JSON before `parseAs` (array `[]` for list/Set, object `{}` for Map); a post-parse coercion cannot work because parse throws first.
 
 ### AG Charts axes + animation

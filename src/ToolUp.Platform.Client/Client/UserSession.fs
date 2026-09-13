@@ -335,7 +335,7 @@ let private clearServerCookie () : unit = jsNative
 /// Get or create a user/session ID.
 ///
 /// Always reads from localStorage so the SSE EventSource `?userId=`
-/// query-param path and the Fable.Remoting `X-User-Id` POST path
+/// query-param path and the ToolUp.Remoting `X-User-Id` POST path
 /// resolve the same value regardless of when each is called or what
 /// `session.SubjectKind` was at the time. The pre-fix design forked
 /// storage on the mode (sessionStorage for Anonymous, localStorage

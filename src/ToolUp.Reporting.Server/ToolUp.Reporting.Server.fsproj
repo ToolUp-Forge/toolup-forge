@@ -3,7 +3,7 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <PackageId>ToolUp.Reporting.Server</PackageId>
-        <Description>ToolUp.Reporting Server — IReportTemplateStore (over IEntityStore), in-process RendererRegistry, ReportApi Fable.Remoting interface + handler factory, ReportingCompose. Depends on ToolUp.Platform.Server + ToolUp.Reporting.Core.</Description>
+        <Description>ToolUp.Reporting Server — IReportTemplateStore (over IEntityStore), in-process RendererRegistry, ReportApi ToolUp.Remoting interface + handler factory, ReportingCompose. Depends on ToolUp.Platform.Server + ToolUp.Reporting.Core.</Description>
         <PackageTags>fsharp;sdk;server;reporting;document-generation</PackageTags>
     </PropertyGroup>
     <ItemGroup>

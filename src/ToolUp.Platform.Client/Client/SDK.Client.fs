@@ -461,7 +461,7 @@ module Client =
     // Header freshness is the CsrfClient request-guard's job — see `UserSession.withRequestHeaders` + `installRequestSeam` below.
     // Proxies are constructed at module load; identity + CSRF headers are read live per request by the send-time guard.
 
-    /// Server-side Fable.Remoting proxy for the team API. Used to
+    /// Server-side ToolUp.Remoting proxy for the team API. Used to
     /// fetch the user's team memberships, drive header-switcher active
     /// team selection, and persist team switches initiated from the
     /// shell. Mirrors `TeamManagerUI`'s proxy — split from the original
@@ -470,7 +470,7 @@ module Client =
     let private teamApi: TeamApi =
         Api.makeProxy<TeamApi> (customOptions = UserSession.withRequestHeaders)
 
-    /// Server-side Fable.Remoting proxy for the accessibility helper
+    /// Server-side ToolUp.Remoting proxy for the accessibility helper
     /// (`GetAccessibleModules`). Used to fetch the per-user accessible-
     /// modules list on shell startup so the sidebar can hide entries
     /// the user can't use. Not a security boundary — the server's

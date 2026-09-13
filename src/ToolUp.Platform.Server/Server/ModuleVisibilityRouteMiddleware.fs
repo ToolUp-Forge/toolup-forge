@@ -29,7 +29,7 @@ open ToolUp.Platform
 // **Reach.** Enforcement can only see routes a module DECLARES, via
 // `ServerModule.RoutePrefixes`. A module that declares none is
 // unaffected — its endpoints are indistinguishable at the path level
-// from any other module's, because the Fable.Remoting route builder
+// from any other module's, because the ToolUp.Remoting route builder
 // names the API RECORD TYPE, not the module. That limit is stated in
 // `ModuleVisibilityMode.EnforcedModuleVisibility` and in the docs page,
 // rather than papered over: a hardening mechanism whose coverage is

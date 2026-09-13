@@ -73,11 +73,12 @@
       0.4.3 — The ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
       packages were folded directly into ToolUp.Platform.Client; the
       runtime is a forge implementation detail rather than a separately
-      consumable concern. The `namespace Elmish` is preserved, so every
-      `open Elmish` call site continues to compile unchanged — consumers
-      drop the three `PackageReference`s and pick up the runtime via
-      ToolUp.Platform.Client. See docs/migrations/0.4.0-toolup-elmish-adoption.md
-      for the full migration story.
+      consumable concern. Phase 73 renamed the runtime's namespaces to
+      `ToolUp.Elmish` / `.React` / `.HMR`; consumers drop the three
+      `PackageReference`s and pick up the runtime via ToolUp.Platform.Client.
+      See docs/migrations/0.4.0-toolup-elmish-adoption.md for the fold and
+      docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
+      for the `open`-site rename.
     -->
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />

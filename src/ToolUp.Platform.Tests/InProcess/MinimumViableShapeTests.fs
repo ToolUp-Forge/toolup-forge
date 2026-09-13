@@ -13,7 +13,7 @@ open ToolUp.Platform
 // **What this file does NOT cover (yet):**
 // - Building a real `WebApplicationBuilder` and asserting `IServiceCollection`
 //   contents post-`compose`. That requires importing the full server-side
-//   props (Saturn / Giraffe / Fable.Remoting) into the test project, which
+//   props (Saturn / Giraffe / ToolUp.Remoting) into the test project, which
 //   is a heavier change than fits Phase 1g. Tracked as a follow-up — the
 //   end-to-end `BackgroundService` count assertion lives behind the same
 //   surface that the dev-diagnostics endpoint already mounts.

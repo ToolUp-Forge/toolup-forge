@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Forms Core — schema-driven form types (FormSchema / Submission / Workflow / AggregationTypes), Fable.Remoting contracts (IFormApi, IPublicFormApi for publishable surveys).</Description>
+        <Description>ToolUp.Forms Core — schema-driven form types (FormSchema / Submission / Workflow / AggregationTypes), ToolUp.Remoting contracts (IFormApi, IPublicFormApi for publishable surveys).</Description>
         <PackageTags>fsharp;sdk;types;forms</PackageTags>
     </PropertyGroup>
     <ItemGroup>

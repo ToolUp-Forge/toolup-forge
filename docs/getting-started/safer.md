@@ -1,6 +1,6 @@
 # Getting started with ToolUp.SAFER
 
-`ToolUp.SAFER` is a minimal F# full-stack starter template (`S`erver + `A`nywhere + `F`able + `E`lmish + `R`emoting). It mirrors the [SAFE Stack](https://safe-stack.github.io/) get-started experience and produces a runnable F# full-stack app in ~200 lines of consumer code that demonstrates the in-tree Elmish + ToolUp.Remoting primitives via a Tiny Chat demo.
+`ToolUp.SAFER` is a minimal F# full-stack starter template (`S`erver + `A`nywhere + `F`able + `E`lmish + `R`emoting). It mirrors the [SAFE Stack](https://safe-stack.github.io/) get-started experience and produces a runnable F# full-stack app in ~200 lines of consumer code that demonstrates the in-tree ToolUp.Elmish + ToolUp.Remoting primitives via a Tiny Chat demo.
 
 > **Positioning.** SAFER is **an option**, not the recommended starter. For production multi-tenant + auth + persistence, reach for [`platformsdk-solution`](../../templates/platformsdk-solution/) instead. SAFER's value is the side-by-side comparison with SAFE Stack — if you're landing here from SAFE Stack docs and want to learn the ToolUp shape with no auth / persistence / multi-tenancy in the way, SAFER is the path.
 

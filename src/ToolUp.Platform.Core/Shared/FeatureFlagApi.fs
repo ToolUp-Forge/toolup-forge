@@ -3,9 +3,9 @@
 
 namespace ToolUp.Platform
 
-// ─── Fable.Remoting API surface ─────────────────────────────────
+// ─── ToolUp.Remoting API surface ─────────────────────────────────
 
-/// Client-facing Fable.Remoting API for reading resolved feature
+/// Client-facing ToolUp.Remoting API for reading resolved feature
 /// flags. Resolution happens server-side — the client receives the
 /// final `FlagValue` per declared key after the scope walk (User →
 /// Team → Platform → declared default) and after schema-drift
@@ -53,6 +53,6 @@ type IFeatureFlagApi = {
 }
 
 module FeatureFlagApi =
-    /// Fable.Remoting endpoint prefix. Matches the pattern used by
+    /// ToolUp.Remoting endpoint prefix. Matches the pattern used by
     /// `PlatformApi`, `IConfigApi`, etc.
     let routeBuilder (typeName: string) (methodName: string) = $"/api/{typeName}/{methodName}"

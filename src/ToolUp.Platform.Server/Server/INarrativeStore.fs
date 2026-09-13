@@ -270,7 +270,7 @@ type ILayoutCatalog =
     abstract member ListLayoutNames: unit -> string list
 
 /// Composition-root helpers for writing narratives from request-scoped
-/// Fable.Remoting handlers. Handlers resolve `INarrativeStore` and the
+/// ToolUp.Remoting handlers. Handlers resolve `INarrativeStore` and the
 /// current `StorageScope` from DI / `HttpContext.Items`; the helper
 /// hides that plumbing so module handlers remain one-liners.
 ///

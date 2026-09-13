@@ -28,7 +28,7 @@
     <IsPackable>false</IsPackable>
     <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
     <!-- Fable-touching project: nullable reference types stay disabled
-         per CLAUDE.md (Feliz / the in-tree Elmish runtime pre-date F# 10
+         per CLAUDE.md (Feliz / the in-tree ToolUp.Elmish runtime pre-date F# 10
          nullness; enabling it would cascade inconsistency errors). -->
     <Nullable>disable</Nullable>
   </PropertyGroup>
@@ -39,7 +39,7 @@
   <ItemGroup>
     <!-- ProjectReference to ToolUp.Platform.Client gives the toy the
          client seam under test (ClientHostCapabilities / withElementView)
-         plus Feliz / the in-tree Elmish runtime, and drives the full
+         plus Feliz / the in-tree ToolUp.Elmish runtime, and drives the full
          Client-tier source tree through Fable when this sample is
          compiled. -->
     <ProjectReference Include="..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />

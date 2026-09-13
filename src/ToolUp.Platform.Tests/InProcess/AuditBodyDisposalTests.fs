@@ -102,7 +102,7 @@ let tests =
 
         testAsync "audited method with a body succeeds and emits its payload (no disposed-stream throw)" {
             // Single-arg method → array-wrapped single-element body, the
-            // Fable.Remoting wire shape (mirrors the 88-byte CreateTeamWithOwner
+            // ToolUp.Remoting wire shape (mirrors the 88-byte CreateTeamWithOwner
             // body in the live repro).
             let! status, text, events =
                 postJson "CreateThing" """[{"Name":"CPG","OwnerId":"d2d880c7-ab98-4e15-91bb-8eaf6fa40d33"}]"""

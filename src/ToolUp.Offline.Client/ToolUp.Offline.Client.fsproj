@@ -4,7 +4,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Description>ToolUp.Offline Client — offline-first browser tier (Fable + Feliz): service-worker + PWA-manifest boot, an IndexedDB-backed mutation queue, a drain-on-reconnect coordinator with exponential backoff, and built-in conflict-resolver / status-badge components. Depends on ToolUp.Platform.Client + ToolUp.Offline.Core.</Description>
         <PackageTags>fsharp;fable;feliz;sdk;client;offline;pwa;sync;indexeddb</PackageTags>
-        <!-- Fable ecosystem (Feliz, the in-tree Elmish + ToolUp.Remoting
+        <!-- Fable ecosystem (Feliz, the in-tree ToolUp.Elmish + ToolUp.Remoting
              runtimes) pre-dates F# 10's nullable reference types; per the
              repo CLAUDE.md rule, nullness stays disabled on every
              Fable-touching project. -->
