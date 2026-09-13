@@ -5,3 +5,17 @@
 # on any repo where the target had been run, over source nobody wrote.
 docs-snippets/generated/
 **/docs-snippets/generated/
+
+# Phase 787 — `proofs/oracle/RemotingDecode.fs` is the F* extractor's output,
+# reproduced byte for byte by `proofs/check.ps1` and compared against the
+# committed copy. Formatting it would break that diff on every run, over source
+# nobody wrote. Same class as the generated doc snippets above.
+proofs/oracle/RemotingDecode.fs
+# The proof leg's working directories: the downloaded toolchain, F*'s
+# .checked cache, and the fresh extraction the byte-diff compares. All
+# gitignored, but Fantomas reads THIS file rather than .gitignore, so a
+# developer who has run the leg would otherwise fail dotnet fantomas
+# --check . on output nobody wrote.
+proofs/.fstar/
+proofs/.cache/
+proofs/.extract/

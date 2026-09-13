@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Phase 787 — the F* model of the remoting decoder algebra, extracted
+         to F# and compiled so the differential host can RUN it beside
+         production over the Phase 784 corpus.
+
+         `RemotingDecode.fs` is GENERATED: `proofs/check.ps1` re-extracts it
+         from `proofs/RemotingDecode.fst` and byte-compares the result
+         against the committed copy, so editing it by hand is a change the
+         proof leg refuses rather than one it absorbs. It is committed
+         nonetheless, and deliberately: the F* toolchain is a 198 MB
+         download, and requiring it to BUILD the repo would put a prover on
+         the critical path of every contributor and every CI job that has
+         nothing to do with proofs. The committed extraction is the seam —
+         `VerifyAll` compiles it like any other source, and the proofs job
+         is what holds it honest.
+
+         Two compiler settings are forced by the extractor's output shape
+         rather than chosen:
+
+           * The strict-indentation opt-out in `OtherFlags` below. The F#
+             backend emits pre-F#-8 layout (`if … then begin` blocks
+             indented to their own column, a `let … in` opening after a
+             blank line). F# 8 made that an error; the flag restores it to
+             a warning, and the warning is silenced below. Scoped to THIS
+             project, so nothing hand-written in the repo relaxes.
+           * `FS0058` (possible incorrect indentation) and `FS0064` (a type
+             instantiated less generally than its annotation) off, for the
+             same reason and in the same scope.
+
+         The incomplete-match warnings the extractor's field projectors
+         produce are NOT suppressed here — naming FS0025 in `NoWarn` is
+         exactly what the Phase 624 gate forbids. They stay warnings
+         because `Directory.Build.props` beside this file stops the
+         repository-wide walk, which is the documented mechanism; read that
+         file for why, and for what a reader gives up by it. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <OtherFlags>$(OtherFlags) --strict-indentation-</OtherFlags>
+        <NoWarn>$(NoWarn);58;64</NoWarn>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The whole runtime the extraction needs. Must precede it. -->
+        <Compile Include="Prims.fs" />
+        <!-- GENERATED from ../RemotingDecode.fst — do not edit. -->
+        <Compile Include="RemotingDecode.fs" />
+    </ItemGroup>
+</Project>

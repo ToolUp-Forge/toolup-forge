@@ -59,7 +59,20 @@
         CONTENT shipped to consumers via `dotnet new`. Each carries its
         own Directory.Build.props that does not import a parent, so
         MSBuild's walk stops there and this file never applies.
-    Both exemptions are mirrored in `ArchitectureFitness.fs0025ExemptPrefixes`.
+      • proofs/oracle/ — the F* extractor's output (Phase 787). The
+        extractor emits one field projector per constructor argument, and
+        each is a single-case match over a nine-case union: seventeen
+        FS0025 warnings in generated code. "Fix the matches" is not
+        available — nobody wrote the file, and `proofs/check.ps1`
+        byte-diffs it against a fresh extraction, so an edit would fail
+        the proof leg rather than survive. Suppressing at the source is
+        not available either: F*'s `no_auto_projectors` attribute is
+        deprecated and a no-op on the pinned release, and the extractor
+        has no flag to omit projectors. So the subtree carries its own
+        Directory.Build.props with no parent import — the same structural
+        mechanism the two templates use — rather than naming FS0025 in a
+        NoWarn, which is what the gate below rightly forbids.
+    All three exemptions are mirrored in `ArchitectureFitness.fs0025ExemptPrefixes`.
 
     THE WILDCARD HAZARD. Making this an error creates pressure to write
     `| _ ->` to get green. Do not. Measured: a wildcard emits no

@@ -301,6 +301,13 @@
              784 corpus, and this proves the generator plans the same decode.
              Neither the corpus nor the reader is re-derived here. -->
         <Compile Include="Remoting\GeneratorFidelityTests.fs" />
+        <!-- Phase 787 — the F* model of the Phase 785 algebra, extracted to
+             F# and run as a differential oracle beside production over the
+             same corpus. AFTER DecoderAlgebraTests.fs: it reuses the corpus
+             declarations both of those consume, and it is the later claim
+             (785 says the algebra agrees with the reader it replaces; this
+             says the proved model agrees with the algebra). -->
+        <Compile Include="Remoting\ProofOracleTests.fs" />
         <Compile Include="InProcess\LocalFileStorageTests.fs" />
         <Compile Include="InProcess\InMemoryEventStoreTests.fs" />
         <Compile Include="InProcess\PersistentEventStoreTests.fs" />
@@ -2424,6 +2431,10 @@
     </ItemGroup>
     <ItemGroup>
         <!-- SDK substrate. ToolUp.Platform.Server transitively pulls Core. -->
+        <!-- Phase 787 — the extracted F* model of the remoting decoder
+             algebra, so ProofOracleTests can RUN it beside production.
+             IsPackable=false and referenced by nothing else. -->
+        <ProjectReference Include="..\..\proofs\oracle\ToolUp.Remoting.Proofs.Oracle.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <!-- Phase 69k — the dev-time decoder generator, under contract test
              by Remoting\GeneratorFidelityTests.fs. It is IsPackable=false and

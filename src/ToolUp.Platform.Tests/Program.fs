@@ -2248,6 +2248,11 @@ let private registeredTests =
         // which the facet cannot report because an undeclared record is
         // absent from it rather than classified `Reflection`.
         GeneratorFidelityTests.tests
+        // Phase 787 — the F* model of that algebra, extracted and run as a
+        // differential oracle beside production over the same corpus, with
+        // a committed go-red bridge that forgets the source width class so
+        // the comparison is known to be able to fail.
+        ProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

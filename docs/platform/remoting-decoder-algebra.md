@@ -281,7 +281,10 @@ composed alongside takes no remoting from here at all, by the cross-pillar rule.
 ## 7. What this improves / what it does not
 
 The trust-boundary statement this facet carries, verbatim — and the text the Phase 777 entry for
-remoting decoders cites this page for rather than restating:
+remoting decoders cites this page for rather than restating. Its **mechanism reference** is
+[`proofs/README.md`](../../proofs/README.md) (Phase 787), whose four-rung claims ladder says which
+part of the statement below is proved, which is differentially tested, which is assumed, and which
+is not claimed at all:
 
 ```
 Crosses:     client bytes on both remoting wires, at every request
