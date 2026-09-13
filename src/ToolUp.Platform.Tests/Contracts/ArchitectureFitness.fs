@@ -575,6 +575,15 @@ let fs0025ExemptPrefixes: Fs0025Exemption list = [
         Prefix = "templates/platformsdk-solution/"
         Reason = "template content — same structural reason as templates/safer/"
     }
+    {
+        Prefix = "proofs/oracle/"
+        Reason =
+            "the F* extractor's output — one field projector per constructor argument, each a "
+            + "single-case match over the nine-case value union. Nobody wrote it and a byte-diff "
+            + "holds it identical to the extraction, so \"fix the matches\" does not exist here; "
+            + "its own Directory.Build.props has no parent import, so the policy never reaches it "
+            + "(Phase 787)"
+    }
 ]
 
 /// Extensions the gate applies to: F# sources (`#nowarn`) and the

@@ -26,14 +26,19 @@
              project, so nothing hand-written in the repo relaxes.
            * `FS0058` (possible incorrect indentation) and `FS0064` (a type
              instantiated less generally than its annotation) off, for the
-             same reason and in the same scope. -->
+             same reason and in the same scope.
+
+         The incomplete-match warnings the extractor's field projectors
+         produce are NOT suppressed here — naming FS0025 in `NoWarn` is
+         exactly what the Phase 624 gate forbids. They stay warnings
+         because `Directory.Build.props` beside this file stops the
+         repository-wide walk, which is the documented mechanism; read that
+         file for why, and for what a reader gives up by it. -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
         <OtherFlags>$(OtherFlags) --strict-indentation-</OtherFlags>
-        <NoWarn>$(NoWarn);58;64;25;49;1182</NoWarn>
-        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-        <WarningsAsErrors></WarningsAsErrors>
+        <NoWarn>$(NoWarn);58;64</NoWarn>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
     </PropertyGroup>
     <ItemGroup>

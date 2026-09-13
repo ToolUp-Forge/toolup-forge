@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 787 — the boundary that stops the repository-wide MSBuild walk at
+    the generated oracle.
+
+    **It deliberately does NOT import the parent.** MSBuild walks up from a
+    project directory until it finds a `Directory.Build.props` and stops
+    there unless that file imports its own parent; this one does not, so
+    the repo-root props never reaches `RemotingDecode.fs`. That is the same
+    structural mechanism `templates/safer/` and
+    `templates/platformsdk-solution/` use, and the exemption is mirrored in
+    the root props' documented NOT-COVERED list and in
+    `ArchitectureFitness.fs0025ExemptPrefixes` — a test asserts the two
+    agree, so this cannot be widened without saying so where authors read
+    the policy.
+
+    WHY IT IS NEEDED. `RemotingDecode.fs` is emitted by the F* extractor,
+    which generates one field projector per constructor argument. Each
+    extracts as a single-case `match` over the nine-case value union — an
+    FS0025 incomplete-match warning apiece, seventeen in all. The root
+    props promotes FS0025 to an error tree-wide (Phase 624), and the gate
+    that keeps that promotion meaningful pins at ZERO the two ways to
+    silence it locally: `#nowarn "25"` in the file, and FS0025 in a
+    project's `NoWarn` / `WarningsNotAsErrors`. Both are correct
+    prohibitions and neither is the answer here, because the third option
+    the gate's message assumes — "fix the matches" — does not exist for a
+    file nobody wrote and that a byte-diff holds identical to the
+    extractor's output.
+
+    The projectors cannot be suppressed at the source either: F*'s
+    `no_auto_projectors` attribute is deprecated and a no-op on the pinned
+    release ("projectors are declaration-only; this attribute is a no-op"),
+    and the extractor has no flag to omit them. So the honest move is to
+    put the generated subtree outside the policy, in the documented way,
+    rather than to exempt it quietly inside the policy.
+
+    WHAT IS LOST, so nobody has to re-derive it: the root props sets the
+    FS0025 promotion, `GenerateDocumentationFile`, and package metadata
+    guarded on `IsPackable != false`. This project is `IsPackable=false`
+    and sets its own doc-file property, so nothing else here is affected.
+    A project added under `proofs/oracle/` in future inherits this file
+    rather than the root one — which is why nothing but the generated
+    oracle should live here.
+-->
+<Project>
+</Project>
