@@ -8,13 +8,13 @@ Feliz.AgCharts 40/333
 Feliz.AgGrid 63/686
 Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1237/2422
-ToolUp.AI.Client 66/444
-ToolUp.AI.Core 158/438
+ToolUp.AI.Client 79/459
+ToolUp.AI.Core 173/481
 ToolUp.AI.McpHost 133/246
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 3/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 295/628
+ToolUp.AI.Server 323/676
 ToolUp.AI.Wire 87/220
 ToolUp.AICookbooks.AgChart 7/9
 ToolUp.AICookbooks.AgGridEnterprise 5/7

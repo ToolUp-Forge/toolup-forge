@@ -1038,6 +1038,14 @@ let private registeredTests =
         // Read; a forged tool name is refused with a typed Denied before the
         // executor runs and lands a _platform.ai.unauthorized_tool audit row.
         AIToolDispatchRbacTests.tests
+        // Phase 503 — human-in-the-loop tool approval. A policy-held
+        // invocation suspends before its body runs, approve resumes it and
+        // reject aborts it with nothing changed, an unanswered prompt
+        // refuses on the shared budget, an outer gate's refusal never
+        // reaches a prompt, the gate covers server-resident tools (which
+        // the client-resident allowlist seam could not), and a deployment
+        // that composes no policy sees an identical event stream.
+        ToolApprovalTests.tests
         // Phase 551 — module-declared grant policy. Fail-closed policy /
         // grant-state parse (no mangled token reads as AdminDiscretion),
         // narrowing-only composition, the write guard per arm, dispatch

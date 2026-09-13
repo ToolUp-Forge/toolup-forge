@@ -53,8 +53,13 @@ open ToolUp.AI
 /// 90 s: generously longer than the client's own 30 s watchdog on the tool
 /// path, so the client-side failure wins the race and the user sees the
 /// specific cause rather than a generic server abort.
+///
+/// Phase 503 made this the THIRD caller's budget too, so the declaration
+/// itself moved to `SuspendedPrompt`, beside the mechanism it bounds.
+/// This binding is the name the consent path and `AIAgentEngine` already
+/// read it by; the value is unchanged.
 [<Literal>]
-let SuspendedDispatchTimeoutMs = 90_000
+let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 
 // ─── Per-request items the gate reads ────────────────────────────
 
@@ -115,48 +120,40 @@ type PendingConsent = {
 }
 
 /// Per-process registry of suspended cross-module reads awaiting a user's
-/// consent decision. Mirrors `ClientToolDispatchRegistry`.
+/// consent decision.
+///
+/// Phase 503: a domain-named FACADE over the one suspended-dispatch
+/// mechanism (`SuspendedPrompt.PendingPromptRegistry`) rather than a
+/// second copy of it. The members below are unchanged — same names, same
+/// signatures, same semantics — and the plumbing under them is now shared
+/// with the approval round trip, so a fix to one is a fix to both.
 type AIConsentRegistry() =
-    let pending =
-        ConcurrentDictionary<Guid, TaskCompletionSource<AllowDecision> * PendingConsent>()
+    let inner = SuspendedPrompt.PendingPromptRegistry<AllowDecision, PendingConsent>()
 
     /// Register a suspended read. Returns the Task the tool awaits —
     /// completed by `/api/ai/consent`, or aborted by the caller's own
     /// timeout path.
     member _.RegisterPending(consentId: Guid, request: PendingConsent) : Task<AllowDecision> =
-        let tcs =
-            TaskCompletionSource<AllowDecision>(TaskCreationOptions.RunContinuationsAsynchronously)
-
-        pending[consentId] <- (tcs, request)
-        tcs.Task
+        inner.RegisterPending(consentId, request)
 
     /// The request recorded for a consent id, or `None` when the id is
     /// unknown / stale / already answered. Read-only: it does NOT remove
     /// the entry, so the handler can authorise first and complete second
     /// (the ordering `/api/ai/tool-result` has to get right for the same
     /// reason).
-    member _.PendingOf(consentId: Guid) : PendingConsent option =
-        match pending.TryGetValue consentId with
-        | true, (_, request) -> Some request
-        | false, _ -> None
+    member _.PendingOf(consentId: Guid) : PendingConsent option = inner.PendingOf consentId
 
     /// Complete a suspended read with the user's decision. `false` when no
     /// matching request was pending — a late POST after the tool already
     /// timed out, a double-click, or a replayed body.
-    member _.TryComplete(consentId: Guid, decision: AllowDecision) : bool =
-        match pending.TryRemove consentId with
-        | true, (tcs, _) -> tcs.TrySetResult decision
-        | false, _ -> false
+    member _.TryComplete(consentId: Guid, decision: AllowDecision) : bool = inner.TryComplete(consentId, decision)
 
     /// Abandon a suspended read (the tool's own timeout path). Resolves as
     /// `Denied` rather than raising: an unanswered prompt is not an error
     /// to recover from, it is a read the user did not authorise, and the
     /// model should be told the same thing it would be told by an explicit
     /// refusal. The turn then fails cleanly on the one shared budget.
-    member _.TryAbandon(consentId: Guid) : bool =
-        match pending.TryRemove consentId with
-        | true, (tcs, _) -> tcs.TrySetResult Denied
-        | false, _ -> false
+    member _.TryAbandon(consentId: Guid) : bool = inner.TryAbandon(consentId, Denied)
 
 // ─── Persistence — the fourth sibling conversation blob ──────────
 
@@ -384,19 +381,18 @@ let requireConsent
                         )
                     )
 
-                    let timeoutTask = Task.Delay SuspendedDispatchTimeoutMs
-                    let! winner = Task.WhenAny(awaited :> Task, timeoutTask) |> Async.AwaitTask
+                    // Phase 503: the race and the abandon-on-timeout are
+                    // the shared mechanism's, not this file's — they are
+                    // what must not drift between the suspended round
+                    // trips, so there is one of each.
+                    let! answered =
+                        SuspendedPrompt.awaitDecision awaited (fun () -> registry.TryAbandon consentId |> ignore)
 
-                    if winner = (awaited :> Task) then
-                        let! decision = awaited |> Async.AwaitTask
-
-                        match decision with
-                        | Denied -> return ConsentRefused(userDeniedMessage targetModule)
-                        | AllowOnce
-                        | AllowForConversation -> return ConsentGranted
-                    else
-                        registry.TryAbandon consentId |> ignore
-
+                    match answered with
+                    | Some Denied -> return ConsentRefused(userDeniedMessage targetModule)
+                    | Some AllowOnce
+                    | Some AllowForConversation -> return ConsentGranted
+                    | None ->
                         return
                             ConsentRefused(
                                 sprintf

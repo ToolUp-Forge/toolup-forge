@@ -443,6 +443,21 @@ ToolUp.AI.Client.SSEClient+EventSource.close() : System.Void
 ToolUp.AI.Client.SidePanelExtensions (class)
 ToolUp.AI.Client.SidePanelExtensions.getStreamingActions() : Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]
 ToolUp.AI.Client.SidePanelExtensions.registerStreamingAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void
+ToolUp.AI.Client.ToolApprovalDialog (class)
+ToolUp.AI.Client.ToolApprovalDialog.View() : Fable.React.ReactElement
+ToolUp.AI.Client.ToolApprovalDialog.answer(System.Guid, ToolUp.AI.ToolApprovalDecision) : System.Void
+ToolUp.AI.Client.ToolApprovalDialog.handleRequired(System.Guid, System.Guid, System.Guid, System.String, System.String, System.String, System.String, System.String) : System.Void
+ToolUp.AI.Client.ToolApprovalDialog.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest (class)
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest..ctor(System.Guid, System.Guid, System.Guid, System.String, System.String, System.String, System.String, System.String)
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.ApprovalId : System.Guid { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.ConversationId : System.Guid { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.Detail : System.String { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.RedactedArgumentsPreview : System.String { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.SourceModule : System.String { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.Summary : System.String { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.TaskId : System.Guid { get }
+ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.ToolName : System.String { get }
 ToolUp.AI.Icons (class)
 ToolUp.AI.Icons.aiAssistant : Fable.React.ReactElement { get }
 ToolUp.AI.Icons.aiSettings : Fable.React.ReactElement { get }
