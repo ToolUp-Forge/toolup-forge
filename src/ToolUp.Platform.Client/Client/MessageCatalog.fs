@@ -1625,6 +1625,70 @@ module MessageCatalog =
                 OriginalOpenFailed = "Couldn't open the original document. Please try again."
             }
         }
+        ProviderProfile = {
+            ProvidersHeading = "Providers"
+            ProvidersHelp = "Add the providers you hold keys for, then choose which one each part of this app uses."
+            Loading = "Loading…"
+            Dismiss = "Dismiss"
+            NoProviders = "No providers configured yet. Add one to get started."
+            AddProvider = "Add provider"
+            Edit = "Edit"
+            Remove = "Remove"
+            Save = "Save"
+            Cancel = "Cancel"
+            Verify = "Verify"
+            Verifying = "Verifying…"
+            NotVerified = "Not verified"
+            NotVerifiedHelp = "This app cannot check keys, so the key is saved as you entered it."
+            VerifiedModels =
+                fun n ->
+                    if n = 1 then
+                        "Key verified — 1 model available"
+                    else
+                        $"Key verified — {n} models available"
+            VerificationFailed = fun reason -> $"The key was not accepted: {reason}"
+            VerifyBeforeSaving = "Verify the key before saving."
+            LabelField = "Label"
+            ProviderIdField = "Provider"
+            ModelField = "Model"
+            ModelPlaceholder = "Leave blank for the provider's default"
+            TagsField = "Tags"
+            TagsPlaceholder = "fast, cheap, eu-resident"
+            ApiKeyField = "API key"
+            ApiKeyPlaceholder = "Paste the key"
+            ApiKeyKeepHelp = "Leave blank to keep the stored key."
+            OAuthConnected = "Connected"
+            OAuthKeyHelp = "This provider is connected through sign-in, so there is no key to paste."
+            NoCredential = "No key stored"
+            HealthHealthy = "Healthy"
+            HealthDegraded = "Degraded"
+            HealthUnhealthy = "Failing"
+            HealthNeedsReauthorization = "Reconnect needed"
+            HealthUnknown = "Not checked"
+            RoutingHeading = "Where each provider is used"
+            RoutingHelp =
+                "Pick a default provider for each area, and override it for a specific case where you need to."
+            SurfaceHeading = fun surface -> surface
+            DefaultRoute = "Default"
+            NoRoute = "None"
+            ContextOverrides = "Overrides"
+            ContextPlaceholder = "Context key"
+            AddOverride = "Add override"
+            RemoveOverride = "Remove override"
+            NoOverrides = "No overrides — everything here uses the default."
+            NoSurfaces = "This app routes no provider surfaces."
+            FallbackHeading = "Fallback order"
+            FallbackHelp = "Tried in order when the chosen provider fails. Leave empty to fail fast."
+            NoFallback = "No fallback — a failed request fails immediately."
+            AddToFallback = "Add to fallback"
+            RemoveFromFallback = "Remove from fallback"
+            MoveUp = "Move up"
+            MoveDown = "Move down"
+            Saved = "Provider saved."
+            Removed = "Provider removed."
+            RoutingSaved = "Routing updated."
+            FallbackSaved = "Fallback order updated."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

@@ -2549,6 +2549,104 @@ type KnowledgeBaseMessages = {
     Errors: KnowledgeErrorMessages
 }
 
+/// The built-in provider-profile (BYOK) settings component
+/// (`ProviderProfileUI`). Every string the reusable component renders,
+/// so an app that embeds it inherits the deployment's locale without
+/// passing labels of its own — the composition surface is the profile
+/// API, the optional verify delegate and the surface keys, and nothing
+/// else.
+type ProviderProfileMessages = {
+    /// Card heading over the configured-entry list.
+    ProvidersHeading: string
+    /// Sub-heading prose under the providers heading.
+    ProvidersHelp: string
+    /// Still-fetching state, shared by every pane.
+    Loading: string
+    /// Dismiss action on the error / status banners.
+    Dismiss: string
+    /// Empty state: nothing configured yet.
+    NoProviders: string
+    /// Action opening the blank add form.
+    AddProvider: string
+    /// Row actions.
+    Edit: string
+    Remove: string
+    Save: string
+    Cancel: string
+    /// The verify action beside the key field.
+    Verify: string
+    /// Verify action while the consumer's delegate is in flight.
+    Verifying: string
+    /// Shown in place of the verify action when the embedding app
+    /// supplied no delegate — the deliberate, clearly-labelled
+    /// "nobody checked this" state.
+    NotVerified: string
+    /// Explains the `NotVerified` badge on hover / beneath the field.
+    NotVerifiedHelp: string
+    /// Takes the model count — the verify delegate's captured list.
+    VerifiedModels: int -> string
+    /// Takes the delegate's reason — the in-form rejection.
+    VerificationFailed: string -> string
+    /// Refusal shown when a pasted key has not been verified and the
+    /// app supplied a delegate.
+    VerifyBeforeSaving: string
+    /// Editor field labels.
+    LabelField: string
+    ProviderIdField: string
+    ModelField: string
+    ModelPlaceholder: string
+    TagsField: string
+    TagsPlaceholder: string
+    ApiKeyField: string
+    ApiKeyPlaceholder: string
+    /// Help under the key field on an entry that already has one.
+    ApiKeyKeepHelp: string
+    /// Badge on an entry whose credential arrived through OAuth.
+    OAuthConnected: string
+    /// Key field is not editable on an OAuth-connected entry.
+    OAuthKeyHelp: string
+    /// Badge on an entry the server holds no credential for.
+    NoCredential: string
+    /// Health-badge labels, one per `ProviderHealthStatus`.
+    HealthHealthy: string
+    HealthDegraded: string
+    HealthUnhealthy: string
+    HealthNeedsReauthorization: string
+    HealthUnknown: string
+    /// Routing pane.
+    RoutingHeading: string
+    RoutingHelp: string
+    /// Takes a surface key — heading of one surface's routing block.
+    SurfaceHeading: string -> string
+    /// The per-surface default row's label.
+    DefaultRoute: string
+    /// The "use no provider here" option in a route picker.
+    NoRoute: string
+    /// Per-context override rows.
+    ContextOverrides: string
+    ContextPlaceholder: string
+    AddOverride: string
+    RemoveOverride: string
+    /// Empty state for a surface with no overrides.
+    NoOverrides: string
+    /// Empty state when the embedding app declared no surface keys.
+    NoSurfaces: string
+    /// Fallback pane.
+    FallbackHeading: string
+    FallbackHelp: string
+    /// Empty state: fail-fast, which is a legitimate choice.
+    NoFallback: string
+    AddToFallback: string
+    RemoveFromFallback: string
+    MoveUp: string
+    MoveDown: string
+    /// Transient confirmations.
+    Saved: string
+    Removed: string
+    RoutingSaved: string
+    FallbackSaved: string
+}
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -2604,4 +2702,5 @@ type MessageCatalog = {
     CompositionInspector: CompositionInspectorMessages
     MappingDataManager: MappingDataManagerMessages
     KnowledgeBase: KnowledgeBaseMessages
+    ProviderProfile: ProviderProfileMessages
 }
