@@ -2735,6 +2735,20 @@ module ServerApp =
 
                 {
                     app.Extensions with
+                        // Phase 44 — mount the `IProviderProfileApi`
+                        // transport on the SAME gate that registers the
+                        // store, which is the shape every other optional
+                        // route in `BuildRouteHandlers` uses: the flag
+                        // that mounts the route is the flag that
+                        // registers what it resolves, so the handler can
+                        // never meet a null store and a deployment with
+                        // no BYOK surface mounts nothing at all (GP 13).
+                        // A consumer embedding `ProviderProfileUI` needs
+                        // no second composition call — supplying the
+                        // store IS the composition act.
+                        Handlers =
+                            app.Extensions.Handlers
+                            @ [ makeApi (ProviderProfileApiHandler.providerProfileApi store) ]
                         ServiceConfig =
                             match app.Extensions.ServiceConfig with
                             | None -> Some register

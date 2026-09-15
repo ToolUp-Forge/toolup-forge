@@ -1052,6 +1052,13 @@
         <Compile Include="Server\ModuleVisibilityStore.fs" />
         <Compile Include="Server\ModuleVisibilityResolver.fs" />
         <Compile Include="Server\ModuleVisibilityApiHandler.fs" />
+        <!-- Phase 44 — the IProviderProfileApi handler, delegating to the
+             registered IProviderProfile. After Providers/BlobProviderProfile.fs
+             (the default store it is composed over) and the team/secret
+             substrate it gates on; before RemotingHelpers.fs and ServerApp.fs,
+             whose compose appends it to ComposeExtensions.Handlers only when a
+             provider-profile store is registered (GP 13). -->
+        <Compile Include="Server\ProviderProfileApiHandler.fs" />
         <Compile Include="Server\ModuleVisibilityRouteMiddleware.fs" />
         <!-- Phase 135 — anonymous-session ownership binding (the sealed
              HttpOnly cookie). Phase 337 MOVED it ahead of the scope
