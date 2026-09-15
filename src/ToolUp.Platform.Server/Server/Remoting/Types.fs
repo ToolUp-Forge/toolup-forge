@@ -525,6 +525,7 @@ type MethodTelemetry = {
     ElapsedMs: int
     Outcome: MethodOutcome
     CorrelationId: string option
+    /// `Some n` = chunks written before the terminal frame on a streaming call; `None` on request/response.
     ChunkCount: int option
 }
 

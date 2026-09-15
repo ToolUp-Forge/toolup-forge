@@ -390,8 +390,11 @@ module internal Streaming =
 /// payload that was split over several `data:` lines decodes to the exact
 /// string that was framed.
 type SseFrame = {
+    /// The `event:` field; `"message"` when the event carried none.
     Event: string
+    /// The `id:` field when present (`<correlation-id>-<chunk-index>` on a dispatcher chunk).
     Id: string option
+    /// Every `data:` line of the event, joined with a line feed.
     Data: string
 }
 
