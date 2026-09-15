@@ -254,6 +254,21 @@ module Proxy =
         else
             typ
 
+    /// The request headers every proxy call sends. Multipart requests leave
+    /// `Content-Type` to XHR (it sets the boundary); the guard-owned keys
+    /// (`Authorization` etc.) are attached at send time by the SDK's request
+    /// guard — see `Remoting.withCustomHeader`.
+    let private requestHeaders (options: RemoteBuilderOptions) (isMultipart: bool) = [
+        if not isMultipart then
+            yield "Content-Type", "application/json; charset=utf-8"
+
+        yield "x-remoting-proxy", "true"
+        yield! options.CustomHeaders
+        match options.Authorization with
+        | Some authToken -> yield "Authorization", authToken
+        | None -> ()
+    ]
+
     let proxyFetch options typeName (func: RecordField) fieldType =
         let funcArgs: (TypeInfo[]) =
             match func.FieldType with
@@ -282,17 +297,7 @@ module Proxy =
 
         let inputArgumentTypes = Array.take argumentCount funcArgs
 
-        let headers = [
-            // xhr will set content-type and boundary for multipart
-            if not isMultipart then
-                yield "Content-Type", "application/json; charset=utf-8"
-
-            yield "x-remoting-proxy", "true"
-            yield! options.CustomHeaders
-            match options.Authorization with
-            | Some authToken -> yield "Authorization", authToken
-            | None -> ()
-        ]
+        let headers = requestHeaders options isMultipart
 
         let executeRequest =
             if options.CustomResponseSerialization.IsSome || isAsyncOfByteArray returnTypeAsync then
@@ -490,3 +495,59 @@ module Proxy =
                         RequestBody.Json requestBodyJson
 
             executeRequest requestBody
+
+    /// Phase 69c.D — `Some elementType` when `fieldType` is a streaming
+    /// field (`'arg -> IAsyncEnumerable<'T>`), recognised at proxy-build time
+    /// exactly as the server classifies it at startup. `IAsyncEnumerable<'T>`
+    /// has no Fable runtime shape, so `createTypeInfo` renders it as
+    /// `TypeInfo.Any`; the element `'T` is read off the generic argument for
+    /// the per-chunk deserialiser. `None` for every request/response shape.
+    let tryStreamingElementType (fieldType: TypeInfo) : TypeInfo option =
+        match fieldType with
+        | TypeInfo.Func getArgs ->
+            match Array.last (getArgs ()) with
+            | TypeInfo.Any getReturnType ->
+                let t = getReturnType ()
+
+                if t.FullName.StartsWith "System.Collections.Generic.IAsyncEnumerable`1" then
+                    Some(t.GetGenericArguments().[0] |> createTypeInfo)
+                else
+                    None
+            | _ -> None
+        | _ -> None
+
+    /// Phase 69c.D — the proxy function for a streaming field. Takes the
+    /// method's single argument and returns a COLD `RemoteStream<'T>`: the
+    /// same route, headers and JSON-array body `proxyFetch` would send, sent
+    /// only when the consumer subscribes (`RemoteStream.subscribe`). The
+    /// value is boxed through the field's `IAsyncEnumerable<'T>` type — the
+    /// erasure boundary the `Streaming.fs` header documents. Unary only,
+    /// matching the server's v0 streaming dispatch.
+    let proxyStream options typeName (func: RecordField) (elementType: TypeInfo) : obj -> obj =
+        let argumentTypes =
+            match func.FieldType with
+            | TypeInfo.Func getArgs ->
+                let args = getArgs ()
+                Array.take (Array.length args - 1) args
+            | _ -> [||]
+
+        if argumentTypes.Length <> 1 then
+            failwithf
+                "Streaming method %s must take exactly one argument (it takes %d) — the server's streaming dispatch is unary"
+                func.FieldName
+                argumentTypes.Length
+
+        let argumentType = argumentTypes.[0]
+        let route = options.RouteBuilder typeName func.FieldName
+        let url = combineRouteWithBaseUrl route options.BaseUrl
+        let headers = requestHeaders options false
+
+        fun arg ->
+            // The same body shapes `proxyFetch` produces for one argument.
+            let body =
+                if Convert.arrayLike argumentType then
+                    Convert.serialize [| arg |] (TypeInfo.Array(fun _ -> argumentType))
+                else
+                    Convert.serialize arg (TypeInfo.Tuple(fun _ -> [| argumentType |]))
+
+            box (RemoteStream.create url headers body options.WithCredentials tryReadDecodeError elementType)

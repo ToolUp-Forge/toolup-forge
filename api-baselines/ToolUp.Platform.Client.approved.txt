@@ -5752,7 +5752,9 @@ ToolUp.Remoting.Client.Proxy.getReturnType(System.Type) : System.Type
 ToolUp.Remoting.Client.Proxy.isAsyncOfByteArray(Fable.SimpleJson.TypeInfo) : System.Boolean
 ToolUp.Remoting.Client.Proxy.isByteArray(Fable.SimpleJson.TypeInfo) : System.Boolean
 ToolUp.Remoting.Client.Proxy.proxyFetch`8(ToolUp.Remoting.Client.RemoteBuilderOptions, System.String, Fable.SimpleJson.RecordField, System.Type) : Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.FSharpFunc`2[c, Microsoft.FSharp.Core.FSharpFunc`2[d, Microsoft.FSharp.Core.FSharpFunc`2[e, Microsoft.FSharp.Core.FSharpFunc`2[f, Microsoft.FSharp.Core.FSharpFunc`2[g, Microsoft.FSharp.Core.FSharpFunc`2[h, Microsoft.FSharp.Control.FSharpAsync`1[System.Object]]]]]]]]]
+ToolUp.Remoting.Client.Proxy.proxyStream(ToolUp.Remoting.Client.RemoteBuilderOptions, System.String, Fable.SimpleJson.RecordField, Fable.SimpleJson.TypeInfo) : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Object]
 ToolUp.Remoting.Client.Proxy.tryReadDecodeError(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Client.Proxy.tryStreamingElementType(Fable.SimpleJson.TypeInfo) : Microsoft.FSharp.Core.FSharpOption`1[Fable.SimpleJson.TypeInfo]
 ToolUp.Remoting.Client.ProxyRequestException (class)
 ToolUp.Remoting.Client.ProxyRequestException..ctor(ToolUp.Remoting.Client.HttpResponse, System.String, System.String)
 ToolUp.Remoting.Client.ProxyRequestException..ctor(ToolUp.Remoting.Client.HttpResponse, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError])
@@ -5769,6 +5771,12 @@ ToolUp.Remoting.Client.RemoteBuilderOptions.CustomResponseSerialization : Micros
 ToolUp.Remoting.Client.RemoteBuilderOptions.IsMultipartEnabled : System.Boolean { get }
 ToolUp.Remoting.Client.RemoteBuilderOptions.RouteBuilder : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
 ToolUp.Remoting.Client.RemoteBuilderOptions.WithCredentials : System.Boolean { get }
+ToolUp.Remoting.Client.RemoteStream (class)
+ToolUp.Remoting.Client.RemoteStream.create`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError]], Fable.SimpleJson.TypeInfo) : ToolUp.Remoting.Client.RemoteStream`1[T]
+ToolUp.Remoting.Client.RemoteStream.subscribe`1(System.Collections.Generic.IAsyncEnumerable`1[T], ToolUp.Remoting.Client.StreamObserver`1[T]) : System.IDisposable
+ToolUp.Remoting.Client.RemoteStream`1 (class)
+ToolUp.Remoting.Client.RemoteStream`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.StreamObserver`1[T], System.IDisposable])
+ToolUp.Remoting.Client.RemoteStream`1.Start : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.StreamObserver`1[T], System.IDisposable] { get }
 ToolUp.Remoting.Client.Remoting (class)
 ToolUp.Remoting.Client.Remoting..ctor()
 ToolUp.Remoting.Client.Remoting.buildProxy`1(ToolUp.Remoting.Client.RemoteBuilderOptions) : t
@@ -5796,6 +5804,19 @@ ToolUp.Remoting.Client.RequestBody+Tags (class)
 ToolUp.Remoting.Client.RequestBody+Tags.Empty : System.Int32 (literal)
 ToolUp.Remoting.Client.RequestBody+Tags.Json : System.Int32 (literal)
 ToolUp.Remoting.Client.RequestBody+Tags.Multipart : System.Int32 (literal)
+ToolUp.Remoting.Client.SseFrame (class)
+ToolUp.Remoting.Client.SseFrame..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Remoting.Client.SseFrame.Data : System.String { get }
+ToolUp.Remoting.Client.SseFrame.Event : System.String { get }
+ToolUp.Remoting.Client.SseFrame.Id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.Client.SseFrameModule (class)
+ToolUp.Remoting.Client.SseFrameModule.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Client.SseFrame]
+ToolUp.Remoting.Client.SseFrameModule.splitComplete(System.String) : System.Tuple`2[System.String, System.String]
+ToolUp.Remoting.Client.StreamObserver`1 (class)
+ToolUp.Remoting.Client.StreamObserver`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit])
+ToolUp.Remoting.Client.StreamObserver`1.OnChunk : Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Remoting.Client.StreamObserver`1.OnComplete : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Remoting.Client.StreamObserver`1.OnError : Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit] { get }
 Toolup.Markdown (class)
 Toolup.Markdown.render(System.String) : Fable.React.ReactElement
 Toolup.NarrativeCommit (class)

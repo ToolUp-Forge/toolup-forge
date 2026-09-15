@@ -62,6 +62,10 @@
         <Compile Include="Client\Remoting\Types.fs" />
         <Compile Include="Client\Remoting\Extensions.fs" />
         <Compile Include="Client\Remoting\Http.fs" />
+        <!-- Phase 69c.D — the Fable consumer of a streaming method: SSE frame
+             decoder + the cold RemoteStream the proxy returns for an
+             IAsyncEnumerable field. Before Proxy.fs, which builds it. -->
+        <Compile Include="Client\Remoting\Streaming.fs" />
         <Compile Include="Client\Remoting\Proxy.fs" />
         <Compile Include="Client\Remoting\Remoting.fs" />
         <Compile Include="Client\Elmish\Prelude.fs" />

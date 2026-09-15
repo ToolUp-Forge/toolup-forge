@@ -180,7 +180,11 @@ type Remoting() =
                         | TypeInfo.Func getArgs -> Array.length (getArgs ()) - 1
                         | _ -> 0
 
-                    normalize argumentCount
+                    // Phase 69c.D — a streaming field gets the cold-stream
+                    // proxy instead of the request/response one.
+                    match Proxy.tryStreamingElementType field.FieldType with
+                    | Some elementType -> box (Proxy.proxyStream options recordType.Name field elementType)
+                    | None -> normalize argumentCount
             |]
 
             let proxy = FSharpValue.MakeRecord(recordType, recordFields)

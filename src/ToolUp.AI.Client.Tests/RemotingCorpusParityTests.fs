@@ -117,7 +117,17 @@ let tests =
             for c in cases ->
                 testCase ("decodes " + c.Name)
                 <| fun () ->
-                    let bytes = toBytes (readFileSync (fixturePath c.Name))
+                    // Bind the Buffer ONCE. `toBytes` is an `[<Emit>]` that
+                    // names `$0` three times, and Fable substitutes the
+                    // argument EXPRESSION at each — so passing the read
+                    // inline evaluated `readFileSync` three times and built
+                    // the view from three different pooled Buffers (`.buffer`
+                    // of one, `.byteOffset` of another). It held only while all
+                    // three landed in one pool slab; one more module in the
+                    // harness moved the slab boundary onto `binary-empty`
+                    // (Phase 69c.D, 2026-09-15).
+                    let buffer = readFileSync (fixturePath c.Name)
+                    let bytes = toBytes buffer
 
                     let decoded = ToolUp.Remoting.MsgPack.Read.Reader(bytes).Read c.ClrType
 

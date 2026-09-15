@@ -85,6 +85,7 @@ let allTests =
         // against the same F# declaration the .NET suites compare
         // against. Two readers, one corpus, one set of expected values.
         RemotingCorpusParityTests.tests
+        StreamingProxyTests.tests
     ]
 
 [<EntryPoint>]
