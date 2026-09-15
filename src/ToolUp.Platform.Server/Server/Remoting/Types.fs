@@ -512,11 +512,20 @@ type MethodOutcome =
 /// the sink can correlate across calls + propagate to logs / metrics
 /// / audit rows. Value is what the dispatcher established for the
 /// request (header value if present, generated GUID otherwise).
+///
+/// Phase 69c.C — `ChunkCount` is the streaming dimension: `Some n` on a
+/// streaming method (`'arg -> IAsyncEnumerable<'T>`), where `n` is the
+/// number of `event: chunk` frames written before the terminal frame
+/// (`complete` or `error`), and `None` on every request/response method.
+/// One event per streaming CALL, never per chunk — a sink that wants
+/// per-chunk granularity reads the count, so the hot path stays one
+/// allocation per call.
 type MethodTelemetry = {
     MethodName: string
     ElapsedMs: int
     Outcome: MethodOutcome
     CorrelationId: string option
+    ChunkCount: int option
 }
 
 /// Phase 69b.C — telemetry hook contract.

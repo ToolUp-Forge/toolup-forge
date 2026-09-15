@@ -413,6 +413,13 @@ module GiraffeUtil =
                         else
                             Unchecked.defaultof<_>
 
+                    // Phase 69c.C — the chunk-count dimension. Counted at
+                    // the single write site below whether or not telemetry
+                    // is active (an `int` increment is cheaper than a second
+                    // gate), and reported as `ChunkCount = Some n` on the
+                    // one-per-call telemetry event.
+                    let mutable chunkCount = 0
+
                     let emitStreamingTelemetry (outcome: MethodOutcome) =
                         if streamingTelemetryActive then
                             match options.Telemetry with
@@ -424,6 +431,7 @@ module GiraffeUtil =
                                     ElapsedMs = int streamingStopwatch.ElapsedMilliseconds
                                     Outcome = outcome
                                     CorrelationId = Some correlationId
+                                    ChunkCount = Some chunkCount
                                 }
                             | None -> ()
 
@@ -531,7 +539,15 @@ module GiraffeUtil =
                                         let json =
                                             System.Text.Json.JsonSerializer.Serialize(element, elementType, stjOptions)
 
-                                        let frame = Streaming.formatChunk json
+                                        // Phase 69c.C — every chunk frame carries
+                                        // `id: <correlation-id>-<chunk-index>`, so a
+                                        // chunk is attributable to its call from the
+                                        // wire alone (the same token the telemetry
+                                        // event and the response header carry).
+                                        let frame =
+                                            Streaming.formatChunkWithId (sprintf "%s-%d" correlationId chunkCount) json
+
+                                        chunkCount <- chunkCount + 1
                                         do! ctx.Response.Body.WriteAsync(frame, 0, frame.Length)
                                         do! ctx.Response.Body.FlushAsync()
                                     else
@@ -1150,6 +1166,7 @@ module GiraffeUtil =
                                             ElapsedMs = 0
                                             Outcome = MethodOutcome.RateLimited retryAfter
                                             CorrelationId = Some correlationId
+                                            ChunkCount = None
                                         }
                                     | _ -> ()
 
@@ -1236,6 +1253,7 @@ module GiraffeUtil =
                                                     ElapsedMs = int stopwatch.ElapsedMilliseconds
                                                     Outcome = outcome
                                                     CorrelationId = Some correlationId
+                                                    ChunkCount = None
                                                 }
                                             | None -> ()
 

@@ -119,6 +119,121 @@ let tests =
             Expect.stringContains err "boom" "error frame carries the message"
         }
 
+        test "Phase 69c.C — formatChunkWithId stamps the id line before the data" {
+            Expect.equal
+                (utf8 (Streaming.formatChunkWithId "abc-0" "{\"x\":1}"))
+                "event: chunk\nid: abc-0\ndata: {\"x\":1}\n\n"
+                "chunk frame carries `id: <correlation-id>-<chunk-index>`"
+
+            // Multiline payloads keep their per-line data: framing under an id.
+            Expect.equal
+                (utf8 (Streaming.formatChunkWithId "abc-1" "a\nb"))
+                "event: chunk\nid: abc-1\ndata: a\ndata: b\n\n"
+                "id line composes with the spec's multiline data framing"
+        }
+
+        test "Phase 69c.C — SseFrame.parse decodes exactly what Streaming encodes" {
+            let wire =
+                utf8 (Streaming.formatChunkWithId "corr-0" "{\"x\":1}")
+                + utf8 (Streaming.formatChunkWithId "corr-1" "line-a\nline-b")
+                + ": keepalive\n\n"
+                + utf8 (Streaming.formatChunk "no-id")
+                + utf8 (Streaming.formatComplete ())
+
+            let frames = SseFrame.parse wire
+
+            Expect.equal
+                frames
+                [
+                    {
+                        Event = "chunk"
+                        Id = Some "corr-0"
+                        Data = "{\"x\":1}"
+                    }
+                    {
+                        Event = "chunk"
+                        Id = Some "corr-1"
+                        Data = "line-a\nline-b"
+                    }
+                    {
+                        Event = "chunk"
+                        Id = None
+                        Data = "no-id"
+                    }
+                    {
+                        Event = "complete"
+                        Id = None
+                        Data = "{}"
+                    }
+                ]
+                "chunk / multiline chunk / id-less chunk / complete decode in order; the comment is dropped"
+
+            let err = SseFrame.parse (utf8 (Streaming.formatError "boom"))
+
+            Expect.equal
+                err
+                [
+                    {
+                        Event = "error"
+                        Id = None
+                        Data = "{\"message\":\"boom\"}"
+                    }
+                ]
+                "error frame decodes with its JSON payload intact"
+        }
+
+        test "Phase 69c.C — SseFrame.parse is terminator-tolerant and holds a trailing partial event" {
+            let crlf = "event: chunk\r\nid: c-0\r\ndata: 1\r\n\r\n"
+
+            Expect.equal
+                (SseFrame.parse crlf)
+                [
+                    {
+                        Event = "chunk"
+                        Id = Some "c-0"
+                        Data = "1"
+                    }
+                ]
+                "CRLF frames decode"
+
+            let cr = "event: chunk\rdata: 2\r\r"
+
+            Expect.equal
+                (SseFrame.parse cr)
+                [
+                    {
+                        Event = "chunk"
+                        Id = None
+                        Data = "2"
+                    }
+                ]
+                "bare-CR frames decode"
+
+            // No event: field ⇒ the spec's default `message` type (the
+            // legacy per-user AI channel is framed this way).
+            Expect.equal
+                (SseFrame.parse "data: {\"a\":1}\n\n")
+                [
+                    {
+                        Event = "message"
+                        Id = None
+                        Data = "{\"a\":1}"
+                    }
+                ]
+                "an event with no event: field is a `message`"
+
+            // A partial trailing event (no closing blank line) is NOT
+            // emitted — a reader holds it for the next chunk, exactly as a
+            // browser does.
+            Expect.equal
+                (SseFrame.parse "event: chunk\ndata: partial")
+                []
+                "a trailing partial event is held, not emitted"
+
+            // An event with no data: line is dropped per the spec.
+            Expect.equal (SseFrame.parse "event: chunk\nid: x\n\n") [] "an event with no data is dropped"
+        }
+
         test "multiline payloads are framed one data: line each (SSE spec)" {
             // A payload containing a literal newline must NOT prematurely
             // end the SSE event — every source line is its own data: line.

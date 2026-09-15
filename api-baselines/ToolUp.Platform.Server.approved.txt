@@ -10452,7 +10452,8 @@ ToolUp.Remoting.Server.MethodOutcome+Tags.Failed : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodOutcome+Tags.RateLimited : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodOutcome+Tags.Succeeded : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodTelemetry (class)
-ToolUp.Remoting.Server.MethodTelemetry..ctor(System.String, System.Int32, ToolUp.Remoting.Server.MethodOutcome, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Remoting.Server.MethodTelemetry..ctor(System.String, System.Int32, ToolUp.Remoting.Server.MethodOutcome, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Remoting.Server.MethodTelemetry.ChunkCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Remoting.Server.MethodTelemetry.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Remoting.Server.MethodTelemetry.ElapsedMs : System.Int32 { get }
 ToolUp.Remoting.Server.MethodTelemetry.MethodName : System.String { get }
@@ -10647,6 +10648,13 @@ ToolUp.Remoting.Server.SerializationType.Tag : System.Int32 { get }
 ToolUp.Remoting.Server.SerializationType+Tags (class)
 ToolUp.Remoting.Server.SerializationType+Tags.Json : System.Int32 (literal)
 ToolUp.Remoting.Server.SerializationType+Tags.MessagePack : System.Int32 (literal)
+ToolUp.Remoting.Server.SseFrame (class)
+ToolUp.Remoting.Server.SseFrame..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Remoting.Server.SseFrame.Data : System.String { get }
+ToolUp.Remoting.Server.SseFrame.Event : System.String { get }
+ToolUp.Remoting.Server.SseFrame.Id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.Server.SseFrameModule (class)
+ToolUp.Remoting.Server.SseFrameModule.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.SseFrame]
 ToolUp.Remoting.Server.TenantScopedAttribute (class)
 ToolUp.Remoting.Server.TenantScopedAttribute..ctor()
 ToolUp.Remoting.Server.ThreadSafeCell (class)

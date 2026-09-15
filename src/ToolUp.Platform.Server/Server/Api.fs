@@ -172,6 +172,14 @@ module internal ApiSeams =
                         let tags = Map.ofList [ "method", t.MethodName; "outcome", outcomeTag ]
 
                         sink.Record("toolup.remoting.elapsed_ms", float t.ElapsedMs, tags)
+
+                        // Phase 69c.C — the streaming dimension rides as its
+                        // own series under the same tags: `Some n` only on a
+                        // streaming call, so request/response methods record
+                        // nothing extra (GP 13).
+                        match t.ChunkCount with
+                        | Some n -> sink.Record("toolup.remoting.chunks", float n, tags)
+                        | None -> ()
                     | _ -> ()
         }
 

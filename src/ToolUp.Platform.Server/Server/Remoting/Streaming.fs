@@ -344,9 +344,24 @@ module internal Streaming =
         |> Array.map (fun line -> "data: " + line)
         |> String.concat "\n"
 
-    /// Frame a single element as an SSE `chunk` event.
+    /// Frame a single element as an SSE `chunk` event (no `id:` line).
     let formatChunk (json: string) : byte[] =
         let frame = sprintf "event: chunk\n%s\n\n" (dataFraming json)
+        Encoding.UTF8.GetBytes frame
+
+    /// Phase 69c.C — frame a single element as an SSE `chunk` event
+    /// carrying an `id:` line. The dispatcher stamps
+    /// `<correlation-id>-<chunk-index>` (zero-based) so every chunk is
+    /// attributable to its call from the wire alone: the browser's
+    /// `EventSource.lastEventId` and any proxy log carry the same token
+    /// the telemetry event and the `x-correlation-id` response header
+    /// carry. The `id:` line precedes `data:` (SSE fields are
+    /// order-independent; `id` first keeps the frame greppable). A
+    /// correlation id never contains a line terminator — the dispatcher
+    /// generates a GUID or takes a header value, and a header value
+    /// cannot carry one — so single-line framing is safe.
+    let formatChunkWithId (id: string) (json: string) : byte[] =
+        let frame = sprintf "event: chunk\nid: %s\n%s\n\n" id (dataFraming json)
         Encoding.UTF8.GetBytes frame
 
     /// Frame the terminal `complete` event.
@@ -363,3 +378,86 @@ module internal Streaming =
         let payload = sprintf "{\"message\":\"%s\"}" safe
         let frame = sprintf "event: error\n%s\n\n" (dataFraming payload)
         Encoding.UTF8.GetBytes frame
+
+/// Phase 69c.C — one decoded server-sent event, as `Streaming.formatChunk`
+/// / `formatChunkWithId` / `formatComplete` / `formatError` encode it.
+///
+/// `Event` is the `event:` field (`"chunk"` / `"complete"` / `"error"` on
+/// this wire; `"message"` when absent, per the SSE spec's default). `Id` is
+/// the `id:` field when present — `<correlation-id>-<chunk-index>` on a
+/// dispatcher chunk. `Data` is every `data:` line of the event joined with
+/// `\n`, which is the inverse of the spec's multiline framing, so a
+/// payload that was split over several `data:` lines decodes to the exact
+/// string that was framed.
+type SseFrame = {
+    Event: string
+    Id: string option
+    Data: string
+}
+
+/// Phase 69c.C — the DECODER for the framing `Streaming` encodes. Pure and
+/// total over text: this is the contract's other half, kept beside the
+/// encoder so the two cannot drift, and it is what the contract tests read
+/// the wire with. It decodes the event-stream grammar
+/// (https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
+/// — `event:` / `data:` / `id:` fields, `:` comments, blank-line delimiters,
+/// CRLF / CR / LF terminators — and nothing transport-specific: a caller
+/// hands it the text of a response body (or of a buffered slice ending on
+/// an event boundary) and gets the events back in order. An event with no
+/// `data:` line is dropped, as the spec requires.
+[<RequireQualifiedAccess>]
+module SseFrame =
+
+    /// Decode every complete event in `text`. A trailing partial event
+    /// (text after the last blank-line delimiter) is ignored, exactly as
+    /// a browser's parser holds it until the next chunk arrives.
+    let parse (text: string) : SseFrame list =
+        let lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n')
+
+        let flush (eventName: string option) (id: string option) (data: string list) (acc: SseFrame list) =
+            match data with
+            | [] -> acc
+            | _ ->
+                {
+                    Event = defaultArg eventName "message"
+                    Id = id
+                    Data = data |> List.rev |> String.concat "\n"
+                }
+                :: acc
+
+        let fieldValue (line: string) (name: string) =
+            // `field:value` — a single leading space after the colon is
+            // stripped, per the spec; `field` alone is the empty value.
+            if line = name then
+                Some ""
+            elif line.StartsWith(name + ":") then
+                let rest = line.Substring(name.Length + 1)
+                Some(if rest.StartsWith " " then rest.Substring 1 else rest)
+            else
+                None
+
+        let mutable eventName: string option = None
+        let mutable id: string option = None
+        let mutable data: string list = []
+        let mutable acc: SseFrame list = []
+
+        for line in lines do
+            if line = "" then
+                acc <- flush eventName id data acc
+                eventName <- None
+                id <- None
+                data <- []
+            elif line.StartsWith ":" then
+                () // comment (keepalive) — ignored
+            else
+                match fieldValue line "data" with
+                | Some v -> data <- v :: data
+                | None ->
+                    match fieldValue line "event" with
+                    | Some v -> eventName <- Some v
+                    | None ->
+                        match fieldValue line "id" with
+                        | Some v -> id <- Some v
+                        | None -> () // unknown field (e.g. `retry`) — ignored
+
+        List.rev acc
