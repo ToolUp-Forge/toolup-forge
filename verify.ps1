@@ -13,7 +13,11 @@
 [CmdletBinding()]
 param(
     # Skip the Fantomas --check + SPDX-header passes (build + tests only) — for fast iteration.
-    [switch] $SkipFormatCheck
+    [switch] $SkipFormatCheck,
+    # Also run the proof leg after the test suites: check the F* models in proofs/ on the pinned
+    # prover, re-extract and byte-diff the committed oracles, and run the oracle host
+    # (proofs/check.ps1 — opt-in here, on in CI via .github/workflows/proofs.yml).
+    [switch] $Proofs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +56,9 @@ if (-not $SkipFormatCheck) {
 
 Step 'build (ToolUp.Forge.sln)' { dotnet build ToolUp.Forge.sln --nologo }
 Step 'test suites (VerifyAll — eight Expecto packs)' { dotnet run --project Build.fsproj -- VerifyAll }
+if ($Proofs) {
+    Step 'proofs (F* check + extraction diff + oracle host)' { pwsh -NoProfile -File ./proofs/check.ps1 }
+}
 
 Write-Host '== verify: all gates green' -ForegroundColor Green
 exit 0
