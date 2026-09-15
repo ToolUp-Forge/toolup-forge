@@ -942,6 +942,10 @@
              client-supplied surface; DeriveFromCookie derives it from a
              signed capability cookie and demotes a lying client. -->
         <Compile Include="AI\AISurfaceCapabilityTests.fs" />
+        <!-- Phase 69c.F — the legacy /api/ai/events channel is byte-pinned
+             across the SubmitMessage / StreamChatV2 single-implementation
+             migration; typed chunk payloads equal legacy data payloads. -->
+        <Compile Include="AI\AIStreamFramingPinTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
