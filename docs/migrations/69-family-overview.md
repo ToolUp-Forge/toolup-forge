@@ -19,7 +19,7 @@ Phase 69 repackaged the transport as a forge-owned in-tree fork (`ToolUp.Remotin
 | 69h | Audit emission (`[<Audit>]` + `IAuditEmitter`) | Annotate compliance methods; sweep lands at 0.5.0 | `69h-audit-annotation-sweep.md` (lands with the 0.5.0 annotation sweep) |
 | 69i | Long-running typed handles (`JobHandle<'T>`) | Opt-in per long-op method via `IJobDispatcher` | [69i-long-running-handle.md](69i-long-running-handle.md) |
 | 69j | Wire schema versioning (`withSchemaVersion`) | Bump only when shipping a wire evolution | covered by the seam helper's doc comment |
-| 69k | Source-generator-driven dispatcher | Nothing yet — runtime contract shipped, generator is a follow-up | [69k-source-generator-dispatcher.md](69k-source-generator-dispatcher.md) |
+| 69k | Build-time generator: closed-algebra response decoders + typed argument tables | Opt-in — reference `ToolUp.Remoting.Generator` (`PrivateAssets="all"`) and declare what to emit; nothing changes until a project declares an item (Phase 804) | [69k-source-generator-dispatcher.md](69k-source-generator-dispatcher.md) |
 | 69l / 69m / 69n | Dispatcher perf-shrink (zero-cost telemetry gate, body/arg fast-path, build-once table) | None — internal | [69l](69l-telemetry-zero-cost-gate.md) / [69m](69m-dispatcher-body-and-arg-fastpath.md) / [69n](69n-fromcontextasync-build-once.md) |
 | 69o | Client proxy convention (module-level values) | Mechanical client-side sweep | [69o-client-proxy-per-call-header-read.md](69o-client-proxy-per-call-header-read.md) |
 

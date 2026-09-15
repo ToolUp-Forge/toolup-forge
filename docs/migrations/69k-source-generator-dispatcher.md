@@ -1,6 +1,6 @@
 # Phase 69k — generated dispatch and generated decoders
 
-> **Substrate status: the generator ships; nothing in your deployment changes.** `ToolUp.Remoting.Generator` is a **dev-time tool** that reads an assembly's API records and emits two things: closed-algebra response decoders, and a typed server-side argument-parse table. It is `IsPackable=false`, it runs when you run it, and no build or runtime path consults it. **There is no consumer action today.** This doc records what it does, the route it takes and why that route is not the one the phase originally named, so that a reader deciding whether to adopt it is deciding from the real design rather than from the plan.
+> **Substrate status: the generator ships as a build-time package; nothing in your deployment changes until you declare something.** `ToolUp.Remoting.Generator` reads an assembly's API records and emits two things: closed-algebra response decoders, and a typed server-side argument-parse table. Since Phase 804 it is a **`PackageReference`-able build-time package** (no runtime assembly, no dependencies, `PrivateAssets="all"`): its packed targets run the generator after the build of any project that declares what to emit, and are inert everywhere else. **The consumer action is one item declaration — see [Adopt](#adopt-phase-804).** This doc records what the generator does, the route it takes and why that route is not the one the phase originally named, and — since 804 — what was measured: the AOT proof and the generated-versus-reflection numbers.
 
 ## The headline, for a consumer: compile-time errors, not speed
 
@@ -10,7 +10,7 @@ Most consumers will never measure the perf difference at the application layer, 
 - A method whose argument type changes without its handler changing is a compile error in generated source, not a `JsonException` on the first call that exercises it.
 - The missing-authorisation-classification gate is already available at edit time — see [69k.F, below](#69kf-was-already-shipped-as-an-analyzer), which is the one task of this phase that turned out to be complete before the phase ran.
 
-Cold-start and AOT remain real motivations, and both are unmeasured here (see [Deferred](#what-is-deliberately-not-here)).
+Cold-start and AOT were the stated motivations, and Phase 804 measured both rather than assuming them — see [Measured](#measured-phase-804). The short version: the generated **decode** path is the one that survives native AOT end to end, and it is not faster than the reflection reader on a warm JIT; the generated **argument table** is reflection-free only up to the System.Text.Json seam it calls, which native AOT does not serve for F# collections, unions or records.
 
 ## Why this is not a Roslyn source generator
 
@@ -86,11 +86,39 @@ Unchanged, and structural rather than configured. `RemotingDecoders.tryGet` retu
 
 The same holds for the server side: `GeneratedDispatchRegistry` is untouched by this phase and still has no adapter consulting it.
 
-## What you can do today
+## Adopt (Phase 804)
 
-1. Run `census` against your own assembly. It tells you which of your API records could go onto the algebra path and, for the rest, exactly which wire type is blocking and why. That is useful on its own, before any adoption.
-2. If a record comes back expressible and you want it on the algebra path, run `decoders` for it, commit the emitted file, and call its `registerAll ()` from your composition root. Review the diff — it is ordinary F#.
+One line of reference and one item per emitted file, on the project whose **built assembly carries the API records** (the contract / shared-types project). The emitted file lands in the sibling that compiles it; add it to that sibling's `<Compile>` list and commit it like any other source.
+
+```xml
+<ItemGroup>
+  <PackageReference Include="ToolUp.Remoting.Generator" PrivateAssets="all" />
+  <ToolUpRemotingDecoders Include="..\MyApp.Client\Generated\Decoders.fs"
+                          ApiRecords="MyApp.IOrdersApi;MyApp.ICustomersApi" Opens="MyApp" />
+  <ToolUpRemotingDispatch Include="..\MyApp.Server\Generated\OrdersDispatch.fs"
+                          ApiRecord="MyApp.IOrdersApi" Opens="MyApp" />
+</ItemGroup>
+```
+
+Under central package management the version resolves through the `ToolUp.Sdk` manifest, so no `Version` attribute is needed. The item metadata — `ApiRecords`, `Opens`, `Namespace`, `Module`, `CorpusCovered` (decoders); `ApiRecord`, `Opens`, `Namespace` (dispatch) — is documented in the package's `build/ToolUp.Remoting.Generator.targets`. `<ToolUpRemotingGenerate>false</ToolUpRemotingGenerate>` silences a declaring project for one build. A project that declares no item is byte-for-byte unchanged; the reference alone does nothing.
+
+The generator writes only when the text changed, so an unchanged assembly leaves the emitted file's timestamp alone and the sibling does not recompile. Inside this repository the same targets are imported by `Directory.Build.props`, so `samples/HelloWorld-AOT` dogfoods exactly the wiring a consumer gets.
+
+**The `sdk-adoption.json` row.** Phase 804 is `consumer_facing`; a consumer records its stance in its own manifest per the workspace's derived-registry model:
+
+```json
+{ "refactor": "804", "status": "adopted", "sha": "<the commit that declared the items>" }
+```
+
+or `"status": "n-a"` with a reason for a consumer that has no MsgPack client and no AOT target — the generator buys such a consumer nothing.
+
+**Before adopting, and in this order:**
+
+1. Run `census` against your own assembly (`dotnet exec <package>/tools/net10.0/any/ToolUp.Remoting.Generator.dll census --assembly <your.dll>`). It tells you which of your API records could go onto the algebra path and, for the rest, exactly which wire type is blocking and why. That is useful on its own.
+2. If a record comes back expressible and you want it on the algebra path, declare the `ToolUpRemotingDecoders` item for it, build, commit the emitted file, and call its `registerAll ()` from your composition root. Review the diff — it is ordinary F#.
 3. Declare what you registered to the facet by composing your generated `coveredApiRecords` with `PlatformDecoders.coveredApiRecords` and passing the result to `RemotingDecoderFacet.inspect`. The corpus-coverage flag is **yours to declare and defaults to `false`**: a deployment's own assertion that its decoder works is not evidence that it does, and the report renders `Observed` rather than `Verified` for it.
+
+Two emitter corrections landed with 804 and matter only if you generated before it: an emitted module now opens `System` and `ToolUp.Remoting` itself, so it compiles in any namespace you choose; and a record declared inside a module (a type spelled `Module.Record`) is constructed with an annotated record expression, so its labels resolve without that module being opened. Regenerate and the diff is those lines.
 
 ## Verification
 
@@ -100,15 +128,65 @@ Generated decoders are source text, and the pack has no compiler, so it cannot e
 
 A case at the end perturbs a pin and asserts the comparison rejects it, so the fidelity cases are known to be capable of failing. The perturbation is chosen to be the invisible kind — two same-typed fields swapped, which still decodes and which only the position catches.
 
+## Measured (Phase 804)
+
+### The AOT proof — `samples/HelloWorld-AOT`
+
+A contract project links the remoting wire corpus's declarations and declares one echo method per corpus type; the console host decodes every pinned fixture under `tests/remoting-corpus/` through the generated decoders (the `.msgpack` side) and the generated argument table (the `.json` side), compares each against the corpus's own declaration, and is published with `PublishAot`. Measured 2026-09-15 on .NET 10.0.8 with MSVC 14.44 (the sample's README records the `vcvarsall` + `IlcUseEnvironmentalTools` incantation a machine needs when the VS installer has not registered the C++ workload with `vswhere`):
+
+| | Result |
+|---|---|
+| Trim / AOT warnings (itemised, `TrimmerSingleWarn=false`) | 161 in total; **0** in the sample, the contract, either generated module, or `ToolUp.Platform.Core`; 104 in `ToolUp.Platform.Server`, all on the System.Text.Json converter set behind `FableConverters.tryDeserialise`; 57 upstream in FSharp.Core |
+| Native run, generated **decoders** | `dynamic code supported: False`; **58 of 58** expressible fixtures decode to their declaration. The 10 refusals (tuples, multi-field union cases, `DateOnly` / `TimeOnly`, and the records holding them) are the algebra's recorded reach, and the sample fails if that set changes |
+| Native run, generated **argument table** | **46 of 68** parse; the other 22 — every option, list, set, map, tuple, union and record — fail inside the reflection converter set the typed seam calls (no native instantiation for generic converters over value types; a reflective invoke for record / union construction). Under the JIT all 68 parse |
+
+Two things the proof found that a green publish would not have. **F#'s `printf` family is a runtime failure under native AOT, not a build warning** — it builds its formatter through `MethodInfo.MakeGenericMethod`, so a `printfn "%d"` publishes with FSharp.Core's blanket warning and fail-fasts on its first call. The algebra's happy path had exactly one such call: `Decode.index` built its refusal path segment eagerly, as the argument to the `Result.mapError` function, so every successful decode through it ran `sprintf`; the first native run died in `asDecimal`'s four-word read. Moved into the refusal arm (the shape `list` and `entries` already had), and the decode path is now printf-free end to end. And **`PublishAot` turns System.Text.Json's reflection-based serialization off for the whole app, JIT builds included**, so the argument table is refused before it runs unless the app opts the switch back on — the sample does, explicitly, so the native run measures whether the seam survives AOT rather than whether a default forbids it.
+
+So the reflection-free claim holds for the **decode** path, which is the client's binary path and the one the algebra was built for. The **argument** path is reflection-free only up to the seam it calls, which is the boundary Phase 785 recorded (785.F): the argument side decodes bytes that arrive as JSON, and the algebra's JSON extension is a separate phase. Until it ships, a native-AOT server cannot take the generated table past primitives, strings, dates, `Guid`, `byte[]` and `string[]`.
+
+### Generated versus reflection — `src/ToolUp.Remoting.Benchmarks`
+
+Stopwatch over the same corpus, Release, 16 logical cores, .NET 10.0.8, 2026-09-15. Cold start is the first pass in a **fresh process** per arm, min of five boots (a warm loop cannot see reflection's cache build or the generated path's registration and JIT); per request is min / median per-operation over nine rounds. Every operation is checked, not just timed.
+
+| Path | Arm | Cold start (first pass) | Per request |
+|---|---|---|---|
+| Response decode, 58 expressible fixtures | generated | 40.2 ms | 0.57 / 0.59 µs per fixture |
+| Response decode, 58 expressible fixtures | reflection | 34.8 ms | 0.54 / 0.55 µs per fixture |
+| Dispatch, five methods (proxy build included) | generated | 69.6 ms | see below |
+| Dispatch, five methods (proxy build included) | reflection | 101.2 ms | see below |
+
+| Dispatch per request (argument parse + handler + serialise) | generated | reflection |
+|---|---|---|
+| `int` | 1.48 / 1.55 µs | 2.22 / 2.32 µs |
+| `string` | 1.51 / 1.69 µs | 2.25 / 2.54 µs |
+| `Address` (flat record) | 1.91 / 2.02 µs | 2.11 / 2.20 µs |
+| `Address list` | 2.60 / 2.68 µs | 2.80 / 2.83 µs |
+| `Consignment` (nested record) | 6.96 / 7.22 µs | 7.10 / 7.37 µs |
+
+A decomposition of the `int` echo, for where the microseconds go: the argument-array parse (`JsonDocument` + clone) is ~0.45 µs, the generated typed parse ~0.30 µs, the handler bound in a task plus the serialise ~0.45 µs. The two arms are measured in the same JIT state — warmed together, a settle for tiered compilation, rounds interleaved — because the first cut of this harness timed them back to back and read the generated arm at 6.7 µs, a tier-0 artefact that vanished when the order was swapped.
+
+Read them as the phase's own framing should: **the generated decoders are not faster than the reflection reader** — warm, both are half a microsecond per fixture (the reader's shape caches are hot and the algebra allocates a `Value` tree); cold, registration plus the JIT of the combinator closures costs about what the reader's cache build costs. The generated dispatch path is marginally ahead warm on primitives and level on records, and ~30 ms ahead cold — the proxy's build over 39 methods is the term that goes. The whole request through the composed pipeline is a measured 0.36 ms on the same machine (`perf-budgets.json`); none of the numbers above is a term that moves it. What the generated path buys is what the headline said: compile-time refusal, and a decode path that native AOT can run.
+
+### 69k.C, decided — the middleware walk stays
+
+The task asked for the attribute-aware pre-flight chain (auth → validation → idempotency → rate-limit → dispatch → audit → telemetry) emitted inline in the generated table as direct calls, or a recorded decision that the walk stays, with the measured cost as the evidence either way. **The walk stays**, on four grounds:
+
+1. **The cost is not there.** The table's per-request cost is single- to low-double-digit microseconds either way, against a 360 µs whole-request hot path; the chain's per-stage dispatch is not the term that moves. Inlining direct calls would remove a few virtual dispatches from a path that is two orders of magnitude cheaper than the request.
+2. **Cold start, where the generated path does win, is not improved by inlining.** The win is the proxy build over N methods, which the manifest already removes; the chain's stages are built once regardless.
+3. **The stages sit behind private composition.** Emitting them widens the surface 69k escalated, and a table that inlines them has to be regenerated whenever a stage's semantics change — a coupling in the wrong direction, from the generated artefact into the runtime's internals.
+4. **The AOT measurement puts the boundary elsewhere.** What stops a native server today is the argument seam, not the chain. Until the JSON follow-on makes the table the adapter's dispatch path, an inlined chain would be optimising a stage the request never reaches natively.
+
+Revisit only if both change: the JSON follow-on lands and a request-level measurement names the chain. Neither is on the table.
+
 ## What is deliberately not here
 
 | | Why |
 |---|---|
-| A NuGet package + automatic wiring into consumer builds | The generator is dev-time and its output is committed, so there is nothing for a build hook to do. Packaging is a deliberate later act. |
-| The attribute-aware pre-flight chain emitted inline | The chain's stages sit behind private composition; emitting it means widening that surface, which is a bigger call than this phase should take. |
-| Cold-start and per-request benchmarks | The generated dispatch path is not wired into the adapter, so there is nothing end-to-end to time. A benchmark of an unwired path measures the benchmark. |
-| An AOT sample | Same reason: the claim is about a request path that is not yet served by generated code. |
-| Tuple and multi-field-union-case combinators | Demand is recorded with counts above. The algebra's shipped surface is under proof concurrently, and widening it underneath that proof is the wrong order. |
+| Tuple and multi-field-union-case combinators | Demand is recorded with counts above. Phase 800 owns both; the AOT sample's recorded refusal set is where their arrival will show. |
+| The algebra over the JSON request wire | 785.F's decision stands: a separate phase, over a value model that can carry an `int64`, an exact decimal and a source width. Until it ships the generated argument table is reflection-free only up to the seam it calls, as measured above. |
+| A `GeneratedDispatchRegistry` consumer in the adapter | The registry is unchanged since 69k. The typed table is the manifest and the parse; wiring it into the adapter's route registration is the JSON follow-on's companion, not a step to take while its parse cannot run natively. |
+
+Closed by Phase 804: the package and the consumer wiring (69k.E), the AOT sample (69k.H), the benchmarks (69k.G), and the pre-flight-chain decision (69k.C).
 
 ## See also
 
