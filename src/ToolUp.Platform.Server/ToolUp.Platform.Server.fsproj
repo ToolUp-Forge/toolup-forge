@@ -63,6 +63,7 @@
         <Compile Include="Server\Remoting\Validation.fs" />
         <Compile Include="Server\Remoting\Jobs.fs" />
         <Compile Include="Server\Remoting\Streaming.fs" />
+        <Compile Include="Server\Remoting\LongRunning.fs" />
         <Compile Include="Server\Remoting\SourceGenDispatch.fs" />
         <Compile Include="Server\Remoting\Errors.fs" />
         <Compile Include="Server\Remoting\Diagnostics.fs" />

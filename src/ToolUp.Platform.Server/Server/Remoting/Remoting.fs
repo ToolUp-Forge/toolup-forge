@@ -45,6 +45,8 @@ module Remoting =
         MaxMultipartSectionBytes = 16L * 1024L * 1024L // 16 MiB
         MaxMultipartSections = 64
         RemoteIpResolver = None
+        JobDispatcher = None
+        JobAdminRole = "Admin"
     }
 
     /// Defines how routes are built using the type name and method name. By default, the generated routes are of the form `/typeName/methodName`.
@@ -248,6 +250,42 @@ module Remoting =
     let withIdempotencyStore (store: IIdempotencyStore) (options: RemotingOptions<'t, 'implementation>) = {
         options with
             IdempotencyStore = Some store
+    }
+
+    /// Phase 69i.B — compose the `IJobDispatcher` behind this API record's
+    /// long-running methods. Every field returning `Async<JobHandle<'T>>`
+    /// is classified as long-running at startup and gains three companion
+    /// routes served by the dispatcher against THIS instance:
+    ///
+    ///   * `POST <route>/status`   — body `[handle]`, replies `JobStatus<'T>`
+    ///     exactly as a hand-wired `JobHandle<'T> -> Async<JobStatus<'T>>`
+    ///     method would (same STJ shape, same content type);
+    ///   * `POST <route>/progress` — body `[handle]`, an SSE stream of
+    ///     `JobStatus<'T>` frames (Phase 69c framing) ending on the first
+    ///     terminal status;
+    ///   * `POST <route>/cancel`   — body `[handle]`, replies as an
+    ///     `Async<unit>` method would; the job transitions to `Cancelled`.
+    ///
+    /// The handler's `Enqueue` must go through the same instance, or the
+    /// companions answer `Failed "job-not-found"` for every handle. Pass
+    /// the dispatcher you give the handlers. Ownership (69i.E / 69i.G): a
+    /// job is stamped with the submitting subject when an auth context is
+    /// composed; the companions serve it to that subject and to callers
+    /// holding `JobAdminRole`, and answer not-found to anyone else.
+    ///
+    /// Default: not composed — the methods keep working (the handler
+    /// owns its dispatcher, the consumer hand-wires a poll method) and no
+    /// companion route exists (GP 11).
+    let withJobDispatcher (dispatcher: IJobDispatcher) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            JobDispatcher = Some dispatcher
+    }
+
+    /// Phase 69i.G — the role that may read / cancel jobs it did not
+    /// submit through the companion routes. Default `"Admin"`.
+    let withJobAdminRole (role: string) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            JobAdminRole = role
     }
 
     /// Phase 69f — override the default idempotency-cache TTL (1h).

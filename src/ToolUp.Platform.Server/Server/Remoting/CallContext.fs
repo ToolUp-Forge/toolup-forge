@@ -67,3 +67,61 @@ module CallContext =
         { new System.IDisposable with
             member _.Dispose() = correlationIdLocal.Value <- priorValue
         }
+    // ── Phase 69i.E — the calling subject, carried the same way ─────────
+    //
+    // The dispatcher establishes the resolved caller's `IAuthContext.SubjectId`
+    // for the duration of a request (and the companion routes do the same
+    // for their own caller) so that the long-running substrate can stamp a
+    // job with its submitting subject at `Enqueue` and re-establish it
+    // INSIDE the job body — `CallContext.subjectId ()` read from within the
+    // job answers with the original caller, not with whatever thread-pool
+    // context the background work happens to run on. That is the whole of
+    // "the job carries the subject id": sub-operations inside the job that
+    // key on the caller (per-subject rate-limit buckets, idempotency scopes,
+    // tenant-scoped stores resolved by subject) see the submitter.
+    //
+    // `None` means no subject was resolved for this request: either no
+    // `AuthContextResolver` is composed, the method is `[<PublicEndpoint>]`
+    // (the resolver is never invoked), or the resolved context is
+    // anonymous. A job enqueued under `None` has no owner and is readable by
+    // any caller — the pre-69i posture, preserved for consumers who have
+    // not composed authentication (GP 11).
+
+    let private subjectIdLocal = AsyncLocal<string>()
+
+    /// Phase 69i.E — the calling subject's stable id (`IAuthContext.SubjectId`),
+    /// or `None` when the current request resolved no subject.
+    let subjectId () : string option =
+        match subjectIdLocal.Value with
+        | null -> None
+        | value -> Some value
+
+    // Phase 69i.G — whether the current caller may act on jobs it does not
+    // own. Set by the dispatcher's companion routes when the resolved
+    // `IAuthContext` holds `RemotingOptions.JobAdminRole`; never set for an
+    // ordinary method call, so a handler polling the dispatcher from inside a
+    // method body is bound by ownership exactly like a remote caller.
+    let private jobAdminLocal = AsyncLocal<bool>()
+
+    /// Phase 69i.G — true when the current caller holds the job-admin role
+    /// (`RemotingOptions.JobAdminRole`) and may read / cancel any job.
+    let isJobAdmin () : bool = jobAdminLocal.Value
+
+    /// Phase 69i.E — establish the calling subject (and job-admin standing)
+    /// for the current async flow; restores the prior values on dispose.
+    let internal beginSubject (subject: string option) (jobAdmin: bool) : System.IDisposable =
+        let priorSubject = subjectIdLocal.Value
+        let priorAdmin = jobAdminLocal.Value
+
+        subjectIdLocal.Value <-
+            match subject with
+            | Some s -> s
+            | None -> null
+
+        jobAdminLocal.Value <- jobAdmin
+
+        { new System.IDisposable with
+            member _.Dispose() =
+                subjectIdLocal.Value <- priorSubject
+                jobAdminLocal.Value <- priorAdmin
+        }

@@ -311,6 +311,15 @@ module GiraffeUtil =
         // means no streaming methods; per-request lookup is a fast miss.
         let streamingShapes = Streaming.classify typeof<'impl>
 
+        // Phase 69i.B — cache per-method result type for long-running
+        // methods (function shape finally returning `Async<JobHandle<'T>>`).
+        // Empty map means no long-running methods; the companion lookup
+        // below is then a fast miss. The map is consulted ONLY when an
+        // `IJobDispatcher` is composed (`Remoting.withJobDispatcher`) —
+        // without one the classification is inert and the methods dispatch
+        // exactly as before (GP 11).
+        let longRunningShapes = LongRunning.classify typeof<'impl>
+
         // Refuse to start when a streaming method carries pre-flight
         // attributes the SSE short-circuit doesn't honour (auth /
         // rate-limit / audit / idempotency). The v0 streaming path
@@ -391,7 +400,85 @@ module GiraffeUtil =
 
                 let streamingShape = streamingShapes |> Map.tryFind streamingPath
 
-                if streamingShape.IsSome then
+                // Phase 69i — companion-route resolution. `<method>/status`,
+                // `<method>/progress` and `<method>/cancel` for a classified
+                // long-running method, served off the composed dispatcher.
+                // Resolved from the last TWO path segments, so an ordinary
+                // method route (one segment after the record name) never
+                // matches; `None` when no dispatcher is composed.
+                let companion =
+                    match options.JobDispatcher with
+                    | Some dispatcher when not (Map.isEmpty longRunningShapes) ->
+                        LongRunning.tryResolveCompanion longRunningShapes ctx.Request.Path.Value
+                        |> Option.map (fun resolved -> dispatcher, resolved)
+                    | _ -> None
+
+                // Phase 69i.E / 69i.G — the companion caller. Resolved through
+                // the composed `AuthContextResolver` (when there is one) so
+                // ownership is evaluated for THIS caller: the submitting
+                // subject sees its job, a caller holding `JobAdminRole` sees
+                // every job, anyone else sees not-found. Companions are never
+                // `[<PublicEndpoint>]`, so the resolver always runs for them.
+                let! companionCaller = task {
+                    match companion, options.AuthContextResolver with
+                    | Some _, Some resolver ->
+                        let! authCtx = resolver ctx |> Async.StartAsTask
+                        return Some authCtx
+                    | _ -> return None
+                }
+
+                let companionSubject = LongRunning.subjectOf companionCaller
+
+                let companionIsAdmin =
+                    companionCaller
+                    |> Option.map (fun authCtx -> authCtx.HasRole options.JobAdminRole)
+                    |> Option.defaultValue false
+
+                let stjOptions =
+                    match options.JsonSerializer with
+                    | SystemTextJson opts -> opts
+
+                // The SSE branch below serves two producers through one loop:
+                // a streaming method's `IAsyncEnumerable<'T>` (Phase 69c) and
+                // the progress companion's `IAsyncEnumerable<JobStatus<'T>>`
+                // (Phase 69i.D). Each is (label, element type, body -> enumerable);
+                // the label names the call in telemetry and diagnostics.
+                let sseSource: (string * System.Type * (string -> obj)) option =
+                    match streamingShape with
+                    | Some(argType, elementType) ->
+                        Some(
+                            streamingPath,
+                            elementType,
+                            fun bodyText ->
+                                let argValue =
+                                    Streaming.parseFirstArg bodyText argType stjOptions
+                                    |> Option.defaultWith (fun () -> System.Activator.CreateInstance argType)
+                                // Resolve impl + invoke streaming method.
+                                let impl = implBuilder ctx
+                                Streaming.invokeMethod impl streamingPath argValue
+                        )
+                    | None ->
+                        match companion with
+                        | Some(dispatcher, (methodName, JobCompanion.Progress, resultType)) ->
+                            Some(
+                                methodName + "/progress",
+                                LongRunning.statusType resultType,
+                                fun bodyText ->
+                                    let handle =
+                                        Streaming.parseFirstArg bodyText (LongRunning.handleType resultType) stjOptions
+                                        |> Option.defaultWith (fun () -> LongRunning.emptyHandle resultType)
+
+                                    LongRunning.subscribeCompanion
+                                        dispatcher
+                                        resultType
+                                        companionSubject
+                                        companionIsAdmin
+                                        handle
+                            )
+                        | _ -> None
+
+                if sseSource.IsSome then
+                    let sseLabel, sseElementType, produce = sseSource.Value
                     // 0.1.16 — streaming-method telemetry stopwatch.
                     // Started at SSE entry; stopped at terminal frame
                     // (complete / error). Bridges the streaming branch
@@ -427,7 +514,7 @@ module GiraffeUtil =
                                 streamingStopwatch.Stop()
 
                                 sink.OnMethodCompleted {
-                                    MethodName = streamingPath
+                                    MethodName = sseLabel
                                     ElapsedMs = int streamingStopwatch.ElapsedMilliseconds
                                     Outcome = outcome
                                     CorrelationId = Some correlationId
@@ -441,7 +528,7 @@ module GiraffeUtil =
                     // before failing the response, rather than NRE-ing
                     // outside any handler.
                     try
-                        let argType, elementType = streamingShape.Value
+                        let elementType = sseElementType
                         // Read body, parse first arg. EnableBuffering is required
                         // before any Position-rewinding read on the request body —
                         // the streaming branch runs BEFORE body-normalisation so we
@@ -453,16 +540,10 @@ module GiraffeUtil =
 
                         let! bodyText = reader.ReadToEndAsync()
 
-                        let stjOptions =
-                            match options.JsonSerializer with
-                            | SystemTextJson opts -> opts
-
-                        let argValue =
-                            Streaming.parseFirstArg bodyText argType stjOptions
-                            |> Option.defaultWith (fun () -> System.Activator.CreateInstance argType)
-                        // Resolve impl + invoke streaming method.
-                        let impl = implBuilder ctx
-                        let asyncEnumerable = Streaming.invokeMethod impl streamingPath argValue
+                        // Phase 69i — the producer parses the body and yields the
+                        // enumerable (a streaming method's, or the progress
+                        // companion's subscription).
+                        let asyncEnumerable = produce bodyText
 
                         // 0.1.16 — guard against a streaming method that
                         // returns null (a legitimate-looking but broken
@@ -471,9 +552,7 @@ module GiraffeUtil =
                         // SSE error frame.
                         if isNull asyncEnumerable then
                             invalidOp (
-                                sprintf
-                                    "streaming method '%s' returned null instead of an IAsyncEnumerable<_>"
-                                    streamingPath
+                                sprintf "streaming method '%s' returned null instead of an IAsyncEnumerable<_>" sseLabel
                             )
 
                         // SSE response setup.
@@ -612,6 +691,114 @@ module GiraffeUtil =
                         emitStreamingTelemetry (MethodOutcome.Failed setupEx)
 
                     return! next ctx
+                elif companion.IsSome then
+                    // Phase 69i.C / 69i.G — the poll and cancel companions.
+                    //
+                    // JSON request / JSON response, exactly the shape a
+                    // hand-wired `JobHandle<'T> -> Async<JobStatus<'T>>` (or
+                    // `-> Async<unit>`) method produces: the body is the
+                    // Remoting argument array `[handle]`, the reply is the
+                    // STJ serialisation of the typed status (or unit). Served
+                    // by the dispatcher off the composed `IJobDispatcher`, so
+                    // the pre-flight chain does not run here — ownership is
+                    // the guard (the companion caller resolved above), and
+                    // the SUBMIT method already ran the full chain.
+                    let dispatcher, (methodName, kind, resultType) = companion.Value
+
+                    let companionLabel =
+                        match kind with
+                        | JobCompanion.Cancel -> methodName + "/cancel"
+                        | JobCompanion.Status
+                        | JobCompanion.Progress -> methodName + "/status"
+
+                    let companionTelemetryActive =
+                        options.Telemetry.IsSome
+                        && (match options.TelemetryGate with
+                            | Some gate -> gate ()
+                            | None -> true)
+
+                    let companionStopwatch =
+                        if companionTelemetryActive then
+                            System.Diagnostics.Stopwatch.StartNew()
+                        else
+                            Unchecked.defaultof<_>
+
+                    let emitCompanionTelemetry (outcome: MethodOutcome) =
+                        if companionTelemetryActive then
+                            match options.Telemetry with
+                            | Some sink ->
+                                companionStopwatch.Stop()
+
+                                sink.OnMethodCompleted {
+                                    MethodName = companionLabel
+                                    ElapsedMs = int companionStopwatch.ElapsedMilliseconds
+                                    Outcome = outcome
+                                    CorrelationId = Some correlationId
+                                    ChunkCount = None
+                                }
+                            | None -> ()
+
+                    let! companionOutcome = task {
+                        try
+                            ctx.Request.EnableBuffering()
+
+                            use reader =
+                                new System.IO.StreamReader(
+                                    ctx.Request.Body,
+                                    System.Text.Encoding.UTF8,
+                                    leaveOpen = true
+                                )
+
+                            let! bodyText = reader.ReadToEndAsync()
+
+                            let handle =
+                                Streaming.parseFirstArg bodyText (LongRunning.handleType resultType) stjOptions
+                                |> Option.defaultWith (fun () -> LongRunning.emptyHandle resultType)
+
+                            use _caller = CallContext.beginSubject companionSubject companionIsAdmin
+
+                            let! result =
+                                LongRunning.invokeCompanion kind dispatcher resultType handle
+                                |> Async.StartAsTask
+
+                            let payloadType =
+                                match kind with
+                                | JobCompanion.Status
+                                | JobCompanion.Progress -> LongRunning.statusType resultType
+                                | JobCompanion.Cancel -> typeof<unit>
+
+                            ctx.Response.StatusCode <- 200
+                            ctx.Response.ContentType <- "application/json; charset=utf-8"
+
+                            do!
+                                System.Text.Json.JsonSerializer.SerializeAsync(
+                                    ctx.Response.Body,
+                                    result,
+                                    payloadType,
+                                    stjOptions
+                                )
+
+                            return Ok()
+                        with ex ->
+                            return Error ex
+                    }
+
+                    match companionOutcome with
+                    | Ok() ->
+                        emitCompanionTelemetry MethodOutcome.Succeeded
+                        return! next ctx
+                    | Error ex ->
+                        emitCompanionTelemetry (MethodOutcome.Failed ex)
+
+                        if ctx.Response.HasStarted then
+                            return! next ctx
+                        else
+                            ctx.Response.StatusCode <- 500
+
+                            let envelope =
+                                Errors.categorisedWithSchema options.SchemaVersion ErrorCategory.System (box ex.Message)
+
+                            return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                 else
                     // 0.1.16 — correlation-id is now established above
                     // (covers both streaming and non-streaming branches).
@@ -802,6 +989,16 @@ module GiraffeUtil =
                             let! authCtx = resolver ctx |> Async.StartAsTask
                             return Some authCtx
                     }
+
+                    // Phase 69i.E — the resolved subject rides the call context
+                    // for the rest of this request, so a handler's
+                    // `IJobDispatcher.Enqueue` stamps the job with its
+                    // submitting caller (and the job body sees that caller
+                    // again). `None` for a public / unresolved / anonymous
+                    // request — an ownerless job. Never job-admin here: that
+                    // standing is granted only to the companion routes.
+                    use _subjectScope =
+                        CallContext.beginSubject (LongRunning.subjectOf resolvedAuthContextForRequest) false
 
                     let denyReason =
                         match options.AuthContextResolver, methodClassification with

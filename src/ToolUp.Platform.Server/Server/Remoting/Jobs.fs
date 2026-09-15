@@ -2,15 +2,14 @@ namespace ToolUp.Remoting.Server
 
 open System
 open System.Collections.Concurrent
+open System.Threading
 
 // =============================================================================
 // Phase 69i — long-running operation typed handles
 // =============================================================================
 //
-// `IJobDispatcher` substrate + a v0 in-memory implementation. The dispatcher
-// itself doesn't yet special-case `Async<JobHandle<'T>>` return shapes on the
-// wire side (a future enhancement; today the JobHandle is serialised as any
-// other record). Handlers use the dispatcher directly:
+// `IJobDispatcher` substrate + a v0 in-memory implementation. Handlers use
+// the dispatcher directly:
 //
 //     StartReport = fun spec -> async {
 //         let work = async {
@@ -20,9 +19,19 @@ open System.Collections.Concurrent
 //         return! jobs.Enqueue work
 //     }
 //
-// And clients poll a companion `GetReportStatus` method that delegates to
-// the same dispatcher. Phase 69k's source-generator would auto-generate the
-// polling companion; v0 wires it manually.
+// 69i.B — with the same instance composed via `Remoting.withJobDispatcher`,
+// the dispatcher classifies every method returning `Async<JobHandle<'T>>` as
+// long-running at startup and serves the poll / progress / cancel companions
+// for it (`LongRunning.fs`), so the consumer no longer hand-wires a poll
+// method. Without the composition the v0 shape above still works unchanged.
+//
+// `IJobScheduler` (Phase 9b) is a COMPOSITION choice behind this seam, not
+// something the dispatcher routes into: the work the v0 shape enqueues is a
+// closure, and `JobResult` carries no payload, so a scheduler-backed
+// `IJobDispatcher` needs a result store beside the scheduler — the shape
+// Phases 630/631 built for the aggregate peer surface (`IPeerJobResultStore`)
+// — and that is a store-backed implementation of THIS interface, not a
+// change to the dispatcher. See `docs/migrations/69i-long-running-handle.md`.
 
 /// Phase 69i — default in-memory `IJobDispatcher`. Background work runs
 /// via `Async.Start`; status is held in a `ConcurrentDictionary` keyed
@@ -33,6 +42,13 @@ open System.Collections.Concurrent
 ///
 /// **Note: in-process only.** Restarts wipe state — appropriate for
 /// dev/test; production wires a distributed impl.
+///
+/// 69i.E — every job is stamped at `Enqueue` with the submitting subject
+/// (`CallContext.subjectId ()`) and the request's correlation id, and both
+/// are re-established inside the job body so sub-operations see the
+/// original caller. `GetStatus` / `Cancel` from a different subject answer
+/// as if the job did not exist, unless `CallContext.isJobAdmin ()` holds.
+/// A job enqueued with no subject resolved has no owner (GP 11).
 type InMemoryJobDispatcher(?maxJobs: int) =
     // Status stored as `obj` because the dispatcher interface methods
     // are polymorphic over `'T` but the store is single-typed. Boxing
@@ -47,6 +63,8 @@ type InMemoryJobDispatcher(?maxJobs: int) =
     // backing IJobDispatcher impl.
     let cap = defaultArg maxJobs 100_000
     let statuses = ConcurrentDictionary<string, obj>()
+    let owners = ConcurrentDictionary<string, string option>()
+    let cancellations = ConcurrentDictionary<string, CancellationTokenSource>()
     let order = ConcurrentQueue<string>()
 
     /// True if `status` is a terminal state — Succeeded / Failed /
@@ -72,6 +90,14 @@ type InMemoryJobDispatcher(?maxJobs: int) =
                 |> Option.defaultValue -1
 
             tag >= 2
+
+    let forget (jobId: string) =
+        statuses.TryRemove jobId |> ignore
+        owners.TryRemove jobId |> ignore
+
+        match cancellations.TryRemove jobId with
+        | true, cts -> cts.Dispose()
+        | false, _ -> ()
 
     /// Opportunistically drain stale heads from `order` — keys that were
     /// already removed from `statuses` (e.g. by a prior eviction).
@@ -107,7 +133,7 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             if order.TryDequeue(&candidate) then
                 match statuses.TryGetValue candidate with
                 | true, status when isTerminal status ->
-                    statuses.TryRemove candidate |> ignore
+                    forget candidate
                     evicted <- true
                 | true, _liveStatus ->
                     // Live job — push back to the tail of `order` so
@@ -129,10 +155,34 @@ type InMemoryJobDispatcher(?maxJobs: int) =
                 + "distributed `IJobDispatcher` impl for production loads."
             )
 
+    /// 69i.E — may the current caller see / act on `jobId`? The owner, a
+    /// job-admin caller, and any caller of an ownerless job. Unknown ids
+    /// are `false` so callers fall through to the not-found arm.
+    let callerMayAccess (jobId: string) =
+        match owners.TryGetValue jobId with
+        | true, None -> true
+        | true, Some owner -> CallContext.isJobAdmin () || CallContext.subjectId () = Some owner
+        | false, _ -> false
+
+    /// Transition to a terminal status unless one is already recorded —
+    /// the runner and `Cancel` race for the terminal slot and the first
+    /// writer wins, so a job cancelled just as it completed reports the
+    /// outcome that landed first, never a later overwrite.
+    let trySetTerminal (jobId: string) (terminal: obj) =
+        match statuses.TryGetValue jobId with
+        | true, current when isTerminal current -> false
+        | true, current -> statuses.TryUpdate(jobId, terminal, current)
+        | false, _ -> false
+
     interface IJobDispatcher with
         member _.Enqueue<'T>(work: Async<'T>) : Async<JobHandle<'T>> = async {
             evictOldestIfFull ()
             let jobId = Guid.NewGuid().ToString("N")
+            let owner = CallContext.subjectId ()
+            let correlation = CallContext.correlationId ()
+            let cts = new CancellationTokenSource()
+            owners[jobId] <- owner
+            cancellations[jobId] <- cts
             statuses[jobId] <- box (JobStatus<'T>.Queued)
             order.Enqueue jobId
 
@@ -141,16 +191,36 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             // intermediate `Running` arm is a one-shot transition
             // — v0 doesn't track progress; consumers wanting
             // progress wire their own dispatcher.
+            //
+            // 69i.E — the submitting subject and the request's
+            // correlation id are re-established inside the job so the
+            // work sees its original caller whatever thread it lands on.
+            // 69i.G — the work runs under the job's own token; `Cancel`
+            // trips it, and the runner records `Cancelled` only if the
+            // work had not already reached a terminal status.
             Async.Start(
                 async {
-                    statuses[jobId] <- box (JobStatus<'T>.Running 0.0)
+                    use _subject = CallContext.beginSubject owner false
+
+                    use _correlation =
+                        match correlation with
+                        | Some cid -> CallContext.beginRequest cid
+                        | None ->
+                            { new IDisposable with
+                                member _.Dispose() = ()
+                            }
+
+                    statuses.TryUpdate(jobId, box (JobStatus<'T>.Running 0.0), box (JobStatus<'T>.Queued))
+                    |> ignore
 
                     try
                         let! result = work
-                        statuses[jobId] <- box (JobStatus<'T>.Succeeded result)
-                    with ex ->
-                        statuses[jobId] <- box (JobStatus<'T>.Failed ex.Message)
-                }
+                        trySetTerminal jobId (box (JobStatus<'T>.Succeeded result)) |> ignore
+                    with
+                    | :? OperationCanceledException -> trySetTerminal jobId (box (JobStatus<'T>.Cancelled)) |> ignore
+                    | ex -> trySetTerminal jobId (box (JobStatus<'T>.Failed ex.Message)) |> ignore
+                },
+                cts.Token
             )
 
             return JobHandle jobId
@@ -160,13 +230,32 @@ type InMemoryJobDispatcher(?maxJobs: int) =
             let (JobHandle jobId) = handle
 
             match statuses.TryGetValue jobId with
-            | true, status ->
+            | true, status when callerMayAccess jobId ->
                 // Type-erased unbox: relies on the caller using
                 // the matching JobHandle<'T>. Safe because the
                 // handle was created from the same Enqueue<'T>
                 // call.
                 return (status :?> JobStatus<'T>)
-            | false, _ -> return JobStatus<'T>.Failed "job-not-found"
+            | _ -> return JobStatus<'T>.Failed "job-not-found"
+        }
+
+        member _.Cancel<'T>(handle: JobHandle<'T>) : Async<unit> = async {
+            let (JobHandle jobId) = handle
+
+            if callerMayAccess jobId then
+                // Mark first, then trip the token: a poll racing the
+                // cancel sees `Cancelled` as soon as the call returns,
+                // and the runner's own `OperationCanceledException` arm
+                // finds the terminal slot already taken.
+                trySetTerminal jobId (box (JobStatus<'T>.Cancelled)) |> ignore
+
+                match cancellations.TryGetValue jobId with
+                | true, cts ->
+                    try
+                        cts.Cancel()
+                    with :? ObjectDisposedException ->
+                        ()
+                | false, _ -> ()
         }
 
     /// Diagnostics: current tracked-job count for telemetry / health.

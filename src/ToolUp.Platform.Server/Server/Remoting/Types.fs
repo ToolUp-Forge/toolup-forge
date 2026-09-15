@@ -475,6 +475,15 @@ type JobStatus<'T> =
 type IJobDispatcher =
     abstract Enqueue<'T> : work: Async<'T> -> Async<JobHandle<'T>>
     abstract GetStatus<'T> : handle: JobHandle<'T> -> Async<JobStatus<'T>>
+    /// Phase 69i.G — request cancellation of a job. A live job transitions
+    /// to `JobStatus.Cancelled` (the running work observes a cancellation
+    /// token; cooperative, as every `Async<_>` cancellation is); a job
+    /// already terminal is left as it is; an unknown handle is a no-op.
+    /// Ownership: the submitting subject (`CallContext.subjectId ()` at
+    /// `Enqueue`) or a caller for whom `CallContext.isJobAdmin ()` holds;
+    /// any other caller's cancel is a no-op indistinguishable from an
+    /// unknown handle (no disclosure).
+    abstract Cancel<'T> : handle: JobHandle<'T> -> Async<unit>
 
 /// Phase 69b.C — telemetry hook.
 ///
@@ -647,4 +656,20 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// rate-limit bucket per proxy IP — defeating the 0.1.14
     /// per-IP partition.
     RemoteIpResolver: ('context -> string option) option
+    /// Phase 69i.B — the `IJobDispatcher` behind every method returning
+    /// `Async<JobHandle<'T>>` on this API record. When `Some`, the
+    /// dispatcher classifies those methods as long-running at startup and
+    /// serves three companion routes per method — `<method>/status`,
+    /// `<method>/progress` (SSE) and `<method>/cancel` — against this
+    /// instance, so the handler's `Enqueue` and the client's poll /
+    /// subscribe / cancel meet on the same store. Default `None`: the
+    /// methods still work (v0 — the handler owns a dispatcher and the
+    /// consumer hand-wires a poll method) and no companion route exists
+    /// (GP 11 / GP 13). Compose via `Remoting.withJobDispatcher`.
+    JobDispatcher: IJobDispatcher option
+    /// Phase 69i.G — the role that may read / cancel ANY job through the
+    /// companion routes; every other caller is bound to the jobs its own
+    /// subject submitted. Default `"Admin"`. Compose via
+    /// `Remoting.withJobAdminRole`.
+    JobAdminRole: string
 }
