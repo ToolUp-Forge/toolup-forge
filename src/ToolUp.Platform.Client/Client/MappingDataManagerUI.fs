@@ -135,6 +135,14 @@ type Msg =
     | RetryIngestionMsg of fileName: string
     | RetryIngestionDone of Result<unit, string>
     /// Phase 220 — narrow the file list to one ingestion status (client-side).
+    /// Phase 6p — the server-side session store this tab was talking to
+    /// is gone. Same event, same subscriber component and same posture as
+    /// `FileManagerUI.SessionStoreCleared`: drop the file-derived state
+    /// rather than refetch it. The in-flight mapping wizard goes with it
+    /// — it is holding a file the server no longer has, so leaving it
+    /// open would only let the user finish a mapping that cannot be
+    /// applied.
+    | SessionStoreCleared
     | SetStatusFilter of IngestionStatusFilter
     | SelectFile of Browser.Types.File
     | FileChosen of fileName: string * contents: string
@@ -518,6 +526,19 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
     | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
 
+    | SessionStoreCleared ->
+        {
+            model with
+                UploadedFiles = []
+                ProcessedData = []
+                IngestionStatus = Map.empty
+                Records = []
+                Held = None
+                Wizard = None
+                Busy = false
+        },
+        Cmd.none
+
     | CatalogLoaded response ->
         let allowed = response.Types |> List.map (fun e -> e.Info.Id) |> Set.ofList
 
@@ -640,8 +661,23 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
     | StartMapping fileName ->
         // Re-fetch the uploaded file's bytes, then open the wizard on it.
+        //
+        // Phase 6p — the SDK's own first adopter of the pre-flight guard,
+        // and a fair one: this handler reads the session file store, so
+        // before 6p a store evicted while the Data Manager sat open
+        // answered with the per-file "File 'X' not found in session"
+        // error against a row the UI was still rendering. The guard turns
+        // that into the same reconciliation every other path produces —
+        // the list clears, the toast names the cause — and costs one
+        // epoch read on the click. A failed epoch READ does not block the
+        // call: `check` swallows it, so a flaky connection degrades to
+        // exactly the pre-6p behaviour rather than locking the user out.
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call fileApi.GetFileContent fileName FileContentLoaded (fun ex -> ApiError ex.Message)
+        Cmd.OfRemoting.call
+            (fun name -> SessionEpoch.preflight (fileApi.GetFileContent name))
+            fileName
+            FileContentLoaded
+            (fun ex -> ApiError ex.Message)
 
     | FileContentLoaded(Ok upload) ->
         let headers, samples = ColumnMapping.parsePreview 20 upload.contents
@@ -1806,7 +1842,13 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
                         ()
                 | _ -> ())
 
-        FsReact.createDisposable dispose)
+        // Phase 6p — rides the same mount as the ingestion subscription;
+        // see `FileManagerUI`'s twin.
+        let disposeReset = SessionEpoch.subscribe (fun _ -> dispatch SessionStoreCleared)
+
+        FsReact.createDisposable (fun () ->
+            dispose ()
+            disposeReset ()))
 
     Html.none
 
