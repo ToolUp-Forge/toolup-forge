@@ -301,6 +301,26 @@ type FileReprocessedPayload = {
 /// operator action).
 type DataStoreResetPayload = { UserId: string; FileCount: int }
 
+/// Phase 6p — an ephemeral `SessionFileStore` was dropped by the TTL
+/// eviction sweep and has since been RE-CREATED under the same scope
+/// container, so every file the caller uploaded before the gap is gone
+/// while their client may still be listing them.
+///
+/// Emitted once per eviction-then-recreate transition, never on a fresh
+/// first access (nothing was lost, and there is no client to inform).
+///
+/// GP 4 — `Container` is the storage-scope container the audit trail
+/// already records for every file event in that scope. Deliberately NOT
+/// carried: filenames, file contents, file count before the eviction, or
+/// any user identity beyond the container. The operator question this
+/// answers is "did this scope silently lose its uploads, and when" —
+/// answering it does not require knowing what was lost.
+///
+/// `Reason` uses the same vocabulary as the notification payload
+/// (`ProcessedDataTypes.SessionStoreResetNotification`); `"Evicted"` is
+/// the only value the server emits.
+type SessionStoreResetPayload = { Container: string; Reason: string }
+
 /// Module-emitted "an analysis was run" event. SDK ships the case so
 /// module code emits via `IAuditLog.Record` with a consistent shape;
 /// the SDK never names a module so SDK never emits `AnalysisRun`
@@ -4651,6 +4671,10 @@ type AuditEvent =
     /// the bulk operation; per-file `FileDeleted` is suppressed to
     /// avoid drowning the audit trail.
     | DataStoreReset of DataStoreResetPayload
+    /// An ephemeral session file store was evicted by the TTL sweep and
+    /// then re-created (Phase 6p) — the scope's uploads were lost
+    /// without any user action. Not emitted on first access.
+    | SessionStoreReset of SessionStoreResetPayload
     | AnalysisRun of AnalysisRunPayload
     | PermissionChanged of PermissionChangedPayload
     /// Successful out-of-band transactional delivery.
@@ -5396,6 +5420,7 @@ module AuditEvent =
         | FileDeleted _ -> "FileDeleted"
         | FileReprocessed _ -> "FileReprocessed"
         | DataStoreReset _ -> "DataStoreReset"
+        | SessionStoreReset _ -> "SessionStoreReset"
         | AnalysisRun _ -> "AnalysisRun"
         | PermissionChanged _ -> "PermissionChanged"
         | NotificationSent _ -> "NotificationSent"
