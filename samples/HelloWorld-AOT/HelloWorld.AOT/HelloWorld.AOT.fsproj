@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HelloWorld-AOT (Phase 804.B, closing 69k.H) - the AOT proof.
+
+    A console host that decodes every pinned fixture of the remoting wire
+    corpus (tests/remoting-corpus) through GENERATED code only: the MsgPack
+    responses through the generated closed-algebra decoders, the JSON
+    arguments through the generated typed argument-parse table. Both files
+    under Generated/ are emitted by the build of HelloWorld.AOT.Contract and
+    committed here; DO NOT EDIT them.
+
+    `dotnet run` proves the decode; `dotnet publish -r win-x64` with
+    PublishAot proves it survives native compilation AND that the executed
+    path is reflection-free at RUNTIME, which a clean publish alone cannot
+    show (F#'s printf reaches MethodInfo.MakeGenericMethod and only fails
+    when called). See README.md for the publish incantation and the
+    measured result.
+
+    TrimmerSingleWarn=false so every trim / AOT warning names the method it
+    came from rather than collapsing to one line per assembly - the claim is
+    that NONE originates in this assembly or in the generated modules, and
+    that is only checkable when they are itemised.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <PublishAot>true</PublishAot>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <TrimmerSingleWarn>false</TrimmerSingleWarn>
+        <!-- PublishAot turns System.Text.Json's reflection-based serialization OFF
+             for the whole app, JIT builds included, so the generated argument
+             table - whose parse is the Phase 783 typed seam over the platform's
+             reflection converter set - is refused before it runs. Turned back on
+             here EXPLICITLY, so the native run measures whether that seam survives
+             AOT rather than whether a default forbids it. The decoders need no such
+             switch: a closed-algebra decoder reflects nowhere. -->
+        <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+        <RootNamespace>HelloWorld.AOT</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Emitted by the generator; see HelloWorld.AOT.Contract.fsproj. -->
+        <Compile Include="Generated\CorpusDecoders.fs" />
+        <Compile Include="Generated\CorpusApiDispatch.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\HelloWorld.AOT.Contract\HelloWorld.AOT.Contract.fsproj" />
+        <!-- Core carries the decoder algebra and the registry (the response
+             side); Server carries the statically-typed STJ seam the argument
+             table parses through. -->
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

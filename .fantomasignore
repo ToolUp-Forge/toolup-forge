@@ -19,3 +19,9 @@ proofs/oracle/RemotingDecode.fs
 proofs/.fstar/
 proofs/.cache/
 proofs/.extract/
+# Phase 804 — the remoting generator's emitted source in the AOT sample. The
+# generator rewrites these after every build of HelloWorld.AOT.Contract and
+# holds them byte-identical to what it emits; formatting them would make the
+# next build re-dirty them, over source nobody wrote. Same class as the
+# oracle above.
+samples/HelloWorld-AOT/HelloWorld.AOT/Generated/
