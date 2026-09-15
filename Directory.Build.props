@@ -285,4 +285,18 @@
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+  <!--
+    Phase 804 (closing 69k.E) - the remoting generator's build integration,
+    imported in-tree so the samples dogfood the very targets a consumer gets
+    from the ToolUp.Remoting.Generator package (a PrivateAssets="all"
+    reference; see src/ToolUp.Remoting.Generator/README.md). INERT for every
+    project that declares no ToolUpRemotingDecoders / ToolUpRemotingDispatch
+    item: each target's condition is then false and nothing runs, so a
+    project that never opts in builds byte-for-byte as before. The tool is
+    resolved at target time to the generator project's own build output,
+    and a declaring project orders itself after it with a build-only
+    ProjectReference (samples/HelloWorld-AOT/HelloWorld.AOT.Contract).
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)src/ToolUp.Remoting.Generator/build/ToolUp.Remoting.Generator.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)src/ToolUp.Remoting.Generator/build/ToolUp.Remoting.Generator.targets')" />
 </Project>
