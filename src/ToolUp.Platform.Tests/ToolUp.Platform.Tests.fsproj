@@ -1762,6 +1762,10 @@
              marker and now sees the tier-shared RateLimit mirror. -->
         <Compile Include="InProcess\AttributeRecognitionSweepTests.fs" />
         <Compile Include="InProcess\StreamingDispatchTests.fs" />
+        <!-- Phase 69i.H - long-running typed handles: the auto-served status /
+             progress / cancel companions, idempotency-key dedup, subject
+             propagation + cross-tenant isolation, and cancellation. -->
+        <Compile Include="InProcess\JobHandleTests.fs" />
         <!-- Phase 69m — Dispatcher body + argument-parse fastpath.
              Textual checks pin (a) InvocationPropsInt.Arguments holding
              JsonElement (not raw text); (b) InvocationProps.InputBytes

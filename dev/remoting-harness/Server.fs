@@ -239,6 +239,10 @@ let private buildJobReportApi: HttpHandler =
     |> Remoting.fromValue jobReportHandlers
     |> Remoting.withErrorHandler errorHandler
     |> Remoting.withAuthContext resolveAuthFromHeaders
+    // Phase 69i.B — the same instance the handlers enqueue on, so the
+    // auto-served `StartReport/status` / `/progress` / `/cancel`
+    // companions resolve the handles `StartReport` hands out.
+    |> Remoting.withJobDispatcher jobDispatcher
     |> Remoting.buildHttpHandler
 
 // ---- Phase 69e — validated input API ---------------------------------------

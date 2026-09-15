@@ -281,6 +281,11 @@ let private registeredTests =
         // classifier on a forged marker.
         AttributeRecognitionSweepTests.tests
         StreamingDispatchTests.tests
+        // Phase 69i.H - long-running typed handles over the real dispatcher:
+        // the auto-served status / progress / cancel companions, the
+        // idempotency-key replay, subject propagation + cross-tenant
+        // isolation, and cancellation.
+        JobHandleTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests
         // Tidy-Up (grounding-wave hygiene) — regression guard proving the
