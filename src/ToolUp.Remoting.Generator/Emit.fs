@@ -72,6 +72,12 @@ module Emit =
             sprintf "namespace %s" options.Namespace
             ""
             "open System"
+            // Phase 804 — the algebra's home, opened explicitly. The default
+            // namespace IS `ToolUp.Remoting`, where `Decode`, `Decoder` and
+            // `RemotingDecoders` resolve unqualified; a consumer emitting into
+            // its own namespace (samples/HelloWorld-AOT was the first) found
+            // none of them without this line.
+            "open ToolUp.Remoting"
         ]
         @ (options.Opens |> List.map (sprintf "open %s"))
         @ [
@@ -88,6 +94,16 @@ module Emit =
             |> List.map (fun f -> Plan.parameterName f.FieldName)
             |> String.concat " "
 
+        // Phase 804 — the construction is ANNOTATED with the record's own
+        // spelling. A type declared inside a module (`WireCorpus.Address`)
+        // has labels that are not in scope unless that module is opened,
+        // and the lambda handed to `Decode.succeed` is checked before the
+        // binding's annotation can reach it; an annotation on the record
+        // expression itself resolves the labels type-directed. Measured
+        // against the alternatives: a module-qualified first label leaves
+        // the remaining labels unresolved, and a `Module.Type.Label` path is
+        // an invalid field label outright. Harmless where the labels were
+        // already in scope, the only case the hand-written decoders met.
         let assignments =
             fields
             |> List.map (fun f -> sprintf "            %s = %s" f.FieldName (Plan.parameterName f.FieldName))
@@ -107,9 +123,9 @@ module Emit =
 
         [
             sprintf "    let %s: Decoder<%s> =" binding typeSpelling
-            sprintf "        Decode.succeed (fun %s -> {" parameters
+            sprintf "        Decode.succeed (fun %s -> ({" parameters
             assignments
-            "        })"
+            sprintf "        }: %s))" typeSpelling
             applies
             ""
         ]

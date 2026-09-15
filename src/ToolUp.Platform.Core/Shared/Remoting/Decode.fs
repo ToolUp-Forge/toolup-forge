@@ -243,7 +243,19 @@ module Decode =
             match value with
             | Value.Arr elements ->
                 match List.tryItem position elements with
-                | Some element -> decoder element |> Result.mapError (DecodeError.under (sprintf "[%d]" position))
+                | Some element ->
+                    // Phase 804 — the path segment is built ONLY on the refusal
+                    // branch, as `list` and `entries` already do. It used to be
+                    // the eagerly-evaluated argument of the `Result.mapError`
+                    // function, so every SUCCESSFUL decode through `index` ran
+                    // `sprintf` — the one printf-family call on the algebra's
+                    // happy path, and under native AOT a fail-fast: F#'s printf
+                    // builds its formatter through `MethodInfo.MakeGenericMethod`,
+                    // which that runtime refuses. Found by the AOT sample's first
+                    // native run, on `asDecimal`'s four-word read.
+                    match decoder element with
+                    | Ok decoded -> Ok decoded
+                    | Error error -> Error(DecodeError.under (sprintf "[%d]" position) error)
                 | None ->
                     refuseWith
                         (sprintf "an array with an element at index %d" position)

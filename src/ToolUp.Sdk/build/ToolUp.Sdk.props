@@ -248,6 +248,7 @@
     <PackageVersion Include="ToolUp.RateLimit.AzureTableStorage" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.RateLimit.Redis" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Remoting.Analyzers" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Remoting.Generator" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Reporting.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Reporting.Docx" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Reporting.HtmlPdf" Version="$(ToolUpSdkVersion)" />

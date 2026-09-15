@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HelloWorld-AOT contract (Phase 804.B). The project whose BUILT assembly
+    the generator reads: the remoting corpus declarations, linked from the
+    SDK's own test project, plus one API record that echoes every corpus
+    type. Declaring the two items below is the whole adoption - after every
+    build of this project the generator emits the decoders and the typed
+    argument table into the sibling HelloWorld.AOT, which commits and
+    compiles them. See src/ToolUp.Remoting.Generator/README.md.
+
+    FSharp.Core only, on purpose: the generator plans decoders for a
+    consumer's wire types from metadata, so the contract needs nothing
+    from the SDK to be generated FOR.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- One declaration, two encodings: the corpus's expected values are
+             the F# declarations, compiled in without TOOLUP_WIRE_CORPUS_DOTNET
+             (the server-tier half - the writers and the anchor - stays in the
+             test pack). -->
+        <Compile Include="..\..\..\src\ToolUp.Platform.Tests\Remoting\WireCorpus.fs" Link="WireCorpus.fs" />
+        <Compile Include="CorpusApi.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <!-- Build-order only: the in-tree generator must exist before the
+             post-build target below runs it. A consumer outside this tree
+             takes a PackageReference to ToolUp.Remoting.Generator with
+             PrivateAssets="all" instead. -->
+        <ProjectReference Include="..\..\..\src\ToolUp.Remoting.Generator\ToolUp.Remoting.Generator.fsproj"
+                          ReferenceOutputAssembly="false"
+                          Private="false"
+                          UndefineProperties="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+        <!-- UndefineProperties: `dotnet publish -r win-x64` hands its RID and AOT
+             switches to every referenced project, which would build the
+             generator self-contained under bin/<cfg>/net10.0/win-x64/ - a
+             folder the in-tree resolver does not look in, and a runtimeconfig
+             `dotnet exec` cannot host. The generator is a tool, never a
+             deployable, so those properties must not reach it. -->
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The adoption. Every corpus shape is declared corpus-covered
+             because HelloWorld.AOT runs the pinned fixtures through the
+             emitted decoders and asserts each decodes to its declaration. -->
+        <ToolUpRemotingDecoders Include="..\HelloWorld.AOT\Generated\CorpusDecoders.fs"
+                                ApiRecords="HelloWorld.AOT.Contract.ICorpusApi"
+                                Opens="ToolUp.Platform.Tests.Remoting"
+                                Namespace="HelloWorld.AOT"
+                                Module="CorpusDecoders"
+                                CorpusCovered="HelloWorld.AOT.Contract.ICorpusApi" />
+        <ToolUpRemotingDispatch Include="..\HelloWorld.AOT\Generated\CorpusApiDispatch.fs"
+                                ApiRecord="HelloWorld.AOT.Contract.ICorpusApi"
+                                Opens="ToolUp.Platform.Tests.Remoting"
+                                Namespace="HelloWorld.AOT" />
+    </ItemGroup>
+</Project>

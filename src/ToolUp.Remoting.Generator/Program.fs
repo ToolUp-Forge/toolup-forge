@@ -48,8 +48,16 @@ let private parse (argv: string list) =
 
     go [] argv
 
+/// Phase 804 — a repeated flag also accepts a `;`-separated list in one
+/// value (`--api-record "A;B"`), because that is the shape MSBuild item
+/// metadata arrives in: the build-time target hands `%(ApiRecords)`
+/// through verbatim rather than re-splitting it in XML.
 let private values name (args: (string * string) list) =
-    args |> List.filter (fst >> (=) name) |> List.map snd
+    args
+    |> List.filter (fst >> (=) name)
+    |> List.collect (fun (_, v) ->
+        v.Split(';', StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
+        |> Array.toList)
 
 let private value name args = values name args |> List.tryLast
 
@@ -57,6 +65,25 @@ let private required name args =
     match value name args with
     | Some v -> v
     | None -> failwithf "--%s is required" name
+
+/// Phase 804 — write only when the text differs. The build-time target runs
+/// this tool after every build of the declaring project, and the emitted
+/// file is a `<Compile>` input of a sibling project; rewriting identical
+/// bytes would move its timestamp and force that sibling to recompile on
+/// every build, which is the incremental-build cost the generator's design
+/// otherwise avoids. Returns whether anything was written.
+let private writeIfChanged (path: string) (text: string) : bool =
+    let unchanged = File.Exists path && File.ReadAllText path = text
+
+    if not unchanged then
+        let dir = Path.GetDirectoryName(Path.GetFullPath path)
+
+        if not (String.IsNullOrEmpty dir) then
+            Directory.CreateDirectory dir |> ignore
+
+        File.WriteAllText(path, text)
+
+    not unchanged
 
 /// Load the assembly and let its dependencies resolve from beside it —
 /// the tool runs against a build output directory, so siblings are there.
@@ -138,10 +165,11 @@ let private decoders (assembly: Assembly) (records: Type list) (args: (string * 
     }
 
     let out = required "out" args
-    File.WriteAllText(out, Emit.compilationUnit options plan)
+    let written = writeIfChanged out (Emit.compilationUnit options plan)
 
     printfn
-        "wrote %s — %d decoder(s), %d registration(s)"
+        "%s %s — %d decoder(s), %d registration(s)"
+        (if written then "wrote" else "unchanged")
         out
         (List.length plan.Bindings)
         (List.length (Emit.coveredSpellings plan))
@@ -157,8 +185,11 @@ let private dispatch (records: Type list) (args: (string * string) list) =
     let out = required "out" args
     let ns = defaultArg (value "namespace" args) "ToolUp.Remoting.Server.Generated"
     let table = Dispatch.tableFor record
-    File.WriteAllText(out, Dispatch.compilationUnit ns (values "open" args) table)
-    printfn "wrote %s — %d method(s)" out (List.length table.Methods)
+
+    let written =
+        writeIfChanged out (Dispatch.compilationUnit ns (values "open" args) table)
+
+    printfn "%s %s — %d method(s)" (if written then "wrote" else "unchanged") out (List.length table.Methods)
 
 [<EntryPoint>]
 let main argv =

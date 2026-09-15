@@ -1,0 +1,106 @@
+<Project>
+  <!--
+    ToolUp.Remoting.Generator - build integration (Phase 804, closing 69k.E).
+
+    Runs the generator AFTER the build of any project that declares what it
+    wants generated, reading the API records off that project's own freshly
+    built assembly and writing ordinary F# source that a sibling project
+    commits and compiles. Declare nothing and this file is inert: no target
+    runs, no file is touched, the build is byte-for-byte what it was.
+
+      <PropertyGroup>
+        <ToolUpRemotingGenerate>true</ToolUpRemotingGenerate>   (default; false opts out for one build)
+      </PropertyGroup>
+      <ItemGroup>
+        <ToolUpRemotingDecoders Include="..\MyApp.Client\Generated\Decoders.fs"
+                                ApiRecords="MyApp.IOrdersApi;MyApp.ICustomersApi"
+                                Opens="MyApp"
+                                Namespace="MyApp.Remoting"
+                                Module="GeneratedDecoders"
+                                CorpusCovered="" />
+        <ToolUpRemotingDispatch Include="..\MyApp.Server\Generated\OrdersDispatch.fs"
+                                ApiRecord="MyApp.IOrdersApi"
+                                Opens="MyApp"
+                                Namespace="MyApp.Remoting.Server.Generated" />
+      </ItemGroup>
+
+    - Include        : where the emitted file goes, relative to the DECLARING
+                       project. The declaring project is the one whose built
+                       assembly carries the API records (the contract /
+                       shared-types project); the file usually lands in a
+                       sibling that compiles it.
+    - ApiRecords     : semicolon-separated full type names. Omitted = every
+                       API record the assembly declares.
+    - Opens          : semicolon-separated namespaces the emitted file opens.
+    - Namespace,     : the emitted namespace and module names; the tool's
+      Module           defaults apply when omitted.
+    - CorpusCovered  : semicolon-separated API records whose wire shapes a
+                       corpus the consumer runs draws. A DECLARATION, never
+                       inferred.
+    - ApiRecord      : (dispatch) exactly one API record per item.
+
+    The tool writes only when the text changed, so an unchanged assembly
+    leaves the emitted file's timestamp alone and no sibling recompiles.
+    Incrementality on top of that is MSBuild's own: the target is skipped
+    while the emitted file is newer than the assembly and the tool.
+
+    Where the tool is: inside the package it is ../tools/net10.0/any/ beside
+    this file. Imported from the SDK's own tree instead (the repository's
+    Directory.Build.props does that so the samples dogfood the same wiring),
+    that folder does not exist and the tool is the sibling project's build
+    output; the property resolves at TARGET time so $(Configuration) is
+    known. ToolUpRemotingGeneratorDll overrides both.
+  -->
+
+  <PropertyGroup>
+    <ToolUpRemotingGeneratorPackagedDll>$(MSBuildThisFileDirectory)../tools/net10.0/any/ToolUp.Remoting.Generator.dll</ToolUpRemotingGeneratorPackagedDll>
+    <ToolUpRemotingGeneratorInTreeProject>$(MSBuildThisFileDirectory)../ToolUp.Remoting.Generator.fsproj</ToolUpRemotingGeneratorInTreeProject>
+  </PropertyGroup>
+
+  <Target Name="_ToolUpRemotingResolveGenerator"
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and ('@(ToolUpRemotingDecoders)' != '' or '@(ToolUpRemotingDispatch)' != '')">
+    <PropertyGroup>
+      <ToolUpRemotingGeneratorDll Condition="'$(ToolUpRemotingGeneratorDll)' == '' and Exists('$(ToolUpRemotingGeneratorPackagedDll)')">$(ToolUpRemotingGeneratorPackagedDll)</ToolUpRemotingGeneratorDll>
+      <ToolUpRemotingGeneratorDll Condition="'$(ToolUpRemotingGeneratorDll)' == '' and Exists('$(ToolUpRemotingGeneratorInTreeProject)')">$(MSBuildThisFileDirectory)../bin/$(Configuration)/net10.0/ToolUp.Remoting.Generator.dll</ToolUpRemotingGeneratorDll>
+    </PropertyGroup>
+    <Error Condition="'$(ToolUpRemotingGeneratorDll)' == '' or !Exists('$(ToolUpRemotingGeneratorDll)')"
+           Text="ToolUp.Remoting.Generator: the generator was not found (looked for '$(ToolUpRemotingGeneratorDll)'). Inside the package it ships under tools/; in the SDK's own tree build src/ToolUp.Remoting.Generator first, or set ToolUpRemotingGeneratorDll." />
+  </Target>
+
+  <Target Name="ToolUpRemotingGenerateDecoders"
+          AfterTargets="Build"
+          DependsOnTargets="_ToolUpRemotingResolveGenerator"
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and '@(ToolUpRemotingDecoders)' != ''"
+          Inputs="$(TargetPath);$(ToolUpRemotingGeneratorDll)"
+          Outputs="%(ToolUpRemotingDecoders.FullPath)">
+    <PropertyGroup>
+      <_ToolUpRemotingArgs>decoders --assembly &quot;$(TargetPath)&quot; --out &quot;%(ToolUpRemotingDecoders.FullPath)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDecoders.ApiRecords)' != ''">$(_ToolUpRemotingArgs) --api-record &quot;%(ToolUpRemotingDecoders.ApiRecords)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDecoders.Opens)' != ''">$(_ToolUpRemotingArgs) --open &quot;%(ToolUpRemotingDecoders.Opens)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDecoders.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingDecoders.Namespace)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDecoders.Module)' != ''">$(_ToolUpRemotingArgs) --module &quot;%(ToolUpRemotingDecoders.Module)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDecoders.CorpusCovered)' != ''">$(_ToolUpRemotingArgs) --corpus-covered &quot;%(ToolUpRemotingDecoders.CorpusCovered)&quot;</_ToolUpRemotingArgs>
+    </PropertyGroup>
+    <Message Importance="high" Text="ToolUp.Remoting.Generator: decoders -> %(ToolUpRemotingDecoders.Identity)" />
+    <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <Target Name="ToolUpRemotingGenerateDispatch"
+          AfterTargets="Build"
+          DependsOnTargets="_ToolUpRemotingResolveGenerator"
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and '@(ToolUpRemotingDispatch)' != ''"
+          Inputs="$(TargetPath);$(ToolUpRemotingGeneratorDll)"
+          Outputs="%(ToolUpRemotingDispatch.FullPath)">
+    <Error Condition="'%(ToolUpRemotingDispatch.ApiRecord)' == ''"
+           Text="ToolUp.Remoting.Generator: ToolUpRemotingDispatch item '%(ToolUpRemotingDispatch.Identity)' needs an ApiRecord (exactly one full type name)." />
+    <PropertyGroup>
+      <_ToolUpRemotingArgs>dispatch --assembly &quot;$(TargetPath)&quot; --out &quot;%(ToolUpRemotingDispatch.FullPath)&quot; --api-record &quot;%(ToolUpRemotingDispatch.ApiRecord)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.Opens)' != ''">$(_ToolUpRemotingArgs) --open &quot;%(ToolUpRemotingDispatch.Opens)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingDispatch.Namespace)&quot;</_ToolUpRemotingArgs>
+    </PropertyGroup>
+    <Message Importance="high" Text="ToolUp.Remoting.Generator: dispatch -> %(ToolUpRemotingDispatch.Identity)" />
+    <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+</Project>

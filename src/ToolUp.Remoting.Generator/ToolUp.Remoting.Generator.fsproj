@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <!--
-      Phase 69k — a DEV-TIME tool, not a shipped package.
+      Phase 69k — a DEV-TIME tool, not a runtime dependency.
 
       The shard asked for a Roslyn source generator wired into every consumer
       build (69k.E). Roslyn source generators are a C#/VB compiler feature and
@@ -16,14 +16,42 @@
       integration — because there is nothing in the compile pipeline to get
       wrong.
 
-      It is `IsPackable=false` deliberately: publishing the generator is 69k.E,
-      which also needs a `Directory.Build.props` edit this session does not own.
-      Not packing also keeps the tool out of the public-API approval set, which
-      discovers packable `ToolUp.*` assemblies and fails one with no committed
-      baseline — a dev tool has no public contract to hold stable.
+      Phase 804 (69k.E) — PACKAGED, as a build-time package rather than a
+      runtime one. The nupkg carries NO lib/ assembly and declares NO
+      dependencies: a consumer references it with PrivateAssets="all" and
+      gets exactly two things — `tools/net10.0/any/`, a self-contained
+      runnable folder (`dotnet exec` needs the dll, its runtimeconfig and
+      FSharp.Core beside it, nothing else), and `build/*.targets`, which runs
+      the tool after the build of any project that DECLARES a
+      `ToolUpRemotingDecoders` / `ToolUpRemotingDispatch` item. A consumer
+      that declares nothing gets a no-op target and is byte-for-byte
+      unchanged (GP 11); `ToolUpRemotingGenerate=false` opts a declaring
+      project out for one build without removing the declaration.
+
+      Not `PackAsTool`, deliberately: NuGet refuses a DotnetTool-typed package
+      inside an ordinary PackageReference, and a package that cannot be
+      referenced cannot deliver a .targets — the "wire it into every consumer
+      build" half of 69k.E needs the reference to exist.
+
+      Being packable puts this assembly in the public-API approval set
+      (api-baselines/ToolUp.Remoting.Generator.approved.txt) and the doc-
+      coverage floor, which is right: the emitted source is the contract a
+      consumer commits, and the `Plan` / `Emit` / `Dispatch` modules are what
+      the fidelity pack holds still.
     -->
-    <IsPackable>false</IsPackable>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <PackageId>ToolUp.Remoting.Generator</PackageId>
+    <Description>ToolUp.Remoting build-time generator — emits closed-algebra response decoders and typed server argument-parse tables from a built assembly's API records. A dev-time package: reference with PrivateAssets="all" and declare ToolUpRemotingDecoders / ToolUpRemotingDispatch items; nothing runs until a project declares one.</Description>
+    <PackageTags>fsharp;sdk;remoting;generator;build;aot;msgpack</PackageTags>
+    <!-- The XML documentation file is emitted (the repo-wide default): a packable
+         assembly is measured by the Phase 261 doc-coverage floor, and the floor
+         reads that file. 69k opted out while the tool was unpackable. -->
+    <!-- No lib/ means no pdb to ship: a symbols package would be empty and NuGet refuses to pack one. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <!-- The runnable tools/ folder is assembled by the target below. -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_ToolUpRemotingGeneratorPackTools</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
   <ItemGroup>
     <!-- Planning first: it decides every combinator, ordering and refusal.
@@ -43,4 +71,24 @@
          SDK's own. -->
     <PackageReference Include="FSharp.Core" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="build\ToolUp.Remoting.Generator.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+  <!--
+    Phase 804 — the runnable tools/ folder: the tool's own dll, its
+    runtimeconfig (so `dotnet exec` knows which runtime to host) and every
+    copy-local reference (FSharp.Core). No deps.json is packed on purpose:
+    without one the host loads assemblies from the app directory, which is
+    exactly the folder this packs, whereas a build-time deps.json would name
+    FSharp.Core by its NuGet package path and probe the consumer's cache.
+  -->
+  <!-- ResolveReferences: pack evaluates this target in an inner build of its own, where nothing has
+       resolved the copy-local set yet; without it FSharp.Core is silently absent from tools/. -->
+  <Target Name="_ToolUpRemotingGeneratorPackTools" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="tools/net10.0/any/" />
+      <TfmSpecificPackageFile Include="$(ProjectRuntimeConfigFilePath)" PackagePath="tools/net10.0/any/" />
+      <TfmSpecificPackageFile Include="@(ReferenceCopyLocalPaths)" PackagePath="tools/net10.0/any/" Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll' and '%(ReferenceCopyLocalPaths.DestinationSubDirectory)' == ''" />
+    </ItemGroup>
+  </Target>
 </Project>
