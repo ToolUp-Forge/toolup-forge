@@ -554,6 +554,9 @@ module Names =
         "TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE"
 
     [<Literal>]
+    let acceptAnonymousModeWithAi = "TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI"
+
+    [<Literal>]
     let acceptForwardedHeadersFromAnyProxy =
         "TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY"
 
@@ -1247,6 +1250,15 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.acceptNoRateLimitInAuthMode
         Description = "Acknowledge an internet-facing authenticated deployment with no rate limiting."
+        Type = BoolKey
+        Default = Some "false"
+        IsSecret = false
+        Category = EscapeHatchCategory
+    }
+    {
+        EnvVar = Names.acceptAnonymousModeWithAi
+        Description =
+            "Lowers a startup preflight refusal to a warning: an AI deployment with an Anonymous surface, no rate-limit policy for anonymous callers and a platform-paid provider, attested cost-bounded upstream."
         Type = BoolKey
         Default = Some "false"
         IsSecret = false
@@ -2662,6 +2674,7 @@ let all: ConfigKeyDescriptor list = [
 /// well would be two ways to say one thing.
 let manifestBindable: Set<string> =
     Set.ofList [
+        Names.acceptAnonymousModeWithAi
         Names.acceptEphemeralRagIndex
         Names.acceptEphemeralShareTokenKey
         Names.acceptForwardedHeadersFromAnyProxy
