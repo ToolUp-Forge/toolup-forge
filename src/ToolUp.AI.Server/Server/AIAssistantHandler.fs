@@ -356,9 +356,10 @@ let private isTerminalStreamEvent =
 // ─── API implementation ──────────────────────────────────────────
 
 /// Build the AIAssistantApi ToolUp.Remoting handler + its typed streaming
-/// companion (Phase 69c.tail A). Both records are built in one closure so
-/// the streaming method reuses the legacy `SubmitMessage` turn machinery
-/// via the per-turn `typedSink` indirection.
+/// companion. Both records are built in one closure over ONE turn
+/// implementation (`makeAssistantApi`, Phase 69c.F): the legacy record takes
+/// the SSE-broadcast sink, the streaming method takes the stream's channel
+/// sink, and nothing else differs.
 /// Mirrors the pattern from fileManagementApi in FileManagement.fs.
 let aiAssistantApi
     (config: SystemPromptBuilder.AIAssistantServerConfig option)
@@ -626,22 +627,24 @@ let aiAssistantApi
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
-    // Phase 69c.tail A — per-turn event-sink indirection. The turn machinery
-    // (SubmitMessage's bgWork) emits through `emit`. When `typedSink` is unset
-    // (the legacy `SubmitMessage` + `/api/ai/events` path) `emit` broadcasts to
-    // the SSE manager exactly as before — byte-for-byte unchanged. When the
-    // typed streaming endpoint (`StreamChatV2`) arms the sink, the SAME turn's
-    // events route to its in-memory channel instead, with no SSE broadcast.
-    // The closure is built per request, so the sink is request-scoped: the
-    // legacy endpoint never arms it, the streaming endpoint always does.
-    let typedSink: (AIStreamEvent -> unit) option ref = ref None
-
-    let emit (e: AIStreamEvent) =
-        match typedSink.Value with
-        | Some sink -> sink e
-        | None -> sendEvent sseManager userId e
-
-    let assistantApi: AIAssistantApi = {
+    // Phase 69c.F — ONE turn implementation, the event sink injected at
+    // construction. `makeAssistantApi emit` builds the api record whose turn
+    // machinery (SubmitMessage's bgWork) emits every `AIStreamEvent` through
+    // `emit`; the two mounted surfaces differ ONLY in the sink they pass:
+    //
+    //   * the legacy `SubmitMessage` + `/api/ai/events` pair is
+    //     `makeAssistantApi (sendEvent sseManager userId)` — the SSE-manager
+    //     broadcast, byte-for-byte what it always wrote (pinned by
+    //     `AIStreamFramingPinTests`);
+    //   * the typed `StreamChatV2` builds the same record over the
+    //     `AsyncStream.fromCallback` channel sink and drives the turn through
+    //     it, so its `event: chunk` payloads are the same serialised events.
+    //
+    // This replaces the Phase 69c.tail A per-request `typedSink` ref cell —
+    // a mutable the typed endpoint armed before firing the turn — with a
+    // parameter: no state to arm, nothing a future third surface could
+    // forget to reset, and the legacy path no longer consults a cell at all.
+    let makeAssistantApi (emit: AIStreamEvent -> unit) : AIAssistantApi = {
         SubmitMessage =
             fun (request: AIMessageRequest) -> async {
                 let conversationId = request.ConversationId
@@ -1428,22 +1431,20 @@ let aiAssistantApi
             }
     }
 
-    // Phase 69c.tail A — typed streaming companion. Reuses the legacy
-    // `SubmitMessage` turn machinery: arm the per-turn sink so the turn's
-    // events route to the typed channel (no SSE broadcast), fire the turn,
-    // and yield events until the terminal `TaskStatusChanged`. The legacy
-    // `SubmitMessage` + `/api/ai/events` SSE pair is untouched.
+    // The legacy surface: the turn over the per-user SSE broadcast.
+    let assistantApi: AIAssistantApi = makeAssistantApi (sendEvent sseManager userId)
+
+    // Phase 69c.F — the typed streaming surface: the SAME turn over the
+    // stream's channel sink. `SubmitMessage`'s foreground returns once the
+    // agent loop is kicked off (the detached-tail shape `fromCallback` is
+    // built for); the loop emits the terminal `TaskStatusChanged` that ends
+    // the stream, and a foreground fault completes the stream as
+    // `event: error`. No SSE broadcast happens on this path.
     let streamingApi: AIStreamingApi = {
         StreamChatV2 =
             fun (request: AIMessageRequest) ->
                 ToolUp.Remoting.Server.AsyncStream.fromCallback isTerminalStreamEvent (fun emitTyped ->
-                    // Arm the per-turn sink so THIS turn's events route to the
-                    // stream's channel instead of the SSE broadcast, then fire
-                    // the turn. SubmitMessage's foreground returns once the
-                    // agent loop is kicked off; the loop emits the terminal
-                    // event that ends the stream.
-                    typedSink.Value <- Some emitTyped
-                    assistantApi.SubmitMessage request |> Async.Ignore)
+                    (makeAssistantApi emitTyped).SubmitMessage request |> Async.Ignore)
     }
 
     assistantApi, streamingApi
