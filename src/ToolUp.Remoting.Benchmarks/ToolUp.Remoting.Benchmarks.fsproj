@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.Remoting.Benchmarks (Phase 804.C, closing 69k.G).
+
+    Generated versus reflection, on the two paths the generator emits for:
+    the client's binary-response DECODE (closed-algebra decoder vs the
+    reflection reader) and the server's DISPATCH of a request (typed
+    argument parse + direct handler call + serialise, vs the reflective
+    proxy). Cold start is measured in a fresh process per arm; per-request
+    latency in a warm loop. Numbers are recorded in
+    docs/migrations/69k-source-generator-dispatcher.md.
+
+    Stopwatch, not BenchmarkDotNet, deliberately: the question is an
+    order-of-magnitude one (does the generated path move the request cost
+    at all, against a measured 0.36 ms hot path), the harness must run in
+    seconds inside a dev loop, and the repository takes no benchmark
+    dependency for a number it reads once per phase. Same shape as
+    dev-scripts/perf-budget-gate.ps1: min over rounds, median beside it.
+
+    The subject is the AOT sample's contract and its GENERATED modules,
+    compiled in by link so the benchmark measures exactly the source the
+    sample ships rather than a second emission of it.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>ToolUp.Remoting.Benchmarks</RootNamespace>
+        <!-- The subject's argument table rides the reflection converter set;
+             the sample makes the same choice, for the same reason. -->
+        <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\..\samples\HelloWorld-AOT\HelloWorld.AOT\Generated\CorpusDecoders.fs" Link="Generated\CorpusDecoders.fs" />
+        <Compile Include="..\..\samples\HelloWorld-AOT\HelloWorld.AOT\Generated\CorpusApiDispatch.fs" Link="Generated\CorpusApiDispatch.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\samples\HelloWorld-AOT\HelloWorld.AOT.Contract\HelloWorld.AOT.Contract.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>
