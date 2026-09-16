@@ -12,8 +12,8 @@ open ToolUp.Platform
 
 // ─── Supervised agent-loop worker (Phase 6k) ─────────────────────
 //
-// `AIAssistantHandler.SubmitMessage` used to fire the agent loop with
-// a bare `Async.Start`. Three things follow from that, and all three
+// The assistant API's SubmitMessage (the record `AIAssistantHandler.makeAssistantApi`
+// builds) used to fire the agent loop with a bare `Async.Start`. Three things follow from that, and all three
 // are silent:
 //
 //   1. **No shutdown story.** A process restart mid-conversation

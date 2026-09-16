@@ -500,7 +500,8 @@ module Proxy =
     /// field (`'arg -> IAsyncEnumerable<'T>`), recognised at proxy-build time
     /// exactly as the server classifies it at startup. `IAsyncEnumerable<'T>`
     /// has no Fable runtime shape, so `createTypeInfo` renders it as
-    /// `TypeInfo.Any`; the element `'T` is read off the generic argument for
+    /// TypeInfo.Any (a Fable.SimpleJson case the .NET surface does not own, so
+    /// it is cited bare); the element `'T` is read off the generic argument for
     /// the per-chunk deserialiser. `None` for every request/response shape.
     let tryStreamingElementType (fieldType: TypeInfo) : TypeInfo option =
         match fieldType with

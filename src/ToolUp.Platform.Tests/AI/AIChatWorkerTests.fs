@@ -10,8 +10,8 @@ open ToolUp.AI
 
 // ─── The supervised agent-loop worker (Phase 6k) ─────────────────────
 //
-// `AIAssistantHandler.SubmitMessage` used to fire the agent loop with a
-// bare `Async.Start`, which has no shutdown story, no admission control
+// The assistant API's SubmitMessage (the record `AIAssistantHandler.makeAssistantApi`
+// builds) used to fire the agent loop with a bare `Async.Start`, which has no shutdown story, no admission control
 // and no lifecycle boundary for the turn's background DI scope. These
 // tests cover the three properties the worker adds, each of which is
 // false of `Async.Start` by construction:
