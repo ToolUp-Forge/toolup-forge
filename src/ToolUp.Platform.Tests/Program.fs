@@ -2042,7 +2042,7 @@ let private registeredTests =
         // the three baselines that pin down what must stay SILENT (fresh
         // first access, healthy steady state, process restart — the last
         // being the case the design says is undetectable server-side).
-        SessionStoreResetContract.tests
+        SessionStoreResetTests.tests
         // Phase 478 — the isolated execution profile: ExecutionProfile as
         // data on the portable ExternalWorkSpec (Standard by default, so
         // the pre-478 path is unchanged), the three-clause isolation

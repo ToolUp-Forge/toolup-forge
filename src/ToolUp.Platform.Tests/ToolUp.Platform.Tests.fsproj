@@ -2272,8 +2272,10 @@
              eviction-then-recreate announcement, and the three baselines
              that pin down what must stay silent (fresh first access,
              healthy steady state, process restart). Reads FileManagement's
-             internal test seams via InternalsVisibleTo. -->
-        <Compile Include="Contracts\SessionStoreResetContract.fs" />
+             internal test seams via InternalsVisibleTo. Under InProcess\
+             rather than Contracts\ because it has one concrete subject,
+             not a seam two implementations could bind. -->
+        <Compile Include="InProcess\SessionStoreResetTests.fs" />
         <Compile Include="InProcess\UploadValidationTests.fs" />
         <!-- Phase 478 — the isolated execution profile: the profile as
              data on the portable spec, the posture a backend declares,

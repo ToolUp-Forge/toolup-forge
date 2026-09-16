@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.Contracts.SessionStoreResetContract
+module ToolUp.Platform.Tests.InProcess.SessionStoreResetTests
 
 open System
 open System.Collections.Concurrent
@@ -8,7 +8,17 @@ open ToolUp.Platform.FileManagement
 open DataManagementTypes
 open ProcessedDataTypes
 
-// ─── Phase 6p — session-store reset contract pack ───────────────
+// ─── Phase 6p — session-store reset transition ──────────────────
+//
+// Deliberately NOT under `Contracts/` and NOT named `*Contract.fs`:
+// that naming declares a PARAMETRISED portability pack over an
+// interface, which the conformance-coverage ratchet then expects two
+// implementations to bind (GP 12 — a portable interface is unproven
+// until a second implementation runs the same pack). This is neither.
+// It has one concrete subject — the shipped `FileManagement` store
+// registry — and there is no seam here for a second implementation to
+// occupy. It sits beside `FileManagementTests`, which tests the same
+// module the same way.
 //
 // The server half of the reconciliation: a `SessionFileStore` carries an
 // epoch that changes when the store instance does, and an
