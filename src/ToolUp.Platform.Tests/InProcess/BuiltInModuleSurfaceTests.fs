@@ -363,9 +363,10 @@ let visibilityTests =
                 "TeamConfigUI", TeamConfigUI.create None
                 "FileManagerUI", FileManagerUI.create [] None
                 "DataSubjectRequestAdminUI", DataSubjectRequestAdminUI.create None
+                "NotificationPreferencesUI", NotificationPreferencesUI.create None
             ]
 
-            Expect.equal (List.length builtIns) 11 "eleven Platform.Client built-ins pinned"
+            Expect.equal (List.length builtIns) 12 "twelve Platform.Client built-ins pinned"
 
             for (label, m) in builtIns do
                 Expect.isFalse (m.Visibility AnonymousKind) (sprintf "%s must hide from AnonymousKind" label)
