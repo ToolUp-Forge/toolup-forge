@@ -60,7 +60,14 @@ let private scopeIdFor (ctx: AccessContext) : string =
 /// — emission is best-effort: a `Record` failure must never fail the
 /// AI call.
 type private MeteringProvider
-    (inner: IAIProvider, usageLog: IUsageLog, scopeId: string, userId: string, origin: ProviderOrigin) =
+    (
+        inner: IAIProvider,
+        usageLog: IUsageLog,
+        scopeId: string,
+        userId: string,
+        origin: ProviderOrigin,
+        priceTable: ModelPriceTable option
+    ) =
 
     // Phase 498 — read `inner.Capabilities` PER EMISSION, not once at
     // construction. `emit` runs after `inner.SendMessage` has returned,
@@ -78,14 +85,14 @@ type private MeteringProvider
 
         Map.ofList (baseEntries @ extra)
 
-    let emit (kind: string) (qty: decimal) (extra: (string * string) list) = async {
+    let emitUnit (kind: string) (unit': string) (qty: decimal) (extra: (string * string) list) = async {
         try
             let record = {
                 RecordId = Guid.NewGuid()
                 ScopeId = scopeId
                 ResourceKind = kind
                 Quantity = qty
-                Unit = "tokens"
+                Unit = unit'
                 Origin = Some origin
                 Metadata = buildMetadata extra
                 Timestamp = DateTime.UtcNow
@@ -97,6 +104,52 @@ type private MeteringProvider
             // self-protect, but a thrown exception here must never
             // fail the AI call.
             ()
+    }
+
+    let emit (kind: string) (qty: decimal) (extra: (string * string) list) = emitUnit kind "tokens" qty extra
+
+    // Phase 499.C — the post-call true-up. The turn's ACTUAL reported
+    // `TokenUsage` is priced through the registered rate card and
+    // written as a third `UsageRecord` beside the two token records,
+    // `Unit` carrying the operator's currency tag. Additive in both
+    // senses that matter: `UsageRecord` is unchanged (the kind string
+    // is open by design), and a deployment with no rate card — or a
+    // turn on a model the rate card does not price — emits exactly the
+    // two records it always did (GP 11).
+    //
+    // `inner.Capabilities` is read here, after the call returned, for
+    // the Phase 498 reason `buildMetadata` reads it here: on a failover
+    // chain the entry that SERVED the turn is what must be priced, and
+    // a construction-time snapshot would bill the primary's rates for
+    // the secondary's tokens.
+    let emitCost (usage: TokenUsage) = async {
+        match priceTable with
+        | None -> ()
+        | Some table ->
+            let caps = inner.Capabilities
+
+            let priced =
+                table
+                |> ModelPriceTable.tryCost
+                    caps.ProviderName
+                    caps.Model
+                    usage.PromptTokens
+                    usage.CachedPromptTokens
+                    usage.OutputTokens
+                    (usage.CacheCreationTokens |> Option.defaultValue 0)
+
+            match priced with
+            | None ->
+                // Unpriced model — count-only. The token records above
+                // still went out; inventing a cost here would put a
+                // number nobody chose into the ledger an operator bills
+                // from.
+                ()
+            | Some amount ->
+                do!
+                    emitUnit AISpendResourceKind.cost table.Currency amount [
+                        "price_key", ModelPriceTable.key caps.ProviderName caps.Model
+                    ]
     }
 
     interface IAIProvider with
@@ -112,6 +165,7 @@ type private MeteringProvider
                     let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
                     do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) cachedExtra
                     do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) []
+                    do! emitCost usage
                 | None ->
                     // Provider couldn't extract usage (transient parse
                     // failure or streaming early-exit). Skip emission
@@ -136,6 +190,7 @@ type private MeteringProvider
                     let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
                     do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) cachedExtra
                     do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) []
+                    do! emitCost usage
                 | None -> ()
             | Error _ -> ()
 
@@ -147,7 +202,26 @@ type private MeteringProvider
 /// and `TryResolveByLabel` (settings-UI catalogue + diagnostic
 /// test-connection flow) intentionally do NOT meter — those are
 /// admin / catalogue calls, not user-attributable AI usage.
-type MeteringProviderFactory(inner: IAIProviderFactory, usageLog: IUsageLog, providerProfile: IProviderProfile) =
+type MeteringProviderFactory
+    (
+        inner: IAIProviderFactory,
+        usageLog: IUsageLog,
+        providerProfile: IProviderProfile,
+        priceTable: ModelPriceTable option
+    ) =
+
+    /// Phase 499 — the pre-499 three-argument shape, preserved as an
+    /// EXPLICIT secondary constructor rather than folded into an
+    /// optional parameter.
+    ///
+    /// An `?priceTable` would collapse both into one widened ctor and
+    /// the three-argument token would disappear from the public-API
+    /// baseline, which the approval gate scores as a REMOVAL — a
+    /// genuine break, not a false positive. This keeps the diff purely
+    /// additive and leaves every existing call site compiling
+    /// byte-for-byte (GP 11).
+    new(inner: IAIProviderFactory, usageLog: IUsageLog, providerProfile: IProviderProfile) =
+        MeteringProviderFactory(inner, usageLog, providerProfile, None)
 
     interface IAIProviderFactory with
         member _.Available = inner.Available
@@ -162,7 +236,10 @@ type MeteringProviderFactory(inner: IAIProviderFactory, usageLog: IUsageLog, pro
             | Ok provider ->
                 let! origin = originFor providerProfile ctx
                 let scopeId = scopeIdFor ctx
-                let metered = MeteringProvider(provider, usageLog, scopeId, ctx.UserId, origin)
+
+                let metered =
+                    MeteringProvider(provider, usageLog, scopeId, ctx.UserId, origin, priceTable)
+
                 return Ok(metered :> IAIProvider)
         }
 
@@ -355,6 +432,147 @@ type BudgetEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudge
         member _.BuildPlatform(providerId, apiKey, model) =
             inner.BuildPlatform(providerId, apiKey, model)
 
+// ─── Phase 499 — monetary spend-budget enforcement decorator ─────
+//
+// The third window in the one chain. `QuotaEnforcingProvider` asks
+// "has this TEAM spent its day / month of tokens"; Phase 9s's
+// `BudgetEnforcingProvider` asks "has this MEMBER spent their hour of
+// tokens"; this asks "has either of them spent their MONEY". Three
+// windows, three ceilings, one decorator chain — which is what keeps
+// the refusal ordering, the error shape and the "never send a call we
+// are about to refuse" property shared between them instead of
+// reinvented three times.
+//
+// **Stacked OUTSIDE both token gates**, so money is checked first. The
+// Phase 689 ordering rule is to report the cheapest, most-immediate
+// ceiling first, and a monetary ceiling is the one an operator
+// actually set deliberately: a token window is a proxy for cost, this
+// IS cost. It is also the ceiling whose breach a user can do least
+// about, so naming it first keeps the refusal honest rather than
+// telling them to wait an hour for a window that is not what stopped
+// them.
+//
+// **The refusal is `PermanentClient(429)`, the same shape both token
+// gates use**, because that is what the agent loop classifies as
+// catastrophic-no-retry and surfaces via `AIProviderError.toMessage`
+// as an `AITaskFailed`. Phase 499.D's requirement that the monetary
+// refusal be DISTINCT from token-quota exhaustion is met exactly as
+// the Phase 689 substrate note prescribes — by the `Domain` /
+// `Dimension` labels on the denial and by the message, not by a second
+// error type. A new `AIProviderError` case would be a DU-case addition
+// to a wire contract with exhaustive matches across the estate, bought
+// for a cosmetic difference.
+
+/// Pre-call monetary gate. Prices the request through the operator's
+/// rate card, consults `AISpendEnforcer`; on a Phase 689 `Refused`
+/// verdict the provider is never invoked and the refusal has already
+/// been recorded as an `AISpendBudgetExceeded` event.
+///
+/// **Reads `inner.Capabilities` PER CALL, never at construction**
+/// (Phase 498): when `inner` is the failover composite, the entry that
+/// will serve this turn can differ from the one that served the last,
+/// and pricing the wrong model is a silent billing error rather than a
+/// visible failure.
+type private SpendEnforcingProvider
+    (inner: IAIProvider, enforcer: AIBudgetEnforcer.AISpendEnforcer, scopeId: string, userId: string) =
+
+    /// The pre-call cost estimate, in the rate card's currency.
+    ///
+    /// Conservative by construction, in the two places it can be:
+    /// input is Phase 9d's advisory character estimator (reused rather
+    /// than re-derived — two budgets disagreeing about what a request
+    /// "asks for" would be a defect nobody could explain), and it
+    /// assumes NO cache hit, so the whole prompt is charged at the
+    /// dearer fresh-input rate. Output cannot be known before the model
+    /// writes it, so it is charged at
+    /// `AIBudgetEnforcer.AssumedOutputTokens`.
+    ///
+    /// An unpriced `(provider, model)` estimates `0M` — count-only,
+    /// never a guessed rate and never a block (GP 11).
+    let estimate (messages: AIProviderMessage list) : decimal =
+        let caps = inner.Capabilities
+
+        let promptTokens =
+            messages
+            |> List.map (fun m -> (m.Role, m.Content))
+            |> TeamQuotaPolicy.RequestTokenEstimator.estimateMessages
+
+        enforcer.PriceTable
+        |> ModelPriceTable.tryCost
+            caps.ProviderName
+            caps.Model
+            (int (ceil promptTokens))
+            0
+            AIBudgetEnforcer.AssumedOutputTokens
+            0
+        |> Option.defaultValue 0M
+
+    let refusal (denial: BudgetDenial) (policy: AISpendBudgetPolicy) =
+        let windowLabel =
+            let budget =
+                if denial.Dimension = AISpendBudgetPolicy.PerScopeDimension then
+                    policy.PerScope
+                else
+                    policy.PerUser
+
+            budget
+            |> Option.map _.Period
+            |> Option.defaultValue AISpendBudgetPolicy.defaultPeriod
+            |> BudgetPeriod.label
+
+        Error(PermanentClient(429, AISpendBudgetExceeded.message enforcer.PriceTable.Currency windowLabel denial))
+
+    /// Run the gate, then the inner call. `NearLimit` proceeds — it is
+    /// a leading indicator, not a refusal, and the account has already
+    /// recorded it.
+    let gated (messages: AIProviderMessage list) (proceed: unit -> Async<Result<AIProviderResponse, AIProviderError>>) = async {
+        let! verdict = enforcer.Check(scopeId, userId, estimate messages)
+
+        match verdict with
+        | BudgetVerdict.Refused denial ->
+            let! policy = enforcer.ReadPolicy scopeId
+            return refusal denial policy
+        | BudgetVerdict.Allowed
+        | BudgetVerdict.NearLimit _ -> return! proceed ()
+    }
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            gated messages (fun () -> inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
+
+        // Structured output is gated identically: it spends the same
+        // provider budget out of the same window.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            gated messages (fun () -> inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
+
+/// Wraps an `IAIProviderFactory` so every `Resolve`-d provider is gated
+/// by the caller's monetary budget. `TryResolveByLabel` is forwarded
+/// ungated, exactly as the metering and both token wrappers forward it
+/// — an admin test-connection call is not user-attributable spend.
+type SpendEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudgetEnforcer.AISpendEnforcer) =
+
+    interface IAIProviderFactory with
+        member _.Available = inner.Available
+        member _.PlatformDescriptors = inner.PlatformDescriptors
+        member _.PlatformDescriptor = inner.PlatformDescriptor
+
+        member _.Resolve(ctx) = async {
+            let! resolved = inner.Resolve(ctx)
+
+            match resolved with
+            | Error e -> return Error e
+            | Ok provider ->
+                let scopeId = scopeIdFor ctx
+                return Ok(SpendEnforcingProvider(provider, enforcer, scopeId, ctx.UserId) :> IAIProvider)
+        }
+
+        member _.TryResolveByLabel(ctx, label) = inner.TryResolveByLabel(ctx, label)
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)
+
 // ─── DI composition helper ───────────────────────────────────────
 //
 // Both `AICompose.composeAI` and `RAGCompose.composeRAG` need the
@@ -483,13 +701,24 @@ let wrapFactoryForDI
         let failoverAware =
             DefaultAIProviderFactory.withFailoverChain providerProfile (failoverSink sp) rawFactory
 
+        // Phase 499. The operator's rate card, supplied through the
+        // documented `ComposeExtensions.ServiceConfig` seam. `None` on
+        // every deployment that registers none, which is what makes
+        // both halves of this phase cost nothing when uncomposed (GP
+        // 11 / GP 13): no cost record on the metering path below, and
+        // no spend decorator at the bottom of this function.
+        let priceTable =
+            match sp.GetService(typeof<ModelPriceTable>) with
+            | :? ModelPriceTable as table -> Some table
+            | _ -> None
+
         let baseFactory =
             match config.UsageMetering with
             | NoUsageMetering -> failoverAware
             | EnabledUsageMetering ->
                 let usageLog = sp.GetService(typeof<IUsageLog>) :?> IUsageLog
 
-                MeteringProviderFactory(failoverAware, usageLog, providerProfile) :> IAIProviderFactory
+                MeteringProviderFactory(failoverAware, usageLog, providerProfile, priceTable) :> IAIProviderFactory
 
         let quotaGated =
             match sp.GetService(typeof<ITeamQuotaPolicy>) with
@@ -509,22 +738,75 @@ let wrapFactoryForDI
         // cannot read its policy would refuse everything or allow
         // everything, and the honest form of "I cannot enforce this" is
         // not to compose the enforcement.
+        let tokenBudgetGated =
+            match
+                sp.GetService(typeof<AIBudgetEnforcer.AIBudgetWindowCache>),
+                sp.GetService(typeof<IConfigStore>),
+                sp.GetService(typeof<IEventStore>)
+            with
+            | (:? AIBudgetEnforcer.AIBudgetWindowCache as cache),
+              (:? IConfigStore as configStore),
+              (:? IEventStore as eventStore) ->
+                let enforcer =
+                    AIBudgetEnforcer.AIBudgetEnforcer(
+                        configStore,
+                        eventStore,
+                        cache,
+                        AIBudgetEnforcer.eventStoreAccount eventStore (fun () -> DateTime.UtcNow),
+                        fun () -> DateTime.UtcNow
+                    )
+
+                BudgetEnforcingProviderFactory(quotaGated, enforcer) :> IAIProviderFactory
+            | _ -> quotaGated
+
+        // Phase 499. The presence of the `ModelPriceTable` singleton IS
+        // the composition gate, exactly as `AIBudgetWindowCache`'s
+        // presence is 9s's: an operator registers a rate card through
+        // `ComposeExtensions.ServiceConfig`, and a deployment that
+        // registers none resolves the object graph it always did — no
+        // decorator, no config read, no allocation (GP 11 / GP 13).
+        //
+        // The config and event stores are required alongside it and
+        // their absence is treated the same way rather than as an
+        // error, for the reason 9s gives: the honest form of "I cannot
+        // enforce this" is not to compose the enforcement.
+        //
+        // NOT gated on team scope, unlike 9s. A per-USER TOKEN window
+        // inside a per-SCOPE budget is meaningless when the scope IS
+        // the user, which is why 9s gates; a monetary ceiling is not —
+        // "this individual deployment may spend 5.00 a day" is a
+        // budget an operator plainly wants, and the per-user and
+        // per-scope ceilings simply measure the same figure against
+        // two independently-configurable ceilings there.
+        //
+        // The spend gate stacks OUTERMOST, so money is evaluated
+        // before either token window. See the decorator's own header.
         match
-            sp.GetService(typeof<AIBudgetEnforcer.AIBudgetWindowCache>),
+            sp.GetService(typeof<ModelPriceTable>),
             sp.GetService(typeof<IConfigStore>),
             sp.GetService(typeof<IEventStore>)
         with
-        | (:? AIBudgetEnforcer.AIBudgetWindowCache as cache),
-          (:? IConfigStore as configStore),
-          (:? IEventStore as eventStore) ->
-            let enforcer =
-                AIBudgetEnforcer.AIBudgetEnforcer(
+        | (:? ModelPriceTable as table), (:? IConfigStore as configStore), (:? IEventStore as eventStore) ->
+            let spendCache =
+                match sp.GetService(typeof<AIBudgetEnforcer.AISpendWindowCache>) with
+                | :? AIBudgetEnforcer.AISpendWindowCache as c -> c
+                | _ -> AIBudgetEnforcer.AISpendWindowCache()
+
+            let warn =
+                match sp.GetService(typeof<ILogger>) with
+                | :? ILogger as logger -> fun (message: string) -> logger.Warn message
+                | _ -> ignore
+
+            let spendEnforcer =
+                AIBudgetEnforcer.AISpendEnforcer(
                     configStore,
                     eventStore,
-                    cache,
-                    AIBudgetEnforcer.eventStoreAccount eventStore (fun () -> DateTime.UtcNow),
+                    table,
+                    spendCache,
+                    AIBudgetEnforcer.spendEventStoreAccount eventStore table.Currency (fun () -> DateTime.UtcNow),
+                    warn,
                     fun () -> DateTime.UtcNow
                 )
 
-            BudgetEnforcingProviderFactory(quotaGated, enforcer) :> IAIProviderFactory
-        | _ -> quotaGated)
+            SpendEnforcingProviderFactory(tokenBudgetGated, spendEnforcer) :> IAIProviderFactory
+        | _ -> tokenBudgetGated)

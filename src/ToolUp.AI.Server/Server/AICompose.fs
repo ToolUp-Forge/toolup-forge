@@ -384,6 +384,40 @@ let composeAI (app: AIServerApp) : ServerApp =
             else
                 s
 
+        // Phase 499 — the monetary spend budget's shared window cache
+        // and its `/dev/inspect` panel.
+        //
+        // NOT gated on team scope, unlike Phase 9s above: a monetary
+        // ceiling on an Individual deployment ("this install may spend
+        // 5.00 a day") is a budget an operator plainly wants, whereas a
+        // per-USER TOKEN window inside a per-SCOPE budget is meaningless
+        // when the scope IS the user.
+        //
+        // Both registrations are LAZY and cost nothing at composition
+        // (GP 13): `AddSingleton<T>()` registers a type rather than an
+        // instance, so the cache is constructed on first resolution —
+        // which `wrapFactoryForDI` only reaches inside the branch where
+        // a `ModelPriceTable` was registered — and the contributor's
+        // factory delegate runs only when `/dev/inspect` enumerates
+        // contributors. A deployment with no rate card therefore
+        // allocates neither, and the panel it would show if asked says
+        // exactly that.
+        let s =
+            s
+                .AddSingleton<AIBudgetEnforcer.AISpendWindowCache>()
+                .AddSingleton<IDevDiagnosticsContributor>(fun (sp: System.IServiceProvider) ->
+                    let table =
+                        match sp.GetService(typeof<ModelPriceTable>) with
+                        | :? ModelPriceTable as t -> Some t
+                        | _ -> None
+
+                    AIBudgetEnforcer.AISpendBudgetContributor(
+                        sp.GetService(typeof<AIBudgetEnforcer.AISpendWindowCache>)
+                        :?> AIBudgetEnforcer.AISpendWindowCache,
+                        table
+                    )
+                    :> IDevDiagnosticsContributor)
+
         // Phase 9d (usage metering) + Phase 9 compute-quota. The
         // delegate factory resolves `IUsageLog` and `ITeamQuotaPolicy`
         // from DI per request and stacks the wrappers over the
