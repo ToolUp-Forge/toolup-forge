@@ -773,7 +773,13 @@ let private SurfaceRouting
                         EntryLabel = v
                     })
             prop.children [
-                Html.option [ prop.value ""; prop.text msgs.NoRoute ]
+                // `yield` is load-bearing, not noise. A list that mixes a
+                // plain element with a `for` comprehension is a sequence
+                // expression, so the plain element is a STATEMENT and its
+                // value is discarded — the "None" option simply vanished
+                // from the emitted picker, leaving no way to clear a
+                // route. Fable's FS0020 is what caught it.
+                yield Html.option [ prop.value ""; prop.text msgs.NoRoute ]
                 for entry in entries -> Html.option [ prop.value entry.Label; prop.text entry.Label ]
             ]
         ]
