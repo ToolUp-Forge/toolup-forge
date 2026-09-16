@@ -272,6 +272,10 @@ let private registeredTests =
         // recovery path is observable (Warn + OverCapRecoveryCount).
         IdempotencyStoreEvictionTests.tests
         AuditBodyDisposalTests.tests
+        // Phase 461 — the request-body rewind invariant is structural: a
+        // NEW post-dispatch stage reads the full body with no guard, and a
+        // foreign-disposed body is a typed 500 + log + telemetry record.
+        PostDispatchBodyReadTests.tests
         StreamingTests.tests
         // Phase 727 — the same question 335 answered for the auth
         // classifier, asked of the four families riding alongside it:
