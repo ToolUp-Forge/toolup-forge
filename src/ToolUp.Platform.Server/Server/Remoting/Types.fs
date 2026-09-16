@@ -369,6 +369,46 @@ type IAuditEmitter =
 type MultipartCapExceededException(message: string) =
     inherit System.Exception(message)
 
+/// Phase 461 — typed exception raised when a dispatcher request-body read
+/// finds `ctx.Request.Body` ALREADY DISPOSED.
+///
+/// The dispatcher only ever BORROWS the buffered request body: it calls
+/// `EnableBuffering` once, reads and rewinds, and leaves disposal to
+/// ASP.NET Core at end-of-request. So a disposed body means something
+/// composed AROUND the remoting handler — a consumer middleware, a wrapping
+/// handler — took ownership of the stream early. The raw
+/// `ObjectDisposedException` ("Cannot access a disposed object. Object
+/// name: 'FileBufferingReadStream'") says nothing about which method,
+/// which stage, or what the client saw; this carries all three.
+///
+/// `ResponseHadStarted` is the diagnostic that matters: `false` means the
+/// fault surfaced as an ordinary 500 through the host's error handling;
+/// `true` means the response was already streaming, the host could not
+/// run an error handler, the connection was reset, and a gateway reported
+/// a 502 over a handler that had already succeeded — the "success-but-502"
+/// shape. The dispatcher logs this through the diagnostics logger and
+/// records it on the telemetry seam as a `MethodOutcome.Failed`, so the
+/// shape is diagnosable from a dashboard rather than a packet trace.
+type RequestBodyDisposedException(methodName: string, responseHadStarted: bool, inner: exn) =
+    inherit
+        System.Exception(
+            sprintf
+                "%s: request-body-disposed: ctx.Request.Body was disposed before the dispatcher read it (%s). The dispatcher only borrows the buffered body and ASP.NET Core disposes it at end-of-request, so something composed around the remoting handler disposed it early — check any middleware or wrapping handler that takes the request stream in a `use`."
+                methodName
+                (if responseHadStarted then
+                     "the response had already started — the client saw a connection reset, not this message"
+                 else
+                     "the response had not started — surfaced as a 500"),
+            inner
+        )
+
+    /// The method the request was dispatching to when the read failed.
+    member _.MethodName: string = methodName
+
+    /// `true` when the response had already started at the moment of the
+    /// failed read — the client saw a reset rather than a 500.
+    member _.ResponseHadStarted: bool = responseHadStarted
+
 /// Phase 69f — captured response shape stored against an idempotency
 /// key + replayed on subsequent calls with the same key. Body is the
 /// already-serialised bytes the original call produced; status + content

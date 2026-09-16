@@ -805,15 +805,32 @@ module GiraffeUtil =
                     // The non-streaming branch continues with body buffering
                     // + the pre-flight chain.
 
-                    // 0.1.15 — unconditional buffering on the non-streaming
-                    // branch. ASP.NET only allocates the buffer when the body
-                    // is read more than once, so the cost is zero for the
+                    // Phase 461 — THE single pre-dispatch buffering stage.
+                    // This one call is what makes the request body
+                    // rewindable for everything that follows: the
+                    // pre-flight reads, the proxy's argument read, and any
+                    // stage that reads the body AFTER dispatch — the
+                    // dispatcher's own (audit payload, idempotency hash) or
+                    // one a consumer composes around the handler. The
+                    // `FileBufferingReadStream` it installs is owned by
+                    // ASP.NET Core (registered for disposal at
+                    // end-of-request); nothing in the dispatcher disposes
+                    // it — the proxy reads it with `leaveOpen` and rewinds
+                    // (Proxy.fs, the `InputBytes = None` arm). Until 461
+                    // the proxy DID dispose it, and the rule "seed the body
+                    // cache before dispatch" lived in a comment plus one
+                    // guard per known consumer; now a post-dispatch reader
+                    // needs no guard and no comment.
+                    // `PostDispatchBodyReadTests` is the contract.
+                    //
+                    // 0.1.15 — unconditional on the non-streaming branch.
+                    // ASP.NET only allocates the buffer when the body is
+                    // read more than once, so the cost is zero for the
                     // common single-read path AND every downstream stage
-                    // (validation, audit emission, body-hash for idempotency,
-                    // the proxy's own read) is freed from the
-                    // "did EnableBuffering get called upstream?" hazard that
-                    // caused audit emission to silently break when
-                    // `BodyNormalisation = Disabled` in 0.1.14.
+                    // is freed from the "did EnableBuffering get called
+                    // upstream?" hazard that caused audit emission to
+                    // silently break when `BodyNormalisation = Disabled`
+                    // in 0.1.14.
                     //
                     // TIDY-UP "ToolUp.Remoting per-request cleanups" (F7) —
                     // this is the ONLY EnableBuffering call on the non-streaming
@@ -826,44 +843,101 @@ module GiraffeUtil =
                     if isProxyHeaderPresent && options.BodyNormalisation = Enabled then
                         do! normaliseRemotingBody ctx
 
+                    // The method name is the trailing path segment (Phase
+                    // 69b.C path). Computed once, up here, because the body
+                    // cache below names it on a fault (Phase 461.D) and
+                    // every pre-flight stage after it keys on it.
+                    let endpointName = SubRouting.getNextPartOfPath ctx
+
+                    let methodNameForAuth =
+                        let lastSlash = endpointName.LastIndexOf '/'
+
+                        if lastSlash >= 0 then
+                            endpointName.Substring(lastSlash + 1)
+                        else
+                            endpointName
+
                     // 0.1.16 — lazy body cache built on a shared bytes
                     // cell. Materialised once on first downstream demand,
                     // then text + hash derive from the cached bytes
-                    // without re-reading ctx.Request.Body (which the
-                    // proxy's StreamReader will dispose later in the
-                    // pipeline). The 0.1.15 fix read the body
-                    // unconditionally for every non-streaming request
-                    // even when no downstream stage needed it, costing
-                    // ~32 MiB peak on the recommended multipart upload
-                    // composition. Now: lazy AND survives the proxy's
-                    // body disposal.
+                    // without re-reading ctx.Request.Body. The 0.1.15 fix
+                    // read the body unconditionally for every non-streaming
+                    // request even when no downstream stage needed it,
+                    // costing ~32 MiB peak on the recommended multipart
+                    // upload composition — which is why Phase 461 did NOT
+                    // make this eager: the body stays lazy, and the stream
+                    // it reads stays alive (see the buffering stage above).
                     let cachedBodyBytesCell: byte[] option ref = ref None
                     let cachedBodyTextCell: string option ref = ref None
                     let cachedBodyHashCell: string option ref = ref None
 
-                    // INVARIANT: if a POST-DISPATCH stage calls this (audit
-                    // payload, error categorisation), the cache MUST already be
-                    // seeded by a PRE-DISPATCH eager-materialise on the same
-                    // method — because the proxy disposes ctx.Request.Body
-                    // (see the LOAD-BEARING note at Proxy.fs `new StreamReader`).
-                    // A first read here after dispatch hits a disposed
-                    // FileBufferingReadStream → ObjectDisposedException after the
-                    // response started → connection reset → gateway 502 on a
-                    // handler that actually succeeded. The idempotency and audit
-                    // stages each add their own pre-dispatch seed guard; any new
-                    // post-dispatch body reader must do the same.
+                    // Phase 461.D — a timestamp for the cold-path telemetry
+                    // event below; taken only when a sink is composed so the
+                    // hot path pays nothing (GP 13).
+                    let bodyCacheClock =
+                        if options.Telemetry.IsSome then
+                            System.Diagnostics.Stopwatch.GetTimestamp()
+                        else
+                            0L
+
+                    // Safe to call from ANY stage, before or after dispatch:
+                    // the stream it reads is the buffered body the stage
+                    // above installed, which nothing in the dispatcher
+                    // disposes (Phase 461). A post-dispatch first read is a
+                    // seek-to-0 copy of the buffer, not a fault.
                     let readCachedBodyBytes () = task {
                         match cachedBodyBytesCell.Value with
                         | Some bytes -> return bytes
                         | None ->
-                            ctx.Request.Body.Position <- 0L
+                            try
+                                ctx.Request.Body.Position <- 0L
 
-                            use ms = new System.IO.MemoryStream()
-                            do! ctx.Request.Body.CopyToAsync ms
-                            ctx.Request.Body.Position <- 0L
-                            let bytes = ms.ToArray()
-                            cachedBodyBytesCell.Value <- Some bytes
-                            return bytes
+                                use ms = new System.IO.MemoryStream()
+                                do! ctx.Request.Body.CopyToAsync ms
+                                ctx.Request.Body.Position <- 0L
+                                let bytes = ms.ToArray()
+                                cachedBodyBytesCell.Value <- Some bytes
+                                return bytes
+                            with :? System.ObjectDisposedException as disposed ->
+                                // Phase 461.D — the body was disposed by
+                                // something composed AROUND the handler (the
+                                // dispatcher never disposes it). Translate the
+                                // bare "Cannot access a disposed object" into a
+                                // fault that names the method and whether the
+                                // response had started, log it, record it on
+                                // the telemetry seam as a `Failed` outcome, and
+                                // rethrow. Before the first byte that is an
+                                // ordinary 500 through the host's error
+                                // handling; after it the connection resets
+                                // regardless — and the log line + telemetry
+                                // record are then the only evidence the
+                                // "handler succeeded, client saw 502" shape
+                                // leaves behind.
+                                let fault =
+                                    RequestBodyDisposedException(methodNameForAuth, ctx.Response.HasStarted, disposed)
+
+                                options.DiagnosticsLogger
+                                |> Option.iter (fun log -> log (sprintf "ToolUp.Remoting: %s" fault.Message))
+
+                                let telemetryActive =
+                                    options.Telemetry.IsSome
+                                    && (match options.TelemetryGate with
+                                        | Some gate -> gate ()
+                                        | None -> true)
+
+                                if telemetryActive then
+                                    options.Telemetry.Value.OnMethodCompleted {
+                                        MethodName = methodNameForAuth
+                                        ElapsedMs =
+                                            int
+                                                (System.Diagnostics.Stopwatch.GetElapsedTime bodyCacheClock)
+                                                    .TotalMilliseconds
+                                        Outcome = MethodOutcome.Failed fault
+                                        CorrelationId = Some correlationId
+                                        ChunkCount = None
+                                    }
+
+                                return raise fault
                     }
 
                     let readCachedBodyText () = task {
@@ -895,7 +969,7 @@ module GiraffeUtil =
 
                     let props = {
                         ImplementationBuilder = fun _ -> implBuilder ctx
-                        EndpointName = SubRouting.getNextPartOfPath ctx
+                        EndpointName = endpointName
                         Input = ctx.Request.Body
                         // Phase 69m — populated just before `proxy props` is
                         // invoked (below, after the pre-flight chain). When an
@@ -917,14 +991,12 @@ module GiraffeUtil =
                     // Phase 69d — auth pre-flight. Lookup the method's classification,
                     // optionally resolve the auth context, evaluate, deny if needed.
                     //
-                    // The methodName below is the trailing path segment (Phase 69b.C
-                    // path). For the deny path we emit a categorised envelope via the
-                    // 69b.E path; no telemetry is emitted on auth deny (the contract
-                    // is per-method-completion — auth denial precedes method invocation).
-                    let methodNameForAuth =
-                        let p = props.EndpointName
-                        let lastSlash = p.LastIndexOf '/'
-                        if lastSlash >= 0 then p.Substring(lastSlash + 1) else p
+                    // `methodNameForAuth` is the trailing path segment (Phase 69b.C
+                    // path), computed above the body cache. For the deny path we emit
+                    // a categorised envelope via the 69b.E path; no telemetry is
+                    // emitted on auth deny (the contract is per-method-completion —
+                    // auth denial precedes method invocation).
+                    //
                     // Auth pre-flight runs only when an AuthContextResolver is
                     // composed. Without one, every method is allowed (matches
                     // pre-69d behaviour for consumers who haven't opted in).
@@ -1165,43 +1237,34 @@ module GiraffeUtil =
                             // both fully handle the response before yielding to `next`.
                             let idempotencyArmed = isMethodIdempotent && options.IdempotencyStore.IsSome
 
-                            // 0.1.16 — force-materialise the body bytes
-                            // eagerly when idempotency is armed for this
-                            // method. The proxy's StreamReader disposes
-                            // ctx.Request.Body after dispatch, so the
-                            // store-path's body-hash lookup would fail
-                            // with `ObjectDisposedException` if we
-                            // waited until then. The lazy cache is still
-                            // useful for non-idempotent methods (where
-                            // validation / audit may not run at all) and
-                            // for idempotent methods this just pulls the
-                            // materialisation forward by a few lines.
-                            if idempotencyArmed && idempotencyKey.IsSome then
-                                let! _ = readCachedBodyBytes ()
-                                ()
+                            // Phase 461 — ONE prefetch, and it is an
+                            // OPTIMISATION, not a correctness guard. When a
+                            // post-dispatch consumer is known to need the
+                            // body bytes — the idempotency store path (the
+                            // response's `RequestBodyHash`) or the audit
+                            // payload on an audited method that validation
+                            // will not already have read — materialise them
+                            // once HERE so the proxy parses from the same
+                            // bytes (the Phase 69m `InputBytes` fastpath)
+                            // instead of the body crossing the stream
+                            // boundary twice. Deleting this line changes
+                            // cost, never correctness: the buffered stream
+                            // stays alive past dispatch (see the buffering
+                            // stage above), so a post-dispatch read that
+                            // was NOT prefetched is a seek-to-0 copy, not a
+                            // disposed-stream fault. Until 461 the two
+                            // halves of this condition were two guards
+                            // (0.1.16 idempotency; Phase 69h audit), each
+                            // load-bearing for correctness because the
+                            // proxy disposed the stream, and each a rule the
+                            // next consumer's author had to know about.
+                            let postDispatchBodyConsumerArmed =
+                                (idempotencyArmed && idempotencyKey.IsSome)
+                                || (options.AuditEmitter.IsSome
+                                    && auditInputTypes.ContainsKey methodNameForAuth
+                                    && not (validationInputTypes.ContainsKey methodNameForAuth))
 
-                            // Same eager-materialise for the Phase 69h audit
-                            // payload path. The audit emission below (after the
-                            // proxy dispatches) reads the cached body to build
-                            // the input-record snapshot — but the proxy's
-                            // StreamReader disposes ctx.Request.Body after
-                            // dispatch. A method that is audited AND carries an
-                            // input type BUT is not validated (validation is the
-                            // only other stage that seeds the cache up-front,
-                            // line ~774) would otherwise hit the disposed
-                            // FileBufferingReadStream on that first read and throw
-                            // ObjectDisposedException. Because the response has
-                            // already started by then, the error handler can't
-                            // run and the connection is reset — surfacing as a
-                            // 502 at the gateway even though the handler
-                            // succeeded (e.g. TeamApi.CreateTeamWithOwner). Pull
-                            // the materialisation forward, exactly as the
-                            // idempotency guard above does.
-                            if
-                                options.AuditEmitter.IsSome
-                                && auditInputTypes.ContainsKey methodNameForAuth
-                                && not (validationInputTypes.ContainsKey methodNameForAuth)
-                            then
+                            if postDispatchBodyConsumerArmed then
                                 let! _ = readCachedBodyBytes ()
                                 ()
 

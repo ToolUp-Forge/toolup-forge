@@ -10653,6 +10653,10 @@ ToolUp.Remoting.Server.RemotingOptions`2.SchemaVersion : System.Int32 { get }
 ToolUp.Remoting.Server.RemotingOptions`2.Telemetry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingTelemetry] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.TelemetryGate : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.ValidationMessages : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IValidationMessages] { get }
+ToolUp.Remoting.Server.RequestBodyDisposedException (class)
+ToolUp.Remoting.Server.RequestBodyDisposedException..ctor(System.String, System.Boolean, System.Exception)
+ToolUp.Remoting.Server.RequestBodyDisposedException.MethodName : System.String { get }
+ToolUp.Remoting.Server.RequestBodyDisposedException.ResponseHadStarted : System.Boolean { get }
 ToolUp.Remoting.Server.RequiresClaimAttribute (class)
 ToolUp.Remoting.Server.RequiresClaimAttribute..ctor(System.String)
 ToolUp.Remoting.Server.RequiresClaimAttribute.Claim : System.String { get }

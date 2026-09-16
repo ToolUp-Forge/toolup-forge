@@ -475,25 +475,35 @@ let makeApiProxy<'impl, 'ctx>
                                         // an empty stream read.
                                         return []
                                     | None ->
-                                        // LOAD-BEARING: this `use` disposes
-                                        // `props.Input` (= ctx.Request.Body, a
-                                        // FileBufferingReadStream) when the proxy
-                                        // finishes. Any dispatcher stage that
-                                        // reads the request body AFTER dispatch
-                                        // (audit payload, idempotency hash, …)
-                                        // MUST pre-seed the body cache
-                                        // (`readCachedBodyBytes` in GiraffeAdapter)
-                                        // BEFORE this point — otherwise its
-                                        // post-dispatch read hits a disposed
-                                        // stream and throws ObjectDisposedException
-                                        // after the response has started, which
-                                        // resets the connection and surfaces as a
-                                        // gateway 502 even though the handler
-                                        // succeeded. See the eager-materialise
-                                        // guards in GiraffeAdapter (idempotency +
-                                        // audit) for the established pattern.
-                                        use sr = new StreamReader(props.Input)
+                                        // Phase 461 — the proxy BORROWS
+                                        // `props.Input`; it never owns it.
+                                        // `props.Input` is `ctx.Request.Body`,
+                                        // a buffered `FileBufferingReadStream`
+                                        // whose lifetime belongs to ASP.NET
+                                        // Core (disposed at end-of-request).
+                                        // Until 461 this `use` disposed it the
+                                        // moment dispatch finished, so any
+                                        // post-dispatch reader that was the
+                                        // FIRST to touch the body met a dead
+                                        // stream, threw after the response had
+                                        // started, and the reset surfaced as a
+                                        // gateway 502 over a handler that had
+                                        // succeeded. The rule "seed the cache
+                                        // before dispatch" then lived in a
+                                        // comment here plus a guard per known
+                                        // consumer. Now the invariant is
+                                        // structural: read, leave the stream
+                                        // open, rewind — so a stage registered
+                                        // AFTER dispatch, by an author who never
+                                        // read this, still sees the full body.
+                                        // `PostDispatchBodyReadTests` is the
+                                        // contract; the single buffering stage
+                                        // is the adapter's `EnableBuffering`.
+                                        use sr = new StreamReader(props.Input, Encoding.UTF8, leaveOpen = true)
                                         let! text = sr.ReadToEndAsync()
+
+                                        if props.Input.CanSeek then
+                                            props.Input.Position <- 0L
 
                                         if String.IsNullOrEmpty text then
                                             return []
