@@ -709,6 +709,7 @@ let private registeredTests =
         AIChatWorkerTests.tests
         AITokenBudgetTests.tests
         ConversationReplayStreamTests.tests
+        IngestionStatusStreamTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         // Phase 44 — the IProviderProfileApi transport + the reusable

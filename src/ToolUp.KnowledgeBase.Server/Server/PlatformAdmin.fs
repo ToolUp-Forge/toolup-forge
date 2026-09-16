@@ -76,7 +76,7 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
     let markIngestionFailed (docId: string) (fileName: string) (reason: string) = async {
         let status = IngestionStatus.Failed reason
 
-        statusCache.AddOrUpdate(docId, status, fun _ _ -> status) |> ignore
+        setStatus docId status
 
         let! existing = loadIndex storage platformContainer
 

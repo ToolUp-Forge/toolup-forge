@@ -82,15 +82,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
             if box deps.Queue <> null && not chunks.IsEmpty then
                 let initialStatus = Embedding(0, chunks.Length)
 
-                statusCache.AddOrUpdate(
-                    docId,
-                    initialStatus,
-                    fun _ existing ->
-                        match existing with
-                        | Queued -> initialStatus
-                        | other -> other
-                )
-                |> ignore
+                updateStatus docId initialStatus (fun existing ->
+                    match existing with
+                    | Queued -> initialStatus
+                    | other -> other)
 
                 let chunkPairs =
                     chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
@@ -208,8 +203,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                     if box deps.Queue <> null && not chunks.IsEmpty then
                         let initialStatus = Embedding(0, chunks.Length)
 
-                        statusCache.AddOrUpdate(req.DocId, initialStatus, fun _ _ -> initialStatus)
-                        |> ignore
+                        setStatus req.DocId initialStatus
 
                         let chunkPairs =
                             chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" req.DocId i, chunk)

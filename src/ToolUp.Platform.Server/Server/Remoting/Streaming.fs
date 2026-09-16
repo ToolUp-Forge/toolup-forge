@@ -102,6 +102,76 @@ module AsyncStream =
                 }
         }
 
+    /// Phase 69c.tail D - bridge a SUBSCRIPTION-based producer to an
+    /// `IAsyncEnumerable<'T>`.
+    ///
+    /// `fromCallback` above is for a producer that RUNS - an agent turn, a
+    /// replay - and its stream ends when that run emits its terminal value.
+    /// A subscription has no run: it is a feed that already exists, the
+    /// values arrive from somewhere else entirely, and the thing that has
+    /// to happen when the consumer goes away is that the subscription is
+    /// DISPOSED. `fromCallback` cannot do that - it holds no handle - so a
+    /// feed bridged through it leaks its subscriber on every aborted
+    /// connection, which is precisely the case a streaming endpoint meets
+    /// most: a browser tab closing mid-stream.
+    ///
+    /// `subscribe emit` is called once, at enumeration time, and returns
+    /// the handle for that subscription. Values passed to `emit` are
+    /// yielded in order; a value emitted synchronously from inside
+    /// `subscribe` (seeding the consumer with the feed's current state) is
+    /// yielded first. The stream ends after the first value satisfying
+    /// `isTerminal` - that value IS yielded - and the subscription is
+    /// disposed then, on consumer disposal, and on a `subscribe` that
+    /// throws.
+    ///
+    /// **Contract:** the feed MUST eventually emit a value satisfying
+    /// `isTerminal`, or the consumer MUST dispose. A feed that does
+    /// neither holds the subscription open, exactly as `fromCallback`'s
+    /// contract says of a producer that never emits its terminal.
+    let fromSubscription (isTerminal: 'T -> bool) (subscribe: ('T -> unit) -> IDisposable) : IAsyncEnumerable<'T> =
+        { new IAsyncEnumerable<'T> with
+            member _.GetAsyncEnumerator(ct: System.Threading.CancellationToken) =
+                let channel = Channel.CreateUnbounded<'T>()
+
+                let subscription =
+                    try
+                        subscribe (fun v -> channel.Writer.TryWrite v |> ignore)
+                    with ex ->
+                        // A feed that refuses to subscribe is the stream's
+                        // error, not an exception thrown past the consumer
+                        // out of `GetAsyncEnumerator`.
+                        channel.Writer.TryComplete ex |> ignore
+
+                        { new IDisposable with
+                            member _.Dispose() = ()
+                        }
+
+                let inner = channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator ct
+
+                { new IAsyncEnumerator<'T> with
+                    member _.Current = inner.Current
+
+                    member _.MoveNextAsync() =
+                        ValueTask<bool>(
+                            task {
+                                let! moved = inner.MoveNextAsync()
+
+                                if moved && isTerminal inner.Current then
+                                    channel.Writer.TryComplete() |> ignore
+
+                                return moved
+                            }
+                        )
+
+                    member _.DisposeAsync() =
+                        // The whole reason this bridge exists: the feed is
+                        // told, exactly once, that nobody is listening.
+                        subscription.Dispose()
+                        channel.Writer.TryComplete() |> ignore
+                        inner.DisposeAsync()
+                }
+        }
+
 module internal Streaming =
 
     // Reflect over public AND non-public records so an internal / private

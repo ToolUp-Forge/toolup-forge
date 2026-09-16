@@ -84,7 +84,7 @@ type KnowledgeBaseLifecycle(services: IServiceProvider) =
                     | Error msg -> errors.Add(sprintf "%s: %s" blobName msg)
 
                 for doc in docs do
-                    statusCache.TryRemove doc.Id |> ignore
+                    clearStatus doc.Id
                     progressCache.TryRemove doc.Id |> ignore
 
                 invalidateInventoryCache container

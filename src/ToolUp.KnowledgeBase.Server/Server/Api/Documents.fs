@@ -518,7 +518,7 @@ let private persistAndIngest
 
         // Seed initial cache state. The background extractor flips this to
         // ExtractingText as soon as it starts running.
-        statusCache.AddOrUpdate(docId, Queued, fun _ _ -> Queued) |> ignore
+        setStatus docId Queued
 
         // Spawn extraction off the request path. UploadDocument returns
         // within the time it takes to persist the raw blob (~hundreds of
@@ -533,8 +533,7 @@ let private persistAndIngest
             try
                 let extractingStatus = ExtractingText
 
-                statusCache.AddOrUpdate(docId, extractingStatus, fun _ _ -> extractingStatus)
-                |> ignore
+                setStatus docId extractingStatus
 
                 do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
 
@@ -602,16 +601,11 @@ let private persistAndIngest
                     // Seed the cache; the observer's `AddOrUpdate` won't
                     // overwrite a fresher value (e.g. one already advanced
                     // to Embedding(1, n) by a racing callback).
-                    statusCache.AddOrUpdate(
-                        docId,
-                        initialStatus,
-                        fun _ existing ->
-                            match existing with
-                            | Queued
-                            | ExtractingText -> initialStatus
-                            | other -> other
-                    )
-                    |> ignore
+                    updateStatus docId initialStatus (fun existing ->
+                        match existing with
+                        | Queued
+                        | ExtractingText -> initialStatus
+                        | other -> other)
 
                     do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
 
@@ -658,7 +652,7 @@ let private persistAndIngest
                         // so settle the terminal status here rather than
                         // leaving the document stuck at `Embedding(0, n)`.
                         let terminal = Complete chunks.Length
-                        statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
+                        setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
 
                         deps.Logger.Info(
@@ -746,7 +740,7 @@ let private persistAndIngest
                             else
                                 UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
 
-                    statusCache.AddOrUpdate(docId, terminal, fun _ _ -> terminal) |> ignore
+                    setStatus docId terminal
                     do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
 
                 do! deps.PublishInventory()
@@ -1501,7 +1495,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     | Some hash -> do! (contentHashIndex deps).Remove hash docId
                     | None -> ()
 
-                    statusCache.TryRemove(docId) |> ignore
+                    clearStatus docId
                     // Invalidate the prompt-build inventory cache so the next AI
                     // turn sees the updated document count, not the stale 30-s
                     // cached string.
@@ -1511,7 +1505,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
             | None ->
                 // Unknown id — preserve the pre-115 idempotent shape (the index
                 // is already in the requested state).
-                statusCache.TryRemove(docId) |> ignore
+                clearStatus docId
                 KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
                 do! deps.PublishInventory()
                 return Ok()
@@ -1654,8 +1648,7 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                             if box deps.Queue <> null && not (List.isEmpty chunkPairs) then
                                 let initialStatus = Embedding(0, chunkPairs.Length)
 
-                                statusCache.AddOrUpdate(doc.Id, initialStatus, fun _ _ -> initialStatus)
-                                |> ignore
+                                setStatus doc.Id initialStatus
 
                                 do! updateIndexStatus deps.Storage deps.Scope.Container doc.Id initialStatus
 

@@ -186,7 +186,7 @@ let sweepScope
                         | Some hash -> do! hashIndex.Remove hash doc.Id
                         | None -> ()
 
-                        statusCache.TryRemove doc.Id |> ignore
+                        clearStatus doc.Id
                         progressCache.TryRemove doc.Id |> ignore
                         return Ok doc
                     else

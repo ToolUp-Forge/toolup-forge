@@ -48,6 +48,9 @@
         <Compile Include="Server\Extractors.fs" />
         <Compile Include="Server\ExtractionErrors.fs" />
         <Compile Include="Server\IndexStorage.fs" />
+        <!-- Phase 69c.tail D - one document's ingestion status as a typed
+             stream over the IndexStorage change feed. -->
+        <Compile Include="Server\IngestionStatusStream.fs" />
         <Compile Include="Server\Recovery.fs" />
         <Compile Include="Server\IngestionObserver.fs" />
         <Compile Include="Server\Notes.fs" />

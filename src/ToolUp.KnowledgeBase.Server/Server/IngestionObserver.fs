@@ -95,7 +95,7 @@ let makeIngestionStatusObserver
                 match existing |> List.tryFind (fun d -> d.Id = job.DocumentId) with
                 | None ->
                     // Document was deleted between enqueue and ingestion — drop.
-                    statusCache.TryRemove(job.DocumentId) |> ignore
+                    clearStatus job.DocumentId
                     progressCache.TryRemove(job.DocumentId) |> ignore
                 | Some doc ->
                     let total = doc.ChunkCount
@@ -108,7 +108,7 @@ let makeIngestionStatusObserver
                         else
                             Embedding(processed, total)
 
-                    statusCache.AddOrUpdate(job.DocumentId, status, fun _ _ -> status) |> ignore
+                    setStatus job.DocumentId status
 
                     // Persist on every transition so a restart mid-ingest can resume
                     // reporting from the last persisted progress point.
@@ -127,7 +127,7 @@ let makeIngestionStatusObserver
         member _.OnChunkFailed(job: IngestionJob, error: string) = async {
             try
                 let status = IngestionStatus.Failed error
-                statusCache.AddOrUpdate(job.DocumentId, status, fun _ _ -> status) |> ignore
+                setStatus job.DocumentId status
                 progressCache.TryRemove(job.DocumentId) |> ignore
                 do! updateIndexStatus storage job.Container job.DocumentId status
 

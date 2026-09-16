@@ -294,3 +294,14 @@ let recoverStuckDocumentsAtStartup =
 /// deliberately separate (GP 11 / GP 13). Defined in
 /// `Server/Recovery.fs`.
 let withIngestionRecovery = KnowledgeBase.ServerRecovery.withIngestionRecovery
+
+/// Phase 69c.tail D — one document's ingestion status as a typed Phase
+/// 69c stream: the change feed over the status cache, seeded with the
+/// current status and ending on the first terminal one. Defined in
+/// `Server/IngestionStatusStream.fs`; re-exported here so the public name
+/// `KnowledgeBase.Server.ingestionStatusStream` sits alongside the other
+/// compose-time surfaces. A composer mounts it by declaring a server-only
+/// streaming record over it — see that file's header for the shape, and
+/// why this is a library surface rather than a field on `KnowledgeApi`.
+let ingestionStatusStream =
+    KnowledgeBase.ServerIngestionStatusStream.ingestionStatusStream

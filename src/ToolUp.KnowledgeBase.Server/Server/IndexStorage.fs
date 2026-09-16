@@ -142,6 +142,102 @@ let statusCache = ConcurrentDictionary<string, IngestionStatus>()
 // the persisted index for every increment.
 let progressCache = ConcurrentDictionary<string, int>()
 
+// ─── Phase 69c.tail D - change notification over the status cache ──
+//
+// Before this, ingestion progress was a poll and only a poll: the
+// TERMINAL transition was published through `INotificationChannel` by the
+// ingestion observer, and everything between `Queued` and `Complete` was
+// visible only by asking `GetStatus` again - which the KB client does
+// every 2 s for every non-terminal document. There was no seam a typed
+// stream could observe, which is why Phase 69c recorded this task as
+// waiting on one rather than moving the poll server-side under a
+// streaming shape.
+//
+// This is that seam, and it is deliberately the smallest one that can
+// exist: an in-process, per-document subscriber list, published to by the
+// three write helpers below. It adds no state to the cache, no ordering
+// promise beyond "the value the cache settled on", and nothing at all to
+// a deployment with no subscribers - `publish` over an empty subscriber
+// map is a dictionary emptiness check (GP 13).
+//
+// **Write through `setStatus` / `updateStatus` / `clearStatus`, not
+// through `statusCache` directly.** The cache stays public because it
+// always was, and a direct `AddOrUpdate` still works - it just publishes
+// nothing, so a subscriber silently misses that transition. The helpers
+// are the whole discipline; there is no other.
+//
+// In-process by construction, like the `IngestionBackgroundService` queue
+// it reports on: a chunk indexed on another instance is that instance's
+// event, and the terminal `INotificationChannel` publish (which a
+// distributed channel companion fans out) remains the cross-instance
+// signal. A subscriber on the wrong instance sees the seed value and then
+// silence until the terminal arrives through the channel - which is the
+// pre-existing distribution story, not one this adds.
+[<RequireQualifiedAccess>]
+module IngestionStatusFeed =
+
+    /// Per-subscription: the document id being watched, and the handler.
+    /// Keyed by an opaque token so two subscriptions to the same document
+    /// are independent and either can be disposed without touching the
+    /// other.
+    let private subscribers =
+        ConcurrentDictionary<Guid, string * (IngestionStatus -> unit)>()
+
+    /// Notify every subscriber watching `docId`. A handler that throws is
+    /// swallowed: a subscriber is an observer of the ingestion path, never
+    /// a participant in it, so its failure must not fail the write that
+    /// triggered it.
+    let internal publish (docId: string) (status: IngestionStatus) : unit =
+        if not subscribers.IsEmpty then
+            for entry in subscribers do
+                let watched, handler = entry.Value
+
+                if watched = docId then
+                    try
+                        handler status
+                    with _ ->
+                        ()
+
+    /// Watch one document's ingestion status. `handler` is called on every
+    /// transition written through the helpers below, on the thread that
+    /// wrote it. Dispose to stop; disposal is idempotent.
+    let subscribe (docId: string) (handler: IngestionStatus -> unit) : IDisposable =
+        let token = Guid.NewGuid()
+        subscribers[token] <- (docId, handler)
+
+        { new IDisposable with
+            member _.Dispose() = subscribers.TryRemove token |> ignore
+        }
+
+    /// How many subscriptions are live. For tests and diagnostics - a
+    /// stream that leaks its subscriber is invisible without it.
+    let internal count () = subscribers.Count
+
+/// Set `docId`'s ingestion status and publish it to any subscriber.
+let setStatus (docId: string) (status: IngestionStatus) : unit =
+    statusCache.AddOrUpdate(docId, status, (fun _ _ -> status)) |> ignore
+    IngestionStatusFeed.publish docId status
+
+/// Set `docId`'s ingestion status through an update function, publishing
+/// the value the cache SETTLED on rather than the one offered — the
+/// enqueue paths deliberately decline to overwrite a fresher value (one
+/// already advanced by a racing chunk callback), and a subscriber must
+/// see what is true, not what was proposed.
+let updateStatus (docId: string) (addValue: IngestionStatus) (update: IngestionStatus -> IngestionStatus) : unit =
+    let settled =
+        statusCache.AddOrUpdate(docId, addValue, (fun _ existing -> update existing))
+
+    IngestionStatusFeed.publish docId settled
+
+/// Forget `docId`'s ingestion status — the document was deleted, reset or
+/// swept. Publishes a terminal `Failed` so a subscriber watching an
+/// in-flight ingestion is told it will not finish instead of waiting for
+/// a transition that can no longer come. A document that had already
+/// reached a terminal status has no subscriber left to hear it.
+let clearStatus (docId: string) : unit =
+    statusCache.TryRemove docId |> ignore
+    IngestionStatusFeed.publish docId (IngestionStatus.Failed "the document was removed before ingestion finished")
+
 // Per-container lock used to serialise read-modify-write of `index.json`
 // from the observer. Index updates are rare (one per chunk completion)
 // and IO-bound, so a simple semaphore-per-container avoids cross-team

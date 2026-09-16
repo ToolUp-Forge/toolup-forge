@@ -971,6 +971,11 @@
              shape: the stream terminates on every exit path, and the streamed
              report agrees with what replay returns. -->
         <Compile Include="AI\ConversationReplayStreamTests.fs" />
+        <!-- Phase 69c.tail D - KB ingestion status over the IndexStorage
+             change feed: transitions reach the subscriber, the declined
+             enqueue write republishes the settled value, a removed document
+             terminates the stream, and disposal unsubscribes. -->
+        <Compile Include="AI\IngestionStatusStreamTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />

@@ -255,15 +255,10 @@ let ingestNarrative
                     // overwritten. Same pattern as the upload path above.
                     let initialStatus = Embedding(0, chunks.Length)
 
-                    statusCache.AddOrUpdate(
-                        docId,
-                        initialStatus,
-                        fun _ existing ->
-                            match existing with
-                            | Queued -> initialStatus
-                            | other -> other
-                    )
-                    |> ignore
+                    updateStatus docId initialStatus (fun existing ->
+                        match existing with
+                        | Queued -> initialStatus
+                        | other -> other)
 
                     let chunkPairs =
                         chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
@@ -298,7 +293,7 @@ let ingestNarrative
                                 Status = IngestionStatus.Failed reason
                         }
                 elif chunks.IsEmpty then
-                    statusCache.AddOrUpdate(docId, Complete 0, fun _ _ -> Complete 0) |> ignore
+                    setStatus docId (Complete 0)
 
                 // Nudge the KB client to reload its document list.
                 // The notification scope is the user id (matches the
@@ -418,7 +413,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         | None -> ()
 
         for doc in priorDocs do
-            statusCache.TryRemove(doc.Id) |> ignore
+            clearStatus doc.Id
             progressCache.TryRemove(doc.Id) |> ignore
 
         // Cross-store coherence: wipe persisted narrative-store entries
