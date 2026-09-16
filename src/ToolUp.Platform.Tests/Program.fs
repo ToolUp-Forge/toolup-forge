@@ -714,6 +714,11 @@ let private registeredTests =
         // BYOK component: the handler over the real store, the GP 13
         // composition gate, and the zero-ToolUp.AI layering claim.
         ProviderProfileApiTests.tests
+        // Phase 44a — per-team BYOK: the team-scoped secret layer, the
+        // Owner/Admin gate on team-owned provider config, and the
+        // ITeamProviderResolver contract pack bound to the shipped
+        // resolver.
+        TeamProviderTests.tests
         // Phase 43.B — the two reference provider-OAuth flows, bound to
         // both conformance packs (`IOAuthCredentialFlowContract` for the
         // OAuth half, `IProviderOAuthFlowContract` for the

@@ -1173,6 +1173,14 @@
              appends its handlers only when a provider-profile store is
              registered (GP 13). -->
         <Compile Include="Server\ProviderProfileApiHandler.fs" />
+        <!-- Phase 44a — the team-scoped ISecretStore layer (scope pinned,
+             keys team-prefixed) and the default ITeamProviderResolver over
+             the Phase 44a scope chain. After Providers/BlobProviderProfile.fs
+             and Teams/TeamManagement.fs (the store and the role lookup the
+             resolver composes); nothing in the compose path depends on
+             either, so both are opt-in (GP 13). -->
+        <Compile Include="Server\TeamScopedSecretStore.fs" />
+        <Compile Include="Server\TeamProviderResolver.fs" />
         <Compile Include="Server\PlatformSchema.fs" />
         <Compile Include="Server\PlatformApiHandler.fs" />
         <Compile Include="Server\PlatformAdminApiHandler.fs" />

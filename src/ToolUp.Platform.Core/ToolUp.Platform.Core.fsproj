@@ -594,6 +594,10 @@
         <Compile Include="Shared\Types\OAuthCorrelationTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
+        <!-- Phase 44a — per-subject resolution over the Phase 44a team-scope
+             binding in ProviderProfileTypes.fs. After that file (it returns
+             ProviderResolution / ProviderScope) and after Subject.fs. -->
+        <Compile Include="Shared\Interfaces\ITeamProviderResolver.fs" />
         <!-- Phase 44 — the ToolUp.Remoting transport over that store, for
              the reusable client-tier BYOK component. After
              ProviderProfileTypes.fs (it projects ProviderEntry and carries

@@ -33,6 +33,11 @@
     <ItemGroup>
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\IProviderProfileContract.fs" />
+        <!-- Phase 44a — per-subject resolution over the team-scope chain:
+             precedence, scope isolation and the Owner/Admin write gate.
+             Core-only, so an external implementer can copy it and run it
+             against ToolUp.Platform.Core alone. -->
+        <Compile Include="Contracts\ITeamProviderResolverContract.fs" />
         <!-- Phase 43.B — the provider-profile half of a provider OAuth flow
              (connect / bind / scheduled-refresh outcomes). Sibling of
              IOAuthCredentialFlowContract, which covers the OAuth half. -->
@@ -1076,6 +1081,11 @@
              GP 13 composition gate, and the reusable component's zero-ToolUp.AI
              layering claim asserted of the built client assembly. -->
         <Compile Include="InProcess\ProviderProfileApiTests.fs" />
+        <!-- Phase 44a — the team-scoped ISecretStore layer (including the
+             red-then-green cross-team leak proof against a deliberately
+             scope-flattening store), the Phase 44 handler's Owner/Admin team
+             arm, and the shipped resolver against its contract pack. -->
+        <Compile Include="InProcess\TeamProviderTests.fs" />
         <!-- Phase 43.B — binds the Claude + OpenAI reference IProviderOAuthFlows
              to both conformance packs, plus the steered refresh outcomes. -->
         <Compile Include="Support\ProviderOAuthTestSupport.fs" />

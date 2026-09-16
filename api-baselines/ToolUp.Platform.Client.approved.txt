@@ -2134,6 +2134,31 @@ TeamManagerUI+View+Tags.PendingInvites : System.Int32 (literal)
 TeamManagerUI+View+Tags.TeamDetails : System.Int32 (literal)
 TeamManagerUI+View+TeamDetails (class)
 TeamManagerUI+View+TeamDetails.teamId : System.String { get }
+TeamProviderUI (class)
+TeamProviderUI.TeamProviderPanel(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+TeamProviderUI.canEdit(TeamProviderUI+TeamProviderConfig) : System.Boolean
+TeamProviderUI.init(TeamProviderUI+TeamProviderConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamProviderUI.update(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamProviderUI.view(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+TeamProviderUI+TeamProviderConfig (class)
+TeamProviderUI+TeamProviderConfig..ctor(ProviderProfileUI+ProviderProfileConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamProviderUI+TeamProviderMessages)
+TeamProviderUI+TeamProviderConfig.Messages : TeamProviderUI+TeamProviderMessages { get }
+TeamProviderUI+TeamProviderConfig.Profile : ProviderProfileUI+ProviderProfileConfig { get }
+TeamProviderUI+TeamProviderConfig.Role : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
+TeamProviderUI+TeamProviderConfig.TeamName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+TeamProviderUI+TeamProviderConfigModule (class)
+TeamProviderUI+TeamProviderConfigModule.create(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : TeamProviderUI+TeamProviderConfig
+TeamProviderUI+TeamProviderConfigModule.forProfile(ProviderProfileUI+ProviderProfileConfig) : TeamProviderUI+TeamProviderConfig
+TeamProviderUI+TeamProviderConfigModule.withMessages(TeamProviderUI+TeamProviderMessages, TeamProviderUI+TeamProviderConfig) : TeamProviderUI+TeamProviderConfig
+TeamProviderUI+TeamProviderConfigModule.withRole(ToolUp.Platform.TeamRole, TeamProviderUI+TeamProviderConfig) : TeamProviderUI+TeamProviderConfig
+TeamProviderUI+TeamProviderConfigModule.withTeamName(System.String, TeamProviderUI+TeamProviderConfig) : TeamProviderUI+TeamProviderConfig
+TeamProviderUI+TeamProviderMessages (class)
+TeamProviderUI+TeamProviderMessages..ctor(System.String, System.String, System.String)
+TeamProviderUI+TeamProviderMessages.ReadOnlyNotice : System.String { get }
+TeamProviderUI+TeamProviderMessages.Subtitle : System.String { get }
+TeamProviderUI+TeamProviderMessages.Title : System.String { get }
+TeamProviderUI+TeamProviderMessagesModule (class)
+TeamProviderUI+TeamProviderMessagesModule.defaults : TeamProviderUI+TeamProviderMessages { get }
 TenantLifecycleAdminUI (class)
 TenantLifecycleAdminUI.create() : ToolUp.Platform.ErasedModule
 TenantLifecycleAdminUI.init() : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TenantLifecycleAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
