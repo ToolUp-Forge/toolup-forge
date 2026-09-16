@@ -8,6 +8,7 @@
     <ItemGroup>
         <Compile Include="Entries.fs" />
         <Compile Include="IsolationTests.fs" />
+        <Compile Include="WiringTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -19,9 +20,16 @@
              it. The SDK allows the reference; nothing here is
              self-contained. -->
         <ProjectReference Include="..\ToolUp.Companions.Isolation\ToolUp.Companions.Isolation.fsproj" />
+        <!-- The two forge paths wired onto the seam. -->
+        <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
+        <ProjectReference Include="..\OcrProviders\Tesseract\ToolUp.OcrProviders.Tesseract.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
+        <!-- Phase 617's precedent: the Skia cases decode REAL pixels through
+             SkiaSharp on both sides of the boundary, so a Linux runner needs a
+             native for its RID. -->
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     </ItemGroup>
 </Project>

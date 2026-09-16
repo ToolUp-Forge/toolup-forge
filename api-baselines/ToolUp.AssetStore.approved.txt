@@ -346,6 +346,8 @@ ToolUp.AssetStore.ImageFormat+Tags.Webp : System.Int32 (literal)
 ToolUp.AssetStore.ImageFormatModule (class)
 ToolUp.AssetStore.ImageFormatModule.fileExtension(ToolUp.AssetStore.ImageFormat) : System.String
 ToolUp.AssetStore.ImageFormatModule.mimeType(ToolUp.AssetStore.ImageFormat) : System.String
+ToolUp.AssetStore.IsolatedSkiaDerivativeRenderer (class)
+ToolUp.AssetStore.IsolatedSkiaDerivativeRenderer.create(ToolUp.Companions.Isolation.ICompanionIsolation) : ToolUp.AssetStore.IDerivativeRenderer
 ToolUp.AssetStore.MagicBytes (class)
 ToolUp.AssetStore.MagicBytes.containsMarkup(System.Int32, System.Byte[]) : System.Boolean
 ToolUp.AssetStore.MagicBytes.isRasterImage(System.String) : System.Boolean
@@ -382,6 +384,19 @@ ToolUp.AssetStore.ProfileEntry+Tags.GeneralDerivative : System.Int32 (literal)
 ToolUp.AssetStore.ProfileEntry+Tags.ImageDerivative : System.Int32 (literal)
 ToolUp.AssetStore.ProfileEntryModule (class)
 ToolUp.AssetStore.ProfileEntryModule.name(ToolUp.AssetStore.ProfileEntry) : System.String
+ToolUp.AssetStore.SkiaDerivativeProbeEntry (class)
+ToolUp.AssetStore.SkiaDerivativeProbeEntry..ctor()
+ToolUp.AssetStore.SkiaDerivativeRenderEntry (class)
+ToolUp.AssetStore.SkiaDerivativeRenderEntry..ctor()
+ToolUp.AssetStore.SkiaIsolationCodec (class)
+ToolUp.AssetStore.SkiaIsolationCodec.decodeError(System.String) : ToolUp.AssetStore.DerivativeRenderError
+ToolUp.AssetStore.SkiaIsolationCodec.decodeProbe(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
+ToolUp.AssetStore.SkiaIsolationCodec.decodeRendered(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.Byte[], System.String], System.String]
+ToolUp.AssetStore.SkiaIsolationCodec.decodeSpec(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AssetStore.DerivativeSpec, System.String]
+ToolUp.AssetStore.SkiaIsolationCodec.encodeError(ToolUp.AssetStore.DerivativeRenderError) : System.String
+ToolUp.AssetStore.SkiaIsolationCodec.encodeProbe(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]) : System.Byte[]
+ToolUp.AssetStore.SkiaIsolationCodec.encodeRendered(System.Byte[], System.String) : System.Byte[]
+ToolUp.AssetStore.SkiaIsolationCodec.encodeSpec(ToolUp.AssetStore.DerivativeSpec) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.AssetStore.SkiaSharpDerivativeRenderer (class)
 ToolUp.AssetStore.SkiaSharpDerivativeRenderer..ctor()
 ToolUp.AssetStore.SniffingUploadValidator (class)

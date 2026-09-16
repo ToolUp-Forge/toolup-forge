@@ -31,7 +31,7 @@ ToolUp.ArtefactSigning 147/323
 ToolUp.ArtefactSigning.AwsKms 1/2
 ToolUp.ArtefactSigning.AzureKeyVault 2/3
 ToolUp.ArtefactSigning.GoogleCloudKms 1/2
-ToolUp.AssetStore 166/423
+ToolUp.AssetStore 179/438
 ToolUp.AuditSinks.AzureBlobArchive 7/11
 ToolUp.AuditSinks.Cef 58/107
 ToolUp.AuditSinks.ChainedLedger 174/324
@@ -114,7 +114,7 @@ ToolUp.NotificationChannels.Email.Smtp 14/24
 ToolUp.NotificationChannels.Push.WebPush 3/16
 ToolUp.NotificationChannels.Redis 13/28
 ToolUp.NotificationChannels.Sms.Twilio 3/17
-ToolUp.OcrProviders.Tesseract 17/29
+ToolUp.OcrProviders.Tesseract 24/37
 ToolUp.Offline.Client 47/101
 ToolUp.Offline.Core 58/151
 ToolUp.Offline.Server 14/23
