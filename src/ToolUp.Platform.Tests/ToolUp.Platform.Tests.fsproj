@@ -967,6 +967,10 @@
              latency stream, the recorded refusal, and both windows in the
              one decorator chain. -->
         <Compile Include="AI\AITokenBudgetTests.fs" />
+        <!-- Phase 69c.tail B - conversation replay over the typed streaming
+             shape: the stream terminates on every exit path, and the streamed
+             report agrees with what replay returns. -->
+        <Compile Include="AI\ConversationReplayStreamTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />

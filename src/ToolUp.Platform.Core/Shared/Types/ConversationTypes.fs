@@ -253,3 +253,48 @@ type ConversationReplayResult = {
     /// turn index. Format is operator-readable; do not parse it.
     Delta: string
 }
+
+/// Phase 69c.tail B — progress of a replay run, as a stream.
+///
+/// `ConversationReplay.replay` is a single `Async` that returns once every
+/// user turn has been re-run through the provider; a replay of a long
+/// conversation is therefore N provider calls of silence followed by one
+/// result. `ConversationReplay.replayStream` is the same run reported as it
+/// happens, one event per transition, over the Phase 69c typed-streaming
+/// shape.
+///
+/// **Payload is FSharp-primitive-only by construction** (six portability
+/// rules, rule 1 — identity by value): every field is a string, an int or an
+/// option of one, so no server type and no live handle crosses the wire and
+/// a non-.NET client can render progress from the JSON alone. The replayed
+/// TURNS are not carried — they are persisted under the replay conversation
+/// id as they are produced, and `ConversationReplayResult` (or an ordinary
+/// `GetConversation` read) is where a consumer takes them from.
+type ConversationReplayEvent =
+    /// The replay conversation has been created and the provider resolved.
+    /// Emitted once, before the first turn is re-run. `provider` / `model`
+    /// are what the factory actually resolved, which is not necessarily what
+    /// `ConversationReplayOptions.ProviderLabel` asked for.
+    | ReplayStarted of
+        replayConversationId: ConversationId *
+        originalConversationId: ConversationId *
+        provider: string *
+        model: string
+    /// One replayed user turn produced a fresh assistant turn, now
+    /// persisted. `turnIndex` is zero-based over the replayed turns, not
+    /// over the original conversation's turn list.
+    | ReplayTurnReplayed of
+        replayConversationId: ConversationId *
+        turnIndex: int *
+        tokensIn: int option *
+        tokensOut: int option
+    /// Terminal — every user turn was replayed. `delta` is the same
+    /// operator-readable summary `ConversationReplayResult.Delta` carries;
+    /// do not parse it.
+    | ReplayCompleted of replayConversationId: ConversationId * assistantTurns: int * delta: string
+    /// Terminal — the run stopped. `replayConversationId` is `None` when the
+    /// failure preceded the replay conversation's creation (the original
+    /// could not be read, or no provider resolved), and `Some id` when a
+    /// turn failed part-way through: the replay conversation exists, is
+    /// marked `Errored`, and holds whatever turns had landed.
+    | ReplayFailed of replayConversationId: ConversationId option * reason: string

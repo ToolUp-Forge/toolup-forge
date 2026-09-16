@@ -150,7 +150,16 @@ let private formatDelta (originalTurns: ConversationTurn list) (replayAssistantT
 /// used. When `None`, the operator's default provider (`Resolve
 /// accessContext`) is used — NOT the original conversation's
 /// provider (the original is dead; the replay runs under live config).
-let replay
+///
+/// Phase 69c.tail B — this is the ONE replay implementation, built over
+/// an injected progress sink (the same shape Phase 69c.F gave the AI
+/// turn). `replay` is this function with a no-op sink and is byte-for-byte
+/// what it was before; `replayStream` is this function with the typed
+/// stream's channel sink. A terminal event (`ReplayCompleted` /
+/// `ReplayFailed`) is emitted on EVERY exit path, which is what lets the
+/// stream end without the producer having to be told separately.
+let replayWith
+    (emit: ConversationReplayEvent -> unit)
     (store: IConversationStore)
     (factory: IAIProviderFactory)
     (eventStore: IEventStore option)
@@ -164,7 +173,9 @@ let replay
         let! originalResult = (store :> IConversationReader).GetConversation(scopeId, originalId)
 
         match originalResult with
-        | Error e -> return Error e
+        | Error e ->
+            emit (ReplayFailed(None, ConversationError.toMessage e))
+            return Error e
         | Ok(originalConv, originalTurns, _) ->
 
             // 2. Resolve replay provider.
@@ -174,7 +185,9 @@ let replay
                 | None -> factory.Resolve accessContext
 
             match providerResult with
-            | Error err -> return Error(ConversationError.StoreUnreachable(ProviderResolutionError.toMessage err))
+            | Error err ->
+                emit (ReplayFailed(None, ProviderResolutionError.toMessage err))
+                return Error(ConversationError.StoreUnreachable(ProviderResolutionError.toMessage err))
             | Ok provider ->
 
                 // 3. Construct the new conversation header.
@@ -205,8 +218,12 @@ let replay
                 let! beginResult = writer.BeginConversation(scopeId, newConversation)
 
                 match beginResult with
-                | Error e -> return Error e
+                | Error e ->
+                    emit (ReplayFailed(None, ConversationError.toMessage e))
+                    return Error e
                 | Ok() ->
+
+                    emit (ReplayStarted(replayId, originalId, resolvedProviderName, resolvedModelName))
 
                     // 4. Walk original turns. User turns: append
                     //    verbatim to the replay. Assistant turns:
@@ -295,6 +312,15 @@ let replay
                                         encounteredFailure <- true
                                         failureDetail <- "Assistant-turn append failed"
                                     | Ok() ->
+                                        emit (
+                                            ReplayTurnReplayed(
+                                                replayId,
+                                                replayAssistantTurns.Length,
+                                                tokensIn,
+                                                tokensOut
+                                            )
+                                        )
+
                                         replayAssistantTurns <- replayAssistantTurns @ [ assistantTurn ]
 
                                         let providerAssistantMsg: AIProviderMessage = {
@@ -334,6 +360,11 @@ let replay
                             options.SdkAnnotation
                             delta
 
+                    if encounteredFailure then
+                        emit (ReplayFailed(Some replayId, failureDetail))
+                    else
+                        emit (ReplayCompleted(replayId, replayAssistantTurns.Length, delta))
+
                     return
                         Ok {
                             ReplayConversationId = replayId
@@ -342,3 +373,67 @@ let replay
                             Delta = delta
                         }
     }
+
+/// Re-runs a conversation and returns its result. `replayWith` with a
+/// no-op progress sink — the pre-Phase-69c.tail surface, unchanged.
+let replay
+    (store: IConversationStore)
+    (factory: IAIProviderFactory)
+    (eventStore: IEventStore option)
+    (accessContext: AccessContext)
+    (scopeId: string)
+    (originalId: ConversationId)
+    (options: ConversationReplayOptions)
+    : Async<Result<ConversationReplayResult, ConversationError>> =
+    replayWith ignore store factory eventStore accessContext scopeId originalId options
+
+/// Phase 69c.tail B — terminal-event predicate for the replay stream:
+/// the run ends on either terminal event. Used by the
+/// `AsyncStream.fromCallback` bridge to close the stream after the
+/// terminal event is yielded.
+let isTerminalReplayEvent =
+    function
+    | ReplayCompleted _
+    | ReplayFailed _ -> true
+    | _ -> false
+
+/// Phase 69c.tail B — the same replay run, reported as it happens.
+///
+/// Returns the Phase 69c typed-streaming shape: an
+/// `IAsyncEnumerable<ConversationReplayEvent>` the ToolUp.Remoting
+/// dispatcher auto-frames as server-sent events when it is the return of
+/// an API-record field. A replay of an N-turn conversation is N provider
+/// calls long, so `replay`'s single `Async` is minutes of silence; this
+/// is the same work with one event per transition.
+///
+/// It is a LIBRARY surface, not a mounted endpoint: a streaming method
+/// cannot carry `[<RequiresRole>]` (the SSE short-circuit runs before the
+/// pre-flight, and the adapter refuses to start on one that does), and
+/// replay is a privileged operator action whose authority arrives in the
+/// `accessContext` its caller supplies. A composer that wants it on the
+/// wire declares a server-only record over its own gated per-request
+/// closure — the shape `AIStreamingApi` uses — and mounts it beside its
+/// existing surface:
+///
+/// ```fsharp skip=fragment
+/// type ConversationReplayStreamingApi = {
+///     [&lt;AllowAnonymous&gt;]
+///     StreamReplay: ConversationId -&gt; IAsyncEnumerable&lt;ConversationReplayEvent&gt;
+/// }
+/// ```
+///
+/// where the closure resolves the store / factory / `AccessContext` from
+/// the request and REFUSES an unauthorised caller by emitting
+/// `ReplayFailed` rather than starting the run.
+let replayStream
+    (store: IConversationStore)
+    (factory: IAIProviderFactory)
+    (eventStore: IEventStore option)
+    (accessContext: AccessContext)
+    (scopeId: string)
+    (originalId: ConversationId)
+    (options: ConversationReplayOptions)
+    : System.Collections.Generic.IAsyncEnumerable<ConversationReplayEvent> =
+    ToolUp.Remoting.Server.AsyncStream.fromCallback isTerminalReplayEvent (fun emit ->
+        replayWith emit store factory eventStore accessContext scopeId originalId options
+        |> Async.Ignore)
