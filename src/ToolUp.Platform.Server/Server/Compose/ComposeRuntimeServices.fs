@@ -566,6 +566,8 @@ let registerFileManagementRuntime
     (config: ServerConfig)
     (usageLogInstance: IUsageLog)
     (resolvedLogger: ILogger)
+    (notificationChannel: INotificationChannel)
+    (auditLog: IAuditLog)
     : unit =
 
     // Phase 9 storage quota resolver. Reads the deployment-wide
@@ -598,6 +600,16 @@ let registerFileManagementRuntime
         QuotaResolver = quotaResolver
         UsageLog = Some usageLogInstance
         MaxFileBytes = maxFileBytes
+        // Phase 6p — GP 13. Opting out clears the channel rather than
+        // carrying a second boolean down to the publish site: one place
+        // decides, and `announceStoreReset`'s `None` arm is the same
+        // no-op a deployment with no channel composed already took.
+        NotificationChannel =
+            if config.NotifyOnSessionStoreReset then
+                Some notificationChannel
+            else
+                None
+        AuditLog = Some auditLog
     }
 
     services.AddSingleton<FileManagement.FileManagementRuntime>(fileManagementRuntime)

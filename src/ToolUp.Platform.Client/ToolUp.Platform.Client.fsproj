@@ -251,6 +251,12 @@
              ProcessedDataContext / LoadingIndicatorContext. -->
         <Compile Include="Client\PresenceContext.fs" />
         <Compile Include="Client\NotificationClient.fs" />
+        <!-- Phase 6p - session-store reconciliation. After NotificationClient.fs
+             (the SSE stream whose reconnect it hangs a check off) and
+             UserSession.fs / Api.fs (the proxy it reads the epoch through);
+             before FileManagerUI.fs, MappingDataManagerUI.fs and
+             SDK.Client.fs, which subscribe to it. -->
+        <Compile Include="Client\SessionEpoch.fs" />
         <!-- Phase 622 — shell auto-mount joining the Phase 241 pump to the
              Phase 442 context over the platform IPresenceApi. After
              PresenceClient.fs (the pump), PresenceContext.fs (the context)

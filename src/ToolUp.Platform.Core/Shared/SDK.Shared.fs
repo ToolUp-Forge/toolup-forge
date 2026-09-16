@@ -3127,6 +3127,23 @@ type ServerConfig = {
     /// their stores never evict.
     EphemeralStoreEvictionMinutes: float
 
+    /// Phase 6p — announce an ephemeral session store's
+    /// eviction-then-recreate to the affected scope over
+    /// `INotificationChannel`, so a connected client clears its stale
+    /// file list and toasts instead of discovering the loss when a
+    /// downstream module call fails with "File 'X' not found in
+    /// session". `true` by default.
+    ///
+    /// GP 13 — a deployment that prefers the pre-6p behaviour sets this
+    /// to `false` and the publish is suppressed. It does NOT suppress
+    /// the `SessionStoreReset` AUDIT emission: audit answers a
+    /// compliance question about data loss, and gating it on a UX
+    /// preference would make the trail silent exactly where it matters.
+    /// Nor does it suppress the client's own reconciliation — the
+    /// on-mount epoch fetch and the pre-flight check are client-side and
+    /// need no channel.
+    NotifyOnSessionStoreReset: bool
+
     /// Data-subject-request substrate opt-in. `Disabled`
     /// (the default) wires no DSR endpoints, no admin module, no
     /// erasure orchestrator — apps that don't carry GDPR / CCPA /
@@ -3893,6 +3910,7 @@ module ServerConfig =
         NotifyInviterOnInviteExpiry = false
         AcceptEphemeralShareTokenKey = false
         EphemeralStoreEvictionMinutes = 60.0
+        NotifyOnSessionStoreReset = true
         MaxSseConnectionsPerScope = Some 10
         DataSubjectRequests = DataSubjectRequestMode.Disabled
         ConfigDriftDetection = NoConfigDriftDetection

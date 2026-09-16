@@ -292,6 +292,29 @@ The `hint: "select_team"` on team-required 403 lets the client UI render an acti
 
 The session-keyed in-memory file store evicts entries after `AnonymousConfig.SessionEvictionMinutes` (default 60). Persistent containers stream through `IBlobStorage` (default `LocalFileStorage` on disk under `data/`) and reload on restart via `loadPersistedFiles()`.
 
+#### Session-store reset is signalled (Phase 6p)
+
+Eviction is the ephemeral profiles' defining behaviour, and until Phase 6p it was **silent**. A tab that had uploaded a file kept listing it long after the server-side store had gone, and the user discovered the loss when a downstream module call answered `File 'X' not found in session. No files have been uploaded in this session.` — mid-analysis, with refresh-and-re-upload the only recovery. This affects the two ephemeral shapes in the table above (`AnonymousSession`, and `AuthenticatedUser` under `Persistence = Ephemeral` — the `AuthenticatedEphemeral` / trial shape) and, in development, any profile across a `dotnet watch` restart.
+
+Each `SessionFileStore` now carries an **epoch** minted at construction, read via `FileManagementApi.GetSessionInfo : unit -> Async<SessionStoreInfo>`. The epoch changes exactly when the server's view of a scope's uploads is emptied: TTL eviction, process restart, a new scope container. Three things follow from it:
+
+| Transition | Server announces | Client reconciles by |
+|---|---|---|
+| Eviction, then the scope is resolved again | `Platform.SessionStoreReset` `CustomNotification` (`Reason = "Evicted"`) over `INotificationChannel`, **and** one `SessionStoreReset` audit row | the notification, adopted without a round trip |
+| Process restart | nothing — the in-memory eviction markers die with the process, and the SSE connection dies with them, so there is no evidence to record and no channel to announce over | comparing its cached epoch on reconnect / refocus |
+| Fresh first access, healthy steady state | nothing | nothing — the epoch matches, no dispatch happens |
+
+Client-side the SDK shell polls the epoch on mount (only where a `DataManager` is composed), on `visibilitychange → visible`, and on every SSE reopen; a mismatch clears the file list and the prefetched processed data and raises a toast naming the cause. `SessionEpoch.preflight` wraps a data-consuming call so the failure a user sees is that toast rather than the per-file "not found" error.
+
+Two knobs, and the asymmetry between them is deliberate:
+
+- `ServerConfig.EphemeralStoreEvictionMinutes` / `TOOLUP_STORE_EVICTION_MINUTES` — the TTL itself, unchanged.
+- `ServerConfig.NotifyOnSessionStoreReset` (default `true`) — suppresses the **notification** for a deployment that prefers the pre-6p behaviour. It does **not** suppress the audit row: audit answers a compliance question about data loss, and gating it on a UX preference would make the trail silent exactly where it matters. Nor does it suppress the client's own reconciliation, which is client-side and needs no channel.
+
+GP 4 — neither the notification payload nor the audit row carries a filename, file contents, or any identity beyond the scope container the audit trail already records for every file event in that scope.
+
+GP 11 — a deployment that never evicts is unchanged apart from the on-mount epoch fetch.
+
 ## Mixed-mode deployment archetypes
 
 Five archetypes drawn from real consumer deployment shapes. Each is a complete authoring example.
