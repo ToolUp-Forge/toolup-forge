@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open System.Text
 open System.Threading
+open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 
@@ -193,8 +194,136 @@ type ScopeAtCapacity = {
     CurrentCount: int
 }
 
+/// Phase 6k — one connection's outbound queue and the single loop that
+/// drains it.
+///
+/// Before this, `Broadcast` fanned out with `Task.WhenAll` over every
+/// connection in the scope and awaited them all. That coupled every
+/// subscriber's latency to every other's: a wedged tab (renderer killed,
+/// laptop suspended, proxy holding the socket open without reading) made
+/// the whole scope wait out the 5 s per-write cap on EVERY event. Two
+/// tabs, one wedged, and the healthy tab's stream ran 5 s behind per
+/// frame — which the client's 60 s watchdog eventually reported as a
+/// silent hang on the connection that was working fine.
+///
+/// Now each connection owns a bounded `Channel<byte[]>` and one reader
+/// loop. `Broadcast` is `TryWrite` per connection: non-blocking, and the
+/// slow subscriber's backpressure is its own. A connection whose queue
+/// is full is not merely slow — it has failed to drain `queueCapacity`
+/// frames within the writes the others completed — so it is evicted as
+/// already-dead, which is the same outcome the 5 s cap produced before,
+/// reached without making anyone else wait for it.
+///
+/// Per-connection ORDER is preserved (one reader, FIFO channel), which
+/// is what SSE delta streams require. Cross-connection order never was
+/// guaranteed and still is not.
+type private ConnectionWriter(sink: IConnectionSink, queueCapacity: int, perWriteTimeoutMs: int, onDead: unit -> unit) =
+
+    let channel =
+        Channel.CreateBounded<byte[]>(
+            BoundedChannelOptions(
+                queueCapacity,
+                // `TryWrite` returns false rather than dropping or
+                // blocking when the queue is full — the manager needs
+                // that false to decide the connection is dead.
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            )
+        )
+
+    /// Frames accepted but not yet handed to the sink. Drives
+    /// `SSEConnectionManager.WaitForDelivery`, which is how a test (or a
+    /// shutdown path) gets a deterministic "everything queued has been
+    /// written" point out of an otherwise fire-and-forget send.
+    let pending = ref 0
+
+    let stopped = ref 0
+    let cts = new CancellationTokenSource()
+
+    /// Idempotent. Called by the manager on `Remove`/`Dispose` and by
+    /// the loop itself when a write fails — whichever happens first.
+    let stop () =
+        if Interlocked.Exchange(&stopped.contents, 1) = 0 then
+            channel.Writer.TryComplete() |> ignore
+
+            try
+                cts.Cancel()
+            with _ ->
+                ()
+
+    /// One frame, capped at `perWriteTimeoutMs` and linked to the
+    /// connection's own disconnect token. Returns false when the write
+    /// failed or timed out — identical semantics to the pre-6k
+    /// `writeOne`, minus the shared `dead` list.
+    let writeOnce (frame: byte[]) : Task<bool> = task {
+        use timeoutCts = new CancellationTokenSource(perWriteTimeoutMs)
+
+        use linkedCts =
+            CancellationTokenSource.CreateLinkedTokenSource(sink.DisconnectToken, timeoutCts.Token, cts.Token)
+
+        try
+            do! sink.WriteFrame(frame, linkedCts.Token) |> Async.StartAsTask
+            return true
+        with _ ->
+            return false
+    }
+
+    /// The dedicated reader loop. Exits on: the channel completing
+    /// (`Remove`/`Dispose`), the writer's token cancelling, or a failed
+    /// write. Every exit runs `onDead`, so eviction has exactly one
+    /// path regardless of which end noticed first.
+    let loop = task {
+        let mutable running = true
+
+        try
+            while running do
+                let! frame = channel.Reader.ReadAsync(cts.Token).AsTask()
+                let! ok = writeOnce frame
+                Interlocked.Decrement(&pending.contents) |> ignore
+
+                if not ok then
+                    running <- false
+        with _ ->
+            // `ChannelClosedException` on a completed-and-drained
+            // queue, or `OperationCanceledException` on stop. Both
+            // are ordinary shutdown, not failures to report.
+            ()
+
+        stop ()
+        onDead ()
+    }
+
+    member _.Sink = sink
+
+    /// Frames queued but not yet written. `> 0` means this connection
+    /// is behind, not that it is dead.
+    member _.Pending = Volatile.Read(&pending.contents)
+
+    /// Queue a frame. False means the connection's queue is full — the
+    /// manager treats that as death, for the reason in the type's
+    /// summary.
+    member _.TryEnqueue(frame: byte[]) : bool =
+        if Volatile.Read(&stopped.contents) <> 0 then
+            false
+        else
+            Interlocked.Increment(&pending.contents) |> ignore
+
+            if channel.Writer.TryWrite frame then
+                true
+            else
+                Interlocked.Decrement(&pending.contents) |> ignore
+                false
+
+    member _.Stop() = stop ()
+
+    /// Awaitable completion of the reader loop. Used by `Dispose` so a
+    /// disposed manager leaves no loop writing to a response body the
+    /// host is tearing down.
+    member _.Completion: Task = loop
+
 type SSEConnectionManager(?maxConnectionsPerScope: int) =
-    let connections = ConcurrentDictionary<string, IConnectionSink list>()
+    let connections = ConcurrentDictionary<string, ConnectionWriter list>()
 
     /// Phase 6l.D — per-scope cap; `None` = unbounded (legacy
     /// behaviour). When set, `Add` returns `Result.Error
@@ -211,6 +340,16 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// replace the WhenAll fan-out with a per-connection writer
     /// queue; this is the bounded-by-default fix in the meantime.
     let perWriteTimeoutMs = 5_000
+
+    /// Phase 6k — how many frames one connection may fall behind
+    /// before it is treated as dead. Deliberately an internal constant
+    /// rather than a config knob: it is not a tuning dial, it is the
+    /// point past which "slow" is indistinguishable from "gone", and a
+    /// deployment that wants a different answer wants a different
+    /// notification channel. 256 frames is several seconds of the
+    /// densest stream the SDK produces (AI message deltas) and a few
+    /// KB per idle connection.
+    let queueCapacity = 256
 
     /// Phase 6h follow-up — Workstream B. Bounded ring-buffer of recent
     /// broadcasts. Capacity 100 (we keep the most-recent 100 entries
@@ -236,37 +375,37 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// summary on `/dev/sse-trace`.
     let refusalCounts = ConcurrentDictionary<string, int>()
 
-    /// Awaitable per-connection write. Failed writes / cancelled
-    /// tokens add the connection to `dead`; successful writes are
-    /// silent. Returns a `Task` so the caller can await all writes
-    /// in parallel and then prune the dead set in one pass.
-    let writeOne (scopeId: string) (bytes: byte[]) (dead: ResizeArray<IConnectionSink>) (conn: IConnectionSink) =
-        task {
-            if conn.DisconnectToken.IsCancellationRequested then
-                lock dead (fun () -> dead.Add conn)
-            else
-                // Cap each write at PerWriteTimeoutMs so one stalled
-                // connection can't hold up the whole scope. Linked
-                // with the per-connection cancellation token so a
-                // client disconnect still fires immediately.
-                use timeoutCts = new CancellationTokenSource(perWriteTimeoutMs)
+    /// Drop a connection from its scope, matched by sink reference
+    /// (two physical connections never share an instance). Idempotent:
+    /// the filter is a no-op once the writer is gone, so the eviction
+    /// the reader loop performs on failure and the one the enqueue path
+    /// performs on a full queue can both run without double-counting.
+    let evict (scopeId: string) (sink: IConnectionSink) =
+        connections.AddOrUpdate(
+            scopeId,
+            [],
+            fun _ (existing: ConnectionWriter list) ->
+                existing |> List.filter (fun w -> not (obj.ReferenceEquals(w.Sink, sink)))
+        )
+        |> ignore
 
-                use linkedCts =
-                    CancellationTokenSource.CreateLinkedTokenSource(conn.DisconnectToken, timeoutCts.Token)
+    /// Hand one frame to every connection in the scope. Non-blocking by
+    /// construction — this is the whole point of the phase. A connection
+    /// whose token has already fired, or whose queue is full, is stopped
+    /// and evicted here; every other connection has its frame queued and
+    /// is written to by its own loop, at its own pace.
+    let enqueueAll (scopeId: string) (writers: ConnectionWriter list) (bytes: byte[]) =
+        for w in writers do
+            let accepted =
+                not w.Sink.DisconnectToken.IsCancellationRequested && w.TryEnqueue bytes
 
-                try
-                    do! conn.WriteFrame(bytes, linkedCts.Token) |> Async.StartAsTask
-                with _ ->
-                    // Either the underlying connection failed or the 5 s
-                    // write cap fired. Both outcomes mean the connection
-                    // is no longer usable for this scope.
-                    lock dead (fun () -> dead.Add conn)
-        }
-        :> Task
+            if not accepted then
+                w.Stop()
+                evict scopeId w.Sink
 
-    let broadcastAsyncWithKind (scopeId: string) (bytes: byte[]) (kind: string) : Task = task {
+    let broadcastWithKindInternal (scopeId: string) (bytes: byte[]) (kind: string) =
         match connections.TryGetValue scopeId with
-        | true, conns ->
+        | true, writers ->
             // Trace: record before dispatch so the entry's
             // `ConnectionCount` reflects what we actually attempted.
             recordTrace {
@@ -274,26 +413,11 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
                 ScopeId = scopeId
                 EventKind = kind
                 PayloadBytes = bytes.Length
-                ConnectionCount = conns.Length
+                ConnectionCount = writers.Length
                 Dropped = false
             }
 
-            let dead = ResizeArray<IConnectionSink>()
-
-            let writes = conns |> List.map (writeOne scopeId bytes dead) |> List.toArray
-            do! Task.WhenAll writes
-
-            if dead.Count > 0 then
-                let toRemove = dead |> Seq.toList
-
-                connections.AddOrUpdate(
-                    scopeId,
-                    [],
-                    fun _ existing ->
-                        existing
-                        |> List.filter (fun c -> not (toRemove |> List.exists (fun d -> obj.ReferenceEquals(c, d))))
-                )
-                |> ignore
+            enqueueAll scopeId writers bytes
         | _ ->
             // Trace: scope had no subscribers. This is the smoking gun
             // for the bug we chased — a `Dropped = true` entry tells
@@ -307,10 +431,6 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
                 ConnectionCount = 0
                 Dropped = true
             }
-    }
-
-    let broadcastAsync (scopeId: string) (bytes: byte[]) : Task =
-        broadcastAsyncWithKind scopeId bytes "data"
 
     /// Periodic keepalive. Every 30 s, send `: keepalive\n\n` to
     /// every connection across every scope. Two purposes:
@@ -326,36 +446,17 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
         // otherwise dominate the last-100 trace and obscure the actual
         // application events. Direct manager-internal write path: same
         // dead-connection eviction, no trace entry.
-        let writeKeepalive (scopeId: string) : Task = task {
+        let writeKeepalive (scopeId: string) =
             match connections.TryGetValue scopeId with
-            | true, conns ->
-                let dead = ResizeArray<IConnectionSink>()
-
-                let writes =
-                    conns |> List.map (writeOne scopeId SSE.keepaliveBytes dead) |> List.toArray
-
-                do! Task.WhenAll writes
-
-                if dead.Count > 0 then
-                    let toRemove = dead |> Seq.toList
-
-                    connections.AddOrUpdate(
-                        scopeId,
-                        [],
-                        fun _ existing ->
-                            existing
-                            |> List.filter (fun c -> not (toRemove |> List.exists (fun d -> obj.ReferenceEquals(c, d))))
-                    )
-                    |> ignore
+            | true, writers -> enqueueAll scopeId writers SSE.keepaliveBytes
             | _ -> ()
-        }
 
         new Timer(
             (fun _ ->
                 let scopeIds = connections.Keys |> Seq.toArray
 
                 for scopeId in scopeIds do
-                    writeKeepalive scopeId |> ignore),
+                    writeKeepalive scopeId),
             null,
             TimeSpan.FromSeconds 30.0,
             TimeSpan.FromSeconds 30.0
@@ -387,7 +488,15 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
                 CurrentCount = currentCount
             }
         | _ ->
-            connections.AddOrUpdate(scopeId, [ conn ], fun _ existing -> conn :: existing)
+            // Phase 6k — the connection gets its own queue and its own
+            // reader loop at registration. `onDead` closes over this
+            // scope and sink so the loop can evict itself the moment a
+            // write fails, without the manager having to notice on the
+            // next broadcast.
+            let writer =
+                ConnectionWriter(conn, queueCapacity, perWriteTimeoutMs, (fun () -> evict scopeId conn))
+
+            connections.AddOrUpdate(scopeId, [ writer ], fun _ existing -> writer :: existing)
             |> ignore
 
             Result.Ok()
@@ -397,12 +506,19 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// physical connections can share the same sink type but never
     /// the same instance).
     member _.Remove(scopeId: string, conn: IConnectionSink) =
-        connections.AddOrUpdate(
-            scopeId,
-            [],
-            fun _ existing -> existing |> List.filter (fun c -> not (obj.ReferenceEquals(c, conn)))
-        )
-        |> ignore
+        // Stop the connection's writer loop before dropping it, so no
+        // frame is written to a response body the handler has finished
+        // with. `Stop` is idempotent and `evict` is a no-op when the
+        // loop already removed itself.
+        match connections.TryGetValue scopeId with
+        | true, writers ->
+            writers
+            |> List.iter (fun w ->
+                if obj.ReferenceEquals(w.Sink, conn) then
+                    w.Stop())
+        | _ -> ()
+
+        evict scopeId conn
 
     /// Write raw SSE-framed bytes to every live connection for a
     /// scope. Callers pre-format with the SSE `data:`/`event:`
@@ -415,13 +531,14 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// Dead connections (cancellation fired, write threw, flush
     /// threw) are collected and removed before returning.
     member _.Broadcast(scopeId: string, bytes: byte[]) =
-        // Synchronous shim — historic callers (NotificationHandler,
-        // AI SSEHandler) treat broadcast as fire-and-forget. Awaiting
-        // is the correct semantics inside `broadcastAsync`; we wait
-        // here so eviction completes before the caller continues. The
-        // method is invoked on background notification publish paths,
-        // not request-thread hot paths.
-        (broadcastAsync scopeId bytes).GetAwaiter().GetResult()
+        // Phase 6k — this used to block the caller on `Task.WhenAll`
+        // over every connection in the scope. It now queues one frame
+        // per connection and returns; each connection's own loop does
+        // the writing. The call is still ordered per connection, and a
+        // caller that needs the frames to have LANDED (a test, a
+        // shutdown drain) asks for that explicitly via
+        // `WaitForDelivery`.
+        broadcastWithKindInternal scopeId bytes "data"
 
     /// Phase 6h follow-up — Workstream B. Variant of `Broadcast` that
     /// takes a richer `kind` tag for the trace ring-buffer. Functional
@@ -433,7 +550,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// dev panel can colour-tag entries and operators can scan the
     /// ring at a glance.
     member _.BroadcastWithKind(scopeId: string, bytes: byte[], kind: string) =
-        (broadcastAsyncWithKind scopeId bytes kind).GetAwaiter().GetResult()
+        broadcastWithKindInternal scopeId bytes kind
 
     /// Phase 6h follow-up — Workstream B. Snapshot the recent-broadcast
     /// trace ring + the currently-registered scope set. Read by
@@ -457,5 +574,41 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
             RefusalCounts = refusalCountsSnapshot
         }
 
+    /// Phase 6k — block until every frame queued so far has been handed
+    /// to its connection, or `timeoutMs` (default 5 s) elapses. Returns
+    /// true when the queues drained.
+    ///
+    /// Delivery is asynchronous now, so "I broadcast, therefore the
+    /// subscriber has the bytes" stopped being true. Rather than leave
+    /// every caller to invent its own sleep, the manager exposes the one
+    /// sync point it can compute exactly: a per-connection count of
+    /// frames accepted but not yet written. Used by the SSE framing pin
+    /// tests (which assert bytes, not bookkeeping) and available to a
+    /// host draining before shutdown. NOT a substitute for the write
+    /// timeout — a connection that never drains still evicts itself.
+    member _.WaitForDelivery(?timeoutMs: int) : bool =
+        let budget = defaultArg timeoutMs 5_000
+        let deadline = DateTime.UtcNow.AddMilliseconds(float budget)
+        let mutable drained = false
+
+        while not drained && DateTime.UtcNow < deadline do
+            let outstanding =
+                connections |> Seq.sumBy (fun kv -> kv.Value |> List.sumBy _.Pending)
+
+            if outstanding = 0 then drained <- true else Thread.Sleep 1
+
+        drained
+
     interface IDisposable with
-        member _.Dispose() = keepaliveTimer.Dispose()
+        member _.Dispose() =
+            keepaliveTimer.Dispose()
+
+            // Phase 6k — stop every reader loop before the manager goes
+            // away. Without this a disposed manager leaves loops parked
+            // on `ReadAsync` holding a response body the host is tearing
+            // down.
+            for kv in connections do
+                for w in kv.Value do
+                    w.Stop()
+
+            connections.Clear()

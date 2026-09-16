@@ -99,6 +99,13 @@ let private legacyWire (scopeId: string) (events: AIStreamEvent list) : string =
     for e in events do
         SSEHandler.sendEvent manager scopeId e
 
+    // Phase 6k: delivery is per-connection and asynchronous now, so
+    // "I broadcast, therefore the sink has the bytes" stopped being
+    // true. The manager's own drain point is the sync barrier; the
+    // pinned bytes below are unchanged, only the moment we read them.
+    if not (manager.WaitForDelivery()) then
+        failtest "the capture connection did not drain within the delivery budget"
+
     sink.Text
 
 /// Enumerate an `IAsyncEnumerable` to a list (the dispatcher's loop, minus
@@ -204,6 +211,9 @@ let tests =
 
             for e in turn do
                 legacySink e
+
+            if not (manager.WaitForDelivery()) then
+                failtest "the capture connection did not drain within the delivery budget"
 
             Expect.equal sink.Text legacyGolden "the legacy sink over the same producer writes the pinned bytes"
         }

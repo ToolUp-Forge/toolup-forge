@@ -951,6 +951,8 @@
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
+        <!-- Phase 6k - per-connection SSE writer queues (decoupled fan-out). -->
+        <Compile Include="InProcess\SsePerConnectionWriterTests.fs" />
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
         <Compile Include="InProcess\EventStoreChainValidatorTests.fs" />

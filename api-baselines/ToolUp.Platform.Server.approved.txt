@@ -8263,6 +8263,7 @@ ToolUp.Platform.SSEConnectionManager.Broadcast(System.String, System.Byte[]) : S
 ToolUp.Platform.SSEConnectionManager.BroadcastWithKind(System.String, System.Byte[], System.String) : System.Void
 ToolUp.Platform.SSEConnectionManager.Remove(System.String, ToolUp.Platform.IConnectionSink) : System.Void
 ToolUp.Platform.SSEConnectionManager.Snapshot() : ToolUp.Platform.SseManagerSnapshot
+ToolUp.Platform.SSEConnectionManager.WaitForDelivery(Microsoft.FSharp.Core.FSharpOption`1[System.Int32]) : System.Boolean
 ToolUp.Platform.SbomAdminEndpoint (class)
 ToolUp.Platform.SbomAdminEndpoint.CycloneDxFormat : System.String (literal)
 ToolUp.Platform.SbomAdminEndpoint.RoutePath : System.String (literal)

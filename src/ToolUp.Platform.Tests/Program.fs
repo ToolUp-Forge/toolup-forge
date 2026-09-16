@@ -716,6 +716,7 @@ let private registeredTests =
         ProviderOAuthFlowTests.openAiProviderFlowContractTests
         ProviderOAuthFlowTests.tests
         SseTraceContributorTests.tests
+        SsePerConnectionWriterTests.tests
         HeaderAuthProviderModeValidatorTests.tests
         AuditLogModeValidatorTests.tests
         EventStoreChainValidatorTests.tests
