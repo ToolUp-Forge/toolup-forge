@@ -2,7 +2,7 @@
 
 Resource-exhaustion defence in this SDK is a *budget*: a subject may spend so much of a resource in
 a window, and something legible happens when it cannot. Several such mechanisms exist — compute
-submissions, render cost, and (ahead) AI token and monetary spend — and before Phase 689 each had
+submissions, render cost, and AI token and monetary spend — and before Phase 689 each had
 invented its own vocabulary. This page is the shape they share, where each budget actually lives,
 and how a refusal reaches an operator.
 
@@ -142,8 +142,8 @@ storage to satisfy an interface.
 | **Compute** (`ComputeBudget`) | concurrency, run duration, period allowance | `BudgetedComputeDispatcher` over `IExternalComputeDispatcher`, **and** the fit-job enqueue path | yes — its decision is `BudgetPolicy.check`, its counter is `IBudgetLedger` |
 | **Hosted-tree render cost** (`HostRenderBudget`) | max nodes, max depth, render time | in-band on the client render path, plus a CI fixture gate | no, by decision — see below |
 | **Peer cascade** (`PeerCascadePolicy`) | hops remaining, route length, identifier length | receiver-side, on every inbound peer call | no, by decision — see below |
-| **AI tokens** (ahead) | per-user / per-team, per window | the AI pre-call gate | intended — see the phase note |
-| **AI monetary spend** (ahead) | currency ceiling per window | the same pre-call gate | intended — see the phase note |
+| **AI tokens** (`AITokenBudgetPolicy`) | per-user, per UTC hour | `BudgetEnforcingProvider`, in the AI provider decorator chain | yes — `BudgetPolicy.verdict` over a `BudgetClaim`, consumption summed from telemetry rather than reserved |
+| **AI monetary spend** (`AISpendBudgetPolicy`) | per-user and per-scope, each over its own `BudgetPeriod` | `SpendEnforcingProvider`, outermost in the same chain | yes — same predicate, same denial shape; the currency lives in the rate card, never in the seam |
 
 ### Compute budgets
 
@@ -207,6 +207,44 @@ shape every ceiling in the SDK has.
 A request refused by a budget **never reaches the inner substrate**: the payload does not leave the
 process, and no backend is asked to start work the deployment cannot pay for. A check performed
 after the backend accepted the work is a check on something that has already left.
+
+### The two AI budgets
+
+Both live in the AI tier (`ToolUp.AI.Core` / `ToolUp.AI.Server`) rather than here, and both are
+`BudgetClaim`s checked by `BudgetPolicy.verdict` — so the seam stays currency-free (GP 1) while the
+thing that turns a request into a *number* stays where a provider and a model are meaningful.
+
+Their consumption is **derived, not reserved**. Nobody can know a turn's cost before the model
+answers, so there is nothing honest to hold at admission: the window is summed from the always-on
+per-turn telemetry stream, which since Phase 6i.B carries all four token counts and the serving
+provider and model. The pre-call figure is therefore only the claim's `Requested` half — an estimate
+— while `Spent` is always what providers actually reported. That is what "reserve an estimate,
+settle the actual" means on a derived-consumption domain, and it is why neither uses `IBudgetLedger`.
+
+Money needs one thing tokens do not: a **rate card**. `ModelPriceTable` maps `(providerId, model)` to
+four per-million rates — fresh input, cached input, output, cache writes — under an operator-supplied
+currency tag, and is registered through `ComposeExtensions.ServiceConfig`:
+
+```fsharp skip=fragment
+let rates =
+    ModelPriceTable.ofList "USD" [ "acme", "acme-1", ModelPrice.simple 3.00M 15.00M ]
+
+{ ComposeExtensions.empty with ServiceConfig = Some(fun s -> s.AddSingleton<ModelPriceTable>(rates)) }
+```
+
+No rate card ships in the SDK, for a reason worth stating: a vendor's price list embedded in a
+vendor-neutral SDK is wrong within a quarter and bills an operator at a number nobody in their
+organisation chose. A `(providerId, model)` the card does not name is **unpriced** — its turns
+contribute nothing to the window, the pair is reported once through the logger and permanently on the
+`/dev/inspect` panel, and nothing is ever refused on account of it (GP 11). An entry declaring zero
+rates is a different fact: that is a *price* of zero.
+
+The registered card's presence is also the composition gate. A deployment that registers none
+resolves the object graph it always did — no decorator, no config read, no allocation (GP 13).
+
+Both ceilings are set per scope in the `_platform.ai.budget` config tab: a token cap per user per
+hour, and monetary caps per user and per scope, each with its own window drawn from `BudgetPeriod`.
+Every one defaults to `0`, which the seam reads as unrestricted.
 
 ---
 
