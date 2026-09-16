@@ -14,9 +14,10 @@ maintenance commitment, and how to sign your work.
 5. [Contribution flow by type](#contribution-flow-by-type)
 6. [Promotion from community to first-party](#promotion-from-community-to-first-party)
 7. [Style and conventions](#style-and-conventions)
-8. [Security-affecting changes](#security-affecting-changes)
-9. [Maintainer setup](#maintainer-setup)
-10. [Where to ask questions](#where-to-ask-questions)
+8. [Generated baselines and their merge driver](#generated-baselines-and-their-merge-driver)
+9. [Security-affecting changes](#security-affecting-changes)
+10. [Maintainer setup](#maintainer-setup)
+11. [Where to ask questions](#where-to-ask-questions)
 
 ---
 
@@ -29,7 +30,10 @@ maintenance commitment, and how to sign your work.
    Unsigned commits will be rejected at review time and by the
    [`checks.yml`](.github/workflows/checks.yml) CI workflow, which scans every PR
    commit for a `Signed-off-by:` trailer matching the commit author.
-5. **Run the gates** locally — the same commands CI runs, so a green run here
+5. **Run `dotnet run --project Build.fsproj -- Setup` once per clone.** It registers the
+   three-way merge driver for the generated `api-baselines/` projections — see
+   [Generated baselines and their merge driver](#generated-baselines-and-their-merge-driver).
+6. **Run the gates** locally — the same commands CI runs, so a green run here
    predicts a green run there:
    ```
    dotnet build ToolUp.Forge.sln
@@ -42,9 +46,9 @@ maintenance commitment, and how to sign your work.
    `VerifyAll` is the aggregator that actually runs every pack. If your change
    touches client-tier F#, add `dotnet run --project Build.fsproj -- VerifyFable`;
    see [What CI checks](#what-ci-checks) for the rest.
-6. **Open a pull request** against `main` with a clear description of the
+7. **Open a pull request** against `main` with a clear description of the
    change and the rationale. Reference any related issues.
-7. A maintainer will review per the [contribution-flow timelines](#contribution-flow-by-type).
+8. A maintainer will review per the [contribution-flow timelines](#contribution-flow-by-type).
 
 ## What CI checks
 
@@ -310,6 +314,84 @@ Two rules, and the gate enforces both:
 Neither rule asks for more comments. The house style is still to write
 one only when the *why* is non-obvious; these say what a comment must
 be true about once you have written it.
+
+## Generated baselines and their merge driver
+
+Two files under `api-baselines/` are **projections** — pure functions of the
+built tree, written by the approval gate itself and never by hand:
+
+- `api-baselines/<Assembly>.approved.txt` — the tracked public surface of each
+  packable assembly (Phase 175), one line per type and member.
+- `api-baselines/doc-coverage.approved.txt` — one row per assembly,
+  `<assembly> <documented>/<total>` (Phase 261).
+
+Both are regenerated with `TOOLUP_APPROVE_API`, scoped to the assemblies you
+actually changed:
+
+```powershell
+$env:TOOLUP_APPROVE_API = "ToolUp.Platform.Core,ToolUp.Platform.Server"
+dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
+$env:TOOLUP_APPROVE_API = $null
+```
+
+### Run `Setup` once per clone
+
+```
+dotnet run --project Build.fsproj -- Setup
+```
+
+This registers a three-way **merge driver** for those two paths in your clone's
+`.git/config`. It is a one-time, per-clone step, and it is not optional if you
+work on more than one branch at a time.
+
+Why it cannot be automatic: `.gitattributes` (which this repo does commit) can
+name a driver per path, but git reads the driver's **command** from
+`.git/config` only — a repository must not be able to hand an arbitrary command
+to everyone who clones it. So the name is in the tree and the command is not,
+and a clone that has not run `Setup` simply gets git's built-in text merge.
+Nothing breaks; you just see the conflict the driver would have resolved.
+
+### What the driver resolves, and what it refuses
+
+The driver is [`dev-scripts/merge-baselines.ps1`](dev-scripts/merge-baselines.ps1)
+(PowerShell 7, no other dependency — it runs inside `git merge`, in a tree that
+may not build).
+
+It resolves the case git's line merge cannot: two branches that each **added**
+to the same sorted region. For the member lists it takes the union of both
+sides' additions and re-emits them in the generator's own order; for the
+coverage rows it computes `base + (ours − base) + (theirs − base)` on both
+numbers, and takes a row that exists on only one side as-is.
+
+It refuses, leaving ordinary conflict markers and a reason on stderr, when:
+
+- a member present in the merge base is **missing from either side**. A removal
+  is a breaking change under the SemVer-on-`0.x` policy, and the whole point of
+  the both-directions gate (Phase 618) is that a human sees it;
+- a coverage row's arithmetic goes negative, or would leave more documented
+  members than members;
+- a row was removed on one side and changed on the other;
+- a line in either file cannot be parsed at all.
+
+### Never resolve a baseline conflict by picking a side
+
+`git checkout --ours` / `--theirs`, or reaching for one side in a merge tool,
+**silently discards everything the other branch added**. On 2026-09-16 six of
+nine landings conflicted on `doc-coverage.approved.txt` alone and two lost a
+sibling's row exactly this way — and because the result is a well-formed file,
+nothing complains until someone else's assembly reads as having regressed.
+
+When the driver refuses, regenerate from the merged tree instead:
+
+```
+dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server
+```
+
+That builds the merged tree, regenerates exactly the assemblies you name
+through the scoped path above, and then re-checks each regenerated file against
+the driver, so the merge commit carries the bytes a clean regeneration would.
+If you prefer to do it by hand, that is fine — but do it by *regenerating*,
+never by choosing.
 
 ## Security-affecting changes
 
