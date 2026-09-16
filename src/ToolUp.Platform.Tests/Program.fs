@@ -197,6 +197,7 @@ let private registeredTests =
         DataProtectionBackendTests.tests
         FileSecretStoreTests.tests
         FileSecretStoreAtomicityTests.tests
+        FileSecretStoreCancellationTests.tests
         // Phase 176 — transient-fault decorator substrate.
         TransientFaultPolicyTests.tests
         // Phase 238 — generic inbound-webhook receiver substrate.

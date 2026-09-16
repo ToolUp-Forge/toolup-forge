@@ -3,6 +3,7 @@ module FileSecretStore
 open System
 open System.IO
 open System.Text.Json
+open System.Threading
 open ToolUp.Platform.Secrets
 
 /// Secret store with scoped file lookup and env-var fallback.
@@ -32,22 +33,65 @@ type FileSecretStore(?baseDir: string, ?path: string) =
     let resolvedBaseDir () =
         baseDir |> Option.defaultWith Directory.GetCurrentDirectory
 
+    let parseSecrets (json: string) =
+        let doc = JsonDocument.Parse json
+        let mutable map = Map.empty
+
+        for prop in doc.RootElement.EnumerateObject() do
+            if prop.Value.ValueKind = JsonValueKind.String then
+                map <- map |> Map.add prop.Name (prop.Value.GetString())
+
+        map
+
+    /// Synchronous read. Phase 6k kept this ONLY for the write path
+    /// (`SetSecret` / `DeleteSecret`), whose read-modify-write runs
+    /// inside `lock cacheLock` — a monitor cannot be held across an
+    /// await, so the load there stays synchronous by construction. It
+    /// is bounded by the same lock that serialises the write, never
+    /// reached from the chat read path, and the file it reads was
+    /// just resolved for writing on the same volume.
     let loadFile (filePath: string) =
         if File.Exists filePath then
             try
-                let json = File.ReadAllText filePath
-                let doc = JsonDocument.Parse json
-                let mutable map = Map.empty
-
-                for prop in doc.RootElement.EnumerateObject() do
-                    if prop.Value.ValueKind = JsonValueKind.String then
-                        map <- map |> Map.add prop.Name (prop.Value.GetString())
-
-                map
+                parseSecrets (File.ReadAllText filePath)
             with _ ->
                 Map.empty
         else
             Map.empty
+
+    /// Phase 6k — the READ path's load. `File.ReadAllText` blocked a
+    /// thread-pool thread for the whole duration of a stalled
+    /// filesystem call (network share, AV scanner, slow disk): under
+    /// load that is thread-pool starvation, and the AI chat path's
+    /// 10 s secret-resolve timeout could not fire because the thread
+    /// it would have to run its continuation on was the one blocked.
+    /// `ReadAllTextAsync` releases the thread while the I/O is in
+    /// flight, and the caller's cancellation token now reaches the
+    /// read itself rather than only the surrounding timeout.
+    let loadFileAsync (ct: CancellationToken) (filePath: string) : Async<Map<string, string>> = async {
+        if not (File.Exists filePath) then
+            return Map.empty
+        else
+            let! outcome = File.ReadAllTextAsync(filePath, ct) |> Async.AwaitTask |> Async.Catch
+
+            match outcome with
+            | Choice1Of2 json ->
+                return
+                    (try
+                        parseSecrets json
+                     with _ ->
+                         Map.empty)
+            | Choice2Of2 _ ->
+                // A cancelled read is the CALLER's signal and must not
+                // degrade to "this scope has no secrets" — that would
+                // turn a timeout into a silent misconfiguration report,
+                // which is the exact class of silent failure this phase
+                // exists to remove. Every other failure (missing file,
+                // malformed JSON, permission denied) keeps the historic
+                // empty-map fallback.
+                ct.ThrowIfCancellationRequested()
+                return Map.empty
+    }
 
     // Cache keyed by scopeId so lookups for different scopes do not share
     // data. `_platform` has its own entry; each team/user gets its own.
@@ -69,18 +113,23 @@ type FileSecretStore(?baseDir: string, ?path: string) =
         else
             $"TOOLUP_{sanitiseScope scopeId}_{key}"
 
-    let loadForScope scopeId =
+    let emptyMap: Async<Map<string, string>> = async { return Map.empty }
+
+    /// Phase 6k — the read path is async end to end. The resolution
+    /// order, precedence and empty-map fallbacks below are exactly what
+    /// the synchronous version did; only the file reads changed.
+    let loadForScopeAsync (ct: CancellationToken) scopeId : Async<Map<string, string>> = async {
         match cache |> Map.tryFind scopeId with
-        | Some c -> c
+        | Some c -> return c
         | None ->
-            let secrets =
+            let! secrets =
                 match path with
                 | Some p when scopeId = "_platform" ->
                     // Override path: applies only to platform scope
-                    loadFile p
+                    loadFileAsync ct p
                 | Some _ ->
                     // Override mode: no per-scope file sources
-                    Map.empty
+                    emptyMap
                 | None ->
                     // Phase 698 — the secrets PATH resolves through the
                     // Phase-696 `ConfigResolution` seam; the per-scope
@@ -88,50 +137,54 @@ type FileSecretStore(?baseDir: string, ?path: string) =
                     // open-ended family the registry does not enumerate and a
                     // manifest therefore cannot name.
                     match ToolUp.Platform.ConfigResolution.tryValue ToolUp.Platform.ConfigKeys.Names.secretsPath with
-                    | None ->
+                    | None -> async {
                         let dir = resolvedBaseDir ()
 
-                        let platformFile =
+                        let! platformFile =
                             if scopeId = "_platform" then
-                                loadFile (Path.Combine(dir, "secrets.json"))
+                                loadFileAsync ct (Path.Combine(dir, "secrets.json"))
                             else
-                                Map.empty
+                                emptyMap
 
-                        let scopedFile =
+                        let! scopedFile =
                             if scopeId = "_platform" then
-                                Map.empty
+                                emptyMap
                             else
-                                loadFile (Path.Combine(dir, $"secrets-{scopeId}.json"))
+                                loadFileAsync ct (Path.Combine(dir, $"secrets-{scopeId}.json"))
 
-                        let userFile =
+                        let! userFile =
                             if scopeId = "_platform" then
                                 let home = Environment.GetFolderPath Environment.SpecialFolder.UserProfile
 
-                                loadFile (Path.Combine(home, ".toolup", "secrets.json"))
+                                loadFileAsync ct (Path.Combine(home, ".toolup", "secrets.json"))
                             else
-                                Map.empty
+                                emptyMap
 
                         // Precedence for _platform: app file > user file.
                         // For scoped lookups: only the scope file contributes.
                         if scopeId = "_platform" then
-                            userFile
-                            |> Map.fold (fun acc k v -> acc |> Map.add k v) Map.empty
-                            |> fun merged -> platformFile |> Map.fold (fun acc k v -> acc |> Map.add k v) merged
+                            return
+                                userFile
+                                |> Map.fold (fun acc k v -> acc |> Map.add k v) Map.empty
+                                |> fun merged -> platformFile |> Map.fold (fun acc k v -> acc |> Map.add k v) merged
                         else
-                            scopedFile
-                    | Some p when scopeId = "_platform" -> loadFile p
-                    | Some _ -> Map.empty
+                            return scopedFile
+                      }
+                    | Some p when scopeId = "_platform" -> loadFileAsync ct p
+                    | Some _ -> emptyMap
 
             // Serialise the cache mutation against concurrent loads and
             // SetSecret/DeleteSecret invalidations; double-check inside the
             // lock so a scope another thread populated meanwhile isn't
             // overwritten (and a concurrent invalidation isn't lost).
-            lock cacheLock (fun () ->
-                match cache |> Map.tryFind scopeId with
-                | Some existing -> existing
-                | None ->
-                    cache <- cache |> Map.add scopeId secrets
-                    secrets)
+            return
+                lock cacheLock (fun () ->
+                    match cache |> Map.tryFind scopeId with
+                    | Some existing -> existing
+                    | None ->
+                        cache <- cache |> Map.add scopeId secrets
+                        secrets)
+    }
 
     // Resolve the file path used for writes on a given scope. Writes
     // always target the base directory (never env vars or the user-home
@@ -247,7 +300,13 @@ type FileSecretStore(?baseDir: string, ?path: string) =
 
     interface ISecretStore with
         member _.GetSecret(scopeId, key) = async {
-            let secrets = loadForScope scopeId
+            // Phase 6k — the ambient cancellation token of whatever async
+            // workflow called us. Every timeout the chat path wraps around
+            // a secret resolve now reaches `File.ReadAllTextAsync` itself,
+            // so a stalled filesystem is cancelled rather than merely
+            // abandoned on a still-blocked thread-pool thread.
+            let! ct = Async.CancellationToken
+            let! secrets = loadForScopeAsync ct scopeId
 
             match secrets |> Map.tryFind key with
             | Some value -> return Some value
@@ -320,7 +379,8 @@ type FileSecretStore(?baseDir: string, ?path: string) =
             // fallback keys are per-scope and not enumerable without
             // probing every possible name. Callers rotate known keys;
             // unknown env-var keys stay untouched.
-            let secrets = loadForScope scopeId
+            let! ct = Async.CancellationToken
+            let! secrets = loadForScopeAsync ct scopeId
             return secrets |> Map.toList |> List.map fst
         }
 

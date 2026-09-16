@@ -376,6 +376,8 @@
         <Compile Include="InProcess\OAuth1aSubstrateTests.fs" />
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <Compile Include="InProcess\FileSecretStoreAtomicityTests.fs" />
+        <!-- Phase 6k - the secret-store read path is async + cancellable. -->
+        <Compile Include="InProcess\FileSecretStoreCancellationTests.fs" />
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <!-- Phase 235 — outbound webhook signing-secret rotation. -->
