@@ -10,6 +10,7 @@ when evaluating a deployment built on ToolUp Platform.
 | [`../../SECURITY.md`](../../SECURITY.md) | Security researcher | "How do I report a vulnerability, and what response will I get?" |
 | [`../platform/security.md`](../platform/security.md) | Deployment operator | "What threat surfaces does *my* composition expose, and which knobs harden them?" |
 | [`permission-audit-chain.md`](permission-audit-chain.md) | Third-party auditor / counterparty | "How do I check for myself that the record of who was granted what has not been edited?" |
+| [`module-access-attestation.md`](module-access-attestation.md) | Counterparty / auditor / regulator | "Prove to me, in a document I can verify offline, that no-one is granted this module without our consent — and who is consented right now." |
 
 The three are deliberately separate. `PLATFORM-SECURITY-RULES.md` is the
 **versioned artefact** — a stable, citable statement of what the substrate
