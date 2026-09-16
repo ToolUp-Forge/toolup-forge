@@ -709,6 +709,10 @@ let private registeredTests =
         AIChatWorkerTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
+        // Phase 44 — the IProviderProfileApi transport + the reusable
+        // BYOK component: the handler over the real store, the GP 13
+        // composition gate, and the zero-ToolUp.AI layering claim.
+        ProviderProfileApiTests.tests
         // Phase 43.B — the two reference provider-OAuth flows, bound to
         // both conformance packs (`IOAuthCredentialFlowContract` for the
         // OAuth half, `IProviderOAuthFlowContract` for the
@@ -2044,6 +2048,12 @@ let private registeredTests =
         // ordering that keeps a refused upload out of storage.
         UploadValidationTests.contractTests
         UploadValidationTests.tests
+        // Phase 6p — the session-store reset transition: the per-instance
+        // epoch, the eviction-then-recreate notification + audit row, and
+        // the three baselines that pin down what must stay SILENT (fresh
+        // first access, healthy steady state, process restart — the last
+        // being the case the design says is undetectable server-side).
+        SessionStoreResetTests.tests
         // Phase 478 — the isolated execution profile: ExecutionProfile as
         // data on the portable ExternalWorkSpec (Standard by default, so
         // the pre-478 path is unchanged), the three-clause isolation

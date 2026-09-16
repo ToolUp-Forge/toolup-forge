@@ -72,6 +72,70 @@ type FileListSnapshot = {
     Ingestion: (string * FileIngestionStatus) list
 }
 
+/// Identity + size of the server-side `SessionFileStore` backing the
+/// caller's resolved `StorageScope`, returned by
+/// `FileManagementApi.GetSessionInfo` (Phase 6p).
+///
+/// `Epoch` is minted when the store instance is CONSTRUCTED, so it
+/// changes on every event that silently empties the server's view of
+/// the caller's uploads: a process restart (the whole in-memory
+/// dictionary is gone), the ephemeral-store TTL eviction
+/// (`ServerConfig.EphemeralStoreEvictionMinutes`), or a scope-container
+/// change. A client that cached an epoch and now reads a different one
+/// knows its local file list is stale WITHOUT having to wait for a
+/// data-consuming call to fail with "File 'X' not found in session".
+///
+/// `FileCount` is the number of files the store currently holds — the
+/// cheap corroborating signal for a client that wants to render "0 files"
+/// immediately rather than re-running `ListFiles`.
+type SessionStoreInfo = { Epoch: Guid; FileCount: int }
+
+/// Wire-format key for the session-store-reset `CustomNotification`
+/// (Phase 6p), mirroring `DataManagerIngestionStatusKey`'s shape. A new
+/// `Notification` DU case is deliberately NOT minted: the DU is a closed
+/// union every host matches exhaustively and every SSE listener
+/// enumerates by hand, and this event is a platform event with a
+/// module-shaped payload — exactly what `CustomNotification` exists for.
+[<Literal>]
+let SessionStoreResetKey = "Platform.SessionStoreReset"
+
+/// `Reason` value for the TTL-eviction transition — the only one the
+/// server publishes. Shared by the publisher, the audit emission and the
+/// client so the three cannot drift into three spellings of one event.
+[<Literal>]
+let SessionStoreResetReasonEvicted = "Evicted"
+
+/// `Reason` value for the client-derived restart classification. A
+/// restart takes the SSE connection with it, so this value never crosses
+/// the channel; the client stamps it on the reconciliation it raises for
+/// itself after finding an epoch the server never minted.
+[<Literal>]
+let SessionStoreResetReasonProcessRestart = "ProcessRestart"
+
+/// Payload carried by the `SessionStoreResetKey` `CustomNotification`.
+///
+/// GP 4 — scope container only. No filenames, no file contents, no user
+/// identity beyond the container the audit log already records.
+///
+/// `Reason` is the string vocabulary rather than a DU so a future cause
+/// can be added without a wire break on the hosts that render it:
+///
+/// * `"Evicted"` — the store was dropped by the ephemeral-store TTL sweep
+///   and has now been re-created. This is the only value the server
+///   PUBLISHES, because it is the only transition with a live subscriber
+///   to inform.
+/// * `"ProcessRestart"` — reserved for the client-derived classification.
+///   A restart takes the SSE connection down with it, so there is no
+///   channel over which to announce it; the client discovers it by
+///   comparing its cached epoch against `GetSessionInfo` on reconnect and
+///   surfaces the same reconciliation.
+type SessionStoreResetNotification = {
+    Container: string
+    PreviousEpoch: Guid option
+    CurrentEpoch: Guid
+    Reason: string
+}
+
 /// File Management API contract. Data-path methods are dispatcher-
 /// anonymous by design: Anonymous-mode deployments upload/read/delete
 /// within their session scope, and `StorageScope` isolation is the
@@ -122,4 +186,15 @@ type FileManagementApi = {
     [<AllowAnonymous>]
     [<Audit "Custom:DataStoreReset">]
     ResetDataStore: unit -> Async<Result<int, string>>
+    /// Phase 6p — identity + file count of the server-side session store
+    /// backing the caller's scope. Read-only, allocates nothing, and is
+    /// the one call a healthy session makes that it did not make before
+    /// (once, on mount): every other reconciliation path below is driven
+    /// by an event that only fires when something was actually lost.
+    ///
+    /// Appended at the END of the record deliberately — Fable.Remoting
+    /// puts a record's methods on the wire positionally, so inserting
+    /// mid-record would re-point every route after it.
+    [<AllowAnonymous>]
+    GetSessionInfo: unit -> Async<SessionStoreInfo>
 }

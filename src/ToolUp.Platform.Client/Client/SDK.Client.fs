@@ -270,6 +270,16 @@ module Client =
         /// `PrefetchedProcessedData` and merged into `ProcessedData` so data
         /// modules see uploaded data on load without visiting Data Manager.
         | DataSnapshotPrefetched of FileListSnapshot
+        /// Phase 6p — the server-side session file store this tab was
+        /// talking to is gone (TTL eviction, process restart, scope
+        /// change) and a new one has taken its place. Raised by
+        /// `SessionEpoch` from whichever path noticed first: the server's
+        /// `Platform.SessionStoreReset` notification, the on-focus epoch
+        /// poll, the SSE-reconnect check, or a pre-flight guard. Clears
+        /// the prefetched processed data and toasts the cause — the file
+        /// list holders clear themselves through their own
+        /// `SessionEpoch.subscribe`.
+        | SessionStoreReset of SessionStoreResetNotification
         /// User collapsed or expanded a sidebar section. The key is
         /// the reserved `"_pinned"` / `"_other"` sentinel or a declared
         /// group name. Persisted to localStorage — no server round-trip
@@ -1292,7 +1302,18 @@ module Client =
         let dataLoaders =
             match config.DataManager with
             | NoDataManager -> []
-            | _ -> [ bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched ]
+            | _ -> [
+                bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
+                // Phase 6p — seed the session epoch alongside the
+                // snapshot it describes. The one call a healthy session
+                // makes that it did not make before; a first read can
+                // never report a reset (there is no prior epoch to
+                // differ from), so this only establishes the baseline
+                // the later checks compare against. Failure is swallowed
+                // inside `SessionEpoch.check` — an unreadable epoch
+                // leaves the tab exactly where 6p found it, not worse.
+                Cmd.ofEffect (fun _ -> Async.StartImmediate(SessionEpoch.prime ()))
+              ]
 
         Cmd.batch (
             [
@@ -1579,6 +1600,42 @@ module Client =
                     Cmd.map ModuleMsg cmd
                 | None -> model, Cmd.none
 
+            | SessionStoreReset notice ->
+                // Drain the shell's half of the file-derived state. The
+                // Data Manager surfaces clear their own lists through
+                // their `SessionEpoch` subscriptions — one event, each
+                // holder responsible for its own state, rather than the
+                // shell reaching into modules it does not own.
+                //
+                // The toast goes through `NotificationClient.publishLocal`
+                // so it lands in whatever `ToastCentre` the deployment
+                // composed, exactly like the team-switch failures above:
+                // no second notification surface for one more event.
+                // The toast names the cause rather than only the effect:
+                // "it was idle too long" and "the server restarted" call
+                // for different user responses, and the payload already
+                // carries which one it was.
+                let cause =
+                    if notice.Reason = SessionStoreResetReasonEvicted then
+                        "after a period of inactivity"
+                    else
+                        "by a server restart"
+
+                NotificationClient.publishLocal (
+                    NotificationEnvelope.create
+                        ""
+                        (Notification.SystemMessage(
+                            SystemMessageLevel.Warning,
+                            $"Your server session was reset {cause}; please re-upload your files."
+                        ))
+                )
+
+                {
+                    model with
+                        PrefetchedProcessedData = []
+                },
+                Cmd.none
+
             | DataSnapshotPrefetched snapshot ->
                 // Boot-time data prefetch: store the snapshot's processed
                 // entries. The post-update recompute below merges them into
@@ -1823,6 +1880,15 @@ module Client =
                     bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
                     bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
                     activeTeamRoleCmd newTeamIdOpt
+                    // Phase 6p — the scope moved, so the store on the
+                    // other side is legitimately a different one. Drop
+                    // the cached epoch and re-seed against the new scope;
+                    // without this the next focus check would compare the
+                    // old scope's epoch against the new scope's store and
+                    // report a reset that never happened.
+                    Cmd.ofEffect (fun _ ->
+                        SessionEpoch.reset ()
+                        Async.StartImmediate(SessionEpoch.prime ()))
                 ]
 
             | LocaleSwitched locale ->
@@ -4431,12 +4497,68 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Phase 6p — session-store reconciliation. Three jobs, one
+        // lifetime: relay `SessionEpoch`'s fan-out into the shell's
+        // `Msg` (so the shell's own state clears wherever the reset was
+        // detected), re-check the epoch when the tab comes back to the
+        // foreground, and re-check it whenever the SSE stream reopens.
+        //
+        // The last two are the paths that catch what the notification
+        // cannot: a process restart takes the channel down with it, and
+        // an eviction that happened while this tab was backgrounded may
+        // have been published to a connection that was already gone.
+        // Both are events that fire rarely and cost one read each; a
+        // deployment that never evicts sees the read return a matching
+        // epoch and dispatches nothing (GP 11).
+        let sessionEpochEffect =
+            EffectHandle.programLifetime "session-epoch" (fun dispatch ->
+                let unsubscribeReset =
+                    SessionEpoch.subscribe (fun notice -> dispatch (SessionStoreReset notice))
+
+                let recheck () =
+                    Async.StartImmediate(
+                        async {
+                            let! _ = SessionEpoch.check ()
+                            return ()
+                        }
+                    )
+
+                // `visibilitychange` rather than `focus`: it fires for the
+                // tab-switch case the operator report describes (the user
+                // left the tab open and came back), and unlike `focus` it
+                // does not fire for every click back into the window from
+                // a devtools pane or another app, which would turn a
+                // once-per-return read into a per-interaction one.
+                let onVisibility =
+                    fun (_: Browser.Types.Event) ->
+                        if SessionEpoch.documentVisible () then
+                            recheck ()
+
+                Browser.Dom.document.addEventListener ("visibilitychange", unbox onVisibility)
+
+                let unsubscribeOpened = NotificationClient.onConnectionOpened recheck
+
+                { new System.IDisposable with
+                    member _.Dispose() =
+                        unsubscribeReset ()
+                        unsubscribeOpened ()
+                        Browser.Dom.document.removeEventListener ("visibilitychange", unbox onVisibility)
+                })
+
         let notificationsEffect =
             EffectHandle.programLifetime "notifications-stream" (fun dispatch ->
                 let onEnvelope (envelope: NotificationEnvelope) =
                     match envelope.Notification with
                     | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
                         dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
+                    | Notification.CustomNotification(key, payloadJson) when key = SessionStoreResetKey ->
+                        // Phase 6p — the authoritative arm. The server
+                        // publishes this on eviction-then-recreate, so
+                        // the epoch it carries needs no round trip to
+                        // confirm. `applyServerNotice` adopts it and
+                        // fans out once; a focus check moments later
+                        // sees a match and stays silent.
+                        SessionEpoch.applyServerNoticeJson payloadJson
                     | Notification.MembershipChanged payload ->
                         // Server-side bridge filters by AffectedUserId
                         // before forwarding to this connection — every
@@ -4572,6 +4694,7 @@ module Client =
             navigationEffect
             localeRequestEffect
             moduleEventsEffect
+            sessionEpochEffect
             notificationsEffect
             authTokenAcquiredEffect
             bridgeHealthEffect

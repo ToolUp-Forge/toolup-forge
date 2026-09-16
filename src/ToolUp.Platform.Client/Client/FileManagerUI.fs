@@ -74,6 +74,15 @@ type Msg =
     | RetryIngestion of ApiCall<string, Result<unit, string>>
     /// Phase 220 — narrow the file list to one ingestion status (client-side).
     | SetStatusFilter of IngestionStatusFilter
+    /// Phase 6p — the server-side session store this tab was talking to
+    /// is gone. Raised by `SessionEpoch` from whichever path noticed
+    /// first (the server's notification, the on-focus poll, the SSE
+    /// reconnect check, a pre-flight guard) and delivered through the
+    /// same subscriber component the ingestion badges use. Drops the
+    /// file-derived state rather than re-fetching it: the files are gone
+    /// server-side, so a refetch would render the same empty list one
+    /// round trip later.
+    | SessionStoreCleared
     | ApiError of string
     | DismissError
 
@@ -267,6 +276,22 @@ let update msg model =
 
     | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
 
+    | SessionStoreCleared ->
+        // Everything derived from the server's session store goes; the
+        // filter and any error banner are the user's own UI state and
+        // stay. `FilesLoading = false` because there is no fetch in
+        // flight to wait on — an empty list here is the answer, not a
+        // pending one, and leaving the spinner up would read as
+        // "loading" forever.
+        {
+            model with
+                UploadedFiles = Map.empty
+                ProcessedData = []
+                IngestionStatus = Map.empty
+                FilesLoading = false
+        },
+        Cmd.none
+
     | ApiError errorMsg ->
         {
             model with
@@ -401,7 +426,15 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
                         ()
                 | _ -> ())
 
-        FsReact.createDisposable dispose)
+        // Phase 6p — the session-store reset rides the same mount rather
+        // than a second component: one effect, one dispose, and the two
+        // subscriptions share a lifetime because they describe the same
+        // file list.
+        let disposeReset = SessionEpoch.subscribe (fun _ -> dispatch SessionStoreCleared)
+
+        FsReact.createDisposable (fun () ->
+            dispose ()
+            disposeReset ()))
 
     Html.none
 

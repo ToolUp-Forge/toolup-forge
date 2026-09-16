@@ -495,8 +495,10 @@ FileManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 FileManagerUI+Msg.IsResetDataStore : System.Boolean { get }
 FileManagerUI+Msg.IsRetryIngestion : System.Boolean { get }
 FileManagerUI+Msg.IsSelectFile : System.Boolean { get }
+FileManagerUI+Msg.IsSessionStoreCleared : System.Boolean { get }
 FileManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 FileManagerUI+Msg.IsUploadFile : System.Boolean { get }
+FileManagerUI+Msg.SessionStoreCleared : FileManagerUI+Msg { get }
 FileManagerUI+Msg.Tag : System.Int32 { get }
 FileManagerUI+Msg+ApiError (class)
 FileManagerUI+Msg+ApiError.Item : System.String { get }
@@ -527,6 +529,7 @@ FileManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
 FileManagerUI+Msg+Tags.RetryIngestion : System.Int32 (literal)
 FileManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
+FileManagerUI+Msg+Tags.SessionStoreCleared : System.Int32 (literal)
 FileManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 FileManagerUI+Msg+Tags.UploadFile : System.Int32 (literal)
 FileManagerUI+Msg+UploadFile (class)
@@ -736,6 +739,7 @@ MappingDataManagerUI+Msg.IsRetryIngestionDone : System.Boolean { get }
 MappingDataManagerUI+Msg.IsRetryIngestionMsg : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectTarget : System.Boolean { get }
+MappingDataManagerUI+Msg.IsSessionStoreCleared : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetDateOrder : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 MappingDataManagerUI+Msg.IsStartMapping : System.Boolean { get }
@@ -744,6 +748,7 @@ MappingDataManagerUI+Msg.IsValidationFinished : System.Boolean { get }
 MappingDataManagerUI+Msg.LoadFiles : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ProceedToMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ResetDataStore : MappingDataManagerUI+Msg { get }
+MappingDataManagerUI+Msg.SessionStoreCleared : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.Tag : System.Int32 { get }
 MappingDataManagerUI+Msg+AddDerivedColumn (class)
 MappingDataManagerUI+Msg+AddDerivedColumn.Item : ColumnMappingTypes+DerivedColumn { get }
@@ -830,6 +835,7 @@ MappingDataManagerUI+Msg+Tags.RetryIngestionDone : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.RetryIngestionMsg : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectTarget : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.SessionStoreCleared : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetDateOrder : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.StartMapping : System.Int32 (literal)
@@ -1405,6 +1411,132 @@ ProcessedDataContext (class)
 ProcessedDataContext.Context : Feliz.ReactTypes+ReactContext`1[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]] { get }
 ProcessedDataContext+ProcessedData (class)
 ProcessedDataContext+ProcessedData.forType(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]
+ProviderProfileUI (class)
+ProviderProfileUI.ProviderProfilePanel(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ProviderProfileUI.init(ProviderProfileUI+ProviderProfileConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ProviderProfileUI.parseTags(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ProviderProfileUI.saveBlocked(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+VerificationState, ProviderProfileUI+ProviderCandidate) : System.Boolean
+ProviderProfileUI.update(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ProviderProfileUI.view(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ProviderProfileUI+EditorSeed (class)
+ProviderProfileUI+EditorSeed..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, System.String, System.Boolean, System.Boolean)
+ProviderProfileUI+EditorSeed.HasStoredCredential : System.Boolean { get }
+ProviderProfileUI+EditorSeed.Label : System.String { get }
+ProviderProfileUI+EditorSeed.Model : System.String { get }
+ProviderProfileUI+EditorSeed.OAuthConnected : System.Boolean { get }
+ProviderProfileUI+EditorSeed.Original : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+EditorSeed.ProviderId : System.String { get }
+ProviderProfileUI+EditorSeed.Tags : System.String { get }
+ProviderProfileUI+EditorSeedModule (class)
+ProviderProfileUI+EditorSeedModule.blank : ProviderProfileUI+EditorSeed { get }
+ProviderProfileUI+EditorSeedModule.ofEntry(ToolUp.Platform.ProviderEntryView) : ProviderProfileUI+EditorSeed
+ProviderProfileUI+Model (class)
+ProviderProfileUI+Model..ctor(ToolUp.Platform.ProviderProfileView, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ProviderProfileUI+EditorSeed], ProviderProfileUI+VerificationState, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ProviderProfileUI+Model.Busy : System.Boolean { get }
+ProviderProfileUI+Model.Editing : Microsoft.FSharp.Core.FSharpOption`1[ProviderProfileUI+EditorSeed] { get }
+ProviderProfileUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+Model.Loaded : System.Boolean { get }
+ProviderProfileUI+Model.Profile : ToolUp.Platform.ProviderProfileView { get }
+ProviderProfileUI+Model.Status : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+Model.Verification : ProviderProfileUI+VerificationState { get }
+ProviderProfileUI+Msg (class)
+ProviderProfileUI+Msg.BeginAdd : ProviderProfileUI+Msg { get }
+ProviderProfileUI+Msg.CancelEdit : ProviderProfileUI+Msg { get }
+ProviderProfileUI+Msg.DismissError : ProviderProfileUI+Msg { get }
+ProviderProfileUI+Msg.DismissStatus : ProviderProfileUI+Msg { get }
+ProviderProfileUI+Msg.IsBeginAdd : System.Boolean { get }
+ProviderProfileUI+Msg.IsBeginEdit : System.Boolean { get }
+ProviderProfileUI+Msg.IsCancelEdit : System.Boolean { get }
+ProviderProfileUI+Msg.IsClearRoute : System.Boolean { get }
+ProviderProfileUI+Msg.IsDismissError : System.Boolean { get }
+ProviderProfileUI+Msg.IsDismissStatus : System.Boolean { get }
+ProviderProfileUI+Msg.IsLoad : System.Boolean { get }
+ProviderProfileUI+Msg.IsMutated : System.Boolean { get }
+ProviderProfileUI+Msg.IsProfileLoaded : System.Boolean { get }
+ProviderProfileUI+Msg.IsRemove : System.Boolean { get }
+ProviderProfileUI+Msg.IsSave : System.Boolean { get }
+ProviderProfileUI+Msg.IsSaveCompleted : System.Boolean { get }
+ProviderProfileUI+Msg.IsSetFallback : System.Boolean { get }
+ProviderProfileUI+Msg.IsSetRoute : System.Boolean { get }
+ProviderProfileUI+Msg.IsVerify : System.Boolean { get }
+ProviderProfileUI+Msg.IsVerifyCompleted : System.Boolean { get }
+ProviderProfileUI+Msg.Load : ProviderProfileUI+Msg { get }
+ProviderProfileUI+Msg.Tag : System.Int32 { get }
+ProviderProfileUI+Msg+BeginEdit (class)
+ProviderProfileUI+Msg+BeginEdit.Item : System.String { get }
+ProviderProfileUI+Msg+ClearRoute (class)
+ProviderProfileUI+Msg+ClearRoute.context : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+Msg+ClearRoute.surface : System.String { get }
+ProviderProfileUI+Msg+Mutated (class)
+ProviderProfileUI+Msg+Mutated.Item1 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+ProviderProfileUI+Msg+Mutated.confirmation : System.String { get }
+ProviderProfileUI+Msg+ProfileLoaded (class)
+ProviderProfileUI+Msg+ProfileLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, System.String] { get }
+ProviderProfileUI+Msg+Remove (class)
+ProviderProfileUI+Msg+Remove.Item : System.String { get }
+ProviderProfileUI+Msg+Save (class)
+ProviderProfileUI+Msg+Save.Item : ProviderProfileUI+ProviderCandidate { get }
+ProviderProfileUI+Msg+SaveCompleted (class)
+ProviderProfileUI+Msg+SaveCompleted.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+ProviderProfileUI+Msg+SetFallback (class)
+ProviderProfileUI+Msg+SetFallback.Item : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ProviderProfileUI+Msg+SetRoute (class)
+ProviderProfileUI+Msg+SetRoute.Item : ToolUp.Platform.RoutingRule { get }
+ProviderProfileUI+Msg+Tags (class)
+ProviderProfileUI+Msg+Tags.BeginAdd : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.BeginEdit : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.CancelEdit : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.ClearRoute : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.DismissError : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.DismissStatus : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.Load : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.Mutated : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.ProfileLoaded : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.Remove : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.Save : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.SaveCompleted : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.SetFallback : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.SetRoute : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.Verify : System.Int32 (literal)
+ProviderProfileUI+Msg+Tags.VerifyCompleted : System.Int32 (literal)
+ProviderProfileUI+Msg+Verify (class)
+ProviderProfileUI+Msg+Verify.Item : ProviderProfileUI+ProviderCandidate { get }
+ProviderProfileUI+Msg+VerifyCompleted (class)
+ProviderProfileUI+Msg+VerifyCompleted.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String] { get }
+ProviderProfileUI+ProviderCandidate (class)
+ProviderProfileUI+ProviderCandidate..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ProviderProfileUI+ProviderCandidate.ApiKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+ProviderCandidate.Label : System.String { get }
+ProviderProfileUI+ProviderCandidate.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ProviderProfileUI+ProviderCandidate.ProviderId : System.String { get }
+ProviderProfileUI+ProviderCandidate.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ProviderProfileUI+ProviderProfileConfig (class)
+ProviderProfileUI+ProviderProfileConfig..ctor(ToolUp.Platform.IProviderProfileApi, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+ProviderCandidate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]]], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ProviderProfileUI+ProviderProfileConfig.Api : ToolUp.Platform.IProviderProfileApi { get }
+ProviderProfileUI+ProviderProfileConfig.Surfaces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ProviderProfileUI+ProviderProfileConfig.Verify : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+ProviderCandidate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]]] { get }
+ProviderProfileUI+ProviderProfileConfigModule (class)
+ProviderProfileUI+ProviderProfileConfigModule.create(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ProviderProfileUI+ProviderProfileConfig
+ProviderProfileUI+ProviderProfileConfigModule.forApi(ToolUp.Platform.IProviderProfileApi, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ProviderProfileUI+ProviderProfileConfig
+ProviderProfileUI+ProviderProfileConfigModule.withApi(ToolUp.Platform.IProviderProfileApi, ProviderProfileUI+ProviderProfileConfig) : ProviderProfileUI+ProviderProfileConfig
+ProviderProfileUI+ProviderProfileConfigModule.withVerify(Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+ProviderCandidate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]], ProviderProfileUI+ProviderProfileConfig) : ProviderProfileUI+ProviderProfileConfig
+ProviderProfileUI+VerificationState (class)
+ProviderProfileUI+VerificationState.IsNotAttempted : System.Boolean { get }
+ProviderProfileUI+VerificationState.IsPassed : System.Boolean { get }
+ProviderProfileUI+VerificationState.IsRefused : System.Boolean { get }
+ProviderProfileUI+VerificationState.IsRunning : System.Boolean { get }
+ProviderProfileUI+VerificationState.NotAttempted : ProviderProfileUI+VerificationState { get }
+ProviderProfileUI+VerificationState.Running : ProviderProfileUI+VerificationState { get }
+ProviderProfileUI+VerificationState.Tag : System.Int32 { get }
+ProviderProfileUI+VerificationState+Passed (class)
+ProviderProfileUI+VerificationState+Passed.models : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ProviderProfileUI+VerificationState+Refused (class)
+ProviderProfileUI+VerificationState+Refused.reason : System.String { get }
+ProviderProfileUI+VerificationState+Tags (class)
+ProviderProfileUI+VerificationState+Tags.NotAttempted : System.Int32 (literal)
+ProviderProfileUI+VerificationState+Tags.Passed : System.Int32 (literal)
+ProviderProfileUI+VerificationState+Tags.Refused : System.Int32 (literal)
+ProviderProfileUI+VerificationState+Tags.Running : System.Int32 (literal)
 ServiceAccountUI (class)
 ServiceAccountUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceAccountAdminConfig]) : ToolUp.Platform.ErasedModule
 ServiceAccountUI.init() : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -2860,6 +2992,7 @@ ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRetryBootLoad : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsSessionStoreReset : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarEntryHideToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarGroupToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleExpandToggled : System.Boolean { get }
@@ -2920,6 +3053,8 @@ ToolUp.Platform.Client+Msg+ResetModule (class)
 ToolUp.Platform.Client+Msg+ResetModule.moduleId : System.String { get }
 ToolUp.Platform.Client+Msg+RetryBootLoad (class)
 ToolUp.Platform.Client+Msg+RetryBootLoad.source : System.String { get }
+ToolUp.Platform.Client+Msg+SessionStoreReset (class)
+ToolUp.Platform.Client+Msg+SessionStoreReset.Item : ProcessedDataTypes+SessionStoreResetNotification { get }
 ToolUp.Platform.Client+Msg+SidebarEntryHideToggled (class)
 ToolUp.Platform.Client+Msg+SidebarEntryHideToggled.entryId : System.String { get }
 ToolUp.Platform.Client+Msg+SidebarGroupToggled (class)
@@ -2960,6 +3095,7 @@ ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RetryBootLoad : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.SessionStoreReset : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarEntryHideToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarGroupToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModuleExpandToggled : System.Int32 (literal)
@@ -4295,7 +4431,7 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
@@ -4322,6 +4458,7 @@ ToolUp.Platform.MessageCatalog.OAuth1aCredential : ToolUp.Platform.OAuth1aCreden
 ToolUp.Platform.MessageCatalog.PermissionsAdmin : ToolUp.Platform.PermissionsAdminMessages { get }
 ToolUp.Platform.MessageCatalog.PlatformAdmin : ToolUp.Platform.PlatformAdminMessages { get }
 ToolUp.Platform.MessageCatalog.PlatformUsers : ToolUp.Platform.PlatformUsersMessages { get }
+ToolUp.Platform.MessageCatalog.ProviderProfile : ToolUp.Platform.ProviderProfileMessages { get }
 ToolUp.Platform.MessageCatalog.PublicUtilityWidgets : ToolUp.Platform.PublicUtilityWidgetsMessages { get }
 ToolUp.Platform.MessageCatalog.RateLimited : ToolUp.Platform.RateLimitedMessages { get }
 ToolUp.Platform.MessageCatalog.ServiceAccount : ToolUp.Platform.ServiceAccountMessages { get }
@@ -4599,6 +4736,7 @@ ToolUp.Platform.NotAuthorisedMode+Tags (class)
 ToolUp.Platform.NotAuthorisedMode+Tags.CustomNotAuthorised : System.Int32 (literal)
 ToolUp.Platform.NotAuthorisedMode+Tags.DefaultNotAuthorised : System.Int32 (literal)
 ToolUp.Platform.NotificationClient (class)
+ToolUp.Platform.NotificationClient.onConnectionOpened(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.NotificationClient.publishLocal(ToolUp.Platform.NotificationEnvelope) : System.Void
 ToolUp.Platform.NotificationClient.reconnect() : System.Void
 ToolUp.Platform.NotificationClient.reset() : System.Void
@@ -5022,6 +5160,64 @@ ToolUp.Platform.PreviewOutcome+Placeholder.unresolved : Microsoft.FSharp.Collect
 ToolUp.Platform.PreviewOutcome+Tags (class)
 ToolUp.Platform.PreviewOutcome+Tags.Placeholder : System.Int32 (literal)
 ToolUp.Platform.PreviewOutcome+Tags.Rendered : System.Int32 (literal)
+ToolUp.Platform.ProviderProfileMessages (class)
+ToolUp.Platform.ProviderProfileMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ProviderProfileMessages.AddOverride : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.AddProvider : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.AddToFallback : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ApiKeyField : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ApiKeyKeepHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ApiKeyPlaceholder : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Cancel : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ContextOverrides : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ContextPlaceholder : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.DefaultRoute : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Dismiss : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Edit : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.FallbackHeading : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.FallbackHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.FallbackSaved : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.HealthDegraded : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.HealthHealthy : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.HealthNeedsReauthorization : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.HealthUnhealthy : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.HealthUnknown : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.LabelField : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Loading : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ModelField : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ModelPlaceholder : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.MoveDown : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.MoveUp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoCredential : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoFallback : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoOverrides : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoProviders : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoRoute : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NoSurfaces : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NotVerified : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.NotVerifiedHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.OAuthConnected : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.OAuthKeyHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ProviderIdField : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ProvidersHeading : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.ProvidersHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Remove : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.RemoveFromFallback : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.RemoveOverride : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Removed : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.RoutingHeading : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.RoutingHelp : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.RoutingSaved : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Save : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Saved : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.SurfaceHeading : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ProviderProfileMessages.TagsField : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.TagsPlaceholder : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.VerificationFailed : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ProviderProfileMessages.VerifiedModels : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
+ToolUp.Platform.ProviderProfileMessages.Verify : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.VerifyBeforeSaving : System.String { get }
+ToolUp.Platform.ProviderProfileMessages.Verifying : System.String { get }
 ToolUp.Platform.PseudoLocaleCatalog (class)
 ToolUp.Platform.PseudoLocaleCatalog.Tag : System.String { get }
 ToolUp.Platform.PseudoLocaleCatalog.catalog() : ToolUp.Platform.MessageCatalog
@@ -5236,6 +5432,21 @@ ToolUp.Platform.ServiceStatusBoardMode+Tags.ConfiguredServiceStatusBoard : Syste
 ToolUp.Platform.ServiceStatusBoardMode+Tags.DefaultServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.ExternalServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.NoServiceStatusBoard : System.Int32 (literal)
+ToolUp.Platform.SessionEpoch (class)
+ToolUp.Platform.SessionEpoch.applyServerNotice(ProcessedDataTypes+SessionStoreResetNotification) : System.Void
+ToolUp.Platform.SessionEpoch.applyServerNoticeJson(System.String) : System.Void
+ToolUp.Platform.SessionEpoch.check() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+SessionStoreResetNotification]]
+ToolUp.Platform.SessionEpoch.current() : Microsoft.FSharp.Core.FSharpOption`1[System.Guid]
+ToolUp.Platform.SessionEpoch.documentVisible() : System.Boolean
+ToolUp.Platform.SessionEpoch.preflight`1(Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.SessionEpoch.prime() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SessionEpoch.reset() : System.Void
+ToolUp.Platform.SessionEpoch.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+SessionStoreResetNotification, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SessionEpoch+SessionStoreResetException (class)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor()
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.String)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException.Data0 : System.String { get }
 ToolUp.Platform.SessionSecurityConfig (class)
 ToolUp.Platform.SessionSecurityConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.SessionSecurityConfig.Icon : Fable.React.ReactElement { get }
