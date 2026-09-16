@@ -58,7 +58,7 @@ type ITeamProviderResolver =
     /// signal to apply whatever the deployment wired (GP 13 — the
     /// platform default is unchanged when no team profile is set).
     ///
-    /// The returned `Scope` is load-bearing, not diagnostic: it names
+    /// The returned `OwningScope` is load-bearing, not diagnostic: it names
     /// where the entry's `SecretKeyName` must be read, and for a
     /// team-owned entry resolved on behalf of a member that is the
     /// TEAM's scope, not the member's.

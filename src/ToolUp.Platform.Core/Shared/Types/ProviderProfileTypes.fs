@@ -382,7 +382,11 @@ type ProviderProfileOwner =
 /// `StorageScope` its profile (and its secrets) are persisted under.
 type ProviderScope = {
     Owner: ProviderProfileOwner
-    Scope: StorageScope
+    /// Named `Storage` rather than `Scope` so a record-construction or
+    /// dot-lookup in `Platform.Server` is never inferred against
+    /// `SoftwareBillOfMaterials.Scope`, which is declared later in that
+    /// tier's compile order and silently wins the field-name race.
+    Storage: StorageScope
 }
 
 module ProviderScope =
@@ -394,7 +398,7 @@ module ProviderScope =
     /// same blob this chain reads.
     let userOwned (userId: string) : ProviderScope = {
         Owner = ProviderProfileOwner.UserOwned userId
-        Scope = {
+        Storage = {
             ScopeId = userId
             Container = $"user-{userId}"
             Persist = true
@@ -406,7 +410,7 @@ module ProviderScope =
     /// reason.
     let teamOwned (teamId: string) : ProviderScope = {
         Owner = ProviderProfileOwner.TeamOwned teamId
-        Scope = {
+        Storage = {
             ScopeId = teamId
             Container = $"team-{teamId}"
             Persist = true
@@ -418,7 +422,7 @@ module ProviderScope =
     /// container IS the claim's scope id.
     let claimOwned (scopeId: string) : ProviderScope = {
         Owner = ProviderProfileOwner.ClaimOwned scopeId
-        Scope = {
+        Storage = {
             ScopeId = scopeId
             Container = scopeId
             Persist = true
@@ -472,8 +476,9 @@ type ProviderResolution = {
     /// for `PlatformDefault`. Carried explicitly because it is the one
     /// fact a consumer cannot re-derive: a team-owned entry resolved
     /// for a member names a secret in the TEAM's scope, and the
-    /// member's own scope does not hold it.
-    Scope: StorageScope option
+    /// member's own scope does not hold it. Named `OwningScope` for the
+    /// same field-inference reason `ProviderScope.Storage` is.
+    OwningScope: StorageScope option
 }
 
 module ProviderResolution =
@@ -481,7 +486,7 @@ module ProviderResolution =
     let platformDefault: ProviderResolution = {
         Entry = None
         Owner = ProviderProfileOwner.PlatformDefault
-        Scope = None
+        OwningScope = None
     }
 
     /// Take the first rung whose profile routes `(surface, context)`.
@@ -509,7 +514,7 @@ module ProviderResolution =
             |> Option.map (fun entry -> {
                 Entry = Some entry
                 Owner = rung.Owner
-                Scope = Some rung.Scope
+                OwningScope = Some rung.Storage
             }))
         |> Option.defaultValue platformDefault
 
