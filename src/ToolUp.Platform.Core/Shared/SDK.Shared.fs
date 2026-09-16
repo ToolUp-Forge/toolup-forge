@@ -3546,6 +3546,24 @@ type ServerConfig = {
     /// subset of what a deployment composes, and therefore not usable as
     /// a parity assertion.
     ExpectedModules: string list option
+
+    /// Phase 6m — explicit operator attestation that an AI deployment
+    /// admitting an `Anonymous` surface, with no rate-limit policy
+    /// resolving for `AnonymousKind` and a platform-paid provider wired,
+    /// is nonetheless cost-bounded by controls the SDK cannot see
+    /// (per-IP gating or request budgets at the proxy / CDN / WAF).
+    /// Default `false` — `AnonymousAIModeValidator` refuses startup,
+    /// because an unauthenticated caller driving a platform-funded
+    /// provider is unbounded spend with no per-user attribution.
+    ///
+    /// Like `AcceptStickyRoutedAiInMultiInstance`, setting this
+    /// **degrades the refusal to a `Warning` rather than clearing it**:
+    /// upstream rate limiting is an assertion about someone else's
+    /// infrastructure, so the residual exposure stays visible in the
+    /// HealthMonitorUI Preflight tab / `/dev/inspect` Validators panel.
+    ///
+    /// Override via `TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`.
+    AcceptAnonymousModeWithAI: bool
 }
 
 // ─── Phase 11.G — curated app-supplied overrides for `ServerConfig.fromEnv` ──
@@ -3935,6 +3953,10 @@ module ServerConfig =
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
         ExpectedModules = None
+        // Phase 6m — GP 13: the refusal is on by default, the
+        // attestation is opt-in. A deployment with no `Anonymous`
+        // surface, or no platform-paid provider, never reaches the rule.
+        AcceptAnonymousModeWithAI = false
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────
@@ -4612,6 +4634,10 @@ module ServerConfig =
                 AcceptEphemeralRagIndex = envFlag ConfigKeys.Names.acceptEphemeralRagIndex
                 AcceptLocalEmbedderAtScale = envFlag ConfigKeys.Names.acceptLocalEmbedderAtScale
                 AcceptStickyRoutedAiInMultiInstance = envFlag ConfigKeys.Names.acceptStickyRoutedAiMultiInstance
+                // Phase 6m — the anonymous-AI cost attestation. Same
+                // GP 11 shape as the rest of the family: unset ⇒ `false`,
+                // and `AnonymousAIModeValidator` still refuses startup.
+                AcceptAnonymousModeWithAI = envFlag ConfigKeys.Names.acceptAnonymousModeWithAi
                 AcceptUnboundAudienceWhenAuthRequired = envFlag ConfigKeys.Names.acceptUnboundAudienceInAuthMode
                 AcceptInMemoryOAuthStateInMultiInstance = envFlag ConfigKeys.Names.acceptInMemoryOAuthStateMultiInstance
                 AcceptPendingInviteStoreInMultiInstance = envFlag ConfigKeys.Names.acceptPendingInviteStoreMultiInstance
