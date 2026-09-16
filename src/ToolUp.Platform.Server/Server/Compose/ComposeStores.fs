@@ -829,3 +829,108 @@ let registerDeployPlane
 
             EntityStoreTenantFleet(entityStore, containerSched, pipeline, resolvedLogger) :> ITenantFleet)
         |> ignore
+
+/// Phase 445 — register the platform backup / restore coordinator when
+/// `ServerConfig.Backup = BackupEnabled settings`. `NoBackup` (the
+/// default) registers nothing — no coordinator, no job, no probe (GP 13).
+///
+/// The coordinator is built over the RAW `innerBlobStorage` — the
+/// storage BENEATH the Phase 22 encryption decorator and the Phase 176
+/// resilience wrapper — so a snapshot copies ciphertext as-is and never
+/// carries key material; the composed resolver (when any) is what
+/// restore preflight resolves the manifest's key ids through. The backup
+/// TARGET is the deployment's `IBackupTarget` singleton (registered via
+/// `ComposeExtensions.ServiceConfig`); a missing one is refused at
+/// preflight by `BackupTargetConfiguredValidator`, and resolving the
+/// coordinator without one fails by name here.
+///
+/// Registered alongside: the `RestoreDrillVerifier` (on-demand drills),
+/// its `backup_restore_drill` readiness probe, and — only when a cron is
+/// declared — the deferred scheduled-job declarations for the snapshot
+/// and the drill, through the Phase 623 hosted-service bridge so the
+/// handlers resolve from the one real container.
+let registerBackupCoordinator
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (innerBlobStorage: IBlobStorage)
+    (encryptionKeyResolver: BlobEncryption.IBlobEncryptionKeyResolver option)
+    : unit =
+    match config.Backup with
+    | NoBackup -> ()
+    | BackupEnabled settings ->
+        let scope = Backup.BackupScope.platformPlus settings.Containers
+
+        services.TryAddSingleton<Backup.IBackupCoordinator>(fun (sp: System.IServiceProvider) ->
+            let target =
+                match sp.GetService(typeof<Backup.IBackupTarget>) with
+                | :? Backup.IBackupTarget as t -> t.Storage
+                | _ ->
+                    failwith
+                        "ServerConfig.Backup = BackupEnabled but no IBackupTarget is registered — register one (BackupTarget.ofStorage <destination IBlobStorage>) through ComposeExtensions.ServiceConfig, or set Backup = NoBackup."
+
+            let auditLog =
+                match sp.GetService(typeof<IAuditLog>) with
+                | :? IAuditLog as a -> Some a
+                | _ -> None
+
+            let logger =
+                match sp.GetService(typeof<ILogger>) with
+                | :? ILogger as l -> Some l
+                | _ -> None
+
+            BackupCoordinator.BackupCoordinator(
+                innerBlobStorage,
+                target,
+                ?keyResolver = encryptionKeyResolver,
+                ?auditLog = auditLog,
+                ?logger = logger
+            )
+            :> Backup.IBackupCoordinator)
+
+        services.TryAddSingleton<RestoreDrill.RestoreDrillVerifier>(fun (sp: System.IServiceProvider) ->
+            let coordinator = sp.GetRequiredService<Backup.IBackupCoordinator>()
+
+            let auditLog =
+                match sp.GetService(typeof<IAuditLog>) with
+                | :? IAuditLog as a -> Some a
+                | _ -> None
+
+            let logger =
+                match sp.GetService(typeof<ILogger>) with
+                | :? ILogger as l -> Some l
+                | _ -> None
+
+            RestoreDrill.RestoreDrillVerifier(coordinator, innerBlobStorage, ?auditLog = auditLog, ?logger = logger))
+
+        services.AddSingleton<HealthChecks.IHealthCheck>(fun (sp: System.IServiceProvider) ->
+            RestoreDrill.RestoreDrillHealthCheck(sp.GetRequiredService<RestoreDrill.RestoreDrillVerifier>())
+            :> HealthChecks.IHealthCheck)
+        |> ignore
+
+        let declarations = [
+            match settings.SnapshotCron with
+            | Some cron ->
+                DeferredScheduledJobDeclaration.ofHandler
+                    RestoreDrill.BackupJobs.SnapshotHandlerName
+                    (Trigger.CronTrigger cron)
+                    (fun sp ->
+                        RestoreDrill.SnapshotJobHandler(sp.GetRequiredService<Backup.IBackupCoordinator>(), scope)
+                        :> IJobHandler)
+            | None -> ()
+            match settings.DrillCron with
+            | Some cron ->
+                DeferredScheduledJobDeclaration.ofHandler
+                    RestoreDrill.BackupJobs.DrillHandlerName
+                    (Trigger.CronTrigger cron)
+                    (fun sp ->
+                        RestoreDrill.RestoreDrillJobHandler(sp.GetRequiredService<RestoreDrill.RestoreDrillVerifier>())
+                        :> IJobHandler)
+            | None -> ()
+        ]
+
+        if not declarations.IsEmpty then
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    DeferredScheduledJobDeclaration.hostedService "Phase 445 backup / restore drill" declarations sp)
+            )
+            |> ignore

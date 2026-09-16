@@ -2496,6 +2496,7 @@
              identity on every committed baseline, and the PowerShell driver
              asserted equal to it. -->
         <Compile Include="InProcess\BaselineMergeDriverTests.fs" />
+        <Compile Include="InProcess\BackupCoordinatorTests.fs" />
         <!-- Phase 441 — notification preference filter + digest job. -->
         <Compile Include="InProcess\NotificationPreferenceTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />

@@ -714,6 +714,14 @@ let compose
     // paired with no verifier at all.
     registerGrantConsentStore services config
 
+    // Phase 445 — platform backup / restore coordinator. Conditional on
+    // `ServerConfig.Backup`; `NoBackup` (default) registers nothing;
+    // `BackupEnabled` composes the coordinator over the RAW inner storage
+    // (beneath the encryption decorator, so snapshots copy ciphertext
+    // as-is) + the restore-drill verifier + its readiness probe + the
+    // scheduled snapshot / drill jobs the settings declare.
+    registerBackupCoordinator services config innerBlobStorage encryptionKeyResolver
+
     // Phase 528 — session registry. Conditional on
     // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
     // registration entirely, so neither the revocation middleware nor the

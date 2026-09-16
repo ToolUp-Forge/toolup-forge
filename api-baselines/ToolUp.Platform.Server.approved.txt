@@ -593,6 +593,192 @@ ToolUp.Platform.BackgroundSubsystem+Tags.OAuthStateCleanupSubsystem : System.Int
 ToolUp.Platform.BackgroundSubsystem+Tags.TransactionalDispatcherSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.UsageBatchFlusherSubsystem : System.Int32 (literal)
 ToolUp.Platform.BackgroundSubsystem+Tags.WebhookDispatcherSubsystem : System.Int32 (literal)
+ToolUp.Platform.Backup (class)
+ToolUp.Platform.Backup+BackupError (class)
+ToolUp.Platform.Backup+BackupError.IsManifestUnreadable : System.Boolean { get }
+ToolUp.Platform.Backup+BackupError.IsSnapshotNotFound : System.Boolean { get }
+ToolUp.Platform.Backup+BackupError.IsStorageFailure : System.Boolean { get }
+ToolUp.Platform.Backup+BackupError.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+BackupError+ManifestUnreadable (class)
+ToolUp.Platform.Backup+BackupError+ManifestUnreadable.reason : System.String { get }
+ToolUp.Platform.Backup+BackupError+ManifestUnreadable.snapshotId : System.String { get }
+ToolUp.Platform.Backup+BackupError+SnapshotNotFound (class)
+ToolUp.Platform.Backup+BackupError+SnapshotNotFound.snapshotId : System.String { get }
+ToolUp.Platform.Backup+BackupError+StorageFailure (class)
+ToolUp.Platform.Backup+BackupError+StorageFailure.reason : System.String { get }
+ToolUp.Platform.Backup+BackupError+Tags (class)
+ToolUp.Platform.Backup+BackupError+Tags.ManifestUnreadable : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupError+Tags.SnapshotNotFound : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupError+Tags.StorageFailure : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupErrorModule (class)
+ToolUp.Platform.Backup+BackupErrorModule.message(ToolUp.Platform.Backup+BackupError) : System.String
+ToolUp.Platform.Backup+BackupManifest (class)
+ToolUp.Platform.Backup+BackupManifest..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Backup+SnapshotEntry], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Backup+EventStoreHead], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Backup+EventStoreHead], ToolUp.Platform.Backup+SnapshotConsistency, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Backup+BackupManifest.CompletedAt : System.DateTime { get }
+ToolUp.Platform.Backup+BackupManifest.Consistency : ToolUp.Platform.Backup+SnapshotConsistency { get }
+ToolUp.Platform.Backup+BackupManifest.Containers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+BackupManifest.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Backup+SnapshotEntry] { get }
+ToolUp.Platform.Backup+BackupManifest.FormatVersion : System.Int32 { get }
+ToolUp.Platform.Backup+BackupManifest.HeadAfter : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Backup+EventStoreHead] { get }
+ToolUp.Platform.Backup+BackupManifest.HeadBefore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Backup+EventStoreHead] { get }
+ToolUp.Platform.Backup+BackupManifest.KeyIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+BackupManifest.SnapshotId : System.String { get }
+ToolUp.Platform.Backup+BackupManifest.StartedAt : System.DateTime { get }
+ToolUp.Platform.Backup+BackupManifest.StoreCounts : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
+ToolUp.Platform.Backup+BackupManifestModule (class)
+ToolUp.Platform.Backup+BackupManifestModule.CurrentFormatVersion : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupManifestModule.consistencyName(ToolUp.Platform.Backup+BackupManifest) : System.String
+ToolUp.Platform.Backup+BackupManifestModule.totalBytes(ToolUp.Platform.Backup+BackupManifest) : System.Int64
+ToolUp.Platform.Backup+BackupScope (class)
+ToolUp.Platform.Backup+BackupScope.IsContainers : System.Boolean { get }
+ToolUp.Platform.Backup+BackupScope.IsPlatform : System.Boolean { get }
+ToolUp.Platform.Backup+BackupScope.Platform : ToolUp.Platform.Backup+BackupScope { get }
+ToolUp.Platform.Backup+BackupScope.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+BackupScope+Containers (class)
+ToolUp.Platform.Backup+BackupScope+Containers.containers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+BackupScope+Tags (class)
+ToolUp.Platform.Backup+BackupScope+Tags.Containers : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupScope+Tags.Platform : System.Int32 (literal)
+ToolUp.Platform.Backup+BackupScopeModule (class)
+ToolUp.Platform.Backup+BackupScopeModule.PlatformContainer : System.String (literal)
+ToolUp.Platform.Backup+BackupScopeModule.containers(ToolUp.Platform.Backup+BackupScope) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Backup+BackupScopeModule.platformPlus(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.Backup+BackupScope
+ToolUp.Platform.Backup+BackupTarget (class)
+ToolUp.Platform.Backup+BackupTarget.ofStorage(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Backup+IBackupTarget
+ToolUp.Platform.Backup+EventStoreHead (class)
+ToolUp.Platform.Backup+EventStoreHead..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Backup+EventStoreHead.CanonicalEvents : System.Int32 { get }
+ToolUp.Platform.Backup+EventStoreHead.LatestEventBlob : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Backup+IBackupCoordinator (interface)
+ToolUp.Platform.Backup+IBackupCoordinator.DiscardStaged(System.String, ToolUp.Platform.Backup+BackupScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.Backup+RestoreError]]
+ToolUp.Platform.Backup+IBackupCoordinator.ListSnapshots() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.Backup+IBackupCoordinator.Preflight(System.String, ToolUp.Platform.Backup+BackupScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Backup+BackupManifest, ToolUp.Platform.Backup+RestoreError]]
+ToolUp.Platform.Backup+IBackupCoordinator.Promote(System.String, ToolUp.Platform.Backup+BackupScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.Backup+RestoreError]]
+ToolUp.Platform.Backup+IBackupCoordinator.ReadManifest(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Backup+BackupManifest, ToolUp.Platform.Backup+BackupError]]
+ToolUp.Platform.Backup+IBackupCoordinator.Restore(System.String, ToolUp.Platform.Backup+BackupScope, ToolUp.Platform.Backup+RestoreOptions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Backup+RestoreReport, ToolUp.Platform.Backup+RestoreError]]
+ToolUp.Platform.Backup+IBackupCoordinator.Snapshot(ToolUp.Platform.Backup+BackupScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Backup+BackupManifest, ToolUp.Platform.Backup+BackupError]]
+ToolUp.Platform.Backup+IBackupTarget (interface)
+ToolUp.Platform.Backup+IBackupTarget.Storage : ToolUp.Platform.BlobStorage+IBlobStorage { get }
+ToolUp.Platform.Backup+RestoreError (class)
+ToolUp.Platform.Backup+RestoreError.IsManifestError : System.Boolean { get }
+ToolUp.Platform.Backup+RestoreError.IsPreflightRefused : System.Boolean { get }
+ToolUp.Platform.Backup+RestoreError.IsStagedReadFailed : System.Boolean { get }
+ToolUp.Platform.Backup+RestoreError.IsWriteFailed : System.Boolean { get }
+ToolUp.Platform.Backup+RestoreError.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+RestoreError+ManifestError (class)
+ToolUp.Platform.Backup+RestoreError+ManifestError.Item : ToolUp.Platform.Backup+BackupError { get }
+ToolUp.Platform.Backup+RestoreError+PreflightRefused (class)
+ToolUp.Platform.Backup+RestoreError+PreflightRefused.failures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Backup+RestorePreflightFailure] { get }
+ToolUp.Platform.Backup+RestoreError+StagedReadFailed (class)
+ToolUp.Platform.Backup+RestoreError+StagedReadFailed.blobName : System.String { get }
+ToolUp.Platform.Backup+RestoreError+StagedReadFailed.container : System.String { get }
+ToolUp.Platform.Backup+RestoreError+StagedReadFailed.reason : System.String { get }
+ToolUp.Platform.Backup+RestoreError+Tags (class)
+ToolUp.Platform.Backup+RestoreError+Tags.ManifestError : System.Int32 (literal)
+ToolUp.Platform.Backup+RestoreError+Tags.PreflightRefused : System.Int32 (literal)
+ToolUp.Platform.Backup+RestoreError+Tags.StagedReadFailed : System.Int32 (literal)
+ToolUp.Platform.Backup+RestoreError+Tags.WriteFailed : System.Int32 (literal)
+ToolUp.Platform.Backup+RestoreError+WriteFailed (class)
+ToolUp.Platform.Backup+RestoreError+WriteFailed.blobName : System.String { get }
+ToolUp.Platform.Backup+RestoreError+WriteFailed.container : System.String { get }
+ToolUp.Platform.Backup+RestoreError+WriteFailed.reason : System.String { get }
+ToolUp.Platform.Backup+RestoreErrorModule (class)
+ToolUp.Platform.Backup+RestoreErrorModule.message(ToolUp.Platform.Backup+RestoreError) : System.String
+ToolUp.Platform.Backup+RestoreOptions (class)
+ToolUp.Platform.Backup+RestoreOptions..ctor(ToolUp.Platform.Backup+RestorePlacement, System.Boolean)
+ToolUp.Platform.Backup+RestoreOptions.Force : System.Boolean { get }
+ToolUp.Platform.Backup+RestoreOptions.Placement : ToolUp.Platform.Backup+RestorePlacement { get }
+ToolUp.Platform.Backup+RestoreOptionsModule (class)
+ToolUp.Platform.Backup+RestoreOptionsModule.defaults : ToolUp.Platform.Backup+RestoreOptions { get }
+ToolUp.Platform.Backup+RestorePlacement (class)
+ToolUp.Platform.Backup+RestorePlacement.InPlace : ToolUp.Platform.Backup+RestorePlacement { get }
+ToolUp.Platform.Backup+RestorePlacement.IsInPlace : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePlacement.IsSideBySide : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePlacement.SideBySide : ToolUp.Platform.Backup+RestorePlacement { get }
+ToolUp.Platform.Backup+RestorePlacement.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+RestorePlacement+Tags (class)
+ToolUp.Platform.Backup+RestorePlacement+Tags.InPlace : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePlacement+Tags.SideBySide : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure (class)
+ToolUp.Platform.Backup+RestorePreflightFailure.IsHashMismatch : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.IsKeyDestroyed : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.IsKeyNotFound : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.IsKeyResolutionFailed : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.IsMissingBlob : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.IsNoKeyResolver : System.Boolean { get }
+ToolUp.Platform.Backup+RestorePreflightFailure.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+HashMismatch (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+HashMismatch.actual : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+HashMismatch.blobName : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+HashMismatch.container : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+HashMismatch.expected : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyDestroyed (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyDestroyed.keyId : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyNotFound (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyNotFound.keyId : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyResolutionFailed (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyResolutionFailed.keyId : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+KeyResolutionFailed.reason : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+MissingBlob (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+MissingBlob.blobName : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+MissingBlob.container : System.String { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+NoKeyResolver (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+NoKeyResolver.keyIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags (class)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.HashMismatch : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.KeyDestroyed : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.KeyNotFound : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.KeyResolutionFailed : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.MissingBlob : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailure+Tags.NoKeyResolver : System.Int32 (literal)
+ToolUp.Platform.Backup+RestorePreflightFailureModule (class)
+ToolUp.Platform.Backup+RestorePreflightFailureModule.isForceable(ToolUp.Platform.Backup+RestorePreflightFailure) : System.Boolean
+ToolUp.Platform.Backup+RestorePreflightFailureModule.message(ToolUp.Platform.Backup+RestorePreflightFailure) : System.String
+ToolUp.Platform.Backup+RestoreReport (class)
+ToolUp.Platform.Backup+RestoreReport..ctor(System.String, System.String, ToolUp.Platform.Backup+RestorePlacement, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Backup+RestoreReport.BlobsWritten : System.Int32 { get }
+ToolUp.Platform.Backup+RestoreReport.Containers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+RestoreReport.HashesVerified : System.Int32 { get }
+ToolUp.Platform.Backup+RestoreReport.Placement : ToolUp.Platform.Backup+RestorePlacement { get }
+ToolUp.Platform.Backup+RestoreReport.RestoreId : System.String { get }
+ToolUp.Platform.Backup+RestoreReport.SkippedMissing : System.Int32 { get }
+ToolUp.Platform.Backup+RestoreReport.SnapshotId : System.String { get }
+ToolUp.Platform.Backup+RestoreReport.StagingPrefix : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Backup+SnapshotConsistency (class)
+ToolUp.Platform.Backup+SnapshotConsistency.Consistent : ToolUp.Platform.Backup+SnapshotConsistency { get }
+ToolUp.Platform.Backup+SnapshotConsistency.IsConsistent : System.Boolean { get }
+ToolUp.Platform.Backup+SnapshotConsistency.IsFuzzy : System.Boolean { get }
+ToolUp.Platform.Backup+SnapshotConsistency.Tag : System.Int32 { get }
+ToolUp.Platform.Backup+SnapshotConsistency+Fuzzy (class)
+ToolUp.Platform.Backup+SnapshotConsistency+Fuzzy.reasons : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Backup+SnapshotConsistency+Tags (class)
+ToolUp.Platform.Backup+SnapshotConsistency+Tags.Consistent : System.Int32 (literal)
+ToolUp.Platform.Backup+SnapshotConsistency+Tags.Fuzzy : System.Int32 (literal)
+ToolUp.Platform.Backup+SnapshotEntry (class)
+ToolUp.Platform.Backup+SnapshotEntry..ctor(System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Backup+SnapshotEntry.BlobName : System.String { get }
+ToolUp.Platform.Backup+SnapshotEntry.Container : System.String { get }
+ToolUp.Platform.Backup+SnapshotEntry.KeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Backup+SnapshotEntry.Sha256 : System.String { get }
+ToolUp.Platform.Backup+SnapshotEntry.Size : System.Int64 { get }
+ToolUp.Platform.BackupCoordinator (class)
+ToolUp.Platform.BackupCoordinator.BackupsContainer : System.String (literal)
+ToolUp.Platform.BackupCoordinator.StagingRoot : System.String (literal)
+ToolUp.Platform.BackupCoordinator.backupBlobName(System.String, System.String, System.String) : System.String
+ToolUp.Platform.BackupCoordinator.decodeManifest(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Backup+BackupManifest, System.String]
+ToolUp.Platform.BackupCoordinator.encodeManifest(ToolUp.Platform.Backup+BackupManifest) : System.Byte[]
+ToolUp.Platform.BackupCoordinator.manifestBlobName(System.String) : System.String
+ToolUp.Platform.BackupCoordinator.newSnapshotId(System.DateTime) : System.String
+ToolUp.Platform.BackupCoordinator.stagingPrefix(System.String) : System.String
+ToolUp.Platform.BackupCoordinator.storeOf(System.String) : System.String
+ToolUp.Platform.BackupCoordinator.tryEnvelopeKeyId(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.BackupCoordinator+BackupCoordinator (class)
+ToolUp.Platform.BackupCoordinator+BackupCoordinator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
+ToolUp.Platform.BackupCoordinator+BackupTargetConfiguredValidator (class)
+ToolUp.Platform.BackupCoordinator+BackupTargetConfiguredValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BackupCoordinator+PrefixedBlobStorage (class)
+ToolUp.Platform.BackupCoordinator+PrefixedBlobStorage..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, System.String)
+ToolUp.Platform.BackupCoordinator+PrefixedBlobStorage.Prefix : System.String { get }
 ToolUp.Platform.BlobBackedBackgroundExportStore (class)
 ToolUp.Platform.BlobBackedBackgroundExportStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, System.TimeSpan)
 ToolUp.Platform.BlobBackedBackgroundExportStoreModule (class)
@@ -1304,6 +1490,7 @@ ToolUp.Platform.ComposeScopeResolver.registerScopeResolution(Microsoft.Extension
 ToolUp.Platform.ComposeStores (class)
 ToolUp.Platform.ComposeStores.buildDataObjectStoreAndCatalog(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.FileProcessor+DataType]]) : System.Tuple`2[ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IDataCatalog]
 ToolUp.Platform.ComposeStores.buildOptionalStoreValues(ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.IDataObjectStore) : System.Tuple`3[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]]
+ToolUp.Platform.ComposeStores.registerBackupCoordinator(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver]) : System.Void
 ToolUp.Platform.ComposeStores.registerColumnMappingStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerComputeBudget(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, ToolUp.Platform.Usage.IUsageLog) : System.Void
 ToolUp.Platform.ComposeStores.registerConfigQueryAndFlagStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IConfigStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ModuleQueryHandler]], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink) : System.Void
@@ -8182,6 +8369,38 @@ ToolUp.Platform.ResourceEnvelopeEnforcement.routeLimitsFor(Microsoft.FSharp.Coll
 ToolUp.Platform.ResourceEnvelopeEnforcement.shadowedPrefixes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.RestoreClosures (class)
 ToolUp.Platform.RestoreClosures.readAssetsFile(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]
+ToolUp.Platform.RestoreDrill (class)
+ToolUp.Platform.RestoreDrill+BackupJobs (class)
+ToolUp.Platform.RestoreDrill+BackupJobs.DrillHandlerName : System.String (literal)
+ToolUp.Platform.RestoreDrill+BackupJobs.SnapshotHandlerName : System.String (literal)
+ToolUp.Platform.RestoreDrill+DrillInvariant (class)
+ToolUp.Platform.RestoreDrill+DrillInvariant..ctor(System.String, System.Boolean, System.String)
+ToolUp.Platform.RestoreDrill+DrillInvariant.Detail : System.String { get }
+ToolUp.Platform.RestoreDrill+DrillInvariant.Name : System.String { get }
+ToolUp.Platform.RestoreDrill+DrillInvariant.Passed : System.Boolean { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome (class)
+ToolUp.Platform.RestoreDrill+DrillOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.DateTime, System.Boolean, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RestoreDrill+DrillInvariant], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.RestoreDrill+DrillOutcome.CompletedAt : System.DateTime { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.Failure : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.HashesVerified : System.Int32 { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.Invariants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RestoreDrill+DrillInvariant] { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.Passed : System.Boolean { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.RestoreId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.SnapshotId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.Stage : System.String { get }
+ToolUp.Platform.RestoreDrill+DrillOutcome.StartedAt : System.DateTime { get }
+ToolUp.Platform.RestoreDrill+DrillOutcomeModule (class)
+ToolUp.Platform.RestoreDrill+DrillOutcomeModule.failedInvariants(ToolUp.Platform.RestoreDrill+DrillOutcome) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.RestoreDrill+RestoreDrillHealthCheck (class)
+ToolUp.Platform.RestoreDrill+RestoreDrillHealthCheck..ctor(ToolUp.Platform.RestoreDrill+RestoreDrillVerifier)
+ToolUp.Platform.RestoreDrill+RestoreDrillJobHandler (class)
+ToolUp.Platform.RestoreDrill+RestoreDrillJobHandler..ctor(ToolUp.Platform.RestoreDrill+RestoreDrillVerifier)
+ToolUp.Platform.RestoreDrill+RestoreDrillVerifier (class)
+ToolUp.Platform.RestoreDrill+RestoreDrillVerifier..ctor(ToolUp.Platform.Backup+IBackupCoordinator, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Platform.RestoreDrill+RestoreDrillVerifier.LastOutcome : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RestoreDrill+DrillOutcome] { get }
+ToolUp.Platform.RestoreDrill+RestoreDrillVerifier.RunDrill() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RestoreDrill+DrillOutcome]
+ToolUp.Platform.RestoreDrill+SnapshotJobHandler (class)
+ToolUp.Platform.RestoreDrill+SnapshotJobHandler..ctor(ToolUp.Platform.Backup+IBackupCoordinator, ToolUp.Platform.Backup+BackupScope)
 ToolUp.Platform.ResultObjectId (class)
 ToolUp.Platform.ResultObjectId.make(System.String, System.String) : System.String
 ToolUp.Platform.ResultObjectId.modulePrefix(System.String) : System.String

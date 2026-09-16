@@ -686,6 +686,62 @@ module GrantConsentMode =
         | BlobGrantConsent
         | CustomGrantConsentStore -> true
 
+/// Phase 445 — the settings behind `BackupMode.BackupEnabled`. Both
+/// schedules are OPTIONAL and independent: a deployment may take
+/// snapshots on demand (through `IBackupCoordinator`) and drill on a cron,
+/// or the reverse. Cron expressions are the five-field shape
+/// `JobTypes.Trigger.CronTrigger` takes; either schedule needs
+/// `ServerConfig.JobScheduler <> NoJobScheduler` to fire, and the compose
+/// validator warns when it cannot.
+type BackupSettings = {
+    /// Cron on which the coordinator snapshots `Containers` (plus the
+    /// reserved `_platform` container, always) into the composed backup
+    /// target. `None` = on-demand snapshots only.
+    SnapshotCron: string option
+    /// Cron on which `RestoreDrillVerifier` restores the latest snapshot
+    /// into a scratch prefix, verifies it and reports the outcome as an
+    /// audit event + health signal. `None` = on-demand drills only.
+    DrillCron: string option
+    /// Scope-derived containers snapshotted in ADDITION to `_platform`
+    /// (`user-{id}` / `team-{id}` / `session-{id}`). Empty (the default)
+    /// snapshots the platform container alone; a per-team backup is the
+    /// GP 4 offboarding / onboarding story and names its team here.
+    Containers: string list
+}
+
+/// Helpers over `BackupSettings`.
+module BackupSettings =
+    /// On-demand only, platform container only.
+    let defaults = {
+        SnapshotCron = None
+        DrillCron = None
+        Containers = []
+    }
+
+/// Phase 445 — selects the platform backup / restore coordinator.
+/// Default `NoBackup`: nothing registered, no job, no health probe, zero
+/// background weight (GP 13). `BackupEnabled` composes
+/// `IBackupCoordinator` over the RAW blob storage (beneath any Phase 22
+/// encryption decorator, so snapshots copy ciphertext as-is and never
+/// carry key material) and requires the deployment to register an
+/// `IBackupTarget` naming the destination `IBlobStorage` — any companion
+/// (local directory, S3, Azure, GCS — GP 3). The compose validator
+/// REFUSES startup when the mode is enabled and no target is registered.
+type BackupMode =
+    /// No coordinator (default).
+    | NoBackup
+    /// Compose the coordinator, the restore-drill verifier + its health
+    /// probe, and the scheduled snapshot / drill jobs the settings name.
+    | BackupEnabled of BackupSettings
+
+/// Helpers over `BackupMode`.
+module BackupMode =
+    /// Whether a coordinator is composed at all.
+    let isComposed (mode: BackupMode) =
+        match mode with
+        | NoBackup -> false
+        | BackupEnabled _ -> true
+
 /// Phase 449 — selects the model-fit substrate (the `IModelFitProvider`
 /// envelope + `_platform.modelfit.run` job handler). Default:
 /// `NoModelFitting` — no registry, no job handler, zero cost (GP 13).
@@ -3527,6 +3583,12 @@ type ServerConfig = {
     /// — a registry that admitted unverified records would be worse than
     /// the refusal it replaced.
     GrantConsent: GrantConsentMode
+    /// Phase 445 — the platform backup / restore coordinator. Default
+    /// `NoBackup` — nothing registered, no scheduled job, no health probe,
+    /// and the deployment is byte-for-byte its pre-445 self (GP 11 + GP 13).
+    /// `BackupEnabled` needs an `IBackupTarget` in DI (the destination
+    /// `IBlobStorage`); the compose validator refuses startup without one.
+    Backup: BackupMode
     /// Phase 594 — the data-vocabulary packs this deployment pins. Default
     /// `[]` — no pack pinned, so the composition validator's
     /// `vocabulary-typename-unknown` / `vocabulary-schema-mismatch` rules
@@ -3973,6 +4035,7 @@ module ServerConfig =
         ModuleVisibility = NoModuleVisibility
         AdminMutationPolicy = AdminMutationPolicy.SingleAdmin
         GrantConsent = NoGrantConsentStore
+        Backup = NoBackup
         PinnedVocabularyPacks = []
         DeclaredDataSchemas = []
         ExpectedModules = None

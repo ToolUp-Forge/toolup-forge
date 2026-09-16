@@ -1969,6 +1969,7 @@ let private registeredTests =
         // false-positive on add). MetadataLoadContext, metadata-only.
         PublicApiApprovalTests.tests
         BaselineMergeDriverTests.tests
+        BackupCoordinatorTests.tests
         // Phase 195 — compile-time auth/audit analyzer recognition parity.
         // The source-linked Recognition.fs decision core vs the runtime
         // AuthClassifier (unclassified-set equality), plus TUR0001/TUR0002
