@@ -4499,4 +4499,201 @@ let main args =
         | Some report, false -> failwithf "VerifySemVerBump: %s" report)
 
 
+    // Phase 805 — register the generated baselines' three-way merge drivers
+    // in THIS CLONE's `.git/config`.
+    //
+    // `.gitattributes` can name a driver per path but cannot define what it
+    // runs: git reads `merge.<name>.driver` from the config only, because a
+    // repository must not be able to hand an arbitrary command to everyone
+    // who clones it. So the registration is a per-clone act, and this is it.
+    // A clone that never runs Setup resolves the name to nothing and gets
+    // git's built-in text merge — today's plain conflict, unchanged (GP 11).
+    //
+    // Usage: `dotnet run --project Build.fsproj -- Setup`
+    Target.create "Setup" (fun _ ->
+        let root = Path.getFullName "."
+        let driver = Path.Combine(root, "dev-scripts", "merge-baselines.ps1")
+
+        if not (File.Exists driver) then
+            failwithf
+                "Setup: %s is missing. The merge drivers cannot be registered without it — check the file out before registering, or the next baseline merge runs a command that does not exist."
+                driver
+
+        // Resolved to an absolute path rather than left as a bare `pwsh`: git
+        // runs a merge driver through a shell whose PATH is not necessarily
+        // the one this target was launched with.
+        let shell =
+            match ProcessUtils.tryFindFileOnPath "pwsh" with
+            | Some path -> path
+            | None ->
+                failwith
+                    "Setup: `pwsh` is not on PATH. The baseline merge drivers are PowerShell 7 scripts — they run inside `git merge`, in a tree that may not build, so they deliberately depend on nothing else. Install PowerShell 7 and re-run."
+
+        let git (gitArgs: string list) =
+            CreateProcess.fromRawCommand "git" gitArgs
+            |> CreateProcess.withWorkingDirectory root
+            |> CreateProcess.ensureExitCode
+            |> Proc.run
+            |> ignore
+
+        // Forward slashes on both paths: the command string is interpreted by
+        // git's own shell, where a backslash is an escape character.
+        let slash (path: string) = path.Replace('\\', '/')
+
+        let register (name: string) (mode: string) =
+            let command =
+                sprintf "\"%s\" -NoProfile -File \"%s\" -Mode %s %%O %%A %%B %%P" (slash shell) (slash driver) mode
+
+            git [ "config"; sprintf "merge.%s.driver" name; command ]
+
+            git [
+                "config"
+                sprintf "merge.%s.name" name
+                sprintf "ToolUp %s-baseline three-way merge (Phase 805)" mode
+            ]
+
+            Trace.tracefn "  merge.%s.driver = %s" name command
+
+        register "toolup-members" "members"
+        register "toolup-coverage" "coverage"
+
+        Trace.tracefn
+            "▶ Setup: the api-baselines merge drivers are registered in this clone. Two branches that each ADD disjoint public members now merge without a hand resolution; a removal, or a coverage row whose arithmetic cannot be reconciled, is still left as a conflict for a human.")
+
+    // Phase 805 — the regenerate-from-the-merged-tree fallback.
+    //
+    // The driver refuses the cases it cannot compute, and the honest answer to
+    // each of them is the same: regenerate the projection from the tree that
+    // came out of the merge, so the merge commit carries the bytes a clean
+    // regen would. This is that, scoped — it regenerates EXACTLY the
+    // assemblies it was handed and never touches one it was not, which is the
+    // whole point of `TOOLUP_APPROVE_API` taking names (Phase 259).
+    //
+    // Usage:
+    //   dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server
+    Target.create "MergeBaselines" (fun _ ->
+        let root = Path.getFullName "."
+
+        // Read from the process argv rather than `p.Context.Arguments`, for
+        // the reason VerifyDocSnippets records: FAKE's own CLI parser consumes
+        // trailing options before the target sees them.
+        let assemblies =
+            args
+            |> Array.tryFindIndex (fun a -> a = "--assemblies")
+            |> Option.bind (fun i -> Array.tryItem (i + 1) args)
+            |> Option.map (fun csv ->
+                csv.Split([| ','; ';' |], System.StringSplitOptions.RemoveEmptyEntries)
+                |> Array.map _.Trim()
+                |> Array.filter (System.String.IsNullOrWhiteSpace >> not))
+            |> Option.defaultValue [||]
+
+        if Array.isEmpty assemblies then
+            failwith
+                "MergeBaselines: name the assemblies to regenerate — `dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server`. It deliberately has no all-of-them mode: an unscoped regen folds in every unrelated drift the merged tree happens to be carrying, which is the failure the scoping exists to prevent."
+
+        let dotnet (dotnetArgs: string list) =
+            CreateProcess.fromRawCommand "dotnet" dotnetArgs
+            |> CreateProcess.withWorkingDirectory root
+            |> CreateProcess.ensureExitCode
+            |> Proc.run
+            |> ignore
+
+        // The renderer reads BUILT DLLs, so the merged tree has to compile
+        // before it can be measured. An unbuilt tree would otherwise report as
+        // the Phase 731 precondition failure, which reads like a surface break
+        // and is not one.
+        Trace.tracefn "MergeBaselines: building the merged tree…"
+        dotnet [ "build"; "ToolUp.Forge.sln"; "--nologo" ]
+
+        let scope = String.concat "," assemblies
+        Trace.tracefn "MergeBaselines: regenerating %s" scope
+
+        CreateProcess.fromRawCommand "dotnet" [
+            "run"
+            "--project"
+            "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
+        ]
+        |> CreateProcess.withWorkingDirectory root
+        |> CreateProcess.setEnvironmentVariable "TOOLUP_APPROVE_API" scope
+        |> CreateProcess.ensureExitCode
+        |> Proc.run
+        |> ignore
+
+        // Then hand the regenerated bytes back to the driver, base = ours =
+        // theirs. The merge of a file against itself is that file, so any
+        // difference means the driver's re-emission and the generator's have
+        // drifted — and a merge commit produced by a drifted driver is exactly
+        // what this target exists to keep out of the history.
+        let shell =
+            match ProcessUtils.tryFindFileOnPath "pwsh" with
+            | Some path -> path
+            | None ->
+                failwith
+                    "MergeBaselines: `pwsh` is not on PATH, so the regenerated baselines cannot be re-checked against the driver."
+
+        let driver = Path.Combine(root, "dev-scripts", "merge-baselines.ps1")
+
+        let roundTrips (mode: string) (path: string) =
+            let scratch =
+                Path.Combine(Path.GetTempPath(), "toolup-mergebaselines-" + System.Guid.NewGuid().ToString "N")
+
+            Directory.CreateDirectory scratch |> ignore
+
+            try
+                let copy = Path.Combine(scratch, Path.GetFileName path)
+                File.Copy(path, copy, true)
+
+                let result =
+                    CreateProcess.fromRawCommand shell [
+                        "-NoProfile"
+                        "-File"
+                        driver
+                        "-Mode"
+                        mode
+                        path
+                        copy
+                        path
+                        path
+                    ]
+                    |> CreateProcess.withWorkingDirectory root
+                    |> Proc.run
+
+                if result.ExitCode <> 0 then
+                    failwithf
+                        "MergeBaselines: the driver refused %s merged against itself (exit %d)."
+                        path
+                        result.ExitCode
+
+                let before = File.ReadAllText(path).Replace("\r\n", "\n")
+                let after = File.ReadAllText(copy).Replace("\r\n", "\n")
+
+                if before <> after then
+                    failwithf
+                        "MergeBaselines: %s does not survive a merge against itself — the driver's re-emission disagrees with what the generator has just written. Do NOT commit this merge; fix dev-scripts/merge-baselines.ps1 or `sortSurfaceBody` first."
+                        path
+            finally
+                try
+                    Directory.Delete(scratch, true)
+                with _ ->
+                    ()
+
+        for assembly in assemblies do
+            let path = Path.Combine(root, "api-baselines", assembly + ".approved.txt")
+
+            if File.Exists path then
+                roundTrips "members" path
+            else
+                Trace.traceImportantfn
+                    "MergeBaselines: %s has no baseline file — the regeneration did not discover that assembly. Check the name."
+                    path
+
+        let coverage = Path.Combine(root, "api-baselines", "doc-coverage.approved.txt")
+
+        if File.Exists coverage then
+            roundTrips "coverage" coverage
+
+        Trace.tracefn
+            "▶ MergeBaselines: %s regenerated from the merged tree and re-checked against the driver. Commit api-baselines/ with the merge."
+            scope)
+
     execute args
