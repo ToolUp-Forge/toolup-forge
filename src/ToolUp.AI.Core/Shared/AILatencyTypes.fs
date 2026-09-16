@@ -46,6 +46,23 @@ type ToolCallTiming = {
 type AILatencyRecord = {
     TaskId: Guid
     ConversationId: Guid
+    /// Phase 9s — the user whose turn this was, within the scope the
+    /// record is written under.
+    ///
+    /// **Why the record had to gain a field.** The per-user token
+    /// budget sums a user's recent consumption out of this stream, and
+    /// until 9s nothing in the stream said WHO: `ModuleEvent.ScopeId`
+    /// is the team in a team-scoped deployment, so every member's
+    /// turns were indistinguishable. A per-user window over a
+    /// per-scope stream is not a query anyone can write.
+    ///
+    /// Records written before 9s decode with `null` here — the JSON
+    /// converter absorbs a missing reference-typed property rather
+    /// than failing — so readers treat null and `""` alike as
+    /// UNATTRIBUTED. An unattributed turn is never charged to a user's
+    /// window; it is wrong in the safe direction, and the historical
+    /// backlog ages out of an hourly window within the hour.
+    UserId: string
     /// 1-based turn index within this agent-loop run.
     TurnNumber: int
     ProviderName: string

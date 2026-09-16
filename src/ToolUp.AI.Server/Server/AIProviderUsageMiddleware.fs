@@ -260,6 +260,101 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
         member _.BuildPlatform(providerId, apiKey, model) =
             inner.BuildPlatform(providerId, apiKey, model)
 
+// ─── Phase 9s — per-user token-budget enforcement decorator ──────
+//
+// The per-USER window Phase 9d does not carry, composed INSIDE this
+// chain rather than beside it. `QuotaEnforcingProvider` above answers
+// "has this TEAM spent its day / month"; this answers "has this MEMBER
+// spent their hour". Two windows, two ceilings, one decorator chain —
+// which is what keeps the refusal ordering, the error shape and the
+// "never send a call we are about to refuse" property shared between
+// them instead of reinvented.
+//
+// **Stacked OUTSIDE the quota gate**, so the per-user hour is checked
+// first. The Phase 689 header states the rule this follows: report the
+// cheapest, most-immediate ceiling first, because a refusal naming
+// three problems invites fixing the wrong one. The hourly window is
+// also the one whose remedy an ordinary user can act on ("wait" /
+// "ask an admin"); the team's monthly allowance is not.
+//
+// **The refusal is `PermanentClient(429)`, the same shape the quota
+// gate uses**, because that is what the agent loop classifies as
+// catastrophic-no-retry and surfaces to the user via
+// `AIProviderError.toMessage` as an `AITaskFailed`. The phase's
+// required wording is the message carried inside it.
+
+/// Pre-call per-user gate. Consults `AIBudgetEnforcer`; on a Phase 689
+/// `Refused` verdict the provider is never invoked and the refusal has
+/// already been recorded as an `AITokenBudgetExceeded` event.
+type private BudgetEnforcingProvider
+    (inner: IAIProvider, enforcer: AIBudgetEnforcer.AIBudgetEnforcer, scopeId: string, userId: string) =
+
+    // Phase 9d's advisory estimator, reused rather than re-derived: the
+    // pre-call figure is an estimate in both windows, and two budgets
+    // disagreeing about what a request "asks for" would be a defect
+    // nobody could explain.
+    let estimate (messages: AIProviderMessage list) : decimal =
+        messages
+        |> List.map (fun m -> (m.Role, m.Content))
+        |> TeamQuotaPolicy.RequestTokenEstimator.estimateMessages
+
+    let refusal (denial: BudgetDenial) =
+        Error(PermanentClient(429, AITokenBudgetExceeded.message denial))
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            let! verdict = enforcer.Check(scopeId, userId, estimate messages)
+
+            match verdict with
+            | BudgetVerdict.Refused denial -> return refusal denial
+            | BudgetVerdict.Allowed
+            | BudgetVerdict.NearLimit _ ->
+                // `NearLimit` proceeds — it is a leading indicator, not
+                // a refusal. The account has already recorded it.
+                return! inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+        }
+
+        // Structured output is gated identically: it spends the same
+        // provider budget out of the same window.
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! verdict = enforcer.Check(scopeId, userId, estimate messages)
+
+            match verdict with
+            | BudgetVerdict.Refused denial -> return refusal denial
+            | BudgetVerdict.Allowed
+            | BudgetVerdict.NearLimit _ ->
+                return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+        }
+
+/// Wraps an `IAIProviderFactory` so every `Resolve`-d provider is
+/// gated by the caller's per-user hourly budget. `TryResolveByLabel`
+/// is forwarded ungated, exactly as the metering and quota wrappers
+/// forward it — an admin test-connection call is not user-attributable
+/// spend.
+type BudgetEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudgetEnforcer.AIBudgetEnforcer) =
+
+    interface IAIProviderFactory with
+        member _.Available = inner.Available
+        member _.PlatformDescriptors = inner.PlatformDescriptors
+        member _.PlatformDescriptor = inner.PlatformDescriptor
+
+        member _.Resolve(ctx) = async {
+            let! resolved = inner.Resolve(ctx)
+
+            match resolved with
+            | Error e -> return Error e
+            | Ok provider ->
+                let scopeId = scopeIdFor ctx
+                return Ok(BudgetEnforcingProvider(provider, enforcer, scopeId, ctx.UserId) :> IAIProvider)
+        }
+
+        member _.TryResolveByLabel(ctx, label) = inner.TryResolveByLabel(ctx, label)
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)
+
 // ─── DI composition helper ───────────────────────────────────────
 //
 // Both `AICompose.composeAI` and `RAGCompose.composeRAG` need the
@@ -396,6 +491,40 @@ let wrapFactoryForDI
 
                 MeteringProviderFactory(failoverAware, usageLog, providerProfile) :> IAIProviderFactory
 
-        match sp.GetService(typeof<ITeamQuotaPolicy>) with
-        | :? ITeamQuotaPolicy as quota -> QuotaEnforcingProviderFactory(baseFactory, quota) :> IAIProviderFactory
-        | _ -> baseFactory)
+        let quotaGated =
+            match sp.GetService(typeof<ITeamQuotaPolicy>) with
+            | :? ITeamQuotaPolicy as quota -> QuotaEnforcingProviderFactory(baseFactory, quota) :> IAIProviderFactory
+            | _ -> baseFactory
+
+        // Phase 9s. The presence of the `AIBudgetWindowCache` singleton
+        // IS the composition gate, the same shape `ITeamQuotaPolicy`'s
+        // presence is one line above: `AICompose` registers it only on a
+        // team-scoped deployment, because a per-USER window inside a
+        // per-SCOPE budget means nothing when the scope is the user. A
+        // deployment without it resolves the same object graph it always
+        // did (GP 11/13) — no decorator, no config read, no allocation.
+        //
+        // The config and event stores are required too, and their absence
+        // is treated the same way rather than as an error: a budget that
+        // cannot read its policy would refuse everything or allow
+        // everything, and the honest form of "I cannot enforce this" is
+        // not to compose the enforcement.
+        match
+            sp.GetService(typeof<AIBudgetEnforcer.AIBudgetWindowCache>),
+            sp.GetService(typeof<IConfigStore>),
+            sp.GetService(typeof<IEventStore>)
+        with
+        | (:? AIBudgetEnforcer.AIBudgetWindowCache as cache),
+          (:? IConfigStore as configStore),
+          (:? IEventStore as eventStore) ->
+            let enforcer =
+                AIBudgetEnforcer.AIBudgetEnforcer(
+                    configStore,
+                    eventStore,
+                    cache,
+                    AIBudgetEnforcer.eventStoreAccount eventStore (fun () -> DateTime.UtcNow),
+                    fun () -> DateTime.UtcNow
+                )
+
+            BudgetEnforcingProviderFactory(quotaGated, enforcer) :> IAIProviderFactory
+        | _ -> quotaGated)

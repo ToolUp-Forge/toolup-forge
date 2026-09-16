@@ -41,6 +41,11 @@
         <Compile Include="Shared\AISettingsTypes.fs" />
         <Compile Include="Shared\PlatformAIKeysApi.fs" />
         <Compile Include="Shared\AILatencyTypes.fs" />
+        <!-- Phase 9s - the per-user AI token budget, expressed on the Phase
+             689 platform budget seam. After AILatencyTypes, whose
+             `AILatencyRecord` is the stream the window is summed from;
+             depends on nothing else in this tier. -->
+        <Compile Include="Shared\AIBudgetTypes.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

@@ -126,6 +126,12 @@
              cross-module audit trail. Mounted by AICompose under the same
              EnableDevEndpoints gate as its three siblings above. -->
         <Compile Include="Server\AICrossModuleObservability.fs" />
+        <!-- Phase 9s - the per-user token-budget check (policy read, window
+             sum over the latency stream, read-through cache, refusal
+             record, /dev/inspect panel). Before AIProviderUsageMiddleware,
+             which stacks the decorator that consumes it into the same
+             provider-factory chain as Phase 9d's quota gate. -->
+        <Compile Include="Server\AIBudgetEnforcer.fs" />
         <Compile Include="Server\AIProviderUsageMiddleware.fs" />
         <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
         <!-- Phase 6m — the anonymous-surface AI cost refusal. Depends on

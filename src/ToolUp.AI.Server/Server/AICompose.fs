@@ -359,6 +359,31 @@ let composeAI (app: AIServerApp) : ServerApp =
         @ fastPathDevHandlers
 
     let aiServiceConfig (s: IServiceCollection) =
+        // Phase 9s — the per-user token budget. Registered ONLY on a
+        // team-scoped deployment: the window it adds is per-USER within
+        // a scope, and on an Individual / Anonymous surface the scope IS
+        // the user, so the ceiling would duplicate Phase 9d's per-scope
+        // one under a second name. Registering the cache is also the
+        // composition gate `wrapFactoryForDI` reads, so a deployment
+        // outside this branch pays nothing at all — no decorator, no
+        // config read, no panel (GP 13).
+        //
+        // The cache is a singleton because the read-through window sums
+        // are worth sharing across requests; nothing in the decision
+        // depends on its contents surviving (see `AIBudgetEnforcer`'s
+        // header on the Phase 9c rule-4 split).
+        let s =
+            if DeploymentConfig.hasTeamScope config then
+                let budgetCache = AIBudgetEnforcer.AIBudgetWindowCache()
+
+                s
+                    .AddSingleton<AIBudgetEnforcer.AIBudgetWindowCache>(budgetCache)
+                    .AddSingleton<IDevDiagnosticsContributor>(
+                        AIBudgetEnforcer.AITokenBudgetContributor(budgetCache) :> IDevDiagnosticsContributor
+                    )
+            else
+                s
+
         // Phase 9d (usage metering) + Phase 9 compute-quota. The
         // delegate factory resolves `IUsageLog` and `ITeamQuotaPolicy`
         // from DI per request and stacks the wrappers over the
@@ -540,7 +565,28 @@ let composeAI (app: AIServerApp) : ServerApp =
         PostMiddleware = baseExtensions.PostMiddleware
     }
 
-    { b with Extensions = extensions }
+    // Phase 9s — surface the per-user token-budget cap in the per-team
+    // config panel. Merged here rather than in `BuildRouteHandlers`
+    // (which merges Phase 9d's `_platform.usage` quota tab) because the
+    // key is AI-tier: `Platform.Server` compiles before `AI.Core` and
+    // cannot name `AIBudgetConfigKey`. Gated on team scope for the same
+    // reason the DI registration above is, and gated on nothing else —
+    // the field defaults to 0 = unbounded, so a deployment that never
+    // opens the tab is unchanged (GP 11).
+    let configWithBudgetSchema =
+        if DeploymentConfig.hasTeamScope config then
+            {
+                config with
+                    ModuleConfigs = AIBudgetEnforcer.mergeAIBudgetSchema config.ModuleConfigs
+            }
+        else
+            config
+
+    {
+        b with
+            Extensions = extensions
+            Config = configWithBudgetSchema
+    }
 
 module AIServerApp =
     /// Construct an `AIServerApp` from scratch with the two required AI

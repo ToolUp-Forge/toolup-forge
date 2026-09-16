@@ -251,6 +251,18 @@ let private resolveLatencyScope (ctx: HttpContext) : StorageScope =
             Persist = true
         }
 
+/// Phase 9s — the caller's user id, for `AILatencyRecord.UserId`.
+///
+/// Read from the same `HttpContext.Items` stamp `resolveLatencyScope`
+/// falls back to, so the two agree by construction. `""` when the
+/// request carried no user identity (an Anonymous deployment), which
+/// readers treat as UNATTRIBUTED — the per-user budget never charges a
+/// window it cannot name.
+let private resolveLatencyUserId (ctx: HttpContext) : string =
+    match ctx.Items.TryGetValue "ToolUp.UserId" with
+    | true, (:? string as id) when not (System.String.IsNullOrWhiteSpace id) -> id
+    | _ -> ""
+
 /// The full agent loop. Reached from `runAgentLoop` below, which is
 /// the entry point every caller uses — it applies the Phase 6j.B
 /// Tier-3 triage intercept first and only then delegates here.
@@ -417,6 +429,11 @@ let private runFullAgentLoop
 
         let latencyScope = resolveLatencyScope ctx
 
+        // Phase 9s - resolved once per loop beside the scope, for the
+        // same reason: both are properties of the REQUEST, and reading
+        // them per turn would re-derive a constant inside the loop.
+        let latencyUserId = resolveLatencyUserId ctx
+
         let emitLatency
             (turnNumber: int)
             (response: AIProviderResponse option)
@@ -443,6 +460,7 @@ let private runFullAgentLoop
                     let payload: AILatencyRecord = {
                         TaskId = taskId
                         ConversationId = conversationId
+                        UserId = latencyUserId
                         TurnNumber = turnNumber
                         ProviderName = servingProviderName ()
                         ProviderModel = servingProviderModel ()
