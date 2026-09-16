@@ -124,6 +124,10 @@
         <Compile Include="Server\AICrossModuleObservability.fs" />
         <Compile Include="Server\AIProviderUsageMiddleware.fs" />
         <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
+        <!-- Phase 6m — the anonymous-surface AI cost refusal. Depends on
+             ServerConfig + the IAIProviderFactory interface only; before
+             AICompose, which registers it. -->
+        <Compile Include="Server\AnonymousAIModeValidator.fs" />
         <Compile Include="Server\AIProviderEnvValidator.fs" />
         <Compile Include="Server\AIModelEnvValidator.fs" />
         <Compile Include="Server\AIProviderProbeValidator.fs" />

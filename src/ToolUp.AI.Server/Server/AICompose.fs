@@ -449,6 +449,15 @@ let composeAI (app: AIServerApp) : ServerApp =
                     AICancellationDispatchInstanceValidator.AICancellationDispatchInstanceValidator(config)
                     :> ConfigValidation.IConfigValidator
                 )
+                // Phase 6m — refuse the wide-open shape: an Anonymous
+                // surface, no rate-limit policy for AnonymousKind, and a
+                // platform-paid provider wired. Registered here (not in
+                // the platform tier) for the same reason as the validator
+                // above — AI is composed by construction on this path.
+                .AddSingleton<ConfigValidation.IConfigValidator>(
+                    AnonymousAIModeValidator.AnonymousAIModeValidator(config, aiProviderFactory)
+                    :> ConfigValidation.IConfigValidator
+                )
                 // Phase 9m.A — catch operator-typo'd TOOLUP_AI_PROVIDER /
                 // TOOLUP_AI_MODEL env vars at startup. Both validators self-
                 // skip with Ok when the corresponding env var is unset

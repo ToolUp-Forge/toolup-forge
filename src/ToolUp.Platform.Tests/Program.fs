@@ -748,6 +748,8 @@ let private registeredTests =
         JobSchedulerInstanceValidatorTests.tests
         // Phase 6n — AI cancel / client-tool-dispatch multi-instance.
         AICancellationDispatchInstanceValidatorTests.tests
+        // Phase 6m — anonymous surface + AI + no anonymous rate limit.
+        AnonymousAIModeValidatorTests.tests
         OAuthStateStoreInstanceValidatorTests.tests
         NotificationChannelInstanceValidatorTests.tests
         IdempotencyStoreInstanceValidatorTests.tests

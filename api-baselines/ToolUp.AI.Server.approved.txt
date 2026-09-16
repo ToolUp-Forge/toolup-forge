@@ -344,6 +344,9 @@ ToolUp.AI.AIToolRegistry+ToolResultBudget.elisionMarker(System.String, System.In
 ToolUp.AI.AIToolRegistry+ToolResultBudget.limitFor(ToolUp.Platform.AIToolResultBudget) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.AI.ActiveAiProbe (class)
 ToolUp.AI.ActiveAiProbe.create(ToolUp.AI.IAIProviderFactory) : ToolUp.Platform.IActiveAiProbe
+ToolUp.AI.AnonymousAIModeValidator (class)
+ToolUp.AI.AnonymousAIModeValidator+AnonymousAIModeValidator (class)
+ToolUp.AI.AnonymousAIModeValidator+AnonymousAIModeValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.AI.IAIProviderFactory, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.AI.AnswerVerifier (class)
 ToolUp.AI.AnswerVerifier.AuditEventType : System.String (literal)
 ToolUp.AI.AnswerVerifier.AuditSourceModule : System.String (literal)
