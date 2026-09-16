@@ -2268,6 +2268,12 @@
              the seam's fail-closed, bounded-read and handler-ordering
              coverage. Compiled as a pair, contract first. -->
         <Compile Include="Contracts\IUploadValidatorContract.fs" />
+        <!-- Phase 6p - the session-store reset transition: the epoch, the
+             eviction-then-recreate announcement, and the three baselines
+             that pin down what must stay silent (fresh first access,
+             healthy steady state, process restart). Reads FileManagement's
+             internal test seams via InternalsVisibleTo. -->
+        <Compile Include="Contracts\SessionStoreResetContract.fs" />
         <Compile Include="InProcess\UploadValidationTests.fs" />
         <!-- Phase 478 — the isolated execution profile: the profile as
              data on the portable spec, the posture a backend declares,

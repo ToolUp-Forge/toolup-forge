@@ -1126,6 +1126,26 @@ let private evictExpiredStores () =
             | true, removed -> evictedEpochs[kvp.Key] <- removed.Store.Epoch
             | false, _ -> ()
 
+/// Test-only — run the eviction sweep NOW rather than waiting for the
+/// 10-minute timer tick, so a test can exercise the eviction-then-recreate
+/// transition by setting `storeEvictionMinutes <- 0.0` around it.
+///
+/// `internal` (InternalsVisibleTo `ToolUp.Platform.Tests`) rather than
+/// public, and named for what it is, so the sweep stays one
+/// implementation: a test that re-implemented "remove the expired
+/// entries" would prove its own copy correct and say nothing about the
+/// timer's.
+let internal __internal_evictNowForTests () = evictExpiredStores ()
+
+/// Test-only — drop every store without recording an eviction marker,
+/// which is exactly what a PROCESS RESTART does: the dictionary and the
+/// markers die together. The discriminator between this and
+/// `__internal_evictNowForTests` is the whole point of the marker, so a
+/// test that cannot express both cannot prove the distinction.
+let internal __internal_simulateProcessRestartForTests () =
+    stores.Clear()
+    evictedEpochs.Clear()
+
 /// Background timer for periodic eviction (runs every 10 minutes).
 ///
 /// **DO NOT DELETE — it is unreferenced on purpose.** The effect is this
