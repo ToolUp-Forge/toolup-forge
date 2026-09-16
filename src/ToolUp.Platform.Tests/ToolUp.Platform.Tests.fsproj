@@ -1802,6 +1802,13 @@
              mass-wipe; recovery path emits Warn + OverCapRecoveryCount). -->
         <Compile Include="InProcess\IdempotencyStoreEvictionTests.fs" />
         <Compile Include="InProcess\AuditBodyDisposalTests.fs" />
+        <!-- Phase 461 — the request-body rewind invariant is structural:
+             the proxy borrows the buffered body instead of disposing it, so
+             a NEW post-dispatch stage (middleware after next.Invoke, or a
+             Giraffe stage composed after the handler) reads the full body
+             with no guard; and a body disposed by foreign middleware is a
+             typed, logged, telemetry-recorded 500 rather than a reset. -->
+        <Compile Include="InProcess\PostDispatchBodyReadTests.fs" />
         <Compile Include="InProcess\StreamingTests.fs" />
         <!-- Phase 727 — attribute recognition beyond the auth classifier:
              the audit / PII-safety, rate-limit and idempotency families
