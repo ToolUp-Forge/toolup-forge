@@ -442,6 +442,37 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // what makes `TrustEverything` actually reachable.
                 .AddSingleton<AIConsentMode>(app.ConsentMode)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
+                // Phase 6k — the supervised agent-loop worker, plus its
+                // `IHostedService` lifecycle. Two registrations of ONE
+                // instance: the handler resolves the concrete type to
+                // enqueue turns, the host drives Start/Stop through the
+                // interface.
+                //
+                // Deliberately NOT gated by `ProcessProfileGate`. Every
+                // other background subsystem is, on the principle that a
+                // `WebOnly` silo serves no background work because a
+                // sibling worker silo drains the persistent stores. That
+                // principle does not reach this one: an agent turn is
+                // bound to the process that accepted the request — its DI
+                // scope, its SSE manager, its cancellation registry — so
+                // there is no sibling silo that could drain it, and
+                // gating it would take chat out entirely on `WebOnly`.
+                .AddSingleton<AIChatWorker.AIChatWorker>(
+                    Func<IServiceProvider, AIChatWorker.AIChatWorker>(fun sp ->
+                        let logger =
+                            match sp.GetService(typeof<ILogger>) with
+                            | :? ILogger as l -> l
+                            | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
+
+                        // `new`: the worker is IDisposable, and the DI
+                        // container owns the singleton's disposal.
+                        new AIChatWorker.AIChatWorker(logger))
+                )
+                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                        sp.GetRequiredService<AIChatWorker.AIChatWorker>()
+                        :> Microsoft.Extensions.Hosting.IHostedService)
+                )
                 // Warn at startup when AI runs multi-instance with the
                 // in-process cancel / client-tool-dispatch registries
                 // (no cross-instance routing yet).

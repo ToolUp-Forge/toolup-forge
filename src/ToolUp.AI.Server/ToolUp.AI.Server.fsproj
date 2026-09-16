@@ -96,6 +96,10 @@
         <Compile Include="Server\AIDenialRateMonitor.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
+        <!-- Phase 6k - the supervised agent-loop worker. Depends on the
+             platform ILogger/Logger only; MUST precede AIAssistantHandler,
+             which enqueues onto it, and AICompose, which registers it. -->
+        <Compile Include="Server\AIChatWorker.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />
         <Compile Include="Server\ConversationReplay.fs" />
         <Compile Include="Server\AIProviderSurface.fs" />

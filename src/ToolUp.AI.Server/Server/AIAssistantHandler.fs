@@ -390,6 +390,17 @@ let aiAssistantApi
         ctx.RequestServices.GetService(typeof<AICancellationRegistry.AICancellationRegistry>)
         :?> AICancellationRegistry.AICancellationRegistry
 
+    // Phase 6k — the supervised agent-loop worker. `GetService`, not
+    // `GetRequiredService`: a composition that never registered one is
+    // a supported shape (a host that gates every `IHostedService` off,
+    // a test standing this handler up without `compose`), and the
+    // enqueue site falls back to the pre-6k detached start rather than
+    // refusing to serve chat at all.
+    let chatWorker =
+        match ctx.RequestServices.GetService(typeof<AIChatWorker.AIChatWorker>) with
+        | :? AIChatWorker.AIChatWorker as w -> Some w
+        | _ -> None
+
     let storage = ctx.RequestServices.GetService(typeof<IBlobStorage>) :?> IBlobStorage
 
     // Observational logger; silent no-op when DI has none (tests
@@ -774,7 +785,7 @@ let aiAssistantApi
                 // a safe default until the real token is registered.
                 let mutable userCancelToken = System.Threading.CancellationToken.None
 
-                let bgWork = async {
+                let bgWork (shutdownToken: System.Threading.CancellationToken) = async {
                     try
                         // Phase 6h follow-up — Workstream B. Trace the
                         // user/task fingerprint at bgWork entry so a
@@ -1020,8 +1031,27 @@ let aiAssistantApi
                         // cleanly via OperationCanceledException. We always
                         // unregister in the surrounding finally to free
                         // the entry whether cancellation fired or not.
-                        let cancelToken = cancellationRegistry.Register(taskId)
-                        userCancelToken <- cancelToken
+                        let registeredToken = cancellationRegistry.Register(taskId)
+                        userCancelToken <- registeredToken
+
+                        // Phase 6k — the worker's shutdown token joins the
+                        // per-task cancel token, so a host shutdown reaches
+                        // `runAgentLoop`'s turn-boundary checks instead of
+                        // abandoning the computation with the client still
+                        // waiting on an open stream.
+                        //
+                        // `userCancelToken` deliberately stays the REGISTERED
+                        // token. The `with` clauses below discriminate a user
+                        // cancel from every other cancellation source, and a
+                        // shutdown is not a user cancel — conflating them
+                        // would report a killed turn as a completed one.
+                        use linkedCancel =
+                            System.Threading.CancellationTokenSource.CreateLinkedTokenSource(
+                                registeredToken,
+                                shutdownToken
+                            )
+
+                        let cancelToken = linkedCancel.Token
 
                         let! finalMessages =
                             match shortCircuitCell.Value with
@@ -1284,7 +1314,6 @@ let aiAssistantApi
                         // already removes the entry on cancellation,
                         // so this is the no-cancel path.
                         cancellationRegistry.Unregister(taskId)
-                        bgScope.Dispose()
                     with
                     | :? System.OperationCanceledException when userCancelToken.IsCancellationRequested ->
                         // Phase 6h: user-initiated cancel. The agent
@@ -1308,17 +1337,67 @@ let aiAssistantApi
 
                         emit (TaskStatusChanged(taskId, AITaskCompleted))
                         cancellationRegistry.Unregister(taskId)
-                        bgScope.Dispose()
+                    | :? System.OperationCanceledException when shutdownToken.IsCancellationRequested ->
+                        // Phase 6k — the host is going away and the worker's
+                        // shutdown budget expired with this turn still in
+                        // flight. Before, the computation was simply
+                        // abandoned: no terminal event, so the client sat on
+                        // an open stream until its 60 s watchdog called it a
+                        // hang and the user was never told why.
+                        //
+                        // `Cancelled` rather than `Errored` because nothing
+                        // went wrong with the turn — it was cut short — and
+                        // the terminal event carries the reason so the chat
+                        // says so inline.
+                        convMarkStatus scope.ScopeId conversationId ConversationStatus.Cancelled
+                        |> Async.Start
+
+                        emit (TaskStatusChanged(taskId, AITaskFailed AIChatWorker.ShuttingDownReason))
+                        cancellationRegistry.Unregister(taskId)
                     | ex ->
                         convMarkStatus scope.ScopeId conversationId (ConversationStatus.Errored ex.Message)
                         |> Async.Start
 
                         emit (TaskStatusChanged(taskId, AITaskFailed ex.Message))
                         cancellationRegistry.Unregister(taskId)
-                        bgScope.Dispose()
                 }
 
-                Async.Start bgWork
+                // Phase 6k — the turn is handed to the supervised worker
+                // rather than fired with `Async.Start`. Scope disposal moves
+                // with it: `Dispose` runs exactly once on the worker
+                // boundary whichever way the turn ended, so a terminal
+                // branch added later cannot leak a DI scope per turn by
+                // forgetting to dispose one.
+                let workItem: AIChatWorker.AIChatWorkItem = {
+                    TaskId = taskId
+                    Fingerprint = $"userId={userId}, conversation={conversationId}"
+                    Run = bgWork
+                    Reject = fun reason -> emit (TaskStatusChanged(taskId, AITaskFailed reason))
+                    Dispose = fun () -> bgScope.Dispose()
+                }
+
+                match chatWorker with
+                | Some worker ->
+                    match worker.TryEnqueue workItem with
+                    | AIChatWorker.Accepted -> ()
+                    | AIChatWorker.QueueFull ->
+                        // Admission control, surfaced. The alternative is
+                        // to start the turn anyway and let it fail later
+                        // as a provider timeout — the same outcome, minus
+                        // the explanation, several seconds further from
+                        // the cause.
+                        Logger.trace logger "ai.agent" $"chat worker queue full; refusing turn (taskId={taskId})"
+
+                        workItem.Reject AIChatWorker.QueueFullReason
+                        workItem.Dispose()
+                    | AIChatWorker.NotRunning ->
+                        Logger.trace
+                            logger
+                            "ai.agent"
+                            $"chat worker registered but not running; detached start (taskId={taskId})"
+
+                        AIChatWorker.runDetached workItem
+                | None -> AIChatWorker.runDetached workItem
 
                 return task
             }

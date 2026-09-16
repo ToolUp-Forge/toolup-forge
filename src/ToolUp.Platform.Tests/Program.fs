@@ -704,6 +704,7 @@ let private registeredTests =
         PlatformAIKeysHandlerRbacTests.tests
         AISurfaceCapabilityTests.tests
         AIStreamFramingPinTests.tests
+        AIChatWorkerTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         // Phase 43.B — the two reference provider-OAuth flows, bound to

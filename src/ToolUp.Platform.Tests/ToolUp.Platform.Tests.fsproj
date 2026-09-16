@@ -948,6 +948,8 @@
              across the SubmitMessage / StreamChatV2 single-implementation
              migration; typed chunk payloads equal legacy data payloads. -->
         <Compile Include="AI\AIStreamFramingPinTests.fs" />
+        <!-- Phase 6k - the supervised agent-loop worker. -->
+        <Compile Include="AI\AIChatWorkerTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
