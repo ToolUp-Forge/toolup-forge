@@ -3588,6 +3588,34 @@ ToolUp.Platform.ConversationExportPayload..ctor(System.String, System.Boolean, S
 ToolUp.Platform.ConversationExportPayload.ConversationId : System.String { get }
 ToolUp.Platform.ConversationExportPayload.ExportedBy : System.String { get }
 ToolUp.Platform.ConversationExportPayload.IncludeToolDetails : System.Boolean { get }
+ToolUp.Platform.ConversationReplayEvent (class)
+ToolUp.Platform.ConversationReplayEvent.IsReplayCompleted : System.Boolean { get }
+ToolUp.Platform.ConversationReplayEvent.IsReplayFailed : System.Boolean { get }
+ToolUp.Platform.ConversationReplayEvent.IsReplayStarted : System.Boolean { get }
+ToolUp.Platform.ConversationReplayEvent.IsReplayTurnReplayed : System.Boolean { get }
+ToolUp.Platform.ConversationReplayEvent.Tag : System.Int32 { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayCompleted (class)
+ToolUp.Platform.ConversationReplayEvent+ReplayCompleted.assistantTurns : System.Int32 { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayCompleted.delta : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayCompleted.replayConversationId : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayFailed (class)
+ToolUp.Platform.ConversationReplayEvent+ReplayFailed.reason : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayFailed.replayConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayStarted (class)
+ToolUp.Platform.ConversationReplayEvent+ReplayStarted.model : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayStarted.originalConversationId : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayStarted.provider : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayStarted.replayConversationId : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayTurnReplayed (class)
+ToolUp.Platform.ConversationReplayEvent+ReplayTurnReplayed.replayConversationId : System.String { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayTurnReplayed.tokensIn : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayTurnReplayed.tokensOut : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.ConversationReplayEvent+ReplayTurnReplayed.turnIndex : System.Int32 { get }
+ToolUp.Platform.ConversationReplayEvent+Tags (class)
+ToolUp.Platform.ConversationReplayEvent+Tags.ReplayCompleted : System.Int32 (literal)
+ToolUp.Platform.ConversationReplayEvent+Tags.ReplayFailed : System.Int32 (literal)
+ToolUp.Platform.ConversationReplayEvent+Tags.ReplayStarted : System.Int32 (literal)
+ToolUp.Platform.ConversationReplayEvent+Tags.ReplayTurnReplayed : System.Int32 (literal)
 ToolUp.Platform.ConversationReplayOptions (class)
 ToolUp.Platform.ConversationReplayOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ConversationReplayOptions.ProviderLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

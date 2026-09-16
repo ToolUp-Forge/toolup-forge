@@ -10164,6 +10164,7 @@ ToolUp.Remoting.Server.ApiDocs`1.route`1(Microsoft.FSharp.Quotations.FSharpExpr`
 ToolUp.Remoting.Server.ApiDocs`1.route`2(Microsoft.FSharp.Quotations.FSharpExpr`1[Microsoft.FSharp.Core.FSharpFunc`2[t, Microsoft.FSharp.Core.FSharpFunc`2[v, Microsoft.FSharp.Control.FSharpAsync`1[u]]]]) : ToolUp.Remoting.Server.RouteDocs
 ToolUp.Remoting.Server.AsyncStream (class)
 ToolUp.Remoting.Server.AsyncStream.fromCallback`1(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : System.Collections.Generic.IAsyncEnumerable`1[T]
+ToolUp.Remoting.Server.AsyncStream.fromSubscription`1(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit], System.IDisposable]) : System.Collections.Generic.IAsyncEnumerable`1[T]
 ToolUp.Remoting.Server.AuditAttribute (class)
 ToolUp.Remoting.Server.AuditAttribute..ctor(System.String)
 ToolUp.Remoting.Server.AuditAttribute.Kind : ToolUp.Remoting.Server.AuditKind { get }

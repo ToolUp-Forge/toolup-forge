@@ -14,7 +14,7 @@ ToolUp.AI.McpHost 133/246
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 3/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 418/816
+ToolUp.AI.Server 421/822
 ToolUp.AI.Wire 87/220
 ToolUp.AICookbooks.AgChart 7/9
 ToolUp.AICookbooks.AgGridEnterprise 5/7
@@ -102,7 +102,7 @@ ToolUp.Hosts.GoogleCloudFunctions 2/4
 ToolUp.IngestionQueues.Redis 24/40
 ToolUp.KnowledgeBase.Client 51/394
 ToolUp.KnowledgeBase.Core 181/454
-ToolUp.KnowledgeBase.Server 180/321
+ToolUp.KnowledgeBase.Server 187/330
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
 ToolUp.MediaLibrary 238/665
@@ -121,9 +121,9 @@ ToolUp.OpenXml 102/298
 ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 192/415
-ToolUp.Platform.Client 2143/6372
-ToolUp.Platform.Core 5123/13133
-ToolUp.Platform.Server 5250/10711
+ToolUp.Platform.Client 2146/6375
+ToolUp.Platform.Core 5128/13161
+ToolUp.Platform.Server 5251/10712
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062

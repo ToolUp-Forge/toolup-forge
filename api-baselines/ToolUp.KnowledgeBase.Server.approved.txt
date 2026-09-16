@@ -16,6 +16,7 @@ KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags (class)
 KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags.Flat : System.Int32 (literal)
 KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags.Structured : System.Int32 (literal)
 KnowledgeBase.Server (class)
+KnowledgeBase.Server.ingestionStatusStream : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Collections.Generic.IAsyncEnumerable`1[SharedTypes+IngestionStatus]] { get }
 KnowledgeBase.Server.kbInventoryBuilder : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]] { get }
 KnowledgeBase.Server.knowledgeApi(Microsoft.AspNetCore.Http.HttpContext) : SharedTypes+KnowledgeApi
 KnowledgeBase.Server.knowledgeBasePromptBuilders : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
@@ -164,6 +165,7 @@ KnowledgeBase.ServerIndexStorage (class)
 KnowledgeBase.ServerIndexStorage.acquireContainerLock(System.String) : System.Threading.SemaphoreSlim
 KnowledgeBase.ServerIndexStorage.appendVersion(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocumentVersion) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.chunkHashesBlobName(System.String) : System.String
+KnowledgeBase.ServerIndexStorage.clearStatus(System.String) : System.Void
 KnowledgeBase.ServerIndexStorage.indexBlobName : System.String { get }
 KnowledgeBase.ServerIndexStorage.loadChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 KnowledgeBase.ServerIndexStorage.loadIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
@@ -171,14 +173,21 @@ KnowledgeBase.ServerIndexStorage.loadVersions(ToolUp.Platform.BlobStorage+IBlobS
 KnowledgeBase.ServerIndexStorage.progressCache : System.Collections.Concurrent.ConcurrentDictionary`2[System.String, System.Int32] { get }
 KnowledgeBase.ServerIndexStorage.saveChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.saveIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+KnowledgeBase.ServerIndexStorage.setStatus(System.String, SharedTypes+IngestionStatus) : System.Void
 KnowledgeBase.ServerIndexStorage.statusCache : System.Collections.Concurrent.ConcurrentDictionary`2[System.String, SharedTypes+IngestionStatus] { get }
 KnowledgeBase.ServerIndexStorage.updateIndexChunkCount(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.updateIndexStatus(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+KnowledgeBase.ServerIndexStorage.updateStatus(System.String, SharedTypes+IngestionStatus, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, SharedTypes+IngestionStatus]) : System.Void
 KnowledgeBase.ServerIndexStorage.upsertIndexEntry(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.versionedOriginalBlobName(System.String, System.Int32, System.String) : System.String
 KnowledgeBase.ServerIndexStorage.versionsBlobName(System.String) : System.String
+KnowledgeBase.ServerIndexStorage+IngestionStatusFeed (class)
+KnowledgeBase.ServerIndexStorage+IngestionStatusFeed.subscribe(System.String, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, Microsoft.FSharp.Core.Unit]) : System.IDisposable
 KnowledgeBase.ServerIngestionObserver (class)
 KnowledgeBase.ServerIngestionObserver.makeIngestionStatusObserver(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
+KnowledgeBase.ServerIngestionStatusStream (class)
+KnowledgeBase.ServerIngestionStatusStream.ingestionStatusStream(System.String) : System.Collections.Generic.IAsyncEnumerable`1[SharedTypes+IngestionStatus]
+KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus(SharedTypes+IngestionStatus) : System.Boolean
 KnowledgeBase.ServerInventory (class)
 KnowledgeBase.ServerInventory.invalidateInventoryCache(System.String) : System.Void
 KnowledgeBase.ServerInventory.kbInventoryBuilder(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]

@@ -539,7 +539,10 @@ ToolUp.AI.ConversationExportAuditHandler+ExportAuditRequest..ctor(System.Guid, S
 ToolUp.AI.ConversationExportAuditHandler+ExportAuditRequest.ConversationId : System.Guid { get }
 ToolUp.AI.ConversationExportAuditHandler+ExportAuditRequest.IncludeToolDetails : System.Boolean { get }
 ToolUp.AI.ConversationReplay (class)
+ToolUp.AI.ConversationReplay.isTerminalReplayEvent(ToolUp.Platform.ConversationReplayEvent) : System.Boolean
 ToolUp.AI.ConversationReplay.replay(ToolUp.Platform.IConversationStore, ToolUp.AI.IAIProviderFactory, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.Platform.AccessContext, System.String, System.String, ToolUp.Platform.ConversationReplayOptions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConversationReplayResult, ToolUp.Platform.ConversationError]]
+ToolUp.AI.ConversationReplay.replayStream(ToolUp.Platform.IConversationStore, ToolUp.AI.IAIProviderFactory, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.Platform.AccessContext, System.String, System.String, ToolUp.Platform.ConversationReplayOptions) : System.Collections.Generic.IAsyncEnumerable`1[ToolUp.Platform.ConversationReplayEvent]
+ToolUp.AI.ConversationReplay.replayWith(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ConversationReplayEvent, Microsoft.FSharp.Core.Unit], ToolUp.Platform.IConversationStore, ToolUp.AI.IAIProviderFactory, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.Platform.AccessContext, System.String, System.String, ToolUp.Platform.ConversationReplayOptions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConversationReplayResult, ToolUp.Platform.ConversationError]]
 ToolUp.AI.DefaultAIProviderFactory (class)
 ToolUp.AI.DefaultAIProviderFactory.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderBuilder], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.AI.AIFallbackPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore]) : ToolUp.AI.IAIProviderFactory
 ToolUp.AI.DefaultAIProviderFactory.empty : ToolUp.AI.IAIProviderFactory { get }
@@ -697,8 +700,11 @@ ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi(ToolUp.AI.IAIProviderFactory, 
 ToolUp.AI.PlatformAITools (class)
 ToolUp.AI.PlatformAITools.builtIn : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool] { get }
 ToolUp.AI.SSEHandler (class)
+ToolUp.AI.SSEHandler.LegacyChannelDeprecatedOn : System.String (literal)
+ToolUp.AI.SSEHandler.LegacyChannelMigrationGuide : System.String (literal)
 ToolUp.AI.SSEHandler.sendEvent(ToolUp.Platform.SSEConnectionManager, System.String, ToolUp.AI.AIStreamEvent) : System.Void
 ToolUp.AI.SSEHandler.sseHandler(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.AI.SSEHandler.writeDeprecationHeaders(Microsoft.AspNetCore.Http.HttpResponse) : System.Void
 ToolUp.AI.SuspendedPrompt (class)
 ToolUp.AI.SuspendedPrompt.SuspendedDispatchTimeoutMs : System.Int32 (literal)
 ToolUp.AI.SuspendedPrompt.awaitDecisionWithin`1(System.Int32, System.Threading.Tasks.Task`1[Decision], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Decision]]
