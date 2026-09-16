@@ -1257,6 +1257,15 @@
              After the aggregator (drives enqueue + the scheduled helpers);
              registered with the scheduler in ComposeTenantLifecycle. -->
         <Compile Include="Server\ScheduledDeprovisionJobHandler.fs" />
+        <!-- Phase 445 — platform backup / restore coordinator + restore
+             drill. After DeployRecords.fs (digests), PersistentEventStore.fs
+             (the drill replays through the real store), IJobHandler.fs and
+             IBlobEncryptionKeyResolver.fs; before Compose/ComposeStores.fs
+             (registers the coordinator) and Compose/ComposeConfigValidators.fs
+             (registers the target-configured validator). -->
+        <Compile Include="Server\IBackupCoordinator.fs" />
+        <Compile Include="Server\BackupCoordinator.fs" />
+        <Compile Include="Server\RestoreDrillVerifier.fs" />
         <Compile Include="Server\Compose\BuildRouteHandlers.fs" />
         <!-- Phase 15e follow-up — per-concern compose-body subdivision.
              Pure structural helpers consumed by `compose`; each takes
