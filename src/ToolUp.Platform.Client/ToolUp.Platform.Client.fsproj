@@ -433,6 +433,11 @@
              NO dependency on ToolUp.AI — verification arrives as a
              consumer-supplied delegate. -->
         <Compile Include="Client\ProviderProfileUI.fs" />
+        <!-- Phase 44a — the Owner/Admin "Team AI providers" surface: a MOUNT
+             of the component above with the caller's team role, not a second
+             editor. After ProviderProfileUI.fs (it wraps that component's
+             config, model and Msg). Nothing auto-injects it (GP 13). -->
+        <Compile Include="Client\TeamProviderUI.fs" />
         <Compile Include="Client\DataSourceCredentialUI.fs" />
         <!-- Phase 10g — OAuth 1.0a credential form helpers (Feliz). -->
         <Compile Include="Client\OAuth1aCredentialUIHelpers.fs" />

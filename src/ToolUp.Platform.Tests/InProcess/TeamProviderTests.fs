@@ -449,10 +449,119 @@ let private teamStoreAdapterTests =
         }
     ]
 
+
+// ─── 4. The "Team AI providers" mount ────────────────────────────
+
+/// A transport that answers everything Ok — the mount's cases are about
+/// which messages REACH a transport, so what it returns is irrelevant
+/// and a stub keeps them off the network.
+let private stubApi: IProviderProfileApi = {
+    GetProfile = fun () -> async { return Ok ProviderProfileView.empty }
+    SaveEntry = fun _ -> async { return Ok() }
+    RemoveEntry = fun _ -> async { return Ok() }
+    SetRoute = fun _ -> async { return Ok() }
+    ClearRoute = fun _ -> async { return Ok() }
+    SetFallback = fun _ -> async { return Ok() }
+    GetHealth = fun () -> async { return Ok [] }
+    RecordVerification = fun _ -> async { return Ok() }
+}
+
+let private teamConfig (role: TeamRole option) : TeamProviderUI.TeamProviderConfig =
+    let profile =
+        ProviderProfileUI.ProviderProfileConfig.forApi stubApi [ "ai.assistant" ]
+
+    let baseConfig = TeamProviderUI.TeamProviderConfig.forProfile profile
+
+    match role with
+    | Some r -> TeamProviderUI.TeamProviderConfig.withRole r baseConfig
+    | None -> baseConfig
+
+let private candidate: ProviderProfileUI.ProviderCandidate = {
+    Label = "team-primary"
+    ProviderId = "anthropic"
+    Model = None
+    Tags = []
+    ApiKey = Some "sk-test"
+}
+
+let private teamSurfaceTests =
+    testList "Phase 44a — the Team AI providers mount" [
+
+        testCase "canEdit is the SAME predicate the server gates on"
+        <| fun () ->
+            // Not "a client-side rule that happens to agree" — literally
+            // TeamRoles.canWriteTeamConfig, which is why that module
+            // lives in Shared. Two rules could drift; one cannot.
+            Expect.isTrue (TeamProviderUI.canEdit (teamConfig (Some Owner))) "Owner edits"
+            Expect.isTrue (TeamProviderUI.canEdit (teamConfig (Some Admin))) "Admin edits"
+            Expect.isFalse (TeamProviderUI.canEdit (teamConfig (Some Member))) "Member does not"
+
+        testCase "an unknown role renders WRITABLE — fail-open, as NavRole.TeamOwnerAdmin documents"
+        <| fun () ->
+            // A role still in flight must not silently strip an Owner of
+            // their own tools, and the server refuses a write the UI
+            // should not have offered anyway (GP 12).
+            Expect.isTrue (TeamProviderUI.canEdit (teamConfig None)) "unknown role still renders the controls"
+
+        testCase "a Member's mutating message is dropped before it reaches the transport"
+        <| fun () ->
+            let config = teamConfig (Some Member)
+            let model, _ = TeamProviderUI.init config
+            let after, _ = TeamProviderUI.update config (ProviderProfileUI.Save candidate) model
+
+            Expect.equal after model "the model is untouched — no in-flight save was ever started"
+            Expect.isFalse after.Busy "and nothing is pending"
+
+        testCase "an Owner's mutating message is passed straight through"
+        <| fun () ->
+            // The discriminator for the case above: same message, same
+            // model, different role. If the mount blocked everything —
+            // or nothing — one of these two would fail.
+            let config = teamConfig (Some Owner)
+            let model, _ = TeamProviderUI.init config
+            let after, _ = TeamProviderUI.update config (ProviderProfileUI.Save candidate) model
+
+            Expect.isTrue after.Busy "the save is in flight"
+
+        testCase "a Member's NON-mutating messages still work"
+        <| fun () ->
+            // Read-only is not inert. A Member who could not open an
+            // entry, dismiss an error or reload would have a surface
+            // that looks broken rather than one that looks read-only.
+            let config = teamConfig (Some Member)
+            let model, _ = TeamProviderUI.init config
+
+            let opened, _ =
+                TeamProviderUI.update config (ProviderProfileUI.ProfileLoaded(Ok ProviderProfileView.empty)) model
+
+            Expect.isTrue opened.Loaded "a load result is applied"
+
+            let dismissed, _ =
+                TeamProviderUI.update config ProviderProfileUI.DismissError { opened with Error = Some "something" }
+
+            Expect.isNone dismissed.Error "and an error can still be dismissed"
+
+        testCase "the mount adds no scope to the wire — it reuses the Phase 44 transport verbatim"
+        <| fun () ->
+            // The whole design claim of the surface. `IProviderProfileApi`
+            // targets the caller's own configScope, which for a TeamMember
+            // IS the team — so "with a team scope" is a property of the
+            // subject, not a parameter the client gets to choose.
+            let config = teamConfig (Some Owner)
+
+            // Physical, not structural: the API record holds functions,
+            // so the only honest question is whether it is the SAME
+            // record — which is exactly the claim (nothing wrapped it).
+            Expect.isTrue
+                (obj.ReferenceEquals(config.Profile.Api, stubApi))
+                "the mount hands the component the transport it was given, unwrapped"
+    ]
+
 let tests =
     testList "Phase 44a — per-team BYOK provider configuration" [
         secretLayerTests
         handlerGateTests
         resolverConformance
         teamStoreAdapterTests
+        teamSurfaceTests
     ]
