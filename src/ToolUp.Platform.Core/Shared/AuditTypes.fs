@@ -4653,6 +4653,95 @@ type CrossModuleReadPayload = {
     Outcome: string
 }
 
+/// Phase 445 — a platform snapshot completed and its manifest was
+/// written to the backup target. The row an operator (or a Compliance
+/// Edition auditor asking "show me your last backup") reads to learn
+/// what was captured and whether it was captured atomically.
+type BackupCompletedPayload = {
+    /// The snapshot's identifier — sortable, and the manifest's blob name
+    /// under the backup target's `_backups/` container.
+    SnapshotId: string
+    /// The scope-derived containers the snapshot walked (`_platform`,
+    /// `team-{id}`, …).
+    Containers: string list
+    /// Blobs copied — the manifest's entry count.
+    BlobCount: int
+    /// Bytes copied, summed over every entry.
+    TotalBytes: int64
+    /// `"Consistent"` when the event-store head did not move during the
+    /// walk, `"Fuzzy"` when it did (the snapshot is then a point-in-
+    /// interval, not a point-in-time, and the manifest says why).
+    Consistency: string
+    /// Encryption key ids the snapshot depends on (from the Phase 22
+    /// envelope headers of the ciphertext it copied). Empty when no
+    /// copied blob was enveloped. Key MATERIAL is never captured.
+    KeyIds: string list
+    /// When the walk started.
+    StartedAt: DateTime
+    /// When the manifest was written.
+    CompletedAt: DateTime
+}
+
+/// Phase 445 — a snapshot did not complete. The manifest was not written,
+/// so nothing downstream (a drill, a restore) can pick the attempt up by
+/// mistake; the row is the only trace of it.
+type BackupFailedPayload = {
+    /// The containers the failed attempt was asked to walk.
+    Containers: string list
+    /// Why — a storage failure reading the source or writing the target.
+    /// Diagnostic only; carries no blob content.
+    Reason: string
+    /// When the attempt started.
+    StartedAt: DateTime
+    /// When it gave up.
+    FailedAt: DateTime
+}
+
+/// Phase 445 — a restore drill restored the latest snapshot into a scratch
+/// prefix, verified every hash and the store-level invariants, and passed.
+/// The row behind the "show me your restore drill" question.
+type RestoreDrillPassedPayload = {
+    /// The snapshot the drill rehearsed.
+    SnapshotId: string
+    /// The scratch restore's identifier (its staging prefix is erased
+    /// once the drill completes).
+    RestoreId: string
+    /// Blobs whose SHA-256 matched the manifest before any write.
+    HashesVerified: int
+    /// Store-level invariants that held (`"event-replay"`,
+    /// `"entity-index-round-trip"`, …).
+    Invariants: string list
+    /// When the drill started.
+    StartedAt: DateTime
+    /// When it finished.
+    CompletedAt: DateTime
+}
+
+/// Phase 445 — a restore drill did not pass: no snapshot to rehearse, a
+/// preflight refusal (hash mismatch, missing blob, destroyed key), or an
+/// invariant that did not hold over the restored copy. The health probe
+/// beside it reports `Degraded` until the next drill passes.
+type RestoreDrillFailedPayload = {
+    /// The snapshot the drill rehearsed, when one was found.
+    SnapshotId: string option
+    /// The scratch restore's identifier, when the drill got as far as
+    /// restoring.
+    RestoreId: string option
+    /// Which stage failed — `"no-snapshot"` / `"preflight"` /
+    /// `"restore"` / `"invariant"` / `"exception"`.
+    Stage: string
+    /// Why, in the coordinator's own words. Diagnostic only.
+    Reason: string
+    /// Invariants that did NOT hold, by name. Empty unless `Stage` is
+    /// `"invariant"`.
+    FailedInvariants: string list
+    /// When the drill started.
+    StartedAt: DateTime
+    /// When it gave up.
+    FailedAt: DateTime
+}
+
+
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -5400,6 +5489,17 @@ type AuditEvent =
     /// records what was actually reached, and only the two together
     /// answer "what did the agent read out of modules nobody named".
     | CrossModuleRead of CrossModuleReadPayload
+    /// Phase 445 — a platform snapshot completed and its manifest landed
+    /// on the backup target.
+    | BackupCompleted of BackupCompletedPayload
+    /// Phase 445 — a platform snapshot did not complete; no manifest was
+    /// written.
+    | BackupFailed of BackupFailedPayload
+    /// Phase 445 — a restore drill restored, verified and passed.
+    | RestoreDrillPassed of RestoreDrillPassedPayload
+    /// Phase 445 — a restore drill did not pass; the health probe reports
+    /// `Degraded` until one does.
+    | RestoreDrillFailed of RestoreDrillFailedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -5605,6 +5705,10 @@ module AuditEvent =
         | MediaKeyDelivered _ -> "MediaKeyDelivered"
         | BlobStorageAuthFailed _ -> "BlobStorageAuthFailed"
         | CrossModuleRead _ -> "CrossModuleRead"
+        | BackupCompleted _ -> "BackupCompleted"
+        | BackupFailed _ -> "BackupFailed"
+        | RestoreDrillPassed _ -> "RestoreDrillPassed"
+        | RestoreDrillFailed _ -> "RestoreDrillFailed"
 
 /// Phase 66 Stream B.7 (design §3.6 + D15 + D16) — sink-side envelope
 /// that wraps an `AuditEvent` with the resolved `AuditSubject` and the

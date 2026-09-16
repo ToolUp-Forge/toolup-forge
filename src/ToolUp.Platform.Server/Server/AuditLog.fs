@@ -1869,6 +1869,41 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> CrossModuleRead(fromAuditJson<CrossModuleReadPayload> j)
     }
+    // Phase 445 — the backup / restore-drill trail: what was captured,
+    // whether it was captured atomically, and whether the rehearsed
+    // restore of it passed.
+    {
+        EventType = "BackupCompleted"
+        TryEncode =
+            (function
+            | BackupCompleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> BackupCompleted(fromAuditJson<BackupCompletedPayload> j)
+    }
+    {
+        EventType = "BackupFailed"
+        TryEncode =
+            (function
+            | BackupFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> BackupFailed(fromAuditJson<BackupFailedPayload> j)
+    }
+    {
+        EventType = "RestoreDrillPassed"
+        TryEncode =
+            (function
+            | RestoreDrillPassed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> RestoreDrillPassed(fromAuditJson<RestoreDrillPassedPayload> j)
+    }
+    {
+        EventType = "RestoreDrillFailed"
+        TryEncode =
+            (function
+            | RestoreDrillFailed p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> RestoreDrillFailed(fromAuditJson<RestoreDrillFailedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.
