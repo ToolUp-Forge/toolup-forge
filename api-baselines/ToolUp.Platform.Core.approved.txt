@@ -6617,6 +6617,16 @@ ToolUp.Platform.IProvenanceQueryApi.GetCaps : Microsoft.FSharp.Core.FSharpFunc`2
 ToolUp.Platform.IProvenanceQueryApi.GetChain : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceChainRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceChainPage, ToolUp.Platform.ProvenanceQueryError]]] { get }
 ToolUp.Platform.IProvenanceQueryApi.GetEdges : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceEdgeSet]] { get }
 ToolUp.Platform.IProvenanceQueryApi.GetNode : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WireProvenanceRef, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.WireProvenanceNodeAnswer]] { get }
+ToolUp.Platform.IProviderProfileApi (class)
+ToolUp.Platform.IProviderProfileApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ProviderEntryInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RoutingRule, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ProviderHealth]], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.ProviderVerificationOutcome], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.IProviderProfileApi.ClearRoute : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.GetHealth : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.ProviderHealth]], System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.GetProfile : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.RecordVerification : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.ProviderVerificationOutcome], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.RemoveEntry : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.SaveEntry : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ProviderEntryInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.SetFallback : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IProviderProfileApi.SetRoute : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RoutingRule, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
 ToolUp.Platform.IServiceAccountApi (class)
@@ -9536,10 +9546,28 @@ ToolUp.Platform.ProviderEntry.ProviderId : System.String { get }
 ToolUp.Platform.ProviderEntry.SecretKeyName : System.String { get }
 ToolUp.Platform.ProviderEntry.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ProviderEntry.UpdatedAt : System.DateTime { get }
+ToolUp.Platform.ProviderEntryInput (class)
+ToolUp.Platform.ProviderEntryInput..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ProviderEntryInput.ApiKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderEntryInput.Label : System.String { get }
+ToolUp.Platform.ProviderEntryInput.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderEntryInput.ProviderId : System.String { get }
+ToolUp.Platform.ProviderEntryInput.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ProviderEntryModule (class)
 ToolUp.Platform.ProviderEntryModule.oauthBinding(ToolUp.Platform.ProviderEntry) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderOAuthBinding]
 ToolUp.Platform.ProviderEntryModule.oauthConnected(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.ProviderOAuthBinding) : ToolUp.Platform.ProviderEntry
 ToolUp.Platform.ProviderEntryModule.pastedKey(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.ProviderEntry
+ToolUp.Platform.ProviderEntryView (class)
+ToolUp.Platform.ProviderEntryView..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.CredentialOrigin, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.ProviderHealth, System.DateTime)
+ToolUp.Platform.ProviderEntryView.ConnectedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.ProviderEntryView.HasCredential : System.Boolean { get }
+ToolUp.Platform.ProviderEntryView.Health : ToolUp.Platform.ProviderHealth { get }
+ToolUp.Platform.ProviderEntryView.Label : System.String { get }
+ToolUp.Platform.ProviderEntryView.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ProviderEntryView.Origin : ToolUp.Platform.CredentialOrigin { get }
+ToolUp.Platform.ProviderEntryView.ProviderId : System.String { get }
+ToolUp.Platform.ProviderEntryView.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ProviderEntryView.UpdatedAt : System.DateTime { get }
 ToolUp.Platform.ProviderHealth (class)
 ToolUp.Platform.ProviderHealth..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.Platform.ProviderHealthStatus)
 ToolUp.Platform.ProviderHealth.LastVerifiedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
@@ -9579,6 +9607,8 @@ ToolUp.Platform.ProviderProfile.Routing : Microsoft.FSharp.Collections.FSharpLis
 ToolUp.Platform.ProviderProfile.SurfaceModelOverrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.ProviderProfile.SurfaceProviderOverrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.ProviderProfile.UpdatedAt : System.DateTime { get }
+ToolUp.Platform.ProviderProfileApi (class)
+ToolUp.Platform.ProviderProfileApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.ProviderProfileModule (class)
 ToolUp.Platform.ProviderProfileModule.empty() : ToolUp.Platform.ProviderProfile
 ToolUp.Platform.ProviderProfileModule.resolveEntry(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ProviderProfile) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderEntry]
@@ -9587,6 +9617,24 @@ ToolUp.Platform.ProviderProfileModule.surfaceProviderOverride(System.String, Too
 ToolUp.Platform.ProviderProfileModule.withRoute(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
 ToolUp.Platform.ProviderProfileModule.withSurfaceModelOverride(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
 ToolUp.Platform.ProviderProfileModule.withSurfaceProviderOverride(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
+ToolUp.Platform.ProviderProfileView (class)
+ToolUp.Platform.ProviderProfileView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule], ToolUp.Platform.FallbackChain)
+ToolUp.Platform.ProviderProfileView.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView] { get }
+ToolUp.Platform.ProviderProfileView.Fallback : ToolUp.Platform.FallbackChain { get }
+ToolUp.Platform.ProviderProfileView.Routing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule] { get }
+ToolUp.Platform.ProviderProfileViewModule (class)
+ToolUp.Platform.ProviderProfileViewModule.empty : ToolUp.Platform.ProviderProfileView { get }
+ToolUp.Platform.ProviderVerificationOutcome (class)
+ToolUp.Platform.ProviderVerificationOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.ProviderVerificationOutcome.IsVerified : System.Boolean { get }
+ToolUp.Platform.ProviderVerificationOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.ProviderVerificationOutcome+Failed (class)
+ToolUp.Platform.ProviderVerificationOutcome+Failed.reason : System.String { get }
+ToolUp.Platform.ProviderVerificationOutcome+Tags (class)
+ToolUp.Platform.ProviderVerificationOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.ProviderVerificationOutcome+Tags.Verified : System.Int32 (literal)
+ToolUp.Platform.ProviderVerificationOutcome+Verified (class)
+ToolUp.Platform.ProviderVerificationOutcome+Verified.models : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Providers (class)
 ToolUp.Platform.Providers+IProviderProfile (interface)
 ToolUp.Platform.Providers+IProviderProfile.Clear(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

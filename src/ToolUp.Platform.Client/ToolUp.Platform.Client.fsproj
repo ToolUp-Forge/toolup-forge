@@ -426,6 +426,13 @@
         <Compile Include="Client\AdminHome.fs" />
         <!-- Parameterized SDK built-in no-active-team landing module. -->
         <Compile Include="Client\NoActiveTeamLandingUI.fs" />
+        <!-- Phase 44 — the reusable BYOK provider-profile component over
+             IProviderProfileApi. Composed by an embedding app (profile API +
+             optional verify delegate + surface keys); not auto-injected, so a
+             deployment that never composes it carries nothing (GP 13). Carries
+             NO dependency on ToolUp.AI — verification arrives as a
+             consumer-supplied delegate. -->
+        <Compile Include="Client\ProviderProfileUI.fs" />
         <Compile Include="Client\DataSourceCredentialUI.fs" />
         <!-- Phase 10g — OAuth 1.0a credential form helpers (Feliz). -->
         <Compile Include="Client\OAuth1aCredentialUIHelpers.fs" />

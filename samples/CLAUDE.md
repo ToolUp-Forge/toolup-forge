@@ -27,6 +27,7 @@ recorded here, so concurrently-running samples never collide. Rules:
 | `MultiSitePublic` | `13950–13959` | Multi-host public rendering (uses 13950) — one process, default site + two Host-header-matched satellites. |
 
 Samples without a fixed listener need no entry: `HelloWorld` (Vite dev server
-on 8080 + server default), `MinimalApp` / `MixedMode` (boot on `TOOLUP_PORT`
-or the SDK default when run manually), and the non-binding `MinimalClient` /
-`FormsAndAI`.
+on 8080 + server default), `MinimalApp` / `MixedMode` /
+`ProviderProfileBYOK.Server` (boot on `TOOLUP_PORT` or the SDK default when
+run manually), and the non-binding `MinimalClient` / `FormsAndAI` /
+`ProviderProfileBYOK.Client`.
