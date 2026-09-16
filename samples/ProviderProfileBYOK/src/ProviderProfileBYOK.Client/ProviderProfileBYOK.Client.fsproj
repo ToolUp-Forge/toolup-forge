@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 44 — the non-AI BYOK sample's client half.
+
+    Fable-only, and NOT in ToolUp.Forge.sln, for the same reason
+    samples/MinimalClient is not: its job is to be driven through the Fable
+    compiler, which a dotnet build of the solution cannot do. From this
+    directory: dotnet tool restore (at the repo root), then
+    dotnet fable -o output (with the no-cache switch).
+
+    It ProjectReferences ToolUp.Platform.Client and nothing else. The absence
+    of any ToolUp.AI reference is the layering claim Phase 44 makes about the
+    provider-profile component, held where a reader can see it.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
+    <!-- Fable ecosystem (Feliz, ToolUp.Elmish.HMR, ToolUp.Remoting.MsgPack,
+         Fable.SimpleJson) pre-dates F# 10's nullable reference types;
+         enabling nullness here would cascade "null / not null inconsistent"
+         errors. Per `CLAUDE.md` guidance: nullable reference types
+         stay disabled on Fable-touching projects. -->
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Client.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Feliz" />
+  </ItemGroup>
+</Project>

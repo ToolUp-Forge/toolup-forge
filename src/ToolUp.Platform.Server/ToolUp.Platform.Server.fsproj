@@ -1165,6 +1165,14 @@
              order) and `ServerConfig.RateLimits`. -->
         <Compile Include="Server\RateLimitMiddleware.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
+        <!-- Phase 44 — the IProviderProfileApi handler, delegating to the
+             registered IProviderProfile, plus the `routeHandlers` gate compose
+             calls. After Providers/BlobProviderProfile.fs (the default store it
+             is composed over), the team/secret substrate it gates on, and
+             RemotingHelpers.fs (makeApi); before ServerApp.fs, whose compose
+             appends its handlers only when a provider-profile store is
+             registered (GP 13). -->
+        <Compile Include="Server\ProviderProfileApiHandler.fs" />
         <Compile Include="Server\PlatformSchema.fs" />
         <Compile Include="Server\PlatformApiHandler.fs" />
         <Compile Include="Server\PlatformAdminApiHandler.fs" />

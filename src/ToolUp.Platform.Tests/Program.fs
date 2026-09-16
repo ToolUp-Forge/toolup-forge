@@ -700,11 +700,17 @@ let private registeredTests =
         BlobCorruptionChaosTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
+        // Phase 498 — provider fallback / failover routing.
+        AIProviderFallbackTests.tests
         PlatformAIKeysHandlerRbacTests.tests
         AISurfaceCapabilityTests.tests
         AIStreamFramingPinTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
+        // Phase 44 — the IProviderProfileApi transport + the reusable
+        // BYOK component: the handler over the real store, the GP 13
+        // composition gate, and the zero-ToolUp.AI layering claim.
+        ProviderProfileApiTests.tests
         // Phase 43.B — the two reference provider-OAuth flows, bound to
         // both conformance packs (`IOAuthCredentialFlowContract` for the
         // OAuth half, `IProviderOAuthFlowContract` for the

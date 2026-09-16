@@ -594,6 +594,13 @@
         <Compile Include="Shared\Types\OAuthCorrelationTypes.fs" />
         <Compile Include="Shared\Types\ProviderProfileTypes.fs" />
         <Compile Include="Shared\Interfaces\IProviderProfile.fs" />
+        <!-- Phase 44 — the ToolUp.Remoting transport over that store, for
+             the reusable client-tier BYOK component. After
+             ProviderProfileTypes.fs (it projects ProviderEntry and carries
+             RoutingRule / FallbackChain / ProviderHealth verbatim) and after
+             AuthAttributes.fs (RequiresClaim / Audit / PiiSafe / NotEmpty
+             markers). Fable-safe: System + Platform.Core value types only. -->
+        <Compile Include="Shared\ProviderProfileApi.fs" />
         <!-- Phase 240 — IPaymentProvider direct-billing substrate. -->
         <Compile Include="Shared\Payments\PaymentTypes.fs" />
         <Compile Include="Shared\Types\I18nTypes.fs" />
