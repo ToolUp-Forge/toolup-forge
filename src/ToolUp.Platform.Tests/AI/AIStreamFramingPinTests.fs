@@ -217,4 +217,41 @@ let tests =
 
             Expect.equal sink.Text legacyGolden "the legacy sink over the same producer writes the pinned bytes"
         }
+
+        // ─── Phase 69c.tail E — the deprecation window, on the wire ──
+        //
+        // The legacy channel stays mounted and byte-identical; what it
+        // gains is a header saying so. Both halves are pinned here
+        // because both are promises: the announcement must be present
+        // and machine-readable, and the REMOVAL date must be absent
+        // until the SDK can honestly make one.
+
+        test "the legacy channel announces its deprecation in a machine-readable header" {
+            let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+            SSEHandler.writeDeprecationHeaders ctx.Response
+
+            Expect.equal
+                (string ctx.Response.Headers["Deprecation"])
+                SSEHandler.LegacyChannelDeprecatedOn
+                "the Deprecation header carries the date the window opened, in IMF-fixdate form"
+
+            let link = string ctx.Response.Headers["Link"]
+
+            Expect.isTrue
+                (link.Contains "rel=\"deprecation\"")
+                "the Link header is typed as the deprecation relation, not a bare URL"
+
+            Expect.isTrue
+                (link.Contains "docs/migrations/69c-streaming-asyncseq-adoption.md")
+                "and points at the migration guide a consumer has to act on"
+        }
+
+        test "no Sunset header is emitted — a removal date is a promise the SDK cannot yet make" {
+            let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+            SSEHandler.writeDeprecationHeaders ctx.Response
+
+            Expect.isFalse
+                (ctx.Response.Headers.ContainsKey "Sunset")
+                "removal waits on a major boundary AND a pinned consumer having migrated; until both hold, saying a date would be a promise the deprecation policy might not honour"
+        }
     ]

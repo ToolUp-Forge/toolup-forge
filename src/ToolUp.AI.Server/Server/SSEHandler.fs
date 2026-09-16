@@ -79,6 +79,59 @@ let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStream
 /// missing / `"anonymous"` resolved identity is refused with 401
 /// rather than trusting a client-supplied `userId`, which would let
 /// any client subscribe as an arbitrary user and receive their stream.
+// ─── Phase 69c.tail E — the legacy channel's deprecation window ──
+//
+// `/api/ai/events` + `AIAssistantApi.SubmitMessage` are the PRE-69c way
+// to drive a chat turn: a POST that returns nothing, and a separate,
+// long-lived, per-user SSE broadcast the client had already subscribed
+// to. Since Phase 69c.F the typed `AIStreamingApi.StreamChatV2` is the
+// same turn over the same implementation, with the turn's events on the
+// caller's OWN connection — correlated per chunk, categorised on error,
+// and closed when the turn ends.
+//
+// The window OPENED on 2026-09-16 and is announced on the wire rather
+// than only in a doc: every accepted connection to the legacy channel
+// carries an IETF `Deprecation` header (RFC 9745) naming the date, and a
+// `Link rel="deprecation"` to the migration guide. A header is the right
+// place for this because the operator most likely to be surprised by the
+// eventual removal is the one running a client nobody has looked at in a
+// year — and that client's traffic is the only thing that still knows it
+// exists.
+//
+// **There is deliberately NO `Sunset` header.** A sunset date is a
+// promise, and two things have to be true before one can honestly be
+// made: the SDK's deprecation policy retires public surface only at a
+// major boundary (`1.0.0`, undated), and the phase's own gate is that a
+// PINNED consumer has migrated to the typed endpoint. Emitting a date
+// the policy might not honour would be worse than emitting none. When
+// both hold, a `Sunset` lands here in the same commit as the dated
+// entry in the migration guide.
+//
+// Nothing about the event stream itself changes: these are response
+// headers, written before the body is committed, and the frames stay
+// byte-for-byte what `AIStreamFramingPinTests` pins.
+
+/// The date the legacy AI SSE channel was announced as deprecated, in
+/// the IMF-fixdate form RFC 9745 requires.
+[<Literal>]
+let LegacyChannelDeprecatedOn = "Wed, 16 Sep 2026 00:00:00 GMT"
+
+/// Where a consumer of the legacy channel is told to go.
+[<Literal>]
+let LegacyChannelMigrationGuide =
+    "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/migrations/69c-streaming-asyncseq-adoption.md"
+
+/// Announce the deprecation on an accepted legacy-channel connection.
+/// Must be called BEFORE the response body is started — once the
+/// `text/event-stream` headers are committed no header can be added.
+let writeDeprecationHeaders (response: HttpResponse) =
+    response.Headers["Deprecation"] <- LegacyChannelDeprecatedOn
+
+    let link =
+        sprintf "<%s>; rel=\"deprecation\"; type=\"text/html\"" LegacyChannelMigrationGuide
+
+    response.Headers["Link"] <- Microsoft.Extensions.Primitives.StringValues link
+
 let sseHandler (manager: SSEConnectionManager) (sseAuthMode: SseAuthMode) : HttpHandler =
     fun (_next: HttpFunc) (ctx: HttpContext) -> task {
         // Phase 6l.D — resolve scope + attempt registration BEFORE
@@ -117,6 +170,9 @@ let sseHandler (manager: SSEConnectionManager) (sseAuthMode: SseAuthMode) : Http
 
                 return Some ctx
             | Result.Ok() ->
+                // Phase 69c.tail E — announce the deprecation while headers
+                // are still mutable; `writeReadyResponse` commits them.
+                writeDeprecationHeaders ctx.Response
                 do! SSE.writeReadyResponse ctx.Response
 
                 // Keep connection alive until client disconnects
