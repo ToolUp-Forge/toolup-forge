@@ -31,8 +31,11 @@ open System
 /// bucket's previous send (or at the job's next tick when it has never
 /// been sent), so a `Daily` digest lands at most once per 24 h.
 type DigestFrequency =
+    /// At most one digest per hour.
     | Hourly
+    /// At most one digest per day.
     | Daily
+    /// At most one digest per week.
     | Weekly
 
 /// Helpers for `DigestFrequency`.
