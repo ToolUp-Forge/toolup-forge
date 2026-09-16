@@ -1129,6 +1129,12 @@ let private registeredTests =
         // the very next call, the counterparty grant write Phase 551 left
         // unreachable, and the trust-vs-lifecycle audit split.
         GrantConsentTests.tests
+        // Phase 557 — module-access attestation certificate: the signed,
+        // third-party-verifiable statement of a module's declared policy and
+        // the consent records live at an instant. Canonical bytes pinned,
+        // emit → offline verify, tamper refusals, determinism, and the
+        // "nothing to attest" arm.
+        AccessAttestationTests.tests
         // Phase 730 — grant-governance completeness. The GrantRecorded audit
         // twin closing the refusal-only trail Phase 551 shipped; the honest
         // classification of an inner-store failure (a Phase 555 QUEUED write

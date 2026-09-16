@@ -1577,6 +1577,16 @@
              enforced); beside EventTopology / DataFootprint, the sibling
              derived lenses. -->
         <Compile Include="Server\AuthorizationSurface.fs" />
+        <!-- Phase 557 — module-access attestation certificate: a signed,
+             third-party-verifiable statement of a module's declared grant
+             policy, the consent records live at an instant, and the
+             grant-authority manifest hash, carried as a DSSE-wrapped in-toto
+             statement over the IStatementEnvelopeSigner seam. After
+             GrantPolicyGuard.fs / GrantConsentStore.fs (the 551 registry and
+             the 552 resolveLive judgement it attests), DsseEnvelope.fs (the
+             envelope it emits) and AuthorizationSurface.fs (the 554 surface
+             it hashes). On demand only — nothing composes it. -->
+        <Compile Include="Server\AccessAttestation.fs" />
         <!-- Phase 627.E in-handler gate declarations for the platform-tier
              API records (JobApi / ModelExecutionApi / IModuleQueryBusApi).
              After AuthorizationSurface.fs, which declares the record they

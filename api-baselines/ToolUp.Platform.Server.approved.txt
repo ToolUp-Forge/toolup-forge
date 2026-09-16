@@ -76,6 +76,101 @@ StaticJwtAuthProvider+StaticJwtConfig.Secret : System.String { get }
 ToolUp.Platform.AIPublishAuthoriser (class)
 ToolUp.Platform.AIPublishAuthoriser.Item : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]] { get }
 ToolUp.Platform.AIPublishAuthoriser.Tag : System.Int32 { get }
+ToolUp.Platform.AccessAttestation (class)
+ToolUp.Platform.AccessAttestation.Format : System.String (literal)
+ToolUp.Platform.AccessAttestation.ModuleNameDigestKey : System.String (literal)
+ToolUp.Platform.AccessAttestation.PredicateType : System.String (literal)
+ToolUp.Platform.AccessAttestation.canonicalJson(ToolUp.Platform.AccessAttestation+AccessAttestationPayload) : System.String
+ToolUp.Platform.AccessAttestation.checkFreshness(ToolUp.Platform.AccessAttestation+AttestationExpectation, ToolUp.Platform.AccessAttestation+AccessAttestationPayload) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AccessAttestation+AccessAttestationPayload, ToolUp.Platform.AccessAttestation+AttestationRefusal]
+ToolUp.Platform.AccessAttestation.compose(ToolUp.Platform.AccessAttestation+AccessAttestationSources, ToolUp.Platform.AccessAttestation+AccessAttestationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessAttestation+AccessAttestationPayload], System.String]]
+ToolUp.Platform.AccessAttestation.emit(ToolUp.Platform.IStatementEnvelopeSigner, ToolUp.Platform.AccessAttestation+AccessAttestationSources, ToolUp.Platform.AccessAttestation+AccessAttestationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AccessAttestation+AttestationOutcome]
+ToolUp.Platform.AccessAttestation.envelopeExpectation(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.EnvelopeExpectation
+ToolUp.Platform.AccessAttestation.manifestHash(ToolUp.Platform.GrantAuthoritySurface) : System.String
+ToolUp.Platform.AccessAttestation.readPayload(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AccessAttestation+AccessAttestationPayload, System.String]
+ToolUp.Platform.AccessAttestation.statementJson(ToolUp.Platform.AccessAttestation+AccessAttestationPayload) : System.String
+ToolUp.Platform.AccessAttestation.subjectFor(System.String) : ToolUp.Platform.InTotoSubject
+ToolUp.Platform.AccessAttestation.verify(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DsseEnvelope, ToolUp.Platform.EnvelopeVerdict], ToolUp.Platform.AccessAttestation+AttestationExpectation, ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AccessAttestation+AccessAttestationPayload, ToolUp.Platform.AccessAttestation+AttestationRefusal]
+ToolUp.Platform.AccessAttestation.verifyJson(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DsseEnvelope, ToolUp.Platform.EnvelopeVerdict], ToolUp.Platform.AccessAttestation+AttestationExpectation, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AccessAttestation+AccessAttestationPayload, ToolUp.Platform.AccessAttestation+AttestationRefusal]
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload (class)
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AccessAttestation+AttestedApproval], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.AttestedAtUtc : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.DeclaredPolicy : System.String { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.DeploymentSha : System.String { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.GrantAuthorityManifestSha256 : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.LiveApprovals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AccessAttestation+AttestedApproval] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.ModuleName : System.String { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationPayload.TeamsExamined : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest (class)
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest.AttestedAt : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest.DeploymentSha : System.String { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest.ModuleName : System.String { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationRequest.TeamIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationSources (class)
+ToolUp.Platform.AccessAttestation+AccessAttestationSources..ctor(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthoritySurface])
+ToolUp.Platform.AccessAttestation+AccessAttestationSources.ConsentVerifier : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationSources.Consents : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationSources.Manifest : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthoritySurface] { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationSources.Permissions : ToolUp.Platform.PermissionStore+IPermissionStore { get }
+ToolUp.Platform.AccessAttestation+AccessAttestationSources.Registry : ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectation (class)
+ToolUp.Platform.AccessAttestation+AttestationExpectation..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset, System.TimeSpan, System.TimeSpan)
+ToolUp.Platform.AccessAttestation+AttestationExpectation.ClockSkew : System.TimeSpan { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectation.MaxAge : System.TimeSpan { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectation.ModuleName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectation.Now : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectationModule (class)
+ToolUp.Platform.AccessAttestation+AttestationExpectationModule.DefaultClockSkew : System.TimeSpan { get }
+ToolUp.Platform.AccessAttestation+AttestationExpectationModule.create(System.String, System.DateTimeOffset, System.TimeSpan) : ToolUp.Platform.AccessAttestation+AttestationExpectation
+ToolUp.Platform.AccessAttestation+AttestationOutcome (class)
+ToolUp.Platform.AccessAttestation+AttestationOutcome.IsAttestationFailed : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome.IsAttested : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome.IsNothingToAttest : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome+AttestationFailed (class)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+AttestationFailed.reason : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Attested (class)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Attested.envelope : ToolUp.Platform.DsseEnvelope { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Attested.payload : ToolUp.Platform.AccessAttestation+AccessAttestationPayload { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome+NothingToAttest (class)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+NothingToAttest.reason : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Tags (class)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Tags.AttestationFailed : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Tags.Attested : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationOutcome+Tags.NothingToAttest : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationRefusal (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal.IsEnvelope : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal.IsNotYetValid : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal.IsStale : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Envelope (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Envelope.Item : ToolUp.Platform.EnvelopeVerdict { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+NotYetValid (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+NotYetValid.attestedAt : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+NotYetValid.now : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+NotYetValid.skew : System.TimeSpan { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Stale (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Stale.attestedAt : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Stale.maxAge : System.TimeSpan { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Stale.now : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Tags (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Tags.Envelope : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Tags.NotYetValid : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Tags.Stale : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Unreadable (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusal+Unreadable.reason : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestationRefusalModule (class)
+ToolUp.Platform.AccessAttestation+AttestationRefusalModule.describe(ToolUp.Platform.AccessAttestation+AttestationRefusal) : System.String
+ToolUp.Platform.AccessAttestation+AttestedApproval (class)
+ToolUp.Platform.AccessAttestation+AttestedApproval..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.AccessAttestation+AttestedApproval.ConsentId : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestedApproval.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Platform.AccessAttestation+AttestedApproval.IssuedAtUtc : System.DateTimeOffset { get }
+ToolUp.Platform.AccessAttestation+AttestedApproval.Party : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestedApproval.SubjectId : System.String { get }
+ToolUp.Platform.AccessAttestation+AttestedApproval.TeamId : System.String { get }
 ToolUp.Platform.AccessClassification (class)
 ToolUp.Platform.AccessClassification.AnonymousReachable : ToolUp.Platform.AccessClassification { get }
 ToolUp.Platform.AccessClassification.ExplicitRequirement : ToolUp.Platform.AccessClassification { get }
