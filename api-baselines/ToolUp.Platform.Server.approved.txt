@@ -9306,6 +9306,13 @@ ToolUp.Platform.TeamManagement+TeamStore.PurgeUser(System.String) : Microsoft.FS
 ToolUp.Platform.TeamManagement+TeamStore.RemoveMember(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.SetActiveTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.SetArchived(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.TeamProviderResolver (class)
+ToolUp.Platform.TeamProviderResolver.create(ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]]) : ToolUp.Platform.ITeamProviderResolver
+ToolUp.Platform.TeamProviderResolver.forTeamStore(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.TeamManagement+ITeamStore) : ToolUp.Platform.ITeamProviderResolver
+ToolUp.Platform.TeamProviderResolver.noTeamRoles(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
+ToolUp.Platform.TeamProviderResolver.teamStoreRoles(ToolUp.Platform.TeamManagement+ITeamStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
+ToolUp.Platform.TeamProviderResolver+TeamProviderResolver (class)
+ToolUp.Platform.TeamProviderResolver+TeamProviderResolver..ctor(ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]])
 ToolUp.Platform.TeamQuotaPolicy (class)
 ToolUp.Platform.TeamQuotaPolicy+BlobBackedTeamQuotaPolicy (class)
 ToolUp.Platform.TeamQuotaPolicy+BlobBackedTeamQuotaPolicy..ctor(ToolUp.Platform.IConfigStore, ToolUp.Platform.Usage.IUsageLog)
@@ -9316,6 +9323,16 @@ ToolUp.Platform.TeamQuotaPolicy+QuotaGatedJobScheduler..ctor(ToolUp.Platform.IJo
 ToolUp.Platform.TeamQuotaPolicy+RequestTokenEstimator (class)
 ToolUp.Platform.TeamQuotaPolicy+RequestTokenEstimator.estimateChars(System.Int32) : System.Decimal
 ToolUp.Platform.TeamQuotaPolicy+RequestTokenEstimator.estimateMessages(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.Decimal
+ToolUp.Platform.TeamScopedSecretStore (class)
+ToolUp.Platform.TeamScopedSecretStore.forTeam(System.String, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Secrets+ISecretStore
+ToolUp.Platform.TeamScopedSecretStore+TeamScopedSecretStore (class)
+ToolUp.Platform.TeamScopedSecretStore+TeamScopedSecretStore..ctor(ToolUp.Platform.Secrets+ISecretStore, System.String)
+ToolUp.Platform.TeamScopedSecretStore+TeamScopedSecretStore.Container : System.String { get }
+ToolUp.Platform.TeamScopedSecretStore+TeamScopedSecretStore.TeamId : System.String { get }
+ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey (class)
+ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.container(System.String) : System.String
+ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.scoped(System.String, System.String) : System.String
+ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.unscoped(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Teams.InMemoryPendingInviteStore (class)
 ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
 ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])

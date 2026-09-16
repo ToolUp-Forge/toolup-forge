@@ -6687,6 +6687,10 @@ ToolUp.Platform.ITeamInviteApi.ListPendingInvitesByEmail : Microsoft.FSharp.Core
 ToolUp.Platform.ITeamInviteApi.ListRecentlyExpiredInvites : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInviteExpiredPayload], System.String]]] { get }
 ToolUp.Platform.ITeamInviteApi.RevokeInvite : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.ITeamInviteApi.RevokePendingInviteByEmail : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.ITeamProviderResolver (interface)
+ToolUp.Platform.ITeamProviderResolver.CanWrite(ToolUp.Platform.Subject, ToolUp.Platform.ProviderProfileOwner) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderScope, System.String]]
+ToolUp.Platform.ITeamProviderResolver.Resolve(ToolUp.Platform.Subject, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProviderResolution]
+ToolUp.Platform.ITeamProviderResolver.ResolveModelOverride(ToolUp.Platform.Subject, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.ITelemetrySink (interface)
 ToolUp.Platform.ITelemetrySink.Name : System.String { get }
 ToolUp.Platform.ITelemetrySink.Track(System.String, ToolUp.Platform.TelemetryEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -9635,6 +9639,24 @@ ToolUp.Platform.ProviderProfileModule.surfaceProviderOverride(System.String, Too
 ToolUp.Platform.ProviderProfileModule.withRoute(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
 ToolUp.Platform.ProviderProfileModule.withSurfaceModelOverride(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
 ToolUp.Platform.ProviderProfileModule.withSurfaceProviderOverride(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ProviderProfile) : ToolUp.Platform.ProviderProfile
+ToolUp.Platform.ProviderProfileOwner (class)
+ToolUp.Platform.ProviderProfileOwner.IsClaimOwned : System.Boolean { get }
+ToolUp.Platform.ProviderProfileOwner.IsPlatformDefault : System.Boolean { get }
+ToolUp.Platform.ProviderProfileOwner.IsTeamOwned : System.Boolean { get }
+ToolUp.Platform.ProviderProfileOwner.IsUserOwned : System.Boolean { get }
+ToolUp.Platform.ProviderProfileOwner.PlatformDefault : ToolUp.Platform.ProviderProfileOwner { get }
+ToolUp.Platform.ProviderProfileOwner.Tag : System.Int32 { get }
+ToolUp.Platform.ProviderProfileOwner+ClaimOwned (class)
+ToolUp.Platform.ProviderProfileOwner+ClaimOwned.scopeId : System.String { get }
+ToolUp.Platform.ProviderProfileOwner+Tags (class)
+ToolUp.Platform.ProviderProfileOwner+Tags.ClaimOwned : System.Int32 (literal)
+ToolUp.Platform.ProviderProfileOwner+Tags.PlatformDefault : System.Int32 (literal)
+ToolUp.Platform.ProviderProfileOwner+Tags.TeamOwned : System.Int32 (literal)
+ToolUp.Platform.ProviderProfileOwner+Tags.UserOwned : System.Int32 (literal)
+ToolUp.Platform.ProviderProfileOwner+TeamOwned (class)
+ToolUp.Platform.ProviderProfileOwner+TeamOwned.teamId : System.String { get }
+ToolUp.Platform.ProviderProfileOwner+UserOwned (class)
+ToolUp.Platform.ProviderProfileOwner+UserOwned.userId : System.String { get }
 ToolUp.Platform.ProviderProfileView (class)
 ToolUp.Platform.ProviderProfileView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule], ToolUp.Platform.FallbackChain)
 ToolUp.Platform.ProviderProfileView.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView] { get }
@@ -9642,6 +9664,26 @@ ToolUp.Platform.ProviderProfileView.Fallback : ToolUp.Platform.FallbackChain { g
 ToolUp.Platform.ProviderProfileView.Routing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule] { get }
 ToolUp.Platform.ProviderProfileViewModule (class)
 ToolUp.Platform.ProviderProfileViewModule.empty : ToolUp.Platform.ProviderProfileView { get }
+ToolUp.Platform.ProviderResolution (class)
+ToolUp.Platform.ProviderResolution..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderEntry], ToolUp.Platform.ProviderProfileOwner, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope])
+ToolUp.Platform.ProviderResolution.Entry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderEntry] { get }
+ToolUp.Platform.ProviderResolution.Owner : ToolUp.Platform.ProviderProfileOwner { get }
+ToolUp.Platform.ProviderResolution.OwningScope : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope] { get }
+ToolUp.Platform.ProviderResolutionModule (class)
+ToolUp.Platform.ProviderResolutionModule.modelOverrideOver(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ProviderScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderProfile]]]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ProviderResolutionModule.platformDefault : ToolUp.Platform.ProviderResolution { get }
+ToolUp.Platform.ProviderResolutionModule.resolveOver(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ProviderScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderProfile]]]) : ToolUp.Platform.ProviderResolution
+ToolUp.Platform.ProviderScope (class)
+ToolUp.Platform.ProviderScope..ctor(ToolUp.Platform.ProviderProfileOwner, ToolUp.Platform.StorageScope)
+ToolUp.Platform.ProviderScope.Owner : ToolUp.Platform.ProviderProfileOwner { get }
+ToolUp.Platform.ProviderScope.Storage : ToolUp.Platform.StorageScope { get }
+ToolUp.Platform.ProviderScopeChain (class)
+ToolUp.Platform.ProviderScopeChain.forSubject(ToolUp.Platform.Subject) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderScope]
+ToolUp.Platform.ProviderScopeChain.writeTarget(ToolUp.Platform.ProviderProfileOwner, ToolUp.Platform.Subject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProviderScope]
+ToolUp.Platform.ProviderScopeModule (class)
+ToolUp.Platform.ProviderScopeModule.claimOwned(System.String) : ToolUp.Platform.ProviderScope
+ToolUp.Platform.ProviderScopeModule.teamOwned(System.String) : ToolUp.Platform.ProviderScope
+ToolUp.Platform.ProviderScopeModule.userOwned(System.String) : ToolUp.Platform.ProviderScope
 ToolUp.Platform.ProviderVerificationOutcome (class)
 ToolUp.Platform.ProviderVerificationOutcome.IsFailed : System.Boolean { get }
 ToolUp.Platform.ProviderVerificationOutcome.IsVerified : System.Boolean { get }

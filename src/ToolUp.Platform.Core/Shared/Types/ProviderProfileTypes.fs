@@ -338,3 +338,190 @@ module ProviderProfile =
             profile with
                 SurfaceProviderOverrides = updated
         }
+// ─── Phase 44a — team-scope binding ──────────────────────────────
+//
+// A `ProviderProfile` is persisted one blob per `StorageScope`, and
+// `AccessContext.configScope` gives a request exactly ONE scope: the
+// team's for a `TeamMember`, the user's for an `AuthenticatedUser`.
+// That is the right answer for a WRITE — you edit the scope you are
+// acting in — and the wrong one for a READ, because a team's
+// configuration is meant to apply to its members while a member may
+// still hold a personal override.
+//
+// The binding below is the read-side half: a subject resolves to an
+// ordered CHAIN of scopes rather than a single one, and a resolution
+// takes the first rung that routes the surface. Nothing here reads a
+// store or a secret — it is a pure fold over profiles a caller has
+// already loaded, so the precedence rule is testable with no
+// infrastructure and compiles under Fable alongside the rest of this
+// file.
+
+/// Which scope OWNS a resolved provider configuration. Carried out of
+/// a resolution because the consumer must read the entry's
+/// `SecretKeyName` at the scope the entry came FROM — a team-owned
+/// entry's key lives in the team's secret scope, and reading it at the
+/// member's own scope finds nothing.
+[<RequireQualifiedAccess>]
+type ProviderProfileOwner =
+    /// The caller's own profile. Overrides the team's, for that caller
+    /// only.
+    | UserOwned of userId: string
+    /// The team's profile. Applies to every member of the team that
+    /// does not hold an override.
+    | TeamOwned of teamId: string
+    /// A claim-bearer's scope — neither user nor team. Kept distinct
+    /// rather than folded into `UserOwned` because a claim's scope id
+    /// is issued by the claim, not by an account, and the two must not
+    /// be confusable at an audit boundary.
+    | ClaimOwned of scopeId: string
+    /// Nothing down the chain routes this surface; the consumer falls
+    /// back to whatever the deployment wired as its platform default.
+    | PlatformDefault
+
+/// One rung of a precedence chain: an owner paired with the
+/// `StorageScope` its profile (and its secrets) are persisted under.
+type ProviderScope = {
+    Owner: ProviderProfileOwner
+    /// Named `Storage` rather than `Scope` so a record-construction or
+    /// dot-lookup in `Platform.Server` is never inferred against
+    /// `SoftwareBillOfMaterials.Scope`, which is declared later in that
+    /// tier's compile order and silently wins the field-name race.
+    Storage: StorageScope
+}
+
+module ProviderScope =
+    /// The scope a user's own profile lives at. Mirrors
+    /// `AccessContext.configScope`'s `AuthenticatedUser` branch
+    /// exactly — the container shape is the one the secret store's
+    /// documented `user-{userId}` convention already names, so a
+    /// profile written through the ordinary settings surface is the
+    /// same blob this chain reads.
+    let userOwned (userId: string) : ProviderScope = {
+        Owner = ProviderProfileOwner.UserOwned userId
+        Storage = {
+            ScopeId = userId
+            Container = $"user-{userId}"
+            Persist = true
+        }
+    }
+
+    /// The scope a team's profile lives at. Mirrors
+    /// `AccessContext.configScope`'s `TeamMember` branch, for the same
+    /// reason.
+    let teamOwned (teamId: string) : ProviderScope = {
+        Owner = ProviderProfileOwner.TeamOwned teamId
+        Storage = {
+            ScopeId = teamId
+            Container = $"team-{teamId}"
+            Persist = true
+        }
+    }
+
+    /// The scope a claim bearer's profile lives at. Mirrors
+    /// `AccessContext.configScope`'s `ClaimBearer` branch, whose
+    /// container IS the claim's scope id.
+    let claimOwned (scopeId: string) : ProviderScope = {
+        Owner = ProviderProfileOwner.ClaimOwned scopeId
+        Storage = {
+            ScopeId = scopeId
+            Container = scopeId
+            Persist = true
+        }
+    }
+
+module ProviderScopeChain =
+    /// The ordered precedence chain a subject reads down: the caller's
+    /// own profile first, the team's second.
+    ///
+    /// `TeamMember` is the only subject with two rungs, and it is the
+    /// whole point: `configScope` answers `team-{teamId}` for that
+    /// subject, so without this chain a team member has no reachable
+    /// personal profile at all and a team-owned profile is the only
+    /// thing that can ever apply. The user rung is FIRST because an
+    /// override that lost to the thing it overrides would not be one.
+    ///
+    /// `AnonymousSession` yields an EMPTY chain rather than a session
+    /// rung: `configScope` gives an anonymous subject no persistent
+    /// scope, so there is no blob to read and inventing one would
+    /// manufacture a scope the rest of the platform does not honour.
+    let forSubject (subject: Subject) : ProviderScope list =
+        match subject with
+        | TeamMember(userId, teamId) -> [ ProviderScope.userOwned userId; ProviderScope.teamOwned teamId ]
+        | AuthenticatedUser userId -> [ ProviderScope.userOwned userId ]
+        | ClaimBearer claim -> [ ProviderScope.claimOwned claim.ScopeId ]
+        | AnonymousSession _ -> []
+
+    /// The rung a WRITE targets for a given owner intent, if the
+    /// subject can reach it. A team member can reach both rungs
+    /// (subject to the Owner/Admin gate on the team one); every other
+    /// subject can reach only its own.
+    ///
+    /// Returns `None` when the subject cannot reach that owner at all —
+    /// an `AuthenticatedUser` asking for a team rung, or any subject
+    /// asking for `PlatformDefault`, which is deployment configuration
+    /// and not a profile anyone edits through this model.
+    let writeTarget (owner: ProviderProfileOwner) (subject: Subject) : ProviderScope option =
+        forSubject subject |> List.tryFind (fun rung -> rung.Owner = owner)
+
+/// The outcome of resolving one `(surface, context)` pair down a
+/// precedence chain.
+type ProviderResolution = {
+    /// The entry that answered, or `None` when no rung routes this
+    /// surface and the consumer should apply its platform default.
+    Entry: ProviderEntry option
+    /// Which rung answered. `PlatformDefault` exactly when `Entry` is
+    /// `None`.
+    Owner: ProviderProfileOwner
+    /// The scope the entry's `SecretKeyName` must be read at. `None`
+    /// for `PlatformDefault`. Carried explicitly because it is the one
+    /// fact a consumer cannot re-derive: a team-owned entry resolved
+    /// for a member names a secret in the TEAM's scope, and the
+    /// member's own scope does not hold it. Named `OwningScope` for the
+    /// same field-inference reason `ProviderScope.Storage` is.
+    OwningScope: StorageScope option
+}
+
+module ProviderResolution =
+    /// Nothing configured anywhere down the chain.
+    let platformDefault: ProviderResolution = {
+        Entry = None
+        Owner = ProviderProfileOwner.PlatformDefault
+        OwningScope = None
+    }
+
+    /// Take the first rung whose profile routes `(surface, context)`.
+    ///
+    /// A rung with NO saved profile, and a rung whose profile routes
+    /// nothing for this surface, both fall through to the next — the
+    /// override is per-SURFACE, not per-profile, so a member who
+    /// overrides `"ai.assistant"` still inherits the team's
+    /// `"rental.gateway"` routing. A rung whose rule names a stale
+    /// label ALSO falls through, because `ProviderProfile.resolveEntry`
+    /// answers `None` for a stale label and this fold has no better
+    /// information than it does; the alternative — failing the whole
+    /// resolution at the first rung with a dangling rule — would let
+    /// one bad personal entry take a team's configuration offline for
+    /// that user.
+    let resolveOver
+        (surface: string)
+        (context: string option)
+        (rungs: (ProviderScope * ProviderProfile option) list)
+        : ProviderResolution =
+        rungs
+        |> List.tryPick (fun (rung, profile) ->
+            profile
+            |> Option.bind (ProviderProfile.resolveEntry surface context)
+            |> Option.map (fun entry -> {
+                Entry = Some entry
+                Owner = rung.Owner
+                OwningScope = Some rung.Storage
+            }))
+        |> Option.defaultValue platformDefault
+
+    /// The surface model override in force, by the same precedence.
+    /// Read separately from the entry because the two are independent
+    /// knobs on the same profile: a member may override only the model
+    /// for a surface whose PROVIDER they take from the team.
+    let modelOverrideOver (surface: string) (rungs: (ProviderScope * ProviderProfile option) list) : string option =
+        rungs
+        |> List.tryPick (fun (_, profile) -> profile |> Option.bind (ProviderProfile.surfaceModelOverride surface))
