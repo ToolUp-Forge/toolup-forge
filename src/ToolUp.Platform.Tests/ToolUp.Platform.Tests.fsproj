@@ -2487,6 +2487,7 @@
              identity on every committed baseline, and the PowerShell driver
              asserted equal to it. -->
         <Compile Include="InProcess\BaselineMergeDriverTests.fs" />
+        <Compile Include="InProcess\BackupCoordinatorTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
              the shared vocabulary (System-only, source-linked into
