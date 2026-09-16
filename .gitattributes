@@ -36,3 +36,24 @@
 # above would rewrite any 0x0d 0x0a pair inside a payload. That is a silent
 # one-byte corruption of a file whose whole purpose is to be byte-exact.
 *.msgpack binary
+
+# Phase 805 — the generated API baselines get a three-way MERGE DRIVER.
+#
+# `<Assembly>.approved.txt` (Phase 175) and `doc-coverage.approved.txt` (Phase
+# 261) are projections of the built tree. Two branches that each add disjoint
+# public members conflict on them textually while agreeing on them semantically,
+# and git's line merge cannot compute the answer because both additions land in
+# the same sorted region. On 2026-09-16 six of nine landings conflicted on
+# `doc-coverage.approved.txt` ALONE, and two of them lost a sibling's row to a
+# `--ours` / `--theirs` resolution.
+#
+# The driver COMMAND cannot live here: git reads `merge.<name>.driver` from
+# `.git/config` only, never from the tree — a repo cannot hand an arbitrary
+# command to everyone who clones it. `dotnet run -- Setup` writes it. Until then
+# the name resolves to nothing and git falls back to its built-in text merge, so
+# a clone that has not run Setup behaves exactly as it does today (GP 11).
+#
+# Ordering is load-bearing: the LAST matching line wins, so the specific
+# `doc-coverage` line must follow the `*.approved.txt` glob.
+api-baselines/*.approved.txt            merge=toolup-members
+api-baselines/doc-coverage.approved.txt merge=toolup-coverage
