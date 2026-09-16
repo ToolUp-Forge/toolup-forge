@@ -127,6 +127,8 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (DataObjectOrphanSweep.DataObjectOrphanSweepConfiguredValidator(config, services)) // Phase 7c — warn when a persistent deployment composes no data-object orphan sweep (Save writes content before metadata, so a crash between them strands objects/_content/{hash}.data forever — invisible to subject erasure), or composes one that JobScheduler = NoJobScheduler can never fire
 
+    addConfigValidator (BackupCoordinator.BackupTargetConfiguredValidator(config, services)) // Phase 445 — refuse Backup = BackupEnabled with no IBackupTarget registered (the coordinator would fail by name at first resolution, which is a request-path surprise rather than a preflight one); warn a declared snapshot / drill cron under JobScheduler = NoJobScheduler (the job can never fire)
+
     addConfigValidator (DirectAddIdentityProofValidator.DirectAddIdentityProofValidator(config, services)) // Phase 549 — refuse DirectAddIdentityProof = RequireDirectoryProof with no IUserDirectory composed (a proof gate with nothing to consult refuses every direct add)
 
     addConfigValidator (EventStoreChainValidator.validator eventStore) // Phase 9u — refuse a miswired IEventStore decorator chain (position conflict, out-of-declared-order pair, audit replication composed outside webhook dispatch, or a cyclic InnerStore). Structural-class: it reads already-resident in-process objects, so SkipPreflight — the emergency lever for external probes whose dependency may be down — must not wave through a composition whose hooks silently drop events
