@@ -135,6 +135,14 @@ let config = {
             // credentials. The IndexedDB and Feliz surfaces are
             // browser-only and ride the Fable compile gate instead.
             TestPack.create "Offline" "src/ToolUp.Offline.Tests/ToolUp.Offline.Tests.fsproj"
+            // Phase 687 — ToolUp.Companions.Isolation: the native-boundary
+            // isolation seam. Its own pack because every out-of-process
+            // case starts a REAL child through `dotnet exec` and kills it
+            // on a fault / a hang / a memory burst — process-heavy by
+            // design, and never `pure`.
+            TestPack.create
+                "CompanionsIsolation"
+                "src/ToolUp.Companions.Isolation.Tests/ToolUp.Companions.Isolation.Tests.fsproj"
         ]
 }
 

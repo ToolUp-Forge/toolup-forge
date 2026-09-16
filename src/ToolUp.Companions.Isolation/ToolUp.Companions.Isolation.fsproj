@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.Companions.Isolation</PackageId>
+    <AssemblyName>ToolUp.Companions.Isolation</AssemblyName>
+    <Description>Native-boundary isolation seam for ToolUp companions — runs a native parser (Tesseract, SkiaSharp, Verovio, any P/Invoke-backed companion) over UNTRUSTED bytes in a sacrificial child process behind a narrow binary pipe, so a crash in the native layer is a typed refusal (WorkerCrashed / TimedOut / MemoryCapExceeded) rather than host-process code execution. In-process stays the default for trusted input; the seam is opt-in per path and mandatory under the verified composition profile. BCL only, no vendor SDK. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;security;isolation;sandbox;native;pinvoke;fuzzing;companion</PackageTags>
+    <!-- The one companion that is BOTH a library and an executable: the
+         worker process is `dotnet exec` of this very assembly, handed the
+         HOST's runtimeconfig + deps.json so it resolves the host's whole
+         closure (companion assemblies and their native runtimes) with no
+         second artefact and no consumer main() hook. No apphost — the dll
+         is all `dotnet exec` needs, and a stray .exe in every consumer's
+         output is noise. -->
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <!-- Phase 687 — companion native-boundary isolation.
+       GP 1 — no vendor dependency at all: Process, Stream and
+       BinaryPrimitives are the whole mechanism, and the native
+       companions this bounds never reach ToolUp.Platform.* through it.
+       GP 2 — every dependency is in the BCL.
+       GP 11 — IsolationMode.InProcess is the pre-687 behaviour
+       byte-for-byte; nothing changes until a path opts in.
+       GP 13 — a deployment that composes no isolation starts no worker
+       and registers nothing. -->
+  <ItemGroup>
+    <Compile Include="IsolationTypes.fs" />
+    <Compile Include="IsolationProtocol.fs" />
+    <Compile Include="IsolationWorker.fs" />
+    <Compile Include="ProcessIsolation.fs" />
+    <Compile Include="CompanionIsolation.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Core carries IConfigValidator; Server carries CompositionProfile
+         (the profile the seam is mandatory under) and the ServerApp the
+         compose helper folds into. -->
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+</Project>

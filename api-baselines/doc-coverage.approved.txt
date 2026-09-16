@@ -57,6 +57,7 @@ ToolUp.Client.ModelViewer 27/65
 ToolUp.Cloud.Aws 0/0
 ToolUp.Cloud.Azure 0/0
 ToolUp.Cloud.Gcp 0/0
+ToolUp.Companions.Isolation 64/129
 ToolUp.ContainerSchedulers.DockerLocal 7/58
 ToolUp.ContentAuthoring 32/74
 ToolUp.ContentScanners.ClamAv 15/25
