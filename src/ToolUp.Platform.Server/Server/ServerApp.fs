@@ -199,6 +199,14 @@ type ServerModule = {
     /// surface for anyone. Both are consulted, in that order, at every
     /// `_platform.ai.*` site.
     AIExposure: ModuleAIExposure option
+    /// Phase 441 — the notification categories this module publishes
+    /// under (GP 9: modules declare, the SDK never enumerates). Fanned
+    /// into `ServerConfig.NotificationCategories` by `addModule`; inert
+    /// unless `ServerConfig.NotificationPreferences` is enabled, in which
+    /// case they are the rows of the preference matrix and the ids the
+    /// send-path filter resolves. Declare via
+    /// `ServerModule.withNotificationCategories`.
+    NotificationCategories: NotificationCategory list
 }
 
 module ServerModule =
@@ -223,6 +231,7 @@ module ServerModule =
         Subjects = []
         GrantPolicy = GrantPolicy.AdminDiscretion
         AIExposure = None
+        NotificationCategories = []
     }
 
     /// Phase 551 — declare the module's grant policy: the precondition
@@ -302,6 +311,26 @@ module ServerModule =
     }
 
     let withDataTypes (dts: DataType list) (m: ServerModule) : ServerModule = { m with DataTypes = dts }
+
+    /// Phase 441 — declare the notification categories this module
+    /// publishes under. Appends, so a module may declare in several
+    /// steps; a category id must be unique across the deployment and
+    /// pass `NotificationCategory.isValidId`, and `Suppressible = false`
+    /// marks the transactional / security class a user cannot mute,
+    /// digest or defer. Publish under a category with
+    /// `NotificationCategoryScope.publish`. Inert unless
+    /// `ServerConfig.NotificationPreferences` is enabled (GP 13).
+    let withNotificationCategories (categories: NotificationCategory list) (m: ServerModule) : ServerModule =
+        for category in categories do
+            if not (NotificationCategory.isValidId category.Id) then
+                invalidArg
+                    "categories"
+                    $"Notification category id '{category.Id}' on module '{m.Name}' is invalid: lower-case letters, digits, '.', '-' and '_' only, no leading or trailing dot."
+
+        {
+            m with
+                NotificationCategories = m.NotificationCategories @ categories
+        }
 
     let withVectorisation (vhs: VectorisationHandler list) (m: ServerModule) : ServerModule = {
         m with
@@ -1327,6 +1356,30 @@ module ServerApp =
                     AlertRules = app.Config.AlertRules @ rules
             }
     }
+
+    /// Phase 441 — declare a notification category at the composition
+    /// root (an app-level category no single module owns, e.g. a
+    /// non-suppressible `security.password-reset`). Same validation and
+    /// the same inert-until-enabled rule as
+    /// `ServerModule.withNotificationCategories`.
+    let withNotificationCategory (category: NotificationCategory) (app: ServerApp) : ServerApp =
+        if not (NotificationCategory.isValidId category.Id) then
+            invalidArg
+                "category"
+                $"Notification category id '{category.Id}' is invalid: lower-case letters, digits, '.', '-' and '_' only, no leading or trailing dot."
+
+        {
+            app with
+                Config = {
+                    app.Config with
+                        NotificationCategories = app.Config.NotificationCategories @ [ category ]
+                }
+        }
+
+    /// Phase 441 — declare several app-level notification categories at
+    /// once; see `withNotificationCategory`.
+    let withNotificationCategories (categories: NotificationCategory list) (app: ServerApp) : ServerApp =
+        categories |> List.fold (fun a c -> withNotificationCategory c a) app
 
     /// Phase 9g — register an audit-log external-export sink (Splunk
     /// HEC, Datadog Logs, S3 Object Lock archive, custom SIEM
@@ -2435,6 +2488,7 @@ module ServerApp =
                                 // pre-10b module composes byte-identically
                                 // (GP 11).
                                 ConfigMigrations = app.Config.ConfigMigrations @ m.ConfigMigrations
+                                NotificationCategories = app.Config.NotificationCategories @ m.NotificationCategories
                                 // Phase 437 — append-only; the empty list
                                 // when no envelope declares a request rate.
                                 RateLimits = app.Config.RateLimits @ envelopeRouteLimits

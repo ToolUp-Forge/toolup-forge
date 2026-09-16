@@ -997,6 +997,17 @@
         <Compile Include="Server\TeamQuotaPolicy.fs" />
         <Compile Include="Server\UsageQueryApi.fs" />
         <Compile Include="Server\TransactionalDispatcher.fs" />
+        <!-- Phase 441 — notification preference + digest substrate: the
+             INotificationPreferenceStore seam + blob-backed default, the
+             NotificationPreferenceFilter INotificationChannel decorator (+ the
+             ambient NotificationCategoryScope), and the DigestJobHandler.
+             After TransactionalDispatcher (the filter wraps its channel) and
+             IJobHandler / IJobScheduler (the digest declaration); before
+             ComposeNotifications, which composes all three. -->
+        <Compile Include="Server\INotificationPreferenceStore.fs" />
+        <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
+        <Compile Include="Server\NotificationPreferenceFilter.fs" />
+        <Compile Include="Server\DigestJobHandler.fs" />
         <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
@@ -1019,6 +1030,10 @@
              (ITeamStore + TeamRoles are the role gate), which is why it sits
              here rather than beside ServiceAccountTokenHandler.fs. -->
         <Compile Include="Server\ServiceAccountApiHandler.fs" />
+        <!-- Phase 441 — INotificationPreferenceApi handler (same AccessContext
+             gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
+             mounts it on the NotificationPreferences opt-in. -->
+        <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
         <!-- Phase 7b — IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
              gated writes). After WebhookApiHandler (same handler shape) +
              TeamManagement (the role gate); before BuildRouteHandlers mounts

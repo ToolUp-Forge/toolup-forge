@@ -326,6 +326,16 @@
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
+        <!-- Phase 441 — notification preference + digest value types
+             (DigestFrequency / DeliveryPreference / PreferenceChannel /
+             QuietHours / UserNotificationPreferences / NotificationCategory /
+             PendingNotification / INotificationPreferenceApi) + the
+             NotificationPreferenceMode opt-in DU. After NotificationTypes.fs
+             (narrows Notification to a channel family) and before
+             SDK.Shared.fs, which carries the ServerConfig fields. Fable-safe
+             (BCL primitives + integer quiet-hours arithmetic; the zone
+             lookup stays server-side). -->
+        <Compile Include="Shared\NotificationPreferenceTypes.fs" />
         <Compile Include="Shared\INotificationChannel.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="Shared\IPresenceChannel.fs" />
