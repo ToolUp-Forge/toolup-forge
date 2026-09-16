@@ -52,6 +52,36 @@ ToolUp.AI.AIAssistantHandler.aiAssistantApi(Microsoft.FSharp.Core.FSharpOption`1
 ToolUp.AI.AIAssistantHandler+AIStreamingApi (class)
 ToolUp.AI.AIAssistantHandler+AIStreamingApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, System.Collections.Generic.IAsyncEnumerable`1[ToolUp.AI.AIStreamEvent]])
 ToolUp.AI.AIAssistantHandler+AIStreamingApi.StreamChatV2 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, System.Collections.Generic.IAsyncEnumerable`1[ToolUp.AI.AIStreamEvent]] { get }
+ToolUp.AI.AIBudgetEnforcer (class)
+ToolUp.AI.AIBudgetEnforcer.WindowCacheTtlSeconds : System.Int32 (literal)
+ToolUp.AI.AIBudgetEnforcer.eventStoreAccount(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Platform.BudgetAccount
+ToolUp.AI.AIBudgetEnforcer.hourWindowStart(System.DateTime) : System.DateTime
+ToolUp.AI.AIBudgetEnforcer.mergeAIBudgetSchema(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry]
+ToolUp.AI.AIBudgetEnforcer.sdkAIBudgetSchema : ToolUp.Platform.ModuleConfigEntry { get }
+ToolUp.AI.AIBudgetEnforcer.sumUserWindow(ToolUp.Platform.IEventStore, System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[System.Decimal]
+ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer (class)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer..ctor(ToolUp.Platform.IConfigStore, ToolUp.Platform.IEventStore, ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache, ToolUp.Platform.BudgetAccount, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer.Cache : ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer.Check(System.String, System.String, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetVerdict]
+ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer.ReadPolicy(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AITokenBudgetPolicy]
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache (class)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache..ctor()
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache..ctor(System.Int32)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.Clear() : System.Void
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry]
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.TryRead(System.String, System.String, System.String, System.DateTime) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.TtlSeconds : System.Int32 { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.Write(ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry) : System.Void
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry (class)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.DateTime)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.CapAtLastSum : System.Decimal { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.ComputedAt : System.DateTime { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.PeriodKey : System.String { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.ScopeId : System.String { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.UsedTokens : System.Decimal { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.UserId : System.String { get }
+ToolUp.AI.AIBudgetEnforcer+AITokenBudgetContributor (class)
+ToolUp.AI.AIBudgetEnforcer+AITokenBudgetContributor..ctor(ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache)
 ToolUp.AI.AICancellationDispatchInstanceValidator (class)
 ToolUp.AI.AICancellationDispatchInstanceValidator+AICancellationDispatchInstanceValidator (class)
 ToolUp.AI.AICancellationDispatchInstanceValidator+AICancellationDispatchInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -312,6 +342,8 @@ ToolUp.AI.AIProviderSurface.platformModelKey : System.String (literal)
 ToolUp.AI.AIProviderSurface.platformProviderKey : System.String (literal)
 ToolUp.AI.AIProviderUsageMiddleware (class)
 ToolUp.AI.AIProviderUsageMiddleware.wrapFactoryForDI(ToolUp.Platform.ServerConfig, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile) : System.Func`2[System.IServiceProvider, ToolUp.AI.IAIProviderFactory]
+ToolUp.AI.AIProviderUsageMiddleware+BudgetEnforcingProviderFactory (class)
+ToolUp.AI.AIProviderUsageMiddleware+BudgetEnforcingProviderFactory..ctor(ToolUp.AI.IAIProviderFactory, ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer)
 ToolUp.AI.AIProviderUsageMiddleware+MeteringProviderFactory (class)
 ToolUp.AI.AIProviderUsageMiddleware+MeteringProviderFactory..ctor(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Usage.IUsageLog, ToolUp.Platform.Providers+IProviderProfile)
 ToolUp.AI.AIProviderUsageMiddleware+QuotaEnforcingProviderFactory (class)

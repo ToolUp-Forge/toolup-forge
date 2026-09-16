@@ -17,6 +17,9 @@ ToolUp.AI.AIAssistantBranding..ctor(System.String, System.String, System.Boolean
 ToolUp.AI.AIAssistantBranding.Icon : System.String { get }
 ToolUp.AI.AIAssistantBranding.Name : System.String { get }
 ToolUp.AI.AIAssistantBranding.ShowSidePanel : System.Boolean { get }
+ToolUp.AI.AIBudgetConfigKey (class)
+ToolUp.AI.AIBudgetConfigKey.maxTokensPerUserPerHour : System.String (literal)
+ToolUp.AI.AIBudgetConfigKey.value : System.String (literal)
 ToolUp.AI.AIConsentDecisionRequest (class)
 ToolUp.AI.AIConsentDecisionRequest..ctor(System.Guid, System.String)
 ToolUp.AI.AIConsentDecisionRequest.ConsentId : System.Guid { get }
@@ -75,7 +78,7 @@ ToolUp.AI.AIFieldSnapshotModule (class)
 ToolUp.AI.AIFieldSnapshotModule.empty(System.String) : ToolUp.AI.AIFieldSnapshot
 ToolUp.AI.AIFieldSnapshotModule.tryFindField(System.String, ToolUp.AI.AIFieldSnapshot) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIFieldDescriptor]
 ToolUp.AI.AILatencyRecord (class)
-ToolUp.AI.AILatencyRecord..ctor(System.Guid, System.Guid, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.AI.AILatencyRecord..ctor(System.Guid, System.Guid, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.AI.AILatencyRecord.CacheCreationTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.AI.AILatencyRecord.CachedPromptTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.AI.AILatencyRecord.ConversationId : System.Guid { get }
@@ -89,6 +92,7 @@ ToolUp.AI.AILatencyRecord.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[
 ToolUp.AI.AILatencyRecord.TtftMs : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
 ToolUp.AI.AILatencyRecord.TurnDurationMs : System.Double { get }
 ToolUp.AI.AILatencyRecord.TurnNumber : System.Int32 { get }
+ToolUp.AI.AILatencyRecord.UserId : System.String { get }
 ToolUp.AI.AILatencyRecordModule (class)
 ToolUp.AI.AILatencyRecordModule.EventType : System.String (literal)
 ToolUp.AI.AILatencyRecordModule.SourceModule : System.String (literal)
@@ -262,6 +266,33 @@ ToolUp.AI.AITaskStatus+Tags.AITaskCompleted : System.Int32 (literal)
 ToolUp.AI.AITaskStatus+Tags.AITaskFailed : System.Int32 (literal)
 ToolUp.AI.AITaskStatus+Tags.InProgress : System.Int32 (literal)
 ToolUp.AI.AITaskStatus+Tags.Queued : System.Int32 (literal)
+ToolUp.AI.AITokenBudgetExceeded (class)
+ToolUp.AI.AITokenBudgetExceeded..ctor(System.DateTime, System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
+ToolUp.AI.AITokenBudgetExceeded.CapTokens : System.Decimal { get }
+ToolUp.AI.AITokenBudgetExceeded.OccurredAt : System.DateTime { get }
+ToolUp.AI.AITokenBudgetExceeded.PeriodKey : System.String { get }
+ToolUp.AI.AITokenBudgetExceeded.RequestedTokens : System.Decimal { get }
+ToolUp.AI.AITokenBudgetExceeded.ScopeId : System.String { get }
+ToolUp.AI.AITokenBudgetExceeded.UsedTokens : System.Decimal { get }
+ToolUp.AI.AITokenBudgetExceeded.UserId : System.String { get }
+ToolUp.AI.AITokenBudgetExceeded.WindowKind : System.String { get }
+ToolUp.AI.AITokenBudgetExceededModule (class)
+ToolUp.AI.AITokenBudgetExceededModule.EventType : System.String (literal)
+ToolUp.AI.AITokenBudgetExceededModule.SourceModule : System.String (literal)
+ToolUp.AI.AITokenBudgetExceededModule.message(ToolUp.Platform.BudgetDenial) : System.String
+ToolUp.AI.AITokenBudgetExceededModule.ofDenial(System.DateTime, ToolUp.Platform.BudgetDenial) : ToolUp.AI.AITokenBudgetExceeded
+ToolUp.AI.AITokenBudgetPolicy (class)
+ToolUp.AI.AITokenBudgetPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.AI.AITokenBudgetPolicy.PerUserPerHour : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.AI.AITokenBudgetPolicyModule (class)
+ToolUp.AI.AITokenBudgetPolicyModule.Domain : System.String (literal)
+ToolUp.AI.AITokenBudgetPolicyModule.PerUserPerHourDimension : System.String (literal)
+ToolUp.AI.AITokenBudgetPolicyModule.isUnbounded(ToolUp.AI.AITokenBudgetPolicy) : System.Boolean
+ToolUp.AI.AITokenBudgetPolicyModule.ofRaw(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.AI.AITokenBudgetPolicy
+ToolUp.AI.AITokenBudgetPolicyModule.perUserClaim(ToolUp.AI.AITokenBudgetPolicy, System.Decimal, System.Decimal) : ToolUp.Platform.BudgetClaim
+ToolUp.AI.AITokenBudgetPolicyModule.perUserPeriod : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.AI.AITokenBudgetPolicyModule.subject(System.String, System.String) : ToolUp.Platform.BudgetSubject
+ToolUp.AI.AITokenBudgetPolicyModule.unbounded : ToolUp.AI.AITokenBudgetPolicy { get }
 ToolUp.AI.AIUserConfigView (class)
 ToolUp.AI.AIUserConfigView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderInstanceView], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.AIUserConfigView.ActiveProviderLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

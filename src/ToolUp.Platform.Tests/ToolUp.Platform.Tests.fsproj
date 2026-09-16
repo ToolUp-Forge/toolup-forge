@@ -958,6 +958,10 @@
         <Compile Include="AI\AIStreamFramingPinTests.fs" />
         <!-- Phase 6k - the supervised agent-loop worker. -->
         <Compile Include="AI\AIChatWorkerTests.fs" />
+        <!-- Phase 9s - the per-user AI token budget: the enforcer over the
+             latency stream, the recorded refusal, and both windows in the
+             one decorator chain. -->
+        <Compile Include="AI\AITokenBudgetTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
