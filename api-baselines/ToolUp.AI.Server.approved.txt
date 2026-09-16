@@ -241,6 +241,7 @@ ToolUp.AI.AILatencyHandler (class)
 ToolUp.AI.AILatencyHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.AI.AILatencyMetrics (class)
 ToolUp.AI.AILatencyMetrics.CachedPromptRatio : System.String (literal)
+ToolUp.AI.AILatencyMetrics.ProviderFailover : System.String (literal)
 ToolUp.AI.AILatencyMetrics.ToolResultElided : System.String (literal)
 ToolUp.AI.AILatencyMetrics.TtftMs : System.String (literal)
 ToolUp.AI.AILatencyMetrics.TurnDurationMs : System.String (literal)
@@ -480,6 +481,7 @@ ToolUp.AI.DefaultAIProviderFactory (class)
 ToolUp.AI.DefaultAIProviderFactory.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderBuilder], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.AI.AIFallbackPolicy, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore]) : ToolUp.AI.IAIProviderFactory
 ToolUp.AI.DefaultAIProviderFactory.empty : ToolUp.AI.IAIProviderFactory { get }
 ToolUp.AI.DefaultAIProviderFactory.singleProvider(ToolUp.AI.AIProviderDescriptor, ToolUp.Platform.AI.IAIProvider) : ToolUp.AI.IAIProviderFactory
+ToolUp.AI.DefaultAIProviderFactory.withFailoverChain(ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIProviderFailoverRecord, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.AI.IAIProviderFactory) : ToolUp.AI.IAIProviderFactory
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider (class)
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider..ctor(ToolUp.AI.AIProviderDescriptor, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.IAIProvider]], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.BootstrapKeyFromEnv : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
