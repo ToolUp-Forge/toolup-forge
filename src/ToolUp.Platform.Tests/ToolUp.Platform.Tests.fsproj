@@ -967,6 +967,11 @@
              latency stream, the recorded refusal, and both windows in the
              one decorator chain. -->
         <Compile Include="AI\AITokenBudgetTests.fs" />
+        <!-- Phase 499 - monetary AI cost budgets: the price table's four
+             rates, the per-user and per-scope spend ceilings over the same
+             latency stream, the count-only degradation of an unpriced model,
+             and the IUsageLog true-up. -->
+        <Compile Include="InProcess\AISpendBudgetTests.fs" />
         <!-- Phase 69c.tail B - conversation replay over the typed streaming
              shape: the stream terminates on every exit path, and the streamed
              report agrees with what replay returns. -->

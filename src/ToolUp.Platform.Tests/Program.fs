@@ -708,6 +708,7 @@ let private registeredTests =
         AIStreamFramingPinTests.tests
         AIChatWorkerTests.tests
         AITokenBudgetTests.tests
+        AISpendBudgetTests.tests
         ConversationReplayStreamTests.tests
         IngestionStatusStreamTests.tests
         InProcessOAuthTokenRefresherTests.tests

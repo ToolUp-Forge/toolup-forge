@@ -18,7 +18,11 @@ ToolUp.AI.AIAssistantBranding.Icon : System.String { get }
 ToolUp.AI.AIAssistantBranding.Name : System.String { get }
 ToolUp.AI.AIAssistantBranding.ShowSidePanel : System.Boolean { get }
 ToolUp.AI.AIBudgetConfigKey (class)
+ToolUp.AI.AIBudgetConfigKey.maxSpendPerScope : System.String (literal)
+ToolUp.AI.AIBudgetConfigKey.maxSpendPerUser : System.String (literal)
 ToolUp.AI.AIBudgetConfigKey.maxTokensPerUserPerHour : System.String (literal)
+ToolUp.AI.AIBudgetConfigKey.spendPerScopePeriod : System.String (literal)
+ToolUp.AI.AIBudgetConfigKey.spendPerUserPeriod : System.String (literal)
 ToolUp.AI.AIBudgetConfigKey.value : System.String (literal)
 ToolUp.AI.AIConsentDecisionRequest (class)
 ToolUp.AI.AIConsentDecisionRequest..ctor(System.Guid, System.String)
@@ -160,6 +164,44 @@ ToolUp.AI.AISettingsApi.SetActive : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft
 ToolUp.AI.AISettingsApi.SetPlatformModelOverride : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AISettingsApi.SetPlatformProviderOverride : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AISettingsApi.TestConnection : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.AI.AISpendBudget (class)
+ToolUp.AI.AISpendBudget..ctor(ToolUp.Platform.BudgetPeriod, System.Decimal)
+ToolUp.AI.AISpendBudget.Ceiling : System.Decimal { get }
+ToolUp.AI.AISpendBudget.Period : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.AI.AISpendBudgetExceeded (class)
+ToolUp.AI.AISpendBudgetExceeded..ctor(System.DateTime, System.String, System.String, System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
+ToolUp.AI.AISpendBudgetExceeded.CapAmount : System.Decimal { get }
+ToolUp.AI.AISpendBudgetExceeded.Currency : System.String { get }
+ToolUp.AI.AISpendBudgetExceeded.Dimension : System.String { get }
+ToolUp.AI.AISpendBudgetExceeded.OccurredAt : System.DateTime { get }
+ToolUp.AI.AISpendBudgetExceeded.PeriodKey : System.String { get }
+ToolUp.AI.AISpendBudgetExceeded.RequestedAmount : System.Decimal { get }
+ToolUp.AI.AISpendBudgetExceeded.ScopeId : System.String { get }
+ToolUp.AI.AISpendBudgetExceeded.SpentAmount : System.Decimal { get }
+ToolUp.AI.AISpendBudgetExceeded.UserId : System.String { get }
+ToolUp.AI.AISpendBudgetExceeded.WindowKind : System.String { get }
+ToolUp.AI.AISpendBudgetExceededModule (class)
+ToolUp.AI.AISpendBudgetExceededModule.EventType : System.String (literal)
+ToolUp.AI.AISpendBudgetExceededModule.SourceModule : System.String (literal)
+ToolUp.AI.AISpendBudgetExceededModule.message(System.String, System.String, ToolUp.Platform.BudgetDenial) : System.String
+ToolUp.AI.AISpendBudgetExceededModule.ofDenial(System.DateTime, System.String, ToolUp.AI.AISpendBudgetPolicy, ToolUp.Platform.BudgetDenial) : ToolUp.AI.AISpendBudgetExceeded
+ToolUp.AI.AISpendBudgetPolicy (class)
+ToolUp.AI.AISpendBudgetPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AISpendBudget], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AISpendBudget])
+ToolUp.AI.AISpendBudgetPolicy.PerScope : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AISpendBudget] { get }
+ToolUp.AI.AISpendBudgetPolicy.PerUser : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AISpendBudget] { get }
+ToolUp.AI.AISpendBudgetPolicyModule (class)
+ToolUp.AI.AISpendBudgetPolicyModule.Domain : System.String (literal)
+ToolUp.AI.AISpendBudgetPolicyModule.PerScopeDimension : System.String (literal)
+ToolUp.AI.AISpendBudgetPolicyModule.PerUserDimension : System.String (literal)
+ToolUp.AI.AISpendBudgetPolicyModule.claim(System.String, ToolUp.AI.AISpendBudget, System.Decimal, System.Decimal) : ToolUp.Platform.BudgetClaim
+ToolUp.AI.AISpendBudgetPolicyModule.defaultPeriod : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.AI.AISpendBudgetPolicyModule.isUnbounded(ToolUp.AI.AISpendBudgetPolicy) : System.Boolean
+ToolUp.AI.AISpendBudgetPolicyModule.ofRaw(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.AI.AISpendBudgetPolicy
+ToolUp.AI.AISpendBudgetPolicyModule.scopeSubject(System.String) : ToolUp.Platform.BudgetSubject
+ToolUp.AI.AISpendBudgetPolicyModule.unbounded : ToolUp.AI.AISpendBudgetPolicy { get }
+ToolUp.AI.AISpendBudgetPolicyModule.userSubject(System.String, System.String) : ToolUp.Platform.BudgetSubject
+ToolUp.AI.AISpendResourceKind (class)
+ToolUp.AI.AISpendResourceKind.cost : System.String (literal)
 ToolUp.AI.AIStreamEvent (class)
 ToolUp.AI.AIStreamEvent.IsAIConsentRequired : System.Boolean { get }
 ToolUp.AI.AIStreamEvent.IsAnswerVerified : System.Boolean { get }
@@ -385,6 +427,27 @@ ToolUp.AI.IPlatformAIKeyStore.SetPlatformKey(System.String, System.String) : Mic
 ToolUp.AI.IPlatformAIKeyStore.SetTeamKey(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.AI.IToolApprovalPolicy (interface)
 ToolUp.AI.IToolApprovalPolicy.Requires(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.ToolApprovalRequirement
+ToolUp.AI.ModelPrice (class)
+ToolUp.AI.ModelPrice..ctor(System.Decimal, System.Decimal, System.Decimal, System.Decimal)
+ToolUp.AI.ModelPrice.CacheCreationPerMillion : System.Decimal { get }
+ToolUp.AI.ModelPrice.CachedInputPerMillion : System.Decimal { get }
+ToolUp.AI.ModelPrice.InputPerMillion : System.Decimal { get }
+ToolUp.AI.ModelPrice.OutputPerMillion : System.Decimal { get }
+ToolUp.AI.ModelPriceModule (class)
+ToolUp.AI.ModelPriceModule.free : ToolUp.AI.ModelPrice { get }
+ToolUp.AI.ModelPriceModule.simple(System.Decimal, System.Decimal) : ToolUp.AI.ModelPrice
+ToolUp.AI.ModelPriceTable (class)
+ToolUp.AI.ModelPriceTable..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.AI.ModelPrice])
+ToolUp.AI.ModelPriceTable.Currency : System.String { get }
+ToolUp.AI.ModelPriceTable.Rates : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.AI.ModelPrice] { get }
+ToolUp.AI.ModelPriceTableModule (class)
+ToolUp.AI.ModelPriceTableModule.cost(ToolUp.AI.ModelPrice, System.Int32, System.Int32, System.Int32, System.Int32) : System.Decimal
+ToolUp.AI.ModelPriceTableModule.empty(System.String) : ToolUp.AI.ModelPriceTable
+ToolUp.AI.ModelPriceTableModule.isEmpty(ToolUp.AI.ModelPriceTable) : System.Boolean
+ToolUp.AI.ModelPriceTableModule.key(System.String, System.String) : System.String
+ToolUp.AI.ModelPriceTableModule.ofList(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, ToolUp.AI.ModelPrice]]) : ToolUp.AI.ModelPriceTable
+ToolUp.AI.ModelPriceTableModule.tryCost(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32, ToolUp.AI.ModelPriceTable) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.AI.ModelPriceTableModule.tryFind(System.String, System.String, ToolUp.AI.ModelPriceTable) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ModelPrice]
 ToolUp.AI.ModuleAIContext (class)
 ToolUp.AI.ModuleAIContext..ctor(System.String, System.String)
 ToolUp.AI.ModuleAIContext.ModuleName : System.String { get }
