@@ -62,6 +62,34 @@ ToolUp.AI.AICancellationRegistry+AICancellationRegistry..ctor()
 ToolUp.AI.AICancellationRegistry+AICancellationRegistry.Register(System.Guid) : System.Threading.CancellationToken
 ToolUp.AI.AICancellationRegistry+AICancellationRegistry.TryCancel(System.Guid) : System.Boolean
 ToolUp.AI.AICancellationRegistry+AICancellationRegistry.Unregister(System.Guid) : System.Void
+ToolUp.AI.AIChatWorker (class)
+ToolUp.AI.AIChatWorker.QueueFullReason : System.String (literal)
+ToolUp.AI.AIChatWorker.ShuttingDownReason : System.String (literal)
+ToolUp.AI.AIChatWorker.runDetached(ToolUp.AI.AIChatWorker+AIChatWorkItem) : System.Void
+ToolUp.AI.AIChatWorker+AIChatWorkItem (class)
+ToolUp.AI.AIChatWorker+AIChatWorkItem..ctor(System.Guid, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Threading.CancellationToken, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
+ToolUp.AI.AIChatWorker+AIChatWorkItem.Dispose : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.AIChatWorker+AIChatWorkItem.Fingerprint : System.String { get }
+ToolUp.AI.AIChatWorker+AIChatWorkItem.Reject : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.AIChatWorker+AIChatWorkItem.Run : Microsoft.FSharp.Core.FSharpFunc`2[System.Threading.CancellationToken, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.AI.AIChatWorker+AIChatWorkItem.TaskId : System.Guid { get }
+ToolUp.AI.AIChatWorker+AIChatWorker (class)
+ToolUp.AI.AIChatWorker+AIChatWorker..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.AI.AIChatWorker+AIChatWorker.IsRunning : System.Boolean { get }
+ToolUp.AI.AIChatWorker+AIChatWorker.QueueDepth : System.Int32 { get }
+ToolUp.AI.AIChatWorker+AIChatWorker.TryEnqueue(ToolUp.AI.AIChatWorker+AIChatWorkItem) : ToolUp.AI.AIChatWorker+EnqueueOutcome
+ToolUp.AI.AIChatWorker+EnqueueOutcome (class)
+ToolUp.AI.AIChatWorker+EnqueueOutcome.Accepted : ToolUp.AI.AIChatWorker+EnqueueOutcome { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.IsAccepted : System.Boolean { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.IsNotRunning : System.Boolean { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.IsQueueFull : System.Boolean { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.NotRunning : ToolUp.AI.AIChatWorker+EnqueueOutcome { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.QueueFull : ToolUp.AI.AIChatWorker+EnqueueOutcome { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome.Tag : System.Int32 { get }
+ToolUp.AI.AIChatWorker+EnqueueOutcome+Tags (class)
+ToolUp.AI.AIChatWorker+EnqueueOutcome+Tags.Accepted : System.Int32 (literal)
+ToolUp.AI.AIChatWorker+EnqueueOutcome+Tags.NotRunning : System.Int32 (literal)
+ToolUp.AI.AIChatWorker+EnqueueOutcome+Tags.QueueFull : System.Int32 (literal)
 ToolUp.AI.AICompose (class)
 ToolUp.AI.AICompose.composeAI(ToolUp.AI.AICompose+AIServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withAI(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

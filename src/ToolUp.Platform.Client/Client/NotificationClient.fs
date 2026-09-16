@@ -4,6 +4,7 @@
 module ToolUp.Platform.NotificationClient
 
 open System
+open System.Collections.Generic
 open Fable.Core
 open Fable.SimpleJson
 open ToolUp.Platform
@@ -162,6 +163,39 @@ let private fanOut (envelope: NotificationEnvelope) =
 /// escape hatch where no `IAuthBridge` is wired) still falls back to
 /// the param so dev deployments keep working, but the degradation is
 /// surfaced once per tab through `AuthDiagnostics` instead of silently.
+// Phase 6p — "the stream just (re)opened" hook. EventSource
+// auto-reconnects after a transient drop and `reconnect` cycles it
+// deliberately, and BOTH are moments where this tab may have been
+// disconnected long enough for the server-side session store to have
+// been evicted or the process to have restarted. The gap is invisible
+// from inside this module — it knows the connection came back, not what
+// happened while it was down — so it publishes the fact and lets the
+// shell decide what to re-check.
+//
+// A list rather than a single handler for the reason every other seam
+// here is: the shell is the first subscriber, not the only possible one.
+let private openedHandlers = List<unit -> unit>()
+
+let private openedGate = obj ()
+
+/// Register a callback fired after every successful EventSource open —
+/// the first connect and every reconnect alike. Returns a dispose thunk.
+let onConnectionOpened (handler: unit -> unit) : unit -> unit =
+    lock openedGate (fun () -> openedHandlers.Add handler)
+    fun () -> lock openedGate (fun () -> openedHandlers.Remove handler |> ignore)
+
+let private fireOpened () =
+    let snapshot = lock openedGate (fun () -> openedHandlers.ToArray())
+
+    for handler in snapshot do
+        try
+            handler ()
+        with ex ->
+            try
+                log.Warn $"connection-opened subscriber swallowed: {ex.Message}"
+            with _ ->
+                ()
+
 let rec private openConnection () =
     let userId = UserSession.getUserId ()
 
@@ -217,7 +251,9 @@ let rec private openConnection () =
     // Each successful open earns a fresh fatal-close retry budget —
     // a server that restarts twice a week should not creep towards
     // the latch.
-    onOpen es (fun _ -> state <- { state with RetryAttempts = 0 })
+    onOpen es (fun _ ->
+        state <- { state with RetryAttempts = 0 }
+        fireOpened ())
 
     // Phase 58 / Phase 117 fatal-close handling. EventSource
     // auto-reconnects on transient failures (readyState = CONNECTING),

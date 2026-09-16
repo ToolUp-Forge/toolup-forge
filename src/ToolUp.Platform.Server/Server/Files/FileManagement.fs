@@ -2,6 +2,8 @@ module ToolUp.Platform.FileManagement
 
 open System
 open System.Collections.Concurrent
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open Microsoft.AspNetCore.Http
 open DataManagementTypes
 open ProcessedDataTypes
@@ -328,6 +330,18 @@ type FileManagementRuntime = {
     /// (a real CSV is far smaller) and exists so an unbounded upload can't
     /// blow up the detect/process pass by default.
     MaxFileBytes: int64 option
+    /// Phase 6p — channel the eviction-then-recreate reset is announced
+    /// on. `None` (no channel composed, or
+    /// `ServerConfig.NotifyOnSessionStoreReset = false`) makes the
+    /// publish a no-op; the audit emission below is unaffected, because
+    /// audit is not a UX choice (GP 13).
+    NotificationChannel: INotificationChannel option
+    /// Phase 6p — `IAuditLog` for the `SessionStoreReset` emission.
+    /// Resolved at compose time rather than per request because the
+    /// transition is detected in `getStore`, which has no `HttpContext`
+    /// (module APIs resolve stores through it too). `None` matches the
+    /// test-harness path.
+    AuditLog: IAuditLog option
 }
 
 module FileManagementRuntime =
@@ -342,6 +356,8 @@ module FileManagementRuntime =
         // app's domain, but a hard backstop against a pathological/abusive
         // multi-hundred-MB body. Override (or `None`) at compose time.
         MaxFileBytes = Some(64L * 1024L * 1024L)
+        NotificationChannel = None
+        AuditLog = None
     }
 
 /// Pending post-save hooks registered by companions (notably
@@ -406,6 +422,16 @@ type SessionFileStore
         ConcurrentDictionary<string, ProcessedFileEntry>(StringComparer.OrdinalIgnoreCase)
 
     let container = scope.Container
+
+    // Phase 6p — identity of THIS store instance. Minted at construction,
+    // so it changes exactly when the server's view of the caller's
+    // uploads is silently emptied: a process restart (the whole `stores`
+    // dictionary is gone), a TTL eviction followed by re-creation, or a
+    // new scope container. The client caches it and compares; a mismatch
+    // is the signal to clear its local file list rather than wait for a
+    // downstream module call to fail with "File 'X' not found in session".
+    let epoch = Guid.NewGuid()
+
     // Persistence routes through `IDataObjectStore` (Phase 7). Files are
     // stored with `Unversioned` policy — the legacy overwrite-on-save
     // semantics — and are visible to Phase 7a's catalog at
@@ -822,6 +848,13 @@ type SessionFileStore
                     }
     }
 
+    /// Phase 6p — this store instance's identity. See `SessionStoreInfo`.
+    member _.Epoch = epoch
+
+    /// Phase 6p — number of files currently held. Corroborates `Epoch`
+    /// for a client that wants to render an empty list immediately.
+    member _.FileCount = files.Count
+
     member _.GetFiles() =
         files.Values
         |> Seq.map (fun file -> {
@@ -1057,13 +1090,61 @@ let configureEvictionMinutes (minutes: float) =
     if minutes > 0.0 then
         storeEvictionMinutes <- minutes
 
+/// Phase 6p — epoch of the store that most recently occupied a container
+/// and was EVICTED from it. The one piece of state that distinguishes the
+/// two ways `getStore` can find a container empty: a fresh first access
+/// (no entry here — nothing was lost, and no client is listening) from an
+/// eviction-then-recreate (an entry here — the caller's uploads are gone
+/// while their client may still be listing them).
+///
+/// Written by the eviction sweep, consumed-and-removed by the next
+/// `getStore` that re-creates the container, so it is a one-shot marker
+/// rather than a growing history. A container evicted and never revisited
+/// leaves one `Guid` behind — bounded by the number of ephemeral scopes
+/// the deployment ever served, which is the same bound `stores` itself had
+/// before the eviction sweep existed.
+///
+/// A process restart deliberately leaves NO marker: the dictionary dies
+/// with the process, so the server cannot know a store was ever there.
+/// That path is reconciled client-side by the epoch comparison, which
+/// needs no server memory at all — see `SessionStoreResetNotification`.
+/// Serialiser for the `SessionStoreResetKey` payload. `FableConverters`
+/// is the same options instance every other `CustomNotification`
+/// publisher uses (`DataManagerIngestionObserver`), so the JSON the
+/// client's `Json.parseAs` reads has the shape it expects.
+let private sessionStoreResetJsonOptions = FableConverters.create ()
+
+let private evictedEpochs = ConcurrentDictionary<string, Guid>()
+
 /// Remove ephemeral stores that haven't been accessed within the TTL.
 let private evictExpiredStores () =
     let cutoff = DateTime.UtcNow.AddMinutes(-storeEvictionMinutes)
 
     for kvp in stores do
         if not kvp.Value.Persist && kvp.Value.LastAccessed.Value < cutoff then
-            stores.TryRemove(kvp.Key) |> ignore
+            match stores.TryRemove(kvp.Key) with
+            | true, removed -> evictedEpochs[kvp.Key] <- removed.Store.Epoch
+            | false, _ -> ()
+
+/// Test-only — run the eviction sweep NOW rather than waiting for the
+/// 10-minute timer tick, so a test can exercise the eviction-then-recreate
+/// transition by setting `storeEvictionMinutes <- 0.0` around it.
+///
+/// `internal` (InternalsVisibleTo `ToolUp.Platform.Tests`) rather than
+/// public, and named for what it is, so the sweep stays one
+/// implementation: a test that re-implemented "remove the expired
+/// entries" would prove its own copy correct and say nothing about the
+/// timer's.
+let internal __internal_evictNowForTests () = evictExpiredStores ()
+
+/// Test-only — drop every store without recording an eviction marker,
+/// which is exactly what a PROCESS RESTART does: the dictionary and the
+/// markers die together. The discriminator between this and
+/// `__internal_evictNowForTests` is the whole point of the marker, so a
+/// test that cannot express both cannot prove the distinction.
+let internal __internal_simulateProcessRestartForTests () =
+    stores.Clear()
+    evictedEpochs.Clear()
 
 /// Background timer for periodic eviction (runs every 10 minutes).
 ///
@@ -1085,21 +1166,96 @@ let private evictionTimer =
         System.TimeSpan.FromMinutes(10.0)
     )
 
+/// Phase 6p — announce an eviction-then-recreate transition on the scope
+/// whose store was just rebuilt. Fire-and-forget on both arms, matching
+/// `fileManagementApi`'s `recordAudit`: a slow or failing channel must
+/// never delay the request that happened to be the one to re-create the
+/// store, and a publish failure is not a reason to fail an upload.
+///
+/// The notification is suppressible (GP 13 — a deployment that prefers
+/// the pre-6p silent-failure behaviour composes no channel, or sets
+/// `ServerConfig.NotifyOnSessionStoreReset = false`, which clears
+/// `NotificationChannel` here). The audit emission is NOT: an audit trail
+/// that records data loss only when the UX opted in would be answering a
+/// compliance question with a product preference.
+let private announceStoreReset
+    (runtime: FileManagementRuntime)
+    (scope: StorageScope)
+    (previousEpoch: Guid)
+    (currentEpoch: Guid)
+    =
+    match runtime.AuditLog with
+    | Some auditLog ->
+        auditLog.Record(
+            scope.ScopeId,
+            SessionStoreReset {
+                Container = scope.Container
+                Reason = SessionStoreResetReasonEvicted
+            }
+        )
+        |> Async.Start
+    | None -> ()
+
+    match runtime.NotificationChannel with
+    | Some channel ->
+        async {
+            try
+                let payload: SessionStoreResetNotification = {
+                    Container = scope.Container
+                    PreviousEpoch = Some previousEpoch
+                    CurrentEpoch = currentEpoch
+                    Reason = SessionStoreResetReasonEvicted
+                }
+
+                let json = JsonSerializer.Serialize(payload, sessionStoreResetJsonOptions)
+                do! channel.Publish(scope.ScopeId, CustomNotification(SessionStoreResetKey, json))
+            with _ ->
+                // A channel that cannot accept the publish leaves the
+                // client on its slower reconciliation paths (the on-focus
+                // epoch poll and the pre-flight check), which is exactly
+                // the no-channel deployment's behaviour — degraded, not
+                // broken. The audit row above already recorded the fact.
+                ()
+        }
+        |> Async.Start
+    | None -> ()
+
 let getStore
     (dataTypes: DataType list)
     (dataObjectStore: IDataObjectStore option)
     (runtime: FileManagementRuntime)
     (scope: StorageScope)
     =
+    // `GetOrAdd`'s factory can run and still LOSE the race, so "did the
+    // factory fire" is not "is my store the one in the dictionary".
+    // Capture what we built and compare references against what came
+    // back: only the winner announces, so a concurrent burst of requests
+    // against a just-evicted container produces exactly one notification.
+    let mutable constructed: SessionFileStore option = None
+
     let entry =
         stores.GetOrAdd(
             scope.Container,
-            fun _ -> {
-                Store = SessionFileStore(dataTypes, dataObjectStore, scope, runtime)
-                LastAccessed = ref DateTime.UtcNow
-                Persist = scope.Persist
-            }
+            fun _ ->
+                let store = SessionFileStore(dataTypes, dataObjectStore, scope, runtime)
+                constructed <- Some store
+
+                {
+                    Store = store
+                    LastAccessed = ref DateTime.UtcNow
+                    Persist = scope.Persist
+                }
         )
+
+    match constructed with
+    | Some store when obj.ReferenceEquals(store, entry.Store) ->
+        // We created the live store. Consume the eviction marker if one
+        // is there — `TryRemove` makes the consumption atomic, so a
+        // second thread arriving behind us cannot re-announce.
+        match evictedEpochs.TryRemove scope.Container with
+        | true, previousEpoch -> announceStoreReset runtime scope previousEpoch store.Epoch
+        | false, _ -> ()
+    | _ -> ()
 
     entry.LastAccessed.Value <- DateTime.UtcNow
     entry.Store
@@ -1388,5 +1544,20 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
                     )
 
                     return Ok fileCount
+            }
+        GetSessionInfo =
+            fun () -> async {
+                // Read-only and allocation-free beyond the record — but
+                // note that resolving `store` above is itself what
+                // re-creates an evicted store and fires the Phase 6p
+                // notification. That is deliberate: a client polling its
+                // epoch after an eviction is precisely the caller who
+                // should learn about it, and it learns by the same path
+                // as everyone else rather than through a second
+                // detection mechanism that could disagree.
+                return {
+                    Epoch = store.Epoch
+                    FileCount = store.FileCount
+                }
             }
     }

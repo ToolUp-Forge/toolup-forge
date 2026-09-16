@@ -381,6 +381,8 @@
         <Compile Include="InProcess\OAuth1aSubstrateTests.fs" />
         <Compile Include="InProcess\FileSecretStoreTests.fs" />
         <Compile Include="InProcess\FileSecretStoreAtomicityTests.fs" />
+        <!-- Phase 6k - the secret-store read path is async + cancellable. -->
+        <Compile Include="InProcess\FileSecretStoreCancellationTests.fs" />
         <!-- Phase 238 — generic inbound-webhook receiver substrate. -->
         <Compile Include="InProcess\WebhookSubstrateTests.fs" />
         <!-- Phase 235 — outbound webhook signing-secret rotation. -->
@@ -959,9 +961,13 @@
              across the SubmitMessage / StreamChatV2 single-implementation
              migration; typed chunk payloads equal legacy data payloads. -->
         <Compile Include="AI\AIStreamFramingPinTests.fs" />
+        <!-- Phase 6k - the supervised agent-loop worker. -->
+        <Compile Include="AI\AIChatWorkerTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
+        <!-- Phase 6k - per-connection SSE writer queues (decoupled fan-out). -->
+        <Compile Include="InProcess\SsePerConnectionWriterTests.fs" />
         <Compile Include="InProcess\HeaderAuthProviderModeValidatorTests.fs" />
         <Compile Include="InProcess\AuditLogModeValidatorTests.fs" />
         <Compile Include="InProcess\EventStoreChainValidatorTests.fs" />
@@ -2291,6 +2297,14 @@
              the seam's fail-closed, bounded-read and handler-ordering
              coverage. Compiled as a pair, contract first. -->
         <Compile Include="Contracts\IUploadValidatorContract.fs" />
+        <!-- Phase 6p - the session-store reset transition: the epoch, the
+             eviction-then-recreate announcement, and the three baselines
+             that pin down what must stay silent (fresh first access,
+             healthy steady state, process restart). Reads FileManagement's
+             internal test seams via InternalsVisibleTo. Under InProcess\
+             rather than Contracts\ because it has one concrete subject,
+             not a seam two implementations could bind. -->
+        <Compile Include="InProcess\SessionStoreResetTests.fs" />
         <Compile Include="InProcess\UploadValidationTests.fs" />
         <!-- Phase 478 — the isolated execution profile: the profile as
              data on the portable spec, the posture a backend declares,

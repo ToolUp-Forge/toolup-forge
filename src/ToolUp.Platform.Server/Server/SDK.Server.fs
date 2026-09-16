@@ -1039,7 +1039,7 @@ let compose
     // FileManagement runtime + Phase 1f extension (gap #10) eviction
     // TTL propagation (extracted to
     // `ComposeRuntimeServices.registerFileManagementRuntime`).
-    registerFileManagementRuntime services config usageLogInstance resolvedLogger
+    registerFileManagementRuntime services config usageLogInstance resolvedLogger resolvedNotificationChannel auditLog
 
     // Phase 4 / 5h — `ITeamStore` + `IPendingInviteStore` +
     // `IPermissionStore` registrations (extracted to

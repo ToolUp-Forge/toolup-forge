@@ -282,6 +282,14 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> DataStoreReset(fromAuditJson<DataStoreResetPayload> j)
     }
     {
+        EventType = "SessionStoreReset"
+        TryEncode =
+            (function
+            | SessionStoreReset p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> SessionStoreReset(fromAuditJson<SessionStoreResetPayload> j)
+    }
+    {
         EventType = "AnalysisRun"
         TryEncode =
             (function
