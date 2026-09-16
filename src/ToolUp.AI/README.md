@@ -28,15 +28,21 @@ The reason is cost control. LLM API calls cost money per request. Without an aut
 
 A public Anonymous-mode deployment with AI enabled is a wide-open cost surface — anyone with the URL can drive arbitrary token consumption against the deployment's API key.
 
-This is a platform-level design principle, not a hard runtime block. `AIServerApp.run` does not refuse to start when `ServerConfig.Mode = Anonymous`, because legitimate exceptions exist:
+**Since Phase 6m this is enforced at startup, not merely documented.** `AnonymousAIModeValidator` — registered automatically by the AI compose branch, so it is present whenever AI is composed and absent from every platform-only deployment — **refuses to start** when all three of these hold:
 
-- Single-user local development
-- Demos or trials with strong network-level rate limiting
-- BYOK-only deployments where every user supplies their own API key (configured via `BYOKMode = AllowUserProviders`)
+1. some entry in `ServerConfig.Surfaces` is `Anonymous` (a mixed `Anonymous + Individual` deployment counts — anonymous requests still resolve to `AnonymousKind` and still reach the AI routes);
+2. no `ServerConfig.RateLimit` policy resolves for `AnonymousKind` — checked with `RateLimitConfig.policyFor`, *not* `isEnabled`, so a deployment that limits only `UserKind` is caught rather than waved through; and
+3. the composed `IAIProviderFactory` reports at least one entry in `PlatformDescriptors` — i.e. the deployment has wired a provider **it** pays for.
 
-Deployments choosing to enable AI in Anonymous mode accept the cost-control responsibility and should layer in their own protections via `ServerConfig.RateLimit`, IP gating at the proxy, or BYOK-only provider configuration.
+There are three exits, and the refusal message names all of them:
 
-See [`CLAUDE.md`](../../CLAUDE.md#ai-in-anonymous-mode--deployment-design-decision) for the full design discussion.
+- **Rate-limit the anonymous surface** — `ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 }`, or a `PerShape` policy covering `AnonymousKind` (`TOOLUP_RATE_LIMIT_PERMITS=N`). Anonymous traffic partitions on client IP.
+- **Use a BYOK-only `IAIProviderFactory`** — wire no platform providers, so every call is funded by a key the user supplied. This is the documented legitimate Anonymous + AI shape, and it is exempt *by construction* rather than by exception: with no platform-paid provider, resolution for an anonymous caller (who has no secret scope to hold a key) can only ever return `NoProviderConfigured`.
+- **Attest that the cost is bounded upstream** — `ServerConfig.AcceptAnonymousModeWithAI = true` (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`) for a deployment whose per-IP gating or request budgets live at the proxy / CDN / WAF. Like `AcceptStickyRoutedAiInMultiInstance`, this **degrades the refusal to a `Warning` rather than clearing it**: upstream rate limiting is an assertion about infrastructure the SDK cannot verify, so the residual exposure stays visible in the HealthMonitorUI Preflight tab and the `/dev/inspect` Validators panel. The deployment boots — only `Error` refuses.
+
+Single-user local development is unaffected in practice: a local shell that has wired no platform provider never reaches the rule, and one that has can set the env var.
+
+The full escape-hatch family — every preflight refusal in the SDK, what trips it, and the field that attests it — is tabulated in [`ToolUp.Platform/technical-guide/07-module-communication-and-portability.md`](../ToolUp.Platform/technical-guide/07-module-communication-and-portability.md).
 
 ## What this package ships
 
