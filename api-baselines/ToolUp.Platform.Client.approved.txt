@@ -495,8 +495,10 @@ FileManagerUI+Msg.IsReprocessFile : System.Boolean { get }
 FileManagerUI+Msg.IsResetDataStore : System.Boolean { get }
 FileManagerUI+Msg.IsRetryIngestion : System.Boolean { get }
 FileManagerUI+Msg.IsSelectFile : System.Boolean { get }
+FileManagerUI+Msg.IsSessionStoreCleared : System.Boolean { get }
 FileManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 FileManagerUI+Msg.IsUploadFile : System.Boolean { get }
+FileManagerUI+Msg.SessionStoreCleared : FileManagerUI+Msg { get }
 FileManagerUI+Msg.Tag : System.Int32 { get }
 FileManagerUI+Msg+ApiError (class)
 FileManagerUI+Msg+ApiError.Item : System.String { get }
@@ -527,6 +529,7 @@ FileManagerUI+Msg+Tags.ReprocessFile : System.Int32 (literal)
 FileManagerUI+Msg+Tags.ResetDataStore : System.Int32 (literal)
 FileManagerUI+Msg+Tags.RetryIngestion : System.Int32 (literal)
 FileManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
+FileManagerUI+Msg+Tags.SessionStoreCleared : System.Int32 (literal)
 FileManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 FileManagerUI+Msg+Tags.UploadFile : System.Int32 (literal)
 FileManagerUI+Msg+UploadFile (class)
@@ -736,6 +739,7 @@ MappingDataManagerUI+Msg.IsRetryIngestionDone : System.Boolean { get }
 MappingDataManagerUI+Msg.IsRetryIngestionMsg : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectFile : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSelectTarget : System.Boolean { get }
+MappingDataManagerUI+Msg.IsSessionStoreCleared : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetDateOrder : System.Boolean { get }
 MappingDataManagerUI+Msg.IsSetStatusFilter : System.Boolean { get }
 MappingDataManagerUI+Msg.IsStartMapping : System.Boolean { get }
@@ -744,6 +748,7 @@ MappingDataManagerUI+Msg.IsValidationFinished : System.Boolean { get }
 MappingDataManagerUI+Msg.LoadFiles : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ProceedToMapping : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.ResetDataStore : MappingDataManagerUI+Msg { get }
+MappingDataManagerUI+Msg.SessionStoreCleared : MappingDataManagerUI+Msg { get }
 MappingDataManagerUI+Msg.Tag : System.Int32 { get }
 MappingDataManagerUI+Msg+AddDerivedColumn (class)
 MappingDataManagerUI+Msg+AddDerivedColumn.Item : ColumnMappingTypes+DerivedColumn { get }
@@ -830,6 +835,7 @@ MappingDataManagerUI+Msg+Tags.RetryIngestionDone : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.RetryIngestionMsg : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectFile : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SelectTarget : System.Int32 (literal)
+MappingDataManagerUI+Msg+Tags.SessionStoreCleared : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetDateOrder : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.SetStatusFilter : System.Int32 (literal)
 MappingDataManagerUI+Msg+Tags.StartMapping : System.Int32 (literal)
@@ -2860,6 +2866,7 @@ ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRetryBootLoad : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsSessionStoreReset : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarEntryHideToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarGroupToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleExpandToggled : System.Boolean { get }
@@ -2920,6 +2927,8 @@ ToolUp.Platform.Client+Msg+ResetModule (class)
 ToolUp.Platform.Client+Msg+ResetModule.moduleId : System.String { get }
 ToolUp.Platform.Client+Msg+RetryBootLoad (class)
 ToolUp.Platform.Client+Msg+RetryBootLoad.source : System.String { get }
+ToolUp.Platform.Client+Msg+SessionStoreReset (class)
+ToolUp.Platform.Client+Msg+SessionStoreReset.Item : ProcessedDataTypes+SessionStoreResetNotification { get }
 ToolUp.Platform.Client+Msg+SidebarEntryHideToggled (class)
 ToolUp.Platform.Client+Msg+SidebarEntryHideToggled.entryId : System.String { get }
 ToolUp.Platform.Client+Msg+SidebarGroupToggled (class)
@@ -2960,6 +2969,7 @@ ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RetryBootLoad : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.SessionStoreReset : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarEntryHideToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarGroupToggled : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.SidebarModuleExpandToggled : System.Int32 (literal)
@@ -4599,6 +4609,7 @@ ToolUp.Platform.NotAuthorisedMode+Tags (class)
 ToolUp.Platform.NotAuthorisedMode+Tags.CustomNotAuthorised : System.Int32 (literal)
 ToolUp.Platform.NotAuthorisedMode+Tags.DefaultNotAuthorised : System.Int32 (literal)
 ToolUp.Platform.NotificationClient (class)
+ToolUp.Platform.NotificationClient.onConnectionOpened(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.NotificationClient.publishLocal(ToolUp.Platform.NotificationEnvelope) : System.Void
 ToolUp.Platform.NotificationClient.reconnect() : System.Void
 ToolUp.Platform.NotificationClient.reset() : System.Void
@@ -5236,6 +5247,21 @@ ToolUp.Platform.ServiceStatusBoardMode+Tags.ConfiguredServiceStatusBoard : Syste
 ToolUp.Platform.ServiceStatusBoardMode+Tags.DefaultServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.ExternalServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.ServiceStatusBoardMode+Tags.NoServiceStatusBoard : System.Int32 (literal)
+ToolUp.Platform.SessionEpoch (class)
+ToolUp.Platform.SessionEpoch.applyServerNotice(ProcessedDataTypes+SessionStoreResetNotification) : System.Void
+ToolUp.Platform.SessionEpoch.applyServerNoticeJson(System.String) : System.Void
+ToolUp.Platform.SessionEpoch.check() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+SessionStoreResetNotification]]
+ToolUp.Platform.SessionEpoch.current() : Microsoft.FSharp.Core.FSharpOption`1[System.Guid]
+ToolUp.Platform.SessionEpoch.documentVisible() : System.Boolean
+ToolUp.Platform.SessionEpoch.preflight`1(Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.SessionEpoch.prime() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SessionEpoch.reset() : System.Void
+ToolUp.Platform.SessionEpoch.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+SessionStoreResetNotification, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SessionEpoch+SessionStoreResetException (class)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor()
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.String)
+ToolUp.Platform.SessionEpoch+SessionStoreResetException.Data0 : System.String { get }
 ToolUp.Platform.SessionSecurityConfig (class)
 ToolUp.Platform.SessionSecurityConfig..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.SessionSecurityConfig.Icon : Fable.React.ReactElement { get }
