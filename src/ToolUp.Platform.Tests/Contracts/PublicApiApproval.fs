@@ -145,6 +145,7 @@ open System.IO
 open System.Reflection
 open System.Text
 open System.Text.RegularExpressions
+open System.Collections.Generic
 
 // Phase 260 - the pure comparer, extracted verbatim so the release
 // bump check runs the SAME set difference this gate does. See that
@@ -590,6 +591,112 @@ let private docMethodName (m: MethodInfo) =
 /// does) and the doc-comment id the XML file would key it by.
 type DocSubject = { Token: string; DocId: string }
 
+// ─── The baseline's ORDER, as one shared definition (Phase 805) ──────
+
+/// The one comparison every generated baseline is sorted by: ORDINAL, on
+/// the rendered token.
+///
+/// It is a named function rather than two inline `String.CompareOrdinal`
+/// calls because it is no longer read only by the generator. Phase 805's
+/// merge driver re-emits a merged baseline and has to produce the bytes a
+/// regeneration would, so the ordering is now a CONTRACT between two
+/// programs rather than an implementation detail of one. A culture-aware
+/// compare orders `.` against `+` and `` ` `` differently, which would
+/// leave a merged file that the next regen silently rewrites.
+let compareSurfaceToken (a: string) (b: string) = String.CompareOrdinal(a, b)
+
+/// The kinds `typeKind` emits, as the closed set a reader of the rendered
+/// TEXT needs to recognise a type-block header. Kept beside the comparer
+/// because the two together are the whole of the grammar: a header line is
+/// `<FullName> (<kind>)`, everything else in a block is a member token, and
+/// a marker is its owner's token plus `obsoleteMarker`'s suffix.
+let private typeHeaderLine =
+    Regex(@"^(?<name>\S+) \((?:enum|interface|delegate|struct|class)\)$", RegexOptions.Compiled)
+
+/// Split a rendered baseline's text into its generated comment header and
+/// its body lines.
+let splitBaselineHeader (text: string) : string list * string list =
+    let lines = text.Replace("\r\n", "\n").Split('\n') |> Array.toList
+
+    let lines =
+        match List.tryLast lines with
+        | Some "" -> lines |> List.take (lines.Length - 1)
+        | _ -> lines
+
+    let header = lines |> List.takeWhile (fun (l: string) -> l.StartsWith "#")
+    header, lines |> List.skip header.Length
+
+/// Re-emit a set of baseline body lines in the order `renderSurfaceDetail`
+/// would have emitted them: type blocks by ordinal FullName, members by
+/// ordinal token within their block, each `(obsolete)` marker immediately
+/// after the token it marks.
+///
+/// This is the SPECIFICATION the Phase 805 merge driver implements in
+/// PowerShell — a `.ps1` cannot call an F# function, so the two are bound
+/// instead by `BaselineMergeDriverTests`, which asserts that this function
+/// is the identity on every committed baseline (pinning it to what the
+/// generator really emits) and that the driver's output equals this
+/// function's (pinning the driver to it).
+///
+/// A line arriving before any type header cannot be placed, so the whole
+/// input is returned unchanged rather than guessed at.
+let sortSurfaceBody (body: string seq) : string list =
+    let blocks =
+        Dictionary<string, string list ref * Dictionary<string, string list ref>>()
+
+    let order = ResizeArray<string>()
+    let mutable current = None
+    let mutable lastBucket: string list ref option = None
+    let mutable lastToken = ""
+    let mutable placeable = true
+
+    for line in body do
+        if line <> "" && placeable then
+            let m = typeHeaderLine.Match line
+
+            if m.Success then
+                let name = m.Groups["name"].Value
+
+                if not (blocks.ContainsKey name) then
+                    blocks[name] <- (ref [], Dictionary<string, string list ref>())
+                    order.Add name
+
+                let (header, _) = blocks[name]
+                current <- Some blocks[name]
+
+                if not (List.contains line header.Value) then
+                    header.Value <- header.Value @ [ line ]
+
+                lastBucket <- Some header
+                lastToken <- line
+            else
+                match current, lastBucket with
+                | None, _ -> placeable <- false
+                | Some(_, members), bucket ->
+                    if line = obsoleteMarker lastToken && bucket.IsSome then
+                        let b = bucket.Value
+
+                        if not (List.contains line b.Value) then
+                            b.Value <- b.Value @ [ line ]
+                    else
+                        if not (members.ContainsKey line) then
+                            members[line] <- ref [ line ]
+
+                        lastBucket <- Some members[line]
+                        lastToken <- line
+
+    if not placeable then
+        List.ofSeq body
+    else
+        [
+            for name in Seq.sortWith compareSurfaceToken order do
+                let (header, members) = blocks[name]
+                yield! header.Value
+
+                for token in Seq.sortWith compareSurfaceToken members.Keys do
+                    yield! members[token].Value
+        ]
+
 /// A rendered type: its surface lines (member tokens plus any Phase 258
 /// obsolete markers), the obsolete markings the same walk observed, and
 /// the Phase 261 documentable subjects it contributes. All three come out
@@ -710,7 +817,7 @@ let private renderType (t: Type) : RenderedType =
 
             [ ctors; methods; props; fields; events ]
             |> Array.concat
-            |> Array.sortWith (fun (a, _, _) (b, _, _) -> String.CompareOrdinal(a, b))
+            |> Array.sortWith (fun (a, _, _) (b, _, _) -> compareSurfaceToken a b)
         with ex ->
             // A dependency the resolver couldn't satisfy makes this one
             // type's members unenumerable. Surface it visibly rather than
@@ -820,7 +927,7 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
         |> Array.sortWith (fun a b ->
             let an = if isNull a.FullName then a.Name else a.FullName
             let bn = if isNull b.FullName then b.Name else b.FullName
-            String.CompareOrdinal(an, bn))
+            compareSurfaceToken an bn)
         |> Array.map renderType
 
     let body = rendered |> Array.collect (_.Lines >> List.toArray)

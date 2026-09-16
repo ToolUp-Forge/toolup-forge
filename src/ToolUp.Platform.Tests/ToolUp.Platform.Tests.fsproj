@@ -2482,6 +2482,11 @@
              generic core's own cases plus the N=2 parity matrix against
              the Phase 480 bilateral surface it now implements. -->
         <Compile Include="InProcess\CountersignatureRegistryTests.fs" />
+        <!-- Phase 805 - the generated baselines' three-way merge driver: the
+             shared definition of the baseline's order, asserted to be the
+             identity on every committed baseline, and the PowerShell driver
+             asserted equal to it. -->
+        <Compile Include="InProcess\BaselineMergeDriverTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
              the shared vocabulary (System-only, source-linked into
