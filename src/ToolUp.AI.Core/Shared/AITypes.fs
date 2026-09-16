@@ -527,3 +527,109 @@ type ModuleAIContext = {
     /// System-prompt text injected when this module is active.
     SystemPrompt: string
 }
+// ─── Phase 498 — provider fallback / failover routing ────────────
+//
+// Phase 43.B shipped `FallbackChain` on every `ProviderProfile` — an
+// ordered list of entry labels, "tried left-to-right when the resolved
+// primary fails" — but nothing server-side consumed it. These are the
+// two things the runtime needs to honour it: the classification of
+// WHICH errors justify a re-route, and the shape of the record each
+// re-route emits.
+//
+// Both are Fable-safe (records + a total function over the wire-tier
+// `AIProviderError` union), so the client tier can read a failover
+// record back off the audit stream without a server-only reference.
+
+/// Phase 498 — which `AIProviderError` values justify advancing to the
+/// next entry of a deployment's `FallbackChain`.
+module AIProviderFailover =
+
+    /// True when `err` is an OUTAGE: the provider (or the network to
+    /// it) is unavailable, so the identical request to a DIFFERENT
+    /// provider may well succeed.
+    ///
+    /// Deliberately a thin recursion over the shipped
+    /// `AIProviderError.isRetryable` taxonomy rather than a second
+    /// classification — "retry the same provider" and "try another
+    /// provider" answer to the same underlying question ("is the
+    /// failure about this request, or about this endpoint?"), and two
+    /// tables that must agree would eventually not.
+    ///
+    /// The one place the two differ is `RetriesExhausted`: it is NOT
+    /// retryable (the provider's own budget has lapsed — another
+    /// attempt at the same endpoint is what just failed repeatedly)
+    /// yet it IS the commonest outage signal a chain exists to
+    /// survive, so it is unwrapped and judged on the inner cause.
+    ///
+    /// Everything else is false, and three of them are load-bearing:
+    /// - `PermanentClient` — a bad key, a malformed request, a
+    ///   content-policy refusal. The same request fails identically
+    ///   at the secondary, so re-routing spends a second provider's
+    ///   budget to reach the same answer AND masks the misconfiguration
+    ///   the operator needs to see. The turn ends.
+    /// - `StreamingAborted` — partial content has ALREADY been
+    ///   delivered to the user's stream. A re-route would replay the
+    ///   answer from the top, duplicating output mid-message.
+    /// - `MalformedResponse` / `UnsupportedCapability` /
+    ///   `SchemaUnsupported` — the endpoint answered; it is the shape
+    ///   of the answer that is wrong. Not an outage.
+    let rec isOutageClass (err: AIProviderError) : bool =
+        match err with
+        | RetriesExhausted(_, inner) -> isOutageClass inner
+        | other -> AIProviderError.isRetryable other
+
+/// Phase 498 — one recorded failover. Written through `IEventStore`
+/// under `AIProviderFailoverRecord.SourceModule` each time the runtime
+/// advances a turn from one chain entry to the next, so "the primary
+/// was down and the secondary served the turn" is answerable from the
+/// audit trail rather than inferred from a latency outlier.
+///
+/// Carries no key material and no prompt content — provider and model
+/// identifiers, the vendor's own error text, and timings only.
+type AIProviderFailoverRecord = {
+    OccurredAt: DateTime
+    /// Storage scope the failing turn belonged to — the same scope key
+    /// `AILatencyRecord`s are written under, so the two streams join.
+    ScopeId: string
+    /// `Capabilities.ProviderName` / `.Model` of the entry that failed.
+    FromProvider: string
+    FromModel: string
+    /// `ProviderProfile` entry label of the chain position advanced TO.
+    ToLabel: string
+    /// `Capabilities.ProviderName` / `.Model` of the entry advanced to.
+    /// Empty when `Resolved` is false — the label no longer names a
+    /// usable entry, so there is no provider to name.
+    ToProvider: string
+    ToModel: string
+    /// `AIProviderError.toMessage` of the error that triggered the
+    /// re-route, extended with the resolution failure when `Resolved`
+    /// is false.
+    Reason: string
+    /// Wall-clock milliseconds the FAILED attempt consumed. The
+    /// per-attempt half of the phase's latency requirement; the
+    /// serving attempt's latency is the `AILatencyRecord` the turn
+    /// emits as usual.
+    AttemptDurationMs: float
+    /// 1-based position within `FallbackChain.Ordered` that was
+    /// advanced to, and the chain's length. `ChainPosition =
+    /// ChainLength` on the last entry, so "the chain is exhausted" is
+    /// readable from a single record.
+    ChainPosition: int
+    ChainLength: int
+    /// False when the chain entry could not be resolved (a stale label,
+    /// a missing key). The runtime skips on to the next entry; the
+    /// record is still written, because a chain that cannot be walked
+    /// is precisely what an operator needs to be told.
+    Resolved: bool
+}
+
+module AIProviderFailoverRecord =
+    /// Reserved `IEventStore` source-module namespace for provider
+    /// failover records. Sibling of `AILatencyRecord.SourceModule`;
+    /// read back with `ReadBySource(scope, _)`.
+    [<Literal>]
+    let SourceModule = "_platform.ai.provider_failover"
+
+    /// Reserved `IEventStore` event-type for one recorded failover.
+    [<Literal>]
+    let EventType = "AIProviderFailover"

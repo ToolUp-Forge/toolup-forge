@@ -1,8 +1,11 @@
 module ToolUp.AI.AIProviderUsageMiddleware
 
 open System
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
+open ToolUp.Platform.Metrics
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Usage
 open ToolUp.AI
@@ -59,11 +62,19 @@ let private scopeIdFor (ctx: AccessContext) : string =
 type private MeteringProvider
     (inner: IAIProvider, usageLog: IUsageLog, scopeId: string, userId: string, origin: ProviderOrigin) =
 
-    let providerName = inner.Capabilities.ProviderName
-    let modelName = inner.Capabilities.Model
-
+    // Phase 498 — read `inner.Capabilities` PER EMISSION, not once at
+    // construction. `emit` runs after `inner.SendMessage` has returned,
+    // and when `inner` is the Phase 498 failover composite the entry it
+    // reports is the one that actually served the turn. Snapshotting
+    // here — which is what this did until Phase 498 — would have billed
+    // the secondary's tokens to the primary on every failed-over turn,
+    // silently and in the one record the operator bills from. On a
+    // deployment with no `FallbackChain` the two reads return the same
+    // values they always did.
     let buildMetadata (extra: (string * string) list) =
-        let baseEntries = [ "provider", providerName; "model", modelName; "userId", userId ]
+        let caps = inner.Capabilities
+
+        let baseEntries = [ "provider", caps.ProviderName; "model", caps.Model; "userId", userId ]
 
         Map.ofList (baseEntries @ extra)
 
@@ -260,12 +271,106 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
 // keep-in-sync comment block in RAGCompose flagged this drift; the
 // helper here removes the surface.
 
+// ─── Phase 498 — failover observability sink ─────────────────────
+//
+// A failover is a change of who is serving the user's turn; it must
+// leave a trace, and the two traces an operator reaches for are
+// different questions. The audit event answers "what happened to THIS
+// conversation" (readable per scope, joinable with the turn's
+// `AILatencyRecord` on `ScopeId`); the counter answers "is a provider
+// degrading" across the fleet. Both are best-effort: the failover has
+// already been performed by the time either runs, and neither may fail
+// the AI call.
+//
+// It lives here rather than inside the composite because this is where
+// DI is — `wrapFactoryForDI` already receives the `IServiceProvider`
+// it resolves `IUsageLog` and `ITeamQuotaPolicy` from. The composite
+// stays a pure routing decision with an injected sink, which is also
+// what makes it testable without a service provider.
+
+/// Serialiser for the failover audit payload. Mirrors
+/// `AIAgentEngine`'s latency serialiser — `FableConverters`
+/// round-trips F# records / `option` losslessly, so a reader gets back
+/// the shape that was written.
+let private failoverJsonOptions = FableConverters.create ()
+
+/// Cap on the audit write. A wedged event store must not hold up a
+/// conversation that has just survived a provider outage — the whole
+/// point of the failover is that the user's turn continues.
+[<Literal>]
+let private FailoverAuditWriteTimeoutMs = 5_000
+
+/// Build the Phase 498 failover sink from whatever DI offers. Both
+/// services are optional: a deployment with neither gets a sink that
+/// does nothing, at the cost of two failed `GetService` calls per
+/// composition (GP 13 — this runs once per `IAIProviderFactory`
+/// resolution, not per turn).
+let private failoverSink (sp: System.IServiceProvider) : AIProviderFailoverRecord -> Async<unit> =
+    let eventStoreOpt =
+        match sp.GetService(typeof<IEventStore>) with
+        | :? IEventStore as s -> Some s
+        | _ -> None
+
+    let metricsSinkOpt =
+        match sp.GetService(typeof<IMetricsSink>) with
+        | :? IMetricsSink as s -> Some s
+        | _ -> None
+
+    fun (record: AIProviderFailoverRecord) -> async {
+        match eventStoreOpt with
+        | None -> ()
+        | Some store ->
+            let evt: ModuleEvent = {
+                Id = Guid.NewGuid()
+                OccurredAt = record.OccurredAt
+                ScopeId = record.ScopeId
+                SourceModule = AIProviderFailoverRecord.SourceModule
+                EventType = AIProviderFailoverRecord.EventType
+                Payload = JsonSerializer.Serialize(record, failoverJsonOptions)
+            }
+
+            try
+                let! child = Async.StartChild(store.Write evt, FailoverAuditWriteTimeoutMs)
+                do! child
+            with _ ->
+                // Timed out or threw. The failover itself already
+                // happened and the turn is proceeding; dropping the
+                // record is strictly better than failing the call the
+                // record is about.
+                ()
+
+        match metricsSinkOpt with
+        | None -> ()
+        | Some sink ->
+            try
+                // `to` is empty on an unresolvable chain entry; the
+                // literal "unresolved" keeps the tag a closed, readable
+                // vocabulary rather than an empty string nobody can
+                // grep for.
+                let target = if record.Resolved then record.ToProvider else "unresolved"
+
+                sink.Record(
+                    AILatencyMetrics.ProviderFailover,
+                    1.0,
+                    Map.ofList [ "provider", record.FromProvider; "to", target ]
+                )
+            with _ ->
+                ()
+    }
+
 /// Build a DI factory delegate that resolves `IAIProviderFactory` with
 /// the standard Metering + Quota wrap applied over `rawFactory`:
 ///   * `MeteringProviderFactory` is stacked when
 ///     `config.UsageMetering = EnabledUsageMetering` (Phase 9d).
 ///   * `QuotaEnforcingProviderFactory` is stacked OUTERMOST whenever an
 ///     `ITeamQuotaPolicy` resolves from DI (Phase 9 compute-quota).
+///   * Phase 498 — `DefaultAIProviderFactory.withFailoverChain` is
+///     stacked INNERMOST, so metering sees the failover composite as
+///     its `inner` and attributes a failed-over turn's tokens to the
+///     entry that served it. See the placement note in
+///     `DefaultAIProviderFactory.fs`; stacking it outermost would have
+///     resolved every chain entry through the deliberately-unmetered
+///     `TryResolveByLabel` path.
 ///
 /// Both composers register their factory via this helper so a
 /// deployment composing RAG retains metering + quota enforcement on
@@ -276,13 +381,20 @@ let wrapFactoryForDI
     (providerProfile: IProviderProfile)
     : System.Func<System.IServiceProvider, IAIProviderFactory> =
     System.Func<System.IServiceProvider, IAIProviderFactory>(fun sp ->
+        // Phase 498. A deployment whose profiles declare no
+        // `FallbackChain` gets its resolved provider back unwrapped
+        // from this layer, so the object graph below is what it always
+        // was (GP 11).
+        let failoverAware =
+            DefaultAIProviderFactory.withFailoverChain providerProfile (failoverSink sp) rawFactory
+
         let baseFactory =
             match config.UsageMetering with
-            | NoUsageMetering -> rawFactory
+            | NoUsageMetering -> failoverAware
             | EnabledUsageMetering ->
                 let usageLog = sp.GetService(typeof<IUsageLog>) :?> IUsageLog
 
-                MeteringProviderFactory(rawFactory, usageLog, providerProfile) :> IAIProviderFactory
+                MeteringProviderFactory(failoverAware, usageLog, providerProfile) :> IAIProviderFactory
 
         match sp.GetService(typeof<ITeamQuotaPolicy>) with
         | :? ITeamQuotaPolicy as quota -> QuotaEnforcingProviderFactory(baseFactory, quota) :> IAIProviderFactory

@@ -700,6 +700,8 @@ let private registeredTests =
         BlobCorruptionChaosTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
+        // Phase 498 — provider fallback / failover routing.
+        AIProviderFallbackTests.tests
         PlatformAIKeysHandlerRbacTests.tests
         AISurfaceCapabilityTests.tests
         AIStreamFramingPinTests.tests

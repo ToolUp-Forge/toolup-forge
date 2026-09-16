@@ -348,6 +348,22 @@ let private runFullAgentLoop
         let providerName = provider.Capabilities.ProviderName
         let providerModel = provider.Capabilities.Model
 
+        // Phase 498 — the provider that is CURRENTLY serving, read at
+        // the moment it is needed rather than pinned at the top of the
+        // loop. `providerName` / `providerModel` above stay the turn's
+        // STARTING provider, which is the right subject for the log
+        // lines that narrate an attempt failing; these two are the
+        // right subject for the record that says who answered.
+        //
+        // On a deployment with no `FallbackChain` the factory hands
+        // back the bare provider and the two pairs are equal for the
+        // life of the loop. With a chain, the failover composite
+        // reports the entry that took over, so the turn's
+        // `AILatencyRecord` and its metric tags name the winner
+        // (Phase 498.C) instead of the provider that went down.
+        let servingProviderName () = provider.Capabilities.ProviderName
+        let servingProviderModel () = provider.Capabilities.Model
+
         // Capability gate: tools present but the provider can't tool-use
         // means every tool is silently inert (the model never emits a
         // tool call → client-resident dispatch and fast-path never fire)
@@ -428,8 +444,8 @@ let private runFullAgentLoop
                         TaskId = taskId
                         ConversationId = conversationId
                         TurnNumber = turnNumber
-                        ProviderName = providerName
-                        ProviderModel = providerModel
+                        ProviderName = servingProviderName ()
+                        ProviderModel = servingProviderModel ()
                         TtftMs = ttftMs
                         TurnDurationMs = turnDurationMs
                         ToolCalls = toolTimings
@@ -487,7 +503,8 @@ let private runFullAgentLoop
                     | None -> ()
                     | Some sink ->
                         try
-                            let tags = Map.ofList [ "provider", providerName; "model", providerModel ]
+                            let tags =
+                                Map.ofList [ "provider", servingProviderName (); "model", servingProviderModel () ]
 
                             sink.Record(AILatencyMetrics.TurnDurationMs, turnDurationMs, tags)
 

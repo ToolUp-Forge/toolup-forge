@@ -113,6 +113,25 @@ ToolUp.AI.AIProviderDescriptor.DefaultModel : System.String { get }
 ToolUp.AI.AIProviderDescriptor.DisplayName : System.String { get }
 ToolUp.AI.AIProviderDescriptor.Id : System.String { get }
 ToolUp.AI.AIProviderDescriptor.SupportedModels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIProviderFailover (class)
+ToolUp.AI.AIProviderFailover.isOutageClass(ToolUp.Platform.AI.AIProviderError) : System.Boolean
+ToolUp.AI.AIProviderFailoverRecord (class)
+ToolUp.AI.AIProviderFailoverRecord..ctor(System.DateTime, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Double, System.Int32, System.Int32, System.Boolean)
+ToolUp.AI.AIProviderFailoverRecord.AttemptDurationMs : System.Double { get }
+ToolUp.AI.AIProviderFailoverRecord.ChainLength : System.Int32 { get }
+ToolUp.AI.AIProviderFailoverRecord.ChainPosition : System.Int32 { get }
+ToolUp.AI.AIProviderFailoverRecord.FromModel : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.FromProvider : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.OccurredAt : System.DateTime { get }
+ToolUp.AI.AIProviderFailoverRecord.Reason : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.Resolved : System.Boolean { get }
+ToolUp.AI.AIProviderFailoverRecord.ScopeId : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.ToLabel : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.ToModel : System.String { get }
+ToolUp.AI.AIProviderFailoverRecord.ToProvider : System.String { get }
+ToolUp.AI.AIProviderFailoverRecordModule (class)
+ToolUp.AI.AIProviderFailoverRecordModule.EventType : System.String (literal)
+ToolUp.AI.AIProviderFailoverRecordModule.SourceModule : System.String (literal)
 ToolUp.AI.AIProviderInstanceSaveRequest (class)
 ToolUp.AI.AIProviderInstanceSaveRequest..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.AIProviderInstanceSaveRequest.ApiKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
