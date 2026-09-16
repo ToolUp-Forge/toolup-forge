@@ -36,10 +36,18 @@ open ToolUp.Platform
 /// and do nothing at all, because the bus is a documented no-op with no
 /// subscribers — the same silent shape the navigation seam produced in
 /// the Phase 573 follow-up this pack was written for.
+///
+/// Phase 6p added `session-epoch` to the shell's own attach order and to
+/// every outer composer, but not to this list, so the pin it is the point
+/// of went red on main. Both sites already agree; only the expectation was
+/// stale. Recorded here rather than silently corrected because "a new
+/// shell effect must join this list" is exactly what the pin exists to
+/// enforce, and it caught one.
 let private expectedIds = [
     "navigation-request"
     "locale-request"
     "module-events"
+    "session-epoch"
     "notifications-stream"
     "auth-token-acquired"
     "auth-bridge-health"
