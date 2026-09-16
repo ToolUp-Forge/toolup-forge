@@ -54,6 +54,18 @@
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+        <!-- Phase 735 — the VerifyAll gate (a named OS mutex keyed on the
+             repository's common git directory) and the corpus-anchor
+             memoisation. VerifyGate.fs is source-linked from the repo root
+             for the same reason SdkManifest.fs is: the FAKE driver and
+             these go-red proofs run one implementation. CorpusAnchor.fs is
+             source-linked from the Platform pack so its O(1)-spawns
+             property is pinned here, in a pack that runs in every lane,
+             rather than only inside the pack whose cost it bounds. -->
+        <Compile Include="..\..\VerifyGate.fs" Link="VerifyGate.fs" />
+        <Compile Include="VerifyGateTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\CorpusAnchor.fs" Link="Support\CorpusAnchor.fs" />
+        <Compile Include="CorpusAnchorTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

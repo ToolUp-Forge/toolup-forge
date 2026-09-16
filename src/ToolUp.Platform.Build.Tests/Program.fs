@@ -44,6 +44,12 @@ let private registeredTests =
         // lockstep roll-up, both SemVer policy tables (0.x and 1.x), and
         // the under-bump refusal. Pure over strings; no git, no network.
         SemVerBumpTests.tests
+        // Phase 735 — the VerifyAll gate's admission rules (free / held /
+        // stale holder / abandoned / opt-out) over minted mutex names, and
+        // the corpus-anchor memoisation's constant-spawn property. Named
+        // OS mutexes and a handful of `git` subprocesses; no network.
+        VerifyGateTests.tests
+        CorpusAnchorTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

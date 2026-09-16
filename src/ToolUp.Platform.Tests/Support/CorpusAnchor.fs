@@ -35,10 +35,37 @@ module ToolUp.Platform.Tests.Support.CorpusAnchor
 // the running checkout and no foreign working tree is known. Resolution
 // must never fail BECAUSE of this module; it only ever narrows or
 // re-roots a search that already existed.
+//
+// ─── Process-level memoisation (Phase 735) ──────────────────────────
+//
+// Both answers this module gives — the main working tree, and the
+// anchoring built on it — are constant for the life of a test process:
+// the checkout does not move and the worktree list does not change
+// while a pack runs. So each is resolved ONCE per checkout root and
+// held; every later ask, from any caller on any thread, is a dictionary
+// read and spawns nothing.
+//
+// The phase that added this was authored on the belief that the module
+// was shelling git PER LOOKUP — O(tests) subprocesses in a 10,000-case
+// pack. Checked against the tree, that was never so: every caller
+// already held its `Anchoring` in a module-level `lazy` from the commit
+// that introduced the module (0a0352de), and a full Platform-pack run
+// spawned git about six times. The memoisation is kept anyway, for a
+// reason that has nothing to do with speed: it moves the O(1) guarantee
+// from each caller's discipline INTO the module, where a test can hold
+// it (`CorpusAnchorTests`, via `gitSpawnCount`), so the next caller
+// written without a `lazy` cannot quietly reintroduce the cost.
+//
+// The counter is instrumentation, not behaviour. Set
+// `TOOLUP_CORPUS_ANCHOR_TRACE=1` and the process prints its total on
+// exit, which is how the "constant number of spawns per pack run" claim
+// was measured rather than asserted.
 
 open System
+open System.Collections.Concurrent
 open System.Diagnostics
 open System.IO
+open System.Threading
 
 /// Windows paths compare case-insensitively; everywhere else the
 /// filesystem is honest about case.
@@ -61,9 +88,34 @@ let isUnder (root: string) (path: string) =
     path.Equals(root, pathComparison)
     || path.StartsWith(root + string Path.DirectorySeparatorChar, pathComparison)
 
+/// Set to any non-empty value other than `0` to have the process report
+/// `gitSpawnCount` on exit.
+[<Literal>]
+let TraceVariable = "TOOLUP_CORPUS_ANCHOR_TRACE"
+
+let mutable private spawns = 0
+
+/// How many `git` processes this module has started in this process.
+/// Instrumentation for the O(1) claim: a full pack run should leave this
+/// at a small constant, however many tests asked for an anchoring.
+let gitSpawnCount () = Volatile.Read &spawns
+
+let private traceOnExit =
+    lazy
+        (match Environment.GetEnvironmentVariable TraceVariable with
+         | null
+         | ""
+         | "0" -> ()
+         | _ ->
+             AppDomain.CurrentDomain.ProcessExit.Add(fun _ ->
+                 eprintfn "CorpusAnchor: %d git spawn(s) this process" (gitSpawnCount ())))
+
 /// `git <arguments>` in `workingDir`; stdout trimmed, or `None` on any
 /// failure — a missing git, a non-repo, a hung child. Never throws.
 let private git (workingDir: string) (arguments: string) : string option =
+    Interlocked.Increment &spawns |> ignore
+    traceOnExit.Force()
+
     try
         let psi = ProcessStartInfo("git", arguments)
         psi.WorkingDirectory <- workingDir
@@ -87,11 +139,25 @@ let private git (workingDir: string) (arguments: string) : string option =
     with _ ->
         None
 
-/// The repository's main working tree, when `checkoutRoot` is a LINKED
-/// worktree of it. `None` when it IS the main tree, is not a git
-/// checkout, or git is unavailable — every case in which there is no
-/// better place to search from than `checkoutRoot` itself.
-let mainWorkingTree (checkoutRoot: string) : string option =
+/// Dictionary keys compare the way paths do on this host, so two
+/// spellings of one checkout root share one cache entry.
+let private pathComparer: StringComparer =
+    if OperatingSystem.IsWindows() then
+        StringComparer.OrdinalIgnoreCase
+    else
+        StringComparer.Ordinal
+
+/// Resolve `key` once per process through `cache`, however many callers
+/// ask and from however many threads: `Lazy` publishes exactly one
+/// evaluation, and the dictionary hands every caller the same `Lazy`.
+let private memoised (cache: ConcurrentDictionary<string, Lazy<'a>>) (compute: string -> 'a) (root: string) : 'a =
+    let key = normalize root
+    cache.GetOrAdd(key, (fun k -> lazy (compute k))).Value
+
+let private mainWorkingTreeCache =
+    ConcurrentDictionary<string, Lazy<string option>>(pathComparer)
+
+let private mainWorkingTreeUncached (checkoutRoot: string) : string option =
     git checkoutRoot "rev-parse --git-common-dir"
     |> Option.bind (fun commonDir ->
         let full =
@@ -110,6 +176,14 @@ let mainWorkingTree (checkoutRoot: string) : string option =
             | null -> None
             | main when normalize(main).Equals(normalize checkoutRoot, pathComparison) -> None
             | main -> Some(normalize main))
+
+/// The repository's main working tree, when `checkoutRoot` is a LINKED
+/// worktree of it. `None` when it IS the main tree, is not a git
+/// checkout, or git is unavailable — every case in which there is no
+/// better place to search from than `checkoutRoot` itself. Resolved once
+/// per root per process.
+let mainWorkingTree (checkoutRoot: string) : string option =
+    memoised mainWorkingTreeCache mainWorkingTreeUncached checkoutRoot
 
 /// Every working tree of this repository other than the ones in `keep`
 /// — the directories a corpus search must never look inside.
@@ -141,7 +215,10 @@ type Anchoring = {
     Foreign: string list
 }
 
-let resolve (checkoutRoot: string) : Anchoring =
+let private resolveCache =
+    ConcurrentDictionary<string, Lazy<Anchoring>>(pathComparer)
+
+let private resolveUncached (checkoutRoot: string) : Anchoring =
     let anchor =
         mainWorkingTree checkoutRoot |> Option.defaultValue (normalize checkoutRoot)
 
@@ -149,6 +226,11 @@ let resolve (checkoutRoot: string) : Anchoring =
         Anchor = anchor
         Foreign = foreignWorktrees checkoutRoot [ checkoutRoot; anchor ]
     }
+
+/// The anchoring for `checkoutRoot`, resolved once per root per process:
+/// the first caller pays two `git` spawns, every later one pays none.
+let resolve (checkoutRoot: string) : Anchoring =
+    memoised resolveCache resolveUncached checkoutRoot
 
 /// Is `dir` inside a working tree the search must not read?
 let excluded (anchoring: Anchoring) (dir: string) =
