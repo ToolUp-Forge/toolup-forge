@@ -333,3 +333,265 @@ let create
             platformBuildById.TryFind providerId
             |> Option.map (fun build -> build apiKey model)
     }
+
+// ─── Phase 498 — fallback / failover routing ─────────────────────
+//
+// Phase 43.B shipped the chain as DATA (`ProviderProfile.Fallback`,
+// an ordered list of entry labels); this is the runtime that honours
+// it. The whole mechanism is one composite `IAIProvider` plus one
+// factory decorator, and where each sits is the load-bearing part:
+//
+// **The composite is the provider, not a branch in the agent loop.**
+// `AIAgentEngine` acquires its provider once and calls `SendMessage`
+// from inside a gate stack it has built for that turn — the Phase 503
+// tool-approval prompt, the Phase 525 disclosure egress doors, the
+// Phase 730 grant gate, the Phase 523 answer gate. Those gates produce
+// the message list; `SendMessage` consumes it. Re-routing INSIDE
+// `SendMessage` therefore re-sends the exact bytes the gate stack
+// already approved, to a different endpoint. It cannot reach around a
+// gate because it never returns to a point above one — a stronger
+// guarantee than an engine-level retry loop could offer, where "which
+// gates have already run for this payload" becomes a question someone
+// has to keep answering correctly.
+//
+// **The composite is INNERMOST in the factory stack.**
+// `AIProviderUsageMiddleware.wrapFactoryForDI` stacks metering and
+// then quota OVER it, so the metering decorator observes the composite
+// as its `inner` and reads `Capabilities` per call — usage is
+// attributed to the entry that actually served the turn (Phase 498.D)
+// with no per-entry bookkeeping. Stacking it outermost would have made
+// each chain entry resolve through `TryResolveByLabel`, which both
+// decorators deliberately forward UNMETERED (it is the settings-UI
+// test-connection path), so a failed-over turn would have been free.
+//
+// **Cost when no chain is declared: one profile read, then nothing.**
+// The decorator returns the inner provider UNWRAPPED when
+// `Fallback.Ordered` is empty, so a deployment that has never declared
+// a chain runs the identical object graph it ran before this phase
+// (GP 11). The read is the price of knowing that, and the request
+// already performs two (the factory's own `ResolveEntry` and the
+// metering wrapper's origin probe).
+
+/// The composite `IAIProvider` a deployment gets when its
+/// `ProviderProfile.Fallback` declares a non-empty chain. Delegates
+/// every call to the entry currently serving; on an outage-class
+/// failure it advances one position and re-issues the SAME call.
+///
+/// **The position is sticky and only ever moves forward**, which is
+/// what makes "a single turn tries at most the whole chain once"
+/// (Phase 498.C) true across an agent loop rather than merely within
+/// one `SendMessage`: once the primary has been shown to be down, the
+/// remaining tool-use iterations of that conversation go straight to
+/// the entry that took over instead of re-probing a dead endpoint on
+/// every turn. The instance's lifetime is one `Resolve`, i.e. one
+/// request, so nothing is shared between conversations.
+type private AIFailoverProvider
+    (
+        primary: IAIProvider,
+        chain: string list,
+        scopeId: string,
+        resolveLabel: string -> Async<Result<IAIProvider, ProviderResolutionError>>,
+        onFailover: AIProviderFailoverRecord -> Async<unit>
+    ) =
+
+    let chainLength = List.length chain
+    let mutable active = primary
+
+    /// Count of chain entries already consumed. 0 = serving the routed
+    /// primary; `chainLength` = the chain is exhausted.
+    let mutable consumed = 0
+
+    /// Advance past chain entries until one resolves. Returns true when
+    /// a new provider is now active, false when the chain ran out.
+    ///
+    /// An entry that fails to resolve — a label the user has since
+    /// deleted, an entry whose key has been rotated away — is SKIPPED
+    /// rather than treated as the end of the chain, and the skip is
+    /// recorded with `Resolved = false`. One stale label in the middle
+    /// of a chain should not cost a deployment the entries behind it,
+    /// and a silent skip would leave the operator with a chain that
+    /// quietly does less than it says.
+    let rec advance (err: AIProviderError) (attemptMs: float) = async {
+        if consumed >= chainLength then
+            return false
+        else
+            let label = chain[consumed]
+            consumed <- consumed + 1
+            let fromCaps = active.Capabilities
+
+            let! resolved = resolveLabel label
+
+            match resolved with
+            | Ok next ->
+                active <- next
+                let toCaps = next.Capabilities
+
+                do!
+                    onFailover {
+                        OccurredAt = System.DateTime.UtcNow
+                        ScopeId = scopeId
+                        FromProvider = fromCaps.ProviderName
+                        FromModel = fromCaps.Model
+                        ToLabel = label
+                        ToProvider = toCaps.ProviderName
+                        ToModel = toCaps.Model
+                        Reason = AIProviderError.toMessage err
+                        AttemptDurationMs = attemptMs
+                        ChainPosition = consumed
+                        ChainLength = chainLength
+                        Resolved = true
+                    }
+
+                return true
+            | Error resolutionError ->
+                do!
+                    onFailover {
+                        OccurredAt = System.DateTime.UtcNow
+                        ScopeId = scopeId
+                        FromProvider = fromCaps.ProviderName
+                        FromModel = fromCaps.Model
+                        ToLabel = label
+                        ToProvider = ""
+                        ToModel = ""
+                        Reason =
+                            sprintf
+                                "%s — fallback chain entry '%s' could not be resolved: %s"
+                                (AIProviderError.toMessage err)
+                                label
+                                (ProviderResolutionError.toMessage resolutionError)
+                        AttemptDurationMs = attemptMs
+                        ChainPosition = consumed
+                        ChainLength = chainLength
+                        Resolved = false
+                    }
+
+                return! advance err attemptMs
+    }
+
+    /// One send, with the chain walked on outage-class failures.
+    /// Generic over which of the two `IAIProvider` send methods is
+    /// being issued so both honour the chain identically — a
+    /// structured-output call is as entitled to survive an outage as a
+    /// conversational one, and two copies of this loop would drift.
+    let sendWithFailover (send: IAIProvider -> Async<Result<AIProviderResponse, AIProviderError>>) = async {
+        let rec attempt () = async {
+            let started = System.Diagnostics.Stopwatch.StartNew()
+            let! result = send active
+
+            match result with
+            | Ok response -> return Ok response
+            | Error err ->
+                if AIProviderFailover.isOutageClass err then
+                    let! advanced = advance err started.Elapsed.TotalMilliseconds
+
+                    if advanced then
+                        return! attempt ()
+                    else
+                        // Chain exhausted. The LAST error is returned
+                        // rather than a new "everything is down" case:
+                        // the callers' existing handling — the agent
+                        // loop's `classifyForAgentLoop`, the handler's
+                        // `AITaskFailed` rendering — already says the
+                        // right thing about it, and inventing a case
+                        // here would retype the `SendMessage` contract
+                        // for every consumer to serve one diagnostic.
+                        // The failover records name every entry tried.
+                        return Error err
+                else
+                    return Error err
+        }
+
+        return! attempt ()
+    }
+
+    interface IAIProvider with
+        /// The entry CURRENTLY serving. Read per call by the metering
+        /// decorator and by the agent loop's latency record, which is
+        /// how both name the provider that actually served the turn.
+        member _.Capabilities = active.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            sendWithFailover (fun p -> p.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
+
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            sendWithFailover (fun p -> p.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
+
+/// Wrap a factory so a `Resolve`-d provider honours the profile's
+/// `FallbackChain` (Phase 43.B) — the shipped data, not a second
+/// configuration value.
+///
+/// Returns the inner provider UNWRAPPED, and therefore leaves a
+/// deployment byte-for-byte unchanged (GP 11), whenever:
+/// - resolution failed (nothing to fall back FROM);
+/// - the request has no persistent config scope (anonymous — no
+///   profile, so no chain);
+/// - the profile declares no chain, or declares one that is empty
+///   once the routed primary's own label and duplicates are removed.
+///
+/// `TryResolveByLabel` is forwarded untouched: a caller naming a
+/// specific entry — the settings-UI test-connection probe, or a user
+/// who picked a provider for this one conversation — has asked about
+/// THAT entry, and silently answering from a different one would make
+/// a connection test unable to fail.
+let withFailoverChain
+    (providerProfile: IProviderProfile)
+    (onFailover: AIProviderFailoverRecord -> Async<unit>)
+    (inner: IAIProviderFactory)
+    : IAIProviderFactory =
+    { new IAIProviderFactory with
+        member _.Available = inner.Available
+
+        member _.PlatformDescriptors = inner.PlatformDescriptors
+
+        member _.PlatformDescriptor = inner.PlatformDescriptor
+
+        member _.Resolve ctx = async {
+            let! resolved = inner.Resolve ctx
+
+            match resolved with
+            | Error e -> return Error e
+            | Ok primary ->
+                match AccessContext.configScope ctx with
+                | None -> return Ok primary
+                | Some scope ->
+                    let! profileOpt = providerProfile.Get scope
+
+                    match profileOpt with
+                    | None -> return Ok primary
+                    | Some profile ->
+                        // The label the primary was routed from, when
+                        // there is one. A chain naming it would re-issue
+                        // the call to the endpoint that just failed —
+                        // which is a retry, not a failover, and the
+                        // provider's own `RetryPolicy` has already spent
+                        // its budget on exactly that.
+                        let routedLabel =
+                            ProviderProfile.resolveEntry AIProviderSurface.aiAssistant None profile
+                            |> Option.map _.Label
+
+                        let ordered =
+                            profile.Fallback.Ordered
+                            |> List.filter (fun l -> not (System.String.IsNullOrWhiteSpace l))
+                            |> List.filter (fun l -> Some l <> routedLabel)
+                            |> List.distinct
+
+                        if List.isEmpty ordered then
+                            return Ok primary
+                        else
+                            let composite =
+                                AIFailoverProvider(
+                                    primary,
+                                    ordered,
+                                    scope.ScopeId,
+                                    (fun label -> inner.TryResolveByLabel(ctx, label)),
+                                    onFailover
+                                )
+
+                            return Ok(composite :> IAIProvider)
+        }
+
+        member _.TryResolveByLabel(ctx, label) = inner.TryResolveByLabel(ctx, label)
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)
+    }

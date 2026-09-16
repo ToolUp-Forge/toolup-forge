@@ -56,6 +56,20 @@ let CachedPromptRatio = "toolup.ai.cached_prompt_ratio"
 [<Literal>]
 let ToolResultElided = "toolup.ai.tool.result.elided"
 
+/// Phase 498 — count of provider failovers, one per advance from a
+/// chain entry to the next. The two tags are the operator's actual
+/// question ("which provider is falling over, and onto what?"), and
+/// both are bounded by the deployment's wired provider set, so the
+/// series count is a constant of the composition rather than a
+/// function of traffic.
+///
+/// A deployment whose `ProviderProfile.Fallback` is empty allocates
+/// the series and never emits into it. The series sitting at zero is
+/// the evidence that no provider has gone down; a series that does not
+/// exist is indistinguishable from one nobody looked at.
+[<Literal>]
+let ProviderFailover = "toolup.ai.provider.failover"
+
 /// 0..1 bucket boundaries for the cached-prompt-ratio histogram.
 /// Sized to make "what fraction of turns are >= 80% cached?" answerable
 /// at a glance — caching's value is concentrated in the long-prefix
@@ -168,6 +182,23 @@ let registrations: MetricRegistration list = [
                 "AI tool results replaced by the over-budget elision marker (one per elided result, tagged by tool)"
             Unit = "1"
             Tags = [ "tool" ]
+        }
+    }
+    // ── Phase 498 — provider fallback / failover routing ──────────
+    //
+    // Appended to the same one list, for the same reason as the two
+    // groups above: `AIServerApp.create` folds exactly one AI list into
+    // `ServerApp.MetricRegistrations`, and an unregistered series fails
+    // by silently dropping emissions rather than by erroring.
+    {
+        Module = None
+        Definition = {
+            Name = ProviderFailover
+            Kind = Counter
+            Description =
+                "AI provider failovers (one per advance to the next FallbackChain entry, tagged by the provider that failed and the one that took over)"
+            Unit = "1"
+            Tags = [ "provider"; "to" ]
         }
     }
 ]

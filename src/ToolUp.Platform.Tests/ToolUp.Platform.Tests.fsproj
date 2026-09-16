@@ -812,6 +812,14 @@
              ProviderProbeSpec.Fetch test seam carries canned outcomes
              so no real network is hit. -->
         <Compile Include="InProcess\AIProviderProbeValidatorTests.fs" />
+        <!-- Phase 498 — AI provider fallback / failover routing over the
+             FallbackChain Phase 43.B shipped as data. The four acceptance
+             cases (primary down -> secondary serves; all down -> typed
+             terminal failure; PermanentClient never re-routes; no chain ->
+             the same provider object, GP 11) plus the isOutageClass
+             classification and the decisions the routing had to take. In
+             memory throughout; no network. -->
+        <Compile Include="InProcess\AIProviderFallbackTests.fs" />
         <Compile Include="InProcess\HealthStateTrackerTests.fs" />
         <!-- Phase 178 — alert-rule / threshold engine. -->
         <Compile Include="InProcess\AlertRuleEngineTests.fs" />
