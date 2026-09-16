@@ -7972,6 +7972,9 @@ ToolUp.Platform.ProviderProbeOutcomeModule (class)
 ToolUp.Platform.ProviderProbeOutcomeModule.failed(System.String) : ToolUp.Platform.ProviderProbeOutcome
 ToolUp.Platform.ProviderProbeOutcomeModule.reachable : ToolUp.Platform.ProviderProbeOutcome { get }
 ToolUp.Platform.ProviderProbeOutcomeModule.toHealth(ToolUp.Platform.ProviderHealth, System.DateTime, ToolUp.Platform.ProviderProbeOutcome) : ToolUp.Platform.ProviderHealth
+ToolUp.Platform.ProviderProfileApiHandler (class)
+ToolUp.Platform.ProviderProfileApiHandler.providerProfileApi(ToolUp.Platform.Providers+IProviderProfile, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IProviderProfileApi
+ToolUp.Platform.ProviderProfileApiHandler.routeHandlers(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Providers+IProviderProfile]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.ProviderStatusProbeJobHandler (class)
 ToolUp.Platform.ProviderStatusProbeJobHandler.DefaultCronExpression : System.String (literal)
 ToolUp.Platform.ProviderStatusProbeJobHandler.HandlerName : System.String (literal)

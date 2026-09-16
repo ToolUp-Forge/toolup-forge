@@ -4,9 +4,11 @@
 module ToolUp.Platform.ProviderProfileApiHandler
 
 open System
+open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Providers
+open ToolUp.Platform.RemotingHelpers
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.TeamManagement
 
@@ -411,3 +413,22 @@ let providerProfileApi (providerProfile: IProviderProfile) (ctx: HttpContext) : 
                         return! providerProfile.SetEntryHealth(scope, label, health)
                 })
     }
+
+/// The GP 13 gate, as a function rather than as a `match` buried inside
+/// `compose`: the route handlers a deployment mounts for the provider
+/// profile, given whether it registered a store.
+///
+/// `None` is the whole claim — an app that never calls
+/// `ServerApp.withProviderProfile` mounts nothing, so the surface 404s
+/// and no store is ever resolved. It is a function so that claim is
+/// something a test can execute rather than something a reader has to
+/// take on trust from a composition root nothing can call.
+///
+/// Called once, from `compose`, on the SAME gate that registers the
+/// `IProviderProfile` DI singleton — which is why composing twice (the
+/// AI path mirrors the store onto the base app, and
+/// `AIServerApp.withProviderProfile` may override it) still mounts one.
+let routeHandlers (store: IProviderProfile option) : HttpHandler list =
+    match store with
+    | None -> []
+    | Some s -> [ makeApi (providerProfileApi s) ]

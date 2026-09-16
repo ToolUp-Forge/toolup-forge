@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phase 44 — the non-AI BYOK sample's server half.
+
+    In ToolUp.Forge.sln on purpose: the claim this sample makes is that a
+    deployment can hold a full multi-provider BYOK catalogue WITHOUT the AI
+    assistant, and a sample nothing compiles cannot keep making a claim. The
+    project references Platform.Core + Platform.Server and nothing else; the
+    absence of any ToolUp.AI reference here is half the proof (the other half
+    is ProviderProfileZeroAIDependencyTests, which asserts it of the built
+    client assembly, where the component actually lives).
+
+    The client half is Fable-only and deliberately NOT in the solution, for
+    the same reason samples/MinimalClient is not.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="Server.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+        <ProjectReference Include="..\..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

@@ -86,17 +86,31 @@ type ProviderProfileConfig = {
 /// Header freshness is the `CsrfClient` request-guard's job — see
 /// `WebhookAdminUI`. `ProviderProfileApi.routeBuilder` is the default
 /// `/api/{type}/{method}` shape, so no override is needed.
-let private defaultApi: IProviderProfileApi =
+///
+/// A FUNCTION rather than a module-level value on purpose. A value here
+/// is a static initialiser that runs the moment anything in this module
+/// is touched, and the proxy builder is a browser construct — so an
+/// in-process .NET test of a pure helper beside it would fail inside a
+/// proxy it never asked for. Building it on demand keeps the browser
+/// path identical and leaves everything else in the module reachable
+/// off the browser.
+let private makeDefaultApi () : IProviderProfileApi =
     Api.makeProxy<IProviderProfileApi> (customOptions = UserSession.withRequestHeaders)
 
 module ProviderProfileConfig =
-    /// The common case: the standard proxy, no verifier, the app's own
-    /// surface keys.
-    let create (surfaces: string list) : ProviderProfileConfig = {
-        Api = defaultApi
+    /// Compose over an explicitly-supplied transport. The shape a host
+    /// uses when it proxies the API through its own route builder or
+    /// header set — and the shape an in-process test composes, since
+    /// the default proxy is a browser construct.
+    let forApi (api: IProviderProfileApi) (surfaces: string list) : ProviderProfileConfig = {
+        Api = api
         Verify = None
         Surfaces = surfaces
     }
+
+    /// The common case: the standard proxy, no verifier, the app's own
+    /// surface keys.
+    let create (surfaces: string list) : ProviderProfileConfig = forApi (makeDefaultApi ()) surfaces
 
     /// Supply the "verify this key" delegate. Without one the component
     /// renders the `NotVerified` state and never blocks a save.

@@ -2746,9 +2746,7 @@ module ServerApp =
                         // A consumer embedding `ProviderProfileUI` needs
                         // no second composition call — supplying the
                         // store IS the composition act.
-                        Handlers =
-                            app.Extensions.Handlers
-                            @ [ makeApi (ProviderProfileApiHandler.providerProfileApi store) ]
+                        Handlers = app.Extensions.Handlers @ ProviderProfileApiHandler.routeHandlers (Some store)
                         ServiceConfig =
                             match app.Extensions.ServiceConfig with
                             | None -> Some register
