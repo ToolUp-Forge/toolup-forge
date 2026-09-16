@@ -27,6 +27,7 @@ module ToolUp.AI.Client.Tests.StreamingProxyTests
 open System.Collections.Generic
 open Fable.Core
 open Fable.Core.JsInterop
+open ToolUp.Elmish
 open ToolUp.Remoting.Client
 open ToolUp.AI.Client.Tests.NodeTest
 
@@ -112,6 +113,23 @@ type private Recorder() =
 
 let private frame (id: string) (json: string) =
     sprintf "event: chunk\nid: %s\ndata: %s\n\n" id json
+
+// -- Phase 69c.tail C: the Elmish side ------------------------------
+
+/// The messages a consumer of `Cmd.OfRemoting.callStreaming` dispatches:
+/// one per element, one terminal, plus the abort handle the
+/// `callStreamingWithHandle` variant hands over.
+type StreamMsg =
+    | Chunk of TickEvent
+    | Done
+    | Failed of string
+    | Subscribed of System.IDisposable
+
+/// Run a `Cmd` the way the Elmish runtime does - every effect, once,
+/// against the supplied dispatch.
+let private run (dispatch: StreamMsg -> unit) (cmd: Cmd<StreamMsg>) =
+    cmd |> List.iter (fun effect -> effect dispatch)
+
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
@@ -298,4 +316,158 @@ let tests =
                 Expect.isEmpty recorder.Chunks "no chunk after dispose"
                 Expect.equal recorder.Completed 0 "no complete after dispose"
                 Expect.isEmpty recorder.Errors "no error after dispose")
+
+        // ─── Phase 69c.tail C — the Elmish cmd helper over that stream ───
+
+        testList "Cmd.OfRemoting.callStreaming" [
+
+            testCaseDeferred "dispatches one message per element, then the terminal complete message" 30 (fun () ->
+                scriptResponse 200 [|
+                    frame "m-0" "{\"N\":1,\"Label\":\"one\"}"
+                    + frame "m-1" "{\"N\":2,\"Label\":\"two\"}"
+                    + "event: complete\ndata: {}\n\n"
+                |]
+
+                let seen = ResizeArray<StreamMsg>()
+
+                Cmd.OfRemoting.callStreaming api.Tick { Upto = 2 } Chunk (fun () -> Done) (fun e -> Failed e.Message)
+                |> run seen.Add
+
+                fun () ->
+                    Expect.equal
+                        (List.ofSeq seen)
+                        [ Chunk { N = 1; Label = "one" }; Chunk { N = 2; Label = "two" }; Done ]
+                        "one ofChunk per element, in order, then exactly one ofComplete")
+
+            testCaseDeferred "a server error frame becomes the error message, and no complete" 30 (fun () ->
+                scriptResponse 200 [|
+                    frame "m-0" "{\"N\":1,\"Label\":\"one\"}"
+                    + "event: error\ndata: {\"message\":\"boom\"}\n\n"
+                |]
+
+                let seen = ResizeArray<StreamMsg>()
+
+                Cmd.OfRemoting.callStreaming api.Tick { Upto = 1 } Chunk (fun () -> Done) (fun e -> Failed e.Message)
+                |> run seen.Add
+
+                fun () ->
+                    match List.ofSeq seen with
+                    | [ Chunk _; Failed message ] ->
+                        Expect.isTrue (message.Contains "boom") "the server message rides the error message"
+                    | other -> failwithf "expected a chunk then a failure, got %A" other)
+
+            testCaseDeferred "a stream that never subscribes fails through ofError rather than throwing" 30 (fun () ->
+                let seen = ResizeArray<StreamMsg>()
+
+                // `null` is not a proxy-built stream — `RemoteStream.subscribe`
+                // refuses it synchronously, and the helper must report that the
+                // same way it reports a mid-stream failure.
+                Cmd.OfRemoting.callStreaming
+                    (fun (_: TickRequest) -> null: IAsyncEnumerable<TickEvent>)
+                    { Upto = 1 }
+                    Chunk
+                    (fun () -> Done)
+                    (fun e -> Failed e.Message)
+                |> run seen.Add
+
+                fun () ->
+                    match List.ofSeq seen with
+                    | [ Failed _ ] -> ()
+                    | other -> failwithf "expected exactly one failure, got %A" other)
+
+            testCaseDeferred "callStreamingWithHandle hands the abort handle over before any element" 30 (fun () ->
+                scriptResponse 200 [|
+                    frame "h-0" "{\"N\":1,\"Label\":\"one\"}" + "event: complete\ndata: {}\n\n"
+                |]
+
+                let seen = ResizeArray<StreamMsg>()
+
+                Cmd.OfRemoting.callStreamingWithHandle
+                    "TickStreamApi.Tick"
+                    api.Tick
+                    { Upto = 1 }
+                    Subscribed
+                    Chunk
+                    (fun () -> Done)
+                    (fun e -> Failed e.Message)
+                |> run seen.Add
+
+                fun () ->
+                    match List.ofSeq seen with
+                    | Subscribed _ :: rest ->
+                        Expect.equal
+                            rest
+                            [ Chunk { N = 1; Label = "one" }; Done ]
+                            "the handle arrives first, then the elements"
+                    | other -> failwithf "expected the handle first, got %A" other)
+
+            testCaseDeferred "disposing the dispatched handle silences the stream entirely" 30 (fun () ->
+                scriptResponse 200 [|
+                    frame "h-1" "{\"N\":1,\"Label\":\"one\"}" + "event: complete\ndata: {}\n\n"
+                |]
+
+                let seen = ResizeArray<StreamMsg>()
+
+                Cmd.OfRemoting.callStreamingWithHandle
+                    "TickStreamApi.Tick"
+                    api.Tick
+                    { Upto = 1 }
+                    Subscribed
+                    Chunk
+                    (fun () -> Done)
+                    (fun e -> Failed e.Message)
+                |> run (fun msg ->
+                    seen.Add msg
+
+                    match msg with
+                    | Subscribed handle -> handle.Dispose()
+                    | _ -> ())
+
+                fun () ->
+                    match List.ofSeq seen with
+                    | [ Subscribed _ ] -> ()
+                    | other -> failwithf "expected only the handle, got %A" other)
+
+            testCaseDeferred
+                "the interceptor chain runs once per subscription, carrying the element count"
+                30
+                (fun () ->
+                    scriptResponse 200 [|
+                        frame "i-0" "{\"N\":1,\"Label\":\"one\"}"
+                        + frame "i-1" "{\"N\":2,\"Label\":\"two\"}"
+                        + "event: complete\ndata: {}\n\n"
+                    |]
+
+                    let calling = ResizeArray<string>()
+                    let succeeded = ResizeArray<obj>()
+
+                    let interceptor =
+                        { new Cmd.OfRemoting.IRemotingInterceptor with
+                            member _.OnCalling(info) = calling.Add info.MethodName
+                            member _.OnSuccess(_, result) = succeeded.Add result
+                            member _.OnError(_, _) = None
+                        }
+
+                    Cmd.OfRemoting.Interceptors.register interceptor
+
+                    let seen = ResizeArray<StreamMsg>()
+
+                    Cmd.OfRemoting.callStreamingWithName
+                        "TickStreamApi.Tick"
+                        api.Tick
+                        { Upto = 2 }
+                        Chunk
+                        (fun () -> Done)
+                        (fun e -> Failed e.Message)
+                    |> run seen.Add
+
+                    fun () ->
+                        Cmd.OfRemoting.Interceptors.unregister interceptor
+                        Expect.equal (List.ofSeq calling) [ "TickStreamApi.Tick" ] "OnCalling fires once, named"
+
+                        Expect.equal
+                            (succeeded |> Seq.map unbox<int> |> List.ofSeq)
+                            [ 2 ]
+                            "OnSuccess fires once with the number of elements delivered")
+        ]
     ]

@@ -412,3 +412,147 @@ module Cmd =
             (ofError: exn -> 'msg)
             : Cmd<'msg> =
             callWithRetryAndName "<anonymous>" policy proxyCall arg ofSuccess ofError
+        // ─── Phase 69c.tail C — streaming methods ──────────────────────
+        //
+        // A proxy field shaped `'arg -> IAsyncEnumerable<'element>` is a
+        // STREAMING method (Phase 69c): the server frames each element as
+        // a server-sent `event: chunk` and the Fable proxy returns a cold
+        // `RemoteStream<'element>` behind the interface type. The consumer
+        // surface for it is `RemoteStream.subscribe` — a callback per
+        // element plus an `IDisposable` — which is a subscription, not a
+        // one-shot async, so it does not fit `call` / `callWithRetry`:
+        //   * there is no single result to hand `ofSuccess`;
+        //   * a retry policy is wrong by construction (a re-subscribe
+        //     re-sends the request and replays the stream from its start,
+        //     which for a chat turn or an ingestion feed means duplicate
+        //     elements, not a recovered call);
+        //   * the subscription outlives the effect that started it and
+        //     has to be disposable.
+        // These helpers are that shape: one message per element, exactly
+        // one terminal message, and — in `callStreamingWithHandle` — the
+        // abort handle dispatched into the consumer's own model so it can
+        // be stored beside the rest of its state (or handed to an
+        // `EffectHandle` for lifetime-managed disposal).
+        //
+        // The interceptor chain runs as it does for a request/response
+        // call, once per SUBSCRIPTION: `OnCalling` when the request is
+        // sent, then exactly one of `OnSuccess` (with the number of
+        // elements delivered, boxed) or `OnError`. Interceptors that
+        // stash a correlation id in `info.Bag` therefore see the same
+        // shape they see for every other call.
+
+        /// Internal — the one implementation behind every
+        /// `callStreaming*` variant. `onSubscribed` receives the abort
+        /// handle after the request has been sent.
+        let private subscribeWithInterceptors
+            (methodName: string)
+            (proxyStream: 'a -> System.Collections.Generic.IAsyncEnumerable<'element>)
+            (arg: 'a)
+            (onSubscribed: IDisposable -> Dispatch<'msg> -> unit)
+            (ofChunk: 'element -> 'msg)
+            (ofComplete: unit -> 'msg)
+            (ofError: exn -> 'msg)
+            : Cmd<'msg> =
+            let effect (dispatch: Dispatch<'msg>) =
+                let info = makeInfo methodName
+                Interceptors.fireOnCalling info
+
+                let mutable delivered = 0
+                let mutable settled = false
+
+                let observer: ToolUp.Remoting.Client.StreamObserver<'element> = {
+                    OnChunk =
+                        fun element ->
+                            delivered <- delivered + 1
+                            dispatch (ofChunk element)
+                    OnComplete =
+                        fun () ->
+                            if not settled then
+                                settled <- true
+                                Interceptors.fireOnSuccess info (box delivered)
+                                dispatch (ofComplete ())
+                    OnError =
+                        fun ex ->
+                            if not settled then
+                                settled <- true
+                                dispatch (ofError (Interceptors.fireOnError info ex))
+                }
+
+                try
+                    let subscription =
+                        ToolUp.Remoting.Client.RemoteStream.subscribe (proxyStream arg) observer
+
+                    onSubscribed subscription dispatch
+                with ex ->
+                    // The subscription never started (a null / non-proxy
+                    // stream, or a transport that threw synchronously).
+                    // Report it exactly as a mid-stream failure, so a
+                    // consumer never has to distinguish the two.
+                    if not settled then
+                        settled <- true
+                        dispatch (ofError (Interceptors.fireOnError info ex))
+
+            [ effect ]
+
+        /// Subscribe to a streaming proxy method, dispatching `ofChunk`
+        /// once per streamed element and then exactly one of
+        /// `ofComplete` (the server's terminal `complete` frame) or
+        /// `ofError` (the server's `error` frame, a non-200 response, a
+        /// chunk that did not deserialise, a transport failure, or a
+        /// body that ended with no terminal frame — a stream never
+        /// completes silently).
+        ///
+        /// The subscription lives until its terminal message. Use
+        /// `callStreamingWithHandle` when the consumer needs to abort it
+        /// early (navigating away, cancelling a turn, switching module).
+        let callStreaming
+            (proxyStream: 'a -> System.Collections.Generic.IAsyncEnumerable<'element>)
+            (arg: 'a)
+            (ofChunk: 'element -> 'msg)
+            (ofComplete: unit -> 'msg)
+            (ofError: exn -> 'msg)
+            : Cmd<'msg> =
+            subscribeWithInterceptors "<anonymous>" proxyStream arg (fun _ _ -> ()) ofChunk ofComplete ofError
+
+        /// As `callStreaming`, but attaches an explicit method name to
+        /// the `CallInfo` so interceptors can route / tag per-method.
+        /// Use when the call site has a meaningful name (typically the
+        /// proxy field, e.g. `"AIStreamingApi.StreamChatV2"`).
+        let callStreamingWithName
+            (methodName: string)
+            (proxyStream: 'a -> System.Collections.Generic.IAsyncEnumerable<'element>)
+            (arg: 'a)
+            (ofChunk: 'element -> 'msg)
+            (ofComplete: unit -> 'msg)
+            (ofError: exn -> 'msg)
+            : Cmd<'msg> =
+            subscribeWithInterceptors methodName proxyStream arg (fun _ _ -> ()) ofChunk ofComplete ofError
+
+        /// As `callStreamingWithName`, but also dispatches
+        /// `ofSubscribed handle` once the request has been sent, handing
+        /// the consumer the `IDisposable` that aborts the connection.
+        /// Store it in the model and `Dispose()` it to stop the stream;
+        /// nothing further is delivered after disposal (neither
+        /// `ofComplete` nor `ofError`), so an aborted stream is silent
+        /// by design — the consumer already knows it aborted.
+        ///
+        /// `ofSubscribed` is dispatched BEFORE any element, so an
+        /// `update` that stores the handle can rely on it being present
+        /// by the time the first `ofChunk` arrives.
+        let callStreamingWithHandle
+            (methodName: string)
+            (proxyStream: 'a -> System.Collections.Generic.IAsyncEnumerable<'element>)
+            (arg: 'a)
+            (ofSubscribed: IDisposable -> 'msg)
+            (ofChunk: 'element -> 'msg)
+            (ofComplete: unit -> 'msg)
+            (ofError: exn -> 'msg)
+            : Cmd<'msg> =
+            subscribeWithInterceptors
+                methodName
+                proxyStream
+                arg
+                (fun subscription dispatch -> dispatch (ofSubscribed subscription))
+                ofChunk
+                ofComplete
+                ofError
