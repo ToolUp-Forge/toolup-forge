@@ -1,6 +1,6 @@
 # Companion native-parser fuzz corpus (Phase 687)
 
-Hostile MusicXML — malformed, truncated, hostile-entity, oversized — fed to Verovio.NET's two
+Hostile MusicXML — malformed, truncated, hostile-entity, oversized, published-report — fed to Verovio.NET's two
 untrusted-input entry points (`LoadData`, `LoadZipBuffer`), **one case per capped child process**
 through the `ToolUp.Companions.Isolation` seam. The corpus is generated deterministically in
 [`FuzzCorpus.fs`](FuzzCorpus.fs); the harness and its known-findings ledger are in
@@ -55,8 +55,22 @@ answers is red until its entry is retired, an unlisted crash is red as a new fin
 | `oversized/5000-notes-in-one-measure` | **contained: timed out** at 30 s | Layout pathology; a bounded-work outcome behind the seam. |
 | `hostile/billion-laughs-entity-expansion`, both XXE shapes, `external-dtd-fetch` | **answered** (rendered) in 0.11 s, ~75 MB, no leak | **Benign.** pugixml expands no DTD entities and resolves no external ones; the original "billion laughs" attribution of the incident was an inference from the case name and is refuted by measurement. |
 
+| `published/verovio-issue-1277-harmony-root-without-child` — `<harmony><root/></harmony>` (rism-digital/verovio#1277) | **answered** on both paths in 0.7 s (measured 2026-09-18) | The reported assertion is fixed in libverovio 6.2.0. The family's containment mechanism is exercised by the ledgered `chord-with-no-first-note` fault above, not by this case; the case stays as the named, independently checkable probe the family exists for. |
+
 Every other case answers or is refused cleanly, in well under a second, with a peak resident set
 under 470 MB across the whole run.
+
+## The published-report probe
+
+The `published` family is the corpus's version of the sanity check in Bosamiya, Lim and Parno, *Provably-Safe Multilingual Software Sandboxing using WebAssembly* (USENIX Security 2022)
+([paper](https://www.jaybosamiya.com/publications/2022/usenix/provably-safe-sandboxing-wasm.pdf)): they compile a library
+carrying a known fault under their sandbox and show the fault contained. Each case here reproduces
+a fault reported publicly against libverovio's MusicXML import, from the report's own description,
+and names the upstream issue in its case name so a reader can check the shape independently of this
+repository. libverovio carries no CVE record (checked 2026-09-18), so the issue tracker is the public
+fault history the family draws on. The verdict semantics are unchanged: a case that answers is green
+and says the fix has been adopted; a case that crashes is red until it is ledgered, and the ledger
+entry is the seam's demonstrated containment of a fault anyone can name.
 
 ## Why the corpus lives here and not in Verovio.NET or a CI leg
 

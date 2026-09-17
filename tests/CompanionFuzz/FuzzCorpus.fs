@@ -7,14 +7,21 @@
 /// is readable as the intent that produced it and the corpus cannot drift
 /// from its description.
 ///
-/// Four families:
+/// Five families:
 ///   * malformed   — not XML, not MusicXML, or MusicXML with the wrong shape,
 ///                   plus fixed-seed byte mutations of a valid score;
 ///   * truncated   — a valid score cut at every tenth of its length;
 ///   * hostile     — entity attacks (XXE, billion laughs, external DTD), deep
 ///                   nesting, oversized names and attributes, control bytes,
 ///                   invalid UTF-8, numeric overflow candidates;
-///   * oversized   — thousands of measures, a text run of megabytes.
+///   * oversized   — thousands of measures, a text run of megabytes;
+///   * published   — reproductions of faults reported publicly against
+///                   libverovio's MusicXML import, cited by issue number.
+///                   This is the sanity check Bosamiya, Lim and Parno run
+///                   in "Provably-Safe Multilingual Software Sandboxing
+///                   using WebAssembly" (USENIX Security 2022) — a library
+///                   with a known fault, run under the sandbox, the fault
+///                   shown contained — in this seam's shape.
 ///
 /// **Where a case runs, and why that is not negotiable.** Every case is
 /// handed to the parser INSIDE THE ISOLATION SEAM'S OUT-OF-PROCESS WORKER
@@ -428,6 +435,25 @@ let private oversized =
             ))
     ]
 
+// ─── Published ───────────────────────────────────────────────────────
+
+/// Publicly reported libverovio MusicXML-import faults, reproduced from
+/// the report rather than fuzzed into. Each case names its upstream issue
+/// so a reader can check the shape against the report, and retire the
+/// case when the fix is adopted. libverovio carries no CVE record (checked
+/// 2026-09-18); its public fault history is its issue tracker. Verdicts
+/// are the corpus's own — a case that ANSWERS is green (the fix has been
+/// adopted upstream), one that CRASHES is red until ledgered — so what the
+/// family pins is the seam against faults a reader can independently name.
+let private published = [
+    case
+        "published"
+        "verovio-issue-1277-harmony-root-without-child"
+        // rism-digital/verovio#1277: `MusicXmlInput::ReadMusicXmlHarmony`
+        // asserted on a `<harmony>` whose `<root>` carries no child.
+        (utf8 (withMeasureTwo ("<harmony><root/></harmony>" + note "")))
+]
+
 /// The whole corpus, in the order a report lists it.
 let all: FuzzCase list =
-    List.concat [ malformed; mutations; truncated; hostile; oversized ]
+    List.concat [ malformed; mutations; truncated; hostile; oversized; published ]

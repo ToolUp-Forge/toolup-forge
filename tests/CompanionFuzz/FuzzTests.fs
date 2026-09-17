@@ -244,7 +244,7 @@ let private corpusShapeTests =
     testList "corpus shape" [
         test "every family is represented and every case name is unique" {
             let families = FuzzCorpus.all |> List.map _.Family |> List.distinct |> List.sort
-            Expect.equal families [ "hostile"; "malformed"; "oversized"; "truncated" ] "families"
+            Expect.equal families [ "hostile"; "malformed"; "oversized"; "published"; "truncated" ] "families"
 
             Expect.equal
                 (FuzzCorpus.all
