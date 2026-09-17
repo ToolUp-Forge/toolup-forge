@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Remoting.Generator.Program
+module internal ToolUp.Remoting.Generator.Program
 
 open System
 open System.IO

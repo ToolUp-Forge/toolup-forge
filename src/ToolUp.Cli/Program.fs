@@ -5,7 +5,7 @@
 /// commands are wired; later phases append their leaf (Phase 166
 /// `stamp`, Phase 168 `module add/remove`) here without touching the
 /// dispatcher or sibling commands.
-module ToolUp.Cli.Program
+module internal ToolUp.Cli.Program
 
 open ToolUp.Cli
 

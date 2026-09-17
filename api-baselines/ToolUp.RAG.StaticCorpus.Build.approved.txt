@@ -36,8 +36,6 @@ ToolUp.RAG.StaticCorpus.Packer+PackOutcome+Packed.chunkCount : System.Int32 { ge
 ToolUp.RAG.StaticCorpus.Packer+PackOutcome+Tags (class)
 ToolUp.RAG.StaticCorpus.Packer+PackOutcome+Tags.Packed : System.Int32 (literal)
 ToolUp.RAG.StaticCorpus.Packer+PackOutcome+Tags.Skipped : System.Int32 (literal)
-ToolUp.RAG.StaticCorpus.Program (class)
-ToolUp.RAG.StaticCorpus.Program.main(System.String[]) : System.Int32
 ToolUp.RAG.StaticCorpus.RawChunk (class)
 ToolUp.RAG.StaticCorpus.RawChunk..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.RAG.StaticCorpus.RawChunk.Body : System.String { get }

@@ -193,10 +193,6 @@ KnowledgeBase.ServerInventory.invalidateInventoryCache(System.String) : System.V
 KnowledgeBase.ServerInventory.kbInventoryBuilder(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 KnowledgeBase.ServerInventory.knowledgeBasePromptBuilders(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]
 KnowledgeBase.ServerInventory.publishInventoryUpdate(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-KnowledgeBase.ServerJsonHelpers (class)
-KnowledgeBase.ServerJsonHelpers.fromJson`1(System.String) : T
-KnowledgeBase.ServerJsonHelpers.jsonOptions : System.Text.Json.JsonSerializerOptions { get }
-KnowledgeBase.ServerJsonHelpers.toJson`1(a) : System.String
 KnowledgeBase.ServerNotes (class)
 KnowledgeBase.ServerNotes.buildNoteChunk(System.String, System.String, System.String, System.Int32, System.Int32, System.String) : System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+TextChunk, SharedTypes+SourceReference]
 KnowledgeBase.ServerNotes.chunkNoteBody(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]

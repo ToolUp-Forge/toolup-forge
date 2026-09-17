@@ -1,4 +1,4 @@
-module KnowledgeBase.ServerJsonHelpers
+module internal KnowledgeBase.ServerJsonHelpers
 
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson

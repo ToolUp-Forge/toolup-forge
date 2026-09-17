@@ -6,8 +6,6 @@
 ToolUp.ContentAuthoring.ContentAdminApi (class)
 ToolUp.ContentAuthoring.ContentAdminApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.ContentAuthoring.ContentAdminApi.routeBuilderPrefix : System.String (literal)
-ToolUp.ContentAuthoring.ContentAdminApiImpl (class)
-ToolUp.ContentAuthoring.ContentAdminApiImpl.create(ToolUp.Platform.IEntityStore+IEntityStore) : ToolUp.ContentAuthoring.IContentAdminApi
 ToolUp.ContentAuthoring.ContentAdminCompose (class)
 ToolUp.ContentAuthoring.ContentAdminCompose.withContentAdmin(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.ContentAuthoring.ContentAdminError (class)

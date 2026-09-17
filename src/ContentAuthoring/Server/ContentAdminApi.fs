@@ -172,7 +172,7 @@ module ContentAdminApi =
 /// surface — team-scoped entities projected into the public overlay at
 /// publish time — not a rescoped `IContentAdminApi`. That is a feature,
 /// not a tightening of this one.
-module ContentAdminApiImpl =
+module internal ContentAdminApiImpl =
 
     let private scope = PublicPageEntity.PublicScope
     let private etype = PublicPageEntity.EntityTypeName

@@ -49,8 +49,6 @@ ToolUp.Remoting.Generator.Plan.returnTypeOf(System.Type) : Microsoft.FSharp.Core
 ToolUp.Remoting.Generator.Plan.returnTypes(System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Type]
 ToolUp.Remoting.Generator.Plan.simpleName(System.Type) : System.String
 ToolUp.Remoting.Generator.Plan.typeSpelling(System.Type) : System.String
-ToolUp.Remoting.Generator.Program (class)
-ToolUp.Remoting.Generator.Program.main(System.String[]) : System.Int32
 ToolUp.Remoting.Generator.Refusal (class)
 ToolUp.Remoting.Generator.Refusal..ctor(System.String, System.String)
 ToolUp.Remoting.Generator.Refusal.RefusedType : System.String { get }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.RAG.StaticCorpus.Program
+module internal ToolUp.RAG.StaticCorpus.Program
 
 open System
 open System.IO

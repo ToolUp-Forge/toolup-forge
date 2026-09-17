@@ -6068,16 +6068,6 @@ ToolUp.Remoting.Client.HttpResponse (class)
 ToolUp.Remoting.Client.HttpResponse..ctor(System.Int32, System.String)
 ToolUp.Remoting.Client.HttpResponse.ResponseBody : System.String { get }
 ToolUp.Remoting.Client.HttpResponse.StatusCode : System.Int32 { get }
-ToolUp.Remoting.Client.InternalUtilities (class)
-ToolUp.Remoting.Client.InternalUtilities.createBlobWithMimeType(Fable.Core.U2`2[System.Byte[], System.String], System.String) : Browser.Types.Blob
-ToolUp.Remoting.Client.InternalUtilities.createFileReader() : Browser.Types.FileReader
-ToolUp.Remoting.Client.InternalUtilities.createFormData() : System.Object
-ToolUp.Remoting.Client.InternalUtilities.createObjectUrl(Browser.Types.Blob) : System.String
-ToolUp.Remoting.Client.InternalUtilities.createUInt8Array`1(a) : System.Byte[]
-ToolUp.Remoting.Client.InternalUtilities.isUInt8Array(System.Object) : System.Boolean
-ToolUp.Remoting.Client.InternalUtilities.readBlobAsText(Browser.Types.Blob) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
-ToolUp.Remoting.Client.InternalUtilities.revokeObjectUrl(System.String) : System.Void
-ToolUp.Remoting.Client.InternalUtilities.toUInt8Array(System.Byte[]) : System.Byte[]
 ToolUp.Remoting.Client.Proxy (class)
 ToolUp.Remoting.Client.Proxy.combineRouteWithBaseUrl(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
 ToolUp.Remoting.Client.Proxy.getReturnType(System.Type) : System.Type

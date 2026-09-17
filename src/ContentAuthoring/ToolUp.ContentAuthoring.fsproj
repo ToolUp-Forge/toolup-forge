@@ -21,6 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Phase 256 — `ContentAdminApiImpl` is assembly-private (the compose root is the only production
+         caller); the Platform pack constructs it directly for the authorization tests. -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="Server\ContentTypeBridge.fs" />
     <Compile Include="Server\ContentLifecycle.fs" />
     <Compile Include="Server\ContentAdminApi.fs" />
