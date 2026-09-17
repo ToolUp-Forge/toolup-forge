@@ -214,44 +214,85 @@ strand a client whose backlog grew past the limit.
 
 ### What is emitted
 
-Opt in with `OfflineSyncOptions.withAuditEventStore`. An **applied** replay then writes one
-`ModuleEvent` with:
+Opt in with `OfflineSyncOptions.withAuditLog`, passing **the `IAuditLog` the entity store is
+composed with** (resolve it from DI). An **applied** replay then records, through
+`IAuditLog.Record`, exactly one lifecycle row for the version it produced:
 
-- `OccurredAt` = the mutation's `EnqueuedAt` (origination, **not** application time)
-- `SourceModule` = `AuditSourceModule.value`
 - `EventType` = `EntityCreated` (new version 1) / `EntityUpdated` / `EntityDeleted`
-- `Payload` = an `EntityLifecycleEventPayload` carrying the **resolved caller's** user id
+- `Payload` = an `EntityLifecycleEventPayload` carrying the **resolved caller's** user id (not
+  `"system"`) and, in `Replay`, an `EntityReplayProvenance`:
+
+  | Field | Value |
+  |---|---|
+  | `OriginatedAt` | the mutation's `EnqueuedAt` — when the user made the edit, on the originating device's clock |
+  | `ReplayedAt` | the server clock when the replay was applied |
+  | `MutationId` | the offline queue's mutation id — the origin marker |
+
+- the row's own `OccurredAt` = the **write** time, as for every other audit row (see below for why
+  this is not the origination time)
+
+`withAuditEventStore` — the Phase 24 shape — still compiles: it is `withAuditLog` over the
+SDK-default `EventStoreAuditLog` on that store, with a silent logger.
 
 A **conflicted** or **rejected** replay emits nothing — nothing was written, so auditing it would
 record a write that did not happen.
 
-### Why `IEventStore` and not `IAuditLog`
+### The worked example
 
-`IAuditLog.Record(scopeId, event)` accepts neither fact this phase requires. It builds the envelope
-internally with `Events.create`, which stamps `DateTime.UtcNow`; and `BlobEntityStore` hard-codes
-`UserId = "system"` in its own emission, because `IEntityStore.Save` does not carry caller identity.
-Writing the `ModuleEvent` directly — with the same source module, event-type name and payload shape
-the audit codec expects — is the only path that preserves both. `AuditReplicator` rebuilds the
-`AuditEnvelope` from `modEvt.OccurredAt`, so downstream sinks see the origination time with **no
-sink-side change**.
+An inspection edited at **09:14** in a tunnel and synced at **11:02** by `alice`, whose deployment
+composes `BlobEntityStore` with the same `EventStoreAuditLog` the handler is given, leaves ONE row:
 
-### The known consequence, stated rather than hidden
+| `OccurredAt` | `EventType` | `UserId` | `Replay.OriginatedAt` | `Replay.ReplayedAt` | `Replay.MutationId` |
+|---|---|---|---|---|---|
+| 11:02:00.317 | `EntityUpdated` | `alice` | 09:14:00 | 11:02:00.312 | `m-8c2f…` |
 
-When the entity store is **also** composed with an `IAuditLog`, an applied replay produces **two**
-lifecycle rows for the same entity version:
+`IAuditLog.GetAuditTrail` returns the event, not the envelope, so a reader of the trail sees the two
+timestamps side by side in the payload — which is why `ReplayedAt` is carried explicitly rather than
+left to the envelope. A live write by the same user through the ordinary API leaves the row it
+always did — `UserId = "system"`, `Replay = None` — byte for byte.
 
-| Row | `UserId` | `OccurredAt` | Records |
-|---|---|---|---|
-| the store's | `"system"` | application time | that the write landed |
-| this one | the real user | origination time | that the user made the edit |
+### How the store's own row is collapsed (Phase 759)
 
-They are distinguishable by `UserId` and they record genuinely different facts, but they are **not
-deduplicated**. Collapsing them cleanly needs a dedicated `AuditEvent.OfflineMutationReplayed` case,
-which is a breaking union-case addition to `ToolUp.Platform.Core` — it ripples into `AuditTypes.fs`,
-the `AuditLog` codec registry, every exhaustive match over the union (FS0025 is an error tree-wide),
-the CEF formatter, and three api-baselines. That is deliberately outside this phase's scope, and it
-is why the emission is opt-in: a deployment that does not need origination-time audit pays neither
-the second row nor the cost.
+`BlobEntityStore.Save` / `Delete` emit a generic lifecycle row from inside the call, stamped
+`UserId = "system"` because `IEntityStore` does not carry caller identity. Before Phase 759 an
+applied replay therefore produced **two** rows for one version — the store's and the handler's —
+distinguishable by `UserId` but never deduplicated.
+
+The handler now applies each mutation under `EntityAuditReplayScope.run entityType entityId` (an
+`AsyncLocal` in `ToolUp.Platform.AuditLog`, the same shape as the request-scope context in `Api.fs`).
+While the scope is active on that async flow, `EventStoreAuditLog.Record` drops a lifecycle row for
+that entity whose `Replay` is `None` — the store's generic one — and the handler's provenance-carrying
+row, recorded immediately after, is the only one that lands. Three properties hold by construction:
+
+- **Never global.** The scope is set for the duration of one store write on one async flow and
+  restored on every exit path; an unrelated emission on the same flow (a different entity) is
+  untouched, and a deployment that never composes the handler never enters it.
+- **Never a lost row.** The scope is entered only when the handler has an `AuditLog` to record its
+  own row through. With no audit log on the handler, the store's generic row stands exactly as it
+  did before — opting out of provenance never opts out of audit.
+- **Not a seam change.** `IEntityStore.Save` keeps its arity (GP 11); a "suppress audit" flag threaded
+  through the store's signature would have widened the seam every store implementation and consumer
+  compiles against, and a decorator cannot reach an emission that happens inside the call.
+
+The Offline test pack pins this against a **real** `BlobEntityStore` over `LocalFileStorage` +
+`EventStoreAuditLog` + `InMemoryEventStore`: a replayed create, a live update, a replayed update and
+a replayed delete leave exactly four rows, and the same composition with no audit log on the handler
+leaves the store's single `"system"` row.
+
+### Why `OccurredAt` is the write time — the Phase 24 premise this phase refutes
+
+Phase 24 wrote the `ModuleEvent` directly to `IEventStore` with `OccurredAt = EnqueuedAt`, on the
+reasoning that `AuditReplicator` rebuilds the envelope from `modEvt.OccurredAt`, so sinks would see
+the origination time with no sink-side change. That reasoning missed the replicator's **cursor**:
+`AuditReplicatorCursor.isAfter` keeps only rows with `OccurredAt` past the sink's last delivery, and
+`JobTriggerCursor.isAfter` has the same shape. A row backdated to 09:14 written into a scope
+whose sink last delivered at 10:30 was never replicated at all — the origination time reached no
+sink, because the row did not. The Offline pack pins both directions: the write-time row is after
+such a cursor, and the same row backdated the Phase 24 way is behind it.
+
+So the origination time rides the **payload**, where the codec, `GetAuditTrail`, the replicator and
+every sink (the `IAuditSink` contract pack carries a pass-through case) hand it on untouched, and the
+envelope's `OccurredAt` keeps the one meaning it has everywhere else: when the row was recorded.
 
 ### Six-rule portability audit — `IOfflineQueue`
 
@@ -274,12 +315,15 @@ The same rules are why `InMemoryOfflineQueue` is possible at all, and both imple
 `src/ToolUp.Offline.Tests` (Expecto pack `Offline`, wired into `VerifyAll`) covers the pure half:
 the retry schedule including its overflow clamps, the status derivation and its documented
 precedence, the queue-stats fold, the wire-name round trips, the ISO timestamp round trip the
-IndexedDB queue depends on, `DrainSelection`, and the handler's three guards against a fake
-`IEntityStore` and a capturing `IEventStore`.
+IndexedDB queue depends on, `DrainSelection`, the handler's three guards against a fake
+`IEntityStore` and a capturing `IEventStore`, and — against a real `BlobEntityStore` composed with
+`EventStoreAuditLog` — the Phase 759 one-row-per-replayed-version regression, the provenance round
+trip through `GetAuditTrail`, the replicator-cursor pin and the pre-759 payload decode.
 
 Each guard has a **paired go-red** in the suite: the scope test also asserts that the *matching*
-scope applies, and the conflict test also asserts that the *matching* version applies — so a guard
-that refused everything would fail too.
+scope applies, the conflict test also asserts that the *matching* version applies, and the
+replay-scope test also asserts that the store's own row stands when the handler has no audit log —
+so a guard that refused everything, or a suppression that were global, would fail too.
 
 The IndexedDB and Feliz surfaces are browser-only; they ride the Fable compile gate
 (`samples/MinimalClient`) rather than this pack. The worked end-to-end example in the phase's
