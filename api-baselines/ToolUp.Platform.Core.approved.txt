@@ -5029,10 +5029,11 @@ ToolUp.Platform.EntityGraphProjectionMode+Tags (class)
 ToolUp.Platform.EntityGraphProjectionMode+Tags.EnabledEntityGraphProjection : System.Int32 (literal)
 ToolUp.Platform.EntityGraphProjectionMode+Tags.NoEntityGraphProjection : System.Int32 (literal)
 ToolUp.Platform.EntityLifecycleEventPayload (class)
-ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityReplayProvenance])
+ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
 ToolUp.Platform.EntityLifecycleEventPayload.EntityId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.EntityType : System.String { get }
-ToolUp.Platform.EntityLifecycleEventPayload.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityReplayProvenance] { get }
+ToolUp.Platform.EntityLifecycleEventPayload.OnBehalfOf : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EntityLifecycleEventPayload.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance] { get }
 ToolUp.Platform.EntityLifecycleEventPayload.UserId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.Version : System.Int32 { get }
 ToolUp.Platform.EntityLock (class)
@@ -5154,11 +5155,6 @@ ToolUp.Platform.EntityQueryTypes+SortDirection.Tag : System.Int32 { get }
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags (class)
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags.Ascending : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags.Descending : System.Int32 (literal)
-ToolUp.Platform.EntityReplayProvenance (class)
-ToolUp.Platform.EntityReplayProvenance..ctor(System.DateTime, System.DateTime, System.String)
-ToolUp.Platform.EntityReplayProvenance.MutationId : System.String { get }
-ToolUp.Platform.EntityReplayProvenance.OriginatedAt : System.DateTime { get }
-ToolUp.Platform.EntityReplayProvenance.ReplayedAt : System.DateTime { get }
 ToolUp.Platform.EntityStoreMode (class)
 ToolUp.Platform.EntityStoreMode.EnabledEntityStore : ToolUp.Platform.EntityStoreMode { get }
 ToolUp.Platform.EntityStoreMode.IsEnabledEntityStore : System.Boolean { get }
@@ -5185,6 +5181,17 @@ ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToMany : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToOne : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToMany : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToOne : System.Int32 (literal)
+ToolUp.Platform.EntityTypes+EntityActor (class)
+ToolUp.Platform.EntityTypes+EntityActor..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
+ToolUp.Platform.EntityTypes+EntityActor.OnBehalfOf : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EntityTypes+EntityActor.Principal : System.String { get }
+ToolUp.Platform.EntityTypes+EntityActor.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance] { get }
+ToolUp.Platform.EntityTypes+EntityActorModule (class)
+ToolUp.Platform.EntityTypes+EntityActorModule.SystemPrincipal : System.String (literal)
+ToolUp.Platform.EntityTypes+EntityActorModule.ofPrincipal(System.String) : ToolUp.Platform.EntityTypes+EntityActor
+ToolUp.Platform.EntityTypes+EntityActorModule.onBehalfOf(System.String, ToolUp.Platform.EntityTypes+EntityActor) : ToolUp.Platform.EntityTypes+EntityActor
+ToolUp.Platform.EntityTypes+EntityActorModule.replaying(ToolUp.Platform.EntityTypes+EntityReplayProvenance, ToolUp.Platform.EntityTypes+EntityActor) : ToolUp.Platform.EntityTypes+EntityActor
+ToolUp.Platform.EntityTypes+EntityActorModule.system : ToolUp.Platform.EntityTypes+EntityActor { get }
 ToolUp.Platform.EntityTypes+EntityError (class)
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidEntityShape : System.Boolean { get }
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidIndex : System.Boolean { get }
@@ -5249,6 +5256,11 @@ ToolUp.Platform.EntityTypes+EntityRegistration`1.EntityType : System.String { ge
 ToolUp.Platform.EntityTypes+EntityRegistration`1.FullTextFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, System.String]]] { get }
 ToolUp.Platform.EntityTypes+EntityRegistration`1.Indexes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityIndex`1[T]] { get }
 ToolUp.Platform.EntityTypes+EntityRegistration`1.Relationships : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+Relationship] { get }
+ToolUp.Platform.EntityTypes+EntityReplayProvenance (class)
+ToolUp.Platform.EntityTypes+EntityReplayProvenance..ctor(System.DateTime, System.DateTime, System.String)
+ToolUp.Platform.EntityTypes+EntityReplayProvenance.MutationId : System.String { get }
+ToolUp.Platform.EntityTypes+EntityReplayProvenance.OriginatedAt : System.DateTime { get }
+ToolUp.Platform.EntityTypes+EntityReplayProvenance.ReplayedAt : System.DateTime { get }
 ToolUp.Platform.EntityTypes+JoinEntitySpec (class)
 ToolUp.Platform.EntityTypes+JoinEntitySpec..ctor(System.String, System.String)
 ToolUp.Platform.EntityTypes+JoinEntitySpec.EntityType : System.String { get }

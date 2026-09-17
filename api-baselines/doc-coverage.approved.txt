@@ -59,7 +59,7 @@ ToolUp.Cloud.Azure 0/0
 ToolUp.Cloud.Gcp 0/0
 ToolUp.Companions.Isolation 65/130
 ToolUp.ContainerSchedulers.DockerLocal 7/58
-ToolUp.ContentAuthoring 32/74
+ToolUp.ContentAuthoring 33/74
 ToolUp.ContentScanners.ClamAv 15/25
 ToolUp.DataSources.Athena 13/16
 ToolUp.DataSources.BigQuery 12/15
@@ -117,14 +117,14 @@ ToolUp.NotificationChannels.Sms.Twilio 3/17
 ToolUp.OcrProviders.Tesseract 24/37
 ToolUp.Offline.Client 47/101
 ToolUp.Offline.Core 58/151
-ToolUp.Offline.Server 19/36
+ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 102/298
 ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 251/499
 ToolUp.Platform.Client 2193/6468
-ToolUp.Platform.Core 5251/13367
-ToolUp.Platform.Server 5487/11108
+ToolUp.Platform.Core 5261/13379
+ToolUp.Platform.Server 5488/11118
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062
