@@ -520,6 +520,17 @@ type InProcessJobScheduler
         | OnEvent _
         | Manual -> None
 
+    /// Phase 766 — is `job` still due for the tick at `tickAt`? The same
+    /// predicate `IJobStore.DueJobs` selects on (`NextRunAt <= now`), so a
+    /// job this returns `false` for would not be in a fresh `DueJobs`
+    /// listing at that instant. `None` is never due: a sibling's run
+    /// leaves a cron with no further occurrence at `None`, and a job that
+    /// was never cron-scheduled has nothing to be due for.
+    let stillDueAt (tickAt: DateTime) (job: JobDefinition) : bool =
+        match job.NextRunAt with
+        | Some next -> next <= tickAt
+        | None -> false
+
     // ─── Single dispatch attempt + retry loop ────────────────────
 
     /// Run one full retry loop for a job. Records every attempt to
@@ -540,15 +551,11 @@ type InProcessJobScheduler
     /// failed retriably would get `MaxAttempts` fresh submissions on every
     /// external failure, i.e. `MaxAttempts²` in total, and would never
     /// dead-letter as long as the backend kept failing retriably.
-    let dispatchFrom (startAttempt: int) (job: JobDefinition) (source: TriggerSource) (scheduledAt: DateTime) = async {
-        // Phase 9i — wait for the job's dispatch lease. `acquireBlocking`
-        // preserves the `SemaphoreSlim.WaitAsync` semantics this replaced
-        // (a concurrent tick for the same job queues rather than being
-        // dropped); the primitive itself is fail-fast, so a distributed
-        // scheduler that would rather skip a contended tick uses
-        // `TryAcquire` directly.
-        let! dispatchLease = DistributedLock.acquireBlocking jobLock (jobLockId job.JobId) dispatchLeaseTtl
-
+    ///
+    /// Phase 766 — runs ONLY under `dispatchLease`, which `dispatchFrom`
+    /// below has already won (by election for a cron tick, by queueing for
+    /// every other source). The lease is released on every exit path here.
+    let dispatchHolding dispatchLease startAttempt (job: JobDefinition) (source: TriggerSource) scheduledAt = async {
         // Phase 9l — start a child activity per dispatch so the
         // OTel span tree links job run → audit emission →
         // notification publish back to whatever request scheduled
@@ -610,6 +617,23 @@ type InProcessJobScheduler
             match current with
             | None -> ()
             | Some j when j.Status <> Active -> ()
+            | Some j when source = ScheduledByCron && not (stillDueAt scheduledAt j) ->
+                // Phase 766 — the second election condition. Winning the
+                // lease says nothing about whether the occurrence this
+                // tick was dispatched for still exists: a sibling that won
+                // an earlier contest for the same due job has, by the time
+                // we hold the lease, run it and advanced `NextRunAt` past
+                // our tick. Re-checking `Status` alone would run it again.
+                logger.Info(
+                    sprintf
+                        "[JobScheduler] event=cron_tick_skipped_not_due jobId=%O scope=%s scheduledAt=%s nextRunAt=%s — a sibling replica already advanced this job past the tick"
+                        j.JobId
+                        j.ScopeId
+                        (scheduledAt.ToString "o")
+                        (j.NextRunAt
+                         |> Option.map (fun n -> n.ToString "o")
+                         |> Option.defaultValue "<none>")
+                )
             | Some _ when outstanding.IsSome ->
                 let awaiting = outstanding.Value
 
@@ -959,6 +983,52 @@ type InProcessJobScheduler
         finally
             releaseJobLease dispatchLease
             dispatchActivityOpt |> Option.iter _.Dispose()
+    }
+
+    /// Take the job's dispatch lease, then run `dispatchHolding` under it.
+    ///
+    /// Phase 9i introduced the per-`JobId` lease; Phase 766 made the cron
+    /// tick an ELECTION over it. How the lease is taken depends on who is
+    /// asking:
+    ///
+    /// - **`ScheduledByCron` — `TryAcquire`, and the loser SKIPS.** Every
+    ///   replica's tick reads the same due job from shared state, so a
+    ///   contended lease here means a sibling is already running this
+    ///   occurrence. Queueing behind it (the pre-766 `acquireBlocking`)
+    ///   was the genuine double-run: the loser eventually won the lease,
+    ///   re-read a job that was `Active` with nothing outstanding, and ran
+    ///   it a second time. Returning immediately is the first of the two
+    ///   skip conditions; the in-lease due-ness re-read in
+    ///   `dispatchHolding` is the second, for the loser whose `TryAcquire`
+    ///   lands only after the winner has released.
+    /// - **Every other source — `acquireBlocking`, queue semantics.** A
+    ///   manual trigger, an event trigger, a back-fill or a reconciliation
+    ///   continuation is a request for THIS run, not for "the occurrence
+    ///   the clock produced"; dropping it because a sibling dispatch was
+    ///   in flight would lose the request. This preserves the
+    ///   `SemaphoreSlim.WaitAsync` semantics Phase 9i migrated from.
+    let dispatchFrom (startAttempt: int) (job: JobDefinition) (source: TriggerSource) (scheduledAt: DateTime) = async {
+        let lockId = jobLockId job.JobId
+
+        let! held = async {
+            match source with
+            | ScheduledByCron -> return! jobLock.TryAcquire(lockId, dispatchLeaseTtl)
+            | ScheduledByEvent _
+            | ScheduledManually _ ->
+                let! lease = DistributedLock.acquireBlocking jobLock lockId dispatchLeaseTtl
+                return Some lease
+        }
+
+        match held with
+        | Some dispatchLease -> do! dispatchHolding dispatchLease startAttempt job source scheduledAt
+        | None ->
+            logger.Info(
+                sprintf
+                    "[JobScheduler] event=cron_tick_skipped_contended jobId=%O scope=%s scheduledAt=%s — another replica holds the dispatch lease for this occurrence"
+                    job.JobId
+                    job.ScopeId
+                    (scheduledAt.ToString "o")
+            )
     }
 
     /// A dispatch that begins its retry counter at attempt 1 — every
@@ -2015,6 +2085,22 @@ type InProcessJobScheduler
     /// watermark. Public for operational tooling and tests — the
     /// hosted-service loop calls it on the cadence documented above.
     member _.RunCatchUpScan(startup: bool) : Async<unit> = runCatchUpScan startup
+
+    /// Phase 766 — run one cron tick on demand, as the hosted-service loop
+    /// would at the minute boundary `now`: dispatch every job
+    /// `IJobStore.DueJobs` reports due at `now` (fire-and-forget, each
+    /// under the Phase 766 election), then reconcile external hand-offs.
+    /// Returns once the dispatches have been STARTED, not once they have
+    /// run — exactly the loop's own contract.
+    ///
+    /// Public for operational tooling and for tests, for the same reason
+    /// `RunCatchUpScan` and `ReconcileAwaitingExternal` are: the cadence
+    /// lives in `ExecuteAsync`, which only ASP.NET Core hosting starts,
+    /// and a two-replica election cannot be placed against a wall clock.
+    /// Not a substitute for the hosted loop — it records no drift, and a
+    /// caller supplying a `now` behind the wall clock re-dispatches
+    /// nothing that has already been advanced past it.
+    member _.RunTick(now: DateTime) : Async<unit> = runTick now
 
     /// Phase 319 — run one external-hand-off reconciliation pass on
     /// demand: poll every `AwaitingExternal` run's persisted handle and

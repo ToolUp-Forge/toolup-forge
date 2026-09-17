@@ -6140,6 +6140,7 @@ ToolUp.Platform.JobScheduler+InProcessJobScheduler.ExecuteAsync(System.Threading
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ProgressSink : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobProgressSink] { get }
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ReconcileAwaitingExternal() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunTick(System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
 ToolUp.Platform.JobScheduler+JobCompletedPayload..ctor(System.Guid, System.String, System.String, System.Guid, System.Int32, System.Int64)
 ToolUp.Platform.JobScheduler+JobCompletedPayload.Attempt : System.Int32 { get }
