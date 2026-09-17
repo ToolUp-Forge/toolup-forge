@@ -396,8 +396,8 @@
         <Compile Include="Shared\NarrativeRenderers.fs" />
         <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
              compiled before SDK.Shared.fs so ServerConfig can carry an
-             AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
-             (after SDK.Shared.fs, needs ModuleEvent) references it back. -->
+             AuditSamplingPolicy field. Depends only on Guid; Audit\AuditSubject.fs
+             (after SDK.Shared.fs) references it back. -->
         <Compile Include="Shared\Types\AuditSampling.fs" />
         <!-- Phase 179 — locale + translation primitives (LocaleCode /
              TranslationKey / Translations) + the I18nCoverageMode policy DU,
@@ -427,7 +427,7 @@
              SubmitterClass — which is also why the denial's projection onto
              ExternalComputeError lives Server-side (precedence cannot be
              mutual; see the file header). Before SDK.Shared.fs (ServerConfig
-             carries a `ComputeBudget` field), AuditTypes.fs (the denial rides
+             carries a `ComputeBudget` field), Audit\SessionAuditPayloads.fs (the denial rides
              two audit payloads) and ModelExecutionWire.fs (it rides the typed
              peer refusal, plan decision D6). Pure / Fable-safe — the cost
              model and the store are Server-tier. -->
@@ -478,7 +478,7 @@
         <Compile Include="Shared\Config\ServerConfigFromEnv.fs" />
         <!-- Phase 9u — the event-store decorator chain's position model
              (IEventStoreDecorator + the EventStoreChain walk/check). After
-             SDK.Shared.fs, which declares the IEventStore it decorates;
+             ModuleEvents.fs, which declares the IEventStore it decorates;
              before Server\EventStoreChainValidator.fs in Platform.Server,
              which is the preflight guard over it. Pure / Fable-safe
              (interface + records + list folds, no reflection beyond
@@ -488,7 +488,7 @@
         <Compile Include="Shared\RateLimitDescriptor.fs" />
         <!-- Phase 30a — signed module artefact format (ArtifactManifest,
              SignedArtifact, ArtifactValidation, PublisherKeyId). Compiled
-             before AuditTypes.fs so audit payload types can reference the
+             before the Shared\Audit lane files so audit payload types can reference the
              publisher-key-id shape via string projections without circular
              dependencies. -->
         <Compile Include="Shared\Types\ArtifactTypes.fs" />

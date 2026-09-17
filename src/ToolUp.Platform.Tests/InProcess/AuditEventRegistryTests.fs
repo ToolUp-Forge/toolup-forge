@@ -312,7 +312,7 @@ module private AuditEventReference =
         sb.AppendLine "" |> ignore
 
         sb.AppendLine
-            "Payload record definitions live beside the union in `src/ToolUp.Platform.Core/Shared/AuditTypes.fs`; each case carries a doc comment explaining when it is emitted."
+            "Payload record definitions live in the `src/ToolUp.Platform.Core/Shared/Audit/*AuditPayloads.fs` lane files compiled before the union; each case carries a doc comment explaining when it is emitted."
         |> ignore
 
         // Normalise to `\n` so the golden comparison is stable across

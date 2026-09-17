@@ -23,7 +23,7 @@ open System.Text
 // are SHA-256-addressed server-side compute types (`System.Security.
 // Cryptography` is not Fable-compilable), so the artifact model is forced
 // server-side too. The audit payloads that cross into persisted
-// `ModuleEvent`s stay in `Core/Shared/AuditTypes.fs`; they carry only the
+// `ModuleEvent`s stay in `Core/Shared/Audit/ModelAuditPayloads.fs`; they carry only the
 // composite-key strings the registry computes here. (Registry *query
 // results* becoming a client surface is plan risk #8 — a later Fable-facing
 // projection, not this phase.)

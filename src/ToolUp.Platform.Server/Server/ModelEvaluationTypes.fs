@@ -27,7 +27,7 @@ open System.Security.Cryptography
 // client view in this phase (the phase key-files named a `Server/Shared/`
 // folder that does not exist — the nearest correct home is `Server/`,
 // mirroring Phase 449/453). The audit payload that crosses into persisted
-// `ModuleEvent`s stays in `Core/Shared/AuditTypes.fs`.
+// `ModuleEvent`s stays in `Core/Shared/Audit/ModelAuditPayloads.fs`.
 
 // ─── Phase 652 — evaluation plans: masked + rolling fold families ───────
 //
