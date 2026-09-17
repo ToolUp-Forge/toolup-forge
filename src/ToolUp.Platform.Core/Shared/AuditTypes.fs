@@ -21,6 +21,11 @@ open System
 /// reads on this constant returns the audit trail only — `ReadBySource`
 /// is the canonical query path.
 module AuditSourceModule =
+    /// The reserved source-module name every `IAuditLog.Record` write
+    /// carries. Read it back with `IEventStore.ReadBySource` to get the
+    /// audit trail and nothing else; write it only through the seam —
+    /// a `ModuleEvent` hand-built on this name bypasses the codec, the
+    /// failure policy and (Phase 759) the replay scope.
     [<Literal>]
     let value = "_platform.audit"
 

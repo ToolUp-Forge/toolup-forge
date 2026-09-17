@@ -1017,6 +1017,9 @@ type MetricsSinkConfig = {
 }
 
 module MetricsSinkConfig =
+    /// The shipped cardinality guard: 1000 series per metric, no
+    /// per-metric override. Widen a single metric's ceiling with
+    /// `PerMetricMaxSeries` rather than raising this default.
     let defaults: MetricsSinkConfig = {
         MaxSeriesPerMetric = 1000
         PerMetricMaxSeries = Map.empty

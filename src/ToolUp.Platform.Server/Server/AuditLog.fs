@@ -1989,7 +1989,7 @@ type AuditWriteRefusedException(scopeId: string, eventType: string, inner: exn) 
 /// arity widening GP 11 forbids, and a per-call decorator cannot reach
 /// an emission that happens inside the call. Request-scoped context
 /// rides the async chain by design here (GP 7 — the same shape as
-/// `Api.requestScopeId`), and the scope is keyed by `(entityType,
+/// `ApiSeams.requestScopeId`), and the scope is keyed by `(entityType,
 /// entityId)` so an unrelated emission on the same flow is untouched.
 /// It is honoured by `EventStoreAuditLog.Record` — the SDK-default
 /// `IAuditLog` — and only for a lifecycle row whose `Replay` is `None`:
