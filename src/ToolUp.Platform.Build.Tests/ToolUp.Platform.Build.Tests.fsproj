@@ -72,6 +72,14 @@
              guessed, a second run is a no-op, BOM + CRLF survive). Pure over
              a scratch copy of the fixtures; no build, no tool, no process. -->
         <Compile Include="CodemodTests.fs" />
+        <!-- Phase 257 — the v1.0 readiness scorecard. Source-linked from
+             the repo root for the same reason SemVerBump.fs above is: the
+             V1Readiness target and these all-green / one-red-per-cause
+             fixtures run one implementation. Compiled after
+             ConformanceCoverage.fs, whose derivation the target's
+             coverage row reads. -->
+        <Compile Include="..\..\V1Readiness.fs" Link="V1Readiness.fs" />
+        <Compile Include="V1ReadinessTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

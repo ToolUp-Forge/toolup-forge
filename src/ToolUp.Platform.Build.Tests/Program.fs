@@ -56,6 +56,11 @@ let private registeredTests =
         // second run is a no-op, BOM + CRLF survive). Pure over a scratch copy
         // of the fixtures; no build, no tool restore, no process.
         CodemodTests.tests
+        // Phase 257 — the v1.0 readiness scorecard: a known-good fixture
+        // scores all-green, one fixture per cause scores that row red,
+        // every unavailable input is an explicit not-yet row, and the
+        // committed inputs parse. Pure over strings; no git, no network.
+        V1ReadinessTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
