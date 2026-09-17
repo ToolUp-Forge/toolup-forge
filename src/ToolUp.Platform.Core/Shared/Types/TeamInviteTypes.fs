@@ -188,7 +188,7 @@ module TeamInviteTypes =
     /// rather than an archive (the full history remains queryable via
     /// `IAuditLog.GetAuditTrail`).
     let ExpiredInviteWindow: TimeSpan = TimeSpan.FromDays 30.0
-// (Audit payload records live in `AuditTypes.fs` alongside the other
-// share-token audit payloads — appended at the end of that file. The
+// (Audit payload records live in `Shared/Audit/AccessAuditPayloads.fs`,
+// the lane that owns the invite payloads since Phase 347. The
 // `AuditEvent` DU and its `eventTypeName` projection are extended in
 // the same file with the five `TeamInvite*` cases.)

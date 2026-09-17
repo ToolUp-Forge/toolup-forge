@@ -10,7 +10,7 @@ namespace ToolUp.Platform
 // into `Types/LocaleTypes.fs` (Phase 179) so they compile before
 // `SDK.Shared.fs` and `ServerConfig` can carry i18n fields. This file
 // keeps the `ErrorCode` / `ApiError` envelope, which depends on
-// `RateLimitedError` (defined mid-way through `SDK.Shared.fs`) and so
+// `RateLimitedError` (defined in `Config/InboundRateLimitTypes.fs`) and so
 // must compile after it. Same `ToolUp.Platform` namespace, so the
 // split needs no `open`.
 

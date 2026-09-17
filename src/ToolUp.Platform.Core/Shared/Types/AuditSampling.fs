@@ -11,10 +11,11 @@ open System
 // into its own file compiled BEFORE SDK.Shared.fs so `ServerConfig` can
 // carry an `AuditSamplingPolicy` field. The type depends only on
 // `AuditSubjectKind` + `Guid` — neither needs `ModuleEvent` (which lives
-// in SDK.Shared.fs), so both can compile ahead of the config record.
-// `AuditSubjectKind` lives here (rather than in AuditTypes.fs) because
-// `AuditSamplingPolicy.rateFor` matches on it; AuditTypes.fs's
-// `AuditSubject.kind` / `kindString` reference it from this earlier file.
+// in Shared/ModuleEvents.fs since Phase 347), so both can compile ahead of
+// the config record. `AuditSubjectKind` lives here (rather than beside
+// `AuditSubject`) because `AuditSamplingPolicy.rateFor` matches on it;
+// Shared/Audit/AuditSubject.fs's `AuditSubject.kind` / `kindString`
+// reference it from this earlier file.
 
 /// Lightweight kind tag for `AuditSubject`. Mirrors `SubjectKind` (the
 /// four-case discriminator for the request-side `Subject`) so audit-side

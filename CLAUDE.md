@@ -298,7 +298,8 @@ When adding a new store substrate (an `IXxxStore` + its types), the canonical sp
   types use `System.Security.Cryptography`, which is not Fable-compilable, and belong in
   `Platform.Server/Server/` even though "types" usually go to Core.
 - **Opt-in wiring (GP 13):** an `XxxStoreMode` DU + a `ServerConfig.Xxx` field defaulting to `NoXxx`
-  in `SDK.Shared.fs`; a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
+  (the DU under `Shared/Config/`, the field in `SDK.Shared.fs`, its default in
+  `Shared/Config/ServerConfigFromEnv.fs`); a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
   (`TryAddSingleton` with a lazy factory); called from `Server/SDK.Server.fs` next to
   `registerTimeSeriesStore`. Note a new `ServerConfig` field retypes the record ctor and forces a
   Core api-baseline regen (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).

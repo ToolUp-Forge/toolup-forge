@@ -284,7 +284,7 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > otherwise claim an arbitrary multiple of the anonymous budget. Per-shape
 > budgets are independent, so an anonymous burst cannot consume authenticated
 > headroom.
-> **Evidence:** `src/ToolUp.Platform.Core/Shared/SDK.Shared.fs`
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Config/RuntimeModes.fs`
 > (`module RateLimitPolicy`, `partitionFor`) ·
 > `src/ToolUp.Platform.Server/Server/RateLimiting.fs` (builds the partitioned
 > limiter from the resolved subject) ·
@@ -957,8 +957,8 @@ section eliminates structurally.
 > events — they are domain events under their own source modules (`_platform.jobs`,
 > `_platform.dataingestion`), so they neither pass the audit codec registry nor
 > reach the audit sinks.
-> **Evidence:** `src/ToolUp.Platform.Core/Shared/AuditTypes.fs` (`IAuditLog`,
-> `AuditEvent`) · `src/ToolUp.Platform.Server/Server/AuditLog.fs` ·
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Audit/AuditEnvelope.fs` (`IAuditLog`) ·
+> `src/ToolUp.Platform.Core/Shared/AuditTypes.fs` (`AuditEvent`) · `src/ToolUp.Platform.Server/Server/AuditLog.fs` ·
 > `docs/reference/audit-event-reference.md` (the generated, exhaustive inventory —
 > projected from the union, gated by `AuditEventRegistryTests`) ·
 > `docs/platform/events.md` (§"Audit log" — families and emission narrative)
@@ -1009,7 +1009,7 @@ section eliminates structurally.
 > `DegradeToFile` (write to a local fallback store and replay it when the
 > primary recovers). A regime that requires audit to be a precondition of the
 > action can have exactly that, and can evidence which policy is configured.
-> **Evidence:** `src/ToolUp.Platform.Core/Shared/SDK.Shared.fs`
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Config/RuntimeModes.fs`
 > (`AuditFailurePolicy`) ·
 > `src/ToolUp.Platform.Server/Server/AuditFallbackStore.fs` ·
 > `src/ToolUp.Platform.Server/Server/AuditFallbackReplayService.fs` ·

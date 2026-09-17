@@ -93,7 +93,7 @@ type PlatformInfo = { RequiresAuth: bool }
 /// would be a breaking change, not a cleanup — keep it.
 ///
 /// Lives in `TeamTypes.fs` (not next to the other `ServerConfig`
-/// modes in `SDK.Shared.fs`) because `TeamApi.GetTeamCreationPolicy`
+/// modes under `Shared/Config/`) because `TeamApi.GetTeamCreationPolicy`
 /// returns it and `TeamApi` is declared further down in this same
 /// file — `TeamTypes.fs` compiles before `SDK.Shared.fs`, so siting
 /// the DU here is what makes it reachable from both the client

@@ -193,7 +193,7 @@ A composition that never calls `withCleanRoomTemplate` wraps nothing, probes not
 
 The foundation ships **one** audit event — `PeerCallCompleted` — emitted best-effort per inbound call by the contract handler after dispatch reaches a terminal outcome (`auditPeerCall`). It resolves `IAuditLog` per-request; a partial test host without one registered simply records nothing.
 
-`PeerCallCompletedPayload` (defined in [`../ToolUp.Platform.Core/Shared/AuditTypes.fs`](../ToolUp.Platform.Core/Shared/AuditTypes.fs), serialised by [`../ToolUp.Platform.Server/Server/AuditLog.fs`](../ToolUp.Platform.Server/Server/AuditLog.fs)):
+`PeerCallCompletedPayload` (defined in [`../ToolUp.Platform.Core/Shared/Audit/PeerAuditPayloads.fs`](../ToolUp.Platform.Core/Shared/Audit/PeerAuditPayloads.fs), serialised by [`../ToolUp.Platform.Server/Server/AuditLog.fs`](../ToolUp.Platform.Server/Server/AuditLog.fs)):
 
 | Field | Source |
 |---|---|

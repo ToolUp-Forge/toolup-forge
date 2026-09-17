@@ -324,7 +324,7 @@ Premium grant / revoke writes use the Phase 62 endpoints (`POST` / `DELETE /api/
 
 ### AdUnit CRUD storage shape
 
-`AdSlotConfig` (in `SDK.Shared.fs`) lacks the `Id` / `Type` / `Version` fields `IEntityStore` requires. `AdUnitConfigApi` wraps it in an internal `AdSlotEntity` record at the persistence boundary — clients see the public `AdSlotConfig` shape; the store sees `AdSlotEntity` keyed on `SlotId`. The entity type is registered lazily on first request because `EntityRegistry.Register` is idempotent under concurrent access. Writes emit `AdSlotConfigCreated` / `AdSlotConfigUpdated` / `AdSlotConfigDeleted` audit events under the `_platform.ads.config` scope.
+`AdSlotConfig` (in `Shared/Config/ConsentAdTypes.fs`) lacks the `Id` / `Type` / `Version` fields `IEntityStore` requires. `AdUnitConfigApi` wraps it in an internal `AdSlotEntity` record at the persistence boundary — clients see the public `AdSlotConfig` shape; the store sees `AdSlotEntity` keyed on `SlotId`. The entity type is registered lazily on first request because `EntityRegistry.Register` is idempotent under concurrent access. Writes emit `AdSlotConfigCreated` / `AdSlotConfigUpdated` / `AdSlotConfigDeleted` audit events under the `_platform.ads.config` scope.
 
 ### Worked example — public-utility deployment
 
