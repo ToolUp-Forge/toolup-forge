@@ -218,6 +218,206 @@ type BlobEntityStore
         else
             None
 
+    // ─── Phase 753 — the save pipeline, shared by `Save` and `SaveIfVersion` ──
+
+    /// Steps 1–2 of a save: extract the required fields and validate the
+    /// shape, then look the entity type up in the registry — it must be
+    /// registered and its `Type` field must match the registration.
+    let validateForSave (entity: 'T) : Result<EntityFieldsCore * EntityRegistration<'T>, EntityError> =
+        match tryGetEntityFields entity with
+        | Error msg -> Error(InvalidEntityShape msg)
+        | Ok core ->
+            match registry.TryGet<'T>(core.Type) with
+            | None -> Error(EntityError.UnknownEntityType core.Type)
+            | Some reg ->
+                if reg.EntityType <> core.Type then
+                    Error(
+                        InvalidEntityShape(
+                            sprintf "Entity Type field '%s' doesn't match registered type '%s'" core.Type reg.EntityType
+                        )
+                    )
+                else
+                    Ok(core, reg)
+
+    /// Head version from a version list — `0` when the entity has never
+    /// been written (the value `SaveIfVersion` / `DeleteIfVersion`
+    /// callers state for "must not exist yet").
+    let headOf (versions: DataObject list) : int =
+        if versions.IsEmpty then
+            0
+        else
+            versions |> List.map _.Version |> List.max
+
+    /// Everything that follows a successful version write (steps 6, 6b
+    /// and the audit emission): maintain each declared index — removing
+    /// the previous head's key when the indexed value changed —
+    /// re-index the declared full-text fields, and emit the lifecycle
+    /// audit event. `previousHead` is `0` on a create.
+    let afterVersionWrite
+        (scopeId: string)
+        (core: EntityFieldsCore)
+        (reg: EntityRegistration<'T>)
+        (entityWithVersion: 'T)
+        (previousHead: int)
+        (newVersion: int)
+        (savedObject: DataObject)
+        : Async<EntityRef<'T>> =
+        async {
+            let objectId = objectIdFor core.Type core.Id
+
+            // Step 6: maintain indexes. For each declared index, compute
+            // the new key, compare against the previous version's key
+            // (if any), and update.
+            for index in reg.Indexes do
+                let newKey = index.Extract entityWithVersion
+                let blobIndex = getIndex scopeId core.Type index.Name
+
+                // If a previous version existed, we need to remove its
+                // index entry under the OLD key (when the indexed value
+                // changed).
+                if previousHead > 0 then
+                    // Read the previous version to compute its index key.
+                    let! prevResult = dataObjectStore.GetVersion(scopeId, objectId, previousHead)
+
+                    match prevResult with
+                    | Ok(_, prevBytes) ->
+                        let prevJson = Encoding.UTF8.GetString prevBytes
+                        let prevEntity = deserialise<'T> prevJson
+                        let prevKey = index.Extract prevEntity
+
+                        if prevKey <> newKey then
+                            let! _ = blobIndex.Remove prevKey core.Id
+                            ()
+                    | Error _ -> () // best-effort; if we can't read prev, just add the new one
+
+                let! _ = blobIndex.Add newKey core.Id None
+                ()
+
+            // Step 6b — maintain full-text indexes (Phase 19b). Each
+            // declared full-text field re-indexes the entity's current
+            // text into its per-(entityType, field) BM25 sparse index,
+            // keyed by entity id. Upsert is idempotent, so a re-save
+            // replaces the prior text without an explicit remove. Empty
+            // when no full-text fields are declared — zero extra writes
+            // (GP 13); a deployment with no `ISparseIndex` wired skips
+            // it entirely.
+            match sparseIndex with
+            | Some idx when not reg.FullTextFields.IsEmpty ->
+                for fieldName, extractor in reg.FullTextFields do
+                    let content = extractor entityWithVersion
+                    let scope = fullTextScope scopeId core.Type fieldName
+
+                    let chunk: TextChunk = {
+                        Content = content
+                        Metadata = Map.empty
+                    }
+
+                    do! idx.Upsert scope core.Id chunk
+            | _ -> ()
+
+            // Emit audit event. Best-effort — exceptions swallowed so
+            // audit emission never fails the primary write.
+            match auditLog with
+            | Some log ->
+                try
+                    let payload = {
+                        UserId = "system"
+                        EntityType = core.Type
+                        EntityId = core.Id
+                        Version = newVersion
+                        Replay = None
+                    }
+
+                    let evt =
+                        if newVersion = 1 then
+                            EntityCreated payload
+                        else
+                            EntityUpdated payload
+
+                    do! log.Record(scopeId, evt)
+                with _ ->
+                    ()
+            | None -> ()
+
+            return refFromDataObject<'T> savedObject core.Id core.Type
+        }
+
+    /// `Delete` and `DeleteIfVersion` share one pipeline; `expected` is
+    /// the version the caller requires the head to be at, or `None` for
+    /// the unconditional delete.
+    ///
+    /// v1 simplification: delete the entity blob; rely on Phase 9f's
+    /// index drift contract — soft-miss-on-read gracefully handles stale
+    /// index entries that point at a deleted entity. A future commit can
+    /// introduce a typed-Delete that walks the registered Extract
+    /// closures via the typed registration to clean up indexes
+    /// proactively, but that requires preserving 'T at the Delete call
+    /// site (reflection-recovered Extract can't be unboxed without the
+    /// original 'T parameter).
+    ///
+    /// Phase 753 residual window on the conditional form: the seam has
+    /// no conditional delete, so the head is compared and then deleted
+    /// in two round trips (`ListVersions` → `Delete`); a save that lands
+    /// between them is removed along with the version the caller
+    /// expected. The window is the same one round trip as a
+    /// non-conditional data-object store's `SaveIfVersion` fallback.
+    let deleteEntity (scopeId: string) (entityType: string) (entityId: EntityId) (expected: int option) = async {
+        if not (registry.Knows entityType) then
+            return Error(EntityError.UnknownEntityType entityType)
+        else
+            let objectId = objectIdFor entityType entityId
+            // Capture head version before delete so the audit event
+            // records what got removed — and, on the conditional form,
+            // so the caller's expectation can be checked. Best-effort.
+            let! versionsBefore = dataObjectStore.ListVersions(scopeId, objectId)
+            let headVersion = headOf versionsBefore
+
+            match expected with
+            | Some e when e <> headVersion ->
+                return Error(EntityError.VersionConflict(entityType, entityId, e, headVersion))
+            | _ ->
+                let! deleteResult = dataObjectStore.Delete(scopeId, objectId)
+
+                match deleteResult with
+                | Ok() ->
+                    // Phase 19b — drop the entity from every declared
+                    // full-text field's sparse index. Field names come from
+                    // the registry's non-generic projection (Delete carries
+                    // no `'T`). Best-effort; even were a stale entry to
+                    // survive, the query load step drops it (the same drift
+                    // contract the secondary indexes rely on). Empty list or
+                    // no sparse index ⇒ zero calls (GP 13).
+                    match sparseIndex with
+                    | Some idx ->
+                        for fieldName in registry.FullTextFieldNames entityType do
+                            let scope = fullTextScope scopeId entityType fieldName
+                            do! idx.DeleteChunk scope entityId
+                    | None -> ()
+
+                    if headVersion > 0 then
+                        match auditLog with
+                        | Some log ->
+                            try
+                                do!
+                                    log.Record(
+                                        scopeId,
+                                        EntityDeleted {
+                                            UserId = "system"
+                                            EntityType = entityType
+                                            EntityId = entityId
+                                            Version = headVersion
+                                            Replay = None
+                                        }
+                                    )
+                            with _ ->
+                                ()
+                        | None -> ()
+
+                    return Ok()
+                | Error DataObjectError.NotFound -> return Ok() // idempotent
+                | Error err -> return Error(StorageFailure(sprintf "IDataObjectStore.Delete failed: %s" (string err)))
+    }
+
     /// Source-compatible 4-arg constructor — the pre-19b shape. Delegates
     /// to the primary constructor with no sparse index (no full-text).
     new
@@ -232,150 +432,94 @@ type BlobEntityStore
     interface IEntityStore with
 
         member _.Save<'T>(scopeId: string, entity: 'T) : Async<Result<EntityRef<'T>, EntityError>> = async {
-            // Step 1: extract required fields, validate shape.
-            match tryGetEntityFields entity with
-            | Error msg -> return Error(InvalidEntityShape msg)
-            | Ok core ->
-                // Step 2: registration lookup — the entity type must
-                // be registered, and its `Type` field must match.
-                match registry.TryGet<'T>(core.Type) with
-                | None -> return Error(EntityError.UnknownEntityType core.Type)
-                | Some reg ->
-                    if reg.EntityType <> core.Type then
-                        return
-                            Error(
-                                InvalidEntityShape(
-                                    sprintf
-                                        "Entity Type field '%s' doesn't match registered type '%s'"
-                                        core.Type
-                                        reg.EntityType
-                                )
-                            )
-                    else
-                        // Step 3: determine the next version. Read
-                        // ListVersions; if empty, version = 1; else
-                        // version = max + 1.
-                        let objectId = objectIdFor core.Type core.Id
-                        let! existingVersions = dataObjectStore.ListVersions(scopeId, objectId)
+            match validateForSave entity with
+            | Error err -> return Error err
+            | Ok(core, reg) ->
+                // Step 3: determine the next version. Read ListVersions;
+                // if empty, version = 1; else version = max + 1.
+                // Last-writer-wins by design — a caller that carried a
+                // version through a round trip uses `SaveIfVersion`.
+                let objectId = objectIdFor core.Type core.Id
+                let! existingVersions = dataObjectStore.ListVersions(scopeId, objectId)
+                let previousHead = headOf existingVersions
+                let newVersion = previousHead + 1
 
-                        let newVersion =
-                            if existingVersions.IsEmpty then
-                                1
-                            else
-                                (existingVersions |> List.map _.Version |> List.max) + 1
+                // Step 4: replace the entity's Version with the assigned
+                // version, then serialise.
+                let entityWithVersion = withVersion entity newVersion
+                let json = serialise entityWithVersion
+                let bytes = Encoding.UTF8.GetBytes json
 
-                        // Step 4: replace the entity's Version with
-                        // the assigned version, then serialise.
-                        let entityWithVersion = withVersion entity newVersion
-                        let json = serialise entityWithVersion
-                        let bytes = Encoding.UTF8.GetBytes json
+                // Step 5: persist via IDataObjectStore.
+                let! saveResult =
+                    dataObjectStore.Save(
+                        scopeId,
+                        objectId,
+                        bytes,
+                        dataTypeFor core.Type,
+                        // `IEntityStore.Save` doesn't carry caller identity — actor-level
+                        // attribution lives one layer up at the API handler, where
+                        // `AccessContext.UserId` is available. "system" matches the existing
+                        // `IDataObjectStore` convention for non-end-user writes.
+                        "system",
+                        Map.empty,
+                        Versioned
+                    )
 
-                        // Step 5: persist via IDataObjectStore.
-                        let! saveResult =
-                            dataObjectStore.Save(
-                                scopeId,
-                                objectId,
-                                bytes,
-                                dataTypeFor core.Type,
-                                // `IEntityStore.Save` doesn't carry caller identity — actor-level
-                                // attribution lives one layer up at the API handler, where
-                                // `AccessContext.UserId` is available. "system" matches the existing
-                                // `IDataObjectStore` convention for non-end-user writes.
-                                "system",
-                                Map.empty,
-                                Versioned
-                            )
+                match saveResult with
+                | Error doErr -> return Error(StorageFailure(sprintf "IDataObjectStore.Save failed: %s" (string doErr)))
+                | Ok savedObject ->
+                    let! entityRef =
+                        afterVersionWrite scopeId core reg entityWithVersion previousHead newVersion savedObject
 
-                        match saveResult with
-                        | Error doErr ->
-                            return Error(StorageFailure(sprintf "IDataObjectStore.Save failed: %s" (string doErr)))
-                        | Ok savedObject ->
-                            // Step 6: maintain indexes. For each
-                            // declared index, compute the new key,
-                            // compare against the previous version's
-                            // key (if any), and update.
-                            let! _ = async {
-                                for index in reg.Indexes do
-                                    let newKey = index.Extract entityWithVersion
-                                    let blobIndex = getIndex scopeId core.Type index.Name
-
-                                    // If a previous version existed,
-                                    // we need to remove its index
-                                    // entry under the OLD key (when
-                                    // the indexed value changed).
-                                    if not existingVersions.IsEmpty then
-                                        // Read the previous version
-                                        // to compute its index key.
-                                        let prevVersion = existingVersions |> List.map _.Version |> List.max
-
-                                        let! prevResult = dataObjectStore.GetVersion(scopeId, objectId, prevVersion)
-
-                                        match prevResult with
-                                        | Ok(_, prevBytes) ->
-                                            let prevJson = Encoding.UTF8.GetString prevBytes
-                                            let prevEntity = deserialise<'T> prevJson
-                                            let prevKey = index.Extract prevEntity
-
-                                            if prevKey <> newKey then
-                                                let! _ = blobIndex.Remove prevKey core.Id
-                                                ()
-                                        | Error _ -> () // best-effort; if we can't read prev, just add the new one
-
-                                    let! _ = blobIndex.Add newKey core.Id None
-                                    ()
-                            }
-
-                            // Step 6b — maintain full-text indexes (Phase
-                            // 19b). Each declared full-text field re-indexes
-                            // the entity's current text into its
-                            // per-(entityType, field) BM25 sparse index,
-                            // keyed by entity id. Upsert is idempotent, so a
-                            // re-save replaces the prior text without an
-                            // explicit remove. Empty when no full-text fields
-                            // are declared — zero extra writes (GP 13); a
-                            // deployment with no `ISparseIndex` wired skips it
-                            // entirely.
-                            match sparseIndex with
-                            | Some idx when not reg.FullTextFields.IsEmpty ->
-                                for fieldName, extractor in reg.FullTextFields do
-                                    let content = extractor entityWithVersion
-                                    let scope = fullTextScope scopeId core.Type fieldName
-
-                                    let chunk: TextChunk = {
-                                        Content = content
-                                        Metadata = Map.empty
-                                    }
-
-                                    do! idx.Upsert scope core.Id chunk
-                            | _ -> ()
-
-                            // Emit audit event. Best-effort — exceptions
-                            // swallowed so audit emission never fails the
-                            // primary write.
-                            match auditLog with
-                            | Some log ->
-                                try
-                                    let payload = {
-                                        UserId = "system"
-                                        EntityType = core.Type
-                                        EntityId = core.Id
-                                        Version = newVersion
-                                        Replay = None
-                                    }
-
-                                    let evt =
-                                        if newVersion = 1 then
-                                            EntityCreated payload
-                                        else
-                                            EntityUpdated payload
-
-                                    do! log.Record(scopeId, evt)
-                                with _ ->
-                                    ()
-                            | None -> ()
-
-                            return Ok(refFromDataObject<'T> savedObject core.Id core.Type)
+                    return Ok entityRef
         }
+
+        // Phase 753 — compare-and-set save. The compare and the claim
+        // are one act inside `ConditionalDataObjectStore.saveIfVersion`:
+        // over the default `DataObjectStore` the version slot
+        // `v{expected+1}.json` is written `IfAbsent` through the Phase
+        // 600 seam, so two racers at the same expectation see exactly
+        // one `Ok`; over a data-object store without the capability the
+        // helper compares then saves, with the one-round-trip lost-update
+        // window documented on it. Nothing here touches an index until
+        // the version write has succeeded, so a refused expectation
+        // leaves every index exactly as it was.
+        member _.SaveIfVersion<'T>
+            (scopeId: string, entity: 'T, expectedVersion: int)
+            : Async<Result<EntityRef<'T>, EntityError>> =
+            async {
+                match validateForSave entity with
+                | Error err -> return Error err
+                | Ok(core, reg) ->
+                    let objectId = objectIdFor core.Type core.Id
+                    let newVersion = expectedVersion + 1
+                    let entityWithVersion = withVersion entity newVersion
+                    let bytes = Encoding.UTF8.GetBytes(serialise entityWithVersion)
+
+                    let! saveResult =
+                        ConditionalDataObjectStore.saveIfVersion
+                            dataObjectStore
+                            scopeId
+                            objectId
+                            bytes
+                            (dataTypeFor core.Type)
+                            "system"
+                            Map.empty
+                            Versioned
+                            expectedVersion
+
+                    match saveResult with
+                    | Error(ConditionalSaveError.VersionConflict(expected, actual)) ->
+                        return Error(EntityError.VersionConflict(core.Type, core.Id, expected, actual))
+                    | Error(SaveFailed doErr) ->
+                        return Error(StorageFailure(sprintf "IDataObjectStore.SaveIfVersion failed: %s" (string doErr)))
+                    | Ok savedObject ->
+                        let! entityRef =
+                            afterVersionWrite scopeId core reg entityWithVersion expectedVersion newVersion savedObject
+
+                        return Ok entityRef
+            }
 
         member _.Get<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
             if not (registry.Knows entityType) then
@@ -427,71 +571,13 @@ type BlobEntityStore
                         : EntityRef<'T>))
         }
 
-        member _.Delete(scopeId: string, entityType: string, entityId: EntityId) = async {
-            // v1 simplification: delete the entity blob; rely on
-            // Phase 9f's index drift contract — soft-miss-on-read
-            // gracefully handles stale index entries that point at a
-            // deleted entity. A future commit can introduce a
-            // typed-Delete that walks the registered Extract
-            // closures via the typed registration to clean up
-            // indexes proactively, but that requires preserving 'T
-            // at the Delete call site (reflection-recovered Extract
-            // can't be unboxed without the original 'T parameter).
-            if not (registry.Knows entityType) then
-                return Error(EntityError.UnknownEntityType entityType)
-            else
-                let objectId = objectIdFor entityType entityId
-                // Capture head version before delete so the audit
-                // event records what got removed. Best-effort.
-                let! versionsBefore = dataObjectStore.ListVersions(scopeId, objectId)
+        member _.Delete(scopeId: string, entityType: string, entityId: EntityId) =
+            deleteEntity scopeId entityType entityId None
 
-                let headVersion =
-                    if versionsBefore.IsEmpty then
-                        0
-                    else
-                        versionsBefore |> List.map _.Version |> List.max
-
-                let! deleteResult = dataObjectStore.Delete(scopeId, objectId)
-
-                match deleteResult with
-                | Ok() ->
-                    // Phase 19b — drop the entity from every declared
-                    // full-text field's sparse index. Field names come from
-                    // the registry's non-generic projection (Delete carries
-                    // no `'T`). Best-effort; even were a stale entry to
-                    // survive, the query load step drops it (the same drift
-                    // contract the secondary indexes rely on). Empty list or
-                    // no sparse index ⇒ zero calls (GP 13).
-                    match sparseIndex with
-                    | Some idx ->
-                        for fieldName in registry.FullTextFieldNames entityType do
-                            let scope = fullTextScope scopeId entityType fieldName
-                            do! idx.DeleteChunk scope entityId
-                    | None -> ()
-
-                    if headVersion > 0 then
-                        match auditLog with
-                        | Some log ->
-                            try
-                                do!
-                                    log.Record(
-                                        scopeId,
-                                        EntityDeleted {
-                                            UserId = "system"
-                                            EntityType = entityType
-                                            EntityId = entityId
-                                            Version = headVersion
-                                            Replay = None
-                                        }
-                                    )
-                            with _ ->
-                                ()
-                        | None -> ()
-
-                    return Ok()
-                | Error DataObjectError.NotFound -> return Ok() // idempotent
-                | Error err -> return Error(StorageFailure(sprintf "IDataObjectStore.Delete failed: %s" (string err)))
-        }
+        // Phase 753 — compare-and-set delete; see `deleteEntity` for the
+        // residual window.
+        member _.DeleteIfVersion(scopeId: string, entityType: string, entityId: EntityId, expectedVersion: int) =
+            deleteEntity scopeId entityType entityId (Some expectedVersion)
 
         member _.FindByIndex<'T>(scopeId: string, entityType: string, indexName: string, value: string) = async {
             match registry.TryGet<'T>(entityType) with

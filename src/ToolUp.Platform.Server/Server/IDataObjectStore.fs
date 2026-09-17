@@ -261,3 +261,115 @@ type IContentRangeReader =
     /// no precision surface.
     abstract ReadContentRange:
         scopeId: string * contentHash: string * offset: int64 * length: int -> Async<Result<byte[], DataObjectError>>
+// ─── Phase 753 — conditional (compare-and-set) saves ─────────────────
+//
+// Optional capability interface for data-object stores that can claim
+// a version slot atomically. Deliberately NOT a member on
+// `IDataObjectStore`: six in-tree implementers (plus consumer-side
+// fakes and decorators) implement that interface, and the same
+// reasoning that kept the Phase 600 ETag seam off `IBlobStorage`
+// applies here. Stores that can claim a version atomically implement
+// THIS interface alongside `IDataObjectStore`; consumers probe with
+// `ConditionalDataObjectStore.saveIfVersion`, which falls back to a
+// compare-then-`Save` with a documented lost-update window when the
+// store cannot.
+//
+// The default `DataObjectStore` implements it over the Phase 600
+// `IConditionalBlobStorage` seam: the version's metadata blob
+// (`objects/{objectId}/v{N+1}.json`) is the commit point of a save, so
+// writing it `IfAbsent` makes "exactly one of two racing writers at the
+// same expected version wins, and no version is skipped or duplicated"
+// true by the blob store's own atomicity rather than by a lock.
+
+/// Why a conditional save was refused. A refused precondition leaves
+/// the stored object untouched — nothing is written, no version is
+/// consumed.
+type ConditionalSaveError =
+    /// The head version was not `expected` at the moment of the write.
+    /// `actual` is the head the store observed; a writer that wants to
+    /// retry re-reads, merges, and states `actual` as its new
+    /// expectation.
+    | VersionConflict of expected: int * actual: int
+    /// The precondition held but the save itself failed, exactly as the
+    /// unconditional `Save` would have reported it.
+    | SaveFailed of DataObjectError
+
+/// Compare-and-set capability over a versioned data-object store. An
+/// implementation MUST make `SaveIfVersion` atomic with respect to
+/// concurrent conditional saves on the same `(scopeId, objectId)`: two
+/// racers stating the same `expectedVersion` see exactly one `Ok`, and
+/// the assigned version is always `expectedVersion + 1`. Scope
+/// discipline, sticky-policy enforcement and content dedup match
+/// `IDataObjectStore.Save`.
+type IConditionalDataObjectStore =
+    /// Save `content` as version `expectedVersion + 1` if — and only if
+    /// — the object's head version is `expectedVersion` right now.
+    /// `expectedVersion = 0` means "the object must not exist yet"
+    /// (create-only). Returns `VersionConflict` naming both versions
+    /// when the head has moved; `Unversioned` objects have no head to
+    /// compare against and are refused as `SaveFailed`.
+    abstract SaveIfVersion:
+        scopeId: string *
+        objectId: string *
+        content: byte[] *
+        dataType: string *
+        createdBy: string *
+        metadata: Map<string, string> *
+        policy: VersioningPolicy *
+        expectedVersion: int ->
+            Async<Result<DataObject, ConditionalSaveError>>
+
+/// Probe-and-fall-back helper over the Phase 753 capability, so every
+/// consumer shares one probe site and one documented fallback.
+module ConditionalDataObjectStore =
+    /// Conditional save through `store`. When `store` implements
+    /// `IConditionalDataObjectStore` the claim is atomic. Otherwise this
+    /// reads the head with `ListVersions`, compares it to
+    /// `expectedVersion`, and calls the unconditional `Save` — which
+    /// leaves a **lost-update window** the size of one round-trip pair
+    /// (the head read here → the metadata upload inside `Save`): two
+    /// racers that both read the head inside that window both pass the
+    /// compare and the later `Save` overwrites the earlier one's
+    /// version metadata, exactly as two unconditional saves would.
+    /// Deployments that need the race closed compose a store that
+    /// implements the capability (the default `DataObjectStore` does).
+    let saveIfVersion
+        (store: IDataObjectStore)
+        (scopeId: string)
+        (objectId: string)
+        (content: byte[])
+        (dataType: string)
+        (createdBy: string)
+        (metadata: Map<string, string>)
+        (policy: VersioningPolicy)
+        (expectedVersion: int)
+        : Async<Result<DataObject, ConditionalSaveError>> =
+        async {
+            match store with
+            | :? IConditionalDataObjectStore as cas ->
+                return!
+                    cas.SaveIfVersion(
+                        scopeId,
+                        objectId,
+                        content,
+                        dataType,
+                        createdBy,
+                        metadata,
+                        policy,
+                        expectedVersion
+                    )
+            | _ ->
+                let! versions = store.ListVersions(scopeId, objectId)
+
+                let head =
+                    match versions with
+                    | [] -> 0
+                    | _ -> versions |> List.map _.Version |> List.max
+
+                if head <> expectedVersion then
+                    return Error(VersionConflict(expectedVersion, head))
+                else
+                    let! saved = store.Save(scopeId, objectId, content, dataType, createdBy, metadata, policy)
+
+                    return saved |> Result.mapError SaveFailed
+        }

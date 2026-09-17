@@ -151,6 +151,34 @@ type InMemoryEntityStore() =
                     }
         }
 
+        // Phase 753 — compare-and-set save: the head is the stored
+        // version (0 when absent); a mismatch is `VersionConflict`.
+        member _.SaveIfVersion<'T>(scopeId: string, entity: 'T, expectedVersion: int) = async {
+            match tryGetEntityFields entity with
+            | Error msg -> return Error(InvalidEntityShape msg)
+            | Ok core ->
+                let b = bucket scopeId core.Type
+
+                let head =
+                    match b.TryGetValue core.Id with
+                    | true, (_, v) -> v
+                    | _ -> 0
+
+                if head <> expectedVersion then
+                    return Error(EntityError.VersionConflict(core.Type, core.Id, expectedVersion, head))
+                else
+                    let newVersion = expectedVersion + 1
+                    let stored = setVersion entity newVersion
+                    b[core.Id] <- (box stored, newVersion)
+
+                    return
+                        Ok {
+                            Id = core.Id
+                            Type = core.Type
+                            Version = newVersion
+                        }
+        }
+
         member _.Get<'T>(scopeId, entityType, entityId) = async {
             let b = bucket scopeId entityType
 
@@ -190,6 +218,22 @@ type InMemoryEntityStore() =
             | None -> ()
 
             return Ok()
+        }
+
+        // Phase 753 — compare-and-set delete.
+        member _.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion) = async {
+            let b = bucket scopeId entityType
+
+            let head =
+                match b.TryGetValue entityId with
+                | true, (_, v) -> v
+                | _ -> 0
+
+            if head <> expectedVersion then
+                return Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, head))
+            else
+                b.TryRemove(entityId) |> ignore
+                return Ok()
         }
 
         member _.FindByIndex<'T>(scopeId, entityType, indexName, value) = async {

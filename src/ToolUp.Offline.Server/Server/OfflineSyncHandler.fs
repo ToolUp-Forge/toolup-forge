@@ -28,15 +28,21 @@ open ToolUp.Offline.OfflineSyncApi
 //     been offline across a team switch must be told, not quietly
 //     written into whichever scope it last saw.
 //
-//  2. **Conflict is detected HERE, not by the store.** The phase design
-//     assumed `IEntityStore.Save` surfaces `EntityError.VersionConflict`
-//     for a stale write. It does not: `BlobEntityStore.Save` assigns
-//     `max(existing) + 1` unconditionally and never compares against the
-//     caller's version, so a naive replay would silently clobber every
-//     concurrent server-side edit. The handler therefore reads the head
-//     version first and compares it against `QueuedMutation.BaseVersion`
-//     — that comparison IS the last-writer-wins guard, and removing it
-//     removes the entire conflict story.
+//  2. **Conflict is detected BY THE STORE, through the seam's
+//     compare-and-set.** Until Phase 753 this handler read the head
+//     version and compared it against `QueuedMutation.BaseVersion`
+//     itself, because `IEntityStore.Save` assigns `max(existing) + 1`
+//     unconditionally and never reports `VersionConflict`; that
+//     hand-rolled compare had a window of its own (a server edit landing
+//     between the read and the save was clobbered anyway). The replay
+//     now goes through `SaveIfVersion` / `DeleteIfVersion` with the
+//     mutation's `BaseVersion` as the expectation, so the head compare
+//     and the write are one act inside the store, and a moved head
+//     comes back typed as `EntityError.VersionConflict`. The handler's
+//     job is to hand that expectation over — an adapter's `Apply` that
+//     saves through the unconditional `Save` instead has opted out of
+//     the conflict story, which is why `OfflineReplayError` makes the
+//     conflict a distinct case rather than a message.
 //
 //  3. **Replay is typed through a registration, not reflected.** The
 //     wire carries `byte[]`; the store's `Save<'T>` needs the real
@@ -60,22 +66,41 @@ type OfflineReplayContext = {
     UserId: string
 }
 
+/// Why a replay adapter could not apply a mutation (Phase 753).
+type OfflineReplayError =
+    /// The head moved past the version the mutation was queued against
+    /// — the store's `EntityError.VersionConflict`, surfaced as its own
+    /// case so the handler turns it into the `Conflict` outcome the user
+    /// resolves rather than a `Rejected` the client drops.
+    | ReplayConflict of expected: int * actual: int
+    /// Anything else — a payload that does not deserialise, an
+    /// unregistered shape, a storage failure. The message reaches the
+    /// client as `Rejected`.
+    | ReplayRejected of string
+
 /// Per-entity-type replay adapter. Registered by the module that owns
 /// the entity record, because only it knows the record's shape.
 ///
-/// Both functions return `Result<_, string>` rather than raising: a
-/// malformed offline payload is an expected outcome (the queue may
-/// hold bytes written by an older client build), and it must become a
-/// `Rejected` the client can drop rather than a 500 it retries forever.
+/// Both functions return `Result` rather than raising: a malformed
+/// offline payload is an expected outcome (the queue may hold bytes
+/// written by an older client build), and it must become a `Rejected`
+/// the client can drop rather than a 500 it retries forever.
 type OfflineEntityReplay = {
     /// `EntityFieldsCore.Type` this adapter handles.
     EntityType: string
     /// Current server bytes + version for one id. `Ok None` when the
-    /// entity does not exist.
+    /// entity does not exist. Read when a replay conflicts, so the
+    /// client can show both documents.
     Current: OfflineReplayContext -> string -> Async<Result<(byte[] * int) option, string>>
-    /// Deserialise `payload` and persist it via `IEntityStore.Save`.
-    /// Returns the saved bytes and the version the store assigned.
-    Apply: OfflineReplayContext -> byte[] -> Async<Result<byte[] * int, string>>
+    /// Deserialise `payload` and persist it via
+    /// `IEntityStore.SaveIfVersion`, stating the `int` argument — the
+    /// mutation's `BaseVersion` — as the expected version. Returns the saved
+    /// bytes and the version the store assigned, or `ReplayConflict`
+    /// when the head has moved. An adapter that persists through the
+    /// unconditional `Save` instead has opted out of conflict detection
+    /// for its entity type; `OfflineEntityReplay.ofJson` is the
+    /// reference shape.
+    Apply: OfflineReplayContext -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
 }
 
 /// Shared JSON setup — the SAME converter set `BlobEntityStore` uses to
@@ -120,18 +145,24 @@ module OfflineEntityReplay =
             }
 
         Apply =
-            fun ctx payload -> async {
+            fun ctx expectedVersion payload -> async {
                 let parsed =
                     try
                         Ok(Json.deserialize<'T> (Encoding.UTF8.GetString payload))
                     with ex ->
-                        Error(sprintf "offline payload for '%s' did not deserialise: %s" entityType ex.Message)
+                        Error(
+                            ReplayRejected(
+                                sprintf "offline payload for '%s' did not deserialise: %s" entityType ex.Message
+                            )
+                        )
 
                 match parsed with
-                | Error msg -> return Error msg
+                | Error err -> return Error err
                 | Ok entity ->
-                    match! ctx.Store.Save<'T>(ctx.ScopeId, entity) with
-                    | Error err -> return Error(EntityError.message err)
+                    match! ctx.Store.SaveIfVersion<'T>(ctx.ScopeId, entity, expectedVersion) with
+                    | Error(EntityError.VersionConflict(_, _, expected, actual)) ->
+                        return Error(ReplayConflict(expected, actual))
+                    | Error err -> return Error(ReplayRejected(EntityError.message err))
                     | Ok entityRef ->
                         // Re-read so the bytes handed back are exactly
                         // what the store now holds (the store rewrites
@@ -142,7 +173,7 @@ module OfflineEntityReplay =
                         // with the server on version — the precise
                         // state that manufactures the NEXT conflict.
                         match! ctx.Store.Get<'T>(ctx.ScopeId, entityType, entityRef.Id) with
-                        | Error err -> return Error(EntityError.message err)
+                        | Error err -> return Error(ReplayRejected(EntityError.message err))
                         | Ok saved -> return Ok(Encoding.UTF8.GetBytes(Json.serialize<'T> saved), entityRef.Version)
             }
     }
@@ -346,61 +377,70 @@ let private applyOne
                             mutation.EntityType
                     )
             | Some replay ->
-                match! replay.Current replayCtx mutation.EntityId with
-                | Error msg -> return Rejected msg
-                | Ok current ->
-                    let headVersion =
-                        match current with
-                        | Some(_, v) -> v
-                        | None -> 0
-
-                    // Guard 2 — last-writer-wins conflict detection.
-                    // The head moved under the offline edit, so the
-                    // user chooses. Note an entity created offline
-                    // (BaseVersion = 0) conflicts only if something
-                    // now exists at that id.
-                    if headVersion <> mutation.BaseVersion then
+                // Guard 2 — conflict detection, performed by the store:
+                // the mutation's `BaseVersion` is the expectation handed
+                // to the seam's compare-and-set, so the head compare and
+                // the write are one act. The head moved under the offline
+                // edit => the user chooses, with both documents in hand.
+                // An entity created offline (BaseVersion = 0) conflicts
+                // only if something now exists at that id.
+                let conflict () = async {
+                    match! replay.Current replayCtx mutation.EntityId with
+                    | Error msg -> return Rejected msg
+                    | Ok current ->
                         let serverBytes =
                             match current with
                             | Some(bytes, _) -> bytes
                             | None -> Array.empty
 
                         return Conflict(mutation.Payload, serverBytes)
-                    else
-                        match mutation.Operation with
-                        | DeleteOp ->
-                            match!
-                                ReplayAudit.scoped
-                                    options.AuditLog
-                                    mutation
-                                    (replayCtx.Store.Delete(replayCtx.ScopeId, mutation.EntityType, mutation.EntityId))
-                            with
-                            | Error err -> return Rejected(EntityError.message err)
-                            | Ok() ->
-                                do!
-                                    ReplayAudit.emit
-                                        options.AuditLog
-                                        replayCtx.ScopeId
-                                        replayCtx.UserId
-                                        mutation
-                                        headVersion
+                }
 
-                                return Applied Array.empty
-                        | SaveOp ->
-                            match!
-                                ReplayAudit.scoped options.AuditLog mutation (replay.Apply replayCtx mutation.Payload)
-                            with
-                            | Error msg -> return Rejected msg
-                            | Ok(savedBytes, newVersion) ->
-                                do!
-                                    ReplayAudit.emit
-                                        options.AuditLog
-                                        replayCtx.ScopeId
-                                        replayCtx.UserId
-                                        mutation
-                                        newVersion
+                // Phase 759 — each write runs under the replay scope
+                // (ReplayAudit.scoped), so the store's own generic
+                // lifecycle row for this entity is dropped and the
+                // provenance-carrying row ReplayAudit.emit records is
+                // the ONE row for the version. The compare-and-set is
+                // untouched: the scope wraps the seam call, it does not
+                // change what the seam is asked.
+                match mutation.Operation with
+                | DeleteOp ->
+                    match!
+                        ReplayAudit.scoped
+                            options.AuditLog
+                            mutation
+                            (replayCtx.Store.DeleteIfVersion(
+                                replayCtx.ScopeId,
+                                mutation.EntityType,
+                                mutation.EntityId,
+                                mutation.BaseVersion
+                            ))
+                    with
+                    | Error(EntityError.VersionConflict _) -> return! conflict ()
+                    | Error err -> return Rejected(EntityError.message err)
+                    | Ok() ->
+                        do!
+                            ReplayAudit.emit
+                                options.AuditLog
+                                replayCtx.ScopeId
+                                replayCtx.UserId
+                                mutation
+                                mutation.BaseVersion
 
-                                return Applied savedBytes
+                        return Applied Array.empty
+                | SaveOp ->
+                    match!
+                        ReplayAudit.scoped
+                            options.AuditLog
+                            mutation
+                            (replay.Apply replayCtx mutation.BaseVersion mutation.Payload)
+                    with
+                    | Error(ReplayConflict _) -> return! conflict ()
+                    | Error(ReplayRejected msg) -> return Rejected msg
+                    | Ok(savedBytes, newVersion) ->
+                        do! ReplayAudit.emit options.AuditLog replayCtx.ScopeId replayCtx.UserId mutation newVersion
+
+                        return Applied savedBytes
     }
 
 /// Per-request API record over a resolved entity store.

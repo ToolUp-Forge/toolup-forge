@@ -650,6 +650,8 @@ let private registeredTests =
         EntityOutboxTests.tests
         // Phase 600 — blob conditional writes (the ETag CAS seam).
         ConditionalBlobStorageTests.tests
+        // Phase 753 — the compare-and-set save on the data-object layer.
+        ConditionalDataObjectStoreTests.tests
         EntityQueryTests.tests
         // Phase 19c — declarative relationship edges.
         RelationshipTests.tests

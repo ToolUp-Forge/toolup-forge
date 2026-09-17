@@ -121,6 +121,7 @@
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\IDerivativeRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="Contracts\IConditionalDataObjectStoreContract.fs" />
         <!-- Phase 535 — CRDT co-editing store conformance: append / diff /
              snapshot / compaction, scope isolation, and the convergence
              property (any permutation of the same update set yields the
@@ -906,6 +907,7 @@
         <!-- Phase 600 — IConditionalBlobStorage contract (ETag CAS seam)
              bound to Local / InMemory / Resilient-decorated backends. -->
         <Compile Include="InProcess\ConditionalBlobStorageTests.fs" />
+        <Compile Include="InProcess\ConditionalDataObjectStoreTests.fs" />
         <!-- Phase 447 — seed / fixture-pack loader (idempotency, version
              bump, mode gating, scope isolation). -->
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />

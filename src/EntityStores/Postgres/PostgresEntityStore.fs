@@ -178,6 +178,28 @@ type PostgresEntityStore
         | None -> ()
     }
 
+    /// Head version of one entity — `0` when it has never been written.
+    /// Shared by the Phase 753 conditional forms.
+    let readHead (scopeId: string) (entityType: string) (entityId: EntityId) : Async<int> = async {
+        use cmd =
+            dataSource.CreateCommand(
+                sprintf
+                    "SELECT COALESCE(MAX(version), 0) FROM %s WHERE scope_id = @s AND entity_type = @t AND entity_id = @i"
+                    table
+            )
+
+        cmd.Parameters.AddWithValue("s", scopeId) |> ignore
+        cmd.Parameters.AddWithValue("t", entityType) |> ignore
+        cmd.Parameters.AddWithValue("i", entityId) |> ignore
+        let! headObj = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+
+        return
+            match headObj with
+            | :? int as i -> i
+            | :? int64 as l -> int l
+            | _ -> 0
+    }
+
     interface IEntityStore with
         member _.Save<'T>(scopeId: string, entity: 'T) = async {
             match tryGetEntityFields entity with
@@ -266,6 +288,109 @@ type PostgresEntityStore
                                 )
                         with ex ->
                             return Error(StorageFailure(sprintf "PostgresEntityStore.Save failed: %s" ex.Message))
+        }
+
+        // Phase 753 — compare-and-set save. The table's primary key is
+        // `(scope_id, entity_type, entity_id, version)`, so inserting row
+        // `expectedVersion + 1` IS the atomic claim: two racers that both
+        // read head = N both attempt v(N+1), the engine admits exactly
+        // one, and the other's unique violation (SQLSTATE 23505) is
+        // reported as `VersionConflict`. No lock, no transaction — the
+        // head read is only the early, cheap refusal for a stale
+        // expectation; the key decides the race.
+        member _.SaveIfVersion<'T>(scopeId: string, entity: 'T, expectedVersion: int) = async {
+            match tryGetEntityFields entity with
+            | Error msg -> return Error(InvalidEntityShape msg)
+            | Ok core ->
+                match registry.TryGet<'T>(core.Type) with
+                | None -> return Error(EntityError.UnknownEntityType core.Type)
+                | Some reg ->
+                    if reg.EntityType <> core.Type then
+                        return
+                            Error(
+                                InvalidEntityShape(
+                                    sprintf
+                                        "Entity Type field '%s' doesn't match registered type '%s'"
+                                        core.Type
+                                        reg.EntityType
+                                )
+                            )
+                    else
+                        try
+                            do! ensureIndexes core.Type (reg.Indexes |> List.map (fun i -> i.Name, i.IsCompound))
+
+                            let! headVersion = readHead scopeId core.Type core.Id
+
+                            if headVersion <> expectedVersion then
+                                return
+                                    Error(EntityError.VersionConflict(core.Type, core.Id, expectedVersion, headVersion))
+                            else
+                                let newVersion = expectedVersion + 1
+                                let json = Json.serialise (Reflection.withVersion entity newVersion)
+
+                                use insCmd =
+                                    dataSource.CreateCommand(
+                                        sprintf
+                                            "INSERT INTO %s (scope_id, entity_type, entity_id, version, payload) VALUES (@s, @t, @i, @v, @p::jsonb)"
+                                            table
+                                    )
+
+                                insCmd.Parameters.AddWithValue("s", scopeId) |> ignore
+                                insCmd.Parameters.AddWithValue("t", core.Type) |> ignore
+                                insCmd.Parameters.AddWithValue("i", core.Id) |> ignore
+                                insCmd.Parameters.AddWithValue("v", newVersion) |> ignore
+                                insCmd.Parameters.AddWithValue("p", json) |> ignore
+
+                                let! claimed = async {
+                                    try
+                                        let! _ = insCmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+                                        return Ok()
+                                    with :? PostgresException as ex when
+                                        ex.SqlState = PostgresErrorCodes.UniqueViolation ->
+                                        // A racer took v(N+1) between the head
+                                        // read and this insert.
+                                        return
+                                            Error(
+                                                EntityError.VersionConflict(
+                                                    core.Type,
+                                                    core.Id,
+                                                    expectedVersion,
+                                                    newVersion
+                                                )
+                                            )
+                                }
+
+                                match claimed with
+                                | Error conflict -> return Error conflict
+                                | Ok() ->
+                                    let payload = {
+                                        UserId = "system"
+                                        EntityType = core.Type
+                                        EntityId = core.Id
+                                        Version = newVersion
+                                        Replay = None
+                                    }
+
+                                    do!
+                                        recordAudit
+                                            scopeId
+                                            (if newVersion = 1 then
+                                                 EntityCreated payload
+                                             else
+                                                 EntityUpdated payload)
+
+                                    return
+                                        Ok(
+                                            {
+                                                Id = core.Id
+                                                Type = core.Type
+                                                Version = newVersion
+                                            }
+                                            : EntityRef<'T>
+                                        )
+                        with ex ->
+                            return
+                                Error(StorageFailure(sprintf "PostgresEntityStore.SaveIfVersion failed: %s" ex.Message))
         }
 
         member _.Get<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
@@ -398,6 +523,58 @@ type PostgresEntityStore
                     return Ok()
                 with ex ->
                     return Error(StorageFailure(sprintf "PostgresEntityStore.Delete failed: %s" ex.Message))
+        }
+
+        // Phase 753 — compare-and-set delete. The head comparison rides
+        // INSIDE the DELETE as a subquery predicate, so it is evaluated
+        // against the same statement snapshot as the rows it removes: a
+        // concurrent save that moves the head makes the predicate false
+        // and the statement removes nothing. A zero-row outcome is then
+        // told apart by re-reading the head — `0` with `expectedVersion
+        // = 0` is the idempotent "never existed" `Ok`, anything else is a
+        // `VersionConflict` naming what the head is now.
+        member _.DeleteIfVersion(scopeId: string, entityType: string, entityId: EntityId, expectedVersion: int) = async {
+            if not (registry.Knows entityType) then
+                return Error(EntityError.UnknownEntityType entityType)
+            else
+                try
+                    use cmd =
+                        dataSource.CreateCommand(
+                            sprintf
+                                "DELETE FROM %s WHERE scope_id = @s AND entity_type = @t AND entity_id = @i AND @e = (SELECT COALESCE(MAX(version), 0) FROM %s h WHERE h.scope_id = @s AND h.entity_type = @t AND h.entity_id = @i)"
+                                table
+                                table
+                        )
+
+                    cmd.Parameters.AddWithValue("s", scopeId) |> ignore
+                    cmd.Parameters.AddWithValue("t", entityType) |> ignore
+                    cmd.Parameters.AddWithValue("i", entityId) |> ignore
+                    cmd.Parameters.AddWithValue("e", expectedVersion) |> ignore
+                    let! removed = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+
+                    if removed > 0 then
+                        do!
+                            recordAudit
+                                scopeId
+                                (EntityDeleted {
+                                    UserId = "system"
+                                    EntityType = entityType
+                                    EntityId = entityId
+                                    Version = expectedVersion
+                                    Replay = None
+                                })
+
+                        return Ok()
+                    else
+                        let! headVersion = readHead scopeId entityType entityId
+
+                        if headVersion = expectedVersion then
+                            return Ok() // nothing there to remove — idempotent, as `Delete` is
+                        else
+                            return
+                                Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, headVersion))
+                with ex ->
+                    return Error(StorageFailure(sprintf "PostgresEntityStore.DeleteIfVersion failed: %s" ex.Message))
         }
 
         member _.FindByIndex<'T>(scopeId: string, entityType: string, indexName: string, value: string) = async {

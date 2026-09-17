@@ -909,3 +909,95 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                 Note = Some(sprintf "%d object(s) %s in scope %s" matched.Length verb scopeId)
                             }
         }
+    // ─── Phase 753 — compare-and-set save ────────────────────────────
+    //
+    // The metadata blob `v{N+1}.json` is a save's commit point (content
+    // is uploaded first and dedup'd; the metadata names it), so claiming
+    // that blob `IfAbsent` through the Phase 600 seam IS the
+    // compare-and-set: of two racers that both read head = N, exactly
+    // one creates `v{N+1}.json` and the other is told the slot is taken.
+    // No lock, no lease, no sweeper — the blob store's own atomicity.
+    //
+    // Residual window when `blobStorage` is NOT an
+    // `IConditionalBlobStorage` (a custom backend that predates Phase
+    // 600): the head compare still runs, but the metadata upload is
+    // unconditional, so two racers that both read head = N inside the
+    // window between that read and the upload both write `v{N+1}.json`
+    // and the later one overwrites the earlier — the unconditional
+    // `Save`'s documented behaviour. The window is one round trip
+    // (`List` → `Upload`); every shipped backend closes it.
+    interface IConditionalDataObjectStore with
+        member _.SaveIfVersion(scopeId, objectId, content, dataType, createdBy, metadata, policy, expectedVersion) = async {
+            if objectId = reservedContentObjectId then
+                return Error(SaveFailed(StorageFailure $"ObjectId '{reservedContentObjectId}' is reserved"))
+            elif policy = Unversioned then
+                return
+                    Error(
+                        SaveFailed(
+                            StorageFailure
+                                "SaveIfVersion requires a Versioned or StrictlyVersioned policy — an Unversioned object has no head to compare"
+                        )
+                    )
+            elif expectedVersion < 0 then
+                return Error(SaveFailed(StorageFailure $"SaveIfVersion: expectedVersion {expectedVersion} is negative"))
+            else
+                let container = containerFor scopeId
+                let! existingPolicy = readV1Policy container objectId
+
+                match existingPolicy with
+                | Some recorded when recorded <> policy -> return Error(SaveFailed(PolicyMismatch(recorded, policy)))
+                | _ ->
+                    let! versions = listVersionBlobs blobStorage container objectId
+
+                    let head =
+                        match versions with
+                        | [] -> 0
+                        | _ -> versions |> List.map fst |> List.max
+
+                    if head <> expectedVersion then
+                        return Error(ConditionalSaveError.VersionConflict(expectedVersion, head))
+                    else
+                        let hash = sha256Hex content
+                        let! contentResult = uploadContentIfMissing container hash content
+
+                        match contentResult with
+                        | Error err -> return Error(SaveFailed err)
+                        | Ok() ->
+                            let nextVersion = expectedVersion + 1
+
+                            let dataObject = {
+                                ObjectId = objectId
+                                Version = nextVersion
+                                CreatedAt = DateTime.UtcNow
+                                CreatedBy = createdBy
+                                ScopeId = scopeId
+                                DataType = dataType
+                                ContentHash = hash
+                                Policy = policy
+                                Metadata = metadata
+                            }
+
+                            let bytes = Json.serialize dataObject
+                            let blobName = versionBlobName objectId nextVersion
+
+                            match blobStorage with
+                            | :? IConditionalBlobStorage as cas ->
+                                let! upload = cas.UploadWithETag(container, blobName, bytes, IfAbsent)
+
+                                match upload with
+                                | Ok _ -> return Ok dataObject
+                                | Error(ETagMismatch _) ->
+                                    // A racer claimed the slot between our
+                                    // head read and this write: the head
+                                    // is (or is becoming) `nextVersion`.
+                                    return Error(ConditionalSaveError.VersionConflict(expectedVersion, nextVersion))
+                                | Error(ConditionalWriteFailure msg) -> return Error(SaveFailed(StorageFailure msg))
+                            | _ ->
+                                let! upload = blobStorage.Upload(container, blobName, bytes)
+
+                                return
+                                    upload
+                                    |> liftStorage
+                                    |> Result.map (fun _ -> dataObject)
+                                    |> Result.mapError SaveFailed
+        }

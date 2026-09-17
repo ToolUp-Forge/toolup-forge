@@ -27,9 +27,12 @@ open ToolUp.Offline.OfflineSyncHandler
 //
 //   1. a mutation for another scope is REJECTED, not redirected;
 //   2. a mutation whose base version is behind head is a CONFLICT
-//      carrying both documents — this is the guard that exists because
-//      `BlobEntityStore.Save` never reports `VersionConflict` itself,
-//      so removing it silently clobbers concurrent server edits;
+//      carrying both documents — since Phase 753 the guard is the
+//      store's own compare-and-set (`SaveIfVersion` / `DeleteIfVersion`
+//      with the mutation's `BaseVersion` as the expectation), so the
+//      fake below refuses a stale expectation exactly as
+//      `BlobEntityStore` does and the handler is asserted to hand the
+//      expectation over rather than to compare heads itself;
 //   3. an audited replay records ONE lifecycle row through `IAuditLog`,
 //      carrying the resolved caller (not `"system"`) and, in its
 //      `Replay` provenance, the mutation's ORIGINAL enqueue time beside
@@ -64,6 +67,36 @@ type FakeEntityStore() =
 
     let key (entityType: string) (entityId: string) = sprintf "%s/%s" entityType entityId
 
+    /// The write both `Save` and `SaveIfVersion` share. Mirrors
+    /// BlobEntityStore: the store rewrites Version on the way in, so the
+    /// stored JSON carries the assigned version, not the caller's.
+    let write (core: EntityFieldsCore) (entity: 'T) (nextVersion: int) : EntityRef<'T> =
+        let k = key core.Type core.Id
+
+        let raw =
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(serialise entity)
+
+        let rewritten = Dictionary<string, obj>()
+
+        for kv in raw do
+            if kv.Key = "Version" then
+                rewritten[kv.Key] <- box nextVersion
+            else
+                rewritten[kv.Key] <- box kv.Value
+
+        store[k] <- (JsonSerializer.Serialize rewritten, nextVersion)
+
+        {
+            Id = core.Id
+            Type = core.Type
+            Version = nextVersion
+        }
+
+    let head (entityType: string) (entityId: string) =
+        match store.TryGetValue(key entityType entityId) with
+        | true, (_, v) -> v
+        | _ -> 0
+
     member _.Seed(entityType: string, entityId: string, json: string, version: int) =
         store[key entityType entityId] <- (json, version)
 
@@ -71,36 +104,22 @@ type FakeEntityStore() =
         member _.Save<'T>(_scopeId: string, entity: 'T) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
+            | Ok core -> return Ok(write core entity (head core.Type core.Id + 1))
+        }
+
+        // Phase 753 — the seam's compare-and-set, which is now the
+        // handler's conflict guard: a stale expectation is refused here,
+        // exactly as BlobEntityStore refuses it.
+        member _.SaveIfVersion<'T>(_scopeId: string, entity: 'T, expectedVersion: int) = async {
+            match tryGetEntityFields entity with
+            | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
-                let k = key core.Type core.Id
+                let current = head core.Type core.Id
 
-                let nextVersion =
-                    match store.TryGetValue k with
-                    | true, (_, v) -> v + 1
-                    | _ -> 1
-
-                // Mirrors BlobEntityStore: the store rewrites Version
-                // on the way in, so the stored JSON carries the
-                // assigned version, not the caller's.
-                let raw =
-                    JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(serialise entity)
-
-                let rewritten = Dictionary<string, obj>()
-
-                for kv in raw do
-                    if kv.Key = "Version" then
-                        rewritten[kv.Key] <- box nextVersion
-                    else
-                        rewritten[kv.Key] <- box kv.Value
-
-                store[k] <- (JsonSerializer.Serialize rewritten, nextVersion)
-
-                return
-                    Ok {
-                        Id = core.Id
-                        Type = core.Type
-                        Version = nextVersion
-                    }
+                if current <> expectedVersion then
+                    return Error(EntityError.VersionConflict(core.Type, core.Id, expectedVersion, current))
+                else
+                    return Ok(write core entity (expectedVersion + 1))
         }
 
         member _.Get<'T>(_scopeId: string, entityType: string, entityId: EntityId) = async {
@@ -116,6 +135,16 @@ type FakeEntityStore() =
                 return Ok()
             else
                 return Error(EntityError.NotFound(entityType, entityId))
+        }
+
+        member _.DeleteIfVersion(_scopeId: string, entityType: string, entityId: EntityId, expectedVersion: int) = async {
+            let current = head entityType entityId
+
+            if current <> expectedVersion then
+                return Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, current))
+            else
+                store.Remove(key entityType entityId) |> ignore
+                return Ok()
         }
 
         // Members the handler never touches. They RAISE rather than

@@ -56,6 +56,28 @@ type IEntityStore =
     /// optimistic concurrency on subsequent reads.
     abstract Save<'T> : scopeId: string * entity: 'T -> Async<Result<EntityRef<'T>, EntityError>>
 
+    /// Phase 753 — compare-and-set save. Persist `entity` as version
+    /// `expectedVersion + 1` if — and only if — the entity's head
+    /// version is `expectedVersion` right now. `expectedVersion = 0`
+    /// means "the entity must not exist yet" (create-only). When the
+    /// head has moved, returns `EntityError.VersionConflict` naming
+    /// the expected and the actual head version, writes nothing, and
+    /// leaves every index untouched; the caller re-reads, merges, and
+    /// states the actual version as its new expectation.
+    ///
+    /// `Save` stays last-writer-wins (GP 11 — nothing about the
+    /// existing method changes); this is the additive surface for
+    /// callers that carried a version through a round trip — an
+    /// offline queue, a co-editing session, a form the user opened an
+    /// hour ago. Implementations MUST make two racing calls at the same
+    /// `expectedVersion` resolve to exactly one `Ok` and one
+    /// `VersionConflict`, with no version skipped or duplicated,
+    /// wherever the wrapped storage can express an atomic claim; an
+    /// implementation over storage that cannot documents the residual
+    /// window in its own header.
+    abstract SaveIfVersion<'T> :
+        scopeId: string * entity: 'T * expectedVersion: int -> Async<Result<EntityRef<'T>, EntityError>>
+
     /// Fetch the latest version of an entity. Returns `NotFound` when
     /// the `(entityType, entityId)` pair has no head version in this
     /// scope.
@@ -81,6 +103,18 @@ type IEntityStore =
     /// Idempotent: deleting a non-existent entity returns `Ok` without
     /// error.
     abstract Delete: scopeId: string * entityType: string * entityId: EntityId -> Async<Result<unit, EntityError>>
+
+    /// Phase 753 — compare-and-set delete, the twin of `SaveIfVersion`.
+    /// Delete the entity if — and only if — its head version is
+    /// `expectedVersion` right now (`0` = "must not exist", which makes
+    /// the call an idempotent `Ok` exactly as `Delete` is). When the
+    /// head has moved, returns `EntityError.VersionConflict` naming
+    /// both versions and removes nothing. The blob-level seam has no
+    /// conditional delete, so implementations compare then delete and
+    /// document the window between the two in their own header.
+    abstract DeleteIfVersion:
+        scopeId: string * entityType: string * entityId: EntityId * expectedVersion: int ->
+            Async<Result<unit, EntityError>>
 
     /// Look up entities by a single declared index. Returns every
     /// entity whose indexed value equals `value` (exact-match only;

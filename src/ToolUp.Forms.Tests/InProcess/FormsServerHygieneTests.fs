@@ -59,6 +59,9 @@ type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<EntityId>)
     interface IEntityStore with
         member _.Save<'T>(scopeId, entity) = inner.Save<'T>(scopeId, entity)
 
+        member _.SaveIfVersion<'T>(scopeId, entity, expectedVersion) =
+            inner.SaveIfVersion<'T>(scopeId, entity, expectedVersion)
+
         member _.Get<'T>(scopeId, entityType, entityId) = async {
             if failIds.Contains entityId then
                 return Error(EntityError.StorageFailure(sprintf "simulated read failure for %s" entityId))
@@ -74,6 +77,9 @@ type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<EntityId>)
 
         member _.Delete(scopeId, entityType, entityId) =
             inner.Delete(scopeId, entityType, entityId)
+
+        member _.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion) =
+            inner.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion)
 
         member _.FindByIndex<'T>(scopeId, entityType, indexName, value) =
             inner.FindByIndex<'T>(scopeId, entityType, indexName, value)
