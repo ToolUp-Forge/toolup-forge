@@ -104,8 +104,8 @@ let private storeWith (template: ReportTemplate) =
         member _.Get(_, id) =
             async.Return(if id = template.Id then Some template else None)
 
-        member _.Save(_, t) = async.Return(Ok t)
-        member _.Delete(_, _) = async.Return(Ok())
+        member _.Save(_, _, t) = async.Return(Ok t)
+        member _.Delete(_, _, _) = async.Return(Ok())
     }
 
 let private templateOf (format: TemplateFormat) : ReportTemplate = {
@@ -131,6 +131,7 @@ let private deckRendererClaimingPptx =
 let private renderThrough (registry: RendererRegistry) (format: TemplateFormat) = async {
     let api =
         ReportApiHandler.create
+            "user-647"
             (storeWith (templateOf format))
             registry
             (fun _ _ _ -> async.Return(Ok("blob", 1)))

@@ -59,8 +59,8 @@ type private FixedTemplateStore(templates: ReportTemplate list) =
         member _.Get(_, id) =
             async.Return(templates |> List.tryFind (fun t -> t.Id = id))
 
-        member _.Save(_, template) = async.Return(Ok template)
-        member _.Delete(_, _) = async.Return(Ok())
+        member _.Save(_, _, template) = async.Return(Ok template)
+        member _.Delete(_, _, _) = async.Return(Ok())
 
 let private markdownTemplate: ReportTemplate = {
     Id = "quarterly"
@@ -116,6 +116,7 @@ let private zeroDepRegistry () : RendererRegistry =
 
 let private ungatedApi () : IReportApi =
     ReportApiHandler.create
+        "user-1"
         (FixedTemplateStore templates :> IReportTemplateStore)
         (zeroDepRegistry ())
         storeBlobOk

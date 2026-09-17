@@ -165,7 +165,7 @@ let private apiOver (renderer: IReportRenderer) (gate: IFactDisclosureGate optio
             audit
             ReportApiConfig.defaults
             scopeId
-    | None -> ReportApiHandler.create templates registry storeBlob audit ReportApiConfig.defaults scopeId
+    | None -> ReportApiHandler.create "operator" templates registry storeBlob audit ReportApiConfig.defaults scopeId
 
 let private renderThroughApi (api: IReportApi) (values: Map<string, PlaceholderValue>) =
     match api.Render(anchorTemplate.Id, values) |> Async.RunSynchronously with
@@ -293,6 +293,7 @@ let tests =
 
             let markdownApi =
                 ReportApiHandler.create
+                    "operator"
                     templates
                     (ReportingCompose.buildDefaultRegistry ())
                     (fun _ _ _ -> async { return Ok("unused", 1) })

@@ -107,12 +107,12 @@ type InMemoryTemplateStore() =
             | _ -> return None
         }
 
-        member _.Save(scopeId, template) = async {
+        member _.Save(scopeId, _principal, template) = async {
             templates[(scopeId, template.Id)] <- template
             return Ok template
         }
 
-        member _.Delete(scopeId, id) = async {
+        member _.Delete(scopeId, _principal, id) = async {
             templates.TryRemove((scopeId, id)) |> ignore
             return Ok()
         }

@@ -1,5 +1,6 @@
 module ToolUp.Reporting.IReportTemplateStore
 
+open ToolUp.Platform.EntityTypes
 open ToolUp.Reporting
 
 // ─── IReportTemplateStore interface ──────────────────────────────────
@@ -33,8 +34,15 @@ type IReportTemplateStore =
     /// Save (create or update) a template. The store assigns the
     /// next monotonic version; the caller's `Version` field is
     /// overwritten.
-    abstract Save: scopeId: string * template: ReportTemplate -> Async<Result<ReportTemplate, string>>
+    ///
+    /// `principal` is the caller performing the write — the reporting
+    /// API handler passes the resolved caller — and is what the
+    /// lifecycle audit row records (Phase 814). The store never
+    /// substitutes `EntityPrincipal.system` for it.
+    abstract Save:
+        scopeId: string * principal: EntityPrincipal * template: ReportTemplate -> Async<Result<ReportTemplate, string>>
 
     /// Delete a template. Idempotent — deleting a non-existent
-    /// template returns `Ok ()`.
-    abstract Delete: scopeId: string * id: TemplateId -> Async<Result<unit, string>>
+    /// template returns `Ok ()`. `principal` is the caller deleting it,
+    /// recorded on the `EntityDeleted` row (Phase 814).
+    abstract Delete: scopeId: string * principal: EntityPrincipal * id: TemplateId -> Async<Result<unit, string>>

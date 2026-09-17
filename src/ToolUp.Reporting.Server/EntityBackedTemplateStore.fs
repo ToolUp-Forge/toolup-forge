@@ -48,23 +48,19 @@ let create (entityStore: IEntityStore) : IReportTemplateStore =
             | Result.Error _ -> return None
         }
 
-        member _.Save(scopeId, template) = async {
+        member _.Save(scopeId, principal, template) = async {
             // IEntityStore overwrites the entity's `Version` on save;
-            // we return the EntityRef's resolved version.
-            // Phase 806 — `IReportTemplateStore.Save` carries no caller, so
-            // this write is stamped as the host's; threading the principal
-            // through that seam is the successor phase's. Until then the row
-            // says so visibly rather than by default.
-            let! result = entityStore.Save<ReportTemplate>(scopeId, EntityPrincipal.system, template)
+            // we return the EntityRef's resolved version. The caller on
+            // the seam is the principal on the row (Phase 814).
+            let! result = entityStore.Save<ReportTemplate>(scopeId, principal, template)
 
             match result with
             | Result.Ok ref -> return Result.Ok { template with Version = ref.Version }
             | Result.Error e -> return Result.Error(string e)
         }
 
-        member _.Delete(scopeId, id) = async {
-            // Phase 806 — as `Save`: no caller on `IReportTemplateStore.Delete`.
-            let! result = entityStore.Delete(scopeId, EntityPrincipal.system, entityType, id)
+        member _.Delete(scopeId, principal, id) = async {
+            let! result = entityStore.Delete(scopeId, principal, entityType, id)
 
             match result with
             | Result.Ok() -> return Result.Ok()

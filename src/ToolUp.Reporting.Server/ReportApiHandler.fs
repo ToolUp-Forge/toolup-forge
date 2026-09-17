@@ -1,5 +1,6 @@
 module ToolUp.Reporting.ReportApiHandler
 
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
@@ -230,10 +231,12 @@ let resolveValuesFor
             return Map.ofArray resolved
     }
 
-/// Shared handler body — `disclosure` carries the fact-disclosure gate
-/// + the calling principal when the deployment composes the fact tier.
+/// Shared handler body — `principal` is the resolved caller every
+/// template write is recorded under (Phase 814); `disclosure` carries
+/// the fact-disclosure gate when the deployment composes the fact tier.
 let private createCore
-    (disclosure: (IFactDisclosureGate * string) option)
+    (principal: string)
+    (disclosure: IFactDisclosureGate option)
     (templateStore: IReportTemplateStore)
     (registry: RendererRegistry)
     (storeBlob: StoreBlob)
@@ -241,18 +244,23 @@ let private createCore
     (config: ReportApiConfig)
     (scopeId: string)
     : IReportApi =
+    // Phase 814 — the caller, as the template seam records it.
+    let caller = EntityPrincipal.ofPrincipal principal
+
+    let disclosure = disclosure |> Option.map (fun gate -> gate, principal)
+
     {
         ListTemplates = fun () -> templateStore.List scopeId
 
         SaveTemplate =
             fun template -> async {
-                let! result = templateStore.Save(scopeId, template)
+                let! result = templateStore.Save(scopeId, caller, template)
                 return result
             }
 
         DeleteTemplate =
             fun id -> async {
-                let! result = templateStore.Delete(scopeId, id)
+                let! result = templateStore.Delete(scopeId, caller, id)
                 return result
             }
 
@@ -310,8 +318,11 @@ let private createCore
 /// template store, blob writer, audit callback, and config. No
 /// disclosure gate: `NarrativeValue` placeholders are projected to
 /// text unchecked (a deployment without the fact tier pays nothing —
-/// GP 13).
+/// GP 13). `principal` is the resolved caller — resolve it upstream
+/// alongside `scopeId` (both are per-caller); every template save and
+/// delete is recorded under it (Phase 814).
 let create
+    (principal: string)
     (templateStore: IReportTemplateStore)
     (registry: RendererRegistry)
     (storeBlob: StoreBlob)
@@ -319,7 +330,7 @@ let create
     (config: ReportApiConfig)
     (scopeId: string)
     : IReportApi =
-    createCore None templateStore registry storeBlob auditOnRender config scopeId
+    createCore principal None templateStore registry storeBlob auditOnRender config scopeId
 
 /// `create` with the fact-disclosure export door engaged (Phase
 /// 564.B): every fact ref carried by a `NarrativeValue` placeholder is
@@ -340,7 +351,7 @@ let createWithDisclosureGate
     (config: ReportApiConfig)
     (scopeId: string)
     : IReportApi =
-    createCore (Some(gate, principal)) templateStore registry storeBlob auditOnRender config scopeId
+    createCore principal (Some gate) templateStore registry storeBlob auditOnRender config scopeId
 
 // ─── In-handler management gate (Phase 619) ──────────────────────────
 //
@@ -396,6 +407,8 @@ let TemplateManagementDenied =
 ///
 /// ```fsharp
 /// ReportApiHandler.createWithDisclosureGate gate principal store registry storeBlob audit config scopeId
+/// // or, without the fact tier:
+/// ReportApiHandler.create principal store registry storeBlob audit config scopeId
 /// |> ReportApiHandler.withManagementGate canManage
 /// ```
 let withManagementGate (canManage: CanManageTemplates) (api: IReportApi) : IReportApi = {
