@@ -145,6 +145,32 @@ type ReactiveDataObjectStore
         member _.Erase(scopeId, subjectUserId, policy, dryRun) =
             inner.Erase(scopeId, subjectUserId, policy, dryRun)
 
+    // Phase 753 — the decorator must not hide the inner store's
+    // compare-and-set capability, or every entity store composed over it
+    // silently drops to the compare-then-save fallback. Forward through
+    // the shared probe (which itself falls back when `inner` lacks the
+    // capability), and react to the new version exactly as `Save` does.
+    interface IConditionalDataObjectStore with
+        member _.SaveIfVersion(scopeId, objectId, content, dataType, createdBy, metadata, policy, expectedVersion) = async {
+            let! result =
+                ConditionalDataObjectStore.saveIfVersion
+                    inner
+                    scopeId
+                    objectId
+                    content
+                    dataType
+                    createdBy
+                    metadata
+                    policy
+                    expectedVersion
+
+            match result with
+            | Ok dataObject -> do! onVersion scopeId dataObject
+            | Error _ -> ()
+
+            return result
+        }
+
 /// Construction + the DI-resolved reaction the fact tier composes.
 module ReactiveDataChange =
 

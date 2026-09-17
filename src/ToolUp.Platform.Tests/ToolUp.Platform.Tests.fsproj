@@ -905,6 +905,7 @@
         <!-- Phase 600 — IConditionalBlobStorage contract (ETag CAS seam)
              bound to Local / InMemory / Resilient-decorated backends. -->
         <Compile Include="InProcess\ConditionalBlobStorageTests.fs" />
+        <Compile Include="InProcess\ConditionalDataObjectStoreTests.fs" />
         <!-- Phase 447 — seed / fixture-pack loader (idempotency, version
              bump, mode gating, scope isolation). -->
         <Compile Include="InProcess\SeedDataLoaderTests.fs" />
