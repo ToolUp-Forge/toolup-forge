@@ -8,7 +8,9 @@ open ToolUp.Remoting.Server
 open ToolUp.Remoting.Server.Proxy
 open System.Threading.Tasks
 
-module GiraffeUtil =
+// Phase 256 — assembly-private: the adapter's own build/dispatch plumbing, reached by consumers
+// only through `Remoting.buildHttpHandler`. Tests see it through InternalsVisibleTo.
+module internal GiraffeUtil =
     let setJsonBody (backend: JsonSerializerBackend) (response: obj) (logger: Option<string -> unit>) : HttpHandler =
         fun (next: HttpFunc) (ctx: HttpContext) -> task {
             // TIDY-UP "ToolUp.Remoting per-request cleanups" (F6) — direct-

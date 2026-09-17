@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.RAG.CitationNormaliserImpl
+module internal ToolUp.RAG.CitationNormaliserImpl
 
 open System
 open System.Collections.Generic

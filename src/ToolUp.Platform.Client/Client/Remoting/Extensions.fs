@@ -10,8 +10,9 @@ open Fable.Core
 open Fable.Core.JsInterop
 open System.Runtime.CompilerServices
 
-/// Utilities for working with binary data types in the browser
-module InternalUtilities =
+/// Utilities for working with binary data types in the browser. Assembly-private since Phase 256:
+/// every caller is the proxy / HTTP layer beside it, and nothing a consumer composes reaches it.
+module internal InternalUtilities =
     /// Creates a new instance of a FileReader
     [<Emit("new FileReader()")>]
     let createFileReader () : FileReader = jsNative

@@ -7,7 +7,7 @@ namespace ToolUp.Companions.Isolation
 /// consumer and an executable to `dotnet exec`: the one entry point is
 /// how the host starts the sacrificial process without a second
 /// artefact to ship (see `ProcessIsolation`).
-module Program =
+module internal Program =
     /// `--worker` serves one request over the standard streams; any
     /// other invocation prints what this executable is and exits 2.
     [<EntryPoint>]

@@ -117,8 +117,6 @@ ToolUp.Cli.ModuleCommand+Options.AppRoot : System.String { get }
 ToolUp.Cli.ModuleCommand+Options.ModulesDir : System.String { get }
 ToolUp.Cli.ModuleCommand+Options.Name : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.ModuleCommand+Options.Register : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Cli.Program (class)
-ToolUp.Cli.Program.main(System.String[]) : System.Int32
 ToolUp.Cli.StampCommand (class)
 ToolUp.Cli.StampCommand.certificationCanonicalBytes(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Cli.StampCommand+ConformanceVerdict]) : System.Byte[]
 ToolUp.Cli.StampCommand.certifiedSurfaceHash(System.String) : System.String
