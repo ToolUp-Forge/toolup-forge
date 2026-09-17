@@ -43,7 +43,7 @@ let saveEdit () = async {
     | Ok current ->
         let edited = { current with Body = editedBody }
 
-        match! store.SaveIfVersion<Note>(scopeId, edited, current.Version) with
+        match! store.SaveIfVersion<Note>(scopeId, EntityActor.ofPrincipal caller.UserId, edited, current.Version) with
         | Ok saved -> return Ok saved
         | Error(EntityError.VersionConflict(_, _, expected, actual)) ->
             // Someone wrote version `actual` after we read `expected`.
@@ -54,7 +54,9 @@ let saveEdit () = async {
 ```
 
 The record's own `Version` field is what you state — the store rewrote it on the way out of `Get`,
-so `current.Version` is the head you read. On success the returned `EntityRef.Version` is the new
+so `current.Version` is the head you read. The `EntityActor` beside it is the caller the handler
+resolved (`caller` is its `AccessContext`): since Phase 806 every mutating member takes one, and it is
+what the lifecycle audit row records. On success the returned `EntityRef.Version` is the new
 head, which is what the next edit states.
 
 ## What the store guarantees, and where
@@ -103,10 +105,17 @@ fallback rather than papered over with a lock, because a lock would have to be h
 whole read-modify-write and released on every failure path, and the seam already has a primitive
 that closes the window for every shipped backend.
 
-`DeleteIfVersion` has that window on every backend: the blob seam has no conditional delete, so
-the head is compared and then deleted in two steps (`PostgresEntityStore` folds the compare into the
-`DELETE` statement's predicate, which narrows it to the statement's own snapshot). A save landing
-between the two is removed along with the version the caller expected.
+`DeleteIfVersion` closes its window the same way since Phase 806. The data-object layer exposes a
+conditional delete beside the conditional save (`IConditionalDataObjectStore.DeleteIfVersion`, probed
+through `ConditionalDataObjectStore.deleteIfVersion`), and the default `DataObjectStore` decides it
+with the same blob a save would: it claims the NEXT version slot (`v{N+1}.json`, `IfAbsent`) before
+removing anything, so a save and a delete racing at the same expectation are refused by each other's
+claim, and releases the slot once the versions are gone. The one race a released slot re-opens — a
+saver that read the head before the delete began and writes after it finished — is closed from the
+saver's side: holding its claim, `SaveIfVersion` checks the version it expected still exists, and
+undoes the claim with `VersionConflict(expected, 0)` when it does not. `PostgresEntityStore` folds
+the compare into the `DELETE` statement's predicate, which evaluates it against the statement's own
+snapshot. The same two fallback compositions as above keep the one-round-trip window on the delete.
 
 ## Offline and co-editing — which mechanism, when
 
