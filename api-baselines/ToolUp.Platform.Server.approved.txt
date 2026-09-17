@@ -2165,6 +2165,20 @@ ToolUp.Platform.ComputeMemoStats.Stored : System.Int64 { get }
 ToolUp.Platform.ComputeMemoization (class)
 ToolUp.Platform.ComputeMemoization.defaultMaxEntries : System.Int32 { get }
 ToolUp.Platform.ComputeMemoization.defaultTtl : System.TimeSpan { get }
+ToolUp.Platform.ConditionalDataObjectStore (class)
+ToolUp.Platform.ConditionalDataObjectStore.saveIfVersion(ToolUp.Platform.IDataObjectStore, System.String, System.String, System.Byte[], System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.VersioningPolicy, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataObject, ToolUp.Platform.ConditionalSaveError]]
+ToolUp.Platform.ConditionalSaveError (class)
+ToolUp.Platform.ConditionalSaveError.IsSaveFailed : System.Boolean { get }
+ToolUp.Platform.ConditionalSaveError.IsVersionConflict : System.Boolean { get }
+ToolUp.Platform.ConditionalSaveError.Tag : System.Int32 { get }
+ToolUp.Platform.ConditionalSaveError+SaveFailed (class)
+ToolUp.Platform.ConditionalSaveError+SaveFailed.Item : ToolUp.Platform.DataObjectError { get }
+ToolUp.Platform.ConditionalSaveError+Tags (class)
+ToolUp.Platform.ConditionalSaveError+Tags.SaveFailed : System.Int32 (literal)
+ToolUp.Platform.ConditionalSaveError+Tags.VersionConflict : System.Int32 (literal)
+ToolUp.Platform.ConditionalSaveError+VersionConflict (class)
+ToolUp.Platform.ConditionalSaveError+VersionConflict.actual : System.Int32 { get }
+ToolUp.Platform.ConditionalSaveError+VersionConflict.expected : System.Int32 { get }
 ToolUp.Platform.ConfigDriftDetector (class)
 ToolUp.Platform.ConfigDriftDetector.run(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ConfigHandler (class)
@@ -5090,6 +5104,8 @@ ToolUp.Platform.IComputeBudgetStore.GetBudget(System.String) : Microsoft.FSharp.
 ToolUp.Platform.IComputeBudgetStore.ReadUsage(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ComputeBudgetUsage]
 ToolUp.Platform.IComputeBudgetStore.SetBudget(System.String, ToolUp.Platform.ComputeBudget) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IComputeBudgetStore.Settle(System.String, System.String, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IConditionalDataObjectStore (interface)
+ToolUp.Platform.IConditionalDataObjectStore.SaveIfVersion(System.String, System.String, System.Byte[], System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.VersioningPolicy, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataObject, ToolUp.Platform.ConditionalSaveError]]
 ToolUp.Platform.IConfigStore (interface)
 ToolUp.Platform.IConfigStore.Clear(ToolUp.Platform.StorageScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IConfigStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
@@ -5334,12 +5350,14 @@ ToolUp.Platform.IEntityStore (class)
 ToolUp.Platform.IEntityStore+IEntityStore (interface)
 ToolUp.Platform.IEntityStore+IEntityStore.Count(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.IEntityStore+IEntityStore.Delete(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EntityTypes+EntityError]]
+ToolUp.Platform.IEntityStore+IEntityStore.DeleteIfVersion(System.String, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.FindByIndex`1(System.String, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityRef`1[T]], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.GetVersion`1(System.String, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.Get`1(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.ListAll`1(System.String, System.String, System.Int32, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityRef`1[T]]]
 ToolUp.Platform.IEntityStore+IEntityStore.ListVersions`1(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EntityTypes+EntityRef`1[T]]]
 ToolUp.Platform.IEntityStore+IEntityStore.Query`1(System.String, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[T], ToolUp.Platform.EntityTypes+EntityError]]
+ToolUp.Platform.IEntityStore+IEntityStore.SaveIfVersion`1(System.String, T, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEntityStore+IEntityStore.Save`1(System.String, T) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityTypes+EntityRef`1[T], ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.IEvidenceChainEvidence (interface)
 ToolUp.Platform.IEvidenceChainEvidence.EvidenceChain : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]] { get }
