@@ -3,25 +3,37 @@ SPDX-License-Identifier: Apache-2.0
 Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 -->
 
-# `proofs/` — the decoder totality theorem
+# `proofs/` — the machine-checked theorems
 
-This directory holds one theorem and the machinery that keeps it honest.
+This directory holds two theorems and the machinery that keeps them honest. Each has its own
+claims ladder below, because the two say different things and a reader should not have to work
+out which rung a sentence about one belongs to by reading the other.
 
-**The theorem.** Given a parsed `Value`, no combinator in `ToolUp.Remoting.Decode` and no decoder
-built from them can diverge, throw, or reach a state that is neither an accept nor a named
-refusal — and *which* of the two is characterised structurally, so the failure classification is
-exhaustive.
+**The decoder totality theorem (Phase 787).** Given a parsed `Value`, no combinator in
+`ToolUp.Remoting.Decode` and no decoder built from them can diverge, throw, or reach a state that
+is neither an accept nor a named refusal — and *which* of the two is characterised structurally, so
+the failure classification is exhaustive.
+
+**The disclosure noninterference theorem (Phase 790).** For any ranking, any total verdict
+function and any policy assignment, the population disclosure fold — the one both population doors
+run — discloses no fact whose verdict was not-disclosable, reports the withheld members as a count
+grouped by policy that depends on the verdicts alone, keeps every disclosed fact's true rank,
+suppresses the magnitude block exactly when anything was withheld, and produces *identical* output
+for two rankings that agree on their disclosable facts, whatever the withheld facts' values. Its
+ladder is [further down](#the-claims-ladder--the-disclosure-fold-phase-790).
 
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
 |---|---|
-| `RemotingDecode.fst` | the model — `Decode.fs` clause for clause, each definition naming its F# counterpart, every refusal message reproduced verbatim |
+| `RemotingDecode.fst` | the decoder model — `Decode.fs` clause for clause, each definition naming its F# counterpart, every refusal message reproduced verbatim |
+| `DisclosureFold.fst` | the disclosure model — `DisclosureEgress.evaluate` and `PopulationDisclosure.fold` / `valuesWithheld` / `disclosedStats` clause for clause, each definition naming its F# counterpart |
 | `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
-| `check.ps1` | the whole proof leg: resolve the pin, check, extract, byte-diff, build, run the differential host |
-| `oracle/RemotingDecode.fs` | **generated** — the model extracted to F#, committed so the repository never needs a prover to build |
-| `oracle/Prims.fs` | the nine-name runtime the extraction needs, because F\*'s F# backend ships none |
-| [`../proofs.json`](../proofs.json) | the ladder below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
+| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract and byte-diff; build the oracle project; run each module's differential host |
+| `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
+| `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
+| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; the second model references a subset of the same nine |
+| [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
 pwsh ./proofs/check.ps1            # the whole leg, once
@@ -30,13 +42,13 @@ pwsh ./proofs/check.ps1 -SkipHost  # the proof half only
 ```
 
 Nothing else in the repository depends on any of it. `dotnet build`, `VerifyAll` and every other CI
-job compile the *committed* extraction like ordinary source; the prover is a ~200 MB download this
+job compile the *committed* extractions like ordinary source; the prover is a ~200 MB download this
 one script fetches on demand into a gitignored directory. That is deliberate: a contributor with no
 interest in proofs should never install one.
 
 ---
 
-## The claims ladder
+## The claims ladder — the decoder (Phase 787)
 
 Four rungs. The distinction between them is the point of writing them down: a reader who takes
 everything here as rung 1 has been misled, and the way to prevent that is to say which rung each
@@ -52,10 +64,10 @@ manifest is the one a machine reads and this page is the one that explains why.
 
 ### Rung 1 — Proved
 
-**This is the only place in this repository where the words "formally verified" are spent, and they
-are spent on the combinator layer alone.** What a machine has checked, on the pinned prover, with
-`--report_assumes error` so that an `assume` or an `admit` would fail the leg rather than quietly
-weaken the result:
+**The words "formally verified" are spent in this file's two Rung-1 sections and nowhere else in
+this repository; here, they are spent on the combinator layer alone.** What a machine has checked,
+on the pinned prover, with `--report_assumes error` so that an `assume` or an `admit` would fail the
+leg rather than quietly weaken the result:
 
 * **Totality, for every decoder at once.** `decode_total` quantifies over *all* decoders, not one
   lemma per combinator — including any a consumer or the source generator builds out of them —
@@ -165,6 +177,116 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
 
 ---
 
+## The claims ladder — the disclosure fold (Phase 790)
+
+The same four rungs, for `DisclosureFold.fst`. The subject is the pair of functions every
+population door runs before it reports anything: the egress predicate
+`DisclosureEgress.evaluate`, and the fold `PopulationDisclosure.fold` with its two companions
+`valuesWithheld` and `disclosedStats`. Both are pure and total over closed types, which is why a
+theorem about them is cheap to state and — the important half — cheap to keep tied to the code.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these five
+lemmas alone:**
+
+* **`no_undisclosed_output`.** No fact whose verdict is not-disclosable appears in the disclosed
+  list — for any ranking, any total verdict function, any policy assignment.
+* **`withheld_is_count_only`.** The withheld count is the number of not-disclosable verdicts, and
+  the withheld projection is `countBy`-then-`sortBy` over their policy refs: both are functions of
+  the verdict list alone. Its corollary `withheld_blind_to_values` says the same relationally, over
+  two rankings whose facts may differ in every field and even in *type* — pointwise-equal verdicts
+  give an identical projection, which is the strongest way to say a value was never consulted.
+* **`ranks_preserved`.** Every disclosed `(rank, fact)` has `fact` at one-based position `rank` of
+  the input ranking. A withheld member leaves a visible gap rather than promoting the member below
+  it, and a contiguous renumbering cannot satisfy the statement.
+* **`magnitudes_absent_iff_withheld`.** When anything was withheld, the gated summary's minimum,
+  maximum and mean are absent; when nothing was, the summary is returned untouched; and the
+  existence-level fields — counts, period coverage, freshness, method mix — ride through in both
+  cases. The biconditional is over the gate's *action*: it fires exactly when some verdict denied
+  (`withheld_iff_any_denied`). It does not say an absent magnitude implies a withheld member — a
+  summary over nothing comparable carries none to begin with.
+* **`verdict_noninterference`.** Two rankings that agree on every disclosable fact, and on every
+  verdict, yield *identical* `PopulationDisclosure` records — the same disclosed list, the same
+  withheld count, the same withheld projection — whatever the withheld facts' identities or values.
+  No observation of the fold's output distinguishes one withheld population from another.
+
+Supporting, and proved beside them: `evaluate_characterised` — `Surfaceable` is always disclosable,
+`Internal` never, `Restricted` exactly when the resolver answers `Some true`, so `Some false` and
+`None` are one clause and an unknown policy ref can never fail open — and `unknown_policy_denies`
+for the conservative default. They are what tie the verdicts the fold consumes to the predicate
+that produces them.
+
+Three things the model leaves *opaque*, each because the fold never inspects it and a second
+implementation here would be free to disagree with the host's: the egress surface (the predicate
+hands it to the resolver and reads nothing from it), a fact's payload (every field but its id —
+which is what lets the noninterference lemma say "whatever the withheld facts' values" and mean
+it), and the string ordering the projection is sorted by (see Rung 3). Every lemma holds for any
+ordering.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate.
+
+* **The model agrees with production.** `DisclosureProofOracleTests` runs the extracted fold
+  beside the shipped one over the rankings the three door packs pin — the answer planner's, the
+  population tool's, the coverage narrative's, reproduced as data — and over four hundred generated
+  rankings, half with verdicts derived through the predicate the way a door derives them and half
+  with verdicts sampled directly, so the fold meets refusal shapes no resolver in the file happens
+  to produce. The two must agree on the **disclosed list, the withheld projection and the gated
+  summary at once**, payloads included. The predicate is compared on its own first, over every
+  classification, resolver and surface, because the fold takes verdicts as given and a drifted
+  predicate would be invisible to it whenever both sides were handed the same wrong verdict.
+* **The committed extraction is what the prover produced.** `check.ps1` re-extracts and byte-diffs
+  against `oracle/DisclosureFold.fs`.
+* **The differential is known to be able to fail.** A committed go-red oracle renumbers the
+  disclosed ranks contiguously — the tidy-looking mistake that reports the third-best as the
+  second-best — and the comparison is asserted to catch it, with the mechanism pinned on a
+  three-member ranking: true ranks 1 and 3 against the oracle's 1 and 2. This is `ranks_preserved`
+  running, and it is the one property a plausible reimplementation is most likely to lose.
+
+### Rung 3 — Assumed, and stated
+
+* **The `Mean` residual — a floor, not a proof.** The theorem is about the *fold*, and the fold
+  gates a summary the store computed over the *whole* matched population. A restricted member ranked
+  below the ceiling still contributed to that summary's `Mean`, and under a highest-first ranking can
+  *be* its `Minimum`. What is proved is that the gate acts on the summary exactly when it acts on
+  the members; what is not proved, or claimed, is that a magnitude the gate lets through carries no
+  information about a member the caller was never returned. `PopulationQueryTypes.fs` says this in
+  the same words, and this rung exists so the ladder says it too rather than letting Rung 1 imply
+  otherwise. The mitigation is structural: when *any* member of the requested ranking is withheld
+  the whole magnitude block goes, so the residual is confined to members outside the ranking asked
+  for.
+* **The string ordering is host-supplied.** `List.sortBy fst` compares ordinally; F\* has no string
+  comparison that extracts to `Prims` alone, so the model takes a `before: string -> string -> bool`
+  from the host, as the decoder model takes a string's length. Every lemma holds for any ordering;
+  what the model does not verify is that the host's ordinal comparison is the shipped one. The
+  differential compares the projection's *order*, so a disagreement fails the leg on any ranking
+  withheld under two policies.
+* **The bridges are hand-written.** A fact is its id plus itself as the opaque payload; a summary is
+  its three magnitudes plus itself as the opaque rest. Short on purpose, and the read-back is a
+  structural comparison of production's own records.
+* The extractor, the F# compiler, the `Prims` shim, and reproducibility resting on the pin plus
+  `--quake` — exactly as for the decoder, above.
+
+### Rung 4 — Not claimed
+
+* **That every door calls `disclosedStats`.** The theorem is about what the fold computes, not
+  about who calls it. A summary type does not force the call, and nothing here could make it: the
+  obligation on a door is to run the ranking through `fold` and the summary through
+  `disclosedStats` before reporting either, and the evidence that the two shipped doors do is
+  their own packs (`AnswerPlannerTests`, `PopulationQueryToolTests`), which is where a third door
+  would have to add itself.
+* **Statistical disclosure control.** Nothing here says what a determined reader could infer from
+  a count, a period range or a freshness histogram, nor from the magnitudes of a ranking with
+  nothing withheld. The disclosure vocabulary is a declared classification enforced at egress, not
+  an inference-control regime, and the shipped code's honesty boundary says so in the same words.
+* **The gate's resolution of a policy ref**, taint propagation, declassification and the audit
+  trail. The predicate takes a resolver as a total function and the theorem holds for every one;
+  what a particular resolver answers is that resolver's claim.
+
+---
+
 ## Method, and where it comes from
 
 The method is not new. An open-source F# wire decoder whose combinators were proved total in F\*
@@ -192,12 +314,26 @@ recorded beside the code they constrain:
   unparseable under F#'s offside rule however the indentation flags are set. As an ordinary function
   it extracts as four flat calls.
 
+And two from the disclosure model (Phase 790), the first second module and so the first to find out
+what the leg had assumed about there being one:
+
+* **A recursive ghost predicate that sits under `/\` must return `prop`, not `Type0`.** `each_rank_true
+  ranked offset rest` as a `Tot Type0` conjunct fails with "Expected type Prims.prop but … has type
+  Type0"; declaring the predicate `Tot prop` is the whole fix, and `True` / `False` / `==` / `==>`
+  all sit happily inside it. A predicate that needs no `==` (a check on an `eqtype`) is better as a
+  `bool` anyway.
+* **Nothing in the leg should name a module twice.** The first version of `check.ps1` carried the
+  module name in the pin's `extract` flags *and* in the script's steps; the second module would have
+  meant a second flag set. The pin now carries only `--codegen FSharp`, and the script appends
+  `--extract <module>` per entry of one `$modules` list — source, committed oracle, host list and
+  case floor — so a third model is one entry and no other edit.
+
 ---
 
 ## When the byte-diff fails
 
-It means `oracle/RemotingDecode.fs` is not what the prover produces from the current
-`RemotingDecode.fst`. That is the expected state after any model edit, and the fix is to copy the
+It means a committed `oracle/*.fs` is not what the prover produces from the current `.fst` beside
+it. That is the expected state after any model edit, and the fix is to copy the
 fresh extraction over the committed one and commit the two together — `check.ps1` prints the exact
 command and the first forty lines of the diff. It is *not* a state to resolve by editing the
 extraction: the next run would simply report it again.
