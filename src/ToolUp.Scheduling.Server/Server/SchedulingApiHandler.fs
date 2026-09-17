@@ -2,6 +2,7 @@ module ToolUp.Scheduling.SchedulingApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Server
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.SchedulingApi
@@ -41,9 +42,13 @@ let private resolveScope (ctx: HttpContext) : string * string =
 
 let schedulingApi (scheduler: IBookingScheduler) (ctx: HttpContext) : ISchedulingApi =
     let scopeId, userId = resolveScope ctx
+    // Phase 814 — the caller, as the resource / availability writes
+    // record it; the booking operations pass the same user as
+    // `actorUserId`.
+    let principal = EntityPrincipal.ofPrincipal userId
 
     {
-        RegisterResource = fun resource -> scheduler.RegisterResource(scopeId, resource)
+        RegisterResource = fun resource -> scheduler.RegisterResource(scopeId, principal, resource)
         GetResource = fun id -> scheduler.GetResource(scopeId, id)
         ListResources = fun () -> scheduler.ListResources scopeId
 
@@ -54,8 +59,8 @@ let schedulingApi (scheduler: IBookingScheduler) (ctx: HttpContext) : ISchedulin
         MarkNoShow = fun id -> scheduler.MarkNoShow(scopeId, id, userId)
         ListBookings = fun (resourceId, window) -> scheduler.ListBookings(scopeId, resourceId, window)
 
-        AddAvailabilityException = fun exc -> scheduler.AddAvailabilityException(scopeId, exc)
-        RemoveAvailabilityException = fun id -> scheduler.RemoveAvailabilityException(scopeId, id)
+        AddAvailabilityException = fun exc -> scheduler.AddAvailabilityException(scopeId, principal, exc)
+        RemoveAvailabilityException = fun id -> scheduler.RemoveAvailabilityException(scopeId, principal, id)
         ListAvailabilityExceptions =
             fun (resourceId, window) -> scheduler.ListAvailabilityExceptions(scopeId, resourceId, window)
 

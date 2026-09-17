@@ -3,6 +3,9 @@ module ToolUp.Scheduling.Tests.Contracts.IBookingSchedulerContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
+open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.SchedulingEvents
 open ToolUp.Scheduling.IBookingScheduler
@@ -21,6 +24,10 @@ open ToolUp.Scheduling.IBookingScheduler
 // `IJobSchedulerContract` packs in `ToolUp.Platform.Tests`.
 
 type SchedulerFactory = unit -> IBookingScheduler * (unit -> ModuleEvent list) * string
+
+/// The caller the shape tests pass on the resource / availability
+/// writes. The shape tests do not observe it — `principalTests` does.
+let private caller = EntityPrincipal.ofPrincipal "scheduling-admin"
 
 let private utc (y: int) (mo: int) (d: int) (h: int) (mi: int) : DateTimeOffset =
     DateTimeOffset(y, mo, d, h, mi, 0, TimeSpan.Zero)
@@ -70,7 +77,7 @@ let tests (label: string) (factory: SchedulerFactory) =
         testAsync "RegisterResource then GetResource returns the resource" {
             let scheduler, _, scopeId = factory ()
             let resource = makeResource "R1"
-            let! reg = scheduler.RegisterResource(scopeId, resource)
+            let! reg = scheduler.RegisterResource(scopeId, caller, resource)
             Expect.equal reg (Ok()) "register ok"
 
             let! fetched = scheduler.GetResource(scopeId, "R1")
@@ -80,9 +87,9 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "ListResources returns every registered resource" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R2")
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R3")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R2")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R3")
 
             let! all = scheduler.ListResources scopeId
             Expect.equal all.Length 3 "three resources"
@@ -98,7 +105,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Book with no conflict succeeds and emits BookingCreated" {
             let scheduler, getEvents, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let booking = makeBooking "B1" "R1" mondayMorning
             let! result = scheduler.Book(scopeId, booking, "u1")
 
@@ -117,7 +124,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Book with overlap returns Error Conflicts" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let first = makeBooking "B1" "R1" mondayMorning
             let! _ = scheduler.Book(scopeId, first, "u1")
 
@@ -139,7 +146,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Cancel transitions booking to Cancelled and emits event" {
             let scheduler, getEvents, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let booking = makeBooking "B1" "R1" mondayMorning
             let! _ = scheduler.Book(scopeId, booking, "u1")
 
@@ -157,7 +164,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Cancel is idempotent on already-cancelled booking" {
             let scheduler, getEvents, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let booking = makeBooking "B1" "R1" mondayMorning
             let! _ = scheduler.Book(scopeId, booking, "u1")
             let! _ = scheduler.Cancel(scopeId, "B1", "first", "u1")
@@ -172,7 +179,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Reschedule moves the booking and emits event" {
             let scheduler, getEvents, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let booking = makeBooking "B1" "R1" mondayMorning
             let! _ = scheduler.Book(scopeId, booking, "u1")
 
@@ -194,7 +201,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "Reschedule with conflict returns Error Conflicts" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let! _ = scheduler.Book(scopeId, makeBooking "B1" "R1" mondayMorning, "u1")
             let! _ = scheduler.Book(scopeId, makeBooking "B2" "R1" (mondayMorning.AddHours(2.0)), "u1")
 
@@ -215,7 +222,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "MarkNoShow on Confirmed booking emits event and transitions" {
             let scheduler, getEvents, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let! _ = scheduler.Book(scopeId, makeBooking "B1" "R1" mondayMorning, "u1")
 
             let! result = scheduler.MarkNoShow(scopeId, "B1", "u1")
@@ -231,7 +238,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "ListBookings filters by date range" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let! _ = scheduler.Book(scopeId, makeBooking "B1" "R1" mondayMorning, "u1")
             let! _ = scheduler.Book(scopeId, makeBooking "B2" "R1" (mondayMorning.AddDays(7.0)), "u1")
             let! _ = scheduler.Book(scopeId, makeBooking "B3" "R1" (mondayMorning.AddDays(14.0)), "u1")
@@ -247,7 +254,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "AddAvailabilityException then ListAvailabilityExceptions returns it" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
 
             let exc: AvailabilityException = {
                 Id = "ex1"
@@ -261,7 +268,7 @@ let tests (label: string) (factory: SchedulerFactory) =
                 Reason = Some "Holiday"
             }
 
-            let! addResult = scheduler.AddAvailabilityException(scopeId, exc)
+            let! addResult = scheduler.AddAvailabilityException(scopeId, caller, exc)
             Expect.equal addResult (Ok()) "added"
 
             let window = {
@@ -276,7 +283,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "DetectConflicts returns OverlappingBooking for overlap" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
             let! _ = scheduler.Book(scopeId, makeBooking "B1" "R1" mondayMorning, "u1")
 
             let probe = makeBooking "B-probe" "R1" (mondayMorning.AddMinutes(30.0))
@@ -294,7 +301,7 @@ let tests (label: string) (factory: SchedulerFactory) =
 
         testAsync "ExpandRecurrence expands a Daily count=4 booking" {
             let scheduler, _, scopeId = factory ()
-            let! _ = scheduler.RegisterResource(scopeId, makeResource "R1")
+            let! _ = scheduler.RegisterResource(scopeId, caller, makeResource "R1")
 
             let rrule = {
                 Frequency = Daily
@@ -316,5 +323,70 @@ let tests (label: string) (factory: SchedulerFactory) =
 
             let! occurrences = scheduler.ExpandRecurrence(scopeId, booking, window)
             Expect.equal occurrences.Length 4 "4 occurrences"
+        }
+    ]
+// ─── Phase 814 — the principal on the seam call is the principal on the row ──
+//
+// `mkEntityStore` builds the `IEntityStore` the binding tests against;
+// `mkScheduler` composes the `IBookingScheduler` under test over an
+// entity store the pack hands it. The pack decorates the entity store to
+// observe what the seam passes down: the caller on `RegisterResource` /
+// `AddAvailabilityException` / `RemoveAvailabilityException` reaches the
+// store unchanged, and the host principal is never substituted. (The
+// booking operations carry `actorUserId`, which the booking EVENTS
+// stamp — the shape tests above cover those.)
+let principalTests
+    (label: string)
+    (mkEntityStore: unit -> IEntityStore)
+    (mkScheduler: IEntityStore -> IBookingScheduler)
+    =
+    let setup () =
+        let recording = PrincipalRecordingEntityStore(mkEntityStore ())
+        let scheduler = mkScheduler (recording :> IEntityStore)
+        let scopeId = "team-814-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+        scheduler, recording, scopeId
+
+    testList (sprintf "IBookingScheduler principal contract (Phase 814) — %s" label) [
+
+        testAsync "the caller on the resource and availability writes is the principal the store receives" {
+            let scheduler, recording, scopeId = setup ()
+            let operator = EntityPrincipal.ofPrincipal "olivia"
+
+            let delegated =
+                EntityPrincipal.ofPrincipal "sam" |> EntityPrincipal.onBehalfOf "olivia"
+
+            let! registered = scheduler.RegisterResource(scopeId, operator, makeResource "R1")
+            Expect.equal registered (Ok()) "register"
+
+            let exc = {
+                Id = "exc-1"
+                Type = "AvailabilityException"
+                Version = 0
+                ResourceId = "R1"
+                Date = DateOnly(2026, 6, 3)
+                Kind = FullDay
+                StartTime = None
+                EndTime = None
+                Reason = Some "holiday"
+            }
+
+            let! added = scheduler.AddAvailabilityException(scopeId, delegated, exc)
+            Expect.equal added (Ok()) "add exception"
+
+            let! removed = scheduler.RemoveAvailabilityException(scopeId, operator, "exc-1")
+            Expect.equal removed (Ok()) "remove exception"
+
+            Expect.equal
+                (recording.Calls |> List.map (fun c -> c.Member, c.ScopeId, c.Principal))
+                [
+                    "Save", scopeId, operator
+                    "Save", scopeId, delegated
+                    "Delete", scopeId, operator
+                ]
+                "each seam call reaches the entity store with exactly the principal the caller passed"
+
+            Expect.isFalse
+                (recording.Principals |> List.exists (fun p -> p = EntityPrincipal.system))
+                "the store never substitutes the host principal for the caller"
         }
     ]

@@ -170,13 +170,10 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
 
     interface IBookingScheduler with
 
-        member _.RegisterResource(scopeId, resource) = async {
-            // Phase 806 — `IBookingScheduler.RegisterResource` carries no
-            // caller, so this write is stamped as the host's; threading the
-            // principal through that seam is the successor phase's (the
-            // booking operations below already carry `actorUserId`). Until
-            // then the row says so visibly rather than by default.
-            let! r = entityStore.Save<BookableResource>(scopeId, EntityPrincipal.system, resource)
+        member _.RegisterResource(scopeId, principal, resource) = async {
+            // Phase 814 — the caller on the seam is the principal on the
+            // row; the store passes it through and never substitutes.
+            let! r = entityStore.Save<BookableResource>(scopeId, principal, resource)
 
             return
                 match r with
@@ -319,7 +316,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                 |> List.sortBy _.StartUtc
         }
 
-        member _.AddAvailabilityException(scopeId, exc) = async {
+        member _.AddAvailabilityException(scopeId, principal, exc) = async {
             let invalid =
                 match exc.Kind, exc.StartTime, exc.EndTime with
                 | PartialBlock, None, _
@@ -332,9 +329,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
             match invalid with
             | Some msg -> return Error(InvalidWindow msg)
             | None ->
-                // Phase 806 — as `RegisterResource`: no caller on
-                // `IBookingScheduler.AddAvailabilityException`.
-                let! r = entityStore.Save<AvailabilityException>(scopeId, EntityPrincipal.system, exc)
+                let! r = entityStore.Save<AvailabilityException>(scopeId, principal, exc)
 
                 return
                     match r with
@@ -342,10 +337,8 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                     | Error err -> Error(mapEntityError err)
         }
 
-        member _.RemoveAvailabilityException(scopeId, id) = async {
-            // Phase 806 — as `RegisterResource`: no caller on
-            // `IBookingScheduler.RemoveAvailabilityException`.
-            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, ExceptionTypeName, id)
+        member _.RemoveAvailabilityException(scopeId, principal, id) = async {
+            let! r = entityStore.Delete(scopeId, principal, ExceptionTypeName, id)
 
             return
                 match r with

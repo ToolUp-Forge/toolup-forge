@@ -1,6 +1,7 @@
 module ToolUp.Scheduling.IBookingScheduler
 
 open System
+open ToolUp.Platform.EntityTypes
 open ToolUp.Scheduling.SchedulingTypes
 
 // ─── Phase 20 — IBookingScheduler interface ─────────────────────────
@@ -64,7 +65,16 @@ type IBookingScheduler =
     /// new version. Returns `Error InvalidWindow` if any
     /// `DefaultAvailability` window is malformed
     /// (`Start = End` for non-wrapping; bad timezone string).
-    abstract RegisterResource: scopeId: string * resource: BookableResource -> Async<Result<unit, BookingError>>
+    ///
+    /// `principal` is the caller performing the write — the scheduling
+    /// API handler passes the resolved user — and is what the lifecycle
+    /// audit row records (Phase 814). The booking operations below carry
+    /// the same caller as `actorUserId`, the string the booking events
+    /// stamp; the resource and availability writes carry the record the
+    /// entity store stamps. The store never substitutes
+    /// `EntityPrincipal.system` for it.
+    abstract RegisterResource:
+        scopeId: string * principal: EntityPrincipal * resource: BookableResource -> Async<Result<unit, BookingError>>
 
     /// Fetch a resource by id. `None` when no resource with that id
     /// exists in the scope.
@@ -117,11 +127,17 @@ type IBookingScheduler =
     /// Add a one-off availability override. Validates that
     /// `PartialBlock` and `ExtendedHours` carry both `StartTime`
     /// and `EndTime`. `FullDay` exceptions ignore the times.
-    abstract AddAvailabilityException: scopeId: string * exc: AvailabilityException -> Async<Result<unit, BookingError>>
+    /// `principal` is the caller, recorded on the lifecycle row
+    /// (Phase 814).
+    abstract AddAvailabilityException:
+        scopeId: string * principal: EntityPrincipal * exc: AvailabilityException -> Async<Result<unit, BookingError>>
 
     /// Remove an availability exception by id. Idempotent —
     /// removing a non-existent id returns `Ok` without error.
-    abstract RemoveAvailabilityException: scopeId: string * id: string -> Async<Result<unit, BookingError>>
+    /// `principal` is the caller, recorded on the `EntityDeleted` row
+    /// (Phase 814).
+    abstract RemoveAvailabilityException:
+        scopeId: string * principal: EntityPrincipal * id: string -> Async<Result<unit, BookingError>>
 
     /// List availability exceptions for a resource within a window.
     /// Filtered by `Date ∈ [window.Start.Date, window.End.Date)` —

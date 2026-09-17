@@ -3,6 +3,7 @@ module ToolUp.Scheduling.Tests.InProcess.WorkedExampleTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.IBookingScheduler
@@ -61,7 +62,7 @@ let tests =
                 Metadata = Map.empty
             }
 
-            let! reg = scheduler.RegisterResource(scopeA, alice)
+            let! reg = scheduler.RegisterResource(scopeA, EntityPrincipal.ofPrincipal "tester", alice)
             Expect.equal reg (Ok()) "register"
 
             // 3. Book a weekly recurring slot starting Mon 2026-06-01 10:00 UTC.
@@ -150,7 +151,7 @@ let tests =
 
             // 7. Re-import into a fresh scope as a single recurring booking.
             let scopeB = "team-b"
-            let! _ = scheduler.RegisterResource(scopeB, alice)
+            let! _ = scheduler.RegisterResource(scopeB, EntityPrincipal.ofPrincipal "tester", alice)
 
             match parse ics with
             | Error e -> failtestf "parse failed: %s" e

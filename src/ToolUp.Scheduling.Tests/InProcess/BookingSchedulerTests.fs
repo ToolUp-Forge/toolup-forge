@@ -1,7 +1,9 @@
 module ToolUp.Scheduling.Tests.InProcess.BookingSchedulerTests
 
 open System
+open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Scheduling.IBookingScheduler
 open ToolUp.Scheduling.BookingScheduler
@@ -27,4 +29,11 @@ let tests =
         let scopeId = "team-test-" + Guid.NewGuid().ToString("N").Substring(0, 8)
         scheduler, (fun () -> eventStore.Events), scopeId
 
-    IBookingSchedulerContract.tests "BookingScheduler (in-memory)" factory
+    testList "BookingScheduler" [
+        IBookingSchedulerContract.tests "BookingScheduler (in-memory)" factory
+
+        IBookingSchedulerContract.principalTests
+            "BookingScheduler (in-memory)"
+            (fun () -> InMemoryEntityStore() :> IEntityStore)
+            (fun entityStore -> BookingScheduler(entityStore, InMemoryEventStore() :> IEventStore) :> IBookingScheduler)
+    ]
