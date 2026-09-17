@@ -207,10 +207,11 @@ module ProcessIsolation =
     //
     // The FIRST line of the memory cap. The resident-set sampler below
     // is a poll: a native parser that commits memory faster than the
-    // host samples it — the recorded instance is an XML entity-
-    // expansion ("billion laughs") case that libverovio expanded to
-    // 126 GB inside one process, four times, taking the whole machine
-    // each time because Windows has no OOM killer — overshoots the cap
+    // host samples it — the recorded instance is a MusicXML `<forward>`
+    // with a duration of 2^31-1 that libverovio allocated against at
+    // about a gigabyte a second, to 126 GB inside one process, four
+    // times, taking the whole machine each time because Windows has no
+    // OOM killer — overshoots the cap
     // by however much it can commit between two samples, and a
     // sampler is exactly as fast as the host's scheduler lets it be.
     // A Job Object is not a poll: the kernel refuses the commit that

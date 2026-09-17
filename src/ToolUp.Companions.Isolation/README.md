@@ -63,8 +63,8 @@ named; `IsolationMode.OutOfProcessWith` takes an explicit `WorkerLauncher`.
 
   **On a non-Windows host lines 2 and 3 are the whole cap**; a hard bound on native allocation
   there is the container runtime's cgroup. The reason the first line exists is the recorded
-  instance: a hostile-entity (billion-laughs) XML case that libverovio expanded to **126 GB
-  in-process**, four times over one night, taking the whole machine each time because Windows has
+  instance: a MusicXML `<forward>` carrying a duration of 2^31-1 that libverovio allocated against
+  without bound, at about a gigabyte a second, to **126 GB in-process**, four times over one night, taking the whole machine each time because Windows has
   no OOM killer — a sampler is exactly as fast as the host's scheduler lets it be, and that is not
   fast enough. Never run hostile input against a native parser in a process without a
   kernel-enforced memory limit.
@@ -82,7 +82,7 @@ the composed mode cannot be honoured on the host.
 
 ## Companions that offer an isolated path
 
-- `ToolUp.OcrProviders.Tesseract` — `TesseractOcr.createIsolated` runs Leptonica's image decode
+- `ToolUp.OcrProviders.Tesseract` — `TesseractOcrIsolation.createIsolated` runs Leptonica's image decode
   and Tesseract's recognition of uploaded documents in the worker.
 - `ToolUp.AssetStore` — `IsolatedSkiaDerivativeRenderer.create` runs SkiaSharp's decode of
   uploaded images in the worker, composed through `AssetCompose.withRenderer`.

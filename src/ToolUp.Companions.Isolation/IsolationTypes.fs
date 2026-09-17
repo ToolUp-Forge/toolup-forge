@@ -87,11 +87,13 @@ type IsolationRefusal =
     /// was killed.
     | TimedOut of limit: TimeSpan
     /// The worker exceeded `IsolationLimits.MemoryCap` and was killed.
-    /// On Windows the kernel refused the commit that would have
-    /// crossed the cap (a Job Object limit) and `observed` is the peak
-    /// commit charge the job recorded — at or just under the cap, by
-    /// construction; elsewhere the host's resident-set sampler tripped
-    /// and `observed` is the sample that did, above the cap.
+    /// `observed` is whichever line tripped: when the kernel refused the
+    /// commit that would have crossed the cap (a Windows Job Object
+    /// limit) it is the peak commit charge the job recorded — at or just
+    /// under the cap, by construction; when the host's resident-set
+    /// sampler tripped first (always, off Windows; on Windows too when
+    /// shared pages push the working set over a cap the private commit
+    /// has not reached) it is the sample that did, above the cap.
     | MemoryCapExceeded of cap: int64 * observed: int64
     /// The entry point rejected the request (its own `Error`, or a
     /// managed exception it raised). Not a crash: the worker answered
@@ -150,7 +152,8 @@ type IsolationLimits = {
     /// and job-wide commit limits are this figure: the KERNEL refuses
     /// the allocation that would cross it, in the allocating thread,
     /// so a native parser cannot overshoot — the recorded instance
-    /// this guards against is an XML entity expansion that reached
+    /// this guards against is a MusicXML `<forward>` with a duration
+    /// of 2^31-1 that a native parser allocated against, unbounded, to
     /// 126 GB in-process. A host that cannot apply the job refuses the
     /// call (`WorkerUnavailable`) rather than run under the softer
     /// lines alone. Everywhere, the host also samples the worker's
