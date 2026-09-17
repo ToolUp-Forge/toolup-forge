@@ -24,6 +24,20 @@ open ToolUp.Platform.Tracing
 // follow-up). Takes the exact substrate values the inline definition
 // captured and returns the same shape. Zero behaviour change.
 
+/// Phase 441 — the notification-preference substrate constructed when
+/// `ServerConfig.NotificationPreferences = EnabledNotificationPreferences`:
+/// the store, the channel BENEATH the preference filter (what the digest
+/// job publishes released and digested sends on, so they are not held a
+/// second time), and the settings. `None` under `NoNotificationPreferences`.
+type NotificationPreferenceSubstrate = {
+    /// The composed `INotificationPreferenceStore` (blob-backed default).
+    Store: INotificationPreferenceStore
+    /// The dispatcher-facing channel the filter wraps.
+    Beneath: INotificationChannel
+    /// The deployment's digest / rendering knobs.
+    Settings: NotificationPreferenceSettings
+}
+
 /// Aggregate of the notification-stack substrate values built before DI
 /// registration. The downstream DI block reads these to register the
 /// concrete instances. Holding them as a record (rather than a tuple)
@@ -54,6 +68,8 @@ type NotificationStack = {
     /// `ServerConfig.Presence = NoPresence` (the default): no DI
     /// registration, no allocation, byte-for-byte unchanged (GP 13).
     PresenceSubstrate: (IPresenceTracker * IEntityLockStore) option
+    /// Phase 441 — the preference substrate, `None` when not enabled.
+    NotificationPreferences: NotificationPreferenceSubstrate option
     /// Phase 535 — opt-in CRDT co-editing store. `None` when
     /// `ServerConfig.CrdtDocuments = NoCrdtDocuments` (the default): no
     /// DI registration, no allocation, byte-for-byte unchanged (GP 13).
@@ -285,6 +301,35 @@ let buildNotificationStack
         | Some dispatcher ->
             TransactionalDispatcher.DispatchingNotificationChannel(baseNotificationChannel, dispatcher) :> _
 
+    // Phase 441 — opt-in per-user notification preferences. The filter
+    // wraps the dispatcher-facing channel so it sees every transactional
+    // publish before the dispatcher; everything downstream (presence,
+    // narrative relay, DI) sees the filtered channel. The digest job gets
+    // the channel beneath it. `NoNotificationPreferences` leaves the
+    // channel exactly as built (GP 11 + GP 13).
+    let notificationPreferences: NotificationPreferenceSubstrate option =
+        match config.NotificationPreferences with
+        | NoNotificationPreferences -> None
+        | EnabledNotificationPreferences settings ->
+            Some {
+                Store = BlobNotificationPreferenceStore.create resolvedBlobStorage (Some resolvedLogger)
+                Beneath = resolvedNotificationChannel
+                Settings = settings
+            }
+
+    let resolvedNotificationChannel: INotificationChannel =
+        match notificationPreferences with
+        | None -> resolvedNotificationChannel
+        | Some substrate ->
+            NotificationPreferenceFilter(
+                substrate.Beneath,
+                substrate.Store,
+                config.NotificationCategories,
+                Some auditLog,
+                resolvedLogger
+            )
+            :> INotificationChannel
+
     // Phase 442 — opt-in presence + soft-lock collaboration substrate.
     // `EnabledPresence` constructs the in-memory `IPresenceTracker` /
     // `IEntityLockStore` defaults over the resolved (dispatcher-wrapped)
@@ -378,6 +423,7 @@ let buildNotificationStack
         TransactionalDispatcher = transactionalDispatcher
         ResolvedNotificationChannel = resolvedNotificationChannel
         PresenceSubstrate = presenceSubstrate
+        NotificationPreferences = notificationPreferences
         CrdtDocumentStore = crdtDocumentStore
         NarrativeStore = narrativeStore
     }
@@ -406,6 +452,32 @@ let registerPresenceSubstrate
     | Some(tracker, lockStore) ->
         services.AddSingleton<IPresenceTracker>(tracker) |> ignore
         services.AddSingleton<IEntityLockStore>(lockStore) |> ignore
+
+/// Phase 441 — register the notification-preference substrate when
+/// enabled: the store as `INotificationPreferenceStore` and the
+/// `_platform.notifications.digest` job on the composed scheduler. A
+/// deployment that enabled preferences but composed no scheduler gets the
+/// store, the filter and the API — muting works — and one `Warn` saying
+/// digests and quiet-hours releases will not fire until a scheduler is
+/// composed. No-op under `NoNotificationPreferences` (GP 13).
+let registerNotificationPreferences
+    (services: IServiceCollection)
+    (substrate: NotificationPreferenceSubstrate option)
+    (jobScheduler: IJobScheduler option)
+    (resolvedLogger: ILogger)
+    : unit =
+    match substrate with
+    | None -> ()
+    | Some s ->
+        services.AddSingleton<INotificationPreferenceStore>(s.Store) |> ignore
+
+        match jobScheduler with
+        | Some scheduler ->
+            NotificationDigest.declaration s.Store s.Beneath s.Settings resolvedLogger
+            |> ScheduledJobDeclaration.registerWith scheduler resolvedLogger
+        | None ->
+            resolvedLogger.Warn
+                "[NotificationPreferences] NotificationPreferences is enabled but JobScheduler = NoJobScheduler — digests and quiet-hours releases will not fire. Muting still applies."
 
 /// Phase 535 — register the CRDT co-editing store when
 /// `ServerConfig.CrdtDocuments` selects either arm — `EnabledCrdtDocuments`

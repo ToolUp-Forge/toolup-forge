@@ -156,6 +156,7 @@ IModelRegistryContract
 IModelScorerContract
 IModuleQueryBusContract
 INotificationAddressBookContract
+INotificationPreferenceStoreContract
 IOAuth1aFlowContract
 IOAuthStateStoreContract
 IOAuthTokenRefresherContract

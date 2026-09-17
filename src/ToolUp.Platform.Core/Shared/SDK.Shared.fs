@@ -2774,6 +2774,27 @@ type ServerConfig = {
     /// / `withAlertRules`.
     AlertRules: AlertRule list
 
+    /// Phase 441 — per-user notification preference + digest substrate.
+    /// Default `NoNotificationPreferences`: no `INotificationPreferenceStore`
+    /// in DI, the outbound channel is not wrapped, no digest job, no
+    /// `INotificationPreferenceApi` route — sends flow exactly as before
+    /// (GP 11 + GP 13). `EnabledNotificationPreferences settings` registers
+    /// the blob-backed store, wraps the dispatcher-facing channel in
+    /// `NotificationPreferenceFilter`, registers the
+    /// `_platform.notifications.digest` job when a scheduler is composed,
+    /// and mounts the preference API the built-in `NotificationPreferencesUI`
+    /// talks to.
+    NotificationPreferences: NotificationPreferenceMode
+
+    /// Phase 441 — the notification categories this deployment's modules
+    /// declare (GP 9: modules declare, the SDK never enumerates). Appended
+    /// by `ServerModule.withNotificationCategories` through `addModule`
+    /// and by `ServerApp.withNotificationCategory`; read by the filter and
+    /// the preference API only when `NotificationPreferences` is enabled,
+    /// so a declaration on a default deployment is inert. Code-authored —
+    /// no env-var path; `fromEnv` inherits the empty set.
+    NotificationCategories: NotificationCategory list
+
     /// Floor on `ILogger`
     /// `Debug`/`Info`/`Warn`/`Error` emission. The default
     /// `ConsoleLogger` honours this; alternative implementations are
@@ -3947,6 +3968,8 @@ module ServerConfig =
         SkipPreflight = false
         HealthStateTracking = false
         AlertRules = AlertRule.none
+        NotificationPreferences = NoNotificationPreferences
+        NotificationCategories = []
         LogLevel = LogLevel.Info
         TraceCategories = Set.empty
         SseAuthMode = QueryParamFallback

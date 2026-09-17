@@ -295,6 +295,12 @@ module ModuleSurface =
             // need would name a dependency that is never a composition
             // decision.)
             c (nameof m.AIExposure) ProvidesFacet
+            // Phase 441 — the notification categories the module publishes
+            // under. `Provides` on the `DataTypes` precedent: a declared
+            // category is part of what the module offers, and the substrate it
+            // implies (`INotificationPreferenceStore`) is a deployment-level
+            // opt-in the category never forces, so nothing lands on `Needs`.
+            c (nameof m.NotificationCategories) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -436,6 +442,14 @@ module ModuleSurface =
             m.Metrics
             |> List.map (fun d -> entry (nameof m.Metrics) "metric" d.Id d.Name (Some(ComponentId.forMetric d.Id)))
 
+        // Phase 441 — one entry per declared category, keyed by its id; an
+        // empty declaration emits nothing, so an undeclared module's surface
+        // is byte-identical to its pre-441 self (GP 11).
+        let notificationCategories =
+            m.NotificationCategories
+            |> List.map (fun cat ->
+                entry (nameof m.NotificationCategories) "notification-category" cat.Id cat.DisplayName None)
+
         let subjects =
             m.Subjects
             |> List.map (fun d -> entry (nameof m.Subjects) "subject" d.Id d.Name (Some(ComponentId.forSubject d.Id)))
@@ -458,6 +472,7 @@ module ModuleSurface =
             aiExposure
             metrics
             subjects
+            notificationCategories
         ]
 
     /// The substrate a module's own registrations IMPLY. Not a per-module

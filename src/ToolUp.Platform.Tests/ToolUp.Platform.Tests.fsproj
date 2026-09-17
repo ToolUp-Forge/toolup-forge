@@ -132,6 +132,8 @@
              migration direct + via the job handler, scope isolation, audit).
              After InMemoryBlobStorage.fs (the backing store). -->
         <Compile Include="Contracts\IUserSchemaStoreContract.fs" />
+        <!-- Phase 441 — INotificationPreferenceStore conformance pack. -->
+        <Compile Include="Contracts\INotificationPreferenceStoreContract.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\ILifecycleLockContract.fs" />
@@ -440,6 +442,13 @@
              could not reach, and the audit split that keeps the tamper alert
              meaningful. -->
         <Compile Include="InProcess\GrantConsentTests.fs" />
+        <!-- Phase 557 — the module-access attestation certificate: the
+             canonical payload pinned as bytes, emit → offline verify against
+             the public key alone, five named tamper refusals, whole-envelope
+             determinism under Ed25519, and the honest "nothing to attest"
+             arm that never reaches the signer. After GrantConsentTests (it
+             attests the 552 judgement those cases establish). -->
+        <Compile Include="InProcess\AccessAttestationTests.fs" />
         <!-- Phase 730 — the three gaps Phases 551 and 552 recorded against
              themselves: the missing GrantRecorded audit twin (the trail had
              only its refusal half), grantModuleAccess relabelling every inner
@@ -2495,6 +2504,8 @@
              asserted equal to it. -->
         <Compile Include="InProcess\BaselineMergeDriverTests.fs" />
         <Compile Include="InProcess\BackupCoordinatorTests.fs" />
+        <!-- Phase 441 — notification preference filter + digest job. -->
+        <Compile Include="InProcess\NotificationPreferenceTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
              the shared vocabulary (System-only, source-linked into

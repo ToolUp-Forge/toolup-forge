@@ -64,6 +64,13 @@
          and two independent parsers of one variable drift. The file
          takes no dependency beyond System for exactly this reason. -->
     <Compile Include="src\ToolUp.Platform.Tests\Support\TestLane.fs" Link="TestLane.fs" />
+    <!-- Phase 735 — the VerifyAll gate: a named OS mutex keyed on the
+         repository's common git directory, so concurrent runs from the
+         worktrees of one clone serialise instead of thrashing. Repo-root,
+         FAKE-free and source-linked into ToolUp.Platform.Build.Tests for
+         the same reason SdkManifest.fs is: forge's own build hygiene, one
+         implementation under the driver and under its go-red proofs. -->
+    <Compile Include="VerifyGate.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

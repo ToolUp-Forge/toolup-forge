@@ -997,6 +997,17 @@
         <Compile Include="Server\TeamQuotaPolicy.fs" />
         <Compile Include="Server\UsageQueryApi.fs" />
         <Compile Include="Server\TransactionalDispatcher.fs" />
+        <!-- Phase 441 — notification preference + digest substrate: the
+             INotificationPreferenceStore seam + blob-backed default, the
+             NotificationPreferenceFilter INotificationChannel decorator (+ the
+             ambient NotificationCategoryScope), and the DigestJobHandler.
+             After TransactionalDispatcher (the filter wraps its channel) and
+             IJobHandler / IJobScheduler (the digest declaration); before
+             ComposeNotifications, which composes all three. -->
+        <Compile Include="Server\INotificationPreferenceStore.fs" />
+        <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
+        <Compile Include="Server\NotificationPreferenceFilter.fs" />
+        <Compile Include="Server\DigestJobHandler.fs" />
         <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />
         <Compile Include="Server\WebhookRegistry.fs" />
@@ -1019,6 +1030,10 @@
              (ITeamStore + TeamRoles are the role gate), which is why it sits
              here rather than beside ServiceAccountTokenHandler.fs. -->
         <Compile Include="Server\ServiceAccountApiHandler.fs" />
+        <!-- Phase 441 — INotificationPreferenceApi handler (same AccessContext
+             gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
+             mounts it on the NotificationPreferences opt-in. -->
+        <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
         <!-- Phase 7b — IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
              gated writes). After WebhookApiHandler (same handler shape) +
              TeamManagement (the role gate); before BuildRouteHandlers mounts
@@ -1562,6 +1577,16 @@
              enforced); beside EventTopology / DataFootprint, the sibling
              derived lenses. -->
         <Compile Include="Server\AuthorizationSurface.fs" />
+        <!-- Phase 557 — module-access attestation certificate: a signed,
+             third-party-verifiable statement of a module's declared grant
+             policy, the consent records live at an instant, and the
+             grant-authority manifest hash, carried as a DSSE-wrapped in-toto
+             statement over the IStatementEnvelopeSigner seam. After
+             GrantPolicyGuard.fs / GrantConsentStore.fs (the 551 registry and
+             the 552 resolveLive judgement it attests), DsseEnvelope.fs (the
+             envelope it emits) and AuthorizationSurface.fs (the 554 surface
+             it hashes). On demand only — nothing composes it. -->
+        <Compile Include="Server\AccessAttestation.fs" />
         <!-- Phase 627.E in-handler gate declarations for the platform-tier
              API records (JobApi / ModelExecutionApi / IModuleQueryBusApi).
              After AuthorizationSurface.fs, which declares the record they

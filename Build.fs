@@ -4704,4 +4704,13 @@ let main args =
             "▶ MergeBaselines: %s regenerated from the merged tree and re-checked against the driver. Commit api-baselines/ with the merge."
             scope)
 
-    execute args
+    // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
+    // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every
+    // worktree of this clone contends for ONE gate and a second run waits
+    // visibly instead of thrashing the first. The dispatcher's gate queue
+    // serialises the CITABLE runs; this covers the ones it cannot see (a
+    // worker's advisory lane, an operator's hand `verify.ps1`). Taken here,
+    // around the whole run, so the build-once step is inside it too. Every
+    // other target passes straight through; `TOOLUP_VERIFY_NO_GATE_MUTEX=1`
+    // opts out. See `VerifyGate.fs` for the design and its bounds.
+    VerifyGate.around (Directory.GetCurrentDirectory()) args (fun () -> execute args)

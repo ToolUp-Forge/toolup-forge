@@ -116,6 +116,10 @@ let private registeredTests =
         // history, migration direct + via the job handler, scope isolation,
         // audit emission).
         IUserSchemaStoreContract.tests
+        // Phase 441 — notification preference store conformance (preference
+        // round-trip, scope isolation, pending-queue ordering / idempotence /
+        // removal, discovery, digest watermarks) over the blob-backed default.
+        INotificationPreferenceStoreContract.tests
         DataCatalogTests.tests
         ResultStoreTests.tests
         ConversationStoreTests.tests
@@ -328,6 +332,10 @@ let private registeredTests =
         // impl; pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisDistributedLockTests.tests
         TransactionalDispatcherTests.tests
+        // Phase 441 — send-path preference filter (mute / digest / quiet hours /
+        // non-suppressible bypass / fail open), the ambient category scope, the
+        // quiet-hours clock, and the digest job's idempotent drain.
+        NotificationPreferenceTests.tests
         NotificationAddressBookTests.tests
         SmtpNotificationSinkTests.tests
         SendGridNotificationSinkTests.tests
@@ -1121,6 +1129,12 @@ let private registeredTests =
         // the very next call, the counterparty grant write Phase 551 left
         // unreachable, and the trust-vs-lifecycle audit split.
         GrantConsentTests.tests
+        // Phase 557 — module-access attestation certificate: the signed,
+        // third-party-verifiable statement of a module's declared policy and
+        // the consent records live at an instant. Canonical bytes pinned,
+        // emit → offline verify, tamper refusals, determinism, and the
+        // "nothing to attest" arm.
+        AccessAttestationTests.tests
         // Phase 730 — grant-governance completeness. The GrantRecorded audit
         // twin closing the refusal-only trail Phase 551 shipped; the honest
         // classification of an inner-store failure (a Phase 555 QUEUED write
