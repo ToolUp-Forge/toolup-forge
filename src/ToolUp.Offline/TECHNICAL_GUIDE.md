@@ -179,13 +179,20 @@ assert.
    written into whichever scope it last saw. An empty `ScopeId` is accepted, meaning "the client did
    not say", which is legitimate for a single-scope deployment.
 
-2. **Conflict is detected in the handler, not by the store.** The phase design assumed
-   `IEntityStore.Save` surfaces `EntityError.VersionConflict` for a stale write. **It does not.**
-   `BlobEntityStore.Save` assigns `max(existing) + 1` unconditionally and never compares against the
-   caller's version — `VersionConflict` exists in `EntityError` but that store never emits it. So the
-   handler reads the head version first and compares it against `BaseVersion`. That comparison **is**
-   the last-writer-wins guard; without it a replay silently clobbers every concurrent server-side
-   edit, with no error anywhere.
+2. **Conflict is detected by the store, through the seam's compare-and-set.** `IEntityStore.Save`
+   is last-writer-wins by design — it assigns `max(existing) + 1` and never compares against the
+   caller's version — so until Phase 753 the handler read the head version itself and compared it
+   against `BaseVersion`, with a window of its own between that read and the save. The replay now
+   goes through `IEntityStore.SaveIfVersion` / `IEntityStore.DeleteIfVersion` with the mutation's
+   `BaseVersion` as the expected version: the compare and the write are one act inside the store,
+   and a moved head comes back as `EntityError.VersionConflict`, which the handler turns into the
+   `Conflict` outcome carrying both documents. The handler's only job is to hand the expectation
+   over. An adapter whose `Apply` persists through the unconditional `Save` instead has opted out
+   of conflict detection for its entity type — which is why `OfflineReplayError` makes the conflict
+   a distinct case rather than a message, and why `OfflineEntityReplay.ofJson` is the reference
+   shape. The concurrency semantics of the seam itself — when to state a version and when not to,
+   and what the store guarantees under two racing writers — are in
+   [`docs/entity-store/concurrency.md`](../../docs/entity-store/concurrency.md).
 
 3. **Replay is typed through a registration.** The wire carries `byte[]`; `Save<'T>` needs the real
    record so the store's index and full-text extractors run. Only the module that owns the entity
