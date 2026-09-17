@@ -7,6 +7,14 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Entries.fs" />
+        <!-- The two Phase 687 contract packs, link-compiled from the shared
+             Contracts/ directory (the IReportRendererContract precedent):
+             the seam pack cannot compile in ToolUp.Platform.Tests, which
+             does not reference the isolation assembly; the renderer pack
+             is compiled there too and bound by the in-process renderer. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\ICompanionIsolationContract.fs" Link="Contracts\ICompanionIsolationContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDerivativeRendererContract.fs" Link="Contracts\IDerivativeRendererContract.fs" />
+        <Compile Include="ContractBindings.fs" />
         <Compile Include="IsolationTests.fs" />
         <Compile Include="WiringTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from

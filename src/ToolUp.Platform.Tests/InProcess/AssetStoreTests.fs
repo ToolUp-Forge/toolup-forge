@@ -55,3 +55,12 @@ let private mkFixture () : AssetStoreFixture =
 
 [<Tests>]
 let tests = IAssetStoreContract.tests "DefaultAssetStore (in-memory)" mkFixture
+
+/// Phase 687 — the in-process binding of the `IDerivativeRenderer`
+/// contract pack; the isolated renderer binds the same pack from
+/// `ToolUp.Companions.Isolation.Tests`, which is what makes the seam
+/// a proven replaceable one (GP 12) rather than an asserted one.
+[<Tests>]
+let rendererContract =
+    IDerivativeRendererContract.tests "SkiaSharpDerivativeRenderer (in-process)" (fun () ->
+        SkiaSharpDerivativeRenderer() :> IDerivativeRenderer)

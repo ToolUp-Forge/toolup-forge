@@ -8,7 +8,7 @@ open Expecto
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
-    testList "ToolUp.Companions.Isolation.Tests" [ IsolationTests.tests; WiringTests.tests ]
+    testList "ToolUp.Companions.Isolation.Tests" [ IsolationTests.tests; WiringTests.tests; ContractBindings.tests ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:

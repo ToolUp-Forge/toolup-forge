@@ -119,6 +119,7 @@
         <Compile Include="Contracts\IPlatformAIKeyStoreContract.fs" />
         <Compile Include="Contracts\IOAuthTokenRefresherContract.fs" />
         <Compile Include="Contracts\IReportRendererContract.fs" />
+        <Compile Include="Contracts\IDerivativeRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
         <!-- Phase 535 — CRDT co-editing store conformance: append / diff /
              snapshot / compaction, scope isolation, and the convergence
