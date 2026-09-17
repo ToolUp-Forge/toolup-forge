@@ -5,6 +5,7 @@ module ToolUp.Platform.Build.Tests.ConformanceCoverageTests
 
 open System.IO
 open Expecto
+open ToolUp.Forge
 
 // ─── Phase 259 — the conformance-pack coverage gate ───────────────────
 //

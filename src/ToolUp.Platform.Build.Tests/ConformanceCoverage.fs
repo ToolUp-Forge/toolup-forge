@@ -69,7 +69,17 @@
 /// `ArchitectureFitness` and `SdkManifest`: a drift guard whose failure
 /// path is never exercised is indistinguishable from one that cannot
 /// fail.
-module ToolUp.Platform.Build.Tests.ConformanceCoverage
+///
+/// **Namespace note (Phase 257).** The module sits under `ToolUp.Forge`
+/// rather than `ToolUp.Platform.Build.Tests` because the readiness
+/// scorecard's `Build.fsproj` source-links this file for its
+/// conformance row, and that assembly already defines
+/// `ToolUp.Platform.Build` as a MODULE — a namespace of the same name
+/// cannot coexist with it (FS0247). `ToolUp.Forge` is where the other
+/// FAKE-free, source-linked release-hygiene modules (`SemVerBump`,
+/// `SdkManifest`, `PublishedSmoke`) already live. The file stays in the
+/// test project, beside the packs it measures.
+module ToolUp.Forge.ConformanceCoverage
 
 open System
 open System.IO

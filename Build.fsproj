@@ -74,6 +74,20 @@
          the same reason SdkManifest.fs is: forge's own build hygiene, one
          implementation under the driver and under its go-red proofs. -->
     <Compile Include="VerifyGate.fs" />
+    <!-- Phase 257 — the v1.0 readiness scorecard behind the V1Readiness
+         target Build.fs registers. Same shape and same reason as
+         SemVerBump.fs above: forge's own release hygiene rather than SDK
+         surface, FAKE-free, and source-linked (not copied) into
+         ToolUp.Platform.Build.Tests so the target and its all-green /
+         one-red-per-cause fixtures run one implementation.
+
+         ConformanceCoverage.fs is Phase 259's gate, source-linked from
+         the Build test pack ahead of it so the scorecard's coverage row
+         reads the SAME derivation of "replaceable seam" the gate does —
+         a second derivation would disagree with the gate about what a
+         seam is. It is BCL-only for exactly this reason. -->
+    <Compile Include="src\ToolUp.Platform.Build.Tests\ConformanceCoverage.fs" Link="ConformanceCoverage.fs" />
+    <Compile Include="V1Readiness.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

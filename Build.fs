@@ -4704,6 +4704,229 @@ let main args =
             "▶ MergeBaselines: %s regenerated from the merged tree and re-checked against the driver. Commit api-baselines/ with the merge."
             scope)
 
+    // ── Phase 257 — the v1.0 readiness scorecard ──
+    //
+    // "Are we 1.0 yet?" as a regenerated table rather than a judgement
+    // call. Six discrete checks, each pass/fail with its measured value
+    // and the threshold it was graded against, written to
+    // `docs/reference/v1-readiness.md` — the document the operator reads
+    // before tagging. What each row reads and why is in `V1Readiness.fs`;
+    // this target only does the READING (git, files, the environment)
+    // and hands data to the pure checks, so a fixture can score every row
+    // without a checkout.
+    //
+    //   dotnet run --project Build.fsproj -- V1Readiness
+    //   dotnet run --project Build.fsproj -- V1Readiness --require-ready
+    //
+    // The default writes the document and exits 0 whatever it says — the
+    // scorecard is a report, and a report that fails the build on the day
+    // it is first generated is one people learn to step over.
+    // `--require-ready` is the graduation gate itself: exit 1 unless every
+    // row passes, for the release workflow at the 1.0 cut.
+    //
+    // An input this tree cannot supply — no release tag, a sidecar not yet
+    // generated, the adoption matrix not pointed at — is an explicit
+    // `not yet` row, never a crash: the generator's job is to say what is
+    // missing, and it cannot say so from inside an exception.
+    //
+    // Registered here and NOT added to `verify.ps1`, for the reason
+    // VerifySemVerBump gives: the question is a release question, the
+    // pure checks run on every commit in the Build test pack, and the
+    // stability row's reading of git is not a per-commit fact.
+    Target.create "V1Readiness" (fun _ ->
+        let root = Path.getFullName "."
+
+        let requireReady =
+            System.Environment.GetCommandLineArgs() |> Array.contains "--require-ready"
+
+        // ── thresholds ──
+        let thresholdsPath = Path.Combine(root, V1Readiness.thresholdsFileName)
+
+        let thresholds, thresholdsSource =
+            if File.Exists thresholdsPath then
+                match V1Readiness.parseThresholds (File.ReadAllText thresholdsPath) with
+                | Ok t -> t, sprintf "`%s`" V1Readiness.thresholdsFileName
+                | Error e -> failwithf "V1Readiness: %s" e
+            else
+                V1Readiness.defaults, sprintf "the built-in defaults (`%s` is absent)" V1Readiness.thresholdsFileName
+
+        // ── git, read the way VerifySemVerBump reads it ──
+        let gitProc (args: string list) =
+            CreateProcess.fromRawCommand "git" args
+            |> CreateProcess.withWorkingDirectory root
+            |> CreateProcess.redirectOutput
+            |> CreateProcess.disableTraceCommand
+
+        let git (args: string list) =
+            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
+
+        let lines (text: string) =
+            text.Replace("\r\n", "\n").Split('\n')
+            |> Array.map _.Trim()
+            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+            |> List.ofArray
+
+        let treeSha =
+            try
+                git [ "rev-parse"; "--short"; "HEAD" ]
+                |> lines
+                |> List.tryHead
+                |> Option.defaultValue "unknown"
+            with _ ->
+                "unknown"
+
+        // 1. baseline-stable: every release tag reachable from HEAD, newest
+        //    first, diffed against the WORKING tree's api-baselines. The
+        //    doc-coverage sidecar is excluded — it moves with documentation,
+        //    not with the surface. The walk stops at the first release that
+        //    differs, so the cost is one `git diff` per stable release plus
+        //    one.
+        let releases =
+            try
+                let tags =
+                    git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
+                    |> lines
+                    |> SemVerBump.releaseTags
+                    |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare b a)
+
+                let identical (tag: string) =
+                    let result =
+                        gitProc [
+                            "diff"
+                            "--quiet"
+                            tag
+                            "--"
+                            "api-baselines"
+                            ":(exclude)api-baselines/doc-coverage.approved.txt"
+                        ]
+                        |> Proc.run
+
+                    result.ExitCode = 0
+
+                let rec walk acc =
+                    function
+                    | [] -> List.rev acc
+                    | (tag, _) :: rest ->
+                        if identical tag then
+                            walk ((tag, true) :: acc) rest
+                        else
+                            List.rev ((tag, false) :: acc)
+
+                V1Readiness.Available(walk [] tags)
+            with e ->
+                V1Readiness.Unavailable(sprintf "git could not be read (%s)" e.Message)
+
+        // 2. conformance-coverage: Phase 259's own derivation.
+        let conformance =
+            try
+                let r = ConformanceCoverage.reconcile root
+                V1Readiness.Available(r.PackedSeamCount, r.SeamCount)
+            with e ->
+                V1Readiness.Unavailable(sprintf "the conformance derivation failed (%s)" e.Message)
+
+        let readIfExists (path: string) (what: string) =
+            if File.Exists path then
+                V1Readiness.Available(File.ReadAllText path)
+            else
+                V1Readiness.Unavailable(sprintf "%s is absent (%s)" what (Path.GetFileName path))
+
+        // 3. doc-coverage: Phase 261's sidecar.
+        let docSidecar =
+            readIfExists
+                (Path.Combine(root, "api-baselines", "doc-coverage.approved.txt"))
+                "the Phase 261 doc-coverage sidecar"
+
+        // 4. undecided-renames: Phase 256's decision table.
+        let renameDoc =
+            readIfExists
+                (Path.Combine(root, "docs", "migrations", "256-public-surface-minimization.md"))
+                "the Phase 256 migration doc"
+
+        // 5. adoption-pending: the generated matrix and the consumer set,
+        //    both supplied from outside — they are facts about private
+        //    consumers, so neither is located or named here.
+        let matrix =
+            match System.Environment.GetEnvironmentVariable V1Readiness.matrixEnvVar with
+            | null
+            | "" ->
+                V1Readiness.Unavailable(
+                    sprintf "%s is not set — point it at the generated adoption matrix" V1Readiness.matrixEnvVar
+                )
+            | path when File.Exists path -> V1Readiness.Available(File.ReadAllText path)
+            | path -> V1Readiness.Unavailable(sprintf "%s names no file (%s)" V1Readiness.matrixEnvVar path)
+
+        let consumers =
+            System.Environment.GetEnvironmentVariable V1Readiness.consumersEnvVar
+            |> V1Readiness.parseConsumers
+
+        // 6. open-deprecations: the `(obsolete)` markers in the baselines.
+        let baselines =
+            let dir = Path.Combine(root, "api-baselines")
+
+            if Directory.Exists dir then
+                Directory.GetFiles(dir, "*.approved.txt")
+                |> Array.filter (fun p -> Path.GetFileName p <> "doc-coverage.approved.txt")
+                |> Array.sort
+                |> Array.map (fun p -> Path.GetFileName p, File.ReadAllText p)
+                |> List.ofArray
+                |> V1Readiness.Available
+            else
+                V1Readiness.Unavailable "api-baselines/ is absent"
+
+        let rows = [
+            V1Readiness.baselineStability thresholds.StableReleases releases
+            V1Readiness.conformanceCoverage thresholds.ConformanceCoveragePct conformance
+            V1Readiness.docCoverage thresholds.DocCoveragePct docSidecar
+            V1Readiness.undecidedRenames renameDoc
+            V1Readiness.adoptionPending consumers matrix
+            V1Readiness.openDeprecations thresholds.OpenDeprecations baselines
+        ]
+
+        let generatedAt = System.DateTime.UtcNow.ToString "yyyy-MM-dd"
+        let document = V1Readiness.render generatedAt treeSha thresholdsSource rows
+        let outPath = Path.Combine(root, "docs", "reference", "v1-readiness.md")
+        Directory.CreateDirectory(Path.GetDirectoryName outPath) |> ignore
+        File.WriteAllText(outPath, document)
+
+        // The per-consumer split goes to the console only — the rendered
+        // document is consumer-blind on purpose.
+        match matrix with
+        | V1Readiness.Available text ->
+            for name, result in V1Readiness.pendingPerConsumer consumers text do
+                match result with
+                | Ok n -> Trace.tracefn "  adoption-pending: %s → %d pending" name n
+                | Error e -> Trace.traceImportantfn "  adoption-pending: %s → %s" name e
+        | V1Readiness.Unavailable _ -> ()
+
+        for r in rows do
+            let verdict =
+                match r.Verdict with
+                | V1Readiness.Pass -> "pass"
+                | V1Readiness.Fail -> "FAIL"
+                | V1Readiness.NotYet -> "NOT YET"
+
+            Trace.tracefn "  %-22s %-8s %s (threshold %s)" r.Id verdict r.Measured r.Threshold
+
+        let failing = rows |> List.filter (fun r -> r.Verdict <> V1Readiness.Pass)
+        let failingIds = failing |> List.map _.Id |> String.concat ", "
+
+        if V1Readiness.ready rows then
+            Trace.tracefn "▶ V1Readiness: READY — every precondition passes. Written to %s." outPath
+        elif requireReady then
+            failwithf
+                "V1Readiness --require-ready: NOT READY — %d of %d precondition(s) fail (%s). The scorecard at %s says what each one needs."
+                failing.Length
+                rows.Length
+                failingIds
+                outPath
+        else
+            Trace.traceImportantfn
+                "▶ V1Readiness: NOT READY — %d of %d precondition(s) fail (%s). Written to %s."
+                failing.Length
+                rows.Length
+                failingIds
+                outPath)
+
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every
     // worktree of this clone contends for ONE gate and a second run waits
