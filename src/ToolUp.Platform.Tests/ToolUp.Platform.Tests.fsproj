@@ -1384,6 +1384,13 @@
         <!-- Phase 560 — the grounded answer planner (question → triples → typed
              PlanStep resolution → the plan in the provenance chain). -->
         <Compile Include="InProcess\AnswerPlannerTests.fs" />
+        <!-- Phase 790 — the F* model of the disclosure fold, extracted to
+             F# and run as a differential oracle beside production over the
+             rankings the three door packs above pin, plus a generated set.
+             AFTER AnswerPlannerTests.fs: it reproduces those packs' rankings
+             as data and is the later claim (they say the doors run the one
+             fold; this says the proved model agrees with that fold). -->
+        <Compile Include="InProcess\DisclosureProofOracleTests.fs" />
         <!-- Phase 708 — the fact-clause feeder: the production producer the
              Phase 522 push path never had. Plan-step projection, the prompt
              path pushing a fact ahead of the chunks, byte-identity for a

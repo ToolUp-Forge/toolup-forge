@@ -1,6 +1,6 @@
 {
   "$comment": [
-    "Phase 787 — the pinned prover for proofs/RemotingDecode.fst.",
+    "Phase 787 — the pinned prover for every model under proofs/ (RemotingDecode.fst, and since Phase 790 DisclosureFold.fst; check.ps1 carries the module list).",
     "F* releases WEEKLY (five releases in the four weeks to 2026-09-13), and a proof is a",
     "claim about a specific prover: an unpinned toolchain would silently change what the",
     "green tick means, and proof hints no longer exist to stabilise it (--record_hints and",
@@ -32,8 +32,8 @@
   },
   "flags": {
     "check": ["--cache_checked_modules", "--report_assumes", "error", "--z3rlimit", "60"],
-    "extract": ["--codegen", "FSharp", "--extract", "RemotingDecode"],
+    "extract": ["--codegen", "FSharp"],
     "quake": ["--quake", "3"],
-    "$comment": "--z3rlimit 60 against a module whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available."
+    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790)."
   }
 }

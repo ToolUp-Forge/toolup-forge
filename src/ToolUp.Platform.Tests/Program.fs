@@ -2314,6 +2314,11 @@ let private registeredTests =
         // a committed go-red bridge that forgets the source width class so
         // the comparison is known to be able to fail.
         ProofOracleTests.tests
+        // Phase 790 — the F* model of the disclosure fold, extracted and
+        // run beside production over the door packs' rankings and a
+        // generated set, with a committed go-red oracle that renumbers
+        // ranks contiguously so the comparison is known to be able to fail.
+        DisclosureProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

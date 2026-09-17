@@ -1,36 +1,38 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Phase 787 — the whole proof leg for the remoting decoder algebra.
+    The whole proof leg for every model under proofs/ — Phase 787's
+    remoting decoder algebra and Phase 790's disclosure fold.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
 
         pwsh ./proofs/check.ps1
 
-    Six steps, in this order, each refusing rather than warning:
+    Six steps, in this order, each refusing rather than warning. Steps
+    2–4 and 6 run once PER MODULE in `$modules` below; step 5 builds the
+    one oracle project every extraction compiles into.
 
       1. Resolve the pinned F* release named in `fstar-pin.json` — an
          existing $env:FSTAR_HOME first, then a previous download under
          `proofs/.fstar/`, then a fresh download whose SHA-256 must match
          the pin.
-      2. CHECK `RemotingDecode.fst` on it, with `--report_assumes error`
-         so an `assume` or an `admit` fails the leg rather than quietly
-         weakening the theorem.
-      3. EXTRACT to F# from the checked cache.
-      4. BYTE-DIFF the extraction against the committed
-         `oracle/RemotingDecode.fs`. This is the step that makes the
-         committed file trustworthy: the repository builds and tests
-         against a copy, and this says the copy is what the prover
-         produced.
+      2. CHECK each module on it, with `--report_assumes error` so an
+         `assume` or an `admit` fails the leg rather than quietly
+         weakening a theorem.
+      3. EXTRACT each to F# from the checked cache.
+      4. BYTE-DIFF each extraction against its committed `oracle/*.fs`.
+         This is the step that makes the committed file trustworthy:
+         the repository builds and tests against a copy, and this says
+         the copy is what the prover produced.
       5. BUILD the oracle project, so a committed extraction that no
          longer compiles is caught here rather than in someone else's
          `VerifyAll`.
-      6. RUN the differential host — the Phase 787 list inside
-         `ToolUp.Platform.Tests`, which decodes the Phase 784 corpus
-         through the extracted model and through production and requires
-         them to agree. Skippable with `-SkipHost`, because it needs the
-         whole solution built and the proof half does not.
+      6. RUN each module's differential host — an Expecto list inside
+         `ToolUp.Platform.Tests` that runs the extracted model beside
+         production and requires them to agree. Skippable with
+         `-SkipHost`, because it needs the whole solution built and the
+         proof half does not.
 
     Two things about reproducibility are worth knowing before reading
     the flags.
@@ -49,17 +51,22 @@
 
     **The toolchain is a 198 MB download and is NOT a build dependency.**
     Nothing in `VerifyAll`, `dotnet build`, or the ordinary CI matrix
-    needs it — the extraction is committed precisely so a contributor
+    needs it — the extractions are committed precisely so a contributor
     with no interest in proofs never installs a prover. This script is
     the only thing that does.
+
+    **Adding a module** is one entry in `$modules`: its source, its
+    committed extraction, the Expecto list that is its differential
+    host, and the case-count floor that list declares. Nothing else in
+    this file names a module.
 
 .PARAMETER Runs
     Repeat the check that many times from a cold cache, with
     `--quake 3`. Default 1. The CI job runs 3.
 
 .PARAMETER SkipHost
-    Skip step 6 (the differential host). The proof, the extraction, the
-    byte-diff and the oracle build still run.
+    Skip step 6 (the differential hosts). The proofs, the extractions,
+    the byte-diffs and the oracle build still run.
 
 .PARAMETER FStarHome
     An F* installation to use instead of resolving the pin. Overrides
@@ -79,6 +86,34 @@ Set-Location $PSScriptRoot
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pin = Get-Content (Join-Path $PSScriptRoot "fstar-pin.json") -Raw | ConvertFrom-Json
+
+# ─── The modules ─────────────────────────────────────────────────────
+#
+# One entry per proved model, in the order they landed. `HostList` is
+# the Expecto list's FULL path (the pack's root list name, a dot, the
+# list name — Expecto joins with `.`, and a slash-shaped filter matches
+# nothing and reports success). `HostMinCases` is the number of cases
+# that list declares, asserted after the run for the reason step 6
+# gives. A later proof phase APPENDS its entry here.
+
+$modules = @(
+    @{
+        Name         = "RemotingDecode"
+        Source       = "RemotingDecode.fst"
+        Oracle       = "oracle/RemotingDecode.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 787 - the proved model as oracle"
+        HostMinCases = 7
+        HostSubject  = "the Phase 784 corpus"
+    }
+    @{
+        Name         = "DisclosureFold"
+        Source       = "DisclosureFold.fst"
+        Oracle       = "oracle/DisclosureFold.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 790 - the proved fold as oracle"
+        HostMinCases = 7
+        HostSubject  = "the door packs' rankings and a generated set"
+    }
+)
 
 function Write-Step {
     param([string] $Text)
@@ -176,34 +211,41 @@ if ($reported -notmatch [regex]::Escape($pin.version.TrimStart("v"))) {
     Write-Host "    WARNING: this is NOT the pinned release ($($pin.version)). A green run here is a claim about THIS prover." -ForegroundColor Yellow
 }
 
-# ─── 2..4. Check, extract, byte-diff ─────────────────────────────────
+# ─── 2..4. Check, extract, byte-diff — per module ────────────────────
 
 $cacheDir = Join-Path $PSScriptRoot ".cache"
 $extractDir = Join-Path $PSScriptRoot ".extract"
-$committed = Join-Path $PSScriptRoot "oracle/RemotingDecode.fs"
 
 $checkFlags = @($pin.flags.check)
 $extractFlags = @($pin.flags.extract)
 $quakeFlags = @($pin.flags.quake)
 
+$moduleNames = ($modules | ForEach-Object { $_.Name }) -join ", "
+
 for ($run = 1; $run -le $Runs; $run++) {
-    Write-Step "2/6  Checking RemotingDecode.fst (run $run of $Runs, COLD cache$(if ($Runs -gt 1) { ', --quake 3' }))"
+    Write-Step "2/6  Checking $moduleNames (run $run of $Runs, COLD cache$(if ($Runs -gt 1) { ', --quake 3' }))"
 
     # Cold every run, deliberately. A warm `.checked` file is F* telling
     # you it already believed this, which is exactly the thing a repeat
-    # run exists not to take on trust.
+    # run exists not to take on trust. The modules share one cache per
+    # run because they share nothing else: each owns its own small
+    # types and imports only Prims, so no `.checked` of one is an input
+    # to another.
     Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
 
-    $fstarArgs = @("--cache_dir", $cacheDir) + $checkFlags
-    if ($Runs -gt 1) { $fstarArgs += $quakeFlags }
-    $fstarArgs += "RemotingDecode.fst"
+    foreach ($module in $modules) {
+        Write-Host "    --- $($module.Source)"
+        $fstarArgs = @("--cache_dir", $cacheDir) + $checkFlags
+        if ($Runs -gt 1) { $fstarArgs += $quakeFlags }
+        $fstarArgs += $module.Source
 
-    & $fstarExe @fstarArgs
-    if ($LASTEXITCODE -ne 0) { Fail "the module did not check (run $run of $Runs, exit $LASTEXITCODE)." }
+        & $fstarExe @fstarArgs
+        if ($LASTEXITCODE -ne 0) { Fail "$($module.Source) did not check (run $run of $Runs, exit $LASTEXITCODE)." }
+    }
 }
 
-Write-Step "3/6  Extracting to F#"
+Write-Step "3/6  Extracting $moduleNames to F#"
 
 Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
@@ -212,49 +254,58 @@ New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
 # expects all modules to be checked first"), which is why this is a
 # second invocation against the cache step 2 populated rather than one
 # combined pass.
-$fstarArgs = @("--cache_dir", $cacheDir, "--odir", $extractDir) + $checkFlags + $extractFlags + @("RemotingDecode.fst")
-& $fstarExe @fstarArgs
-if ($LASTEXITCODE -ne 0) { Fail "extraction failed (exit $LASTEXITCODE)." }
-
-Write-Step "4/6  Byte-diffing the extraction against the committed oracle"
-
-$fresh = Join-Path $extractDir "RemotingDecode.fs"
-if (-not (Test-Path $fresh)) { Fail "the extractor produced no RemotingDecode.fs." }
-
-$freshHash = (Get-FileHash $fresh -Algorithm SHA256).Hash.ToLower()
-$committedHash = (Get-FileHash $committed -Algorithm SHA256).Hash.ToLower()
-
-Write-Host "    fresh     sha256:$freshHash"
-Write-Host "    committed sha256:$committedHash"
-
-if ($freshHash -ne $committedHash) {
-    Write-Host ""
-    Write-Host "    The committed oracle is not what the prover produced. Diff:" -ForegroundColor Yellow
-    Compare-Object (Get-Content $committed) (Get-Content $fresh) |
-        Select-Object -First 40 |
-        Format-Table -AutoSize |
-        Out-String |
-        Write-Host
-
-    Fail "oracle/RemotingDecode.fs is stale. Copy the fresh extraction over it and commit the two together:  Copy-Item '$fresh' '$committed'"
+foreach ($module in $modules) {
+    Write-Host "    --- $($module.Source)"
+    $fstarArgs = @("--cache_dir", $cacheDir, "--odir", $extractDir) + $checkFlags + $extractFlags + @("--extract", $module.Name, $module.Source)
+    & $fstarExe @fstarArgs
+    if ($LASTEXITCODE -ne 0) { Fail "extraction of $($module.Source) failed (exit $LASTEXITCODE)." }
 }
 
-Write-Host "    identical" -ForegroundColor Green
+Write-Step "4/6  Byte-diffing each extraction against its committed oracle"
+
+foreach ($module in $modules) {
+    $fresh = Join-Path $extractDir "$($module.Name).fs"
+    $committed = Join-Path $PSScriptRoot $module.Oracle
+
+    if (-not (Test-Path $fresh)) { Fail "the extractor produced no $($module.Name).fs." }
+    if (-not (Test-Path $committed)) { Fail "no committed oracle at $($module.Oracle). Copy the fresh extraction there and commit it:  Copy-Item '$fresh' '$committed'" }
+
+    $freshHash = (Get-FileHash $fresh -Algorithm SHA256).Hash.ToLower()
+    $committedHash = (Get-FileHash $committed -Algorithm SHA256).Hash.ToLower()
+
+    Write-Host "    --- $($module.Oracle)"
+    Write-Host "    fresh     sha256:$freshHash"
+    Write-Host "    committed sha256:$committedHash"
+
+    if ($freshHash -ne $committedHash) {
+        Write-Host ""
+        Write-Host "    The committed oracle is not what the prover produced. Diff:" -ForegroundColor Yellow
+        Compare-Object (Get-Content $committed) (Get-Content $fresh) |
+            Select-Object -First 40 |
+            Format-Table -AutoSize |
+            Out-String |
+            Write-Host
+
+        Fail "$($module.Oracle) is stale. Copy the fresh extraction over it and commit the two together:  Copy-Item '$fresh' '$committed'"
+    }
+
+    Write-Host "    identical" -ForegroundColor Green
+}
 
 # ─── 5. Build the oracle ─────────────────────────────────────────────
 
 Write-Step "5/6  Building the oracle project"
 
 & dotnet build (Join-Path $PSScriptRoot "oracle/ToolUp.Remoting.Proofs.Oracle.fsproj") --nologo -v q
-if ($LASTEXITCODE -ne 0) { Fail "the committed extraction does not compile (exit $LASTEXITCODE)." }
+if ($LASTEXITCODE -ne 0) { Fail "a committed extraction does not compile (exit $LASTEXITCODE)." }
 
-# ─── 6. The differential host ────────────────────────────────────────
+# ─── 6. The differential hosts ───────────────────────────────────────
 
 if ($SkipHost) {
-    Write-Step "6/6  Differential host SKIPPED (-SkipHost)"
+    Write-Step "6/6  Differential hosts SKIPPED (-SkipHost)"
 }
 else {
-    Write-Step "6/6  Running the differential host over the Phase 784 corpus"
+    Write-Step "6/6  Running the differential hosts"
 
     $testProject = Join-Path $repoRoot "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
     & dotnet build $testProject --nologo -v q
@@ -263,36 +314,39 @@ else {
     $dll = Join-Path $repoRoot "src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll"
     if (-not (Test-Path $dll)) { Fail "no test assembly at $dll." }
 
-    $listName = "ToolUp.Platform.Tests.Phase 787 - the proved model as oracle"
-    $output = & dotnet $dll --filter $listName 2>&1
-    $exit = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host "    $_" }
+    foreach ($module in $modules) {
+        Write-Host "    --- $($module.Name) over $($module.HostSubject)"
 
-    # A filter that matches nothing prints `0 tests run ... Success!` and
-    # exits 0. So the COUNT is asserted, never the exit code alone — the
-    # one shape in which this whole leg could report a green over a suite
-    # that did not run.
-    #
-    # **Strip ANSI first, and the reason is the same trap one level down.**
-    # Expecto colourises the count, so the bytes are `ESC[36m7ESC[37m
-    # tests run` and a `(\d+)\s+tests run` regex over the raw text matches
-    # NOTHING — reading as zero cases, from a run that was green. This
-    # script fails closed on that, so the mistake cost a refusal rather
-    # than a false pass, but a harness that compared against zero the
-    # other way round would have reported exactly the vacuous green the
-    # count exists to prevent.
-    $plain = [regex]::Replace((($output | ForEach-Object { "$_" }) -join "`n"), "\x1b\[[0-9;]*[A-Za-z]", "")
+        $output = & dotnet $dll --filter $module.HostList 2>&1
+        $exit = $LASTEXITCODE
+        $output | ForEach-Object { Write-Host "    $_" }
 
-    $ran = if ($plain -match '(\d+)\s+tests run') { [int]$Matches[1] } else { -1 }
+        # A filter that matches nothing prints `0 tests run ... Success!`
+        # and exits 0. So the COUNT is asserted, never the exit code alone
+        # — the one shape in which this whole leg could report a green
+        # over a suite that did not run.
+        #
+        # **Strip ANSI first, and the reason is the same trap one level
+        # down.** Expecto colourises the count, so the bytes are
+        # `ESC[36m7ESC[37m tests run` and a `(\d+)\s+tests run` regex over
+        # the raw text matches NOTHING — reading as zero cases, from a run
+        # that was green. This script fails closed on that, so the mistake
+        # cost a refusal rather than a false pass, but a harness that
+        # compared against zero the other way round would have reported
+        # exactly the vacuous green the count exists to prevent.
+        $plain = [regex]::Replace((($output | ForEach-Object { "$_" }) -join "`n"), "\x1b\[[0-9;]*[A-Za-z]", "")
 
-    if ($ran -lt 0) { Fail "could not read a case count out of the differential host's output." }
+        $ran = if ($plain -match '(\d+)\s+tests run') { [int]$Matches[1] } else { -1 }
 
-    if ($exit -ne 0) { Fail "the differential host reported failures (exit $exit)." }
-    if ($ran -lt 7) { Fail "the differential host ran $ran case(s); the Phase 787 list declares at least 7. A filter that matches nothing reports success, so this is checked rather than trusted." }
+        if ($ran -lt 0) { Fail "could not read a case count out of the $($module.Name) host's output." }
 
-    Write-Host "    $ran case(s) ran, all green" -ForegroundColor Green
+        if ($exit -ne 0) { Fail "the $($module.Name) differential host reported failures (exit $exit)." }
+        if ($ran -lt $module.HostMinCases) { Fail "the $($module.Name) differential host ran $ran case(s); its list declares at least $($module.HostMinCases). A filter that matches nothing reports success, so this is checked rather than trusted." }
+
+        Write-Host "    $ran case(s) ran, all green" -ForegroundColor Green
+    }
 }
 
 Write-Host ""
-Write-Host "PROOF LEG GREEN — $($pin.version), $Runs cold check(s), extraction identical to the committed oracle." -ForegroundColor Green
+Write-Host "PROOF LEG GREEN — $($pin.version), $Runs cold check(s) of $($modules.Count) module(s), every extraction identical to its committed oracle." -ForegroundColor Green
 exit 0
