@@ -517,6 +517,10 @@ ToolUp.Platform.AuditLog+AuditMetrics.ChainHeadUnreadableTotal : System.String (
 ToolUp.Platform.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
 ToolUp.Platform.AuditLog+AuditWriteRefusedException (class)
 ToolUp.Platform.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
+ToolUp.Platform.AuditLog+EntityAuditReplayScope (class)
+ToolUp.Platform.AuditLog+EntityAuditReplayScope.covers(ToolUp.Platform.EntityLifecycleEventPayload) : System.Boolean
+ToolUp.Platform.AuditLog+EntityAuditReplayScope.run`1(System.String, System.String, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.AuditLog+EntityAuditReplayScope.suppresses(ToolUp.Platform.AuditEvent) : System.Boolean
 ToolUp.Platform.AuditLog+EventStoreAuditLog (class)
 ToolUp.Platform.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFallbackStore+AuditFallbackStore])
 ToolUp.Platform.AuditLog+NoOpAuditLog (class)

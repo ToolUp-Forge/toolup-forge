@@ -5029,9 +5029,10 @@ ToolUp.Platform.EntityGraphProjectionMode+Tags (class)
 ToolUp.Platform.EntityGraphProjectionMode+Tags.EnabledEntityGraphProjection : System.Int32 (literal)
 ToolUp.Platform.EntityGraphProjectionMode+Tags.NoEntityGraphProjection : System.Int32 (literal)
 ToolUp.Platform.EntityLifecycleEventPayload (class)
-ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, System.String, System.String, System.Int32)
+ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityReplayProvenance])
 ToolUp.Platform.EntityLifecycleEventPayload.EntityId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.EntityType : System.String { get }
+ToolUp.Platform.EntityLifecycleEventPayload.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityReplayProvenance] { get }
 ToolUp.Platform.EntityLifecycleEventPayload.UserId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.Version : System.Int32 { get }
 ToolUp.Platform.EntityLock (class)
@@ -5153,6 +5154,11 @@ ToolUp.Platform.EntityQueryTypes+SortDirection.Tag : System.Int32 { get }
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags (class)
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags.Ascending : System.Int32 (literal)
 ToolUp.Platform.EntityQueryTypes+SortDirection+Tags.Descending : System.Int32 (literal)
+ToolUp.Platform.EntityReplayProvenance (class)
+ToolUp.Platform.EntityReplayProvenance..ctor(System.DateTime, System.DateTime, System.String)
+ToolUp.Platform.EntityReplayProvenance.MutationId : System.String { get }
+ToolUp.Platform.EntityReplayProvenance.OriginatedAt : System.DateTime { get }
+ToolUp.Platform.EntityReplayProvenance.ReplayedAt : System.DateTime { get }
 ToolUp.Platform.EntityStoreMode (class)
 ToolUp.Platform.EntityStoreMode.EnabledEntityStore : ToolUp.Platform.EntityStoreMode { get }
 ToolUp.Platform.EntityStoreMode.IsEnabledEntityStore : System.Boolean { get }

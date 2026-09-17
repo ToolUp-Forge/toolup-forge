@@ -5,12 +5,14 @@ module ToolUp.Offline.Tests.OfflineSyncHandlerTests
 
 open System
 open System.Collections.Generic
+open System.IO
 open System.Text
 open System.Text.Json
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.IEntityStore
@@ -31,12 +33,18 @@ open ToolUp.Offline.OfflineSyncHandler
 //      fake below refuses a stale expectation exactly as
 //      `BlobEntityStore` does and the handler is asserted to hand the
 //      expectation over rather than to compare heads itself;
-//   3. an audited replay is stamped with the mutation's ORIGINAL
-//      enqueue time and the resolved caller, not `UtcNow` / `"system"`.
+//   3. an audited replay records ONE lifecycle row through `IAuditLog`,
+//      carrying the resolved caller (not `"system"`) and, in its
+//      `Replay` provenance, the mutation's ORIGINAL enqueue time beside
+//      the application time (Phase 759 — the row's own `OccurredAt` is
+//      the write time, so the replicator cursor still delivers it; the
+//      double-row regression runs against a REAL `BlobEntityStore`).
 //
 // Each has a paired go-red: the scope test also asserts the matching
-// scope APPLIES, and the conflict test also asserts the matching
-// version applies, so a guard that refused everything would fail too.
+// scope APPLIES, the conflict test also asserts the matching version
+// applies, and the replay-scope test also asserts the store's own row
+// stands when the handler has no audit log — so a guard that refused
+// everything, or a suppression that were global, would fail too.
 
 type Inspection = {
     Id: string
@@ -346,9 +354,54 @@ let conflictTests =
         }
     ]
 
+/// Decode the lifecycle payload off a captured `ModuleEvent` with the
+/// SAME converter set the audit log persists through.
+let private decodeLifecycle (evt: ModuleEvent) : EntityLifecycleEventPayload =
+    JsonSerializer.Deserialize<EntityLifecycleEventPayload>(evt.Payload, jsonOptions)
+
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+/// A REAL `BlobEntityStore` over a temp directory, composed with the
+/// SDK-default audit log over an in-memory event store — the composition
+/// Phase 24 recorded the double row against. Returns the store, the
+/// audit log and the event store so a test can read the trail both ways.
+let private realStoreWithAudit () =
+    let tempDir =
+        Path.Combine(Path.GetTempPath(), "toolup-offline-audit-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory tempDir |> ignore
+    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let dos = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
+    let registry = EntityStore.EntityRegistry()
+    registry.Register(EntityRegistration.create<Inspection> "Inspection")
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let auditLog = AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
+
+    let store =
+        EntityStore.BlobEntityStore(dos, blob, registry, Some auditLog) :> IEntityStore
+
+    store, auditLog, events
+
+/// The lifecycle rows in a trail, oldest first, as `(case, payload)`.
+let private lifecycleRows (trail: AuditEvent list) =
+    trail
+    |> List.rev
+    |> List.choose (fun e ->
+        match e with
+        | EntityCreated p -> Some("EntityCreated", p)
+        | EntityUpdated p -> Some("EntityUpdated", p)
+        | EntityDeleted p -> Some("EntityDeleted", p)
+        | _ -> None)
+
 let auditTests =
-    testList "audit replay stamping" [
-        test "no audit event store means no emission (GP 13)" {
+    testList "audit replay provenance" [
+        test "no audit log means no emission (GP 13)" {
             let store = FakeEntityStore()
 
             let api =
@@ -361,12 +414,13 @@ let auditTests =
             |> Async.RunSynchronously
             |> ignore
         // Nothing to assert beyond "it did not raise" — the point is
-        // that the default composes with no event store at all.
+        // that the default composes with no audit log at all.
         }
 
-        test "an applied replay is stamped with the ORIGINAL enqueue time" {
+        test "an applied replay records ONE row carrying the real user and BOTH timestamps" {
             let store = FakeEntityStore()
             let events = CapturingEventStore()
+            let before = DateTime.UtcNow.AddSeconds -1.0
 
             let options =
                 OfflineSyncOptions.defaults
@@ -381,11 +435,33 @@ let auditTests =
 
             match events.Written with
             | [ evt ] ->
-                Expect.equal evt.OccurredAt enqueuedAt.UtcDateTime "OccurredAt is the enqueue time, not UtcNow"
                 Expect.equal evt.ScopeId "team-a" "scoped to the resolved scope"
                 Expect.equal evt.SourceModule AuditSourceModule.value "written on the audit source module"
                 Expect.equal evt.EventType "EntityCreated" "version 1 is a creation"
-                Expect.stringContains evt.Payload "alice" "the applying user is preserved, not 'system'"
+
+                // The row's OccurredAt is the WRITE time — that is what
+                // keeps it after the replicator cursor. The origination
+                // time rides the payload, not the envelope.
+                Expect.isGreaterThanOrEqual evt.OccurredAt before "OccurredAt is the write time, not the enqueue time"
+                Expect.notEqual evt.OccurredAt enqueuedAt.UtcDateTime "the envelope is not backdated"
+
+                let payload = decodeLifecycle evt
+                Expect.equal payload.UserId "alice" "the applying user is preserved, not 'system'"
+                Expect.equal payload.EntityType "Inspection" "entity type"
+                Expect.equal payload.EntityId "e1" "entity id"
+                Expect.equal payload.Version 1 "the version the store assigned"
+
+                match payload.Replay with
+                | Some replay ->
+                    Expect.equal
+                        replay.OriginatedAt
+                        enqueuedAt.UtcDateTime
+                        "OriginatedAt is the mutation's enqueue time"
+
+                    Expect.isGreaterThanOrEqual replay.ReplayedAt before "ReplayedAt is the application time"
+                    Expect.notEqual replay.OriginatedAt replay.ReplayedAt "the two timestamps are distinguishable"
+                    Expect.equal replay.MutationId "m-1" "the origin marker is the queue's mutation id"
+                | None -> failtest "a replayed row must carry replay provenance"
             | other -> failtestf "expected exactly one audit event, got %d" (List.length other)
         }
 
@@ -418,7 +494,9 @@ let auditTests =
             |> ignore
 
             match events.Written with
-            | [ evt ] -> Expect.equal evt.EventType "EntityUpdated" "version 2 is an update"
+            | [ evt ] ->
+                Expect.equal evt.EventType "EntityUpdated" "version 2 is an update"
+                Expect.equal (decodeLifecycle evt).Version 2 "the new version"
             | other -> failtestf "expected exactly one audit event, got %d" (List.length other)
         }
 
@@ -453,6 +531,197 @@ let auditTests =
             |> ignore
 
             Expect.isEmpty events.Written "a conflict is not a write"
+        }
+
+        test "the replayed row is AFTER a replicator cursor that has passed its origination time" {
+            // The Phase 24 premise this phase refutes: a row stamped
+            // with the origination time was said to reach sinks "with
+            // no sink-side change". The replicator's cursor filters on
+            // OccurredAt, so a row backdated behind it is never
+            // delivered. Pinned here in both directions.
+            let store = FakeEntityStore()
+            let events = CapturingEventStore()
+
+            let options =
+                OfflineSyncOptions.defaults
+                |> OfflineSyncOptions.withReplays replays
+                |> OfflineSyncOptions.withAuditEventStore events
+
+            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+
+            api.Apply(mutationFor "team-a" "e1" 0 "note")
+            |> Async.RunSynchronously
+            |> ignore
+
+            let cursor: AuditReplicatorCursor = {
+                // A sink that last delivered a day AFTER the user made
+                // the edit — the ordinary state when a device has been
+                // offline for a while.
+                LastDeliveredAt = enqueuedAt.UtcDateTime.AddDays 1.0
+                LastDeliveredEventId = Guid.Empty
+            }
+
+            match events.Written with
+            | [ evt ] ->
+                Expect.isTrue (AuditReplicatorCursor.isAfter cursor evt) "the write-time row is delivered"
+
+                // Go-red twin: the same row backdated the Phase 24 way
+                // would have been silently skipped.
+                let backdated = {
+                    evt with
+                        OccurredAt = enqueuedAt.UtcDateTime
+                }
+
+                Expect.isFalse (AuditReplicatorCursor.isAfter cursor backdated) "a backdated row is behind the cursor"
+            | other -> failtestf "expected exactly one audit event, got %d" (List.length other)
+        }
+
+        test "a pre-759 lifecycle payload decodes with Replay = None" {
+            // A row persisted before the field existed carries no
+            // `Replay` property at all; it must read back as a live
+            // write, with no version switch and no migration (GP 11).
+            let legacy =
+                """{"UserId":"system","EntityType":"Inspection","EntityId":"e1","Version":3}"""
+
+            let payload =
+                JsonSerializer.Deserialize<EntityLifecycleEventPayload>(legacy, jsonOptions)
+
+            Expect.equal payload.UserId "system" "the legacy actor"
+            Expect.equal payload.Version 3 "the legacy version"
+            Expect.isNone payload.Replay "an absent field is a live write"
+        }
+
+        test "the provenance round-trips through EventStoreAuditLog.GetAuditTrail" {
+            let store, auditLog, _ = realStoreWithAudit ()
+
+            let options =
+                OfflineSyncOptions.defaults
+                |> OfflineSyncOptions.withReplays replays
+                |> OfflineSyncOptions.withAuditLog auditLog
+
+            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+
+            match api.Apply(mutationFor "team-a" "e1" 0 "note") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+
+            match lifecycleRows trail with
+            | [ ("EntityCreated", p) ] ->
+                Expect.equal p.UserId "alice" "the real user survives the round trip"
+
+                match p.Replay with
+                | Some replay ->
+                    Expect.equal replay.OriginatedAt enqueuedAt.UtcDateTime "OriginatedAt survives the round trip"
+                    Expect.equal replay.MutationId "m-1" "MutationId survives the round trip"
+
+                    Expect.isGreaterThan
+                        replay.ReplayedAt
+                        replay.OriginatedAt
+                        "the trail renders the two timestamps distinguishably"
+                | None -> failtest "the trail must render the replay provenance"
+            | other -> failtestf "expected exactly one lifecycle row, got %A" other
+        }
+
+        test "REGRESSION — a replayed version produces exactly ONE lifecycle row, and live writes are untouched" {
+            // Phase 24's recorded residue: with the entity store ALSO
+            // composed with an IAuditLog, an applied replay produced two
+            // rows for one version — the store's ("system", write time)
+            // and the handler's (real user, origination time).
+            let store, auditLog, _ = realStoreWithAudit ()
+
+            let options =
+                OfflineSyncOptions.defaults
+                |> OfflineSyncOptions.withReplays replays
+                |> OfflineSyncOptions.withAuditLog auditLog
+
+            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+
+            // 1. Replayed create → one row, the handler's.
+            match api.Apply(mutationFor "team-a" "e1" 0 "offline v1") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            // 2. A LIVE write through the store → its own generic row,
+            //    byte-identical to today: "system", no provenance.
+            let live =
+                store.Save<Inspection>(
+                    "team-a",
+                    {
+                        Id = "e1"
+                        Type = "Inspection"
+                        Version = 1
+                        Notes = "live v2"
+                    }
+                )
+                |> Async.RunSynchronously
+
+            Expect.isOk live "the live save applies"
+
+            // 3. Replayed update over the live head → one row again.
+            match api.Apply(mutationFor "team-a" "e1" 2 "offline v3") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            // 4. Replayed delete → one row.
+            let deletion = {
+                mutationFor "team-a" "e1" 3 "" with
+                    Id = "m-4"
+                    Operation = DeleteOp
+            }
+
+            match api.Apply deletion |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+            let rows = lifecycleRows trail
+
+            // Compared as a sorted set: the trail orders by OccurredAt,
+            // and four writes inside one test can share a clock tick.
+            let observed =
+                rows
+                |> List.map (fun (case, p) -> p.Version, case, p.UserId, Option.isSome p.Replay)
+                |> List.sort
+
+            Expect.equal
+                observed
+                [
+                    1, "EntityCreated", "alice", true
+                    2, "EntityUpdated", "system", false
+                    3, "EntityDeleted", "alice", true
+                    3, "EntityUpdated", "alice", true
+                ]
+                "four applied versions, four rows — never a double; replays carry the real user + provenance, the live write is the store's generic row"
+
+            let deleted =
+                rows |> List.tryFind (fun (case, _) -> case = "EntityDeleted") |> Option.map snd
+
+            Expect.equal
+                (deleted |> Option.bind _.Replay |> Option.map _.MutationId)
+                (Some "m-4")
+                "the delete row carries its own mutation id"
+        }
+
+        test "without an audit log on the handler the store's own row still stands (the scope is never global)" {
+            let store, auditLog, _ = realStoreWithAudit ()
+
+            let options = OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays
+
+            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+
+            match api.Apply(mutationFor "team-a" "e1" 0 "note") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+
+            match lifecycleRows trail with
+            | [ ("EntityCreated", p) ] ->
+                Expect.equal p.UserId "system" "the store's generic row is not suppressed"
+                Expect.isNone p.Replay "and it carries no provenance"
+            | other -> failtestf "expected the store's single generic row, got %A" other
         }
     ]
 

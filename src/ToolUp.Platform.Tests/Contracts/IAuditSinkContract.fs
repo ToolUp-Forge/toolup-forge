@@ -118,4 +118,40 @@ let tests
             with ex ->
                 failtestf "Deliver must surface failures via Result.Error, not by throwing: %s" ex.Message
         }
+
+        testCaseAsync "A replay-provenance lifecycle payload is delivered untouched (Phase 759)"
+        <| async {
+            // An offline mutation applied by replay records ONE lifecycle
+            // row whose payload carries `Replay = Some …` — origination
+            // time, application time, queue mutation id. The replicator
+            // hands the sink that payload exactly as decoded; a sink that
+            // re-shaped or dropped the nested provenance would silently
+            // turn "edited offline at T1, landed at T2" back into a plain
+            // write. The envelope's own `OccurredAt` is the write time
+            // (the replicator's cursor filters on it), so the two
+            // timestamps in the payload are the only place the
+            // origination survives downstream.
+            let sink = factory ()
+
+            let replayed =
+                EntityUpdated {
+                    UserId = "user-offline"
+                    EntityType = "Inspection"
+                    EntityId = "e-759"
+                    Version = 2
+                    Replay =
+                        Some {
+                            OriginatedAt = baseTime.AddDays -1.0
+                            ReplayedAt = baseTime
+                            MutationId = "m-759"
+                        }
+                }
+
+            let batch = [ AuditEnvelope.fromScopeId "team-contract" baseTime replayed ]
+            let! result = sink.Deliver batch
+
+            match result with
+            | Ok() -> verifyDelivered sink [ batch ]
+            | Error msg -> failtestf "Deliver of a replay-provenance payload failed: %s" msg
+        }
     ]

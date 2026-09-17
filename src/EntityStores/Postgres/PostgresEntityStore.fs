@@ -264,6 +264,7 @@ type PostgresEntityStore
                                         EntityType = core.Type
                                         EntityId = core.Id
                                         Version = newVersion
+                                        Replay = None
                                     }
                                 else
                                     EntityUpdated {
@@ -271,6 +272,7 @@ type PostgresEntityStore
                                         EntityType = core.Type
                                         EntityId = core.Id
                                         Version = newVersion
+                                        Replay = None
                                     }
 
                             do! recordAudit scopeId event
@@ -366,6 +368,7 @@ type PostgresEntityStore
                                         EntityType = core.Type
                                         EntityId = core.Id
                                         Version = newVersion
+                                        Replay = None
                                     }
 
                                     do!
@@ -514,6 +517,7 @@ type PostgresEntityStore
                                     EntityType = entityType
                                     EntityId = entityId
                                     Version = headVersion
+                                    Replay = None
                                 })
 
                     return Ok()
@@ -557,6 +561,7 @@ type PostgresEntityStore
                                     EntityType = entityType
                                     EntityId = entityId
                                     Version = expectedVersion
+                                    Replay = None
                                 })
 
                         return Ok()

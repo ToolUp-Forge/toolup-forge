@@ -21,6 +21,11 @@ open System
 /// reads on this constant returns the audit trail only — `ReadBySource`
 /// is the canonical query path.
 module AuditSourceModule =
+    /// The reserved source-module name every `IAuditLog.Record` write
+    /// carries. Read it back with `IEventStore.ReadBySource` to get the
+    /// audit trail and nothing else; write it only through the seam —
+    /// a `ModuleEvent` hand-built on this name bypasses the codec, the
+    /// failure policy and (Phase 759) the replay scope.
     [<Literal>]
     let value = "_platform.audit"
 
@@ -572,6 +577,37 @@ type WorkflowActionExecutedPayload = {
     Reason: string
 }
 
+/// Phase 759 — provenance of an entity mutation that was made OFFLINE
+/// and applied later by replay: "this edit happened at T1 and landed at
+/// T2". Carried on the lifecycle row itself (`EntityLifecycleEventPayload.Replay`)
+/// so ONE row records both facts; the row's `OccurredAt` is the write
+/// time, as for every other audit row, and the origination time lives
+/// here. That split is load-bearing rather than cosmetic: the audit
+/// replicator's cursor (`AuditReplicatorCursor.isAfter`) and the job
+/// trigger watermark both filter on `OccurredAt`, so a row backdated to
+/// its origination time behind the cursor would never be replicated —
+/// the origination time must ride the payload, not the envelope.
+///
+/// Both timestamps are UTC. `OriginatedAt` carries the originating
+/// device's clock at its own precision (portability rule 6 — the
+/// offline queue's `EnqueuedAt` is a browser timestamp); `ReplayedAt`
+/// is the server clock at the moment the replay was applied.
+type EntityReplayProvenance = {
+    /// When the user made the edit — the offline queue's `EnqueuedAt`
+    /// on the originating device, NOT the server's application time.
+    OriginatedAt: DateTime
+    /// When the server applied the replay. Differs from the row's
+    /// `OccurredAt` only by the instant between the handler's stamp
+    /// and the store's write; carried explicitly so a reader of
+    /// `IAuditLog.GetAuditTrail` — which returns the event, not the
+    /// envelope — still sees both timestamps side by side.
+    ReplayedAt: DateTime
+    /// The offline queue's mutation id — the origin marker that
+    /// correlates this row with the client-side queue entry that
+    /// produced it.
+    MutationId: string
+}
+
 /// Entity-store lifecycle events. Emitted by `BlobEntityStore`
 /// after successful Save / Delete, swallowed-on-failure (audit emission
 /// must never fail the primary operation). Each case carries the
@@ -590,6 +626,19 @@ type EntityLifecycleEventPayload = {
     /// for `EntityUpdated` the new version (>1); for `EntityDeleted`
     /// the head version at delete time.
     Version: int
+    /// Phase 759 — `Some` when this row records an offline mutation
+    /// applied by replay (the offline sync handler is the emitter, and
+    /// `UserId` is then the real user rather than `"system"`); `None`
+    /// for a live write.
+    ///
+    /// **`None` is the shipped default and absorbs every pre-759
+    /// record** — the same structural backward compatibility as
+    /// `PermissionChangedPayload.Chain`: the converter set this payload
+    /// persists through initialises an absent reference-typed field to
+    /// `null`, and `None` IS null for `FSharpOption`, so a row written
+    /// before this field existed deserialises to `None` with no version
+    /// switch and no migration (GP 11).
+    Replay: EntityReplayProvenance option
 }
 
 /// Encryption-key lifecycle events. Emitted by

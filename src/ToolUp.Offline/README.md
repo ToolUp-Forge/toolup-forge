@@ -153,14 +153,16 @@ An entity type with no registered adapter is **rejected**, never guessed at.
 
 ## Audit
 
-Opt in with `OfflineSyncOptions.withAuditEventStore`. An applied replay then emits an
-`EntityCreated` / `EntityUpdated` / `EntityDeleted` audit record stamped with the mutation's
-**original enqueue time** and the **applying user's id** — so an inspection edited at 09:14 in a
-tunnel and synced at 11:02 is audited as having happened at 09:14, by the person who made it.
+Opt in with `OfflineSyncOptions.withAuditLog`, passing the `IAuditLog` your entity store is composed
+with. An applied replay then records **one** `EntityCreated` / `EntityUpdated` / `EntityDeleted`
+audit row carrying the **applying user's id** and, in its `Replay` provenance, the mutation's
+**original enqueue time** beside the **application time** and the queue's mutation id — so an
+inspection edited at 09:14 in a tunnel and synced at 11:02 is audited as one row: made at 09:14 by
+the person who made it, landed at 11:02. The entity store's own generic `"system"` row for that
+version is suppressed for the replay only; live writes are audited exactly as before.
 
-Read [`TECHNICAL_GUIDE.md`](TECHNICAL_GUIDE.md) before enabling it: when your entity store is also
-composed with an `IAuditLog`, two lifecycle rows appear for the same version, and the guide explains
-why and how to tell them apart.
+[`TECHNICAL_GUIDE.md`](TECHNICAL_GUIDE.md) §4 has the worked example, how the collapse works, and
+why the row's own `OccurredAt` is the application time rather than the origination time.
 
 ## Requirements and limits
 
