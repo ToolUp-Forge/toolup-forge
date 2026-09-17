@@ -507,18 +507,26 @@ let tests =
             // already caught by the first arm of this file.
             let root = repoRoot ()
 
-            let sharedPath =
-                Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "SDK.Shared.fs")
+            // Phase 347 — the `ServerConfig` companion module (`defaults` +
+            // `fromEnv`) was carved out of SDK.Shared.fs into its own file; the
+            // record itself stays behind. The region parse below is unchanged:
+            // the server-only guard still opens the `fromEnv` region and it
+            // still runs to the end of the file.
+            let fromEnvPath =
+                Path.Combine(root, "src", "ToolUp.Platform.Core", "Shared", "Config", "ServerConfigFromEnv.fs")
 
-            Expect.isTrue (File.Exists sharedPath) (sprintf "ServerConfig source not found: %s" sharedPath)
+            Expect.isTrue (File.Exists fromEnvPath) (sprintf "ServerConfig.fromEnv source not found: %s" fromEnvPath)
 
-            let text = File.ReadAllText sharedPath
+            let text = File.ReadAllText fromEnvPath
 
             // The `fromEnv` region: everything from the server-only guard
             // (where the env helpers begin) to the end of the file.
             let regionStart = text.IndexOf "#if !FABLE_COMPILER"
 
-            Expect.isGreaterThan regionStart -1 "the server-only `fromEnv` region was not found in SDK.Shared.fs"
+            Expect.isGreaterThan
+                regionStart
+                -1
+                "the server-only `fromEnv` region was not found in ServerConfigFromEnv.fs"
 
             let region = text.Substring regionStart
 

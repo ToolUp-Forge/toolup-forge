@@ -456,7 +456,26 @@
              in the Fable-packed source with the rest of Shared/. -->
         <Compile Include="Shared\SignedShapeSeparator.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
+        <!-- Phase 347 — the SDK.Shared.fs monolith carved into cohesive units in
+             its original declaration order (behaviour-preserving: same namespace,
+             same names — only file boundaries moved). ModuleEvents.fs holds the
+             inter-module event envelope + IEventStore; Config\ holds the *Mode
+             DUs and validation-adjacent records ServerConfig selects between;
+             SDK.Shared.fs keeps the ServerConfig record itself (the documented
+             irreducible core — a record is one compilation unit); then the
+             overrides, the Surfaces predicates and the `ServerConfig` companion
+             module (`defaults` + the server-only `fromEnv`). Every file is
+             Fable-safe exactly as the monolith was and ships under fable/ via
+             the **\*.fs glob. -->
+        <Compile Include="Shared\ModuleEvents.fs" />
+        <Compile Include="Shared\Config\StoreModes.fs" />
+        <Compile Include="Shared\Config\RuntimeModes.fs" />
+        <Compile Include="Shared\Config\InboundRateLimitTypes.fs" />
+        <Compile Include="Shared\Config\ConsentAdTypes.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
+        <Compile Include="Shared\Config\ServerConfigOverrides.fs" />
+        <Compile Include="Shared\Config\DeploymentConfig.fs" />
+        <Compile Include="Shared\Config\ServerConfigFromEnv.fs" />
         <!-- Phase 9u — the event-store decorator chain's position model
              (IEventStoreDecorator + the EventStoreChain walk/check). After
              SDK.Shared.fs, which declares the IEventStore it decorates;
