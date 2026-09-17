@@ -12,6 +12,11 @@
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+    <!-- Phase 791 — the answer planner's question compiler is a provider
+         entry, so it constructs a `ModelInput` like every other. AI.Core
+         depends on Platform.Core alone, so the edge adds no cycle and no
+         vendor dependency (GP 1). -->
+    <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
         <!-- Phase 565 — grounding certificates ride the Phase 40 artefact-
              signing substrate (IArtefactSigner / IArtefactVerifier). The
              edge runs Facts.Server -> ArtefactSigning -> Platform.Server;

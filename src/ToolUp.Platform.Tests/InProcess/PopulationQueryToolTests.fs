@@ -983,7 +983,7 @@ let demoTests =
             let onEvent (evt: AIStreamEvent) = lock events (fun () -> events.Add evt)
 
             let! finalMessages =
-                AIAgentEngine.runAgentLoop
+                AIAgentEngine.runAgentLoopWithInput
                     (provider :> IAIProvider)
                     registry
                     (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -995,7 +995,7 @@ let demoTests =
                     None
                     CancellationToken.None
                     [ AIProviderMessage.text "user" "Which brand has the highest revenue?" ]
-                    None
+                    ModelInput.empty
                     onEvent
 
             let captured = lock events (fun () -> events.ToArray() |> Array.toList)
@@ -1064,7 +1064,106 @@ let demoTests =
                 "and the model could state the population size it never saw"
 
             Expect.equal provider.Turns 2 "one tool turn, one answer turn"
+
+            // (5) Phase 791 — the same claim, made over the VALUE rather
+            // than over a string search, and required to agree with it.
+            //
+            // The value is built from exactly what the provider was
+            // handed, with the returned top-k declared as disclosed facts.
+            // `leakedFactIds` then asks the question the `Contains` loop
+            // above asks, of the value instead of the transcript: is there
+            // a subject in the rendering that the value does not account
+            // for? Assertion (3) and this one are two probes of one fact,
+            // and a divergence between them is a defect in whichever is
+            // wrong — which is the point of keeping both.
+            let declaredFacts =
+                seeded
+                |> List.sortByDescending snd
+                |> List.truncate topK
+                |> List.map (fun (sku, value) -> {
+                    FactId = sku
+                    Value = FactRendering.render "N0" (Scalar value)
+                    Verdict = FactDisclosable
+                    Scope = scope
+                })
+
+            let modelInput =
+                declaredFacts
+                |> List.fold
+                    (fun input fact ->
+                        match ModelInput.addFact fact input with
+                        | Ok next -> next
+                        | Error e -> failtestf "the top-k facts must be admissible: %s" e)
+                    (ModelInput.ofSystemPrompt "PopulationQueryTool" (Some context) [])
+
+            Expect.equal
+                (ModelInput.leakedFactIds (seeded |> List.map fst) modelInput)
+                []
+                "every subject the rendering shows is declared in the value — nothing reached the model unaccounted for"
+
+            Expect.equal
+                (ModelInput.disclosedFactIds modelInput |> List.sort)
+                (present |> List.sort)
+                "and the value's declared facts are exactly the subjects the string oracle found — the two probes agree"
         }
+
+        testCase "a rendering that emits a fact the value does not carry fails the differential"
+        <| fun () ->
+            // The go-red. Phase 791.D is only worth running if it can
+            // fail, and the failure it must catch is a renderer that shows
+            // the model something the value never admitted — so here is
+            // that exact rendering, built by hand, asserted to be caught.
+            let declared = {
+                FactId = "sku-declared"
+                Value = "1,000"
+                Verdict = FactDisclosable
+                Scope = "team-differential"
+            }
+
+            let honest =
+                ModelInput.ofSystemPrompt "PopulationQueryTool" (Some "[F1] revenue: sku-declared 1,000") []
+                |> ModelInput.addFact declared
+                |> function
+                    | Ok input -> input
+                    | Error e -> failtestf "the declared fact must be admissible: %s" e
+
+            Expect.equal
+                (ModelInput.leakedFactIds [ "sku-declared"; "sku-undeclared" ] honest)
+                []
+                "the honest value leaks nothing"
+
+            let leaking =
+                ModelInput.addBlock
+                    {
+                        BuilderId = "RAGPromptBuilder"
+                        Text = "[F2] revenue: sku-undeclared 9,999"
+                    }
+                    honest
+
+            Expect.equal
+                (ModelInput.leakedFactIds [ "sku-declared"; "sku-undeclared" ] leaking)
+                [ "sku-undeclared" ]
+                "a block naming a fact the value never admitted is named by the differential, not absorbed by it"
+
+        testCase "the smart constructor refuses a fact the disclosure gate denied"
+        <| fun () ->
+            // The other half of the closure argument: the value cannot be
+            // populated by a leak in the first place, so Phase 792 may
+            // quantify over `Facts` without re-deriving disclosure.
+            let denied = {
+                FactId = "sku-restricted"
+                Value = "42"
+                Verdict = FactNotDisclosable "policy/internal-only"
+                Scope = "team-differential"
+            }
+
+            match ModelInput.addFact denied ModelInput.empty with
+            | Ok _ -> failtest "a non-disclosable fact must not be constructible into a ModelInput"
+            | Error reason ->
+                Expect.stringContains
+                    reason
+                    "policy/internal-only"
+                    "and the refusal names the policy rather than the value"
     ]
 
 let tests =

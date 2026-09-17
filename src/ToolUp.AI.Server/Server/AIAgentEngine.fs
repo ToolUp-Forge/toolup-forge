@@ -283,7 +283,7 @@ let private runFullAgentLoop
     (activePage: string option)
     (cancelToken: System.Threading.CancellationToken)
     (messages: AIProviderMessage list)
-    (systemPrompt: string option)
+    (modelInput: ModelInput)
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
@@ -692,7 +692,13 @@ let private runFullAgentLoop
                     "ai.agent"
                     $"provider.SendMessage attempt {outerRetriesUsed + 1} (conversation={conversationId}, msgCount={msgs.Length}, toolCount={tools.Length})"
 
-                let! result = provider.SendMessage(msgs, tools, systemPrompt, Some streamCb, providerCallPolicy)
+                // Phase 791 — the turn's value. The blocks are fixed for
+                // the conversation; the messages grow with each tool
+                // round-trip, so the value is rebuilt per attempt and
+                // `withMessages` keeps its tool-result record in step.
+                let turnInput = ModelInput.withMessages msgs modelInput
+
+                let! result = provider.SendMessage(turnInput, tools, Some streamCb, providerCallPolicy)
 
                 Logger.trace
                     logger
@@ -1362,7 +1368,13 @@ let private runFullAgentLoop
 // path, so the next complex turn replays a history in which the change
 // is visible.
 
-let runAgentLoop
+/// Phase 791 — the loop over the closed model-input value.
+///
+/// The entry point every in-tree caller uses. `modelInput` carries
+/// everything the provider will be shown; `messages` remains separate
+/// because the loop grows it turn by turn and folds each growth back
+/// into the value before rendering.
+let runAgentLoopWithInput
     (provider: IAIProvider)
     (registry: AIToolRegistry)
     (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
@@ -1374,7 +1386,7 @@ let runAgentLoop
     (activePage: string option)
     (cancelToken: System.Threading.CancellationToken)
     (messages: AIProviderMessage list)
-    (systemPrompt: string option)
+    (modelInput: ModelInput)
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
@@ -1412,6 +1424,41 @@ let runAgentLoop
                     activePage
                     cancelToken
                     messages
-                    systemPrompt
+                    modelInput
                     onEvent
     }
+
+/// The pre-791 string-shaped entry point, kept for one release so an
+/// out-of-tree composition root upgrades without a same-commit edit
+/// (GP 11). Lifts the `string option` into a single-block `ModelInput`,
+/// which renders back to the identical prompt, and delegates.
+[<Obsolete("Use AIAgentEngine.runAgentLoopWithInput and construct a ModelInput (ModelInput.ofSystemPrompt lifts an existing string option). runAgentLoop will be removed in a future major.")>]
+let runAgentLoop
+    (provider: IAIProvider)
+    (registry: AIToolRegistry)
+    (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
+    (ctx: HttpContext)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (surface: AISurface)
+    (activeModule: string option)
+    (activePage: string option)
+    (cancelToken: System.Threading.CancellationToken)
+    (messages: AIProviderMessage list)
+    (systemPrompt: string option)
+    (onEvent: AIStreamEvent -> unit)
+    : Async<AIProviderMessage list> =
+    runAgentLoopWithInput
+        provider
+        registry
+        dispatchRegistry
+        ctx
+        taskId
+        conversationId
+        surface
+        activeModule
+        activePage
+        cancelToken
+        messages
+        (ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt messages)
+        onEvent

@@ -1041,6 +1041,12 @@ let private registeredTests =
         // grouped count, true rank gaps, gated magnitudes), the two typed
         // ordering refusals, and the end-to-end demo.
         PopulationQueryToolTests.tests
+        // Phase 791 — the closed model-input value: the source scan
+        // asserting every provider entry constructs a `ModelInput` (with
+        // the planted-violation go-red that proves it fires), and the
+        // byte-identity of `render` against the pre-phase prompt strings.
+        ModelInputEntryTests.tests
+        ModelInputEntryTests.renderTests
         // Phase 705 — metric context + coverage discovery: the
         // `list_metric_coverage` entry point (registry declarations with
         // their Context, per-hierarchy cardinality / period reach /

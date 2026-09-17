@@ -2533,6 +2533,12 @@
              Build.fsproj so the VerifyAll driver and this pack parse the
              variable through ONE implementation); TestLaneFilter.fs is
              the Expecto-shaped half only this pack compiles. -->
+        <!-- Phase 791 — the provider entries take a ModelInput: the
+             source scan over the seven entries (with its planted-violation
+             go-red) and the byte-identity of render against the pre-phase
+             prompts. After the InProcess packs it scans nothing of; before
+             the lane support files. -->
+        <Compile Include="InProcess\ModelInputEntryTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

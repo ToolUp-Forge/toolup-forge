@@ -201,7 +201,7 @@ let private runTurn
             | _ -> ()
 
         let! _ =
-            AIAgentEngine.runAgentLoop
+            AIAgentEngine.runAgentLoopWithInput
                 (CannedToolCallProvider(ToolName, ArgsJson) :> IAIProvider)
                 registry
                 (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -213,7 +213,7 @@ let private runTurn
                 (Some "/dashboard")
                 CancellationToken.None
                 [ AIProviderMessage.text "user" "delete everything please" ]
-                None
+                ToolUp.AI.ModelInput.empty
                 onEvent
 
         return lock events (fun () -> events.ToArray() |> Array.toList)

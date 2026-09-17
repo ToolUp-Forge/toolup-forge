@@ -3,6 +3,7 @@ module ToolUp.RAG.ProviderQueryRewriter
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.IQueryRewriter
+open ToolUp.AI
 
 // ─── Provider-backed conversation-aware query rewriter (Phase 506) ───
 //
@@ -132,7 +133,10 @@ type ProviderQueryRewriter(provider: IAIProvider, ?historyTurns: int, ?timeoutMs
             else
                 let userMessage = AIProviderMessage.text "user" (buildPrompt turns query history)
 
-                let! result = provider.SendMessage([ userMessage ], [], Some rewriteSystemPrompt, None, policy)
+                let input =
+                    ModelInput.ofSystemPrompt "ProviderQueryRewriter" (Some rewriteSystemPrompt) [ userMessage ]
+
+                let! result = provider.SendMessage(input, [], None, policy)
 
                 match result with
                 | Error err ->

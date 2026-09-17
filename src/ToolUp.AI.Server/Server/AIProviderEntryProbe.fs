@@ -53,6 +53,11 @@ let private probeMessage: AIProviderMessage = {
 /// way; this bounds the output half of it.
 let private probeSystemPrompt = Some "Reply with a single word."
 
+/// The probe's model input (Phase 791). Static: the probe shows the
+/// provider the same two things on every entry it tests.
+let private probeInput =
+    ModelInput.ofSystemPrompt "AIProviderEntryProbe" probeSystemPrompt [ probeMessage ]
+
 /// Reconstruct the `AccessContext` whose `configScope` is exactly the
 /// given `StorageScope`.
 ///
@@ -122,8 +127,7 @@ let create
                         // UI copy.
                         return Error(ProviderResolutionError.toMessage err)
                     | Ok provider ->
-                        let! response =
-                            provider.SendMessage([ probeMessage ], [], probeSystemPrompt, None, RetryPolicy.noRetry)
+                        let! response = provider.SendMessage(probeInput, [], None, RetryPolicy.noRetry)
 
                         match response with
                         | Ok _ ->

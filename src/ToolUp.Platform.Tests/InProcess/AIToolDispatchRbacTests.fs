@@ -284,7 +284,7 @@ let tests =
             let onEvent (evt: AIStreamEvent) = lock events (fun () -> events.Add evt)
 
             let! _final =
-                AIAgentEngine.runAgentLoop
+                AIAgentEngine.runAgentLoopWithInput
                     (ForgingProvider("sales.forecast") :> IAIProvider)
                     registry
                     (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -296,7 +296,7 @@ let tests =
                     None
                     CancellationToken.None
                     [ AIProviderMessage.text "user" "forecast my sales" ]
-                    None
+                    ToolUp.AI.ModelInput.empty
                     onEvent
 
             let captured = lock events (fun () -> events.ToArray() |> Array.toList)
@@ -354,7 +354,7 @@ let tests =
             let onEvent (evt: AIStreamEvent) = lock events (fun () -> events.Add evt)
 
             let! _final =
-                AIAgentEngine.runAgentLoop
+                AIAgentEngine.runAgentLoopWithInput
                     (ForgingProvider("mood.log") :> IAIProvider)
                     registry
                     (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -366,7 +366,7 @@ let tests =
                     None
                     CancellationToken.None
                     [ AIProviderMessage.text "user" "log my mood" ]
-                    None
+                    ToolUp.AI.ModelInput.empty
                     onEvent
 
             Expect.equal

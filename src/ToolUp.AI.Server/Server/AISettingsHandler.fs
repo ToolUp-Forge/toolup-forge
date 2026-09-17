@@ -28,6 +28,12 @@ let private testMessage: AIProviderMessage = {
 /// trip; `TestConnection` is not free.
 let private testSystemPrompt = Some "Reply with a single word."
 
+/// The test-connection model input (Phase 791). Byte-identical to
+/// `AIProviderEntryProbe`'s by the same deliberate design as the payload
+/// it lifts.
+let private testInput =
+    ModelInput.ofSystemPrompt "AISettingsHandler" testSystemPrompt [ testMessage ]
+
 /// Secret-store key name for an instance's API key. Per-instance (not
 /// per-provider) so two instances of the same provider can hold
 /// separate keys — required for the multi-instance design (decision
@@ -543,8 +549,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
                         return Error(ProviderResolutionError.toMessage err)
                     | Ok provider ->
-                        let! response =
-                            provider.SendMessage([ testMessage ], [], testSystemPrompt, None, RetryPolicy.noRetry)
+                        let! response = provider.SendMessage(testInput, [], None, RetryPolicy.noRetry)
 
                         match response with
                         | Ok _ ->

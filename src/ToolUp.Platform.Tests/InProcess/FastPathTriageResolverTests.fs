@@ -257,7 +257,7 @@ let private runLoop (triageConfig: FastPathTriageConfig option) (provider: IAIPr
     let events = ResizeArray<AIStreamEvent>()
 
     let! finalMessages =
-        AIAgentEngine.runAgentLoop
+        AIAgentEngine.runAgentLoopWithInput
             provider
             (AIToolRegistry.AIToolRegistry())
             (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -269,7 +269,7 @@ let private runLoop (triageConfig: FastPathTriageConfig option) (provider: IAIPr
             (Some "/dashboard")
             CancellationToken.None
             [ AIProviderMessage.text "user" instruction ]
-            None
+            ToolUp.AI.ModelInput.empty
             (fun evt -> lock events (fun () -> events.Add evt))
 
     // The harness seeds no `ToolUp.StorageScope`, so `resolveScope`

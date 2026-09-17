@@ -753,6 +753,25 @@ let aiAssistantApi
                     else
                         Some systemPromptText
 
+                // Phase 791 — the turn's closed value. The prompt block is
+                // the composed builder output verbatim, so rendering it
+                // reproduces `systemPrompt` byte for byte; the chunks come
+                // from the same cell the Sources panel reads, each carrying
+                // `NotGated` until Phase 775 supplies a gate result.
+                let modelInput =
+                    retrievedSourcesCell.Value
+                    |> List.fold
+                        (fun input (s: RetrievedSource) ->
+                            ModelInput.addChunk
+                                {
+                                    ChunkId = s.DocumentId
+                                    Text = s.Snippet
+                                    GateResult = NotGated
+                                    Source = Some s.DocumentName
+                                }
+                                input)
+                        (ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt [])
+
                 // Create a background context with its own DI scope.
                 // The original HttpContext is disposed after this response.
                 let bgCtx, bgScope = createBackgroundContext ctx userId
@@ -1078,7 +1097,7 @@ let aiAssistantApi
                                         ]
                                 }
                             | None ->
-                                runAgentLoop
+                                runAgentLoopWithInput
                                     provider
                                     registry
                                     dispatchRegistry
@@ -1090,7 +1109,7 @@ let aiAssistantApi
                                     request.ActivePage
                                     cancelToken
                                     allProviderMessages
-                                    systemPrompt
+                                    modelInput
                                     (fun evt -> emit evt)
 
                         // Persist the full round-trippable history first —

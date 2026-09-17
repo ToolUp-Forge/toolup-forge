@@ -272,9 +272,12 @@ let replayWith
 
                                 replayHistory <- replayHistory @ [ providerUserMsg ]
 
+                                let replayInput =
+                                    ModelInput.ofSystemPrompt "ConversationReplay" newSystemPrompt replayHistory
+
                                 // Call provider for assistant response.
                                 let! providerResponseResult =
-                                    provider.SendMessage(replayHistory, [], newSystemPrompt, None, RetryPolicy.defaults)
+                                    provider.SendMessage(replayInput, [], None, RetryPolicy.defaults)
 
                                 match providerResponseResult with
                                 | Error err ->

@@ -213,7 +213,7 @@ let private driveLoop
         let initialMessages = [ AIProviderMessage.text "user" "test" ]
 
         let! _final =
-            AIAgentEngine.runAgentLoop
+            AIAgentEngine.runAgentLoopWithInput
                 provider
                 registry
                 dispatchRegistry
@@ -225,7 +225,7 @@ let private driveLoop
                 (Some "/test")
                 CancellationToken.None
                 initialMessages
-                None
+                ToolUp.AI.ModelInput.empty
                 onEvent
 
         let captured = lock events (fun () -> events.ToArray() |> Array.toList)

@@ -759,16 +759,12 @@ let tryTriage
                                     )
                         }
 
-                        let triageMessages = [ AIProviderMessage.text "user" instruction ]
+                        let triageInput =
+                            ModelInput.ofSystemPrompt "FastPathTriageResolver" (Some(buildTriagePrompt snapshot)) [
+                                AIProviderMessage.text "user" instruction
+                            ]
 
-                        let! response =
-                            provider.SendStructuredMessage(
-                                triageMessages,
-                                [],
-                                Some(buildTriagePrompt snapshot),
-                                triageSchema,
-                                policy
-                            )
+                        let! response = provider.SendStructuredMessage(triageInput, [], triageSchema, policy)
 
                         let plan =
                             match response with

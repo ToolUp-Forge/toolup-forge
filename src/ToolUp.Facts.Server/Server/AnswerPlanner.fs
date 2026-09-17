@@ -11,6 +11,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.AI
 
 // ─── AnswerPlanner (Phase 560) ───────────────────────────────────────
 //
@@ -877,14 +878,12 @@ module AnswerPlanner =
     /// guess loop.
     let structuredCompiler (provider: IAIProvider) (registry: Grounding.IMetricRegistry option) : TripleCompiler =
         fun question -> async {
-            let! result =
-                provider.SendStructuredMessage(
-                    [ AIProviderMessage.text "user" question ],
-                    [],
-                    Some(vocabularyPrompt registry),
-                    TripleSchema,
-                    RetryPolicy.defaults
-                )
+            let input =
+                ModelInput.ofSystemPrompt "AnswerPlanner" (Some(vocabularyPrompt registry)) [
+                    AIProviderMessage.text "user" question
+                ]
+
+            let! result = provider.SendStructuredMessage(input, [], TripleSchema, RetryPolicy.defaults)
 
             match result with
             | Error err -> return Error(sprintf "structured extraction failed: %A" err)
@@ -912,14 +911,12 @@ module AnswerPlanner =
         (registry: Grounding.IMetricRegistry option)
         : QuestionCompiler =
         fun question -> async {
-            let! result =
-                provider.SendStructuredMessage(
-                    [ AIProviderMessage.text "user" question ],
-                    [],
-                    Some(questionVocabularyPrompt registry),
-                    QuestionSchema,
-                    RetryPolicy.defaults
-                )
+            let input =
+                ModelInput.ofSystemPrompt "AnswerPlanner" (Some(questionVocabularyPrompt registry)) [
+                    AIProviderMessage.text "user" question
+                ]
+
+            let! result = provider.SendStructuredMessage(input, [], QuestionSchema, RetryPolicy.defaults)
 
             match result with
             | Error err -> return Error(sprintf "structured extraction failed: %A" err)

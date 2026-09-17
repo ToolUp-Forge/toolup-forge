@@ -167,7 +167,7 @@ let tests =
             let initialMessages = [ AIProviderMessage.text "user" "please do the thing" ]
 
             let! _finalMessages =
-                AIAgentEngine.runAgentLoop
+                AIAgentEngine.runAgentLoopWithInput
                     provider
                     registry
                     dispatchRegistry
@@ -179,7 +179,7 @@ let tests =
                     (Some "/dashboard")
                     CancellationToken.None
                     initialMessages
-                    None
+                    ToolUp.AI.ModelInput.empty
                     onEvent
 
             let captured = lock events (fun () -> events.ToArray() |> Array.toList)

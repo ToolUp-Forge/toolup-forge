@@ -848,7 +848,7 @@ let demoTests =
             let onEvent (evt: AIStreamEvent) = lock events (fun () -> events.Add evt)
 
             let! finalMessages =
-                AIAgentEngine.runAgentLoop
+                AIAgentEngine.runAgentLoopWithInput
                     (provider :> IAIProvider)
                     toolRegistry
                     (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -860,7 +860,7 @@ let demoTests =
                     None
                     CancellationToken.None
                     [ AIProviderMessage.text "user" "What data do you have?" ]
-                    None
+                    ToolUp.AI.ModelInput.empty
                     onEvent
 
             let captured = lock events (fun () -> events.ToArray() |> Array.toList)
