@@ -166,7 +166,7 @@ type CodemodPlan = {
 /// registers (`dotnet run -- Codemod <dir> [--check]`): the rules as data,
 /// the per-file rewrite, the walk, and the two renderings (diff and
 /// findings). It takes no FAKE dependency and runs no process, so the
-/// golden-file pack in `ToolUp.Platform.Build.Tests` decides every rule
+/// golden-file pack (CodemodTests, in the Build tests project) decides every rule
 /// with no build, no tool restore and no clock.
 ///
 /// **Deterministic or reported — never guessed.** A rule is a REWRITE only
