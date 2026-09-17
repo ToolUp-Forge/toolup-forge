@@ -393,6 +393,14 @@ let private isCompilerGenerated (attrs: Collections.Generic.IList<CustomAttribut
 /// a SEPARATE line derived from the member's token, never a rewrite of it.
 /// See the Phase 258 note in this file's header for why the in-place
 /// alternative is forbidden, and why the message is deliberately absent.
+///
+/// Phase 257 reads this suffix back as TEXT: the v1.0 readiness scorecard
+/// (`V1Readiness.fs` at the repo root, FAKE-side) counts the markers in
+/// the committed baselines as its open-deprecations row, and reads the
+/// doc-coverage sidecar below as its doc-coverage row. It cannot call
+/// this module — it has no metadata load context — so the two spellings
+/// are pinned together here: change the suffix, and change
+/// `V1Readiness.obsoleteMarkerSuffix` in the same commit.
 let obsoleteMarker (memberToken: string) = memberToken + "  (obsolete)"
 
 /// Phase 258 — the `[<Obsolete>]` message on a declared member or type.
