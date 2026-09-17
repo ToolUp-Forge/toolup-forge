@@ -11,6 +11,9 @@
     <!-- Phase 182 — SBOM/provenance emission consumed by the Publish
          target in SDK.Build.fs (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Sbom.fs" />
+    <!-- Phase 183 — the consumer codemod behind the Codemod target
+         registerTargets registers (compiled after this). -->
+    <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Codemod.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Build.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.HostPackaging.fs" />
     <!-- Phase 213 — the Core-Web-Vitals budget parser + check behind the

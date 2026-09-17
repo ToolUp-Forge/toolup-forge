@@ -1128,6 +1128,87 @@ let registerTargets (config: BuildConfig) =
                 missing.Length
                 (sourceFiles.Length - missing.Length))
 
+    // Phase 183 — the consumer codemod for the Epoch-1 0.x breaking
+    // renames (Phase 73 `Fable.Remoting.*` / `Elmish` namespaces, Phase 66
+    // `PlatformMode` → Surfaces, Phase 11.C.5 package-id + interface
+    // renames). The deciding half is `Codemod` in SDK.Codemod.fs — rules
+    // as data, per-file rewrite, walk, renderings — and is FAKE-free and
+    // process-free so the golden-file pack decides every rule; this
+    // target is the shell around it: argument parsing, the writes, and
+    // the Fantomas pass the formatting mandate requires of generated F#.
+    //
+    //   dotnet run -- Codemod <dir>            rewrite in place; report the
+    //                                          sites left for human review;
+    //                                          then `dotnet fantomas` the
+    //                                          rewritten .fs / .fsx files
+    //   dotnet run -- Codemod <dir> --check    print the diff + the review
+    //                                          list, write nothing; exit 1
+    //                                          while rewrites are pending
+    //                                          (the AddHeaders --check shape)
+    //
+    // Idempotent: a second run over migrated source plans zero rewrites
+    // and runs no formatter. The review list never fails the run — it is
+    // the report of what the codemod deliberately did not guess at.
+    // Opt-in: a consumer who never runs it is byte-for-byte unaffected
+    // (GP 13); the SDK runtime surface is untouched.
+    Target.create "Codemod" (fun _ ->
+        let argv = Environment.GetCommandLineArgs() |> Array.toList
+        let checkOnly = argv |> List.contains "--check"
+
+        // The directory is the first non-flag token AFTER the target
+        // name. Read from the process argv rather than `p.Context.Arguments`
+        // for the reason VerifyDocSnippets gives: FAKE's own parser never
+        // hands trailing options to the target.
+        let root =
+            match argv |> List.skipWhile ((<>) "Codemod") with
+            | _ :: rest -> rest |> List.tryFind (fun a -> not (a.StartsWith "--"))
+            | [] -> None
+
+        match root with
+        | None -> failwith "Codemod: usage — dotnet run -- Codemod <consumer-source-dir> [--check]"
+        | Some dir ->
+            let plan = Codemod.plan (System.IO.Path.GetFullPath dir)
+            Trace.tracefn "%s" (Codemod.renderSummary plan)
+            Trace.tracefn "%s" (Codemod.renderFindings plan)
+
+            if checkOnly then
+                Trace.tracefn "%s" (Codemod.renderDiff plan)
+
+                match plan.ChangedFiles with
+                | [] -> ()
+                | changed ->
+                    failwithf
+                        "Codemod --check: %d file(s) still carry pre-rename source (diff above). Re-run without --check to apply."
+                        changed.Length
+            else
+                let written = Codemod.apply plan
+
+                for path in written do
+                    Trace.tracefn "  rewrote %s" path
+
+                let sources =
+                    written
+                    |> List.filter (fun p -> Codemod.classify p = Some CodemodFileClass.Source)
+
+                match sources with
+                | [] -> Trace.tracefn "Codemod: no .fs / .fsx rewritten — nothing to format."
+                | files ->
+                    // The formatting mandate applies to generated F# too:
+                    // the consumer's diff must be format-clean, so the
+                    // rewritten sources go through the consumer's own
+                    // Fantomas (the tool manifest resolves from the cwd,
+                    // which is the consumer's Build project). A missing
+                    // tool is named rather than swallowed — the files ARE
+                    // rewritten at this point, and the remedy is one
+                    // command.
+                    try
+                        run dotnet ("fantomas" :: files) "."
+                    with e ->
+                        failwithf
+                            "Codemod: %d file(s) were rewritten but `dotnet fantomas` failed (%s). Run `dotnet tool restore` then `dotnet fantomas <the rewritten files>` to finish the format pass."
+                            files.Length
+                            e.Message)
+
     // Wire dependencies
     let (==>) a b = Fake.Core.TargetOperators.(==>) a b
 

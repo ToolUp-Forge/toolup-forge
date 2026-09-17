@@ -40,6 +40,90 @@ ToolUp.Platform.BuildOutput.ClientBundlePath : System.String { get }
 ToolUp.Platform.BuildOutput.ServerPublishPath : System.String { get }
 ToolUp.Platform.BuildOutputModule (class)
 ToolUp.Platform.BuildOutputModule.defaults : ToolUp.Platform.BuildOutput { get }
+ToolUp.Platform.Codemod (class)
+ToolUp.Platform.Codemod.analyseFile(System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
+ToolUp.Platform.Codemod.apply(ToolUp.Platform.CodemodPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Codemod.classify(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodFileClass]
+ToolUp.Platform.Codemod.plan(System.String) : ToolUp.Platform.CodemodPlan
+ToolUp.Platform.Codemod.prunedDirectories : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.Codemod.renderDiff(ToolUp.Platform.CodemodPlan) : System.String
+ToolUp.Platform.Codemod.renderFindings(ToolUp.Platform.CodemodPlan) : System.String
+ToolUp.Platform.Codemod.renderSummary(ToolUp.Platform.CodemodPlan) : System.String
+ToolUp.Platform.Codemod.reviewRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodReviewRule] { get }
+ToolUp.Platform.Codemod.reviewText(ToolUp.Platform.CodemodFileClass, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding]
+ToolUp.Platform.Codemod.rewriteRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewriteRule] { get }
+ToolUp.Platform.Codemod.rewriteText(ToolUp.Platform.CodemodFileClass, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite]]
+ToolUp.Platform.Codemod.walk(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CodemodFileClass, System.String]]
+ToolUp.Platform.CodemodFileClass (class)
+ToolUp.Platform.CodemodFileClass.IsProject : System.Boolean { get }
+ToolUp.Platform.CodemodFileClass.IsSource : System.Boolean { get }
+ToolUp.Platform.CodemodFileClass.Project : ToolUp.Platform.CodemodFileClass { get }
+ToolUp.Platform.CodemodFileClass.Source : ToolUp.Platform.CodemodFileClass { get }
+ToolUp.Platform.CodemodFileClass.Tag : System.Int32 { get }
+ToolUp.Platform.CodemodFileClass+Tags (class)
+ToolUp.Platform.CodemodFileClass+Tags.Project : System.Int32 (literal)
+ToolUp.Platform.CodemodFileClass+Tags.Source : System.Int32 (literal)
+ToolUp.Platform.CodemodFileResult (class)
+ToolUp.Platform.CodemodFileResult..ctor(System.String, System.String, ToolUp.Platform.CodemodFileClass, System.String, System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding])
+ToolUp.Platform.CodemodFileResult.Changed : System.Boolean { get }
+ToolUp.Platform.CodemodFileResult.Class : ToolUp.Platform.CodemodFileClass { get }
+ToolUp.Platform.CodemodFileResult.Findings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding] { get }
+ToolUp.Platform.CodemodFileResult.HasBom : System.Boolean { get }
+ToolUp.Platform.CodemodFileResult.Original : System.String { get }
+ToolUp.Platform.CodemodFileResult.Path : System.String { get }
+ToolUp.Platform.CodemodFileResult.RelativePath : System.String { get }
+ToolUp.Platform.CodemodFileResult.Rewrites : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewrite] { get }
+ToolUp.Platform.CodemodFileResult.Rewritten : System.String { get }
+ToolUp.Platform.CodemodFinding (class)
+ToolUp.Platform.CodemodFinding..ctor(System.String, ToolUp.Platform.CodemodMigration, System.Int32, System.String, System.String)
+ToolUp.Platform.CodemodFinding.Guidance : System.String { get }
+ToolUp.Platform.CodemodFinding.Line : System.Int32 { get }
+ToolUp.Platform.CodemodFinding.Migration : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodFinding.RuleId : System.String { get }
+ToolUp.Platform.CodemodFinding.Text : System.String { get }
+ToolUp.Platform.CodemodMigration (class)
+ToolUp.Platform.CodemodMigration.ApiStability : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
+ToolUp.Platform.CodemodMigration+Tags (class)
+ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)
+ToolUp.Platform.CodemodMigrationModule (class)
+ToolUp.Platform.CodemodMigrationModule.doc(ToolUp.Platform.CodemodMigration) : System.String
+ToolUp.Platform.CodemodMigrationModule.label(ToolUp.Platform.CodemodMigration) : System.String
+ToolUp.Platform.CodemodPlan (class)
+ToolUp.Platform.CodemodPlan..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFileResult])
+ToolUp.Platform.CodemodPlan.AllFindings : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.CodemodFinding]] { get }
+ToolUp.Platform.CodemodPlan.ChangedFiles : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFileResult] { get }
+ToolUp.Platform.CodemodPlan.Files : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFileResult] { get }
+ToolUp.Platform.CodemodPlan.Root : System.String { get }
+ToolUp.Platform.CodemodReviewRule (class)
+ToolUp.Platform.CodemodReviewRule..ctor(System.String, ToolUp.Platform.CodemodMigration, ToolUp.Platform.CodemodFileClass, System.Text.RegularExpressions.Regex, System.String)
+ToolUp.Platform.CodemodReviewRule.Applies : ToolUp.Platform.CodemodFileClass { get }
+ToolUp.Platform.CodemodReviewRule.Guidance : System.String { get }
+ToolUp.Platform.CodemodReviewRule.Id : System.String { get }
+ToolUp.Platform.CodemodReviewRule.Migration : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodReviewRule.Pattern : System.Text.RegularExpressions.Regex { get }
+ToolUp.Platform.CodemodRewrite (class)
+ToolUp.Platform.CodemodRewrite..ctor(System.String, System.Int32, System.String, System.String)
+ToolUp.Platform.CodemodRewrite.After : System.String { get }
+ToolUp.Platform.CodemodRewrite.Before : System.String { get }
+ToolUp.Platform.CodemodRewrite.Line : System.Int32 { get }
+ToolUp.Platform.CodemodRewrite.RuleId : System.String { get }
+ToolUp.Platform.CodemodRewriteRule (class)
+ToolUp.Platform.CodemodRewriteRule..ctor(System.String, ToolUp.Platform.CodemodMigration, ToolUp.Platform.CodemodFileClass, System.Text.RegularExpressions.Regex, Microsoft.FSharp.Core.FSharpOption`1[System.Text.RegularExpressions.Regex], Microsoft.FSharp.Core.FSharpFunc`2[System.Text.RegularExpressions.Match, System.String], System.String)
+ToolUp.Platform.CodemodRewriteRule.Applies : ToolUp.Platform.CodemodFileClass { get }
+ToolUp.Platform.CodemodRewriteRule.Id : System.String { get }
+ToolUp.Platform.CodemodRewriteRule.Migration : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodRewriteRule.Pattern : System.Text.RegularExpressions.Regex { get }
+ToolUp.Platform.CodemodRewriteRule.Rewrite : Microsoft.FSharp.Core.FSharpFunc`2[System.Text.RegularExpressions.Match, System.String] { get }
+ToolUp.Platform.CodemodRewriteRule.Summary : System.String { get }
+ToolUp.Platform.CodemodRewriteRule.Unless : Microsoft.FSharp.Core.FSharpOption`1[System.Text.RegularExpressions.Regex] { get }
 ToolUp.Platform.CoreWebVitalsBudget (class)
 ToolUp.Platform.CoreWebVitalsBudget..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.CoreWebVitalsMetric, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CoreWebVitalsServerSignals])
 ToolUp.Platform.CoreWebVitalsBudget.CategoryFloors : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.LighthouseCategory, System.Double]] { get }

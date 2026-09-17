@@ -50,6 +50,12 @@ let private registeredTests =
         // OS mutexes and a handful of `git` subprocesses; no network.
         VerifyGateTests.tests
         CorpusAnchorTests.tests
+        // Phase 183 — the consumer codemod for the 0.x breaking renames:
+        // golden-file tests over the fixture consumer tree (every deterministic
+        // rename lands, the non-mechanical sites are reported not guessed, a
+        // second run is a no-op, BOM + CRLF survive). Pure over a scratch copy
+        // of the fixtures; no build, no tool restore, no process.
+        CodemodTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

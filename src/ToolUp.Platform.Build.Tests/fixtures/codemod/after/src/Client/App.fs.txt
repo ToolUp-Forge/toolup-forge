@@ -1,0 +1,28 @@
+module MyApp.Client.App
+
+open ToolUp.Elmish
+open ToolUp.Elmish.React
+#if DEBUG
+open ToolUp.Elmish.HMR
+#endif
+open ToolUp.Remoting.Client
+open ToolUp.Platform
+
+let config = {
+    ClientConfig.defaults with
+        Surfaces = Surfaces.individual
+        DevDefaultUserId = "dev-admin"
+}
+
+let mode = UserSession.getSubjectKind ()
+let configured = UserSession.configure mode
+let surfaces = BundleConstants.platformSurfaces
+
+let clientConfig =
+    ClientConfig.create "MyApp" [ Modules.hello ] Icon.none
+
+let program = ToolUp.Elmish.Program.mkProgram init update view
+
+let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
+
+ToolUp.Elmish.React.Program.withReactSynchronous "app" program |> Program.run

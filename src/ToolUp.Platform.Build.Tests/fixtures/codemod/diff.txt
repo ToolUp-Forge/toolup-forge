@@ -1,0 +1,98 @@
+--- a/Directory.Packages.props
++++ b/Directory.Packages.props
+@@ L8 [11c5-package-audit-sinks]
+-    <PackageVersion Include="ToolUp.Platform.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
++    <PackageVersion Include="ToolUp.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
+@@ L9 [11c5-package-notification-channels]
+-    <PackageVersion Include="ToolUp.Platform.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
++    <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
+@@ L10 [11c5-package-metrics]
+-    <PackageVersion Include="ToolUp.Platform.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
++    <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
+@@ L11 [11c5-package-azure-blob]
+-    <PackageVersion Include="ToolUp.Storage.Azure" Version="$(ToolUpSdkVersion)" />
++    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
+@@ L13 [11c5-package-oidc-client]
+-    <PackageVersion Include="ToolUp.AuthProviders.OidcClient" Version="$(ToolUpSdkVersion)" />
++    <PackageVersion Include="ToolUp.AuthProviders.Oidc.Client" Version="$(ToolUpSdkVersion)" />
+--- a/src/Client/App.fs
++++ b/src/Client/App.fs
+@@ L3 [73-elmish-open]
+-open Elmish
++open ToolUp.Elmish
+@@ L4 [73-elmish-open]
+-open Elmish.React
++open ToolUp.Elmish.React
+@@ L6 [73-elmish-open]
+-open Elmish.HMR
++open ToolUp.Elmish.HMR
+@@ L8 [73-remoting-namespace]
+-open Fable.Remoting.Client
++open ToolUp.Remoting.Client
+@@ L13 [66-mode-field]
+-        Mode = PlatformMode.Individual
++        Surfaces = Surfaces.individual
+@@ L17 [66-user-session-get-mode]
+-let mode = UserSession.getMode ()
++let mode = UserSession.getSubjectKind ()
+@@ L19 [66-bundle-constant]
+-let surfaces = BundleConstants.platformMode
++let surfaces = BundleConstants.platformSurfaces
+@@ L24 [73-elmish-qualified]
+-let program = Elmish.Program.mkProgram init update view
++let program = ToolUp.Elmish.Program.mkProgram init update view
+@@ L28 [73-elmish-qualified]
+-Elmish.React.Program.withReactSynchronous "app" program |> Program.run
++ToolUp.Elmish.React.Program.withReactSynchronous "app" program |> Program.run
+--- a/src/Server/Program.fs
++++ b/src/Server/Program.fs
+@@ L5 [73-remoting-namespace]
+-open Fable.Remoting.Server
++open ToolUp.Remoting.Server
+@@ L6 [73-remoting-namespace]
+-open Fable.Remoting.Giraffe
++open ToolUp.Remoting.Giraffe
+@@ L15 [66-mode-field]
+-        Mode = Individual
++        Surfaces = Surfaces.individual
+@@ L16 [66-accept-flags]
+-        AcceptHeaderAuthInAuthenticatedMode = true
++        AcceptHeaderAuthWhenAuthRequired = true
+@@ L17 [66-accept-flags]
+-        AcceptPlaintextSecretsInAuthenticatedMode = true
++        AcceptPlaintextSecretsWhenAuthRequired = true
+@@ L31 [73-remoting-namespace]
+-let routeInfo: Fable.Remoting.Server.RouteInfo<HttpContext> option = None
++let routeInfo: ToolUp.Remoting.Server.RouteInfo<HttpContext> option = None
+@@ L40 [66-platform-mode-env]
+-    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_MODE", "individual")
++    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_SURFACES", "individual")
+--- a/src/Server/Server.fsproj
++++ b/src/Server/Server.fsproj
+@@ L13 [11c5-package-audit-sinks]
+-    <PackageReference Include="ToolUp.Platform.AuditSinks.S3Archive" />
++    <PackageReference Include="ToolUp.AuditSinks.S3Archive" />
+@@ L14 [11c5-package-notification-channels]
+-    <PackageReference Include="ToolUp.Platform.NotificationChannels.Redis" />
++    <PackageReference Include="ToolUp.NotificationChannels.Redis" />
+@@ L15 [11c5-package-metrics]
+-    <PackageReference Include="ToolUp.Platform.Metrics.OpenTelemetry" />
++    <PackageReference Include="ToolUp.Metrics.OpenTelemetry" />
+@@ L16 [11c5-package-azure-blob]
+-    <PackageReference Include="ToolUp.Storage.Azure" />
++    <PackageReference Include="ToolUp.Storage.AzureBlob" />
+@@ L18 [11c5-package-oidc-client]
+-    <PackageReference Include="ToolUp.AuthProviders.OidcClient" />
++    <PackageReference Include="ToolUp.AuthProviders.Oidc.Client" />
+--- a/src/Server/Sinks.fs
++++ b/src/Server/Sinks.fs
+@@ L10 [11c5-sink-kind]
+-        member _.Kind = NotificationKind.SinkKind.Email
++        member _.Kind = SinkKind.Email
+@@ L25 [11c5-audit-retry-policy]
+-        RetryPolicy = AuditReplicatorRetryPolicy.defaults
++        RetryPolicy = RetryPolicy.defaults
+@@ L41 [73-remoting-namespace]
+-let legacyJson = Fable.Remoting.Json.FableJsonConverter()
++let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
+Codemod: 29 rewrite(s) across 5 file(s) pending.
