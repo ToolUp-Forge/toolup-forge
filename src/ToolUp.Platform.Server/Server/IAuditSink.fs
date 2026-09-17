@@ -81,7 +81,7 @@ type IAuditSink =
 
     /// Phase 66 Stream B.7 (design D16) — wire-format envelope version
     /// the sink expects. Compare against `LatestAuditSchemaVersion`
-    /// (defined in `AuditTypes.fs`); a sink at an older version
+    /// (defined in `Shared/Audit/AuditEnvelope.fs`); a sink at an older version
     /// receives events translated into its earlier shape by the
     /// dispatcher when a translation path exists. Today's three
     /// reference companions (SplunkHec / DatadogLogs / S3Archive)

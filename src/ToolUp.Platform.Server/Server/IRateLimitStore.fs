@@ -58,7 +58,7 @@ type IRateLimitWriter =
             Async<Result<InboundRateLimitDecision, RateLimitStoreError>>
 
 // `RateLimitDecisionEvent` (the operator-facing wire payload returned
-// by `GetRecentDecisions`) lives in `Platform.Core/Shared/SDK.Shared.fs`
+// by `GetRecentDecisions`) lives in `Platform.Core/Shared/Config/InboundRateLimitTypes.fs`
 // so the Fable client widget can parse it without a server-tier
 // reference. See the Phase 56 rate-limit types block there.
 

@@ -25,7 +25,7 @@ open System.Security.Cryptography
 // key-files named a `Server/Shared/` folder that does not exist; the
 // nearest correct home is `Server/` alongside the interface). The audit
 // payloads that *do* cross into persisted `ModuleEvent`s stay in
-// `Core/Shared/AuditTypes.fs`; they carry only the composite-key strings
+// `Core/Shared/Audit/ModelAuditPayloads.fs`; they carry only the composite-key strings
 // forge computes here.
 //
 // **Seed + gates are typed fields (plan D4).** A seeded fit is

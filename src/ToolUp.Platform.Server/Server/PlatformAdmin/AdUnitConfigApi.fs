@@ -27,7 +27,7 @@ open ToolUp.Platform.IEntityStore
 // `NoEntityStore` skips the route entirely so disabled deployments
 // 404 from the Giraffe terminal middleware.
 //
-// **Storage shape.** `AdSlotConfig` (in `SDK.Shared.fs`) doesn't
+// **Storage shape.** `AdSlotConfig` (in `Shared/Config/ConsentAdTypes.fs`) doesn't
 // carry the `Id` / `Type` / `Version` fields `IEntityStore` requires.
 // The handler wraps it in an internal `AdSlotEntity` record at the
 // persistence boundary — clients see the public `AdSlotConfig`

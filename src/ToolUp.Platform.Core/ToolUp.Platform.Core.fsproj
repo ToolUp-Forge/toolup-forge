@@ -396,8 +396,8 @@
         <Compile Include="Shared\NarrativeRenderers.fs" />
         <!-- Phase 66 Stream C.2 — AuditSubjectKind + AuditSamplingPolicy
              compiled before SDK.Shared.fs so ServerConfig can carry an
-             AuditSamplingPolicy field. Depends only on Guid; AuditTypes.fs
-             (after SDK.Shared.fs, needs ModuleEvent) references it back. -->
+             AuditSamplingPolicy field. Depends only on Guid; Audit\AuditSubject.fs
+             (after SDK.Shared.fs) references it back. -->
         <Compile Include="Shared\Types\AuditSampling.fs" />
         <!-- Phase 179 — locale + translation primitives (LocaleCode /
              TranslationKey / Translations) + the I18nCoverageMode policy DU,
@@ -427,7 +427,7 @@
              SubmitterClass — which is also why the denial's projection onto
              ExternalComputeError lives Server-side (precedence cannot be
              mutual; see the file header). Before SDK.Shared.fs (ServerConfig
-             carries a `ComputeBudget` field), AuditTypes.fs (the denial rides
+             carries a `ComputeBudget` field), Audit\SessionAuditPayloads.fs (the denial rides
              two audit payloads) and ModelExecutionWire.fs (it rides the typed
              peer refusal, plan decision D6). Pure / Fable-safe — the cost
              model and the store are Server-tier. -->
@@ -456,10 +456,29 @@
              in the Fable-packed source with the rest of Shared/. -->
         <Compile Include="Shared\SignedShapeSeparator.fs" />
         <Compile Include="Shared\ExternalCompute.fs" />
+        <!-- Phase 347 — the SDK.Shared.fs monolith carved into cohesive units in
+             its original declaration order (behaviour-preserving: same namespace,
+             same names — only file boundaries moved). ModuleEvents.fs holds the
+             inter-module event envelope + IEventStore; Config\ holds the *Mode
+             DUs and validation-adjacent records ServerConfig selects between;
+             SDK.Shared.fs keeps the ServerConfig record itself (the documented
+             irreducible core — a record is one compilation unit); then the
+             overrides, the Surfaces predicates and the `ServerConfig` companion
+             module (`defaults` + the server-only `fromEnv`). Every file is
+             Fable-safe exactly as the monolith was and ships under fable/ via
+             the **\*.fs glob. -->
+        <Compile Include="Shared\ModuleEvents.fs" />
+        <Compile Include="Shared\Config\StoreModes.fs" />
+        <Compile Include="Shared\Config\RuntimeModes.fs" />
+        <Compile Include="Shared\Config\InboundRateLimitTypes.fs" />
+        <Compile Include="Shared\Config\ConsentAdTypes.fs" />
         <Compile Include="Shared\SDK.Shared.fs" />
+        <Compile Include="Shared\Config\ServerConfigOverrides.fs" />
+        <Compile Include="Shared\Config\DeploymentConfig.fs" />
+        <Compile Include="Shared\Config\ServerConfigFromEnv.fs" />
         <!-- Phase 9u — the event-store decorator chain's position model
              (IEventStoreDecorator + the EventStoreChain walk/check). After
-             SDK.Shared.fs, which declares the IEventStore it decorates;
+             ModuleEvents.fs, which declares the IEventStore it decorates;
              before Server\EventStoreChainValidator.fs in Platform.Server,
              which is the preflight guard over it. Pure / Fable-safe
              (interface + records + list folds, no reflection beyond
@@ -469,11 +488,35 @@
         <Compile Include="Shared\RateLimitDescriptor.fs" />
         <!-- Phase 30a — signed module artefact format (ArtifactManifest,
              SignedArtifact, ArtifactValidation, PublisherKeyId). Compiled
-             before AuditTypes.fs so audit payload types can reference the
+             before the Shared\Audit lane files so audit payload types can reference the
              publisher-key-id shape via string projections without circular
              dependencies. -->
         <Compile Include="Shared\Types\ArtifactTypes.fs" />
+        <!-- Phase 347 — the AuditTypes.fs monolith carved by subsystem lane in its
+             original declaration order (behaviour-preserving: same namespace,
+             same names — only file boundaries moved). Audit\AuditSubject.fs holds
+             the reserved source-module name + the AuditSubject attribution DU;
+             the *AuditPayloads.fs files hold the payload records, one lane each;
+             AuditTypes.fs keeps the AuditEvent union + its eventTypeName
+             projection (the documented irreducible core, append-only); and
+             Audit\AuditEnvelope.fs holds the envelope / schema-version contract,
+             IAuditLog, IAuthAuditHook and BlobStorageAuthAudit. A new payload
+             record lands in the lane file that owns its subsystem, BEFORE
+             AuditTypes.fs; every file is Fable-safe exactly as the monolith was
+             and ships under fable/ via the **\*.fs glob. -->
+        <Compile Include="Shared\Audit\AuditSubject.fs" />
+        <Compile Include="Shared\Audit\PlatformAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\KnowledgeAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\SessionAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\AccessAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\GovernanceAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\PeerAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\TenantAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\ModelAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\ProvenanceAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\EvidenceAuditPayloads.fs" />
         <Compile Include="Shared\AuditTypes.fs" />
+        <Compile Include="Shared\Audit\AuditEnvelope.fs" />
         <Compile Include="Shared\Interfaces\ISubjectResolver.fs" />
         <Compile Include="Shared\Interfaces\IAnonymousSessionMigrator.fs" />
         <Compile Include="Shared\IShareTokenRateLimiter.fs" />
