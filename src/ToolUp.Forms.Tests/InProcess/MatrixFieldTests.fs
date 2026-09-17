@@ -3,6 +3,7 @@ module ToolUp.Forms.Tests.InProcess.MatrixFieldTests
 open System
 open System.Text.Json
 open Expecto
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -129,7 +130,7 @@ let tests =
             let formStore = FormStore(entityStore) :> IFormStore
             let scope = "team-availability"
 
-            let! _ = formStore.SaveSchema(scope, availabilitySchema)
+            let! _ = formStore.SaveSchema(scope, EntityPrincipal.ofPrincipal "tester", availabilitySchema)
 
             // A representative availability pattern.
             let grid = [|

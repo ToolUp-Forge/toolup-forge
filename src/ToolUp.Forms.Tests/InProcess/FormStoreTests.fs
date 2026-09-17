@@ -1,6 +1,8 @@
 module ToolUp.Forms.Tests.InProcess.FormStoreTests
 
 open System
+open Expecto
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
@@ -18,4 +20,11 @@ let tests =
         let scopeB = "team-b-" + Guid.NewGuid().ToString("N").Substring(0, 8)
         store, scopeA, scopeB
 
-    IFormStoreContract.tests "FormStore (in-memory)" factory
+    testList "FormStore" [
+        IFormStoreContract.tests "FormStore (in-memory)" factory
+
+        IFormStoreContract.principalTests
+            "FormStore (in-memory)"
+            (fun () -> InMemoryEntityStore() :> IEntityStore)
+            (fun entityStore -> FormStore(entityStore) :> IFormStore)
+    ]

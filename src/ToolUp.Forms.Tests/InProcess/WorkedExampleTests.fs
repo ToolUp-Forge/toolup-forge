@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -151,7 +152,7 @@ let tests =
             }
 
             let scope = "team-bugtracker"
-            let! _ = formStore.SaveSchema(scope, schema)
+            let! _ = formStore.SaveSchema(scope, EntityPrincipal.ofPrincipal "tester", schema)
 
             // 5. Submit a Critical bug — server-side validation + audit
             //    happen via the engine's full surface, but here we

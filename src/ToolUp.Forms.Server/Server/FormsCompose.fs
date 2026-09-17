@@ -104,7 +104,8 @@ let private formsPublicSubmitSurfaceModule: ServerModule =
 /// no per-scope override.
 type DefaultedFormStore(inner: IFormStore, defaults: Map<FormSchemaId, FormSchema>) =
     interface IFormStore with
-        member _.SaveSchema(scopeId, schema) = inner.SaveSchema(scopeId, schema)
+        member _.SaveSchema(scopeId, principal, schema) =
+            inner.SaveSchema(scopeId, principal, schema)
 
         member _.GetSchema(scopeId, schemaId, version) = async {
             let! r = inner.GetSchema(scopeId, schemaId, version)
@@ -135,7 +136,8 @@ type DefaultedFormStore(inner: IFormStore, defaults: Map<FormSchemaId, FormSchem
             return persisted @ extras |> List.sortBy _.Id
         }
 
-        member _.DeleteSchema(scopeId, schemaId) = inner.DeleteSchema(scopeId, schemaId)
+        member _.DeleteSchema(scopeId, principal, schemaId) =
+            inner.DeleteSchema(scopeId, principal, schemaId)
 
         member _.SaveSubmission(scopeId, submission) =
             inner.SaveSubmission(scopeId, submission)
@@ -145,8 +147,8 @@ type DefaultedFormStore(inner: IFormStore, defaults: Map<FormSchemaId, FormSchem
 
         member _.ListSubmissions(scopeId, query) = inner.ListSubmissions(scopeId, query)
 
-        member _.DeleteSubmission(scopeId, submissionId) =
-            inner.DeleteSubmission(scopeId, submissionId)
+        member _.DeleteSubmission(scopeId, principal, submissionId) =
+            inner.DeleteSubmission(scopeId, principal, submissionId)
 
 /// Record form of compose arguments. Wraps a base `ServerApp` and
 /// carries the compose-time-registered maps.

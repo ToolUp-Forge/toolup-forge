@@ -118,8 +118,8 @@ let private listSchemasErrorSurfacingTests =
             let store = FormStore(inner, warnLog.Add, metrics) :> IFormStore
             let scopeId = freshScope ()
 
-            let! _ = store.SaveSchema(scopeId, buildSchema "alpha")
-            let! _ = store.SaveSchema(scopeId, buildSchema "bravo")
+            let! _ = store.SaveSchema(scopeId, EntityPrincipal.ofPrincipal "tester", buildSchema "alpha")
+            let! _ = store.SaveSchema(scopeId, EntityPrincipal.ofPrincipal "tester", buildSchema "bravo")
 
             let! listed = store.ListSchemas scopeId
 
@@ -139,9 +139,9 @@ let private listSchemasErrorSurfacingTests =
             // in front of reads only.
             let cleanStore = FormStore(inner) :> IFormStore
 
-            let! _ = cleanStore.SaveSchema(scopeId, buildSchema "alpha")
-            let! _ = cleanStore.SaveSchema(scopeId, buildSchema "bravo")
-            let! _ = cleanStore.SaveSchema(scopeId, buildSchema "charlie")
+            let! _ = cleanStore.SaveSchema(scopeId, EntityPrincipal.ofPrincipal "tester", buildSchema "alpha")
+            let! _ = cleanStore.SaveSchema(scopeId, EntityPrincipal.ofPrincipal "tester", buildSchema "bravo")
+            let! _ = cleanStore.SaveSchema(scopeId, EntityPrincipal.ofPrincipal "tester", buildSchema "charlie")
 
             let faulting =
                 FaultingGetEntityStore(inner, Set.ofList [ "alpha"; "charlie" ]) :> IEntityStore

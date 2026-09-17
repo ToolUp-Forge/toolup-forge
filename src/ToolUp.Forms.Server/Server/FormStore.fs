@@ -77,7 +77,7 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
 
     interface IFormStore with
 
-        member _.SaveSchema(scopeId, schema) = async {
+        member _.SaveSchema(scopeId, principal, schema) = async {
             // Force the entity-type discriminator regardless of what
             // the caller put in `Type` — defensive against schemas
             // built outside `FormSchema.create`.
@@ -86,11 +86,9 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
                     Type = FormSchema.entityType
             }
 
-            // Phase 806 — `IFormStore.SaveSchema` carries no caller, so this
-            // write is stamped as the host's; threading the principal through
-            // that seam is the successor phase's. Until then the row says so
-            // visibly rather than by default.
-            let! r = entityStore.Save<FormSchema>(scopeId, EntityPrincipal.system, normalized)
+            // Phase 814 — the caller on the seam is the principal on the
+            // row; the store passes it through and never substitutes.
+            let! r = entityStore.Save<FormSchema>(scopeId, principal, normalized)
 
             return
                 match r with
@@ -169,9 +167,8 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
             return acc |> Seq.sortBy _.Id |> List.ofSeq
         }
 
-        member _.DeleteSchema(scopeId, schemaId) = async {
-            // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSchema`.
-            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, FormSchema.entityType, schemaId)
+        member _.DeleteSchema(scopeId, principal, schemaId) = async {
+            let! r = entityStore.Delete(scopeId, principal, FormSchema.entityType, schemaId)
 
             return
                 match r with
@@ -232,9 +229,8 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
                 | Error err -> Error(FormError.StorageFailed(EntityError.message err))
         }
 
-        member _.DeleteSubmission(scopeId, submissionId) = async {
-            // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSubmission`.
-            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, Submission.entityType, submissionId)
+        member _.DeleteSubmission(scopeId, principal, submissionId) = async {
+            let! r = entityStore.Delete(scopeId, principal, Submission.entityType, submissionId)
 
             return
                 match r with

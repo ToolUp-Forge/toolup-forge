@@ -67,7 +67,13 @@ type IFormStore =
     /// (overwriting whatever the input record's `Version` field said);
     /// subsequent saves bump the version monotonically. Indexes are
     /// updated atomically with the version write.
-    abstract SaveSchema: scopeId: string * schema: FormSchema -> Async<Result<FormSchema, FormError>>
+    ///
+    /// `principal` is the caller performing the write — the form API
+    /// handler passes `AccessContext.UserId` — and is what the
+    /// lifecycle audit row records (Phase 814). The store never
+    /// substitutes `EntityPrincipal.system` for it.
+    abstract SaveSchema:
+        scopeId: string * principal: EntityPrincipal * schema: FormSchema -> Async<Result<FormSchema, FormError>>
 
     /// Fetch a form schema. `version = None` returns the latest;
     /// `version = Some n` returns that specific historical version
@@ -89,7 +95,11 @@ type IFormStore =
     /// Existing submissions referencing the schema are preserved
     /// (their `SchemaVersion` resolves through `GetSchema (_, _, Some)`
     /// which sees historical versions).
-    abstract DeleteSchema: scopeId: string * schemaId: FormSchemaId -> Async<Result<unit, FormError>>
+    ///
+    /// `principal` is the caller deleting it, recorded on the
+    /// `EntityDeleted` row (Phase 814).
+    abstract DeleteSchema:
+        scopeId: string * principal: EntityPrincipal * schemaId: FormSchemaId -> Async<Result<unit, FormError>>
 
     /// Save a submission. On first save the store assigns version 1;
     /// subsequent saves (`UpdateDraft`) bump the version. Server-side
@@ -110,4 +120,11 @@ type IFormStore =
     /// Delete a submission. Idempotent. Removes head + indexes;
     /// historical versions remain via `GetVersion` per Phase 7
     /// deletion semantics.
-    abstract DeleteSubmission: scopeId: string * submissionId: SubmissionId -> Async<Result<unit, FormError>>
+    ///
+    /// `principal` is the caller deleting it, recorded on the
+    /// `EntityDeleted` row (Phase 814). A submission deleted by its own
+    /// invited respondent carries the prefix-tagged respondent identity
+    /// (`SubmissionAuthor.toIndexValue`), the same string the row for
+    /// its creation carries.
+    abstract DeleteSubmission:
+        scopeId: string * principal: EntityPrincipal * submissionId: SubmissionId -> Async<Result<unit, FormError>>

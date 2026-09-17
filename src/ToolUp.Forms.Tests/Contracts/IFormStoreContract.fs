@@ -2,7 +2,10 @@ module ToolUp.Forms.Tests.Contracts.IFormStoreContract
 
 open System
 open Expecto
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
+open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 open ToolUp.Platform.EntityQuery
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
@@ -21,6 +24,10 @@ open ToolUp.Forms.IFormStore
 // `IBookingSchedulerContract` / `IEntityStoreContract` packs.
 
 type StoreFactory = unit -> IFormStore * string * string
+
+/// The caller the shape tests pass on every mutating member. The
+/// shape tests do not observe it — `principalTests` does.
+let private caller = EntityPrincipal.ofPrincipal "form-admin"
 
 let private makeSchema (id: FormSchemaId) : FormSchema = {
     Id = id
@@ -60,7 +67,7 @@ let tests (label: string) (factory: StoreFactory) =
         testAsync "SaveSchema then GetSchema returns the schema" {
             let store, scope, _ = factory ()
             let schema = makeSchema "f1"
-            let! save = store.SaveSchema(scope, schema)
+            let! save = store.SaveSchema(scope, caller, schema)
             Expect.isOk save "save ok"
 
             let! got = store.GetSchema(scope, "f1", None)
@@ -73,8 +80,8 @@ let tests (label: string) (factory: StoreFactory) =
         testAsync "SaveSchema bumps Version on second save with same Id" {
             let store, scope, _ = factory ()
             let schema = makeSchema "f1"
-            let! first = store.SaveSchema(scope, schema)
-            let! second = store.SaveSchema(scope, schema)
+            let! first = store.SaveSchema(scope, caller, schema)
+            let! second = store.SaveSchema(scope, caller, schema)
 
             match first, second with
             | Ok s1, Ok s2 ->
@@ -191,7 +198,7 @@ let tests (label: string) (factory: StoreFactory) =
             let store, scope, _ = factory ()
             do! store.SaveSubmission(scope, makeSubmission "s1" "form-A" "user") |> Async.Ignore
 
-            let! del = store.DeleteSubmission(scope, "s1")
+            let! del = store.DeleteSubmission(scope, caller, "s1")
             Expect.isOk del "delete ok"
 
             let! got = store.GetSubmission(scope, "s1")
@@ -203,10 +210,73 @@ let tests (label: string) (factory: StoreFactory) =
 
         testAsync "DeleteSchema is idempotent (deleting non-existent returns Ok)" {
             let store, scope, _ = factory ()
-            let! r1 = store.DeleteSchema(scope, "never-existed")
+            let! r1 = store.DeleteSchema(scope, caller, "never-existed")
             Expect.isOk r1 "first delete idempotent"
 
-            let! r2 = store.DeleteSchema(scope, "never-existed")
+            let! r2 = store.DeleteSchema(scope, caller, "never-existed")
             Expect.isOk r2 "second delete idempotent"
+        }
+    ]
+// ─── Phase 814 — the principal on the seam call is the principal on the row ──
+//
+// `mkEntityStore` builds the `IEntityStore` the binding tests against;
+// `mkStore` composes the `IFormStore` under test over an entity store
+// the pack hands it. The pack decorates the entity store to observe
+// what the seam passes down, so the claim is exactly the seam's: the
+// caller on `SaveSchema` / `DeleteSchema` / `DeleteSubmission` reaches
+// the store unchanged, and the host principal is never substituted.
+let principalTests (label: string) (mkEntityStore: unit -> IEntityStore) (mkStore: IEntityStore -> IFormStore) =
+    let setup () =
+        let recording = PrincipalRecordingEntityStore(mkEntityStore ())
+        let store = mkStore (recording :> IEntityStore)
+        let scope = "team-814-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+        store, recording, scope
+
+    testList (sprintf "IFormStore principal contract (Phase 814) — %s" label) [
+
+        testAsync "the caller on SaveSchema and DeleteSchema is the principal the store receives" {
+            let store, recording, scope = setup ()
+            let admin = EntityPrincipal.ofPrincipal "alice"
+
+            let delegated =
+                EntityPrincipal.ofPrincipal "bob" |> EntityPrincipal.onBehalfOf "alice"
+
+            let! saved = store.SaveSchema(scope, admin, makeSchema "f1")
+            Expect.isOk saved "save ok"
+
+            let! deleted = store.DeleteSchema(scope, delegated, "f1")
+            Expect.isOk deleted "delete ok"
+
+            Expect.equal
+                (recording.Calls |> List.map (fun c -> c.Member, c.ScopeId, c.Principal))
+                [ "Save", scope, admin; "Delete", scope, delegated ]
+                "each seam call reaches the entity store with exactly the principal the caller passed"
+        }
+
+        testAsync "a submission deleted by its invited respondent carries the prefix-tagged respondent identity" {
+            let store, recording, scope = setup ()
+
+            let respondent = InvitedRespondent("tok-1", Some "invitee")
+
+            let respondentPrincipal =
+                EntityPrincipal.ofPrincipal (SubmissionAuthor.toIndexValue respondent)
+
+            let submission = {
+                makeSubmission "s1" "form-A" "unused" with
+                    Author = respondent
+            }
+
+            do! store.SaveSubmission(scope, submission) |> Async.Ignore
+            let! deleted = store.DeleteSubmission(scope, respondentPrincipal, "s1")
+            Expect.isOk deleted "delete ok"
+
+            Expect.equal
+                recording.Principals
+                [ respondentPrincipal; respondentPrincipal ]
+                "the row for the creation (806) and the row for the deletion (814) name the same prefix-tagged respondent"
+
+            Expect.isFalse
+                (recording.Principals |> List.exists (fun p -> p = EntityPrincipal.system))
+                "the store never substitutes the host principal for the caller"
         }
     ]

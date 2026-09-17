@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.EntityQuery
 open ToolUp.Forms.FormSchema
@@ -120,6 +121,8 @@ let formApi
     let accessContext = resolveAccessContext ctx
     let scopeId = resolveScopeId ctx accessContext
     let userId = accessContext.UserId
+    // Phase 814 — the caller, as the schema seam records it.
+    let principal = EntityPrincipal.ofPrincipal userId
 
     let withWriteGate (op: unit -> Async<Result<'T, FormError>>) : Async<Result<'T, FormError>> = async {
         let! ok = isWriteAllowed ctx accessContext
@@ -153,7 +156,7 @@ let formApi
 
     {
         // ─── Schema management ─────────────────────────────────────
-        SaveSchema = fun schema -> withWriteGate (fun () -> formStore.SaveSchema(scopeId, schema))
+        SaveSchema = fun schema -> withWriteGate (fun () -> formStore.SaveSchema(scopeId, principal, schema))
 
         GetSchema =
             fun (id, version) -> async {
@@ -167,7 +170,7 @@ let formApi
 
         ListSchemas = fun () -> formStore.ListSchemas scopeId
 
-        DeleteSchema = fun id -> withWriteGate (fun () -> formStore.DeleteSchema(scopeId, id))
+        DeleteSchema = fun id -> withWriteGate (fun () -> formStore.DeleteSchema(scopeId, principal, id))
 
         // ─── Submission lifecycle ──────────────────────────────────
         Submit =
@@ -616,7 +619,7 @@ let formApi
                             | HideSchemaAndRevoke -> async {
                                 let updated = { schema with Visibility = Internal }
 
-                                match! formStore.SaveSchema(scopeId, updated) with
+                                match! formStore.SaveSchema(scopeId, principal, updated) with
                                 | Ok _ -> return Internal
                                 | Error _ ->
                                     // SaveSchema failure is unusual but
