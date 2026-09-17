@@ -492,7 +492,31 @@
              publisher-key-id shape via string projections without circular
              dependencies. -->
         <Compile Include="Shared\Types\ArtifactTypes.fs" />
+        <!-- Phase 347 — the AuditTypes.fs monolith carved by subsystem lane in its
+             original declaration order (behaviour-preserving: same namespace,
+             same names — only file boundaries moved). Audit\AuditSubject.fs holds
+             the reserved source-module name + the AuditSubject attribution DU;
+             the *AuditPayloads.fs files hold the payload records, one lane each;
+             AuditTypes.fs keeps the AuditEvent union + its eventTypeName
+             projection (the documented irreducible core, append-only); and
+             Audit\AuditEnvelope.fs holds the envelope / schema-version contract,
+             IAuditLog, IAuthAuditHook and BlobStorageAuthAudit. A new payload
+             record lands in the lane file that owns its subsystem, BEFORE
+             AuditTypes.fs; every file is Fable-safe exactly as the monolith was
+             and ships under fable/ via the **\*.fs glob. -->
+        <Compile Include="Shared\Audit\AuditSubject.fs" />
+        <Compile Include="Shared\Audit\PlatformAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\KnowledgeAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\SessionAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\AccessAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\GovernanceAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\PeerAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\TenantAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\ModelAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\ProvenanceAuditPayloads.fs" />
+        <Compile Include="Shared\Audit\EvidenceAuditPayloads.fs" />
         <Compile Include="Shared\AuditTypes.fs" />
+        <Compile Include="Shared\Audit\AuditEnvelope.fs" />
         <Compile Include="Shared\Interfaces\ISubjectResolver.fs" />
         <Compile Include="Shared\Interfaces\IAnonymousSessionMigrator.fs" />
         <Compile Include="Shared\IShareTokenRateLimiter.fs" />
