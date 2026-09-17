@@ -104,6 +104,7 @@ ToolUp.Companions.Isolation.ProcessIsolation (class)
 ToolUp.Companions.Isolation.ProcessIsolation.DiagnosticTailChars : System.Int32 (literal)
 ToolUp.Companions.Isolation.ProcessIsolation.create(ToolUp.Companions.Isolation.IsolationLimits) : ToolUp.Companions.Isolation.ICompanionIsolation
 ToolUp.Companions.Isolation.ProcessIsolation.createWith(ToolUp.Companions.Isolation.IsolationLimits, ToolUp.Companions.Isolation.WorkerLauncher) : ToolUp.Companions.Isolation.ICompanionIsolation
+ToolUp.Companions.Isolation.ProcessIsolation.kernelMemoryCapSupported : System.Boolean { get }
 ToolUp.Companions.Isolation.ProcessIsolation.resolveDotnetHost() : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
 ToolUp.Companions.Isolation.ProcessIsolation.resolveLauncher() : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Companions.Isolation.WorkerLauncher, System.String]
 ToolUp.Companions.Isolation.ProcessIsolation.run(ToolUp.Companions.Isolation.IsolationLimits, ToolUp.Companions.Isolation.WorkerLauncher, System.Type, ToolUp.Companions.Isolation.IsolatedRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Companions.Isolation.IsolationRefusal]]

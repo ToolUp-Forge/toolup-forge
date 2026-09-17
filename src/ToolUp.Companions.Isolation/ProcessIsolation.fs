@@ -203,6 +203,287 @@ module ProcessIsolation =
         with _ ->
             ()
 
+    // ─── The kernel-enforced memory cap (Windows Job Object) ──────────
+    //
+    // The FIRST line of the memory cap. The resident-set sampler below
+    // is a poll: a native parser that commits memory faster than the
+    // host samples it — the recorded instance is an XML entity-
+    // expansion ("billion laughs") case that libverovio expanded to
+    // 126 GB inside one process, four times, taking the whole machine
+    // each time because Windows has no OOM killer — overshoots the cap
+    // by however much it can commit between two samples, and a
+    // sampler is exactly as fast as the host's scheduler lets it be.
+    // A Job Object is not a poll: the kernel refuses the commit that
+    // would cross `JobMemoryLimit` / `ProcessMemoryLimit`, in the
+    // allocating thread, before any byte is touched. The refused
+    // allocation is reported to the host on the job's I/O completion
+    // port (`JOB_OBJECT_MSG_*_MEMORY_LIMIT`), and the host kills the
+    // worker and answers `MemoryCapExceeded`. `KILL_ON_JOB_CLOSE`
+    // ties the worker's life to the job handle, so a host that dies
+    // takes its worker with it rather than orphaning it.
+    //
+    // What a refused commit looks like from INSIDE the worker: a
+    // managed allocation is an `OutOfMemoryException`, which the worker
+    // catches and answers as `Rejected`; a native `malloc` returns
+    // NULL and the parser does whatever it does next. Either way the
+    // worker may answer, cleanly, before the host has read the port —
+    // so the port is consulted on EVERY exit path, and a cap hit
+    // overrides whatever the worker said: the answer was produced by a
+    // process the kernel had already refused, and is not evidence.
+    //
+    // The limit is on COMMIT charge, not resident set — stricter than
+    // the sampler, which is what a first line should be. The
+    // assignment window: `Process.Start` returns before the child
+    // runs any user code, and the job is assigned immediately after;
+    // the muxer's own start-up (hostfxr, the runtime) is what fills
+    // that window, and no request bytes have reached the worker yet.
+    // Non-Windows hosts have no Job Object; there the sampler and the
+    // runtime's own `GCHeapHardLimit` are the whole cap, and the
+    // README says so.
+    module private Kernel32 =
+        [<Literal>]
+        let InfoClassAssociateCompletionPort = 7
+
+        [<Literal>]
+        let InfoClassExtendedLimit = 9
+
+        [<Literal>]
+        let JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100u
+
+        [<Literal>]
+        let JOB_OBJECT_LIMIT_JOB_MEMORY = 0x200u
+
+        [<Literal>]
+        let JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000u
+
+        [<Literal>]
+        let JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT = 9u
+
+        [<Literal>]
+        let JOB_OBJECT_MSG_JOB_MEMORY_LIMIT = 10u
+
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type IoCounters =
+            val mutable ReadOperationCount: uint64
+            val mutable WriteOperationCount: uint64
+            val mutable OtherOperationCount: uint64
+            val mutable ReadTransferCount: uint64
+            val mutable WriteTransferCount: uint64
+            val mutable OtherTransferCount: uint64
+
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type JobObjectBasicLimitInformation =
+            val mutable PerProcessUserTimeLimit: int64
+            val mutable PerJobUserTimeLimit: int64
+            val mutable LimitFlags: uint32
+            val mutable MinimumWorkingSetSize: unativeint
+            val mutable MaximumWorkingSetSize: unativeint
+            val mutable ActiveProcessLimit: uint32
+            val mutable Affinity: unativeint
+            val mutable PriorityClass: uint32
+            val mutable SchedulingClass: uint32
+
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type JobObjectExtendedLimitInformation =
+            val mutable BasicLimitInformation: JobObjectBasicLimitInformation
+            val mutable IoInfo: IoCounters
+            val mutable ProcessMemoryLimit: unativeint
+            val mutable JobMemoryLimit: unativeint
+            val mutable PeakProcessMemoryUsed: unativeint
+            val mutable PeakJobMemoryUsed: unativeint
+
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type JobObjectAssociateCompletionPort =
+            val mutable CompletionKey: nativeint
+            val mutable CompletionPort: nativeint
+
+        [<DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)>]
+        extern nativeint CreateJobObjectW(nativeint lpJobAttributes, string lpName)
+
+        [<DllImport("kernel32.dll", SetLastError = true, EntryPoint = "SetInformationJobObject")>]
+        extern bool SetInformationJobObjectLimits(
+            nativeint hJob,
+            int infoClass,
+            JobObjectExtendedLimitInformation& info,
+            uint32 size
+        )
+
+        [<DllImport("kernel32.dll", SetLastError = true, EntryPoint = "SetInformationJobObject")>]
+        extern bool SetInformationJobObjectPort(
+            nativeint hJob,
+            int infoClass,
+            JobObjectAssociateCompletionPort& info,
+            uint32 size
+        )
+
+        [<DllImport("kernel32.dll", SetLastError = true)>]
+        extern bool QueryInformationJobObject(
+            nativeint hJob,
+            int infoClass,
+            JobObjectExtendedLimitInformation& info,
+            uint32 size,
+            nativeint returnLength
+        )
+
+        [<DllImport("kernel32.dll", SetLastError = true)>]
+        extern bool AssignProcessToJobObject(nativeint hJob, nativeint hProcess)
+
+        [<DllImport("kernel32.dll", SetLastError = true)>]
+        extern nativeint CreateIoCompletionPort(
+            nativeint fileHandle,
+            nativeint existingPort,
+            unativeint completionKey,
+            uint32 concurrentThreads
+        )
+
+        [<DllImport("kernel32.dll", SetLastError = true)>]
+        extern bool GetQueuedCompletionStatus(
+            nativeint port,
+            uint32& bytes,
+            unativeint& key,
+            nativeint& overlapped,
+            uint32 timeoutMs
+        )
+
+        [<DllImport("kernel32.dll", SetLastError = true)>]
+        extern bool CloseHandle(nativeint handle)
+
+        let lastError () =
+            ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message
+
+    /// Whether this host can put the worker under a kernel-enforced
+    /// memory cap. True on Windows (a Job Object); false elsewhere,
+    /// where the cap is the resident-set sampler plus the worker's own
+    /// `GCHeapHardLimit`.
+    let kernelMemoryCapSupported = RuntimeInformation.IsOSPlatform OSPlatform.Windows
+
+    /// A Job Object around one worker, with its completion port.
+    type private JobObject(job: nativeint, port: nativeint, cap: int64 option) =
+        let mutable hit = false
+
+        /// Whether the kernel has refused a commit against the cap —
+        /// sticky, because reading the port consumes the message.
+        member _.MemoryLimitHit =
+            if hit then
+                true
+            else
+                let mutable bytes = 0u
+                let mutable key = 0un
+                let mutable overlapped = 0n
+                let mutable draining = true
+
+                while draining do
+                    if Kernel32.GetQueuedCompletionStatus(port, &bytes, &key, &overlapped, 0u) then
+                        if
+                            bytes = Kernel32.JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT
+                            || bytes = Kernel32.JOB_OBJECT_MSG_JOB_MEMORY_LIMIT
+                        then
+                            hit <- true
+                    else
+                        // A false return with no packet is the empty
+                        // queue; with one it is a failed packet, which a
+                        // job port never posts — either way, done.
+                        draining <- false
+
+                hit
+
+        /// The highest commit charge the job reached — what the cap was
+        /// measured against — or 0 when the query fails.
+        member _.PeakCommit: int64 =
+            let mutable info = Kernel32.JobObjectExtendedLimitInformation()
+
+            if
+                Kernel32.QueryInformationJobObject(
+                    job,
+                    Kernel32.InfoClassExtendedLimit,
+                    &info,
+                    uint32 (Marshal.SizeOf<Kernel32.JobObjectExtendedLimitInformation>()),
+                    0n
+                )
+            then
+                int64 (uint64 info.PeakJobMemoryUsed)
+            else
+                0L
+
+        member _.Cap = cap
+
+        /// Put `proc` under the job.
+        member _.Assign(proc: Process) : Result<unit, string> =
+            if Kernel32.AssignProcessToJobObject(job, proc.Handle) then
+                Ok()
+            else
+                Error(Kernel32.lastError ())
+
+        interface IDisposable with
+            member _.Dispose() =
+                // Closing the last handle to a KILL_ON_JOB_CLOSE job
+                // terminates anything still in it.
+                Kernel32.CloseHandle port |> ignore
+                Kernel32.CloseHandle job |> ignore
+
+        /// Create a job carrying `cap` (when given) as both the
+        /// per-process and the job-wide commit limit, killing on close,
+        /// with a completion port to hear the limit messages on.
+        static member TryCreate(cap: int64 option) : Result<JobObject, string> =
+            let job = Kernel32.CreateJobObjectW(0n, null)
+
+            if job = 0n then
+                Error $"CreateJobObject: {Kernel32.lastError ()}"
+            else
+                let mutable limits = Kernel32.JobObjectExtendedLimitInformation()
+                limits.BasicLimitInformation.LimitFlags <- Kernel32.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+
+                match cap with
+                | Some cap ->
+                    limits.BasicLimitInformation.LimitFlags <-
+                        limits.BasicLimitInformation.LimitFlags
+                        ||| Kernel32.JOB_OBJECT_LIMIT_PROCESS_MEMORY
+                        ||| Kernel32.JOB_OBJECT_LIMIT_JOB_MEMORY
+
+                    limits.ProcessMemoryLimit <- unativeint (uint64 cap)
+                    limits.JobMemoryLimit <- unativeint (uint64 cap)
+                | None -> ()
+
+                let limitsSet =
+                    Kernel32.SetInformationJobObjectLimits(
+                        job,
+                        Kernel32.InfoClassExtendedLimit,
+                        &limits,
+                        uint32 (Marshal.SizeOf<Kernel32.JobObjectExtendedLimitInformation>())
+                    )
+
+                if not limitsSet then
+                    let reason = Kernel32.lastError ()
+                    Kernel32.CloseHandle job |> ignore
+                    Error $"SetInformationJobObject(limits): {reason}"
+                else
+                    let port = Kernel32.CreateIoCompletionPort(-1n, 0n, 0un, 1u)
+
+                    if port = 0n then
+                        let reason = Kernel32.lastError ()
+                        Kernel32.CloseHandle job |> ignore
+                        Error $"CreateIoCompletionPort: {reason}"
+                    else
+                        let mutable association = Kernel32.JobObjectAssociateCompletionPort()
+                        association.CompletionKey <- job
+                        association.CompletionPort <- port
+
+                        let portSet =
+                            Kernel32.SetInformationJobObjectPort(
+                                job,
+                                Kernel32.InfoClassAssociateCompletionPort,
+                                &association,
+                                uint32 (Marshal.SizeOf<Kernel32.JobObjectAssociateCompletionPort>())
+                            )
+
+                        if not portSet then
+                            let reason = Kernel32.lastError ()
+                            Kernel32.CloseHandle port |> ignore
+                            Kernel32.CloseHandle job |> ignore
+                            Error $"SetInformationJobObject(completion port): {reason}"
+                        else
+                            Ok(new JobObject(job, port, cap))
+
     /// Run `entry` over `request` in a fresh worker started by
     /// `launcher`, under `limits`.
     let run
@@ -237,16 +518,63 @@ module ProcessIsolation =
                 psi.Environment["DOTNET_GCHeapHardLimit"] <- sprintf "0x%X" cap
             | None -> ()
 
-            let started =
-                try
-                    Ok(Process.Start psi)
-                with ex ->
-                    Error $"{launcher.FileName}: {ex.Message}"
+            // The kernel cap comes first, before the child exists. A
+            // host that asked for a cap and cannot get the kernel to
+            // hold it is refused, not degraded: the sampler alone is
+            // the configuration that lost a machine. With no cap the
+            // job still buys KILL_ON_JOB_CLOSE, best-effort.
+            let job: Result<JobObject option, string> =
+                if kernelMemoryCapSupported then
+                    match JobObject.TryCreate limits.MemoryCap, limits.MemoryCap with
+                    | Ok job, _ -> Ok(Some job)
+                    | Error reason, Some _ -> Error $"the memory cap cannot be kernel-enforced on this host: {reason}"
+                    | Error _, None -> Ok None
+                else
+                    Ok None
 
-            match started with
+            let disposeJob (job: JobObject option) =
+                job |> Option.iter (fun j -> (j :> IDisposable).Dispose())
+
+            let started: Result<Process * JobObject option, string> =
+                match job with
+                | Error reason -> Error reason
+                | Ok job ->
+                    try
+                        Ok(Process.Start psi, job)
+                    with ex ->
+                        disposeJob job
+                        Error $"{launcher.FileName}: {ex.Message}"
+
+            let assigned: Result<Process * JobObject option, string> =
+                match started with
+                | Ok(proc, Some job) ->
+                    match job.Assign proc, limits.MemoryCap with
+                    | Ok(), _ -> Ok(proc, Some job)
+                    | Error reason, Some _ ->
+                        kill proc
+                        proc.Dispose()
+                        disposeJob (Some job)
+
+                        Error
+                            $"the memory cap cannot be kernel-enforced on this host (AssignProcessToJobObject): {reason}"
+                    | Error _, None ->
+                        disposeJob (Some job)
+                        Ok(proc, None)
+                | other -> other
+
+            match assigned with
             | Error reason -> return Error(IsolationRefusal.WorkerUnavailable reason)
-            | Ok proc ->
+            | Ok(proc, job) ->
                 use proc = proc
+
+                use _ = job |> Option.map (fun j -> j :> IDisposable) |> Option.defaultValue null
+
+                let capHit () =
+                    job |> Option.exists (fun j -> j.MemoryLimitHit)
+
+                let observedPeak () =
+                    job |> Option.map (fun j -> j.PeakCommit) |> Option.defaultValue 0L
+
                 let diagnostic = Tail DiagnosticTailChars
 
                 proc.ErrorDataReceived.Add(fun args ->
@@ -286,11 +614,23 @@ module ProcessIsolation =
                         kill proc
                         watch <- Some(Watch.Killed(IsolationRefusal.TimedOut limits.Timeout))
                     else
-                        match limits.MemoryCap, sampleResidentSet proc with
-                        | Some cap, Some observed when observed > cap ->
+                        let tripped =
+                            match limits.MemoryCap with
+                            | None -> None
+                            | Some cap when capHit () ->
+                                // First line: the kernel refused a commit.
+                                Some(cap, observedPeak ())
+                            | Some cap ->
+                                // Second line: the resident-set sampler.
+                                sampleResidentSet proc
+                                |> Option.filter (fun observed -> observed > cap)
+                                |> Option.map (fun observed -> cap, observed)
+
+                        match tripped with
+                        | Some(cap, observed) ->
                             kill proc
                             watch <- Some(Watch.Killed(IsolationRefusal.MemoryCapExceeded(cap, observed)))
-                        | _ ->
+                        | None ->
                             let! _ = Task.WhenAny(reader, Task.Delay samplePeriod) |> Async.AwaitTask
                             ()
 
@@ -305,10 +645,26 @@ module ProcessIsolation =
                 proc.WaitForExit()
                 do! writer |> Async.AwaitTask
 
-                match watch with
-                | Some(Watch.Killed refusal) -> return Error refusal
-                | Some Watch.Answered
-                | None ->
+                // The kernel may have refused a commit AFTER the last
+                // poll and BEFORE the worker answered or died — a
+                // managed OutOfMemoryException is caught inside the
+                // worker and answered as a rejection, and a native
+                // parser handed a NULL from malloc does whatever it
+                // does next. Whatever it said, it said it as a process
+                // the cap had already been enforced against; the cap
+                // is the outcome.
+                let capHitAfterAll =
+                    match watch, limits.MemoryCap with
+                    | Some(Watch.Killed _), _
+                    | _, None -> None
+                    | _, Some cap when capHit () -> Some(cap, observedPeak ())
+                    | _, Some _ -> None
+
+                match watch, capHitAfterAll with
+                | _, Some(cap, observed) -> return Error(IsolationRefusal.MemoryCapExceeded(cap, observed))
+                | Some(Watch.Killed refusal), _ -> return Error refusal
+                | Some Watch.Answered, _
+                | None, _ ->
                     let! outcome = reader |> Async.AwaitTask
 
                     match outcome with

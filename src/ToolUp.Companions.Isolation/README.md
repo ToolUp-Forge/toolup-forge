@@ -46,10 +46,28 @@ named; `IsolationMode.OutOfProcessWith` takes an explicit `WorkerLauncher`.
 ## Limits — what is bounded and what is not
 
 - **Timeout** — wall-clock per call, start-up included; the worker is killed past it.
-- **Memory cap** — a **soft** cap: the host samples the worker's resident set every 10 ms and kills
-  it on the first sample over the cap, and the worker's managed heap is hard-limited to the same
-  figure through the runtime's `GCHeapHardLimit`. A hard bound on native allocation is an OS
-  facility (Job Object, cgroup) and belongs to the deployment's container runtime.
+- **Memory cap** — three lines, and which one holds depends on the host:
+  1. **Windows — a kernel-enforced Job Object (the first line).** The worker is assigned to a job
+     whose per-process and job-wide commit limits are the cap, with `KILL_ON_JOB_CLOSE` so a host
+     that dies takes its worker with it. The kernel refuses the allocation that would cross the cap
+     in the allocating thread, so a native parser cannot overshoot it; the refused commit reaches
+     the host on the job's completion port and the call answers `MemoryCapExceeded`, whatever the
+     worker said afterwards (a managed `OutOfMemoryException` is caught inside the worker and would
+     otherwise read as a clean rejection). A Windows host that cannot apply the job refuses the
+     call (`WorkerUnavailable`, naming the Win32 error) rather than running under the softer lines
+     alone. `ProcessIsolation.kernelMemoryCapSupported` reports whether this line exists.
+  2. **The resident-set sampler** — every 10 ms, killed on the first sample over the cap. A poll,
+     so a burst can overshoot between samples.
+  3. **The worker's managed heap** — hard-limited to the same figure through the runtime's
+     `GCHeapHardLimit`.
+
+  **On a non-Windows host lines 2 and 3 are the whole cap**; a hard bound on native allocation
+  there is the container runtime's cgroup. The reason the first line exists is the recorded
+  instance: a hostile-entity (billion-laughs) XML case that libverovio expanded to **126 GB
+  in-process**, four times over one night, taking the whole machine each time because Windows has
+  no OOM killer — a sampler is exactly as fast as the host's scheduler lets it be, and that is not
+  fast enough. Never run hostile input against a native parser in a process without a
+  kernel-enforced memory limit.
 - **Not bounded:** the worker's system access. It runs as the same OS user on the same host. A
   deployment that needs that composes the worker inside a container — Phase 478's `Isolated`
   execution profile's territory.

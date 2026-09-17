@@ -86,8 +86,12 @@ type IsolationRefusal =
     /// The worker did not answer within `IsolationLimits.Timeout` and
     /// was killed.
     | TimedOut of limit: TimeSpan
-    /// The worker's resident set exceeded `IsolationLimits.MemoryCap`
-    /// and it was killed. `observed` is the sample that tripped it.
+    /// The worker exceeded `IsolationLimits.MemoryCap` and was killed.
+    /// On Windows the kernel refused the commit that would have
+    /// crossed the cap (a Job Object limit) and `observed` is the peak
+    /// commit charge the job recorded — at or just under the cap, by
+    /// construction; elsewhere the host's resident-set sampler tripped
+    /// and `observed` is the sample that did, above the cap.
     | MemoryCapExceeded of cap: int64 * observed: int64
     /// The entry point rejected the request (its own `Error`, or a
     /// managed exception it raised). Not a crash: the worker answered
@@ -139,18 +143,25 @@ type IsolationLimits = {
     /// Wall-clock bound on one call, worker start-up included. Past it
     /// the worker is killed and the call returns `TimedOut`.
     Timeout: TimeSpan
-    /// Resident-set bound on the worker, in bytes. `None` = unbounded.
+    /// Memory bound on the worker, in bytes. `None` = unbounded.
     ///
-    /// **A soft cap, and honest about it.** The host samples the
-    /// worker's resident set every few milliseconds and kills it on the
-    /// first sample over the cap, so a native allocation burst can
-    /// overshoot between two samples; the worker's MANAGED heap is
-    /// additionally hard-limited to the same figure through the
-    /// runtime's own `GCHeapHardLimit`. A hard bound on native
-    /// allocation is an OS facility (a Job Object, a cgroup) and belongs
-    /// to the deployment's container runtime, not to this seam. Set it
-    /// comfortably above the runtime's own baseline (tens of megabytes)
-    /// or every call is refused.
+    /// **Three lines, and which one holds depends on the host.** On
+    /// Windows the worker runs inside a Job Object whose per-process
+    /// and job-wide commit limits are this figure: the KERNEL refuses
+    /// the allocation that would cross it, in the allocating thread,
+    /// so a native parser cannot overshoot — the recorded instance
+    /// this guards against is an XML entity expansion that reached
+    /// 126 GB in-process. A host that cannot apply the job refuses the
+    /// call (`WorkerUnavailable`) rather than run under the softer
+    /// lines alone. Everywhere, the host also samples the worker's
+    /// resident set every few milliseconds and kills it on the first
+    /// sample over the cap (a poll, so a burst can overshoot between
+    /// samples), and the worker's MANAGED heap is hard-limited to the
+    /// same figure through the runtime's own `GCHeapHardLimit`. On a
+    /// non-Windows host those two are the whole cap; a hard bound on
+    /// native allocation there is the container runtime's cgroup.
+    /// Set it comfortably above the runtime's own baseline (tens of
+    /// megabytes) or every call is refused.
     MemoryCap: int64 option
 }
 

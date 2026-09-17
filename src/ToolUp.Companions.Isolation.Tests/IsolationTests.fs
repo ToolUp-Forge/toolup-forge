@@ -251,7 +251,16 @@ let private processTests =
             match outcome with
             | Error(IsolationRefusal.MemoryCapExceeded(reported, observed)) ->
                 Expect.equal reported cap "the cap it was run under"
-                Expect.isGreaterThan observed cap "the sample that tripped it"
+
+                if ProcessIsolation.kernelMemoryCapSupported then
+                    // The Job Object refuses the commit that would cross
+                    // the cap, so the peak the kernel recorded is AT OR
+                    // UNDER it: a run that ever observed more than the
+                    // cap was not kernel-enforced and this must go red.
+                    Expect.isLessThanOrEqual observed cap "the kernel refused before the cap was crossed"
+                    Expect.isGreaterThan observed (cap / 2L) "the peak is the cap's neighbourhood, not a stale zero"
+                else
+                    Expect.isGreaterThan observed cap "the resident-set sample that tripped the sampler"
             | other -> failtestf "expected MemoryCapExceeded; got %A" other
 
         testCase "an entry point the worker cannot construct is WorkerUnavailable naming it"
