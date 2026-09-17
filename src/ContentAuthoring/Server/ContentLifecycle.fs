@@ -136,8 +136,11 @@ let promoteIfDue (now: DateTimeOffset) (page: PublicPage) : PublicPage =
 /// `Published`. Returns the slugs promoted. A deployment registers this
 /// as a recurring `IJobScheduler` job (e.g. once a minute) so scheduled
 /// content goes live without a redeploy — "scheduled publish fires via
-/// the job scheduler" with no per-page job bookkeeping.
-let runScheduledPublishSweep (store: IEntityStore) (now: DateTimeOffset) : Async<string list> = async {
+/// the job scheduler" with no per-page job bookkeeping. `actor` is the
+/// principal the job is scheduled under and is stamped on every
+/// promotion (Phase 806) — the deployment that registers the job names
+/// it; a sweep no principal owns passes `EntityActor.system`.
+let runScheduledPublishSweep (store: IEntityStore) (actor: EntityActor) (now: DateTimeOffset) : Async<string list> = async {
     let! refs = store.ListAll<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, 0, 5000)
 
     let mutable promoted = []
@@ -150,7 +153,7 @@ let runScheduledPublishSweep (store: IEntityStore) (now: DateTimeOffset) : Async
                     Page = promoteIfDue now entity.Page
             }
 
-            match! store.Save(PublicPageEntity.PublicScope, updated) with
+            match! store.Save(PublicPageEntity.PublicScope, actor, updated) with
             | Ok _ -> promoted <- Slug.value entity.Page.Slug :: promoted
             | Error _ -> ()
         | _ -> ()

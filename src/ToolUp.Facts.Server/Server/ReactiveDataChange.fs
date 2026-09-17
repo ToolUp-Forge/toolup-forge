@@ -171,6 +171,11 @@ type ReactiveDataObjectStore
             return result
         }
 
+        // Phase 806 — same forwarding through the shared probe; a delete
+        // produces no version, so, like `Delete`, it triggers no reaction.
+        member _.DeleteIfVersion(scopeId, objectId, expectedVersion) =
+            ConditionalDataObjectStore.deleteIfVersion inner scopeId objectId expectedVersion
+
 /// Construction + the DI-resolved reaction the fact tier composes.
 module ReactiveDataChange =
 

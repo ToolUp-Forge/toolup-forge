@@ -62,7 +62,8 @@ type OfflineReplayContext = {
     Store: IEntityStore
     /// Server-resolved storage scope. Authoritative.
     ScopeId: string
-    /// Server-resolved caller. Stamped onto the replay audit record.
+    /// Server-resolved caller. The `Principal` of the `EntityActor` the
+    /// handler builds per mutation and hands to `Apply`.
     UserId: string
 }
 
@@ -93,14 +94,18 @@ type OfflineEntityReplay = {
     /// client can show both documents.
     Current: OfflineReplayContext -> string -> Async<Result<(byte[] * int) option, string>>
     /// Deserialise `payload` and persist it via
-    /// `IEntityStore.SaveIfVersion`, stating the `int` argument — the
-    /// mutation's `BaseVersion` — as the expected version. Returns the saved
-    /// bytes and the version the store assigned, or `ReplayConflict`
-    /// when the head has moved. An adapter that persists through the
-    /// unconditional `Save` instead has opted out of conflict detection
-    /// for its entity type; `OfflineEntityReplay.ofJson` is the
-    /// reference shape.
-    Apply: OfflineReplayContext -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
+    /// `IEntityStore.SaveIfVersion`, passing the `EntityActor` the
+    /// handler built for the mutation — the real caller plus the
+    /// mutation's replay provenance, which is what makes the store's one
+    /// lifecycle row for the version carry the origination time (Phase
+    /// 806) — and stating the `int` argument, the mutation's
+    /// `BaseVersion`, as the expected version. Returns the saved bytes
+    /// and the version the store assigned, or `ReplayConflict` when the
+    /// head has moved. An adapter that persists through the unconditional
+    /// `Save` instead has opted out of conflict detection for its entity
+    /// type; one that substitutes its own actor has opted out of the
+    /// provenance. `OfflineEntityReplay.ofJson` is the reference shape.
+    Apply: OfflineReplayContext -> EntityActor -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
 }
 
 /// Shared JSON setup — the SAME converter set `BlobEntityStore` uses to
@@ -145,7 +150,7 @@ module OfflineEntityReplay =
             }
 
         Apply =
-            fun ctx expectedVersion payload -> async {
+            fun ctx actor expectedVersion payload -> async {
                 let parsed =
                     try
                         Ok(Json.deserialize<'T> (Encoding.UTF8.GetString payload))
@@ -159,7 +164,7 @@ module OfflineEntityReplay =
                 match parsed with
                 | Error err -> return Error err
                 | Ok entity ->
-                    match! ctx.Store.SaveIfVersion<'T>(ctx.ScopeId, entity, expectedVersion) with
+                    match! ctx.Store.SaveIfVersion<'T>(ctx.ScopeId, actor, entity, expectedVersion) with
                     | Error(EntityError.VersionConflict(_, _, expected, actual)) ->
                         return Error(ReplayConflict(expected, actual))
                     | Error err -> return Error(ReplayRejected(EntityError.message err))
@@ -182,40 +187,29 @@ module OfflineEntityReplay =
 
 /// Composition-time options for the sync handler.
 ///
-/// `AuditLog` is the audit half of the phase, and it is opt-in (`None`
-/// by default) so a deployment that composes the handler pays nothing
-/// for it (GP 11 + GP 13).
-///
-/// **The audit row an applied replay records (Phase 759).** One
+/// **The audit row an applied replay records (Phase 759 / 806).** One
 /// lifecycle row per applied version — `EntityCreated` / `EntityUpdated`
 /// / `EntityDeleted` — carrying the REAL user in `UserId` and, in
 /// `EntityLifecycleEventPayload.Replay`, the mutation's origination time
 /// (`EnqueuedAt`), the server's application time and the queue entry's
-/// mutation id. It goes through `IAuditLog.Record` like every other
-/// audit row, so the row's `OccurredAt` is the write time: that is what
-/// keeps it visible to the audit replicator, whose cursor filters on
-/// `OccurredAt` and would never deliver a row backdated behind it (the
+/// mutation id. Since Phase 806 the ENTITY STORE records it: the handler
+/// builds an `EntityActor` per mutation — the caller, replaying with that
+/// provenance — and passes it on the seam call, so the store's own row
+/// for the version is the provenance-carrying one and there is no second
+/// row to suppress. It goes through the store's `IAuditLog` like every
+/// other lifecycle row, so the row's `OccurredAt` is the write time: that
+/// is what keeps it visible to the audit replicator, whose cursor filters
+/// on `OccurredAt` and would never deliver a row backdated behind it (the
 /// Phase 24 direct-`IEventStore` emission had exactly that defect).
 ///
-/// **Why the entity store's own row does not double it.** The store
-/// emits a generic `UserId = "system"` lifecycle row from inside
-/// `Save` / `Delete`, because `IEntityStore` does not carry caller
-/// identity. The handler applies each mutation under
-/// `EntityAuditReplayScope.run`, and the SDK-default audit log drops
-/// the store's generic row for that entity while the scope is active —
-/// for that call path only, never globally. **Compose the handler with
-/// the same `IAuditLog` the entity store is composed with** (resolve it
-/// from DI); a deployment whose store has no audit log wired still gets
-/// the handler's row, and one that opts out of `AuditLog` here keeps
-/// the store's generic row exactly as before.
+/// The handler therefore holds no audit log of its own. Compose the
+/// entity store with one (`BlobEntityStore`'s `auditLog` argument, or the
+/// SQL companion's) and every replay is audited; a store composed without
+/// one records nothing, exactly as it records nothing for a live write.
 type OfflineSyncOptions = {
     /// Per-entity-type replay adapters. An entity type absent here is
     /// `Rejected` — the handler never guesses a record shape.
     Replays: OfflineEntityReplay list
-    /// Opt-in audit emission through the `IAuditLog` seam. `None`
-    /// (default) emits nothing and leaves the entity store's own
-    /// emission untouched.
-    AuditLog: IAuditLog option
     /// Ceiling on one `ApplyBatch` call. A reconnecting client with a
     /// large backlog is drained across several batches rather than in
     /// one unbounded request — the drain is resumable by construction,
@@ -224,43 +218,13 @@ type OfflineSyncOptions = {
 }
 
 module OfflineSyncOptions =
-    /// No replays registered, no audit, batches of 50.
-    let defaults: OfflineSyncOptions = {
-        Replays = []
-        AuditLog = None
-        MaxBatchSize = 50
-    }
+    /// No replays registered, batches of 50.
+    let defaults: OfflineSyncOptions = { Replays = []; MaxBatchSize = 50 }
 
     let withReplays (replays: OfflineEntityReplay list) (options: OfflineSyncOptions) : OfflineSyncOptions = {
         options with
             Replays = replays
     }
-
-    /// Record the replay's provenance-carrying lifecycle row through
-    /// `log`. Pass the `IAuditLog` the entity store is composed with so
-    /// the store's generic row for the same version is the one dropped.
-    let withAuditLog (log: IAuditLog) (options: OfflineSyncOptions) : OfflineSyncOptions = {
-        options with
-            AuditLog = Some log
-    }
-
-    /// The Phase 24 shape, kept so a composition root written against
-    /// it compiles unchanged: audit through an `IEventStore` directly.
-    /// Since Phase 759 this is `withAuditLog` over the SDK-default
-    /// `EventStoreAuditLog` on that store, with a silent logger — the
-    /// row lands with the same source module, event type and payload
-    /// codec `IAuditLog.GetAuditTrail` reads, and failures are swallowed
-    /// exactly as the direct write's were.
-    let withAuditEventStore (store: IEventStore) (options: OfflineSyncOptions) : OfflineSyncOptions =
-        let silent =
-            { new ILogger with
-                member _.Debug _ = ()
-                member _.Info _ = ()
-                member _.Warn _ = ()
-                member _.Error(_, _) = ()
-            }
-
-        withAuditLog (AuditLog.EventStoreAuditLog(store, silent)) options
 
 // ─── Request-scope resolution ────────────────────────────────────────
 
@@ -287,64 +251,19 @@ let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : s
 // ─── Audit ───────────────────────────────────────────────────────────
 
 module private ReplayAudit =
-    /// The lifecycle event an applied replay records: the real caller
-    /// in `UserId`, and the replay provenance — origination time,
-    /// application time, queue mutation id — in `Replay`.
-    let event (userId: string) (mutation: QueuedMutation) (newVersion: int) (replayedAt: DateTime) : AuditEvent =
-        let payload: EntityLifecycleEventPayload = {
-            UserId = userId
-            EntityType = mutation.EntityType
-            EntityId = mutation.EntityId
-            Version = newVersion
-            Replay =
-                Some {
-                    // THE POINT OF THE WHOLE BLOCK: the origination
-                    // time survives, beside the application time, on
-                    // the one row that records the version.
-                    OriginatedAt = mutation.EnqueuedAt.UtcDateTime
-                    ReplayedAt = replayedAt
-                    MutationId = mutation.Id
-                }
+    /// Phase 806 — the actor an applied replay is written as: the real
+    /// caller, replaying with the mutation's provenance — origination
+    /// time (the queue's `EnqueuedAt`), application time, queue mutation
+    /// id. The entity store stamps it on the ONE lifecycle row it records
+    /// for the version, so "edited offline at T1, landed at T2" survives
+    /// on the row itself rather than in a second row beside it.
+    let actor (userId: string) (mutation: QueuedMutation) (replayedAt: DateTime) : EntityActor =
+        EntityActor.ofPrincipal userId
+        |> EntityActor.replaying {
+            OriginatedAt = mutation.EnqueuedAt.UtcDateTime
+            ReplayedAt = replayedAt
+            MutationId = mutation.Id
         }
-
-        match mutation.Operation with
-        | DeleteOp -> AuditEvent.EntityDeleted payload
-        | SaveOp when newVersion <= 1 -> AuditEvent.EntityCreated payload
-        | SaveOp -> AuditEvent.EntityUpdated payload
-
-    /// Record the provenance-carrying lifecycle row through the seam.
-    ///
-    /// Best-effort in exactly the shape `BlobEntityStore` uses: any
-    /// failure is swallowed, because a replay that succeeded must not
-    /// be reported to the client as failed merely because its audit row
-    /// did not land. The client would re-queue it and apply it twice.
-    let emit
-        (auditLog: IAuditLog option)
-        (scopeId: string)
-        (userId: string)
-        (mutation: QueuedMutation)
-        (newVersion: int)
-        : Async<unit> =
-        async {
-            match auditLog with
-            | None -> return ()
-            | Some log ->
-                try
-                    do! log.Record(scopeId, event userId mutation newVersion DateTime.UtcNow)
-                with _ ->
-                    return ()
-        }
-
-    /// Apply `write` as the replay of the mutation's entity: while it
-    /// runs, the SDK-default audit log drops the entity store's generic
-    /// `"system"` lifecycle row for that entity, so the row `emit`
-    /// records afterwards is the ONLY one for the version. Entered only
-    /// when the handler has an audit log to record that row through —
-    /// with none, the store's own row stands exactly as before.
-    let scoped (auditLog: IAuditLog option) (mutation: QueuedMutation) (write: Async<'T>) : Async<'T> =
-        match auditLog with
-        | None -> write
-        | Some _ -> AuditLog.EntityAuditReplayScope.run mutation.EntityType mutation.EntityId write
 
 // ─── The handler ─────────────────────────────────────────────────────
 
@@ -396,51 +315,34 @@ let private applyOne
                         return Conflict(mutation.Payload, serverBytes)
                 }
 
-                // Phase 759 — each write runs under the replay scope
-                // (ReplayAudit.scoped), so the store's own generic
-                // lifecycle row for this entity is dropped and the
-                // provenance-carrying row ReplayAudit.emit records is
-                // the ONE row for the version. The compare-and-set is
-                // untouched: the scope wraps the seam call, it does not
-                // change what the seam is asked.
+                // Phase 806 — the write carries its actor: the caller,
+                // replaying with this mutation's provenance. The store
+                // stamps it on the one lifecycle row it records for the
+                // version; nothing is emitted here and nothing has to be
+                // suppressed. The compare-and-set is untouched: the
+                // actor rides the seam call, it does not change what the
+                // seam is asked.
+                let actor = ReplayAudit.actor replayCtx.UserId mutation DateTime.UtcNow
+
                 match mutation.Operation with
                 | DeleteOp ->
                     match!
-                        ReplayAudit.scoped
-                            options.AuditLog
-                            mutation
-                            (replayCtx.Store.DeleteIfVersion(
-                                replayCtx.ScopeId,
-                                mutation.EntityType,
-                                mutation.EntityId,
-                                mutation.BaseVersion
-                            ))
+                        replayCtx.Store.DeleteIfVersion(
+                            replayCtx.ScopeId,
+                            actor,
+                            mutation.EntityType,
+                            mutation.EntityId,
+                            mutation.BaseVersion
+                        )
                     with
                     | Error(EntityError.VersionConflict _) -> return! conflict ()
                     | Error err -> return Rejected(EntityError.message err)
-                    | Ok() ->
-                        do!
-                            ReplayAudit.emit
-                                options.AuditLog
-                                replayCtx.ScopeId
-                                replayCtx.UserId
-                                mutation
-                                mutation.BaseVersion
-
-                        return Applied Array.empty
+                    | Ok() -> return Applied Array.empty
                 | SaveOp ->
-                    match!
-                        ReplayAudit.scoped
-                            options.AuditLog
-                            mutation
-                            (replay.Apply replayCtx mutation.BaseVersion mutation.Payload)
-                    with
+                    match! replay.Apply replayCtx actor mutation.BaseVersion mutation.Payload with
                     | Error(ReplayConflict _) -> return! conflict ()
                     | Error(ReplayRejected msg) -> return Rejected msg
-                    | Ok(savedBytes, newVersion) ->
-                        do! ReplayAudit.emit options.AuditLog replayCtx.ScopeId replayCtx.UserId mutation newVersion
-
-                        return Applied savedBytes
+                    | Ok(savedBytes, _) -> return Applied savedBytes
     }
 
 /// Per-request API record over a resolved entity store.

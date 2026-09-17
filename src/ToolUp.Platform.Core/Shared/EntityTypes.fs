@@ -93,6 +93,106 @@ module EntityError =
         | InvalidEntityShape msg -> sprintf "Invalid entity shape: %s" msg
         | StorageFailure msg -> sprintf "Entity store storage failure: %s" msg
 
+/// Phase 759 — provenance of an entity mutation that was made OFFLINE
+/// and applied later by replay: "this edit happened at T1 and landed at
+/// T2". Carried on the lifecycle row itself (`EntityLifecycleEventPayload.Replay`)
+/// so ONE row records both facts; the row's `OccurredAt` is the write
+/// time, as for every other audit row, and the origination time lives
+/// here. That split is load-bearing rather than cosmetic: the audit
+/// replicator's cursor (`AuditReplicatorCursor.isAfter`) and the job
+/// trigger watermark both filter on `OccurredAt`, so a row backdated to
+/// its origination time behind the cursor would never be replicated —
+/// the origination time must ride the payload, not the envelope.
+///
+/// Both timestamps are UTC. `OriginatedAt` carries the originating
+/// device's clock at its own precision (portability rule 6 — the
+/// offline queue's `EnqueuedAt` is a browser timestamp); `ReplayedAt`
+/// is the server clock at the moment the replay was applied.
+///
+/// Phase 806 moved it here from the audit-payload file — beside
+/// `EntityActor`, which carries it INTO the store — with its shape
+/// unchanged.
+type EntityReplayProvenance = {
+    /// When the user made the edit — the offline queue's `EnqueuedAt`
+    /// on the originating device, NOT the server's application time.
+    OriginatedAt: DateTime
+    /// When the server applied the replay. Differs from the row's
+    /// `OccurredAt` only by the instant between the handler's stamp
+    /// and the store's write; carried explicitly so a reader of
+    /// `IAuditLog.GetAuditTrail` — which returns the event, not the
+    /// envelope — still sees both timestamps side by side.
+    ReplayedAt: DateTime
+    /// The offline queue's mutation id — the origin marker that
+    /// correlates this row with the client-side queue entry that
+    /// produced it.
+    MutationId: string
+}
+
+/// Phase 806 — the acting principal on an `IEntityStore` mutation. Every
+/// mutating member of the store takes one, so the lifecycle audit row a
+/// store records (`EntityCreated` / `EntityUpdated` / `EntityDeleted`)
+/// carries the CALLER rather than a placeholder the store had to invent:
+/// an implementation that ignores it is visibly ignoring a parameter,
+/// and an out-of-tree implementation gets a compile error rather than a
+/// wrong audit row. It replaces the ambient replay scope Phase 759
+/// carried the provenance in, which went silently missing across any
+/// async boundary that did not flow the execution context.
+type EntityActor = {
+    /// The authenticated principal performing the write —
+    /// `AccessContext.UserId` at a handler, the scheduling principal for
+    /// a job. Stamped as `UserId` on the lifecycle audit row and as
+    /// `CreatedBy` on the version the data-object layer stores.
+    Principal: string
+    /// The subject the principal acts FOR, when the write is delegated —
+    /// an admin editing a member's record, a service principal acting
+    /// for a user. `None` when the principal acts for itself. Stamped
+    /// as `OnBehalfOf` on the lifecycle audit row.
+    OnBehalfOf: string option
+    /// `Some` when the write applies an OFFLINE mutation by replay — the
+    /// offline sync handler is the emitter — so the one lifecycle row
+    /// the store records carries the origination time, the application
+    /// time and the queue mutation id beside the version. `None` for a
+    /// live write.
+    Replay: EntityReplayProvenance option
+}
+
+module EntityActor =
+    /// The principal name the host stamps on a write no user made. The
+    /// literal lives here and nowhere else: a store never infers it.
+    [<Literal>]
+    let SystemPrincipal = "system"
+
+    /// The host itself, acting for nobody. Legitimate ONLY where no
+    /// principal exists to name — a boot-time seed, a migration, a
+    /// scheduled sweep no user triggered. It is never a default: a
+    /// handler has `AccessContext.UserId`, a job has the principal that
+    /// scheduled it, and a caller that passes `system` where a user was
+    /// in reach is recording a write nobody made. A store never
+    /// substitutes it — the row carries exactly the actor on the call.
+    let system: EntityActor = {
+        Principal = SystemPrincipal
+        OnBehalfOf = None
+        Replay = None
+    }
+
+    /// An actor for `principal` acting for itself, live (no replay
+    /// provenance). The shape a handler builds from `AccessContext.UserId`.
+    let ofPrincipal (principal: string) : EntityActor = {
+        Principal = principal
+        OnBehalfOf = None
+        Replay = None
+    }
+
+    /// `principal` acting for `subject` — a delegated write.
+    let onBehalfOf (subject: string) (actor: EntityActor) : EntityActor = { actor with OnBehalfOf = Some subject }
+
+    /// `actor` applying an offline mutation by replay. The provenance
+    /// rides onto the lifecycle row the store records for the version.
+    let replaying (provenance: EntityReplayProvenance) (actor: EntityActor) : EntityActor = {
+        actor with
+            Replay = Some provenance
+    }
+
 /// Core fields every entity record must carry. Used by the runtime
 /// reflection helper to extract them from any user record.
 type EntityFieldsCore = {

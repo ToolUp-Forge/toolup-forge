@@ -23,7 +23,9 @@ open System
 // metadata is overwritten (its content survives, dedup'd — see
 // `DataObjectStore.fs`). The race-free path is the compare-and-set
 // `IConditionalDataObjectStore.SaveIfVersion` (Phase 753), reached
-// through `ConditionalDataObjectStore.saveIfVersion`. Saves to
+// through `ConditionalDataObjectStore.saveIfVersion`, and its twin
+// `IConditionalDataObjectStore.DeleteIfVersion` (Phase 806), reached
+// through `ConditionalDataObjectStore.deleteIfVersion`. Saves to
 // different objects have no ordering relationship.
 //
 // **Stateless contract.** No method assumes in-memory state survives
@@ -299,13 +301,28 @@ type ConditionalSaveError =
     /// unconditional `Save` would have reported it.
     | SaveFailed of DataObjectError
 
+/// Phase 806 — why a conditional delete did not remove the object.
+type ConditionalDeleteError =
+    /// The head version was not `expected` at the moment of the delete.
+    /// `actual` is the head the store observed; a caller that still
+    /// wants the object gone re-reads and states `actual`.
+    | VersionConflict of expected: int * actual: int
+    /// The precondition held but the delete itself was refused or
+    /// failed, exactly as the unconditional `Delete` would have reported
+    /// it (`DeleteForbidden` on a `StrictlyVersioned` object, or a
+    /// storage failure).
+    | DeleteFailed of DataObjectError
+
 /// Compare-and-set capability over a versioned data-object store. An
 /// implementation MUST make `SaveIfVersion` atomic with respect to
 /// concurrent conditional saves on the same `(scopeId, objectId)`: two
 /// racers stating the same `expectedVersion` see exactly one `Ok`, and
 /// the assigned version is always `expectedVersion + 1`. Scope
 /// discipline, sticky-policy enforcement and content dedup match
-/// `IDataObjectStore.Save`.
+/// `IDataObjectStore.Save`. `DeleteIfVersion` (Phase 806) holds the same
+/// bar against a concurrent conditional save: of a `SaveIfVersion` and a
+/// `DeleteIfVersion` that both state the same `expectedVersion`, exactly
+/// one succeeds and the other is told `VersionConflict`.
 type IConditionalDataObjectStore =
     /// Save `content` as version `expectedVersion + 1` if — and only if
     /// — the object's head version is `expectedVersion` right now.
@@ -323,6 +340,23 @@ type IConditionalDataObjectStore =
         policy: VersioningPolicy *
         expectedVersion: int ->
             Async<Result<DataObject, ConditionalSaveError>>
+
+    /// Phase 806 — delete the object if — and only if — its head version
+    /// is `expectedVersion` right now. `expectedVersion = 0` means "the
+    /// object must not exist", which makes the call an idempotent `Ok`
+    /// exactly as `Delete` is. Returns `VersionConflict` naming both
+    /// versions when the head has moved and removes nothing; refuses a
+    /// `StrictlyVersioned` object as `DeleteFailed DeleteForbidden`.
+    ///
+    /// The deciding write is the NEXT version slot, not the removal: an
+    /// implementation claims `expectedVersion + 1` — the same slot a
+    /// `SaveIfVersion` at that expectation would create — before it
+    /// removes anything, so a save racing the delete at the same
+    /// expectation loses the claim and is refused, and a delete racing
+    /// such a save finds the slot taken and is refused. The claim is
+    /// released once the versions are gone.
+    abstract DeleteIfVersion:
+        scopeId: string * objectId: string * expectedVersion: int -> Async<Result<unit, ConditionalDeleteError>>
 
 /// Probe-and-fall-back helper over the Phase 753 capability, so every
 /// consumer shares one probe site and one documented fallback.
@@ -372,9 +406,47 @@ module ConditionalDataObjectStore =
                     | _ -> versions |> List.map _.Version |> List.max
 
                 if head <> expectedVersion then
-                    return Error(VersionConflict(expectedVersion, head))
+                    return Error(ConditionalSaveError.VersionConflict(expectedVersion, head))
                 else
                     let! saved = store.Save(scopeId, objectId, content, dataType, createdBy, metadata, policy)
 
                     return saved |> Result.mapError SaveFailed
+        }
+
+    /// Phase 806 — conditional delete through `store`. When `store`
+    /// implements `IConditionalDataObjectStore` the next-slot claim makes
+    /// the compare and the removal one act. Otherwise this reads the head
+    /// with `ListVersions`, compares it to `expectedVersion`, and calls
+    /// the unconditional `Delete` — which leaves the same one-round-trip
+    /// window `saveIfVersion` documents above: a save that lands between
+    /// the head read and the removal is removed with the version the
+    /// caller expected, or survives it orphaned, depending on which side
+    /// of the listing it landed. Deployments that need the race closed
+    /// compose a store that implements the capability (the default
+    /// `DataObjectStore` does).
+    let deleteIfVersion
+        (store: IDataObjectStore)
+        (scopeId: string)
+        (objectId: string)
+        (expectedVersion: int)
+        : Async<Result<unit, ConditionalDeleteError>> =
+        async {
+            match store with
+            | :? IConditionalDataObjectStore as cas -> return! cas.DeleteIfVersion(scopeId, objectId, expectedVersion)
+            | _ ->
+                let! versions = store.ListVersions(scopeId, objectId)
+
+                let head =
+                    match versions with
+                    | [] -> 0
+                    | _ -> versions |> List.map _.Version |> List.max
+
+                if head <> expectedVersion then
+                    return Error(ConditionalDeleteError.VersionConflict(expectedVersion, head))
+                elif head = 0 then
+                    return Ok()
+                else
+                    let! deleted = store.Delete(scopeId, objectId)
+
+                    return deleted |> Result.mapError DeleteFailed
         }

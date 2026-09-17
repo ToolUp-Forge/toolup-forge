@@ -247,7 +247,10 @@ let private upsertHandler (auditEventFor: string -> string -> AuditEvent) : Http
                 return! writeError ctx 400 "AdSlotConfig.SlotId is required"
             | Some config ->
                 let entity = AdSlotEntity.fromConfig config
-                let! saveResult = store.Save<AdSlotEntity>(PlatformAdsConfigScope, entity) |> Async.StartAsTask
+
+                let! saveResult =
+                    store.Save<AdSlotEntity>(PlatformAdsConfigScope, EntityActor.ofPrincipal ac.UserId, entity)
+                    |> Async.StartAsTask
 
                 match saveResult with
                 | Ok ref ->
@@ -271,7 +274,7 @@ let private deleteHandler (slotId: string) : HttpHandler =
     fun next (ctx: HttpContext) ->
         withSubstrate ctx (fun ac store _registry -> task {
             let! result =
-                store.Delete(PlatformAdsConfigScope, AdSlotEntityType, slotId)
+                store.Delete(PlatformAdsConfigScope, EntityActor.ofPrincipal ac.UserId, AdSlotEntityType, slotId)
                 |> Async.StartAsTask
 
             match result with

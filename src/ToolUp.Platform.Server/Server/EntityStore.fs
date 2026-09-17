@@ -248,13 +248,34 @@ type BlobEntityStore
         else
             versions |> List.map _.Version |> List.max
 
+    /// Phase 806 — the lifecycle row for `version` of an entity, stamped
+    /// from the actor on the call and nothing else: `UserId` is the
+    /// principal, `OnBehalfOf` the delegation, `Replay` the offline
+    /// provenance. No branch of this store writes a placeholder actor.
+    let lifecyclePayload
+        (actor: EntityActor)
+        (entityType: string)
+        (entityId: EntityId)
+        (version: int)
+        : EntityLifecycleEventPayload =
+        {
+            UserId = actor.Principal
+            OnBehalfOf = actor.OnBehalfOf
+            EntityType = entityType
+            EntityId = entityId
+            Version = version
+            Replay = actor.Replay
+        }
+
     /// Everything that follows a successful version write (steps 6, 6b
     /// and the audit emission): maintain each declared index — removing
     /// the previous head's key when the indexed value changed —
     /// re-index the declared full-text fields, and emit the lifecycle
-    /// audit event. `previousHead` is `0` on a create.
+    /// audit event stamped from `actor`. `previousHead` is `0` on a
+    /// create.
     let afterVersionWrite
         (scopeId: string)
+        (actor: EntityActor)
         (core: EntityFieldsCore)
         (reg: EntityRegistration<'T>)
         (entityWithVersion: 'T)
@@ -320,13 +341,7 @@ type BlobEntityStore
             match auditLog with
             | Some log ->
                 try
-                    let payload = {
-                        UserId = "system"
-                        EntityType = core.Type
-                        EntityId = core.Id
-                        Version = newVersion
-                        Replay = None
-                    }
+                    let payload = lifecyclePayload actor core.Type core.Id newVersion
 
                     let evt =
                         if newVersion = 1 then
@@ -355,28 +370,50 @@ type BlobEntityStore
     /// site (reflection-recovered Extract can't be unboxed without the
     /// original 'T parameter).
     ///
-    /// Phase 753 residual window on the conditional form: the seam has
-    /// no conditional delete, so the head is compared and then deleted
-    /// in two round trips (`ListVersions` → `Delete`); a save that lands
-    /// between them is removed along with the version the caller
-    /// expected. The window is the same one round trip as a
-    /// non-conditional data-object store's `SaveIfVersion` fallback.
-    let deleteEntity (scopeId: string) (entityType: string) (entityId: EntityId) (expected: int option) = async {
-        if not (registry.Knows entityType) then
-            return Error(EntityError.UnknownEntityType entityType)
-        else
-            let objectId = objectIdFor entityType entityId
-            // Capture head version before delete so the audit event
-            // records what got removed — and, on the conditional form,
-            // so the caller's expectation can be checked. Best-effort.
-            let! versionsBefore = dataObjectStore.ListVersions(scopeId, objectId)
-            let headVersion = headOf versionsBefore
+    /// Phase 806 — the conditional form routes through
+    /// `ConditionalDataObjectStore.deleteIfVersion`, so over the default
+    /// `DataObjectStore` the compare and the removal are one act (the
+    /// next version slot is claimed before anything is removed — see
+    /// that store's header); a save racing the delete at the same
+    /// expectation is refused, or refuses the delete, never both. Over a
+    /// data-object store without the capability the helper compares then
+    /// deletes, with the one-round-trip window documented on it. The
+    /// unconditional form is the plain `Delete`, last-writer-wins as
+    /// before. Every audit row here is stamped from `actor`.
+    let deleteEntity
+        (scopeId: string)
+        (actor: EntityActor)
+        (entityType: string)
+        (entityId: EntityId)
+        (expected: int option)
+        =
+        async {
+            if not (registry.Knows entityType) then
+                return Error(EntityError.UnknownEntityType entityType)
+            else
+                let objectId = objectIdFor entityType entityId
+                // Capture the head version before the delete so the audit
+                // event records what got removed. Best-effort: on the
+                // conditional form the seam re-checks it atomically.
+                let! versionsBefore = dataObjectStore.ListVersions(scopeId, objectId)
+                let headVersion = headOf versionsBefore
 
-            match expected with
-            | Some e when e <> headVersion ->
-                return Error(EntityError.VersionConflict(entityType, entityId, e, headVersion))
-            | _ ->
-                let! deleteResult = dataObjectStore.Delete(scopeId, objectId)
+                let! deleteResult =
+                    match expected with
+                    | Some e -> async {
+                        let! conditional = ConditionalDataObjectStore.deleteIfVersion dataObjectStore scopeId objectId e
+
+                        return
+                            match conditional with
+                            | Ok() -> Ok()
+                            | Error(ConditionalDeleteError.VersionConflict(exp, actual)) ->
+                                Error(Choice1Of2(EntityError.VersionConflict(entityType, entityId, exp, actual)))
+                            | Error(DeleteFailed doErr) -> Error(Choice2Of2 doErr)
+                      }
+                    | None -> async {
+                        let! unconditional = dataObjectStore.Delete(scopeId, objectId)
+                        return unconditional |> Result.mapError Choice2Of2
+                      }
 
                 match deleteResult with
                 | Ok() ->
@@ -401,22 +438,18 @@ type BlobEntityStore
                                 do!
                                     log.Record(
                                         scopeId,
-                                        EntityDeleted {
-                                            UserId = "system"
-                                            EntityType = entityType
-                                            EntityId = entityId
-                                            Version = headVersion
-                                            Replay = None
-                                        }
+                                        EntityDeleted(lifecyclePayload actor entityType entityId headVersion)
                                     )
                             with _ ->
                                 ()
                         | None -> ()
 
                     return Ok()
-                | Error DataObjectError.NotFound -> return Ok() // idempotent
-                | Error err -> return Error(StorageFailure(sprintf "IDataObjectStore.Delete failed: %s" (string err)))
-    }
+                | Error(Choice1Of2 conflict) -> return Error conflict
+                | Error(Choice2Of2 DataObjectError.NotFound) -> return Ok() // idempotent
+                | Error(Choice2Of2 err) ->
+                    return Error(StorageFailure(sprintf "IDataObjectStore.Delete failed: %s" (string err)))
+        }
 
     /// Source-compatible 4-arg constructor — the pre-19b shape. Delegates
     /// to the primary constructor with no sparse index (no full-text).
@@ -431,7 +464,7 @@ type BlobEntityStore
 
     interface IEntityStore with
 
-        member _.Save<'T>(scopeId: string, entity: 'T) : Async<Result<EntityRef<'T>, EntityError>> = async {
+        member _.Save<'T>(scopeId: string, actor: EntityActor, entity: 'T) : Async<Result<EntityRef<'T>, EntityError>> = async {
             match validateForSave entity with
             | Error err -> return Error err
             | Ok(core, reg) ->
@@ -457,11 +490,7 @@ type BlobEntityStore
                         objectId,
                         bytes,
                         dataTypeFor core.Type,
-                        // `IEntityStore.Save` doesn't carry caller identity — actor-level
-                        // attribution lives one layer up at the API handler, where
-                        // `AccessContext.UserId` is available. "system" matches the existing
-                        // `IDataObjectStore` convention for non-end-user writes.
-                        "system",
+                        actor.Principal,
                         Map.empty,
                         Versioned
                     )
@@ -470,7 +499,7 @@ type BlobEntityStore
                 | Error doErr -> return Error(StorageFailure(sprintf "IDataObjectStore.Save failed: %s" (string doErr)))
                 | Ok savedObject ->
                     let! entityRef =
-                        afterVersionWrite scopeId core reg entityWithVersion previousHead newVersion savedObject
+                        afterVersionWrite scopeId actor core reg entityWithVersion previousHead newVersion savedObject
 
                     return Ok entityRef
         }
@@ -486,7 +515,7 @@ type BlobEntityStore
         // the version write has succeeded, so a refused expectation
         // leaves every index exactly as it was.
         member _.SaveIfVersion<'T>
-            (scopeId: string, entity: 'T, expectedVersion: int)
+            (scopeId: string, actor: EntityActor, entity: 'T, expectedVersion: int)
             : Async<Result<EntityRef<'T>, EntityError>> =
             async {
                 match validateForSave entity with
@@ -504,7 +533,7 @@ type BlobEntityStore
                             objectId
                             bytes
                             (dataTypeFor core.Type)
-                            "system"
+                            actor.Principal
                             Map.empty
                             Versioned
                             expectedVersion
@@ -516,7 +545,15 @@ type BlobEntityStore
                         return Error(StorageFailure(sprintf "IDataObjectStore.SaveIfVersion failed: %s" (string doErr)))
                     | Ok savedObject ->
                         let! entityRef =
-                            afterVersionWrite scopeId core reg entityWithVersion expectedVersion newVersion savedObject
+                            afterVersionWrite
+                                scopeId
+                                actor
+                                core
+                                reg
+                                entityWithVersion
+                                expectedVersion
+                                newVersion
+                                savedObject
 
                         return Ok entityRef
             }
@@ -571,13 +608,15 @@ type BlobEntityStore
                         : EntityRef<'T>))
         }
 
-        member _.Delete(scopeId: string, entityType: string, entityId: EntityId) =
-            deleteEntity scopeId entityType entityId None
+        member _.Delete(scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId) =
+            deleteEntity scopeId actor entityType entityId None
 
-        // Phase 753 — compare-and-set delete; see `deleteEntity` for the
-        // residual window.
-        member _.DeleteIfVersion(scopeId: string, entityType: string, entityId: EntityId, expectedVersion: int) =
-            deleteEntity scopeId entityType entityId (Some expectedVersion)
+        // Phase 753 / 806 — compare-and-set delete; see `deleteEntity`
+        // for how the compare and the removal are made one act.
+        member _.DeleteIfVersion
+            (scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId, expectedVersion: int)
+            =
+            deleteEntity scopeId actor entityType entityId (Some expectedVersion)
 
         member _.FindByIndex<'T>(scopeId: string, entityType: string, indexName: string, value: string) = async {
             match registry.TryGet<'T>(entityType) with

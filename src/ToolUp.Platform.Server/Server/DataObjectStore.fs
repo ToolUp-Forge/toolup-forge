@@ -45,6 +45,12 @@ let private contentPrefix = "objects/_content/"
 
 let private reservedContentObjectId = "_content"
 
+/// Phase 806 — the bytes a conditional delete claims the next version
+/// slot with. Deliberately NOT metadata JSON: every parsed read drops a
+/// blob these bytes sit in, so the claim is visible to the by-name slot
+/// scan (where it decides the race) and to nothing else.
+let private deleteClaimBytes = Encoding.UTF8.GetBytes "toolup:delete-claim"
+
 /// Cap on concurrent metadata-blob downloads. `ListVersions` and
 /// `ListObjects` fan out one read per (version | object); without a
 /// cap, a frequently-versioned object or a populous scope can spawn
@@ -1000,4 +1006,111 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                     |> liftStorage
                                     |> Result.map (fun _ -> dataObject)
                                     |> Result.mapError SaveFailed
+        }
+
+        // Phase 806 — compare-and-set delete. The deciding write is the
+        // NEXT version slot: `v{expected+1}.json` is claimed `IfAbsent`
+        // through the Phase 600 seam BEFORE anything is removed, with
+        // bytes that no reader parses as metadata. A `SaveIfVersion` at
+        // the same expectation races for the very same blob, so exactly
+        // one of the two wins — the save's claim refuses the delete
+        // (`VersionConflict(expected, expected + 1)`), the delete's claim
+        // refuses the save. Every parsed read (`Get`, `ListVersions`, the
+        // `ConditionalDataObjectStore` fallbacks) drops the unparseable
+        // claim, so no phantom version is observable through them; only
+        // the by-name slot scan sees it, which is the point. The listed
+        // versions are removed and their content released as `Delete`
+        // does, and the claim is released LAST — releasing it first would
+        // let a create land a fresh `v1.json` that the pending removal of
+        // the listed names then deleted.
+        //
+        // Residual window when `blobStorage` is NOT an
+        // `IConditionalBlobStorage`: the head compare still runs, but no
+        // slot can be claimed, so the removal is the unconditional
+        // `Delete`'s — one round trip between the head read and the
+        // removal, exactly as `SaveIfVersion` documents for its own
+        // fallback. Every shipped backend closes it.
+        //
+        // A process that dies between the claim and its release leaves
+        // the claim standing: by-name scans then see head = expected + 1
+        // while parsed reads see the object gone, so a `SaveIfVersion`
+        // stating 0 is refused until `Evict` (which removes every version
+        // blob by name) clears it. Recorded rather than closed — a
+        // sweeper for it would be a second GC over a state only a crash
+        // reaches.
+        member _.DeleteIfVersion(scopeId, objectId, expectedVersion) = async {
+            if objectId = reservedContentObjectId then
+                return Error(DeleteFailed(StorageFailure $"ObjectId '{reservedContentObjectId}' is reserved"))
+            elif expectedVersion < 0 then
+                return
+                    Error(
+                        DeleteFailed(StorageFailure $"DeleteIfVersion: expectedVersion {expectedVersion} is negative")
+                    )
+            else
+                let container = containerFor scopeId
+                let! versions = listVersionBlobs blobStorage container objectId
+
+                let head =
+                    match versions with
+                    | [] -> 0
+                    | _ -> versions |> List.map fst |> List.max
+
+                if head <> expectedVersion then
+                    return Error(ConditionalDeleteError.VersionConflict(expectedVersion, head))
+                elif head = 0 then
+                    // Idempotent: nothing there to remove, exactly as
+                    // `Delete` answers.
+                    return Ok()
+                else
+                    let! policy = readV1Policy container objectId
+
+                    match policy with
+                    | Some StrictlyVersioned -> return Error(DeleteFailed DeleteForbidden)
+                    | _ ->
+                        let names = versions |> List.map snd
+
+                        let removeListed () = async {
+                            // Phase 634 — read what these versions reference
+                            // BEFORE removing them, so the in-band GC reclaims
+                            // exactly the content this delete released.
+                            let! released = releasedContentHashes container names
+
+                            let! _ =
+                                names
+                                |> List.map (fun name -> blobStorage.Delete(container, name))
+                                |> Async.Parallel
+
+                            let! _orphaned = collectOrphanedContent container released
+                            return ()
+                        }
+
+                        match blobStorage with
+                        | :? IConditionalBlobStorage as cas ->
+                            let claimName = versionBlobName objectId (expectedVersion + 1)
+                            let! claim = cas.UploadWithETag(container, claimName, deleteClaimBytes, IfAbsent)
+
+                            match claim with
+                            | Error(ETagMismatch _) ->
+                                // A save claimed the slot between the head
+                                // read and this write: the head is (or is
+                                // becoming) `expected + 1`, and nothing was
+                                // removed.
+                                return
+                                    Error(ConditionalDeleteError.VersionConflict(expectedVersion, expectedVersion + 1))
+                            | Error(ConditionalWriteFailure msg) -> return Error(DeleteFailed(StorageFailure msg))
+                            | Ok _ ->
+                                let! removal = removeListed () |> Async.Catch
+                                // Release the claim on every path — see the
+                                // header for why it goes last.
+                                let! _ = blobStorage.Delete(container, claimName)
+
+                                match removal with
+                                | Choice1Of2() -> return Ok()
+                                | Choice2Of2 ex -> return Error(DeleteFailed(StorageFailure ex.Message))
+                        | _ ->
+                            let! removal = removeListed () |> Async.Catch
+
+                            match removal with
+                            | Choice1Of2() -> return Ok()
+                            | Choice2Of2 ex -> return Error(DeleteFailed(StorageFailure ex.Message))
         }

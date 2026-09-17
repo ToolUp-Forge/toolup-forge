@@ -5,6 +5,7 @@ module ToolUp.ContentAuthoring.ContentAdminCompose
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Platform.Server
 
@@ -64,7 +65,20 @@ open ToolUp.Platform.Server
 let withContentAdmin (app: ServerApp) : ServerApp =
     let adminApi (ctx: HttpContext) : IContentAdminApi =
         let store = ctx.RequestServices.GetService(typeof<IEntityStore>) :?> IEntityStore
-        ContentAdminApiImpl.create store
+
+        // Phase 806 — the admin the gate admitted is the actor on every
+        // write. The stamp is the auth middleware's; the fallback names
+        // the anonymous session so a misconfigured pipeline yields a
+        // visible 'anonymous' row rather than a placeholder.
+        let actor =
+            match ctx.Items.TryGetValue "ToolUp.AccessContext" with
+            | true, (:? AccessContext as ac) -> EntityActor.ofPrincipal ac.UserId
+            | _ ->
+                match ctx.Items.TryGetValue "ToolUp.UserId" with
+                | true, (:? string as id) -> EntityActor.ofPrincipal id
+                | _ -> EntityActor.ofPrincipal "anonymous"
+
+        ContentAdminApiImpl.create store actor
 
     let handler =
         Api.make<IContentAdminApi> (adminApi, routeBuilder = ContentAdminApi.routeBuilder)

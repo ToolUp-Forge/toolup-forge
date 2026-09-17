@@ -17,6 +17,18 @@ open ToolUp.Platform.EntityQueryTypes
 // from `scopeId`. Same discipline as `IDataObjectStore` and
 // `IBlobStorage`.
 //
+// Phase 806 — every MUTATING member also takes an `EntityActor`: the
+// principal on the call is the principal on the lifecycle audit row
+// the store records, and the replay provenance an offline replay
+// carries rides the same parameter. There is no ambient scope to read
+// and nothing for an implementation to infer — a store that stamps
+// anything but the actor it was handed is wrong by inspection, and an
+// out-of-tree implementation gets a compile error rather than a wrong
+// row. Callers build one with `EntityActor.ofPrincipal` from
+// `AccessContext.UserId` (a job passes the principal that scheduled
+// it); `EntityActor.system` is for writes no principal made, never a
+// default.
+//
 // Six-rule portability audit (Phase 9c, Guiding Principle 12):
 //   1. Identity by value      — `EntityId: string`, `entityType: string`,
 //                               `scopeId: string`. No live handles.
@@ -54,7 +66,11 @@ type IEntityStore =
     /// Returns the assigned `EntityRef<'T>` so callers know what
     /// version they wrote. Callers use the returned `Version` for
     /// optimistic concurrency on subsequent reads.
-    abstract Save<'T> : scopeId: string * entity: 'T -> Async<Result<EntityRef<'T>, EntityError>>
+    ///
+    /// `actor` is stamped on the `EntityCreated` / `EntityUpdated` row
+    /// as `UserId` (+ `OnBehalfOf`, + `Replay`) and as `CreatedBy` on
+    /// the stored version (Phase 806).
+    abstract Save<'T> : scopeId: string * actor: EntityActor * entity: 'T -> Async<Result<EntityRef<'T>, EntityError>>
 
     /// Phase 753 — compare-and-set save. Persist `entity` as version
     /// `expectedVersion + 1` if — and only if — the entity's head
@@ -76,7 +92,8 @@ type IEntityStore =
     /// implementation over storage that cannot documents the residual
     /// window in its own header.
     abstract SaveIfVersion<'T> :
-        scopeId: string * entity: 'T * expectedVersion: int -> Async<Result<EntityRef<'T>, EntityError>>
+        scopeId: string * actor: EntityActor * entity: 'T * expectedVersion: int ->
+            Async<Result<EntityRef<'T>, EntityError>>
 
     /// Fetch the latest version of an entity. Returns `NotFound` when
     /// the `(entityType, entityId)` pair has no head version in this
@@ -101,19 +118,26 @@ type IEntityStore =
     /// semantics).
     ///
     /// Idempotent: deleting a non-existent entity returns `Ok` without
-    /// error.
-    abstract Delete: scopeId: string * entityType: string * entityId: EntityId -> Async<Result<unit, EntityError>>
+    /// error. `actor` is stamped on the `EntityDeleted` row (Phase 806).
+    abstract Delete:
+        scopeId: string * actor: EntityActor * entityType: string * entityId: EntityId ->
+            Async<Result<unit, EntityError>>
 
     /// Phase 753 — compare-and-set delete, the twin of `SaveIfVersion`.
     /// Delete the entity if — and only if — its head version is
     /// `expectedVersion` right now (`0` = "must not exist", which makes
     /// the call an idempotent `Ok` exactly as `Delete` is). When the
     /// head has moved, returns `EntityError.VersionConflict` naming
-    /// both versions and removes nothing. The blob-level seam has no
-    /// conditional delete, so implementations compare then delete and
-    /// document the window between the two in their own header.
+    /// both versions and removes nothing. Since Phase 806 the compare
+    /// and the removal are one act wherever the wrapped storage can
+    /// express an atomic claim (`IConditionalDataObjectStore.DeleteIfVersion`
+    /// over the default data-object store; the `DELETE` predicate over
+    /// SQL): a `SaveIfVersion` and a `DeleteIfVersion` racing at the same
+    /// expectation resolve to exactly one `Ok`. An implementation over
+    /// storage that cannot documents the residual window in its own
+    /// header.
     abstract DeleteIfVersion:
-        scopeId: string * entityType: string * entityId: EntityId * expectedVersion: int ->
+        scopeId: string * actor: EntityActor * entityType: string * entityId: EntityId * expectedVersion: int ->
             Async<Result<unit, EntityError>>
 
     /// Look up entities by a single declared index. Returns every

@@ -5,6 +5,7 @@ namespace ToolUp.PublicRendering
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Platform.Narrative
 
@@ -269,7 +270,12 @@ type PublicRenderingNarrativePagePublisher
 
                     let envelope = PublicPageEntity.fromPage page
 
-                    let! result = entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, envelope)
+                    // Phase 806 — `INarrativePagePublisher.Publish` carries no
+                    // caller, so the write is the host's; threading the
+                    // publishing principal through that seam is the
+                    // successor phase's. Until then the row says so visibly.
+                    let! result =
+                        entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, EntityActor.system, envelope)
 
                     match result with
                     | Ok _ ->

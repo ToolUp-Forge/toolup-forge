@@ -86,7 +86,11 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
                     Type = FormSchema.entityType
             }
 
-            let! r = entityStore.Save<FormSchema>(scopeId, normalized)
+            // Phase 806 — `IFormStore.SaveSchema` carries no caller, so this
+            // write is stamped as the host's; threading the principal through
+            // that seam is the successor phase's. Until then the row says so
+            // visibly rather than by default.
+            let! r = entityStore.Save<FormSchema>(scopeId, EntityActor.system, normalized)
 
             return
                 match r with
@@ -166,7 +170,8 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
         }
 
         member _.DeleteSchema(scopeId, schemaId) = async {
-            let! r = entityStore.Delete(scopeId, FormSchema.entityType, schemaId)
+            // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSchema`.
+            let! r = entityStore.Delete(scopeId, EntityActor.system, FormSchema.entityType, schemaId)
 
             return
                 match r with
@@ -180,7 +185,16 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
                     Type = Submission.entityType
             }
 
-            let! r = entityStore.Save<Submission>(scopeId, normalized)
+            // Phase 806 — the submission names its own author, and that is the
+            // actor on the row: the authenticated user's id, or the
+            // prefix-tagged token identity of an invited respondent (the same
+            // string the `Author` index keys on).
+            let actor =
+                match normalized.Author with
+                | AuthenticatedUser userId -> EntityActor.ofPrincipal userId
+                | InvitedRespondent _ -> EntityActor.ofPrincipal (SubmissionAuthor.toIndexValue normalized.Author)
+
+            let! r = entityStore.Save<Submission>(scopeId, actor, normalized)
 
             return
                 match r with
@@ -219,7 +233,8 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
         }
 
         member _.DeleteSubmission(scopeId, submissionId) = async {
-            let! r = entityStore.Delete(scopeId, Submission.entityType, submissionId)
+            // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSubmission`.
+            let! r = entityStore.Delete(scopeId, EntityActor.system, Submission.entityType, submissionId)
 
             return
                 match r with

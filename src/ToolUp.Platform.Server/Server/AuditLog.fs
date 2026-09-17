@@ -1967,76 +1967,6 @@ type AuditWriteRefusedException(scopeId: string, eventType: string, inner: exn) 
             inner
         )
 
-/// Phase 759 — the ambient scope under which an entity store's own
-/// generic lifecycle emission is SUPPRESSED, because the caller is about
-/// to record a better row for the same version.
-///
-/// **The problem it solves.** `BlobEntityStore.Save` / `Delete` emit an
-/// `EntityCreated` / `EntityUpdated` / `EntityDeleted` row stamped
-/// `UserId = "system"` at write time, because `IEntityStore.Save` does
-/// not carry caller identity. The offline replay handler knows more —
-/// the real user, the mutation's origination time, the queue entry it
-/// came from — and records a row carrying that provenance
-/// (`EntityLifecycleEventPayload.Replay = Some …`). Without this scope
-/// an applied replay produced TWO lifecycle rows for one entity
-/// version: the store's generic one and the handler's provenance one
-/// (Phase 24's recorded residue).
-///
-/// **Why an `AsyncLocal` and not a store parameter.** The store's
-/// emission sits inside `IEntityStore.Save`, whose signature is the
-/// seam every store implementation and every consumer compiles
-/// against; threading a "suppress audit" flag through it is exactly the
-/// arity widening GP 11 forbids, and a per-call decorator cannot reach
-/// an emission that happens inside the call. Request-scoped context
-/// rides the async chain by design here (GP 7 — the same shape as
-/// `ApiSeams.requestScopeId`), and the scope is keyed by `(entityType,
-/// entityId)` so an unrelated emission on the same flow is untouched.
-/// It is honoured by `EventStoreAuditLog.Record` — the SDK-default
-/// `IAuditLog` — and only for a lifecycle row whose `Replay` is `None`:
-/// the provenance-carrying row the scope exists to make room for always
-/// passes.
-///
-/// **It is NEVER global.** `run` sets the scope for the duration of
-/// `work` on the current async flow and restores the previous value on
-/// every exit path; nothing outside that flow observes it, and a
-/// deployment that never composes the offline handler never enters it.
-module EntityAuditReplayScope =
-    let private current = System.Threading.AsyncLocal<(string * string) option>()
-
-    /// Whether `payload` names the entity whose replay is being applied
-    /// on the current async flow. `false` outside any scope.
-    let covers (payload: EntityLifecycleEventPayload) : bool =
-        match current.Value with
-        | Some(entityType, entityId) -> payload.EntityType = entityType && payload.EntityId = entityId
-        | None -> false
-
-    /// Whether the SDK-default audit log should DROP `audit`: a generic
-    /// (`Replay = None`) lifecycle row for the entity under the active
-    /// scope. Every other event — including the provenance-carrying row
-    /// for that same entity — is `false`.
-    let suppresses (audit: AuditEvent) : bool =
-        match audit with
-        | EntityCreated payload
-        | EntityUpdated payload
-        | EntityDeleted payload -> Option.isNone payload.Replay && covers payload
-        | _ -> false
-
-    /// Run `work` as the replay of `(entityType, entityId)`: for its
-    /// duration, on this async flow, the entity store's generic
-    /// lifecycle row for that entity is suppressed by the SDK-default
-    /// audit log. The caller is responsible for recording the
-    /// provenance-carrying row afterwards — entering the scope without
-    /// doing so loses the audit row entirely.
-    let run (entityType: string) (entityId: string) (work: Async<'T>) : Async<'T> = async {
-        let previous = current.Value
-        current.Value <- Some(entityType, entityId)
-
-        try
-            return! work
-        finally
-            current.Value <- previous
-    }
-
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`
 /// so audit events flow through the same retention policy, blob
 /// layout, and webhook hooks as every other platform event.
@@ -2216,24 +2146,7 @@ type EventStoreAuditLog
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
-            // Phase 759 — under an active `EntityAuditReplayScope` the
-            // entity store's generic ("system", write-time) lifecycle
-            // row for the entity being replayed is dropped: the replay
-            // handler records the provenance-carrying row for the same
-            // version immediately after, so one applied version yields
-            // one row. Every other event, including that provenance
-            // row, takes the ordinary path.
-            if EntityAuditReplayScope.suppresses audit then
-                logger.Debug(
-                    sprintf
-                        "[AuditLog] event=lifecycle_row_suppressed scope=%s eventType=%s — offline replay records the provenance-carrying row"
-                        scopeId
-                        (AuditEvent.eventTypeName audit)
-                )
-            else
-                return! record scopeId audit
-        }
+        member _.Record(scopeId, audit) = record scopeId audit
 
         member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
             let! events = eventStore.ReadBySource(scopeId, AuditSourceModule.value)

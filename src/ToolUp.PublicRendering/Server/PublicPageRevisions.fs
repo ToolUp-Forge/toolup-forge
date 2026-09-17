@@ -48,18 +48,31 @@ let current (store: IEntityStore) (slug: string) : Async<Result<PublicPage, Enti
 
 /// Restore a prior revision: write its content back as a new current
 /// version (append-only — history is preserved, including the restore
-/// itself). Returns the restored page on success.
-let restore (store: IEntityStore) (slug: string) (version: int) : Async<Result<PublicPage, EntityError>> = async {
-    match!
-        store.GetVersion<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug, version)
-    with
-    | Error e -> return Error e
-    | Ok old ->
-        // A fresh envelope (Version = 0) — the store assigns the next
-        // version on Save, so the restore appends rather than rewinds.
-        let restored = PublicPageEntity.fromPage old.Page
+/// itself). Returns the restored page on success. `actor` is stamped on
+/// the version the restore appends (Phase 806).
+let restore
+    (store: IEntityStore)
+    (actor: EntityActor)
+    (slug: string)
+    (version: int)
+    : Async<Result<PublicPage, EntityError>> =
+    async {
 
-        match! store.Save(PublicPageEntity.PublicScope, restored) with
-        | Ok _ -> return Ok old.Page
+        match!
+            store.GetVersion<PublicPageEntity>(
+                PublicPageEntity.PublicScope,
+                PublicPageEntity.EntityTypeName,
+                slug,
+                version
+            )
+        with
         | Error e -> return Error e
-}
+        | Ok old ->
+            // A fresh envelope (Version = 0) — the store assigns the next
+            // version on Save, so the restore appends rather than rewinds.
+            let restored = PublicPageEntity.fromPage old.Page
+
+            match! store.Save(PublicPageEntity.PublicScope, actor, restored) with
+            | Ok _ -> return Ok old.Page
+            | Error e -> return Error e
+    }

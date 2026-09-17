@@ -177,7 +177,10 @@ module ContentAdminApiImpl =
     let private scope = PublicPageEntity.PublicScope
     let private etype = PublicPageEntity.EntityTypeName
 
-    let create (store: IEntityStore) : IContentAdminApi = {
+    /// Bind the admin surface over `store` for one caller — `actor` is the
+    /// resolved `PlatformAdmin` the gate admitted, stamped on every write
+    /// the surface makes (Phase 806).
+    let create (store: IEntityStore) (actor: EntityActor) : IContentAdminApi = {
         ListPages =
             fun () -> async {
                 let! refs = store.ListAll<PublicPageEntity>(scope, etype, 0, 5000)
@@ -211,7 +214,7 @@ module ContentAdminApiImpl =
             }
         SavePage =
             fun page -> async {
-                match! store.Save(scope, PublicPageEntity.fromPage page) with
+                match! store.Save(scope, actor, PublicPageEntity.fromPage page) with
                 | Ok _ -> return Ok()
                 | Error e -> return Error(StorageError(sprintf "%A" e))
             }
@@ -225,14 +228,14 @@ module ContentAdminApiImpl =
                             Page = { e.Page with Status = status }
                     }
 
-                    match! store.Save(scope, updated) with
+                    match! store.Save(scope, actor, updated) with
                     | Ok _ -> return Ok()
                     | Error err -> return Error(StorageError(sprintf "%A" err))
             }
         ListRevisions = fun slug -> PublicPageRevisions.list store slug
         RestoreRevision =
             fun (slug, version) -> async {
-                match! PublicPageRevisions.restore store slug version with
+                match! PublicPageRevisions.restore store actor slug version with
                 | Ok _ -> return Ok()
                 | Error(EntityError.NotFound _) -> return Error NotFound
                 | Error other -> return Error(StorageError(sprintf "%A" other))

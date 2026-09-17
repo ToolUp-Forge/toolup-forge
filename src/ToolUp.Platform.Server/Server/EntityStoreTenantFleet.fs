@@ -127,7 +127,12 @@ type EntityStoreTenantFleet
                                 request.DisplayName
                                 DateTime.UtcNow
 
-                        let! saved = entityStore.Save<Tenant>(Tenant.CatalogScope, tenant)
+                        let! saved =
+                            entityStore.Save<Tenant>(
+                                Tenant.CatalogScope,
+                                EntityActor.ofPrincipal request.OwnerUserId,
+                                tenant
+                            )
 
                         match saved with
                         | Ok _ -> return Ok { tenant with Version = 1 }
@@ -278,7 +283,8 @@ type EntityStoreTenantFleet
                         match Tenant.transitionStatus Evicted DateTime.UtcNow t with
                         | Error msg -> return Error(FleetStorageFailure msg)
                         | Ok next ->
-                            let! saved = entityStore.Save<Tenant>(Tenant.CatalogScope, next)
+                            let! saved =
+                                entityStore.Save<Tenant>(Tenant.CatalogScope, EntityActor.ofPrincipal byUserId, next)
 
                             match saved with
                             | Error e -> return Error(FleetStorageFailure(EntityError.message e))
@@ -327,7 +333,8 @@ type EntityStoreTenantFleet
                     match Tenant.transitionStatus Active DateTime.UtcNow t with
                     | Error msg -> return Error(FleetStorageFailure msg)
                     | Ok next ->
-                        let! saved = entityStore.Save<Tenant>(Tenant.CatalogScope, next)
+                        let! saved =
+                            entityStore.Save<Tenant>(Tenant.CatalogScope, EntityActor.ofPrincipal byUserId, next)
 
                         match saved with
                         | Ok _ ->

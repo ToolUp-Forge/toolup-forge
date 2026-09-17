@@ -124,14 +124,21 @@ type OutboxEntityStore
     /// on the happy path, by the relay after a crash or event-store
     /// outage. Events are at-least-once (a crash between publish and
     /// intent delete re-publishes; consumers dedupe by `ModuleEvent.Id`).
-    /// A save that fails (or never happens) publishes nothing.
+    /// A save that fails (or never happens) publishes nothing. `actor`
+    /// is the actor on the wrapped store's `Save` (Phase 806).
     member _.SaveWithEvents<'T>
-        (scopeId: string, entityType: string, entityId: EntityId, entity: 'T, events: ModuleEvent list)
-        : Async<Result<EntityRef<'T>, EntityError>> =
+        (
+            scopeId: string,
+            actor: EntityActor,
+            entityType: string,
+            entityId: EntityId,
+            entity: 'T,
+            events: ModuleEvent list
+        ) : Async<Result<EntityRef<'T>, EntityError>> =
         async {
             if List.isEmpty events then
                 // Degenerate case — no coupling needed.
-                return! entityStore.Save<'T>(scopeId, entity)
+                return! entityStore.Save<'T>(scopeId, actor, entity)
             else
                 // 1. Version witness, read before anything is written.
                 let! versions = entityStore.ListVersions<'T>(scopeId, entityType, entityId)
@@ -158,7 +165,7 @@ type OutboxEntityStore
                 | Error err -> return Error(StorageFailure $"outbox intent staging failed: {err}")
                 | Ok _ ->
                     // 3. The entity save.
-                    match! entityStore.Save<'T>(scopeId, entity) with
+                    match! entityStore.Save<'T>(scopeId, actor, entity) with
                     | Error err ->
                         // Save failed — withdraw the intent so nothing
                         // publishes. Best-effort: if the delete fails,
