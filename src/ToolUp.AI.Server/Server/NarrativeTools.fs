@@ -4,6 +4,7 @@ open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Remoting.Json.SystemTextJson
@@ -641,8 +642,11 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                                         "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in, or has not enabled AI publishing via withAIPublishEnabled true."
                                 |}
                         | Some publisher ->
+                            // Phase 814 — the request's resolved user is the
+                            // principal the page's lifecycle row records.
                             let! outcome =
                                 publisher.PublishAsync(
+                                    EntityPrincipal.ofPrincipal (userIdOf ctx),
                                     slug,
                                     titleOpt,
                                     descOpt,

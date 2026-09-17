@@ -13,6 +13,7 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open Giraffe.ViewEngine
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.IEntityStore
@@ -548,7 +549,15 @@ let private pingTests =
             let doc = Narrative.create "Hello"
 
             let result =
-                publisher.PublishAsync("hello", None, None, Some "page", OverwriteExisting, doc)
+                publisher.PublishAsync(
+                    EntityPrincipal.ofPrincipal "author",
+                    "hello",
+                    None,
+                    None,
+                    Some "page",
+                    OverwriteExisting,
+                    doc
+                )
                 |> Async.RunSynchronously
 
             match result with
@@ -563,7 +572,15 @@ let private pingTests =
             let doc = Narrative.create "Hi"
 
             let result =
-                publisher.PublishAsync("hi", None, None, Some "page", OverwriteExisting, doc)
+                publisher.PublishAsync(
+                    EntityPrincipal.ofPrincipal "author",
+                    "hi",
+                    None,
+                    None,
+                    Some "page",
+                    OverwriteExisting,
+                    doc
+                )
                 |> Async.RunSynchronously
 
             match result with

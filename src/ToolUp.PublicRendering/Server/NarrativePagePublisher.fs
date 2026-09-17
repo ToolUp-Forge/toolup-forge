@@ -177,135 +177,132 @@ type PublicRenderingNarrativePagePublisher
     }
 
     interface INarrativePagePublisher with
-        member _.PublishAsync(slug, titleOverride, descriptionOverride, layoutHint, collisionPolicy, document) = async {
-            let requestedSlug = sanitiseSlug slug
+        member _.PublishAsync
+            (principal, slug, titleOverride, descriptionOverride, layoutHint, collisionPolicy, document)
+            =
+            async {
+                let requestedSlug = sanitiseSlug slug
 
-            // Phase 91 — guardrail rejections first (cheapest, no store
-            // access). An explicit layout hint outside the allow-list, or a
-            // document exceeding the section cap, is refused before any
-            // slug-collision work.
-            let guardrailViolation =
-                match guardrails.AllowedLayouts, layoutHint with
-                | Some allowed, Some h when not (Set.contains h allowed) ->
-                    Some(sprintf "layout '%s' is not permitted for AI publishing (guardrail allow-list)" h)
-                | _ ->
-                    match guardrails.MaxSections with
-                    | Some n when List.length document.Sections > n ->
-                        Some(
-                            sprintf
-                                "document has %d sections, exceeding the %d-section guardrail for AI publishing"
-                                (List.length document.Sections)
-                                n
-                        )
-                    | _ -> None
-
-            if System.String.IsNullOrWhiteSpace requestedSlug then
-                return PublishFailed "slug is required (received an empty / whitespace-only value)"
-            elif guardrailViolation.IsSome then
-                return PublishFailed guardrailViolation.Value
-            else
-                // Resolve the target slug per collision policy. Reject
-                // and AutoSuffix both consult the entity store first;
-                // OverwriteExisting skips the check (the existing Save
-                // semantics already handle the overwrite).
-                let! resolvedSlug = async {
-                    match collisionPolicy with
-                    | OverwriteExisting -> return Some requestedSlug
-                    | RejectIfExists ->
-                        let! exists = slugExists requestedSlug
-                        if exists then return None else return Some requestedSlug
-                    | AutoSuffix -> return! findFreeSlug requestedSlug 1
-                }
-
-                match resolvedSlug with
-                | None ->
-                    match collisionPolicy with
-                    | RejectIfExists ->
-                        return
-                            PublishFailed(
-                                sprintf
-                                    "slug '%s' is already occupied (RejectIfExists policy); pass a different slug or use OverwriteExisting / AutoSuffix to proceed"
-                                    requestedSlug
-                            )
+                // Phase 91 — guardrail rejections first (cheapest, no store
+                // access). An explicit layout hint outside the allow-list, or a
+                // document exceeding the section cap, is refused before any
+                // slug-collision work.
+                let guardrailViolation =
+                    match guardrails.AllowedLayouts, layoutHint with
+                    | Some allowed, Some h when not (Set.contains h allowed) ->
+                        Some(sprintf "layout '%s' is not permitted for AI publishing (guardrail allow-list)" h)
                     | _ ->
-                        return
-                            PublishFailed(
+                        match guardrails.MaxSections with
+                        | Some n when List.length document.Sections > n ->
+                            Some(
                                 sprintf
-                                    "could not find a free slug starting from '%s' within 100 attempts"
-                                    requestedSlug
+                                    "document has %d sections, exceeding the %d-section guardrail for AI publishing"
+                                    (List.length document.Sections)
+                                    n
                             )
-                | Some canonicalSlug ->
-                    let title =
-                        titleOverride
-                        |> Option.defaultValue (
-                            if System.String.IsNullOrWhiteSpace document.Title then
-                                "(untitled)"
-                            else
-                                document.Title
-                        )
+                        | _ -> None
 
-                    let description =
-                        descriptionOverride |> Option.orElse document.Subtitle |> Option.defaultValue ""
-
-                    let page: PublicPage = {
-                        Slug = Slug canonicalSlug
-                        Title = title
-                        Description = description
-                        Body = Narrative document
-                        Layout = resolveLayout layoutHint
-                        Frontmatter = Map.empty
-                        PublishedAt = Some DateTimeOffset.UtcNow
-                        Collection = None
-                        // Phase 91 — forced-draft guardrail: when enabled,
-                        // the page lands as Draft and is not publicly served
-                        // until a human moves it through the Phase 89 review
-                        // workflow. Default (off) preserves the Phase 80a
-                        // immediate-publish behaviour (GP 11).
-                        Status = (if guardrails.ForceDraft then Draft else Published)
-                        // Phase 91 — audience guardrail. Default Public
-                        // (Phase 80a / 86 behaviour); a deployment can pin a
-                        // narrower audience so AI never widens reach.
-                        Audience = guardrails.Audience
+                if System.String.IsNullOrWhiteSpace requestedSlug then
+                    return PublishFailed "slug is required (received an empty / whitespace-only value)"
+                elif guardrailViolation.IsSome then
+                    return PublishFailed guardrailViolation.Value
+                else
+                    // Resolve the target slug per collision policy. Reject
+                    // and AutoSuffix both consult the entity store first;
+                    // OverwriteExisting skips the check (the existing Save
+                    // semantics already handle the overwrite).
+                    let! resolvedSlug = async {
+                        match collisionPolicy with
+                        | OverwriteExisting -> return Some requestedSlug
+                        | RejectIfExists ->
+                            let! exists = slugExists requestedSlug
+                            if exists then return None else return Some requestedSlug
+                        | AutoSuffix -> return! findFreeSlug requestedSlug 1
                     }
 
-                    let envelope = PublicPageEntity.fromPage page
+                    match resolvedSlug with
+                    | None ->
+                        match collisionPolicy with
+                        | RejectIfExists ->
+                            return
+                                PublishFailed(
+                                    sprintf
+                                        "slug '%s' is already occupied (RejectIfExists policy); pass a different slug or use OverwriteExisting / AutoSuffix to proceed"
+                                        requestedSlug
+                                )
+                        | _ ->
+                            return
+                                PublishFailed(
+                                    sprintf
+                                        "could not find a free slug starting from '%s' within 100 attempts"
+                                        requestedSlug
+                                )
+                    | Some canonicalSlug ->
+                        let title =
+                            titleOverride
+                            |> Option.defaultValue (
+                                if System.String.IsNullOrWhiteSpace document.Title then
+                                    "(untitled)"
+                                else
+                                    document.Title
+                            )
 
-                    // Phase 806 — `INarrativePagePublisher.Publish` carries no
-                    // caller, so the write is the host's; threading the
-                    // publishing principal through that seam is the
-                    // successor phase's. Until then the row says so visibly.
-                    let! result =
-                        entityStore.Save<PublicPageEntity>(
-                            PublicPageEntity.PublicScope,
-                            EntityPrincipal.system,
-                            envelope
-                        )
+                        let description =
+                            descriptionOverride |> Option.orElse document.Subtitle |> Option.defaultValue ""
 
-                    match result with
-                    | Ok _ ->
-                        // Phase 84 — purge any cached render of this slug so
-                        // the republished content is served immediately
-                        // rather than waiting out the prior entry's TTL. A
-                        // no-op when no render cache is composed.
-                        match renderCacheInvalidator with
-                        | Some inv -> do! inv.PurgeSlug canonicalSlug
-                        | None -> ()
+                        let page: PublicPage = {
+                            Slug = Slug canonicalSlug
+                            Title = title
+                            Description = description
+                            Body = Narrative document
+                            Layout = resolveLayout layoutHint
+                            Frontmatter = Map.empty
+                            PublishedAt = Some DateTimeOffset.UtcNow
+                            Collection = None
+                            // Phase 91 — forced-draft guardrail: when enabled,
+                            // the page lands as Draft and is not publicly served
+                            // until a human moves it through the Phase 89 review
+                            // workflow. Default (off) preserves the Phase 80a
+                            // immediate-publish behaviour (GP 11).
+                            Status = (if guardrails.ForceDraft then Draft else Published)
+                            // Phase 91 — audience guardrail. Default Public
+                            // (Phase 80a / 86 behaviour); a deployment can pin a
+                            // narrower audience so AI never widens reach.
+                            Audience = guardrails.Audience
+                        }
 
-                        // Phase 109 — push the just-published URL to IndexNow
-                        // so participating engines re-crawl it immediately
-                        // rather than waiting out the passive-crawl window. A
-                        // no-op when no IndexNow is composed (or its
-                        // `PingOnPublish` toggle is off — the service itself
-                        // gates that). Best-effort: PingSlug swallows its own
-                        // transport failures, so a push outage never fails a
-                        // publish.
-                        match indexNowService with
-                        | Some svc -> do! svc.PingSlug canonicalSlug
-                        | None -> ()
+                        let envelope = PublicPageEntity.fromPage page
 
-                        return PublishSucceeded canonicalSlug
-                    | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
-        }
+                        // Phase 814 — the publishing caller is the principal on
+                        // the page's lifecycle row; never substituted.
+                        let! result =
+                            entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, principal, envelope)
+
+                        match result with
+                        | Ok _ ->
+                            // Phase 84 — purge any cached render of this slug so
+                            // the republished content is served immediately
+                            // rather than waiting out the prior entry's TTL. A
+                            // no-op when no render cache is composed.
+                            match renderCacheInvalidator with
+                            | Some inv -> do! inv.PurgeSlug canonicalSlug
+                            | None -> ()
+
+                            // Phase 109 — push the just-published URL to IndexNow
+                            // so participating engines re-crawl it immediately
+                            // rather than waiting out the passive-crawl window. A
+                            // no-op when no IndexNow is composed (or its
+                            // `PingOnPublish` toggle is off — the service itself
+                            // gates that). Best-effort: PingSlug swallows its own
+                            // transport failures, so a push outage never fails a
+                            // publish.
+                            match indexNowService with
+                            | Some svc -> do! svc.PingSlug canonicalSlug
+                            | None -> ()
+
+                            return PublishSucceeded canonicalSlug
+                        | Error err -> return PublishFailed(sprintf "entity store rejected the save: %A" err)
+            }
 
 module PublicRenderingNarrativePagePublisher =
     /// Factory invoked from `PublicRenderingCompose.run` once the

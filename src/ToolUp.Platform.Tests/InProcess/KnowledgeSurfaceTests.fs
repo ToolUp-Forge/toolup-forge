@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.KnowledgeSurfaceTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.IRetrievalPipeline
@@ -125,7 +126,7 @@ let private mkPublisher (guardrails: NarrativePublishGuardrails) : INarrativePag
     publisher, store
 
 let private publish (publisher: INarrativePagePublisher) (slug: string) (doc: NarrativeDocument) =
-    publisher.PublishAsync(slug, None, None, Some "page", OverwriteExisting, doc)
+    publisher.PublishAsync(EntityPrincipal.ofPrincipal "author", slug, None, None, Some "page", OverwriteExisting, doc)
     |> Async.RunSynchronously
 
 let private readBack (store: IEntityStore) (slug: string) : PublicPage =

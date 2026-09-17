@@ -1,6 +1,7 @@
 namespace ToolUp.Platform
 
 open System
+open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Narrative
 
 /// Identity of a narrative entry — a stable pointer a module writes
@@ -237,7 +238,11 @@ type AIPublishAuthoriser = AIPublishAuthoriser of (Microsoft.AspNetCore.Http.Htt
 ///      monotonic; cross-slug ordering is not promised
 ///   6. Precision at lower bound — n/a (no time semantics)
 type INarrativePagePublisher =
-    /// Publish the document at the given slug. `titleOverride` and
+    /// Publish the document at the given slug. `principal` is the caller
+    /// publishing it — the `publish_narrative` AI tool passes the
+    /// request's resolved user — and is what the lifecycle audit row for
+    /// the page entity records (Phase 814); an implementation never
+    /// substitutes `EntityPrincipal.system` for it. `titleOverride` and
     /// `descriptionOverride` let the caller surface a page Title /
     /// Description distinct from the document's own (most relevant for
     /// AI-emitted narratives where the document's analytics-shape title
@@ -248,6 +253,7 @@ type INarrativePagePublisher =
     /// `SlugCollisionPolicy` for the semantics; pass `OverwriteExisting`
     /// to preserve the Phase 80a default.
     abstract member PublishAsync:
+        principal: EntityPrincipal *
         slug: string *
         titleOverride: string option *
         descriptionOverride: string option *
