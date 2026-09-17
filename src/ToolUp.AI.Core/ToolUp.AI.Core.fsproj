@@ -46,6 +46,11 @@
              `AILatencyRecord` is the stream the window is summed from;
              depends on nothing else in this tier. -->
         <Compile Include="Shared\AIBudgetTypes.fs" />
+        <!-- Phase 791 — ModelInput: closed value for everything a provider sees.
+             After all other types since it composes AITypes, AILatencyTypes, and
+             the Facts disclosure types from Platform.Core. The smart constructor
+             enforces affirmative disclosure verdicts at construction time. -->
+        <Compile Include="Shared\ModelInput.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>
