@@ -1012,6 +1012,48 @@ ModuleVisibilityAdminUI+RuleKind.Tag : System.Int32 { get }
 ModuleVisibilityAdminUI+RuleKind+Tags (class)
 ModuleVisibilityAdminUI+RuleKind+Tags.Allow : System.Int32 (literal)
 ModuleVisibilityAdminUI+RuleKind+Tags.Deny : System.Int32 (literal)
+NotificationPreferencesUI (class)
+NotificationPreferencesUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferencesConfig]) : ToolUp.Platform.ErasedModule
+NotificationPreferencesUI.init() : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+NotificationPreferencesUI.update(NotificationPreferencesUI+Msg, NotificationPreferencesUI+Model) : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+NotificationPreferencesUI+Model (class)
+NotificationPreferencesUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferenceView], ToolUp.Platform.UserNotificationPreferences, System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+NotificationPreferencesUI+Model.Busy : System.Boolean { get }
+NotificationPreferencesUI+Model.Draft : ToolUp.Platform.UserNotificationPreferences { get }
+NotificationPreferencesUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+NotificationPreferencesUI+Model.Loaded : System.Boolean { get }
+NotificationPreferencesUI+Model.Saved : System.Boolean { get }
+NotificationPreferencesUI+Model.View : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferenceView] { get }
+NotificationPreferencesUI+Msg (class)
+NotificationPreferencesUI+Msg.DismissError : NotificationPreferencesUI+Msg { get }
+NotificationPreferencesUI+Msg.IsDismissError : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsLoad : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsSave : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsSaveCompleted : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsSetCell : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsSetQuietHours : System.Boolean { get }
+NotificationPreferencesUI+Msg.IsViewLoaded : System.Boolean { get }
+NotificationPreferencesUI+Msg.Load : NotificationPreferencesUI+Msg { get }
+NotificationPreferencesUI+Msg.Save : NotificationPreferencesUI+Msg { get }
+NotificationPreferencesUI+Msg.Tag : System.Int32 { get }
+NotificationPreferencesUI+Msg+SaveCompleted (class)
+NotificationPreferencesUI+Msg+SaveCompleted.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+NotificationPreferencesUI+Msg+SetCell (class)
+NotificationPreferencesUI+Msg+SetCell.category : System.String { get }
+NotificationPreferencesUI+Msg+SetCell.channel : ToolUp.Platform.PreferenceChannel { get }
+NotificationPreferencesUI+Msg+SetCell.delivery : ToolUp.Platform.DeliveryPreference { get }
+NotificationPreferencesUI+Msg+SetQuietHours (class)
+NotificationPreferencesUI+Msg+SetQuietHours.Item : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.QuietHours] { get }
+NotificationPreferencesUI+Msg+Tags (class)
+NotificationPreferencesUI+Msg+Tags.DismissError : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.Load : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.Save : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.SaveCompleted : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.SetCell : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.SetQuietHours : System.Int32 (literal)
+NotificationPreferencesUI+Msg+Tags.ViewLoaded : System.Int32 (literal)
+NotificationPreferencesUI+Msg+ViewLoaded (class)
+NotificationPreferencesUI+Msg+ViewLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationPreferenceView, System.String] { get }
 PermissionsAdminUI (class)
 PermissionsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionsAdminConfig]) : ToolUp.Platform.ErasedModule
 PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -3138,7 +3180,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3173,6 +3215,7 @@ ToolUp.Platform.ClientConfig.ModuleVisibilityAdmin : ToolUp.Platform.ModuleVisib
 ToolUp.Platform.ClientConfig.NoActiveTeamLanding : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig] { get }
 ToolUp.Platform.ClientConfig.NoActiveTeamLandingModuleId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.NotAuthorisedView : ToolUp.Platform.NotAuthorisedMode { get }
+ToolUp.Platform.ClientConfig.NotificationPreferences : ToolUp.Platform.NotificationPreferencesMode { get }
 ToolUp.Platform.ClientConfig.Offline : ToolUp.Platform.OfflineMode { get }
 ToolUp.Platform.ClientConfig.OnElmishError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientConfig.OnError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]] { get }
@@ -4459,7 +4502,7 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
@@ -4482,6 +4525,7 @@ ToolUp.Platform.MessageCatalog.ModuleVisibilityAdmin : ToolUp.Platform.ModuleVis
 ToolUp.Platform.MessageCatalog.NarrativeRenderer : ToolUp.Platform.NarrativeRendererMessages { get }
 ToolUp.Platform.MessageCatalog.NoActiveTeamLanding : ToolUp.Platform.NoActiveTeamLandingMessages { get }
 ToolUp.Platform.MessageCatalog.NotAuthorised : ToolUp.Platform.NotAuthorisedMessages { get }
+ToolUp.Platform.MessageCatalog.NotificationPreferences : ToolUp.Platform.NotificationPreferencesMessages { get }
 ToolUp.Platform.MessageCatalog.OAuth1aCredential : ToolUp.Platform.OAuth1aCredentialMessages { get }
 ToolUp.Platform.MessageCatalog.PermissionsAdmin : ToolUp.Platform.PermissionsAdminMessages { get }
 ToolUp.Platform.MessageCatalog.PlatformAdmin : ToolUp.Platform.PlatformAdminMessages { get }
@@ -4771,6 +4815,55 @@ ToolUp.Platform.NotificationClient.reset() : System.Void
 ToolUp.Platform.NotificationClient.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.NotificationEnvelope, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.NotificationClient+EventSource (interface)
 ToolUp.Platform.NotificationClient+EventSource.close() : System.Void
+ToolUp.Platform.NotificationPreferencesConfig (class)
+ToolUp.Platform.NotificationPreferencesConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.NotificationPreferencesConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.NotificationPreferencesConfig.Name : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages (class)
+ToolUp.Platform.NotificationPreferencesMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.NotificationPreferencesMessages.AlwaysDelivered : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.ApplyQuietHours : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.CategoryColumn : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.ChannelEmail : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.ChannelPush : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.ChannelSms : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.DeliveryImmediate : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.DeliveryMuted : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.DigestDaily : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.DigestHourly : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.DigestWeekly : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Dismiss : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Heading : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Loading : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.NoCategories : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.NoChannels : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursBody : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursEnabled : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursEnd : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursHeading : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursStart : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.QuietHoursTimeZone : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Save : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Saved : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Saving : System.String { get }
+ToolUp.Platform.NotificationPreferencesMessages.Subheading : System.String { get }
+ToolUp.Platform.NotificationPreferencesMode (class)
+ToolUp.Platform.NotificationPreferencesMode.DefaultNotificationPreferencesUI : ToolUp.Platform.NotificationPreferencesMode { get }
+ToolUp.Platform.NotificationPreferencesMode.IsConfiguredNotificationPreferencesUI : System.Boolean { get }
+ToolUp.Platform.NotificationPreferencesMode.IsDefaultNotificationPreferencesUI : System.Boolean { get }
+ToolUp.Platform.NotificationPreferencesMode.IsExternalNotificationPreferencesUI : System.Boolean { get }
+ToolUp.Platform.NotificationPreferencesMode.IsNoNotificationPreferencesUI : System.Boolean { get }
+ToolUp.Platform.NotificationPreferencesMode.NoNotificationPreferencesUI : ToolUp.Platform.NotificationPreferencesMode { get }
+ToolUp.Platform.NotificationPreferencesMode.Tag : System.Int32 { get }
+ToolUp.Platform.NotificationPreferencesMode+ConfiguredNotificationPreferencesUI (class)
+ToolUp.Platform.NotificationPreferencesMode+ConfiguredNotificationPreferencesUI.Item : ToolUp.Platform.NotificationPreferencesConfig { get }
+ToolUp.Platform.NotificationPreferencesMode+ExternalNotificationPreferencesUI (class)
+ToolUp.Platform.NotificationPreferencesMode+ExternalNotificationPreferencesUI.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.NotificationPreferencesMode+Tags (class)
+ToolUp.Platform.NotificationPreferencesMode+Tags.ConfiguredNotificationPreferencesUI : System.Int32 (literal)
+ToolUp.Platform.NotificationPreferencesMode+Tags.DefaultNotificationPreferencesUI : System.Int32 (literal)
+ToolUp.Platform.NotificationPreferencesMode+Tags.ExternalNotificationPreferencesUI : System.Int32 (literal)
+ToolUp.Platform.NotificationPreferencesMode+Tags.NoNotificationPreferencesUI : System.Int32 (literal)
 ToolUp.Platform.OAuth1aCredentialMessages (class)
 ToolUp.Platform.OAuth1aCredentialMessages..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.OAuth1aCredentialMessages.Authorize : System.String { get }

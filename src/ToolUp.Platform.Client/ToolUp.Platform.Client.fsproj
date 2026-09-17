@@ -402,6 +402,9 @@
              scoped API tokens). Owner/Admin nav role; opt-in via
              ClientConfig.ServiceAccountAdmin. -->
         <Compile Include="Client\ServiceAccountUI.fs" />
+        <!-- Phase 441 — built-in notification preference centre over
+             INotificationPreferenceApi; gated by ClientConfig.NotificationPreferences. -->
+        <Compile Include="Client\NotificationPreferencesUI.fs" />
         <!-- Module-visibility profile editor — the admin surface over
              IModuleVisibilityApi. Opt-in via ClientConfig.ModuleVisibilityAdmin. -->
         <Compile Include="Client\ModuleVisibilityAdminUI.fs" />

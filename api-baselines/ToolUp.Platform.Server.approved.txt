@@ -923,6 +923,10 @@ ToolUp.Platform.BlobModelRegistryModule (class)
 ToolUp.Platform.BlobModelRegistryModule.create(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLimits(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits) : ToolUp.Platform.IModelRegistry
 ToolUp.Platform.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILineageStore) : ToolUp.Platform.IModelRegistry
+ToolUp.Platform.BlobNotificationPreferenceStore (class)
+ToolUp.Platform.BlobNotificationPreferenceStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.INotificationPreferenceStore
+ToolUp.Platform.BlobNotificationPreferenceStore+BlobNotificationPreferenceStore (class)
+ToolUp.Platform.BlobNotificationPreferenceStore+BlobNotificationPreferenceStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.BlobPrivacyBudgetLedger (class)
 ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobPrivacyBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
@@ -1538,17 +1542,24 @@ ToolUp.Platform.ComposeNotifications (class)
 ToolUp.Platform.ComposeNotifications.buildNotificationStack(ToolUp.Platform.ServerConfig, ToolUp.Platform.NotificationMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, ToolUp.Platform.Tracing.IActivitySink, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Metrics.IMetricsSink]) : ToolUp.Platform.ComposeNotifications+NotificationStack
 ToolUp.Platform.ComposeNotifications.registerAuditFallbackReplay(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeNotifications.registerCrdtDocumentStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore]) : System.Void
+ToolUp.Platform.ComposeNotifications.registerNotificationPreferences(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeNotifications.registerPresenceSubstrate(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerShareTokenStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore]) : System.Void
 ToolUp.Platform.ComposeNotifications.registerTransactionalDispatcher(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.INotificationSink]) : System.Void
+ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate (class)
+ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate..ctor(ToolUp.Platform.INotificationPreferenceStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.NotificationPreferenceSettings)
+ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate.Beneath : ToolUp.Platform.INotificationChannel { get }
+ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate.Settings : ToolUp.Platform.NotificationPreferenceSettings { get }
+ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate.Store : ToolUp.Platform.INotificationPreferenceStore { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack (class)
-ToolUp.Platform.ComposeNotifications+NotificationStack..ctor(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IConfigStore, ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore], ToolUp.Platform.INarrativeStore)
+ToolUp.Platform.ComposeNotifications+NotificationStack..ctor(ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.INotificationChannel, ToolUp.Platform.IConfigStore, ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher], ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore], ToolUp.Platform.INarrativeStore)
 ToolUp.Platform.ComposeNotifications+NotificationStack.AuditLog : ToolUp.Platform.IAuditLog { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.BaseNotificationChannel : ToolUp.Platform.INotificationChannel { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ConfigMigrationSupport : ToolUp.Platform.ConfigMigrationRegistry+ConfigMigrationSupport { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ConfigStoreInstance : ToolUp.Platform.IConfigStore { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.CrdtDocumentStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ICrdtDocumentStore] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.NarrativeStore : ToolUp.Platform.INarrativeStore { get }
+ToolUp.Platform.ComposeNotifications+NotificationStack.NotificationPreferences : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComposeNotifications+NotificationPreferenceSubstrate] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.PresenceSubstrate : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.IPresenceTracker, ToolUp.Platform.IEntityLockStore]] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ResolvedNotificationChannel : ToolUp.Platform.INotificationChannel { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.ShareTokenStoreInstance : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore] { get }
@@ -3085,6 +3096,13 @@ ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Name : System.String { ge
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Status : System.String { get }
 ToolUp.Platform.DiagnosticBundleHandler (class)
 ToolUp.Platform.DiagnosticBundleHandler.route(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.DigestJobHandler (class)
+ToolUp.Platform.DigestJobHandler..ctor(ToolUp.Platform.INotificationPreferenceStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.NotificationPreferenceSettings, ToolUp.Platform.ILogger)
+ToolUp.Platform.DigestRenderer (class)
+ToolUp.Platform.DigestRenderer.body(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]) : System.String
+ToolUp.Platform.DigestRenderer.marker(ToolUp.Platform.DigestFrequency, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]) : System.String
+ToolUp.Platform.DigestRenderer.render(ToolUp.Platform.NotificationPreferenceSettings, ToolUp.Platform.PreferenceChannel, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]) : ToolUp.Platform.Notification
+ToolUp.Platform.DigestRenderer.subject(System.String, System.Int32) : System.String
 ToolUp.Platform.DiodeConsent (class)
 ToolUp.Platform.DiodeConsent.DiodeWithheld : ToolUp.Platform.DiodeConsent { get }
 ToolUp.Platform.DiodeConsent.IsDiodeGranted : System.Boolean { get }
@@ -5542,6 +5560,16 @@ ToolUp.Platform.INotificationAddressBook (interface)
 ToolUp.Platform.INotificationAddressBook.ResolveEmail(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress]]
 ToolUp.Platform.INotificationAddressBook.ResolvePhone(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber]]
 ToolUp.Platform.INotificationAddressBook.ResolvePushTokens(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken]]
+ToolUp.Platform.INotificationPreferenceStore (interface)
+ToolUp.Platform.INotificationPreferenceStore.Enqueue(System.String, ToolUp.Platform.PendingNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.INotificationPreferenceStore.GetDigestWatermarks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.DateTime]]
+ToolUp.Platform.INotificationPreferenceStore.GetPreferences(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserNotificationPreferences, System.String]]
+ToolUp.Platform.INotificationPreferenceStore.ListPending(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]]
+ToolUp.Platform.INotificationPreferenceStore.ListPendingUsers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.INotificationPreferenceStore.ListScopesWithPending() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.INotificationPreferenceStore.Remove(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Guid]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.INotificationPreferenceStore.SavePreferences(System.String, System.String, ToolUp.Platform.UserNotificationPreferences) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.INotificationPreferenceStore.SetDigestWatermark(System.String, System.String, ToolUp.Platform.DigestFrequency, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.INotificationSink (interface)
 ToolUp.Platform.INotificationSink.Kind : ToolUp.Platform.NotificationKind+SinkKind { get }
 ToolUp.Platform.INotificationSink.Provider : System.String { get }
@@ -7281,6 +7309,10 @@ ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook (class
 ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationAddressBook+NoOpNotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook+NoOpNotificationAddressBook..ctor()
+ToolUp.Platform.NotificationCategoryScope (class)
+ToolUp.Platform.NotificationCategoryScope.current() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.NotificationCategoryScope.publish(ToolUp.Platform.INotificationChannel, System.String, System.String, ToolUp.Platform.Notification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.NotificationCategoryScope.push(System.String) : System.IDisposable
 ToolUp.Platform.NotificationChannel (class)
 ToolUp.Platform.NotificationChannel.fromEnv(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationChannel+NotificationChannelResolver]) : System.Tuple`3[ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthChecks+IHealthCheck], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigValidation+IConfigValidator]]
 ToolUp.Platform.NotificationChannel+InMemoryNotificationChannel (class)
@@ -7295,8 +7327,24 @@ ToolUp.Platform.NotificationChannel+NotificationChannelResolver.Resolve : Micros
 ToolUp.Platform.NotificationChannelInstanceValidator (class)
 ToolUp.Platform.NotificationChannelInstanceValidator+NotificationChannelInstanceValidator (class)
 ToolUp.Platform.NotificationChannelInstanceValidator+NotificationChannelInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.NotificationDigest (class)
+ToolUp.Platform.NotificationDigest.HandlerName : System.String (literal)
+ToolUp.Platform.NotificationDigest.create(ToolUp.Platform.INotificationPreferenceStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.NotificationPreferenceSettings, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.NotificationDigest.declaration(ToolUp.Platform.INotificationPreferenceStore, ToolUp.Platform.INotificationChannel, ToolUp.Platform.NotificationPreferenceSettings, ToolUp.Platform.ILogger) : ToolUp.Platform.ScheduledJobDeclaration
 ToolUp.Platform.NotificationHandler (class)
 ToolUp.Platform.NotificationHandler.notificationHandler(ToolUp.Platform.INotificationChannel, ToolUp.Platform.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.Platform.NotificationPreferenceApiHandler (class)
+ToolUp.Platform.NotificationPreferenceApiHandler.notificationPreferenceApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.INotificationPreferenceApi
+ToolUp.Platform.NotificationPreferenceFilter (class)
+ToolUp.Platform.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.TimeZoneInfo]])
+ToolUp.Platform.NotificationPreferenceFilterModule (class)
+ToolUp.Platform.NotificationPreferenceFilterModule.DigestQueuedReason : System.String (literal)
+ToolUp.Platform.NotificationPreferenceFilterModule.MutedReason : System.String (literal)
+ToolUp.Platform.NotificationPreferenceFilterModule.QuietHoursDeferredReason : System.String (literal)
+ToolUp.Platform.NotificationPreferenceFilterModule.hashRecipient(System.String) : System.String
+ToolUp.Platform.NotificationPreferenceFilterModule.narrowTo(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Notification) : ToolUp.Platform.Notification
+ToolUp.Platform.NotificationPreferenceFilterModule.recipientsOf(ToolUp.Platform.Notification) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.NotifyingCrdtDocumentStore (class)
 ToolUp.Platform.NotifyingCrdtDocumentStore..ctor(ToolUp.Platform.ICrdtDocumentStore, ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.NotifyingNarrativeStore (class)
@@ -8280,6 +8328,9 @@ ToolUp.Platform.ProviderStatusProbeJobHandler+ProviderStatusProbePayloadModule.t
 ToolUp.Platform.PublicBaseUrlFormatValidator (class)
 ToolUp.Platform.PublicBaseUrlFormatValidator+PublicBaseUrlFormatValidator (class)
 ToolUp.Platform.PublicBaseUrlFormatValidator+PublicBaseUrlFormatValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.QuietHoursClock (class)
+ToolUp.Platform.QuietHoursClock.deferralFor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.TimeZoneInfo]], System.DateTime, ToolUp.Platform.QuietHours) : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]
+ToolUp.Platform.QuietHoursClock.systemZone(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.TimeZoneInfo]
 ToolUp.Platform.RateLimitConfigValidator (class)
 ToolUp.Platform.RateLimitConfigValidator+RateLimitConfigValidator (class)
 ToolUp.Platform.RateLimitConfigValidator+RateLimitConfigValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -9100,6 +9151,8 @@ ToolUp.Platform.ServerAppModule.withMetricRegistrations(Microsoft.FSharp.Collect
 ToolUp.Platform.ServerAppModule.withMetricsSink(ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withModelExecution(ToolUp.Platform.ComposeModelExecution+ModelExecutionComposeOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withModuleBindingVerifier(ToolUp.Platform.IModuleBindingVerifier, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withNotificationCategories(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withNotificationCategory(ToolUp.Platform.NotificationCategory, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withNotifications(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withOAuth1aFlow(ToolUp.Platform.IOAuth1aFlow, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withOAuthFlow(ToolUp.Platform.IOAuthCredentialFlow, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -9127,7 +9180,7 @@ ToolUp.Platform.ServerHost (class)
 ToolUp.Platform.ServerHost.createWebHost(Microsoft.AspNetCore.Builder.WebApplication, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : ToolUp.Platform.IServerHost
 ToolUp.Platform.ServerHost.createWorkerHost(Microsoft.Extensions.Hosting.IHost, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : ToolUp.Platform.IServerHost
 ToolUp.Platform.ServerModule (class)
-ToolUp.Platform.ServerModule..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], ToolUp.Platform.SurfaceRequirement, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition], ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure])
+ToolUp.Platform.ServerModule..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], ToolUp.Platform.SurfaceRequirement, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition], ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory])
 ToolUp.Platform.ServerModule.AIExposure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure] { get }
 ToolUp.Platform.ServerModule.AITools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
 ToolUp.Platform.ServerModule.BindingStamp : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp] { get }
@@ -9142,6 +9195,7 @@ ToolUp.Platform.ServerModule.JobHandlers : Microsoft.FSharp.Collections.FSharpLi
 ToolUp.Platform.ServerModule.MetricDefinitions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition] { get }
 ToolUp.Platform.ServerModule.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition] { get }
 ToolUp.Platform.ServerModule.Name : System.String { get }
+ToolUp.Platform.ServerModule.NotificationCategories : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory] { get }
 ToolUp.Platform.ServerModule.QueryHandlers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler] { get }
 ToolUp.Platform.ServerModule.RoutePrefixes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ServerModule.RouteSurfaceRequirements : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]] { get }
@@ -9166,6 +9220,7 @@ ToolUp.Platform.ServerModuleModule.withGuardedApi`1(Microsoft.FSharp.Core.FSharp
 ToolUp.Platform.ServerModuleModule.withHandlers(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withJobHandler(System.String, ToolUp.Platform.IJobHandler, ToolUp.Platform.Trigger, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withMetrics(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
+ToolUp.Platform.ServerModuleModule.withNotificationCategories(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withQueryContract`2(ToolUp.Platform.ModuleQueryContract`2[Req, Resp], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleQueryContext, Microsoft.FSharp.Core.FSharpFunc`2[Req, Microsoft.FSharp.Control.FSharpAsync`1[Resp]]], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withQueryHandlers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withRoutePrefix(System.String, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule

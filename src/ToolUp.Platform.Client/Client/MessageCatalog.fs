@@ -699,6 +699,36 @@ module MessageCatalog =
             Copied = "Copied!"
             CopyAsMarkdown = "Copy as Markdown"
         }
+        NotificationPreferences = {
+            Heading = "Notification preferences"
+            Subheading =
+                "Choose how each kind of notification reaches you on each channel, and set quiet hours during which immediate sends are held until the window ends."
+            Loading = "Loading…"
+            Dismiss = "dismiss"
+            NoCategories = "No notification categories have been declared in this deployment yet."
+            NoChannels = "This deployment has no outbound notification channel configured."
+            CategoryColumn = "Category"
+            ChannelEmail = "Email"
+            ChannelSms = "SMS"
+            ChannelPush = "Push"
+            DeliveryImmediate = "Immediately"
+            DeliveryMuted = "Muted"
+            DigestHourly = "Hourly digest"
+            DigestDaily = "Daily digest"
+            DigestWeekly = "Weekly digest"
+            AlwaysDelivered = "Always delivered"
+            QuietHoursHeading = "Quiet hours"
+            QuietHoursBody =
+                "Immediate notifications that arrive inside this window are held and delivered when it ends. Muted and digest settings are unaffected."
+            QuietHoursEnabled = "Enable quiet hours"
+            QuietHoursStart = "From"
+            QuietHoursEnd = "Until"
+            QuietHoursTimeZone = "Time zone"
+            ApplyQuietHours = "Apply"
+            Save = "Save preferences"
+            Saving = "Saving…"
+            Saved = "Preferences saved."
+        }
         ServiceAccount = {
             Heading = "Service accounts"
             Subheading =

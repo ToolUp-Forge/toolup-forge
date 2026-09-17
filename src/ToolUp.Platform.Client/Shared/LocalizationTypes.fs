@@ -1025,6 +1025,64 @@ type NarrativeRendererMessages = {
     CopyAsMarkdown: string
 }
 
+/// The built-in notification preference centre (`NotificationPreferencesUI`,
+/// Phase 441).
+type NotificationPreferencesMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    /// Shown until the first load completes.
+    Loading: string
+    /// The error banner's dismiss action.
+    Dismiss: string
+    /// Empty state when no module has declared a notification category.
+    NoCategories: string
+    /// Empty state when the deployment has no outbound sink at all.
+    NoChannels: string
+    /// Header of the matrix's first column.
+    CategoryColumn: string
+    /// Column header for the email channel family.
+    ChannelEmail: string
+    /// Column header for the SMS channel family.
+    ChannelSms: string
+    /// Column header for the push channel family.
+    ChannelPush: string
+    /// Cell options. The underlying wire tokens stay fixed; only these
+    /// display labels are localised.
+    DeliveryImmediate: string
+    /// Cell option: muted.
+    DeliveryMuted: string
+    /// Cell option: hourly digest.
+    DigestHourly: string
+    /// Cell option: daily digest.
+    DigestDaily: string
+    /// Cell option: weekly digest.
+    DigestWeekly: string
+    /// Shown in place of the picker on a non-suppressible row.
+    AlwaysDelivered: string
+    /// Quiet-hours section heading.
+    QuietHoursHeading: string
+    /// Quiet-hours explanatory prose.
+    QuietHoursBody: string
+    /// The enable checkbox's label.
+    QuietHoursEnabled: string
+    /// Label of the window-start time input.
+    QuietHoursStart: string
+    /// Label of the window-end time input.
+    QuietHoursEnd: string
+    /// Label of the time-zone input.
+    QuietHoursTimeZone: string
+    /// The quiet-hours form's apply-to-draft button.
+    ApplyQuietHours: string
+    /// Save button at rest.
+    Save: string
+    /// Save button while the request is in flight.
+    Saving: string
+    /// Confirmation shown after a successful save.
+    Saved: string
+}
+
 /// The built-in service-account admin module (`ServiceAccountUI`, Phase 527).
 type ServiceAccountMessages = {
     /// Page heading.
@@ -2686,6 +2744,7 @@ type MessageCatalog = {
     WebhookAdmin: WebhookAdminMessages
     NarrativeRenderer: NarrativeRendererMessages
     ServiceAccount: ServiceAccountMessages
+    NotificationPreferences: NotificationPreferencesMessages
     DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
     TeamConfig: TeamConfigMessages
     TenantLifecycleAdmin: TenantLifecycleAdminMessages

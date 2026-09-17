@@ -3646,6 +3646,19 @@ module Client =
             | _, ConfiguredServiceAccountAdmin cfg -> [ ServiceAccountUI.create (Some cfg) ]
             | _, ExternalServiceAccountAdmin custom -> [ custom ]
 
+        // Phase 441 — notification preference centre. Same scope rule as
+        // the service-account admin above: a preference record is stored
+        // per persistent scope for a signed-in person, and an
+        // Anonymous-only deployment has neither, so every call would fail.
+        // Omitted whatever the setting says in that case.
+        let notificationPreferences =
+            match ClientConfig.requiresAnyAuth config, config.NotificationPreferences with
+            | false, _
+            | _, NoNotificationPreferencesUI -> []
+            | _, DefaultNotificationPreferencesUI -> [ NotificationPreferencesUI.create None ]
+            | _, ConfiguredNotificationPreferencesUI cfg -> [ NotificationPreferencesUI.create (Some cfg) ]
+            | _, ExternalNotificationPreferencesUI custom -> [ custom ]
+
         // Module-visibility profile editor: same scope rule again — a
         // profile is stored per admin scope, and an Anonymous-only
         // deployment has none, so every read / write would fail. The
@@ -3891,6 +3904,7 @@ module Client =
             @ teamConfig
             @ webhookAdmin
             @ serviceAccountAdmin
+            @ notificationPreferences
             @ moduleVisibilityAdmin
             @ sessionSecurity
             @ permissionsAdmin

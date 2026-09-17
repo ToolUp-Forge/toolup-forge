@@ -132,6 +132,8 @@
              migration direct + via the job handler, scope isolation, audit).
              After InMemoryBlobStorage.fs (the backing store). -->
         <Compile Include="Contracts\IUserSchemaStoreContract.fs" />
+        <!-- Phase 441 — INotificationPreferenceStore conformance pack. -->
+        <Compile Include="Contracts\INotificationPreferenceStoreContract.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\ILifecycleLockContract.fs" />
@@ -2502,6 +2504,8 @@
              asserted equal to it. -->
         <Compile Include="InProcess\BaselineMergeDriverTests.fs" />
         <Compile Include="InProcess\BackupCoordinatorTests.fs" />
+        <!-- Phase 441 — notification preference filter + digest job. -->
+        <Compile Include="InProcess\NotificationPreferenceTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
              the shared vocabulary (System-only, source-linked into

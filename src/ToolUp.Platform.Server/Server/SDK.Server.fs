@@ -988,6 +988,18 @@ let compose
     // list under `NoJobScheduler` emits one `Warn` and skips.
     registerScheduledJobDeclarations jobSchedulerInstance scheduledJobDeclarations resolvedLogger
 
+    // Phase 441 — notification-preference substrate: the store singleton
+    // + the `_platform.notifications.digest` job on the composed scheduler
+    // (extracted to `ComposeNotifications.registerNotificationPreferences`).
+    // The filter itself was applied to the channel inside
+    // `buildNotificationStack`. No-op unless
+    // `NotificationPreferences = EnabledNotificationPreferences _`.
+    registerNotificationPreferences
+        services
+        notificationStack.NotificationPreferences
+        jobSchedulerInstance
+        resolvedLogger
+
     // Phase 9h.A — opt-in background DSR export/erasure substrate. Gated
     // on `DataSubjectRequests = Enabled { Async = true }`; registers the
     // blob-backed `IBackgroundExportStore` + the two job handlers so

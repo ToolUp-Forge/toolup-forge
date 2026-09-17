@@ -747,6 +747,23 @@ let buildRouteHandlers
             Api.make (ServiceAccountApiHandler.serviceAccountApi, routeBuilder = ServiceAccountApi.routeBuilder)
           ]
 
+    // Phase 441 — `INotificationPreferenceApi` (the surface behind the
+    // built-in `NotificationPreferencesUI`). Mounted only when
+    // `NotificationPreferences` is enabled, so a default deployment gains
+    // no route (GP 13). The signed-in / persistent-scope / no-machine-
+    // caller gate is enforced inside the handler. Route shape:
+    // `/api/INotificationPreferenceApi/*` via
+    // `NotificationPreferenceApi.routeBuilder`.
+    let notificationPreferenceApiHandler: HttpHandler list =
+        match config.NotificationPreferences with
+        | NoNotificationPreferences -> []
+        | EnabledNotificationPreferences _ -> [
+            Api.make (
+                NotificationPreferenceApiHandler.notificationPreferenceApi config,
+                routeBuilder = NotificationPreferenceApi.routeBuilder
+            )
+          ]
+
     let router (devRoutes: HttpHandler list) =
         choose (
             [
@@ -800,6 +817,7 @@ let buildRouteHandlers
             @ dataSubjectRequestApiHandler
             @ platformTenantApiHandler
             @ serviceAccountApiHandler
+            @ notificationPreferenceApiHandler
             @ devRoutes
             @ extensions.Handlers
             @ handlers

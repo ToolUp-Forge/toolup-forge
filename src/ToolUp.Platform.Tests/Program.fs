@@ -116,6 +116,10 @@ let private registeredTests =
         // history, migration direct + via the job handler, scope isolation,
         // audit emission).
         IUserSchemaStoreContract.tests
+        // Phase 441 — notification preference store conformance (preference
+        // round-trip, scope isolation, pending-queue ordering / idempotence /
+        // removal, discovery, digest watermarks) over the blob-backed default.
+        INotificationPreferenceStoreContract.tests
         DataCatalogTests.tests
         ResultStoreTests.tests
         ConversationStoreTests.tests
@@ -328,6 +332,10 @@ let private registeredTests =
         // impl; pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisDistributedLockTests.tests
         TransactionalDispatcherTests.tests
+        // Phase 441 — send-path preference filter (mute / digest / quiet hours /
+        // non-suppressible bypass / fail open), the ambient category scope, the
+        // quiet-hours clock, and the digest job's idempotent drain.
+        NotificationPreferenceTests.tests
         NotificationAddressBookTests.tests
         SmtpNotificationSinkTests.tests
         SendGridNotificationSinkTests.tests
