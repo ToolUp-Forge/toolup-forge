@@ -215,6 +215,9 @@ let private registeredTests =
         // Phase 16a — the dispatcher's failure-state lease, paired with a
         // two-replica control that must observe the lost update.
         WebhookFailureStateLeaseTests.tests
+        // Phase 766 — the cron tick as a single-leader election, paired
+        // with an own-lock-table control that must observe the double-run.
+        CronTickElectionTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 622 — presence + lock platform API (scope isolation,

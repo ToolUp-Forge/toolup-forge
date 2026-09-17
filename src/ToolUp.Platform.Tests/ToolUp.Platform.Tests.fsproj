@@ -403,6 +403,11 @@
              Contracts\InMemoryBlobStorage.fs, whose in-memory storage the
              shared registry is built over. -->
         <Compile Include="InProcess\WebhookFailureStateLeaseTests.fs" />
+        <!-- Phase 766 — the cron tick as a single-leader election over
+             IDistributedLock: two-replica arms plus the own-lock-table
+             control that must observe the double-run. After
+             WebhookFailureStateLeaseTests.fs, whose shape it follows. -->
+        <Compile Include="InProcess\CronTickElectionTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 622 — presence + lock platform API: scope isolation
