@@ -124,6 +124,11 @@ let buildDevDiagnosticsCapture
             | NoDataIngestion -> "NoDataIngestion"
             | EnabledDataIngestion -> "EnabledDataIngestion"
 
+        let backupMode =
+            match config.Backup with
+            | NoBackup -> "NoBackup"
+            | BackupEnabled _ -> "BackupEnabled"
+
         let rateLimitActive = RateLimitConfig.isEnabled config.RateLimit
 
         [
@@ -135,6 +140,7 @@ let buildDevDiagnosticsCapture
             entry "ResultStore" resultMode (config.ResultStore <> NoResultStore) "ServerConfig.ResultStore"
             entry "Lineage" lineageMode (config.Lineage <> NoLineageStore) "ServerConfig.Lineage"
             entry "DataIngestion" ingestionMode (config.DataIngestion <> NoDataIngestion) "ServerConfig.DataIngestion"
+            entry "Backup" backupMode (BackupMode.isComposed config.Backup) "ServerConfig.Backup"
             entry
                 "RateLimit"
                 (if rateLimitActive then "Enabled" else "Disabled")

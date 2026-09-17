@@ -18,8 +18,13 @@ open System
 // **Ordering contract.** Versions are linearly numbered within a
 // single `(scopeId, objectId)` — the shard. Ordering across different
 // `objectId`s or scopes is not promised (Phase 9c Rule 5). Concurrent
-// saves to the same object resolve by version-collision retry; saves
-// to different objects have no ordering relationship.
+// unconditional saves to the same object are NOT resolved by retry:
+// the default store races on "max version + 1" and the loser's
+// metadata is overwritten (its content survives, dedup'd — see
+// `DataObjectStore.fs`). The race-free path is the compare-and-set
+// `IConditionalDataObjectStore.SaveIfVersion` (Phase 753), reached
+// through `ConditionalDataObjectStore.saveIfVersion`. Saves to
+// different objects have no ordering relationship.
 //
 // **Stateless contract.** No method assumes in-memory state survives
 // between calls. Every operation derives its result from parameters +

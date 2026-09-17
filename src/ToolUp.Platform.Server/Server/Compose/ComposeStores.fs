@@ -233,7 +233,7 @@ let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (
 
         if ProcessProfileGate.shouldRegisterBackgroundService config EntityOutboxRelaySubsystem then
             services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                EntityOutboxRelayService.EntityOutboxRelayService(
+                new EntityOutboxRelayService.EntityOutboxRelayService(
                     sp.GetRequiredService<EntityOutbox.OutboxEntityStore>(),
                     resolvedLogger
                 )

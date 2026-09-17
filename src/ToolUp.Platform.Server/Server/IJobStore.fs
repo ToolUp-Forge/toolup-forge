@@ -58,8 +58,11 @@ type IJobStore =
     /// transition (`NextRunAt`, `LastRunAt`, `LastRunStatus`,
     /// `ConsecutiveFailures`). Callers should always read-modify-
     /// write through `Get` then `Update` to avoid clobbering a
-    /// concurrent scheduler tick — the in-process default takes a
-    /// per-job `lock`, distributed implementations rely on
+    /// concurrent scheduler tick — the store itself takes no lock;
+    /// the in-process default (`BlobJobStore`) is a plain
+    /// read-modify-write and relies on `InProcessJobScheduler` holding
+    /// a per-`JobId` lease on `IDistributedLock` around the cycle,
+    /// while distributed implementations rely on
     /// `IConditionalBlobStorage.UploadWithETag` (Phase 9c follow-up).
     abstract Update: definition: JobDefinition -> Async<unit>
 

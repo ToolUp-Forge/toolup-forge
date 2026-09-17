@@ -32,7 +32,8 @@ let template = {
 }
 
 // Render through the standard path — PDF bytes out.
-let! result = registry.TryResolve(Pdf).Value.Render(template, Map [ "period", TextValue "Q2 2026" ])
+let renderer = (registry.TryResolve Pdf).Value
+let! result = renderer.Render(template, Map [ "period", TextValue "Q2 2026" ])
 ```
 
 ## Format registration (how this coexists with `HtmlRenderer`)

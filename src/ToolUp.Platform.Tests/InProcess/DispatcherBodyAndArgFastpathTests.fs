@@ -27,10 +27,11 @@ open Expecto
 // integration-shape allocation-pin test (compose a multi-arg API,
 // dispatch through a TestServer, assert one outer JsonDocument.Parse
 // and zero StreamReader allocations on the cached-bytes path) is the
-// right next step but requires the TestServer scaffold the
-// `ToolUp.Platform.Tests` runner doesn't have today. Tracked as a
-// follow-up TIDY-UP item alongside the Phase 69l integration-shape
-// allocation-pin test.
+// right next step. The TestServer scaffold it needs now exists in this
+// runner (`AuditBodyDisposalTests`, `PostDispatchBodyReadTests` dispatch
+// through the real dispatcher on a TestServer); the allocation-pin test
+// itself remains unwritten. Tracked as a follow-up TIDY-UP item
+// alongside the Phase 69l integration-shape allocation-pin test.
 
 let private repoRoot () =
     let assemblyDir =

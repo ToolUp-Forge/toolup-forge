@@ -121,7 +121,12 @@ module internal Middleware =
     /// stamping, streaming dispatch) ship as Giraffe-only today. Composing
     /// them against the AspNetCore middleware would silently no-op, routing
     /// around the declared guards. Refuse at compose time and direct the
-    /// consumer at Giraffe until per-adapter parity ships.
+    /// consumer at Giraffe until per-adapter parity ships. The same gap
+    /// covers request-body buffering: this adapter never calls
+    /// `EnableBuffering` and keeps no body cache, so post-dispatch body
+    /// reads are not supported here — Phase 461's read-after-dispatch
+    /// invariant is the Giraffe adapter's, and the seam refusal above is
+    /// what keeps the pre-flight chain that depends on it off this path.
     let private refuseUnsupportedSeams (options: RemotingOptions<'ctx, 'impl>) : unit =
         let composed = [
             if options.Telemetry.IsSome then

@@ -556,7 +556,7 @@ let registerAuditFallbackReplay
             AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, resolvedLogger)
 
         services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            AuditFallbackReplayService.AuditFallbackReplayService(drainStore, eventStore, resolvedLogger)
+            new AuditFallbackReplayService.AuditFallbackReplayService(drainStore, eventStore, resolvedLogger)
             :> Microsoft.Extensions.Hosting.IHostedService
         )
         |> ignore
