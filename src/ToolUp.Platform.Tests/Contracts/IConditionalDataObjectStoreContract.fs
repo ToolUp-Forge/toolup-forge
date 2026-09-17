@@ -134,9 +134,23 @@ let private saveIf (store: IDataObjectStore) scopeId objectId (content: string) 
         Versioned
         expected
 
+let private deleteIf (store: IDataObjectStore) scopeId objectId expected =
+    ConditionalDataObjectStore.deleteIfVersion store scopeId objectId expected
+
 let private versionsOf (store: IDataObjectStore) scopeId objectId = async {
     let! vs = store.ListVersions(scopeId, objectId)
     return vs |> List.map _.Version
+}
+
+/// Park both racers at the head read, then let them go together.
+let private releaseWhenBothParked (gated: GatedBlobStorage) = async {
+    let deadline = DateTime.UtcNow.AddSeconds 10.0
+
+    while gated.Arrivals < 2 && DateTime.UtcNow < deadline do
+        do! Async.Sleep 5
+
+    Expect.equal gated.Arrivals 2 "both racers reached the head read before the gate opened"
+    gated.Release()
 }
 
 /// Bind an implementation. `factory` builds the store under test over
@@ -269,5 +283,136 @@ let tests (name: string) (factory: IBlobStorage -> IDataObjectStore) =
 
             let! versions = versionsOf store s "o1"
             Expect.isEmpty versions "nothing written"
+        }
+        // ─── Phase 806 — the conditional delete, in the 753 shape ─────
+
+        testCaseAsync
+            "DeleteIfVersion: a stale expectation is refused with nothing removed; a current one removes the object; 0 on an absent object is an idempotent Ok"
+        <| async {
+            let store = factory (InMemoryBlobStorage())
+            let s = scope ()
+            let! _ = saveIf store s "o1" "v1" 0
+            let! _ = saveIf store s "o1" "v2" 1
+
+            let! stale = deleteIf store s "o1" 1
+
+            match stale with
+            | Error(ConditionalDeleteError.VersionConflict(1, 2)) -> ()
+            | other -> failtestf "expected VersionConflict(1, 2), got %A" other
+
+            let! versions = versionsOf store s "o1"
+            Expect.equal versions [ 1; 2 ] "the refused delete removed nothing"
+
+            let! current = deleteIf store s "o1" 2
+            Expect.isOk current "the current expectation removes the object"
+
+            let! after = versionsOf store s "o1"
+            Expect.isEmpty after "every version is gone"
+
+            let! head = store.Get(s, "o1")
+
+            match head with
+            | Error NotFound -> ()
+            | other -> failtestf "expected NotFound after the delete, got %A" other
+
+            let! absent = deleteIf store s "o1" 0
+            Expect.isOk absent "nothing there to remove, nothing to conflict with — as Delete answers"
+
+            let! wrong = deleteIf store s "o1" 3
+
+            match wrong with
+            | Error(ConditionalDeleteError.VersionConflict(3, 0)) -> ()
+            | other -> failtestf "expected VersionConflict(3, 0), got %A" other
+
+            // And a create after the delete starts the object over at v1.
+            let! recreated = saveIf store s "o1" "again" 0
+
+            match recreated with
+            | Ok d -> Expect.equal d.Version 1 "the released slot is a fresh object"
+            | Error e -> failtestf "create after delete should succeed, got %A" e
+        }
+
+        testCaseAsync
+            "a save and a delete that both read head = 1 — exactly one wins, the loser is told, and the object is consistent with the winner"
+        <| async {
+            let gated = GatedBlobStorage(InMemoryBlobStorage())
+            let store = factory gated
+            let s = scope ()
+
+            let! seeded = saveIf store s "o1" "v1" 0
+            Expect.isOk seeded "seed v1"
+
+            gated.Arm()
+            let saver = saveIf store s "o1" "from-saver" 1 |> Async.StartAsTask
+            let deleter = deleteIf store s "o1" 1 |> Async.StartAsTask
+            do! releaseWhenBothParked gated
+
+            let! saved = saver |> Async.AwaitTask
+            let! deleted = deleter |> Async.AwaitTask
+            let! versions = versionsOf store s "o1"
+
+            match saved, deleted with
+            | Ok d, Error(ConditionalDeleteError.VersionConflict(expected, _)) ->
+                Expect.equal d.Version 2 "the save took v2"
+                Expect.equal expected 1 "the delete is refused against the expectation it stated"
+                Expect.equal versions [ 1; 2 ] "the save's version stands beside the seed — the delete removed nothing"
+            | Error(ConditionalSaveError.VersionConflict(expected, _)), Ok() ->
+                Expect.equal expected 1 "the save is refused against the expectation it stated"
+                Expect.isEmpty versions "the delete removed the object and the save left no orphan version"
+                let! head = store.Get(s, "o1")
+
+                match head with
+                | Error NotFound -> ()
+                | other -> failtestf "expected NotFound after the winning delete, got %A" other
+            | Ok _, Ok() -> failtest "both won: the save's version was removed, or it survives on a deleted object"
+            | Error a, Error b -> failtestf "neither won: save %A, delete %A" a b
+            | other -> failtestf "unexpected outcome pair %A" other
+        }
+
+        testCaseAsync "over a blob store without the ETag seam the compare still refuses a stale delete expectation"
+        <| async {
+            let store = factory (PlainBlobStorage(InMemoryBlobStorage()))
+            let s = scope ()
+            let! _ = saveIf store s "o1" "v1" 0
+            let! _ = saveIf store s "o1" "v2" 1
+
+            let! stale = deleteIf store s "o1" 1
+
+            match stale with
+            | Error(ConditionalDeleteError.VersionConflict(1, 2)) -> ()
+            | other -> failtestf "expected VersionConflict(1, 2), got %A" other
+
+            let! versions = versionsOf store s "o1"
+            Expect.equal versions [ 1; 2 ] "nothing removed on the refused path"
+
+            let! current = deleteIf store s "o1" 2
+            Expect.isOk current "the current expectation removes the object"
+        }
+
+        testCaseAsync "a StrictlyVersioned object refuses the conditional delete exactly as it refuses Delete"
+        <| async {
+            let store = factory (InMemoryBlobStorage())
+            let s = scope ()
+
+            let! _ =
+                ConditionalDataObjectStore.saveIfVersion
+                    store
+                    s
+                    "o1"
+                    (bytes "x")
+                    "doc"
+                    "tester"
+                    Map.empty
+                    StrictlyVersioned
+                    0
+
+            let! refused = deleteIf store s "o1" 1
+
+            match refused with
+            | Error(DeleteFailed DeleteForbidden) -> ()
+            | other -> failtestf "expected DeleteFailed DeleteForbidden, got %A" other
+
+            let! versions = versionsOf store s "o1"
+            Expect.equal versions [ 1 ] "nothing removed"
         }
     ]

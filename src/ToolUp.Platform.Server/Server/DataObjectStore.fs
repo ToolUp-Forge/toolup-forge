@@ -991,6 +991,27 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                 let! upload = cas.UploadWithETag(container, blobName, bytes, IfAbsent)
 
                                 match upload with
+                                | Ok _ when expectedVersion > 0 ->
+                                    // Phase 806 — the slot was free, but was
+                                    // it free because nobody had written it
+                                    // or because a `DeleteIfVersion` claimed
+                                    // it, removed the object and released it
+                                    // between our head read and this write?
+                                    // Holding the claim, no delete can pass
+                                    // its own claim step, so the version we
+                                    // expected either still exists — the
+                                    // write stands — or is already gone, in
+                                    // which case we are writing v{N+1} of an
+                                    // object with no v1..vN and must undo
+                                    // the claim and report the head as it is.
+                                    let! expectedExists =
+                                        blobStorage.Exists(container, versionBlobName objectId expectedVersion)
+
+                                    if expectedExists then
+                                        return Ok dataObject
+                                    else
+                                        let! _ = blobStorage.Delete(container, blobName)
+                                        return Error(ConditionalSaveError.VersionConflict(expectedVersion, 0))
                                 | Ok _ -> return Ok dataObject
                                 | Error(ETagMismatch _) ->
                                     // A racer claimed the slot between our
@@ -1022,7 +1043,11 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         // versions are removed and their content released as `Delete`
         // does, and the claim is released LAST — releasing it first would
         // let a create land a fresh `v1.json` that the pending removal of
-        // the listed names then deleted.
+        // the listed names then deleted. The release re-opens the slot for
+        // a saver that read the head BEFORE this delete started and writes
+        // AFTER it finished; that saver's `SaveIfVersion` closes it from
+        // its side, by checking the version it expected still exists once
+        // it holds the claim (see there).
         //
         // Residual window when `blobStorage` is NOT an
         // `IConditionalBlobStorage`: the head compare still runs, but no

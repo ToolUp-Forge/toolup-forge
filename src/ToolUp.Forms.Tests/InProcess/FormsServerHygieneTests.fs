@@ -57,10 +57,10 @@ type private RecordingMetricsSink() =
 /// outage but the version blob is unreadable.
 type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<EntityId>) =
     interface IEntityStore with
-        member _.Save<'T>(scopeId, entity) = inner.Save<'T>(scopeId, entity)
+        member _.Save<'T>(scopeId, actor, entity) = inner.Save<'T>(scopeId, actor, entity)
 
-        member _.SaveIfVersion<'T>(scopeId, entity, expectedVersion) =
-            inner.SaveIfVersion<'T>(scopeId, entity, expectedVersion)
+        member _.SaveIfVersion<'T>(scopeId, actor, entity, expectedVersion) =
+            inner.SaveIfVersion<'T>(scopeId, actor, entity, expectedVersion)
 
         member _.Get<'T>(scopeId, entityType, entityId) = async {
             if failIds.Contains entityId then
@@ -75,11 +75,11 @@ type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<EntityId>)
         member _.ListVersions<'T>(scopeId, entityType, entityId) =
             inner.ListVersions<'T>(scopeId, entityType, entityId)
 
-        member _.Delete(scopeId, entityType, entityId) =
-            inner.Delete(scopeId, entityType, entityId)
+        member _.Delete(scopeId, actor, entityType, entityId) =
+            inner.Delete(scopeId, actor, entityType, entityId)
 
-        member _.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion) =
-            inner.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion)
+        member _.DeleteIfVersion(scopeId, actor, entityType, entityId, expectedVersion) =
+            inner.DeleteIfVersion(scopeId, actor, entityType, entityId, expectedVersion)
 
         member _.FindByIndex<'T>(scopeId, entityType, indexName, value) =
             inner.FindByIndex<'T>(scopeId, entityType, indexName, value)

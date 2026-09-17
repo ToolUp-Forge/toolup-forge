@@ -136,6 +136,7 @@ let tests
             let replayed =
                 EntityUpdated {
                     UserId = "user-offline"
+                    OnBehalfOf = None
                     EntityType = "Inspection"
                     EntityId = "e-759"
                     Version = 2

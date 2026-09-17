@@ -41,6 +41,10 @@ let testEntityRegistration =
 
 let otherEntityRegistration = EntityRegistration.create<OtherEntity> OtherEntityType
 
+/// The actor every storage-behaviour case writes as. The audit cases
+/// below use their own, because the actor is what they are about.
+let private actor = EntityActor.ofPrincipal "tester"
+
 let private mkEntity (id: EntityId) (owner: string) (status: string) : TestEntity = {
     Id = id
     Type = TestEntityType
@@ -64,7 +68,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let store, scopeA, _ = setup ()
             let entity = mkEntity "e-1" "alice" "active"
 
-            let! saveResult = store.Save<TestEntity>(scopeA, entity)
+            let! saveResult = store.Save<TestEntity>(scopeA, actor, entity)
             Expect.isOk saveResult "save succeeds"
 
             match saveResult with
@@ -88,9 +92,9 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let store, scopeA, _ = setup ()
             let v1 = mkEntity "e-2" "alice" "active"
 
-            let! _ = store.Save<TestEntity>(scopeA, v1)
+            let! _ = store.Save<TestEntity>(scopeA, actor, v1)
             let v2 = { v1 with Status = "completed" }
-            let! saveResult = store.Save<TestEntity>(scopeA, v2)
+            let! saveResult = store.Save<TestEntity>(scopeA, actor, v2)
 
             match saveResult with
             | Result.Ok ref -> Expect.equal ref.Version 2 "second save gets Version 2"
@@ -117,9 +121,9 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, _ = setup ()
             let entity = mkEntity "e-3" "alice" "active"
-            let! _ = store.Save<TestEntity>(scopeA, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
 
-            let! delete = store.Delete(scopeA, TestEntityType, "e-3")
+            let! delete = store.Delete(scopeA, actor, TestEntityType, "e-3")
             Expect.isOk delete "delete succeeds"
 
             let! getResult = store.Get<TestEntity>(scopeA, TestEntityType, "e-3")
@@ -132,16 +136,16 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         testCaseAsync "Delete is idempotent"
         <| async {
             let store, scopeA, _ = setup ()
-            let! result = store.Delete(scopeA, TestEntityType, "never-existed")
+            let! result = store.Delete(scopeA, actor, TestEntityType, "never-existed")
             Expect.isOk result "deleting a non-existent entity returns Ok"
         }
 
         testCaseAsync "FindByIndex returns entities matching the indexed value"
         <| async {
             let store, scopeA, _ = setup ()
-            let! _ = store.Save<TestEntity>(scopeA, mkEntity "e-4" "alice" "active")
-            let! _ = store.Save<TestEntity>(scopeA, mkEntity "e-5" "alice" "completed")
-            let! _ = store.Save<TestEntity>(scopeA, mkEntity "e-6" "bob" "active")
+            let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity "e-4" "alice" "active")
+            let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity "e-5" "alice" "completed")
+            let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity "e-6" "bob" "active")
 
             let! aliceResult = store.FindByIndex<TestEntity>(scopeA, TestEntityType, "Owner", "alice")
 
@@ -174,7 +178,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, scopeB = setup ()
             let entity = mkEntity "shared-id" "alice" "active"
-            let! _ = store.Save<TestEntity>(scopeA, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
 
             // Same id, different scope — scope B should see nothing.
             let! getB = store.Get<TestEntity>(scopeB, TestEntityType, "shared-id")
@@ -184,7 +188,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             | _ -> failtest "expected NotFound in scope B"
 
             // Save in scope B with the same id — should be a fresh entity.
-            let! _ = store.Save<TestEntity>(scopeB, { entity with Owner = "bob" })
+            let! _ = store.Save<TestEntity>(scopeB, actor, { entity with Owner = "bob" })
 
             // Scope A's entity should be unchanged.
             let! getA = store.Get<TestEntity>(scopeA, TestEntityType, "shared-id")
@@ -213,8 +217,8 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
                 Note = "from-other-type"
             }
 
-            let! _ = store.Save<TestEntity>(scopeA, testE)
-            let! _ = store.Save<OtherEntity>(scopeA, otherE)
+            let! _ = store.Save<TestEntity>(scopeA, actor, testE)
+            let! _ = store.Save<OtherEntity>(scopeA, actor, otherE)
 
             let! getTest = store.Get<TestEntity>(scopeA, TestEntityType, "shared-id")
             let! getOther = store.Get<OtherEntity>(scopeA, OtherEntityType, "shared-id")
@@ -235,8 +239,8 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! initial = store.Count(scopeA, TestEntityType)
             Expect.equal initial 0 "fresh store has zero entities"
 
-            let! _ = store.Save<TestEntity>(scopeA, mkEntity "c-1" "alice" "active")
-            let! _ = store.Save<TestEntity>(scopeA, mkEntity "c-2" "bob" "active")
+            let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity "c-1" "alice" "active")
+            let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity "c-2" "bob" "active")
 
             let! after = store.Count(scopeA, TestEntityType)
             Expect.equal after 2 "two entities counted"
@@ -247,7 +251,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let store, scopeA, _ = setup ()
 
             for i in 0..4 do
-                let! _ = store.Save<TestEntity>(scopeA, mkEntity (sprintf "p-%d" i) "alice" "active")
+                let! _ = store.Save<TestEntity>(scopeA, actor, mkEntity (sprintf "p-%d" i) "alice" "active")
                 ()
 
             let! page1 = store.ListAll<TestEntity>(scopeA, TestEntityType, 0, 2)
@@ -275,7 +279,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
                 Status = "active"
             }
 
-            let! result = store.Save<TestEntity>(scopeA, weird)
+            let! result = store.Save<TestEntity>(scopeA, actor, weird)
 
             match result with
             | Result.Error(UnknownEntityType t) -> Expect.equal t "Unregistered" "type preserved"
@@ -289,13 +293,13 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let store, scopeA, _ = setup ()
             let entity = mkEntity "cas-1" "alice" "active"
 
-            let! created = store.SaveIfVersion<TestEntity>(scopeA, entity, 0)
+            let! created = store.SaveIfVersion<TestEntity>(scopeA, actor, entity, 0)
 
             match created with
             | Result.Ok ref -> Expect.equal ref.Version 1 "create-only expectation (0) assigns version 1"
             | Result.Error e -> failwithf "expected Ok, got %A" e
 
-            let! updated = store.SaveIfVersion<TestEntity>(scopeA, { entity with Status = "completed" }, 1)
+            let! updated = store.SaveIfVersion<TestEntity>(scopeA, actor, { entity with Status = "completed" }, 1)
 
             match updated with
             | Result.Ok ref -> Expect.equal ref.Version 2 "current expectation assigns expected + 1"
@@ -315,11 +319,11 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, _ = setup ()
             let entity = mkEntity "cas-2" "alice" "active"
-            let! _ = store.Save<TestEntity>(scopeA, entity)
-            let! _ = store.Save<TestEntity>(scopeA, { entity with Status = "reviewed" })
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, { entity with Status = "reviewed" })
 
             // A writer that read v1 and comes back after v2 landed.
-            let! stale = store.SaveIfVersion<TestEntity>(scopeA, { entity with Status = "stale-edit" }, 1)
+            let! stale = store.SaveIfVersion<TestEntity>(scopeA, actor, { entity with Status = "stale-edit" }, 1)
 
             match stale with
             | Result.Error(VersionConflict(t, id, expected, actual)) ->
@@ -354,10 +358,10 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let store, scopeA, _ = setup ()
             let entity = mkEntity "cas-3" "alice" "active"
 
-            let! first = store.SaveIfVersion<TestEntity>(scopeA, entity, 0)
+            let! first = store.SaveIfVersion<TestEntity>(scopeA, actor, entity, 0)
             Expect.isOk first "first create-only save succeeds"
 
-            let! second = store.SaveIfVersion<TestEntity>(scopeA, { entity with Owner = "bob" }, 0)
+            let! second = store.SaveIfVersion<TestEntity>(scopeA, actor, { entity with Owner = "bob" }, 0)
 
             match second with
             | Result.Error(VersionConflict(_, _, 0, 1)) -> ()
@@ -374,12 +378,12 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, scopeB = setup ()
             let entity = mkEntity "cas-4" "alice" "active"
-            let! _ = store.Save<TestEntity>(scopeA, entity)
-            let! _ = store.Save<TestEntity>(scopeA, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
 
             // Scope B has never seen cas-4: a create-only save there succeeds
             // regardless of scope A's head.
-            let! inB = store.SaveIfVersion<TestEntity>(scopeB, entity, 0)
+            let! inB = store.SaveIfVersion<TestEntity>(scopeB, actor, entity, 0)
 
             match inB with
             | Result.Ok ref -> Expect.equal ref.Version 1 "scope B assigns its own version 1"
@@ -391,7 +395,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, _ = setup ()
             let entity = mkEntity "cas-race" "alice" "active"
-            let! seeded = store.Save<TestEntity>(scopeA, entity)
+            let! seeded = store.Save<TestEntity>(scopeA, actor, entity)
             Expect.isOk seeded "seed v1"
 
             // Several rounds, because a race that is only run once only
@@ -409,6 +413,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
                     |> List.map (fun r ->
                         store.SaveIfVersion<TestEntity>(
                             scopeA,
+                            actor,
                             {
                                 entity with
                                     Status = sprintf "r%d-w%d" round r
@@ -462,10 +467,10 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         <| async {
             let store, scopeA, _ = setup ()
             let entity = mkEntity "cas-del" "alice" "active"
-            let! _ = store.Save<TestEntity>(scopeA, entity)
-            let! _ = store.Save<TestEntity>(scopeA, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
+            let! _ = store.Save<TestEntity>(scopeA, actor, entity)
 
-            let! stale = store.DeleteIfVersion(scopeA, TestEntityType, "cas-del", 1)
+            let! stale = store.DeleteIfVersion(scopeA, actor, TestEntityType, "cas-del", 1)
 
             match stale with
             | Result.Error(VersionConflict(_, _, 1, 2)) -> ()
@@ -474,7 +479,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! stillThere = store.Get<TestEntity>(scopeA, TestEntityType, "cas-del")
             Expect.isOk stillThere "a refused delete removes nothing"
 
-            let! current = store.DeleteIfVersion(scopeA, TestEntityType, "cas-del", 2)
+            let! current = store.DeleteIfVersion(scopeA, actor, TestEntityType, "cas-del", 2)
             Expect.isOk current "the current expectation deletes"
 
             let! gone = store.Get<TestEntity>(scopeA, TestEntityType, "cas-del")
@@ -487,13 +492,203 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
         testCaseAsync "DeleteIfVersion with expectation 0 on an absent entity is an idempotent Ok, exactly as Delete is"
         <| async {
             let store, scopeA, _ = setup ()
-            let! result = store.DeleteIfVersion(scopeA, TestEntityType, "never-existed-cas", 0)
+            let! result = store.DeleteIfVersion(scopeA, actor, TestEntityType, "never-existed-cas", 0)
             Expect.isOk result "nothing to remove, nothing to conflict with"
 
-            let! wrong = store.DeleteIfVersion(scopeA, TestEntityType, "never-existed-cas", 3)
+            let! wrong = store.DeleteIfVersion(scopeA, actor, TestEntityType, "never-existed-cas", 3)
 
             match wrong with
             | Result.Error(VersionConflict(_, _, 3, 0)) -> ()
             | other -> failwithf "expected VersionConflict(3, 0), got %A" other
+        }
+    ]
+
+// ─── Phase 806 — the actor on the call is the actor on the row ───────
+//
+// Bound with a capturing `IAuditLog`, because the property under test
+// is what the store RECORDS, not what it stores. Two claims, one per
+// case: the lifecycle row carries exactly the actor the caller passed —
+// principal, delegation, replay provenance — and the `"system"`
+// principal appears on a row only when a caller passed
+// `EntityActor.system`, never as something the store fell back to.
+
+/// Records every lifecycle row the store under test emits.
+type CapturingAuditLog() =
+    let rows = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
+
+    /// Every `(scopeId, event)` recorded so far, in emission order.
+    member _.Rows = rows |> Seq.toList
+
+    /// The lifecycle payloads recorded for `scopeId`, in emission order,
+    /// paired with the case name (`"created"` / `"updated"` / `"deleted"`).
+    member _.Lifecycle(scopeId: string) : (string * EntityLifecycleEventPayload) list =
+        rows
+        |> Seq.choose (fun (s, evt) ->
+            if s <> scopeId then
+                None
+            else
+                match evt with
+                | EntityCreated p -> Some("created", p)
+                | EntityUpdated p -> Some("updated", p)
+                | EntityDeleted p -> Some("deleted", p)
+                | _ -> None)
+        |> Seq.toList
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { rows.Enqueue(scopeId, audit) }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
+/// Bind the actor cases. `factory` builds the store under test COMPOSED
+/// WITH the audit log the pack hands it, and returns the store, its
+/// registry and a fresh scope.
+let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.EntityRegistry * string) =
+    let setup () =
+        let log = CapturingAuditLog()
+        let store, registry, scope = factory (log :> IAuditLog)
+        registry.Register<TestEntity>(testEntityRegistration)
+        store, scope, log
+
+    let provenance: EntityReplayProvenance = {
+        OriginatedAt = DateTime(2026, 9, 17, 8, 0, 0, DateTimeKind.Utc)
+        ReplayedAt = DateTime(2026, 9, 17, 9, 0, 0, DateTimeKind.Utc)
+        MutationId = "m-806"
+    }
+
+    testList $"{name} — IEntityStore actor contract (Phase 806)" [
+
+        testCaseAsync
+            "the actor on the call is the actor on the row — principal, on-behalf-of and replay provenance, on every mutating member"
+        <| async {
+            let store, scope, log = setup ()
+            let entity = mkEntity "a-1" "alice" "active"
+
+            let! created = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", entity)
+            Expect.isOk created "create"
+
+            let! updated =
+                store.SaveIfVersion<TestEntity>(
+                    scope,
+                    EntityActor.ofPrincipal "bob" |> EntityActor.onBehalfOf "carol",
+                    { entity with Status = "reviewed" },
+                    1
+                )
+
+            Expect.isOk updated "conditional update"
+
+            let! replayed =
+                store.Save<TestEntity>(
+                    scope,
+                    EntityActor.ofPrincipal "alice" |> EntityActor.replaying provenance,
+                    { entity with Status = "replayed" }
+                )
+
+            Expect.isOk replayed "replayed update"
+
+            let! deleted = store.DeleteIfVersion(scope, EntityActor.ofPrincipal "dave", TestEntityType, "a-1", 3)
+            Expect.isOk deleted "conditional delete"
+
+            let rows =
+                log.Lifecycle scope
+                |> List.map (fun (case, p) -> case, p.Version, p.UserId, p.OnBehalfOf, p.Replay)
+
+            Expect.equal
+                rows
+                [
+                    "created", 1, "alice", None, None
+                    "updated", 2, "bob", Some "carol", None
+                    "updated", 3, "alice", None, Some provenance
+                    "deleted", 3, "dave", None, None
+                ]
+                "each row carries exactly the actor its call passed, and one row per version"
+
+            // And the unconditional delete, on a second entity.
+            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "erin", mkEntity "a-2" "erin" "active")
+            let! _ = store.Delete(scope, EntityActor.ofPrincipal "frank", TestEntityType, "a-2")
+
+            let a2 =
+                log.Lifecycle scope
+                |> List.filter (fun (_, p) -> p.EntityId = "a-2")
+                |> List.map (fun (case, p) -> case, p.UserId)
+
+            Expect.equal
+                a2
+                [ "created", "erin"; "deleted", "frank" ]
+                "the unconditional delete is stamped from its actor too"
+        }
+
+        testCaseAsync "a system actor is never inferred — it reaches a row only when a caller passed it"
+        <| async {
+            let store, scope, log = setup ()
+
+            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", mkEntity "s-1" "alice" "active")
+
+            let! _ =
+                store.SaveIfVersion<TestEntity>(
+                    scope,
+                    EntityActor.ofPrincipal "alice",
+                    mkEntity "s-1" "alice" "done",
+                    1
+                )
+
+            let! _ = store.Delete(scope, EntityActor.ofPrincipal "alice", TestEntityType, "s-1")
+
+            let principals = log.Lifecycle scope |> List.map (fun (_, p) -> p.UserId)
+            Expect.equal principals [ "alice"; "alice"; "alice" ] "three rows, none of them the host's"
+
+            Expect.isFalse
+                (principals |> List.contains EntityActor.SystemPrincipal)
+                "no row carries the system principal when no caller passed it"
+
+            // The one legitimate way the value appears.
+            let! _ = store.Save<TestEntity>(scope, EntityActor.system, mkEntity "s-2" "host" "seeded")
+
+            let seeded =
+                log.Lifecycle scope
+                |> List.filter (fun (_, p) -> p.EntityId = "s-2")
+                |> List.map snd
+
+            Expect.equal
+                (seeded |> List.map _.UserId)
+                [ EntityActor.SystemPrincipal ]
+                "passed explicitly, recorded as passed"
+        }
+
+        testCaseAsync
+            "one row per replayed version — the replay provenance rides the store's own row, and nothing doubles it"
+        <| async {
+            let store, scope, log = setup ()
+            let entity = mkEntity "r-1" "alice" "active"
+            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", entity)
+
+            let replaying = EntityActor.ofPrincipal "alice" |> EntityActor.replaying provenance
+
+            let! applied = store.SaveIfVersion<TestEntity>(scope, replaying, { entity with Status = "offline-edit" }, 1)
+
+            Expect.isOk applied "the replay applies"
+
+            let forVersion2 =
+                log.Lifecycle scope
+                |> List.filter (fun (_, p) -> p.EntityId = "r-1" && p.Version = 2)
+
+            match forVersion2 with
+            | [ ("updated", p) ] ->
+                Expect.equal p.UserId "alice" "the real user, not a placeholder"
+
+                Expect.equal
+                    p.Replay
+                    (Some provenance)
+                    "origination time, application time and mutation id ride the row"
+            | other -> failwithf "expected exactly one row for version 2, got %A" other
+
+            let! removed = store.DeleteIfVersion(scope, replaying, TestEntityType, "r-1", 2)
+            Expect.isOk removed "the replayed delete applies"
+
+            let deletedRows =
+                log.Lifecycle scope
+                |> List.filter (fun (case, p) -> p.EntityId = "r-1" && case = "deleted")
+
+            match deletedRows with
+            | [ (_, p) ] -> Expect.equal p.Replay (Some provenance) "the deleted row carries the provenance too"
+            | other -> failwithf "expected exactly one deleted row, got %A" other
         }
     ]

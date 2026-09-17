@@ -267,7 +267,12 @@ let private exclusionTests =
                     Title = "Team A Dashboard"
             }
 
-            let! _ = store.Save<PublicPageEntity>("team-a", PublicPageEntity.fromPage teamScopedPage)
+            let! _ =
+                store.Save<PublicPageEntity>(
+                    "team-a",
+                    EntityTypes.EntityActor.ofPrincipal "tester",
+                    PublicPageEntity.fromPage teamScopedPage
+                )
 
             // Empty markdown root → no file pages; the only resolution path
             // is the scope-keyed overlay tier.

@@ -69,7 +69,7 @@ let private seed (store: IEntityStore) (scope: string) : Async<unit> = async {
     ]
 
     for item in items do
-        let! _ = store.Save<Item>(scope, item)
+        let! _ = store.Save<Item>(scope, EntityActor.ofPrincipal "tester", item)
         ()
 }
 
@@ -130,7 +130,7 @@ let private mkFtDoc (id: string) (category: string) (notes: string) : FtDoc = {
 
 let private seedFt (store: IEntityStore) (scope: string) (docs: FtDoc list) : Async<unit> = async {
     for d in docs do
-        let! _ = store.Save<FtDoc>(scope, d)
+        let! _ = store.Save<FtDoc>(scope, EntityActor.ofPrincipal "tester", d)
         ()
 }
 

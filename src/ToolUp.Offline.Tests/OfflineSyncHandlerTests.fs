@@ -97,11 +97,20 @@ type FakeEntityStore() =
         | true, (_, v) -> v
         | _ -> 0
 
+    let actors = ResizeArray<string * EntityActor>()
+
     member _.Seed(entityType: string, entityId: string, json: string, version: int) =
         store[key entityType entityId] <- (json, version)
 
+    /// Phase 806 — every `(member, actor)` a mutating call passed, in
+    /// call order. The actor on the seam call is what the handler's
+    /// audit half now consists of, so it is what the tests observe.
+    member _.Actors = actors |> List.ofSeq
+
     interface IEntityStore with
-        member _.Save<'T>(_scopeId: string, entity: 'T) = async {
+        member _.Save<'T>(_scopeId: string, actor: EntityActor, entity: 'T) = async {
+            actors.Add("Save", actor)
+
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core -> return Ok(write core entity (head core.Type core.Id + 1))
@@ -110,7 +119,9 @@ type FakeEntityStore() =
         // Phase 753 — the seam's compare-and-set, which is now the
         // handler's conflict guard: a stale expectation is refused here,
         // exactly as BlobEntityStore refuses it.
-        member _.SaveIfVersion<'T>(_scopeId: string, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(_scopeId: string, actor: EntityActor, entity: 'T, expectedVersion: int) = async {
+            actors.Add("SaveIfVersion", actor)
+
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -128,7 +139,8 @@ type FakeEntityStore() =
             | _ -> return Error(EntityError.NotFound(entityType, entityId))
         }
 
-        member _.Delete(_scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.Delete(_scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId) = async {
+            actors.Add("Delete", actor)
             let k = key entityType entityId
 
             if store.Remove k then
@@ -137,15 +149,20 @@ type FakeEntityStore() =
                 return Error(EntityError.NotFound(entityType, entityId))
         }
 
-        member _.DeleteIfVersion(_scopeId: string, entityType: string, entityId: EntityId, expectedVersion: int) = async {
-            let current = head entityType entityId
+        member _.DeleteIfVersion
+            (_scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId, expectedVersion: int)
+            =
+            async {
+                actors.Add("DeleteIfVersion", actor)
 
-            if current <> expectedVersion then
-                return Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, current))
-            else
-                store.Remove(key entityType entityId) |> ignore
-                return Ok()
-        }
+                let current = head entityType entityId
+
+                if current <> expectedVersion then
+                    return Error(EntityError.VersionConflict(entityType, entityId, expectedVersion, current))
+                else
+                    store.Remove(key entityType entityId) |> ignore
+                    return Ok()
+            }
 
         // Members the handler never touches. They RAISE rather than
         // returning an empty result, so a handler change that starts
@@ -368,10 +385,11 @@ let private silentLogger =
     }
 
 /// A REAL `BlobEntityStore` over a temp directory, composed with the
-/// SDK-default audit log over an in-memory event store — the composition
-/// Phase 24 recorded the double row against. Returns the store, the
-/// audit log and the event store so a test can read the trail both ways.
-let private realStoreWithAudit () =
+/// SDK-default audit log over `events` — the composition Phase 24
+/// recorded the double row against, and since Phase 806 the ONLY place
+/// a replay's lifecycle row is recorded. Returns the store and its audit
+/// log. `auditLog = None` composes the store with no audit at all.
+let private realStoreOver (events: IEventStore) (audited: bool) =
     let tempDir =
         Path.Combine(Path.GetTempPath(), "toolup-offline-audit-" + Guid.NewGuid().ToString("N"))
 
@@ -380,12 +398,18 @@ let private realStoreWithAudit () =
     let dos = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityStore.EntityRegistry()
     registry.Register(EntityRegistration.create<Inspection> "Inspection")
-    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let auditLog = AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
 
     let store =
-        EntityStore.BlobEntityStore(dos, blob, registry, Some auditLog) :> IEntityStore
+        EntityStore.BlobEntityStore(dos, blob, registry, (if audited then Some auditLog else None)) :> IEntityStore
 
+    store, auditLog
+
+/// The audited real store over an in-memory event store, so a test can
+/// read the trail both ways.
+let private realStoreWithAudit () =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store, auditLog = realStoreOver events true
     store, auditLog, events
 
 /// The lifecycle rows in a trail, oldest first, as `(case, payload)`.
@@ -401,8 +425,14 @@ let private lifecycleRows (trail: AuditEvent list) =
 
 let auditTests =
     testList "audit replay provenance" [
-        test "no audit log means no emission (GP 13)" {
+        test "the handler passes the caller, replaying with the mutation's provenance, on every seam call" {
+            // Phase 806 — the handler's audit half IS the actor it hands
+            // the seam: the real user, `Replay` carrying the mutation's
+            // origination time, the application time and the queue
+            // mutation id. The store stamps it; the handler records
+            // nothing itself.
             let store = FakeEntityStore()
+            let before = DateTime.UtcNow.AddSeconds -1.0
 
             let api =
                 offlineSyncApi
@@ -413,25 +443,55 @@ let auditTests =
             api.Apply(mutationFor "team-a" "e1" 0 "note")
             |> Async.RunSynchronously
             |> ignore
-        // Nothing to assert beyond "it did not raise" — the point is
-        // that the default composes with no audit log at all.
+
+            let deletion = {
+                mutationFor "team-a" "e1" 1 "" with
+                    Id = "m-2"
+                    Operation = DeleteOp
+            }
+
+            api.Apply deletion |> Async.RunSynchronously |> ignore
+
+            match store.Actors with
+            | [ ("SaveIfVersion", saved); ("DeleteIfVersion", deleted) ] ->
+                Expect.equal saved.Principal "alice" "the applying user is the principal, not 'system'"
+                Expect.isNone saved.OnBehalfOf "a replay is the user's own write"
+
+                match saved.Replay with
+                | Some replay ->
+                    Expect.equal
+                        replay.OriginatedAt
+                        enqueuedAt.UtcDateTime
+                        "OriginatedAt is the mutation's enqueue time"
+
+                    Expect.isGreaterThanOrEqual replay.ReplayedAt before "ReplayedAt is the application time"
+                    Expect.notEqual replay.OriginatedAt replay.ReplayedAt "the two timestamps are distinguishable"
+                    Expect.equal replay.MutationId "m-1" "the origin marker is the queue's mutation id"
+                | None -> failtest "a replayed write must carry replay provenance"
+
+                Expect.equal deleted.Principal "alice" "the delete carries the same user"
+
+                Expect.equal
+                    (deleted.Replay |> Option.map _.MutationId)
+                    (Some "m-2")
+                    "the delete carries its own mutation id"
+            | other -> failtestf "expected one SaveIfVersion and one DeleteIfVersion, got %A" other
         }
 
         test "an applied replay records ONE row carrying the real user and BOTH timestamps" {
-            let store = FakeEntityStore()
             let events = CapturingEventStore()
+            let store, _ = realStoreOver events true
             let before = DateTime.UtcNow.AddSeconds -1.0
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditEventStore events
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
-
-            api.Apply(mutationFor "team-a" "e1" 0 "note")
-            |> Async.RunSynchronously
-            |> ignore
+            match api.Apply(mutationFor "team-a" "e1" 0 "note") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
 
             match events.Written with
             | [ evt ] ->
@@ -447,6 +507,7 @@ let auditTests =
 
                 let payload = decodeLifecycle evt
                 Expect.equal payload.UserId "alice" "the applying user is preserved, not 'system'"
+                Expect.isNone payload.OnBehalfOf "the user's own write"
                 Expect.equal payload.EntityType "Inspection" "entity type"
                 Expect.equal payload.EntityId "e1" "entity id"
                 Expect.equal payload.Version 1 "the version the store assigned"
@@ -466,71 +527,79 @@ let auditTests =
         }
 
         test "a replay over an existing entity audits as an update" {
-            let store = FakeEntityStore()
-
-            store.Seed(
-                "Inspection",
-                "e1",
-                serialise {
-                    Id = "e1"
-                    Type = "Inspection"
-                    Version = 1
-                    Notes = "first"
-                },
-                1
-            )
-
             let events = CapturingEventStore()
+            let store, _ = realStoreOver events true
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditEventStore events
+            let seeded =
+                store.SaveIfVersion<Inspection>(
+                    "team-a",
+                    EntityActor.ofPrincipal "seeder",
+                    {
+                        Id = "e1"
+                        Type = "Inspection"
+                        Version = 0
+                        Notes = "first"
+                    },
+                    0
+                )
+                |> Async.RunSynchronously
 
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+            Expect.isOk seeded "seed v1"
 
-            api.Apply(mutationFor "team-a" "e1" 1 "second")
-            |> Async.RunSynchronously
-            |> ignore
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
-            match events.Written with
+            match api.Apply(mutationFor "team-a" "e1" 1 "second") |> Async.RunSynchronously with
+            | Applied _ -> ()
+            | other -> failtestf "expected Applied, got %A" other
+
+            match events.Written |> List.filter (fun e -> e.EventType = "EntityUpdated") with
             | [ evt ] ->
-                Expect.equal evt.EventType "EntityUpdated" "version 2 is an update"
-                Expect.equal (decodeLifecycle evt).Version 2 "the new version"
-            | other -> failtestf "expected exactly one audit event, got %d" (List.length other)
+                let payload = decodeLifecycle evt
+                Expect.equal payload.Version 2 "the new version"
+                Expect.equal payload.UserId "alice" "the replaying user"
+                Expect.isSome payload.Replay "with the provenance"
+            | other -> failtestf "expected exactly one update row, got %d" (List.length other)
         }
 
-        test "a conflicted replay emits NO audit event" {
+        test "a conflicted replay writes no row" {
             // A conflict changed nothing, so auditing it would record a
             // write that did not happen.
-            let store = FakeEntityStore()
-
-            store.Seed(
-                "Inspection",
-                "e1",
-                serialise {
-                    Id = "e1"
-                    Type = "Inspection"
-                    Version = 5
-                    Notes = "server"
-                },
-                5
-            )
-
             let events = CapturingEventStore()
+            let store, _ = realStoreOver events true
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditEventStore events
+            let seeded =
+                store.Save<Inspection>(
+                    "team-a",
+                    EntityActor.ofPrincipal "seeder",
+                    {
+                        Id = "e1"
+                        Type = "Inspection"
+                        Version = 0
+                        Notes = "server"
+                    }
+                )
+                |> Async.RunSynchronously
 
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+            Expect.isOk seeded "seed v1"
 
-            api.Apply(mutationFor "team-a" "e1" 3 "offline")
-            |> Async.RunSynchronously
-            |> ignore
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
-            Expect.isEmpty events.Written "a conflict is not a write"
+            match api.Apply(mutationFor "team-a" "e1" 0 "offline") |> Async.RunSynchronously with
+            | Conflict _ -> ()
+            | other -> failtestf "expected Conflict, got %A" other
+
+            Expect.equal
+                (events.Written |> List.map _.EventType)
+                [ "EntityCreated" ]
+                "only the seed's row — a conflict is not a write"
         }
 
         test "the replayed row is AFTER a replicator cursor that has passed its origination time" {
@@ -539,15 +608,14 @@ let auditTests =
             // no sink-side change". The replicator's cursor filters on
             // OccurredAt, so a row backdated behind it is never
             // delivered. Pinned here in both directions.
-            let store = FakeEntityStore()
             let events = CapturingEventStore()
+            let store, _ = realStoreOver events true
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditEventStore events
-
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
             api.Apply(mutationFor "team-a" "e1" 0 "note")
             |> Async.RunSynchronously
@@ -576,10 +644,11 @@ let auditTests =
             | other -> failtestf "expected exactly one audit event, got %d" (List.length other)
         }
 
-        test "a pre-759 lifecycle payload decodes with Replay = None" {
-            // A row persisted before the field existed carries no
-            // `Replay` property at all; it must read back as a live
-            // write, with no version switch and no migration (GP 11).
+        test "a pre-759 lifecycle payload decodes with Replay = None, and a pre-806 one with OnBehalfOf = None" {
+            // A row persisted before either field existed carries no
+            // `Replay` / `OnBehalfOf` property at all; it must read back
+            // as a live, undelegated write, with no version switch and no
+            // migration (GP 11).
             let legacy =
                 """{"UserId":"system","EntityType":"Inspection","EntityId":"e1","Version":3}"""
 
@@ -589,17 +658,17 @@ let auditTests =
             Expect.equal payload.UserId "system" "the legacy actor"
             Expect.equal payload.Version 3 "the legacy version"
             Expect.isNone payload.Replay "an absent field is a live write"
+            Expect.isNone payload.OnBehalfOf "an absent field is an undelegated write"
         }
 
         test "the provenance round-trips through EventStoreAuditLog.GetAuditTrail" {
             let store, auditLog, _ = realStoreWithAudit ()
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditLog auditLog
-
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
             match api.Apply(mutationFor "team-a" "e1" 0 "note") |> Async.RunSynchronously with
             | Applied _ -> ()
@@ -624,30 +693,32 @@ let auditTests =
             | other -> failtestf "expected exactly one lifecycle row, got %A" other
         }
 
-        test "REGRESSION — a replayed version produces exactly ONE lifecycle row, and live writes are untouched" {
-            // Phase 24's recorded residue: with the entity store ALSO
-            // composed with an IAuditLog, an applied replay produced two
-            // rows for one version — the store's ("system", write time)
-            // and the handler's (real user, origination time).
+        test "REGRESSION — a replayed version produces exactly ONE lifecycle row, and live writes carry their own actor" {
+            // Phase 24's recorded residue: with the entity store composed
+            // with an IAuditLog, an applied replay produced two rows for
+            // one version — the store's ("system", write time) and the
+            // handler's (real user, origination time). Since Phase 806
+            // there is one emitter, so there is one row by construction;
+            // pinned anyway, because it is the property.
             let store, auditLog, _ = realStoreWithAudit ()
 
-            let options =
-                OfflineSyncOptions.defaults
-                |> OfflineSyncOptions.withReplays replays
-                |> OfflineSyncOptions.withAuditLog auditLog
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
-
-            // 1. Replayed create → one row, the handler's.
+            // 1. Replayed create → one row, alice's, with provenance.
             match api.Apply(mutationFor "team-a" "e1" 0 "offline v1") |> Async.RunSynchronously with
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            // 2. A LIVE write through the store → its own generic row,
-            //    byte-identical to today: "system", no provenance.
+            // 2. A LIVE write through the store → its own row, stamped
+            //    from ITS actor: no provenance.
             let live =
                 store.Save<Inspection>(
                     "team-a",
+                    EntityActor.ofPrincipal "bob",
                     {
                         Id = "e1"
                         Type = "Inspection"
@@ -689,11 +760,11 @@ let auditTests =
                 observed
                 [
                     1, "EntityCreated", "alice", true
-                    2, "EntityUpdated", "system", false
+                    2, "EntityUpdated", "bob", false
                     3, "EntityDeleted", "alice", true
                     3, "EntityUpdated", "alice", true
                 ]
-                "four applied versions, four rows — never a double; replays carry the real user + provenance, the live write is the store's generic row"
+                "four applied versions, four rows — never a double; replays carry the real user + provenance, the live write carries its own actor"
 
             let deleted =
                 rows |> List.tryFind (fun (case, _) -> case = "EntityDeleted") |> Option.map snd
@@ -704,24 +775,24 @@ let auditTests =
                 "the delete row carries its own mutation id"
         }
 
-        test "without an audit log on the handler the store's own row still stands (the scope is never global)" {
-            let store, auditLog, _ = realStoreWithAudit ()
+        test
+            "a store composed without an audit log records nothing for a replay — the handler holds no audit log of its own" {
+            let events = CapturingEventStore()
+            let store, _ = realStoreOver events false
 
-            let options = OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays
-
-            let api = offlineSyncApi store options (contextFor "team-a" "alice")
+            let api =
+                offlineSyncApi
+                    store
+                    (OfflineSyncOptions.defaults |> OfflineSyncOptions.withReplays replays)
+                    (contextFor "team-a" "alice")
 
             match api.Apply(mutationFor "team-a" "e1" 0 "note") |> Async.RunSynchronously with
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
-
-            match lifecycleRows trail with
-            | [ ("EntityCreated", p) ] ->
-                Expect.equal p.UserId "system" "the store's generic row is not suppressed"
-                Expect.isNone p.Replay "and it carries no provenance"
-            | other -> failtestf "expected the store's single generic row, got %A" other
+            Expect.isEmpty
+                events.Written
+                "nothing recorded anywhere: audit is the store's, and this store has none (GP 13)"
         }
     ]
 

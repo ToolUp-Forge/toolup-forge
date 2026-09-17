@@ -86,7 +86,7 @@ let tests =
             // nothing, and each case failed later as "expected [...], actual []"
             // — a symptom that reads like a broken query, not a broken fixture.
             for item in items do
-                match! store.Save<Item>(scope, item) with
+                match! store.Save<Item>(scope, EntityActor.ofPrincipal "tester", item) with
                 | Result.Ok _ -> ()
                 | Result.Error e -> failwithf "seed Save of %s failed: %A" item.Id e
         }
@@ -104,6 +104,13 @@ let tests =
                 let store = PostgresEntityStore.create dataSource registry
                 let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
                 store, registry, "team-a-" + suffix, "team-b-" + suffix)
+
+            // Phase 806 — the actor pack, over the same store composed with
+            // the audit log the pack hands it.
+            IEntityStoreContract.auditTests "PostgresEntityStore" (fun auditLog ->
+                let registry = EntityRegistry()
+                let store = PostgresEntityStore.createWithAudit dataSource registry auditLog
+                store, registry, "team-audit-" + Guid.NewGuid().ToString("N").Substring(0, 8))
 
             testList "predicate pushdown (SQL, not client-side scans)" [
 

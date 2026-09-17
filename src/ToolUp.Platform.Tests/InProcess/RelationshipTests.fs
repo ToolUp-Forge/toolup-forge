@@ -240,6 +240,7 @@ let tests =
                 let! _ =
                     store.Save<Customer>(
                         scope,
+                        EntityActor.ofPrincipal "tester",
                         {
                             Id = c
                             Type = "Customer"
@@ -256,6 +257,7 @@ let tests =
                 let! _ =
                     store.Save<Order>(
                         scope,
+                        EntityActor.ofPrincipal "tester",
                         {
                             Id = id
                             Type = "Order"
@@ -288,6 +290,7 @@ let tests =
                 let! _ =
                     store.Save<Course>(
                         scope,
+                        EntityActor.ofPrincipal "tester",
                         {
                             Id = id
                             Type = "Course"
@@ -309,6 +312,7 @@ let tests =
                 let! _ =
                     store.Save<Enrollment>(
                         scope,
+                        EntityActor.ofPrincipal "tester",
                         {
                             Id = id
                             Type = "Enrollment"

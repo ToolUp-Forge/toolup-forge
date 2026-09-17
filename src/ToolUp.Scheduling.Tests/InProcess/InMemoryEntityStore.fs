@@ -43,7 +43,7 @@ type InMemoryEntityStore() =
 
     interface IEntityStore with
 
-        member _.Save<'T>(scopeId: string, entity: 'T) = async {
+        member _.Save<'T>(scopeId: string, _actor: EntityActor, entity: 'T) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -67,7 +67,7 @@ type InMemoryEntityStore() =
 
         // Phase 753 — compare-and-set save: the head is the stored
         // version (0 when absent); a mismatch is `VersionConflict`.
-        member _.SaveIfVersion<'T>(scopeId: string, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(scopeId: string, _actor: EntityActor, entity: 'T, expectedVersion: int) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -124,14 +124,14 @@ type InMemoryEntityStore() =
             | _ -> return []
         }
 
-        member _.Delete(scopeId, entityType, entityId) = async {
+        member _.Delete(scopeId, _actor, entityType, entityId) = async {
             let b = bucket scopeId entityType
             b.TryRemove(entityId) |> ignore
             return Ok()
         }
 
         // Phase 753 — compare-and-set delete.
-        member _.DeleteIfVersion(scopeId, entityType, entityId, expectedVersion) = async {
+        member _.DeleteIfVersion(scopeId, _actor, entityType, entityId, expectedVersion) = async {
             let b = bucket scopeId entityType
 
             let head =
