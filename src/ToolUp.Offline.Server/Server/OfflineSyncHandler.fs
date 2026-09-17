@@ -62,7 +62,7 @@ type OfflineReplayContext = {
     Store: IEntityStore
     /// Server-resolved storage scope. Authoritative.
     ScopeId: string
-    /// Server-resolved caller. The `Principal` of the `EntityActor` the
+    /// Server-resolved caller. The `Principal` of the `EntityPrincipal` the
     /// handler builds per mutation and hands to `Apply`.
     UserId: string
 }
@@ -94,7 +94,7 @@ type OfflineEntityReplay = {
     /// client can show both documents.
     Current: OfflineReplayContext -> string -> Async<Result<(byte[] * int) option, string>>
     /// Deserialise `payload` and persist it via
-    /// `IEntityStore.SaveIfVersion`, passing the `EntityActor` the
+    /// `IEntityStore.SaveIfVersion`, passing the `EntityPrincipal` the
     /// handler built for the mutation — the real caller plus the
     /// mutation's replay provenance, which is what makes the store's one
     /// lifecycle row for the version carry the origination time (Phase
@@ -105,7 +105,7 @@ type OfflineEntityReplay = {
     /// `Save` instead has opted out of conflict detection for its entity
     /// type; one that substitutes its own actor has opted out of the
     /// provenance. `OfflineEntityReplay.ofJson` is the reference shape.
-    Apply: OfflineReplayContext -> EntityActor -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
+    Apply: OfflineReplayContext -> EntityPrincipal -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
 }
 
 /// Shared JSON setup — the SAME converter set `BlobEntityStore` uses to
@@ -193,7 +193,7 @@ module OfflineEntityReplay =
 /// `EntityLifecycleEventPayload.Replay`, the mutation's origination time
 /// (`EnqueuedAt`), the server's application time and the queue entry's
 /// mutation id. Since Phase 806 the ENTITY STORE records it: the handler
-/// builds an `EntityActor` per mutation — the caller, replaying with that
+/// builds an `EntityPrincipal` per mutation — the caller, replaying with that
 /// provenance — and passes it on the seam call, so the store's own row
 /// for the version is the provenance-carrying one and there is no second
 /// row to suppress. It goes through the store's `IAuditLog` like every
@@ -257,9 +257,9 @@ module private ReplayAudit =
     /// id. The entity store stamps it on the ONE lifecycle row it records
     /// for the version, so "edited offline at T1, landed at T2" survives
     /// on the row itself rather than in a second row beside it.
-    let actor (userId: string) (mutation: QueuedMutation) (replayedAt: DateTime) : EntityActor =
-        EntityActor.ofPrincipal userId
-        |> EntityActor.replaying {
+    let actor (userId: string) (mutation: QueuedMutation) (replayedAt: DateTime) : EntityPrincipal =
+        EntityPrincipal.ofPrincipal userId
+        |> EntityPrincipal.replaying {
             OriginatedAt = mutation.EnqueuedAt.UtcDateTime
             ReplayedAt = replayedAt
             MutationId = mutation.Id

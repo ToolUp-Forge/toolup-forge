@@ -129,7 +129,7 @@ type OutboxEntityStore
     member _.SaveWithEvents<'T>
         (
             scopeId: string,
-            actor: EntityActor,
+            actor: EntityPrincipal,
             entityType: string,
             entityId: EntityId,
             entity: 'T,

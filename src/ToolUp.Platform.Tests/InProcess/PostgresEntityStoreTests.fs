@@ -86,7 +86,7 @@ let tests =
             // nothing, and each case failed later as "expected [...], actual []"
             // — a symptom that reads like a broken query, not a broken fixture.
             for item in items do
-                match! store.Save<Item>(scope, EntityActor.ofPrincipal "tester", item) with
+                match! store.Save<Item>(scope, EntityPrincipal.ofPrincipal "tester", item) with
                 | Result.Ok _ -> ()
                 | Result.Error e -> failwithf "seed Save of %s failed: %A" item.Id e
         }

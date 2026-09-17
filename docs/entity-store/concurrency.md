@@ -43,7 +43,7 @@ let saveEdit () = async {
     | Ok current ->
         let edited = { current with Body = editedBody }
 
-        match! store.SaveIfVersion<Note>(scopeId, EntityActor.ofPrincipal caller.UserId, edited, current.Version) with
+        match! store.SaveIfVersion<Note>(scopeId, EntityPrincipal.ofPrincipal caller.UserId, edited, current.Version) with
         | Ok saved -> return Ok saved
         | Error(EntityError.VersionConflict(_, _, expected, actual)) ->
             // Someone wrote version `actual` after we read `expected`.
@@ -54,7 +54,7 @@ let saveEdit () = async {
 ```
 
 The record's own `Version` field is what you state — the store rewrote it on the way out of `Get`,
-so `current.Version` is the head you read. The `EntityActor` beside it is the caller the handler
+so `current.Version` is the head you read. The `EntityPrincipal` beside it is the caller the handler
 resolved (`caller` is its `AccessContext`): since Phase 806 every mutating member takes one, and it is
 what the lifecycle audit row records. On success the returned `EntityRef.Version` is the new
 head, which is what the next edit states.

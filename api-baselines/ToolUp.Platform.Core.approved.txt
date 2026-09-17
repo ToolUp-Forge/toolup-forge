@@ -5181,17 +5181,6 @@ ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToMany : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.ManyToOne : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToMany : System.Int32 (literal)
 ToolUp.Platform.EntityTypes+Cardinality+Tags.OneToOne : System.Int32 (literal)
-ToolUp.Platform.EntityTypes+EntityActor (class)
-ToolUp.Platform.EntityTypes+EntityActor..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
-ToolUp.Platform.EntityTypes+EntityActor.OnBehalfOf : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.EntityTypes+EntityActor.Principal : System.String { get }
-ToolUp.Platform.EntityTypes+EntityActor.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance] { get }
-ToolUp.Platform.EntityTypes+EntityActorModule (class)
-ToolUp.Platform.EntityTypes+EntityActorModule.SystemPrincipal : System.String (literal)
-ToolUp.Platform.EntityTypes+EntityActorModule.ofPrincipal(System.String) : ToolUp.Platform.EntityTypes+EntityActor
-ToolUp.Platform.EntityTypes+EntityActorModule.onBehalfOf(System.String, ToolUp.Platform.EntityTypes+EntityActor) : ToolUp.Platform.EntityTypes+EntityActor
-ToolUp.Platform.EntityTypes+EntityActorModule.replaying(ToolUp.Platform.EntityTypes+EntityReplayProvenance, ToolUp.Platform.EntityTypes+EntityActor) : ToolUp.Platform.EntityTypes+EntityActor
-ToolUp.Platform.EntityTypes+EntityActorModule.system : ToolUp.Platform.EntityTypes+EntityActor { get }
 ToolUp.Platform.EntityTypes+EntityError (class)
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidEntityShape : System.Boolean { get }
 ToolUp.Platform.EntityTypes+EntityError.IsInvalidIndex : System.Boolean { get }
@@ -5235,6 +5224,17 @@ ToolUp.Platform.EntityTypes+EntityIndex`1..ctor(System.String, Microsoft.FSharp.
 ToolUp.Platform.EntityTypes+EntityIndex`1.Extract : Microsoft.FSharp.Core.FSharpFunc`2[T, System.String] { get }
 ToolUp.Platform.EntityTypes+EntityIndex`1.IsCompound : System.Boolean { get }
 ToolUp.Platform.EntityTypes+EntityIndex`1.Name : System.String { get }
+ToolUp.Platform.EntityTypes+EntityPrincipal (class)
+ToolUp.Platform.EntityTypes+EntityPrincipal..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
+ToolUp.Platform.EntityTypes+EntityPrincipal.OnBehalfOf : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EntityTypes+EntityPrincipal.Principal : System.String { get }
+ToolUp.Platform.EntityTypes+EntityPrincipal.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance] { get }
+ToolUp.Platform.EntityTypes+EntityPrincipalModule (class)
+ToolUp.Platform.EntityTypes+EntityPrincipalModule.SystemPrincipal : System.String (literal)
+ToolUp.Platform.EntityTypes+EntityPrincipalModule.ofPrincipal(System.String) : ToolUp.Platform.EntityTypes+EntityPrincipal
+ToolUp.Platform.EntityTypes+EntityPrincipalModule.onBehalfOf(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal) : ToolUp.Platform.EntityTypes+EntityPrincipal
+ToolUp.Platform.EntityTypes+EntityPrincipalModule.replaying(ToolUp.Platform.EntityTypes+EntityReplayProvenance, ToolUp.Platform.EntityTypes+EntityPrincipal) : ToolUp.Platform.EntityTypes+EntityPrincipal
+ToolUp.Platform.EntityTypes+EntityPrincipalModule.system : ToolUp.Platform.EntityTypes+EntityPrincipal { get }
 ToolUp.Platform.EntityTypes+EntityRef`1 (class)
 ToolUp.Platform.EntityTypes+EntityRef`1..ctor(System.String, System.String, System.Int32)
 ToolUp.Platform.EntityTypes+EntityRef`1.Id : System.String { get }

@@ -290,7 +290,7 @@ type EntityBackedConsentStateStore(entityStore: IEntityStore, ?auditLog: IAuditL
                     Type = ConsentRecord.entityType
             }
 
-            let! result = entityStore.Save<ConsentRecord>(scopeId, EntityActor.ofPrincipal record.Subject, toSave)
+            let! result = entityStore.Save<ConsentRecord>(scopeId, EntityPrincipal.ofPrincipal record.Subject, toSave)
 
             match result with
             | Ok ref ->
@@ -315,7 +315,7 @@ type EntityBackedConsentStateStore(entityStore: IEntityStore, ?auditLog: IAuditL
             | Error e -> return Error(EntityError.message e)
             | Ok prev ->
                 let withdrawn = Withdrawal.apply categories DateTimeOffset.UtcNow prev
-                let! saved = entityStore.Save<ConsentRecord>(scopeId, EntityActor.ofPrincipal subject, withdrawn)
+                let! saved = entityStore.Save<ConsentRecord>(scopeId, EntityPrincipal.ofPrincipal subject, withdrawn)
 
                 match saved with
                 | Ok ref ->

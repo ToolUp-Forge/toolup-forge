@@ -52,7 +52,7 @@ let current (store: IEntityStore) (slug: string) : Async<Result<PublicPage, Enti
 /// the version the restore appends (Phase 806).
 let restore
     (store: IEntityStore)
-    (actor: EntityActor)
+    (actor: EntityPrincipal)
     (slug: string)
     (version: int)
     : Async<Result<PublicPage, EntityError>> =

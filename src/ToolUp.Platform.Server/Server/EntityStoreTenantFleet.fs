@@ -130,7 +130,7 @@ type EntityStoreTenantFleet
                         let! saved =
                             entityStore.Save<Tenant>(
                                 Tenant.CatalogScope,
-                                EntityActor.ofPrincipal request.OwnerUserId,
+                                EntityPrincipal.ofPrincipal request.OwnerUserId,
                                 tenant
                             )
 
@@ -284,7 +284,11 @@ type EntityStoreTenantFleet
                         | Error msg -> return Error(FleetStorageFailure msg)
                         | Ok next ->
                             let! saved =
-                                entityStore.Save<Tenant>(Tenant.CatalogScope, EntityActor.ofPrincipal byUserId, next)
+                                entityStore.Save<Tenant>(
+                                    Tenant.CatalogScope,
+                                    EntityPrincipal.ofPrincipal byUserId,
+                                    next
+                                )
 
                             match saved with
                             | Error e -> return Error(FleetStorageFailure(EntityError.message e))
@@ -334,7 +338,7 @@ type EntityStoreTenantFleet
                     | Error msg -> return Error(FleetStorageFailure msg)
                     | Ok next ->
                         let! saved =
-                            entityStore.Save<Tenant>(Tenant.CatalogScope, EntityActor.ofPrincipal byUserId, next)
+                            entityStore.Save<Tenant>(Tenant.CatalogScope, EntityPrincipal.ofPrincipal byUserId, next)
 
                         match saved with
                         | Ok _ ->

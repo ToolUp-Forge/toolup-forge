@@ -110,7 +110,7 @@ module EntityError =
 /// is the server clock at the moment the replay was applied.
 ///
 /// Phase 806 moved it here from the audit-payload file — beside
-/// `EntityActor`, which carries it INTO the store — with its shape
+/// `EntityPrincipal`, which carries it INTO the store — with its shape
 /// unchanged.
 type EntityReplayProvenance = {
     /// When the user made the edit — the offline queue's `EnqueuedAt`
@@ -137,7 +137,7 @@ type EntityReplayProvenance = {
 /// wrong audit row. It replaces the ambient replay scope Phase 759
 /// carried the provenance in, which went silently missing across any
 /// async boundary that did not flow the execution context.
-type EntityActor = {
+type EntityPrincipal = {
     /// The authenticated principal performing the write —
     /// `AccessContext.UserId` at a handler, the scheduling principal for
     /// a job. Stamped as `UserId` on the lifecycle audit row and as
@@ -156,7 +156,7 @@ type EntityActor = {
     Replay: EntityReplayProvenance option
 }
 
-module EntityActor =
+module EntityPrincipal =
     /// The principal name the host stamps on a write no user made. The
     /// literal lives here and nowhere else: a store never infers it.
     [<Literal>]
@@ -169,7 +169,7 @@ module EntityActor =
     /// scheduled it, and a caller that passes `system` where a user was
     /// in reach is recording a write nobody made. A store never
     /// substitutes it — the row carries exactly the actor on the call.
-    let system: EntityActor = {
+    let system: EntityPrincipal = {
         Principal = SystemPrincipal
         OnBehalfOf = None
         Replay = None
@@ -177,18 +177,21 @@ module EntityActor =
 
     /// An actor for `principal` acting for itself, live (no replay
     /// provenance). The shape a handler builds from `AccessContext.UserId`.
-    let ofPrincipal (principal: string) : EntityActor = {
+    let ofPrincipal (principal: string) : EntityPrincipal = {
         Principal = principal
         OnBehalfOf = None
         Replay = None
     }
 
     /// `principal` acting for `subject` — a delegated write.
-    let onBehalfOf (subject: string) (actor: EntityActor) : EntityActor = { actor with OnBehalfOf = Some subject }
+    let onBehalfOf (subject: string) (actor: EntityPrincipal) : EntityPrincipal = {
+        actor with
+            OnBehalfOf = Some subject
+    }
 
     /// `actor` applying an offline mutation by replay. The provenance
     /// rides onto the lifecycle row the store records for the version.
-    let replaying (provenance: EntityReplayProvenance) (actor: EntityActor) : EntityActor = {
+    let replaying (provenance: EntityReplayProvenance) (actor: EntityPrincipal) : EntityPrincipal = {
         actor with
             Replay = Some provenance
     }

@@ -270,7 +270,7 @@ let private exclusionTests =
             let! _ =
                 store.Save<PublicPageEntity>(
                     "team-a",
-                    EntityTypes.EntityActor.ofPrincipal "tester",
+                    EntityTypes.EntityPrincipal.ofPrincipal "tester",
                     PublicPageEntity.fromPage teamScopedPage
                 )
 

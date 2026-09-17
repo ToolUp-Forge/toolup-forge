@@ -43,7 +43,7 @@ type InMemoryEntityStore() =
 
     interface IEntityStore with
 
-        member _.Save<'T>(scopeId: string, _actor: EntityActor, entity: 'T) = async {
+        member _.Save<'T>(scopeId: string, _actor: EntityPrincipal, entity: 'T) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -67,7 +67,7 @@ type InMemoryEntityStore() =
 
         // Phase 753 — compare-and-set save: the head is the stored
         // version (0 when absent); a mismatch is `VersionConflict`.
-        member _.SaveIfVersion<'T>(scopeId: string, _actor: EntityActor, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(scopeId: string, _actor: EntityPrincipal, entity: 'T, expectedVersion: int) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->

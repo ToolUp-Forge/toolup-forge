@@ -114,7 +114,7 @@ side:
 - `runScheduledPublishSweep store actor now` — promotes every `Scheduled`-and-due
   page to `Published`, stamping `actor` on each promotion. A deployment registers
   it as a recurring `IJobScheduler` job — naming the principal the job runs under,
-  or `EntityActor.system` for a sweep no principal owns — so scheduled content
+  or `EntityPrincipal.system` for a sweep no principal owns — so scheduled content
   goes live without a redeploy.
 
 ## Versioning

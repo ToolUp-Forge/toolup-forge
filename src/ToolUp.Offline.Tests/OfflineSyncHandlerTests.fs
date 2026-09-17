@@ -97,7 +97,7 @@ type FakeEntityStore() =
         | true, (_, v) -> v
         | _ -> 0
 
-    let actors = ResizeArray<string * EntityActor>()
+    let actors = ResizeArray<string * EntityPrincipal>()
 
     member _.Seed(entityType: string, entityId: string, json: string, version: int) =
         store[key entityType entityId] <- (json, version)
@@ -108,7 +108,7 @@ type FakeEntityStore() =
     member _.Actors = actors |> List.ofSeq
 
     interface IEntityStore with
-        member _.Save<'T>(_scopeId: string, actor: EntityActor, entity: 'T) = async {
+        member _.Save<'T>(_scopeId: string, actor: EntityPrincipal, entity: 'T) = async {
             actors.Add("Save", actor)
 
             match tryGetEntityFields entity with
@@ -119,7 +119,7 @@ type FakeEntityStore() =
         // Phase 753 — the seam's compare-and-set, which is now the
         // handler's conflict guard: a stale expectation is refused here,
         // exactly as BlobEntityStore refuses it.
-        member _.SaveIfVersion<'T>(_scopeId: string, actor: EntityActor, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(_scopeId: string, actor: EntityPrincipal, entity: 'T, expectedVersion: int) = async {
             actors.Add("SaveIfVersion", actor)
 
             match tryGetEntityFields entity with
@@ -139,7 +139,7 @@ type FakeEntityStore() =
             | _ -> return Error(EntityError.NotFound(entityType, entityId))
         }
 
-        member _.Delete(_scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId) = async {
+        member _.Delete(_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) = async {
             actors.Add("Delete", actor)
             let k = key entityType entityId
 
@@ -150,7 +150,7 @@ type FakeEntityStore() =
         }
 
         member _.DeleteIfVersion
-            (_scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId, expectedVersion: int)
+            (_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
             =
             async {
                 actors.Add("DeleteIfVersion", actor)
@@ -533,7 +533,7 @@ let auditTests =
             let seeded =
                 store.SaveIfVersion<Inspection>(
                     "team-a",
-                    EntityActor.ofPrincipal "seeder",
+                    EntityPrincipal.ofPrincipal "seeder",
                     {
                         Id = "e1"
                         Type = "Inspection"
@@ -574,7 +574,7 @@ let auditTests =
             let seeded =
                 store.Save<Inspection>(
                     "team-a",
-                    EntityActor.ofPrincipal "seeder",
+                    EntityPrincipal.ofPrincipal "seeder",
                     {
                         Id = "e1"
                         Type = "Inspection"
@@ -718,7 +718,7 @@ let auditTests =
             let live =
                 store.Save<Inspection>(
                     "team-a",
-                    EntityActor.ofPrincipal "bob",
+                    EntityPrincipal.ofPrincipal "bob",
                     {
                         Id = "e1"
                         Type = "Inspection"

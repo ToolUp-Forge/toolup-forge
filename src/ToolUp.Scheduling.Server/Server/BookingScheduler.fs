@@ -176,7 +176,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
             // principal through that seam is the successor phase's (the
             // booking operations below already carry `actorUserId`). Until
             // then the row says so visibly rather than by default.
-            let! r = entityStore.Save<BookableResource>(scopeId, EntityActor.system, resource)
+            let! r = entityStore.Save<BookableResource>(scopeId, EntityPrincipal.system, resource)
 
             return
                 match r with
@@ -209,7 +209,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                 if not (List.isEmpty conflicts) then
                     return Error(Conflicts conflicts)
                 else
-                    let! r = entityStore.Save<Booking>(scopeId, EntityActor.ofPrincipal actorUserId, booking)
+                    let! r = entityStore.Save<Booking>(scopeId, EntityPrincipal.ofPrincipal actorUserId, booking)
 
                     match r with
                     | Error err -> return Error(mapEntityError err)
@@ -237,7 +237,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
             | Some b when b.Status = Cancelled -> return Ok() // idempotent
             | Some b ->
                 let updated = { b with Status = Cancelled }
-                let! r = entityStore.Save<Booking>(scopeId, EntityActor.ofPrincipal actorUserId, updated)
+                let! r = entityStore.Save<Booking>(scopeId, EntityPrincipal.ofPrincipal actorUserId, updated)
 
                 match r with
                 | Error err -> return Error(mapEntityError err)
@@ -270,7 +270,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                     if not (List.isEmpty conflicts) then
                         return Error(Conflicts conflicts)
                     else
-                        let! r = entityStore.Save<Booking>(scopeId, EntityActor.ofPrincipal actorUserId, updated)
+                        let! r = entityStore.Save<Booking>(scopeId, EntityPrincipal.ofPrincipal actorUserId, updated)
 
                         match r with
                         | Error err -> return Error(mapEntityError err)
@@ -299,7 +299,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                 return Error(StorageFailure "Only Confirmed bookings can be marked NoShow")
             | Some b ->
                 let updated = { b with Status = NoShow }
-                let! r = entityStore.Save<Booking>(scopeId, EntityActor.ofPrincipal actorUserId, updated)
+                let! r = entityStore.Save<Booking>(scopeId, EntityPrincipal.ofPrincipal actorUserId, updated)
 
                 match r with
                 | Error err -> return Error(mapEntityError err)
@@ -334,7 +334,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
             | None ->
                 // Phase 806 — as `RegisterResource`: no caller on
                 // `IBookingScheduler.AddAvailabilityException`.
-                let! r = entityStore.Save<AvailabilityException>(scopeId, EntityActor.system, exc)
+                let! r = entityStore.Save<AvailabilityException>(scopeId, EntityPrincipal.system, exc)
 
                 return
                     match r with
@@ -345,7 +345,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
         member _.RemoveAvailabilityException(scopeId, id) = async {
             // Phase 806 — as `RegisterResource`: no caller on
             // `IBookingScheduler.RemoveAvailabilityException`.
-            let! r = entityStore.Delete(scopeId, EntityActor.system, ExceptionTypeName, id)
+            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, ExceptionTypeName, id)
 
             return
                 match r with

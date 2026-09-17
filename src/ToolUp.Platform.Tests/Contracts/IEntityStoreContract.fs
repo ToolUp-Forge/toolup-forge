@@ -43,7 +43,7 @@ let otherEntityRegistration = EntityRegistration.create<OtherEntity> OtherEntity
 
 /// The actor every storage-behaviour case writes as. The audit cases
 /// below use their own, because the actor is what they are about.
-let private actor = EntityActor.ofPrincipal "tester"
+let private actor = EntityPrincipal.ofPrincipal "tester"
 
 let private mkEntity (id: EntityId) (owner: string) (status: string) : TestEntity = {
     Id = id
@@ -510,7 +510,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
 // case: the lifecycle row carries exactly the actor the caller passed —
 // principal, delegation, replay provenance — and the `"system"`
 // principal appears on a row only when a caller passed
-// `EntityActor.system`, never as something the store fell back to.
+// `EntityPrincipal.system`, never as something the store fell back to.
 
 /// Records every lifecycle row the store under test emits.
 type CapturingAuditLog() =
@@ -562,13 +562,13 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
             let store, scope, log = setup ()
             let entity = mkEntity "a-1" "alice" "active"
 
-            let! created = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", entity)
+            let! created = store.Save<TestEntity>(scope, EntityPrincipal.ofPrincipal "alice", entity)
             Expect.isOk created "create"
 
             let! updated =
                 store.SaveIfVersion<TestEntity>(
                     scope,
-                    EntityActor.ofPrincipal "bob" |> EntityActor.onBehalfOf "carol",
+                    EntityPrincipal.ofPrincipal "bob" |> EntityPrincipal.onBehalfOf "carol",
                     { entity with Status = "reviewed" },
                     1
                 )
@@ -578,13 +578,13 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
             let! replayed =
                 store.Save<TestEntity>(
                     scope,
-                    EntityActor.ofPrincipal "alice" |> EntityActor.replaying provenance,
+                    EntityPrincipal.ofPrincipal "alice" |> EntityPrincipal.replaying provenance,
                     { entity with Status = "replayed" }
                 )
 
             Expect.isOk replayed "replayed update"
 
-            let! deleted = store.DeleteIfVersion(scope, EntityActor.ofPrincipal "dave", TestEntityType, "a-1", 3)
+            let! deleted = store.DeleteIfVersion(scope, EntityPrincipal.ofPrincipal "dave", TestEntityType, "a-1", 3)
             Expect.isOk deleted "conditional delete"
 
             let rows =
@@ -602,8 +602,8 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
                 "each row carries exactly the actor its call passed, and one row per version"
 
             // And the unconditional delete, on a second entity.
-            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "erin", mkEntity "a-2" "erin" "active")
-            let! _ = store.Delete(scope, EntityActor.ofPrincipal "frank", TestEntityType, "a-2")
+            let! _ = store.Save<TestEntity>(scope, EntityPrincipal.ofPrincipal "erin", mkEntity "a-2" "erin" "active")
+            let! _ = store.Delete(scope, EntityPrincipal.ofPrincipal "frank", TestEntityType, "a-2")
 
             let a2 =
                 log.Lifecycle scope
@@ -620,27 +620,27 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
         <| async {
             let store, scope, log = setup ()
 
-            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", mkEntity "s-1" "alice" "active")
+            let! _ = store.Save<TestEntity>(scope, EntityPrincipal.ofPrincipal "alice", mkEntity "s-1" "alice" "active")
 
             let! _ =
                 store.SaveIfVersion<TestEntity>(
                     scope,
-                    EntityActor.ofPrincipal "alice",
+                    EntityPrincipal.ofPrincipal "alice",
                     mkEntity "s-1" "alice" "done",
                     1
                 )
 
-            let! _ = store.Delete(scope, EntityActor.ofPrincipal "alice", TestEntityType, "s-1")
+            let! _ = store.Delete(scope, EntityPrincipal.ofPrincipal "alice", TestEntityType, "s-1")
 
             let principals = log.Lifecycle scope |> List.map (fun (_, p) -> p.UserId)
             Expect.equal principals [ "alice"; "alice"; "alice" ] "three rows, none of them the host's"
 
             Expect.isFalse
-                (principals |> List.contains EntityActor.SystemPrincipal)
+                (principals |> List.contains EntityPrincipal.SystemPrincipal)
                 "no row carries the system principal when no caller passed it"
 
             // The one legitimate way the value appears.
-            let! _ = store.Save<TestEntity>(scope, EntityActor.system, mkEntity "s-2" "host" "seeded")
+            let! _ = store.Save<TestEntity>(scope, EntityPrincipal.system, mkEntity "s-2" "host" "seeded")
 
             let seeded =
                 log.Lifecycle scope
@@ -649,7 +649,7 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
 
             Expect.equal
                 (seeded |> List.map _.UserId)
-                [ EntityActor.SystemPrincipal ]
+                [ EntityPrincipal.SystemPrincipal ]
                 "passed explicitly, recorded as passed"
         }
 
@@ -658,9 +658,10 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
         <| async {
             let store, scope, log = setup ()
             let entity = mkEntity "r-1" "alice" "active"
-            let! _ = store.Save<TestEntity>(scope, EntityActor.ofPrincipal "alice", entity)
+            let! _ = store.Save<TestEntity>(scope, EntityPrincipal.ofPrincipal "alice", entity)
 
-            let replaying = EntityActor.ofPrincipal "alice" |> EntityActor.replaying provenance
+            let replaying =
+                EntityPrincipal.ofPrincipal "alice" |> EntityPrincipal.replaying provenance
 
             let! applied = store.SaveIfVersion<TestEntity>(scope, replaying, { entity with Status = "offline-edit" }, 1)
 

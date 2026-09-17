@@ -139,8 +139,8 @@ let promoteIfDue (now: DateTimeOffset) (page: PublicPage) : PublicPage =
 /// the job scheduler" with no per-page job bookkeeping. `actor` is the
 /// principal the job is scheduled under and is stamped on every
 /// promotion (Phase 806) — the deployment that registers the job names
-/// it; a sweep no principal owns passes `EntityActor.system`.
-let runScheduledPublishSweep (store: IEntityStore) (actor: EntityActor) (now: DateTimeOffset) : Async<string list> = async {
+/// it; a sweep no principal owns passes `EntityPrincipal.system`.
+let runScheduledPublishSweep (store: IEntityStore) (actor: EntityPrincipal) (now: DateTimeOffset) : Async<string list> = async {
     let! refs = store.ListAll<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, 0, 5000)
 
     let mutable promoted = []

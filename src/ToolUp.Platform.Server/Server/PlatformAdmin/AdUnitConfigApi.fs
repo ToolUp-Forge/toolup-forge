@@ -249,7 +249,7 @@ let private upsertHandler (auditEventFor: string -> string -> AuditEvent) : Http
                 let entity = AdSlotEntity.fromConfig config
 
                 let! saveResult =
-                    store.Save<AdSlotEntity>(PlatformAdsConfigScope, EntityActor.ofPrincipal ac.UserId, entity)
+                    store.Save<AdSlotEntity>(PlatformAdsConfigScope, EntityPrincipal.ofPrincipal ac.UserId, entity)
                     |> Async.StartAsTask
 
                 match saveResult with
@@ -274,7 +274,7 @@ let private deleteHandler (slotId: string) : HttpHandler =
     fun next (ctx: HttpContext) ->
         withSubstrate ctx (fun ac store _registry -> task {
             let! result =
-                store.Delete(PlatformAdsConfigScope, EntityActor.ofPrincipal ac.UserId, AdSlotEntityType, slotId)
+                store.Delete(PlatformAdsConfigScope, EntityPrincipal.ofPrincipal ac.UserId, AdSlotEntityType, slotId)
                 |> Async.StartAsTask
 
             match result with

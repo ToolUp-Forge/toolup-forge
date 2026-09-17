@@ -72,11 +72,11 @@ let withContentAdmin (app: ServerApp) : ServerApp =
         // visible 'anonymous' row rather than a placeholder.
         let actor =
             match ctx.Items.TryGetValue "ToolUp.AccessContext" with
-            | true, (:? AccessContext as ac) -> EntityActor.ofPrincipal ac.UserId
+            | true, (:? AccessContext as ac) -> EntityPrincipal.ofPrincipal ac.UserId
             | _ ->
                 match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> EntityActor.ofPrincipal id
-                | _ -> EntityActor.ofPrincipal "anonymous"
+                | true, (:? string as id) -> EntityPrincipal.ofPrincipal id
+                | _ -> EntityPrincipal.ofPrincipal "anonymous"
 
         ContentAdminApiImpl.create store actor
 

@@ -169,7 +169,7 @@ let stampSubmission: WorkflowAction =
     fun ctx -> async {
         let entityStore =
             ctx.Services.GetService(typeof<IEntityStore>) :?> IEntityStore
-        let! _ = entityStore.Save("scope", EntityActor.ofPrincipal ctx.AccessContext.UserId, { ... })
+        let! _ = entityStore.Save("scope", EntityPrincipal.ofPrincipal ctx.AccessContext.UserId, { ... })
         return ()
     }
 ```

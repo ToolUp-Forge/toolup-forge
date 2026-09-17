@@ -108,7 +108,7 @@ let tests =
             let! result =
                 outbox.SaveWithEvents(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     LedgerType,
                     "e-1",
                     mkEntry "e-1" "first",
@@ -141,7 +141,7 @@ let tests =
             let! result =
                 downOutbox.SaveWithEvents(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     LedgerType,
                     "e-2",
                     mkEntry "e-2" "spilled",
@@ -187,7 +187,7 @@ let tests =
             let! result =
                 outbox.SaveWithEvents(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     LedgerType,
                     "e-3",
                     {
@@ -254,7 +254,9 @@ let tests =
 
             // The crash-between-save-and-publish window: entity saved,
             // intent still staged, publish never ran.
-            let! saved = entityStore.Save<LedgerEntry>(scope, EntityActor.ofPrincipal "tester", mkEntry "e-4" "orphan")
+            let! saved =
+                entityStore.Save<LedgerEntry>(scope, EntityPrincipal.ofPrincipal "tester", mkEntry "e-4" "orphan")
+
             Expect.isOk saved "direct save succeeds"
 
             let intent: EntityOutbox.OutboxIntent = {

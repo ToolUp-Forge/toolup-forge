@@ -429,12 +429,12 @@ type WorkflowActionExecutedPayload = {
 /// cross-reference against the entity blob in `IDataObjectStore`.
 type EntityLifecycleEventPayload = {
     /// Actor who triggered the lifecycle event — the `Principal` of the
-    /// `EntityActor` on the store call, exactly as passed (Phase 806).
-    /// `"system"` only when the caller passed `EntityActor.system`; a
+    /// `EntityPrincipal` on the store call, exactly as passed (Phase 806).
+    /// `"system"` only when the caller passed `EntityPrincipal.system`; a
     /// store never infers it.
     UserId: string
     /// Phase 806 — the subject `UserId` acted FOR when the write was
-    /// delegated (`EntityActor.OnBehalfOf`); `None` when the principal
+    /// delegated (`EntityPrincipal.OnBehalfOf`); `None` when the principal
     /// acted for itself. Absent on every pre-806 row and deserialises to
     /// `None` by the same null-is-`None` mechanism as `Replay` below.
     OnBehalfOf: string option
@@ -448,7 +448,7 @@ type EntityLifecycleEventPayload = {
     Version: int
     /// Phase 759 — `Some` when this row records an offline mutation
     /// applied by replay: the offline sync handler passes the provenance
-    /// on the `EntityActor` and the store stamps it here beside the
+    /// on the `EntityPrincipal` and the store stamps it here beside the
     /// version it assigned (Phase 806); `None` for a live write.
     ///
     /// **`None` is the shipped default and absorbs every pre-759

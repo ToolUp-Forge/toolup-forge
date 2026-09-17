@@ -90,7 +90,7 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
             // write is stamped as the host's; threading the principal through
             // that seam is the successor phase's. Until then the row says so
             // visibly rather than by default.
-            let! r = entityStore.Save<FormSchema>(scopeId, EntityActor.system, normalized)
+            let! r = entityStore.Save<FormSchema>(scopeId, EntityPrincipal.system, normalized)
 
             return
                 match r with
@@ -171,7 +171,7 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
 
         member _.DeleteSchema(scopeId, schemaId) = async {
             // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSchema`.
-            let! r = entityStore.Delete(scopeId, EntityActor.system, FormSchema.entityType, schemaId)
+            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, FormSchema.entityType, schemaId)
 
             return
                 match r with
@@ -191,8 +191,8 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
             // string the `Author` index keys on).
             let actor =
                 match normalized.Author with
-                | AuthenticatedUser userId -> EntityActor.ofPrincipal userId
-                | InvitedRespondent _ -> EntityActor.ofPrincipal (SubmissionAuthor.toIndexValue normalized.Author)
+                | AuthenticatedUser userId -> EntityPrincipal.ofPrincipal userId
+                | InvitedRespondent _ -> EntityPrincipal.ofPrincipal (SubmissionAuthor.toIndexValue normalized.Author)
 
             let! r = entityStore.Save<Submission>(scopeId, actor, normalized)
 
@@ -234,7 +234,7 @@ type FormStore(entityStore: IEntityStore, ?warn: FormStoreWarn, ?metricsSink: IM
 
         member _.DeleteSubmission(scopeId, submissionId) = async {
             // Phase 806 — as `SaveSchema`: no caller on `IFormStore.DeleteSubmission`.
-            let! r = entityStore.Delete(scopeId, EntityActor.system, Submission.entityType, submissionId)
+            let! r = entityStore.Delete(scopeId, EntityPrincipal.system, Submission.entityType, submissionId)
 
             return
                 match r with

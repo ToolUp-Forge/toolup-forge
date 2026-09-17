@@ -25,7 +25,7 @@ ToolUp.ContentAuthoring.ContentLifecycle.editorialWorkflow : ToolUp.Forms.Workfl
 ToolUp.ContentAuthoring.ContentLifecycle.isDueForPublish(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : System.Boolean
 ToolUp.ContentAuthoring.ContentLifecycle.promoteIfDue(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : ToolUp.PublicRendering.PublicPage
 ToolUp.ContentAuthoring.ContentLifecycle.publishAt(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : ToolUp.PublicRendering.PublicPage
-ToolUp.ContentAuthoring.ContentLifecycle.runScheduledPublishSweep(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.EntityTypes+EntityActor, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.ContentAuthoring.ContentLifecycle.runScheduledPublishSweep(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.EntityTypes+EntityPrincipal, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.ContentAuthoring.ContentLifecycle.schedule(System.DateTimeOffset, ToolUp.PublicRendering.PublicPage) : ToolUp.PublicRendering.PublicPage
 ToolUp.ContentAuthoring.ContentLifecycle.statusForState(System.String) : ToolUp.PublicRendering.PublishStatus
 ToolUp.ContentAuthoring.ContentLifecycle.toDraft(ToolUp.PublicRendering.PublicPage) : ToolUp.PublicRendering.PublicPage

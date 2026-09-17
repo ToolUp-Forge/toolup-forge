@@ -183,7 +183,7 @@ type PostgresEntityStore
     /// principal, `OnBehalfOf` the delegation, `Replay` the offline
     /// provenance. No branch of this store writes a placeholder actor.
     let lifecyclePayload
-        (actor: EntityActor)
+        (actor: EntityPrincipal)
         (entityType: string)
         (entityId: EntityId)
         (version: int)
@@ -220,7 +220,7 @@ type PostgresEntityStore
     }
 
     interface IEntityStore with
-        member _.Save<'T>(scopeId: string, actor: EntityActor, entity: 'T) = async {
+        member _.Save<'T>(scopeId: string, actor: EntityPrincipal, entity: 'T) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -307,7 +307,7 @@ type PostgresEntityStore
         // reported as `VersionConflict`. No lock, no transaction — the
         // head read is only the early, cheap refusal for a stale
         // expectation; the key decides the race.
-        member _.SaveIfVersion<'T>(scopeId: string, actor: EntityActor, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(scopeId: string, actor: EntityPrincipal, entity: 'T, expectedVersion: int) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -474,7 +474,7 @@ type PostgresEntityStore
                 return []
         }
 
-        member _.Delete(scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId) = async {
+        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) = async {
             if not (registry.Knows entityType) then
                 return Error(EntityError.UnknownEntityType entityType)
             else
@@ -528,7 +528,7 @@ type PostgresEntityStore
         // = 0` is the idempotent "never existed" `Ok`, anything else is a
         // `VersionConflict` naming what the head is now.
         member _.DeleteIfVersion
-            (scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId, expectedVersion: int)
+            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
             =
             async {
 

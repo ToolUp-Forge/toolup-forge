@@ -253,7 +253,7 @@ type BlobEntityStore
     /// principal, `OnBehalfOf` the delegation, `Replay` the offline
     /// provenance. No branch of this store writes a placeholder actor.
     let lifecyclePayload
-        (actor: EntityActor)
+        (actor: EntityPrincipal)
         (entityType: string)
         (entityId: EntityId)
         (version: int)
@@ -275,7 +275,7 @@ type BlobEntityStore
     /// create.
     let afterVersionWrite
         (scopeId: string)
-        (actor: EntityActor)
+        (actor: EntityPrincipal)
         (core: EntityFieldsCore)
         (reg: EntityRegistration<'T>)
         (entityWithVersion: 'T)
@@ -382,7 +382,7 @@ type BlobEntityStore
     /// before. Every audit row here is stamped from `actor`.
     let deleteEntity
         (scopeId: string)
-        (actor: EntityActor)
+        (actor: EntityPrincipal)
         (entityType: string)
         (entityId: EntityId)
         (expected: int option)
@@ -464,45 +464,57 @@ type BlobEntityStore
 
     interface IEntityStore with
 
-        member _.Save<'T>(scopeId: string, actor: EntityActor, entity: 'T) : Async<Result<EntityRef<'T>, EntityError>> = async {
-            match validateForSave entity with
-            | Error err -> return Error err
-            | Ok(core, reg) ->
-                // Step 3: determine the next version. Read ListVersions;
-                // if empty, version = 1; else version = max + 1.
-                // Last-writer-wins by design — a caller that carried a
-                // version through a round trip uses `SaveIfVersion`.
-                let objectId = objectIdFor core.Type core.Id
-                let! existingVersions = dataObjectStore.ListVersions(scopeId, objectId)
-                let previousHead = headOf existingVersions
-                let newVersion = previousHead + 1
+        member _.Save<'T>
+            (scopeId: string, actor: EntityPrincipal, entity: 'T)
+            : Async<Result<EntityRef<'T>, EntityError>> =
+            async {
+                match validateForSave entity with
+                | Error err -> return Error err
+                | Ok(core, reg) ->
+                    // Step 3: determine the next version. Read ListVersions;
+                    // if empty, version = 1; else version = max + 1.
+                    // Last-writer-wins by design — a caller that carried a
+                    // version through a round trip uses `SaveIfVersion`.
+                    let objectId = objectIdFor core.Type core.Id
+                    let! existingVersions = dataObjectStore.ListVersions(scopeId, objectId)
+                    let previousHead = headOf existingVersions
+                    let newVersion = previousHead + 1
 
-                // Step 4: replace the entity's Version with the assigned
-                // version, then serialise.
-                let entityWithVersion = withVersion entity newVersion
-                let json = serialise entityWithVersion
-                let bytes = Encoding.UTF8.GetBytes json
+                    // Step 4: replace the entity's Version with the assigned
+                    // version, then serialise.
+                    let entityWithVersion = withVersion entity newVersion
+                    let json = serialise entityWithVersion
+                    let bytes = Encoding.UTF8.GetBytes json
 
-                // Step 5: persist via IDataObjectStore.
-                let! saveResult =
-                    dataObjectStore.Save(
-                        scopeId,
-                        objectId,
-                        bytes,
-                        dataTypeFor core.Type,
-                        actor.Principal,
-                        Map.empty,
-                        Versioned
-                    )
+                    // Step 5: persist via IDataObjectStore.
+                    let! saveResult =
+                        dataObjectStore.Save(
+                            scopeId,
+                            objectId,
+                            bytes,
+                            dataTypeFor core.Type,
+                            actor.Principal,
+                            Map.empty,
+                            Versioned
+                        )
 
-                match saveResult with
-                | Error doErr -> return Error(StorageFailure(sprintf "IDataObjectStore.Save failed: %s" (string doErr)))
-                | Ok savedObject ->
-                    let! entityRef =
-                        afterVersionWrite scopeId actor core reg entityWithVersion previousHead newVersion savedObject
+                    match saveResult with
+                    | Error doErr ->
+                        return Error(StorageFailure(sprintf "IDataObjectStore.Save failed: %s" (string doErr)))
+                    | Ok savedObject ->
+                        let! entityRef =
+                            afterVersionWrite
+                                scopeId
+                                actor
+                                core
+                                reg
+                                entityWithVersion
+                                previousHead
+                                newVersion
+                                savedObject
 
-                    return Ok entityRef
-        }
+                        return Ok entityRef
+            }
 
         // Phase 753 — compare-and-set save. The compare and the claim
         // are one act inside `ConditionalDataObjectStore.saveIfVersion`:
@@ -515,7 +527,7 @@ type BlobEntityStore
         // the version write has succeeded, so a refused expectation
         // leaves every index exactly as it was.
         member _.SaveIfVersion<'T>
-            (scopeId: string, actor: EntityActor, entity: 'T, expectedVersion: int)
+            (scopeId: string, actor: EntityPrincipal, entity: 'T, expectedVersion: int)
             : Async<Result<EntityRef<'T>, EntityError>> =
             async {
                 match validateForSave entity with
@@ -608,13 +620,13 @@ type BlobEntityStore
                         : EntityRef<'T>))
         }
 
-        member _.Delete(scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId) =
+        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) =
             deleteEntity scopeId actor entityType entityId None
 
         // Phase 753 / 806 — compare-and-set delete; see `deleteEntity`
         // for how the compare and the removal are made one act.
         member _.DeleteIfVersion
-            (scopeId: string, actor: EntityActor, entityType: string, entityId: EntityId, expectedVersion: int)
+            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
             =
             deleteEntity scopeId actor entityType entityId (Some expectedVersion)
 

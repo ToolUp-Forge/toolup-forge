@@ -275,7 +275,11 @@ type PublicRenderingNarrativePagePublisher
                     // publishing principal through that seam is the
                     // successor phase's. Until then the row says so visibly.
                     let! result =
-                        entityStore.Save<PublicPageEntity>(PublicPageEntity.PublicScope, EntityActor.system, envelope)
+                        entityStore.Save<PublicPageEntity>(
+                            PublicPageEntity.PublicScope,
+                            EntityPrincipal.system,
+                            envelope
+                        )
 
                     match result with
                     | Ok _ ->

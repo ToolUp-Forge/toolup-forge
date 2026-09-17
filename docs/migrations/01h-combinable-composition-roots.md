@@ -171,7 +171,7 @@ them directly:
 let stampJobEntity: WorkflowAction =
     fun ctx -> async {
         let store = ctx.Services.GetService(typeof<IEntityStore>) :?> IEntityStore
-        let! _ = store.Save("scope", EntityActor.ofPrincipal ctx.AccessContext.UserId, { Id = ctx.Submission.Id; ... })
+        let! _ = store.Save("scope", EntityPrincipal.ofPrincipal ctx.AccessContext.UserId, { Id = ctx.Submission.Id; ... })
         return ()
     }
 ```

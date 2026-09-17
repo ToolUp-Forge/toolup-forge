@@ -409,25 +409,27 @@ let tests =
             let! _ =
                 store.Save(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     PublicPageEntity.fromPage (pageWith (Scheduled(now.AddMinutes(-5.0))) "due")
                 )
 
             let! _ =
                 store.Save(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     PublicPageEntity.fromPage (pageWith (Scheduled(now.AddHours 5.0)) "future")
                 )
 
             let! _ =
                 store.Save(
                     scope,
-                    EntityActor.ofPrincipal "tester",
+                    EntityPrincipal.ofPrincipal "tester",
                     PublicPageEntity.fromPage (pageWith PublishStatus.Draft "draftpage")
                 )
 
-            let! promoted = ContentLifecycle.runScheduledPublishSweep store (EntityActor.ofPrincipal "sweep-job") now
+            let! promoted =
+                ContentLifecycle.runScheduledPublishSweep store (EntityPrincipal.ofPrincipal "sweep-job") now
+
             Expect.equal promoted [ "due" ] "only the due scheduled page is promoted"
 
             let! due = store.Get<PublicPageEntity>(scope, PublicPageEntity.EntityTypeName, "due")
@@ -454,8 +456,8 @@ let tests =
                     Title = "About v2"
             }
 
-            let! _ = store.Save(scope, EntityActor.ofPrincipal "tester", PublicPageEntity.fromPage v1)
-            let! _ = store.Save(scope, EntityActor.ofPrincipal "tester", PublicPageEntity.fromPage v2)
+            let! _ = store.Save(scope, EntityPrincipal.ofPrincipal "tester", PublicPageEntity.fromPage v1)
+            let! _ = store.Save(scope, EntityPrincipal.ofPrincipal "tester", PublicPageEntity.fromPage v2)
 
             let! revisions = PublicPageRevisions.list store "about"
             Expect.equal (List.length revisions) 2 "two revisions listed"
@@ -469,7 +471,7 @@ let tests =
             | Error e -> failtestf "get rev1 failed: %A" e
 
             // Restore v1 → appends a new current version with v1 content.
-            let! restored = PublicPageRevisions.restore store (EntityActor.ofPrincipal "admin") "about" 1
+            let! restored = PublicPageRevisions.restore store (EntityPrincipal.ofPrincipal "admin") "about" 1
             Expect.isOk restored "restore ok"
 
             let! revisionsAfter = PublicPageRevisions.list store "about"
@@ -508,7 +510,7 @@ let tests =
         testCaseAsync "content admin API saves, lists, and transitions pages"
         <| async {
             let store = mkPageStore ()
-            let api = ContentAdminApiImpl.create store (EntityActor.ofPrincipal "admin")
+            let api = ContentAdminApiImpl.create store (EntityPrincipal.ofPrincipal "admin")
 
             let! _ = api.SavePage(pageWith PublishStatus.Draft "intro")
             let! _ = api.SavePage(pageWith Published "home")

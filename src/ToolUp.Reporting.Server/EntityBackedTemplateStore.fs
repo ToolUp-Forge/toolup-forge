@@ -55,7 +55,7 @@ let create (entityStore: IEntityStore) : IReportTemplateStore =
             // this write is stamped as the host's; threading the principal
             // through that seam is the successor phase's. Until then the row
             // says so visibly rather than by default.
-            let! result = entityStore.Save<ReportTemplate>(scopeId, EntityActor.system, template)
+            let! result = entityStore.Save<ReportTemplate>(scopeId, EntityPrincipal.system, template)
 
             match result with
             | Result.Ok ref -> return Result.Ok { template with Version = ref.Version }
@@ -64,7 +64,7 @@ let create (entityStore: IEntityStore) : IReportTemplateStore =
 
         member _.Delete(scopeId, id) = async {
             // Phase 806 — as `Save`: no caller on `IReportTemplateStore.Delete`.
-            let! result = entityStore.Delete(scopeId, EntityActor.system, entityType, id)
+            let! result = entityStore.Delete(scopeId, EntityPrincipal.system, entityType, id)
 
             match result with
             | Result.Ok() -> return Result.Ok()

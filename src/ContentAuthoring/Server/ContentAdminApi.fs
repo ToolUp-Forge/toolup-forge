@@ -180,7 +180,7 @@ module internal ContentAdminApiImpl =
     /// Bind the admin surface over `store` for one caller — `actor` is the
     /// resolved `PlatformAdmin` the gate admitted, stamped on every write
     /// the surface makes (Phase 806).
-    let create (store: IEntityStore) (actor: EntityActor) : IContentAdminApi = {
+    let create (store: IEntityStore) (actor: EntityPrincipal) : IContentAdminApi = {
         ListPages =
             fun () -> async {
                 let! refs = store.ListAll<PublicPageEntity>(scope, etype, 0, 5000)

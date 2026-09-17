@@ -1,6 +1,8 @@
-# Migration — `EntityActor` on `IEntityStore`, and a conditional delete on the data-object seam
+# Migration — `EntityPrincipal` on `IEntityStore`, and a conditional delete on the data-object seam
 
-Every mutating member of `IEntityStore` — `Save`, `SaveIfVersion`, `Delete`, `DeleteIfVersion` — now takes an `EntityActor`: the principal performing the write, an optional on-behalf-of subject, and the optional offline-replay provenance. Both shipped stores stamp the lifecycle audit row (`EntityCreated` / `EntityUpdated` / `EntityDeleted`) and the stored version's `CreatedBy` from it, and neither writes a placeholder actor any more: before this phase every row said `UserId = "system"` because the seam carried no caller, and the offline replay path worked around that with an ambient `AsyncLocal` scope that a new implementation had to remember to read and that went silently missing across any async boundary that did not flow the execution context.
+> **Naming note.** The principal record is spelled `EntityPrincipal` throughout this document: Phase 814 renamed it (from the working name 806 landed it under) before the 0.23.0 draft was released, so no released consumer ever names the earlier spelling and this document reads under the released name. The rename and the four seam retypes that followed it are in [`814-seam-principals.md`](814-seam-principals.md).
+
+Every mutating member of `IEntityStore` — `Save`, `SaveIfVersion`, `Delete`, `DeleteIfVersion` — now takes an `EntityPrincipal`: the principal performing the write, an optional on-behalf-of subject, and the optional offline-replay provenance. Both shipped stores stamp the lifecycle audit row (`EntityCreated` / `EntityUpdated` / `EntityDeleted`) and the stored version's `CreatedBy` from it, and neither writes a placeholder actor any more: before this phase every row said `UserId = "system"` because the seam carried no caller, and the offline replay path worked around that with an ambient `AsyncLocal` scope that a new implementation had to remember to read and that went silently missing across any async boundary that did not flow the execution context.
 
 In the same seam revision the compare-then-delete window on `DeleteIfVersion` is closed: `IConditionalDataObjectStore` gains `DeleteIfVersion`, the twin of `SaveIfVersion`, and `BlobEntityStore` routes through it.
 
@@ -14,32 +16,32 @@ The actor is the second argument, between the scope and the payload. Build it fr
 
 ```diff
 - store.Save<Note>(scopeId, note)
-+ store.Save<Note>(scopeId, EntityActor.ofPrincipal accessContext.UserId, note)
++ store.Save<Note>(scopeId, EntityPrincipal.ofPrincipal accessContext.UserId, note)
 
 - store.SaveIfVersion<Note>(scopeId, note, expected)
-+ store.SaveIfVersion<Note>(scopeId, EntityActor.ofPrincipal accessContext.UserId, note, expected)
++ store.SaveIfVersion<Note>(scopeId, EntityPrincipal.ofPrincipal accessContext.UserId, note, expected)
 
 - store.Delete(scopeId, "Note", noteId)
-+ store.Delete(scopeId, EntityActor.ofPrincipal accessContext.UserId, "Note", noteId)
++ store.Delete(scopeId, EntityPrincipal.ofPrincipal accessContext.UserId, "Note", noteId)
 
 - store.DeleteIfVersion(scopeId, "Note", noteId, expected)
-+ store.DeleteIfVersion(scopeId, EntityActor.ofPrincipal accessContext.UserId, "Note", noteId, expected)
++ store.DeleteIfVersion(scopeId, EntityPrincipal.ofPrincipal accessContext.UserId, "Note", noteId, expected)
 ```
 
 Three constructors cover every case:
 
 ```fsharp skip=fragment
 // A handler: the authenticated caller, acting for itself.
-let actor = EntityActor.ofPrincipal accessContext.UserId
+let actor = EntityPrincipal.ofPrincipal accessContext.UserId
 
 // A delegated write: an admin editing a member's record.
-let delegated = EntityActor.ofPrincipal adminId |> EntityActor.onBehalfOf memberId
+let delegated = EntityPrincipal.ofPrincipal adminId |> EntityPrincipal.onBehalfOf memberId
 
 // A write no principal made: a boot-time seed, a migration, a sweep no user
 // triggered. NEVER a default — a handler has a caller, a job has the
 // principal that scheduled it. The store never substitutes it; the row
 // carries exactly the actor on the call.
-let host = EntityActor.system
+let host = EntityPrincipal.system
 ```
 
 `OnBehalfOf` lands on the row as `EntityLifecycleEventPayload.OnBehalfOf` (new, `None` on every pre-806 row — it deserialises by the same null-is-`None` mechanism as `Replay`, so no migration). `Replay` is for the offline sync handler; a live write leaves it `None`.
@@ -63,7 +65,7 @@ let host = EntityActor.system
           })
 ```
 
-The contract pack pins it: `IEntityStoreContract.auditTests` binds your store with a capturing `IAuditLog` and asserts that the actor on the call is the actor on the row, and that `"system"` reaches a row only when a caller passed `EntityActor.system`. Bind it beside `IEntityStoreContract.tests`.
+The contract pack pins it: `IEntityStoreContract.auditTests` binds your store with a capturing `IAuditLog` and asserts that the actor on the call is the actor on the row, and that `"system"` reaches a row only when a caller passed `EntityPrincipal.system`. Bind it beside `IEntityStoreContract.tests`.
 
 ### 3. Every `IConditionalDataObjectStore` implementation — add `DeleteIfVersion`
 
@@ -80,7 +82,7 @@ The handler builds one actor per mutation — the caller, replaying with the mut
 
 ```diff
 - Apply: OfflineReplayContext -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
-+ Apply: OfflineReplayContext -> EntityActor -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
++ Apply: OfflineReplayContext -> EntityPrincipal -> int -> byte[] -> Async<Result<byte[] * int, OfflineReplayError>>
 ```
 
 An adapter built with `OfflineEntityReplay.ofJson` needs no change. A hand-written one passes the actor on its `SaveIfVersion` call and nothing else — substituting its own actor opts its entity type out of the provenance.
@@ -121,4 +123,4 @@ Revert the phase's commits. Rows written under it carry `OnBehalfOf` and a real 
 
 ## Version notes
 
-Breaking (SemVer-on-0.x: minor) — retyped abstract members on a shipped interface with two production implementations, a new abstract member on `IConditionalDataObjectStore`, removed `OfflineSyncOptions.AuditLog` / `withAuditLog` / `withAuditEventStore` / `EntityAuditReplayScope`, retyped `OutboxEntityStore.SaveWithEvents`, `ContentAdminApiImpl.create`, `runScheduledPublishSweep`, `PublicPageRevisions.restore`, `OfflineEntityReplay.Apply`; widened `EntityLifecycleEventPayload` (breaks full-record literals; wire-additive); relocated `EntityReplayProvenance`. Additive: `EntityActor` + its module, `ConditionalDeleteError`, `ConditionalDataObjectStore.deleteIfVersion`, `IEntityStoreContract.auditTests`. Landed against the frozen 0.23.0 draft without moving `<Version>`; the operator classes the next cut.
+Breaking (SemVer-on-0.x: minor) — retyped abstract members on a shipped interface with two production implementations, a new abstract member on `IConditionalDataObjectStore`, removed `OfflineSyncOptions.AuditLog` / `withAuditLog` / `withAuditEventStore` / `EntityAuditReplayScope`, retyped `OutboxEntityStore.SaveWithEvents`, `ContentAdminApiImpl.create`, `runScheduledPublishSweep`, `PublicPageRevisions.restore`, `OfflineEntityReplay.Apply`; widened `EntityLifecycleEventPayload` (breaks full-record literals; wire-additive); relocated `EntityReplayProvenance`. Additive: `EntityPrincipal` + its module, `ConditionalDeleteError`, `ConditionalDataObjectStore.deleteIfVersion`, `IEntityStoreContract.auditTests`. Landed against the frozen 0.23.0 draft without moving `<Version>`; the operator classes the next cut.

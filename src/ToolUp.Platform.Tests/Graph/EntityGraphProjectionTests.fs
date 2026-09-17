@@ -187,8 +187,10 @@ let tests =
             "sync: create propagates node + edge automatically"
             (async {
                 let env = makeEnv true
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                let! _ =
+                    env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
 
                 let! authorNode = env.Graph.GetNode("team-a", nodeIdOf "Author" "a1")
                 let! bookNode = env.Graph.GetNode("team-a", nodeIdOf "Book" "b1")
@@ -207,10 +209,14 @@ let tests =
             "sync: update re-projects the node in place (still one node)"
             (async {
                 let env = makeEnv true
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
-                    env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada Lovelace" 1990 20.0m)
+                    env.Store.Save(
+                        "team-a",
+                        EntityPrincipal.ofPrincipal "tester",
+                        mkAuthor "a1" "Ada Lovelace" 1990 20.0m
+                    )
 
                 let! node = env.Graph.GetNode("team-a", nodeIdOf "Author" "a1")
 
@@ -224,9 +230,12 @@ let tests =
             "sync: delete removes the node (+ incident edges)"
             (async {
                 let env = makeEnv true
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
-                let! _ = env.Store.Delete("team-a", EntityActor.ofPrincipal "tester", "Book", "b1")
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                let! _ =
+                    env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+
+                let! _ = env.Store.Delete("team-a", EntityPrincipal.ofPrincipal "tester", "Book", "b1")
 
                 let! bookNode = env.Graph.GetNode("team-a", nodeIdOf "Book" "b1")
                 Expect.isNone bookNode "book node removed by the delete signal"
@@ -239,7 +248,7 @@ let tests =
             "sync: re-applying the same mutation is idempotent (deterministic ids)"
             (async {
                 let env = makeEnv false
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
                 let! r1 = env.Projector.SyncEntity("team-a", "Author", "a1")
                 let! r2 = env.Projector.SyncEntity("team-a", "Author", "a1")
                 okOrFail "sync 1" r1
@@ -263,8 +272,10 @@ let tests =
             "rebuild: bootstraps a graph over an existing entity store (counts correct)"
             (async {
                 let env = makeEnv false // no auto-projection — simulate a pre-existing store
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                let! _ =
+                    env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
 
                 let! report = env.Projector.RebuildProjection("team-a")
                 Expect.equal report.NodesUpserted 2 "two entities → two nodes upserted"
@@ -279,8 +290,11 @@ let tests =
             "rebuild: a second run over an unchanged store is a no-op (idempotent)"
             (async {
                 let env = makeEnv false
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                let! _ =
+                    env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+
                 let! _ = env.Projector.RebuildProjection("team-a")
                 let! second = env.Projector.RebuildProjection("team-a")
                 Expect.isTrue (ProjectionReport.isNoOp second) "unchanged store → zero-count report"
@@ -290,7 +304,7 @@ let tests =
             "rebuild: removes an orphan node whose source entity is gone"
             (async {
                 let env = makeEnv false
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
                 let! _ = env.Projector.RebuildProjection("team-a")
                 // Inject an orphan directly into the graph (no backing entity).
                 let orphan = {
@@ -310,8 +324,11 @@ let tests =
             "rebuild: heals a missed delete/mutation signal (drift recovery)"
             (async {
                 let env = makeEnv false
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                let! _ =
+                    env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkBook "b1" "Poems" "a1" 120 true)
+
                 let! _ = env.Projector.RebuildProjection("team-a")
                 // Simulate a missed signal: the book node vanishes out-of-band.
                 let! _ = env.Graph.DeleteNode("team-a", nodeIdOf "Book" "b1")
@@ -329,8 +346,8 @@ let tests =
             "isolation: a tenant's entities project only into its own graph scope"
             (async {
                 let env = makeEnv true
-                let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                let! _ = env.Store.Save("team-b", EntityActor.ofPrincipal "tester", mkAuthor "a2" "Grace" 1906 9.0m)
+                let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+                let! _ = env.Store.Save("team-b", EntityPrincipal.ofPrincipal "tester", mkAuthor "a2" "Grace" 1906 9.0m)
 
                 let! aInA = env.Graph.GetNode("team-a", nodeIdOf "Author" "a1")
                 let! bInA = env.Graph.GetNode("team-a", nodeIdOf "Author" "a2")
@@ -441,8 +458,13 @@ let tests =
                     // same graph state — the bridge promises ordering only within
                     // a single entity, never across entities.
                     let env = makeEnv false
-                    let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
-                    let! _ = env.Store.Save("team-a", EntityActor.ofPrincipal "tester", mkAuthor "a2" "Grace" 1906 9.0m)
+
+                    let! _ =
+                        env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
+
+                    let! _ =
+                        env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a2" "Grace" 1906 9.0m)
+
                     let! _ = env.Projector.SyncEntity("team-a", "Author", "a2")
                     let! _ = env.Projector.SyncEntity("team-a", "Author", "a1")
                     let! n1 = env.Graph.GetNode("team-a", nodeIdOf "Author" "a1")

@@ -146,7 +146,7 @@ let private populate (live: IBlobStorage) =
             let! savedEntity =
                 entities.Save<IEntityStoreContract.TestEntity>(
                     Team,
-                    EntityTypes.EntityActor.ofPrincipal "tester",
+                    EntityTypes.EntityPrincipal.ofPrincipal "tester",
                     {
                         Id = "e-1"
                         Type = "TestEntity"

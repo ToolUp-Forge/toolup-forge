@@ -634,7 +634,7 @@ ToolUp.PublicRendering.PublicPageRevisions (class)
 ToolUp.PublicRendering.PublicPageRevisions.current(ToolUp.Platform.IEntityStore+IEntityStore, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PublicPage, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.PublicRendering.PublicPageRevisions.get(ToolUp.Platform.IEntityStore+IEntityStore, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PublicPage, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.PublicRendering.PublicPageRevisions.list(ToolUp.Platform.IEntityStore+IEntityStore, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPageRevisions+PageRevision]]
-ToolUp.PublicRendering.PublicPageRevisions.restore(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.EntityTypes+EntityActor, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PublicPage, ToolUp.Platform.EntityTypes+EntityError]]
+ToolUp.PublicRendering.PublicPageRevisions.restore(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.PublicRendering.PublicPage, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.PublicRendering.PublicPageRevisions+PageRevision (class)
 ToolUp.PublicRendering.PublicPageRevisions+PageRevision..ctor(System.String, System.Int32)
 ToolUp.PublicRendering.PublicPageRevisions+PageRevision.Slug : System.String { get }
