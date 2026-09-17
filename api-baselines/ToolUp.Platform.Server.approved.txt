@@ -5577,7 +5577,7 @@ ToolUp.Platform.IModuleVisibilityStore.SetProfile(ToolUp.Platform.FlagScope, Too
 ToolUp.Platform.INarrativeIngestor (interface)
 ToolUp.Platform.INarrativeIngestor.Ingest(ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeIngestOutcome]
 ToolUp.Platform.INarrativePagePublisher (interface)
-ToolUp.Platform.INarrativePagePublisher.PublishAsync(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
+ToolUp.Platform.INarrativePagePublisher.PublishAsync(ToolUp.Platform.EntityTypes+EntityPrincipal, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.SlugCollisionPolicy, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativePublishOutcome]
 ToolUp.Platform.INarrativeStore (interface)
 ToolUp.Platform.INarrativeStore.DeleteScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.INarrativeStore.Get(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeEntry]]

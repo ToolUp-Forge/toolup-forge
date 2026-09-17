@@ -1982,6 +1982,9 @@ let private registeredTests =
         PublicApiApprovalTests.tests
         BaselineMergeDriverTests.tests
         BackupCoordinatorTests.tests
+        // Phase 814 — the module seams carry their caller: two row cases and
+        // the source-reading guard against a new identity-less seam.
+        SeamPrincipalTests.tests
         // Phase 195 — compile-time auth/audit analyzer recognition parity.
         // The source-linked Recognition.fs decision core vs the runtime
         // AuthClassifier (unclassified-set equality), plus TUR0001/TUR0002

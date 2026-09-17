@@ -96,13 +96,13 @@ ToolUp.Forms.FormsInHandlerGates (class)
 ToolUp.Forms.FormsInHandlerGates.formApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Forms.IFormStore (class)
 ToolUp.Forms.IFormStore+IFormStore (interface)
-ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]
-ToolUp.Forms.IFormStore+IFormStore.DeleteSubmission(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]
+ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]
+ToolUp.Forms.IFormStore+IFormStore.DeleteSubmission(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]
 ToolUp.Forms.IFormStore+IFormStore.GetSchema(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Forms.FormSchema+FormSchema, ToolUp.Forms.FormSubmission+FormError]]
 ToolUp.Forms.IFormStore+IFormStore.GetSubmission(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Forms.FormSubmission+Submission, ToolUp.Forms.FormSubmission+FormError]]
 ToolUp.Forms.IFormStore+IFormStore.ListSchemas(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSchema+FormSchema]]
 ToolUp.Forms.IFormStore+IFormStore.ListSubmissions(System.String, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[ToolUp.Forms.FormSubmission+Submission]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSubmission+Submission], ToolUp.Forms.FormSubmission+FormError]]
-ToolUp.Forms.IFormStore+IFormStore.SaveSchema(System.String, ToolUp.Forms.FormSchema+FormSchema) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Forms.FormSchema+FormSchema, ToolUp.Forms.FormSubmission+FormError]]
+ToolUp.Forms.IFormStore+IFormStore.SaveSchema(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, ToolUp.Forms.FormSchema+FormSchema) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Forms.FormSchema+FormSchema, ToolUp.Forms.FormSubmission+FormError]]
 ToolUp.Forms.IFormStore+IFormStore.SaveSubmission(System.String, ToolUp.Forms.FormSubmission+Submission) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Forms.FormSubmission+Submission, ToolUp.Forms.FormSubmission+FormError]]
 ToolUp.Forms.IFormSubmissionAnalyser (class)
 ToolUp.Forms.IFormSubmissionAnalyser+IFormSubmissionAnalyser (interface)

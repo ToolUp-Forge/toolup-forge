@@ -139,7 +139,7 @@ ToolUp.Remoting.Generator 43/78
 ToolUp.Reporting.Core 114/362
 ToolUp.Reporting.Docx 12/31
 ToolUp.Reporting.HtmlPdf 15/31
-ToolUp.Reporting.Server 88/177
+ToolUp.Reporting.Server 88/176
 ToolUp.Reporting.Xlsx 6/11
 ToolUp.Rerankers.Local 9/19
 ToolUp.Scheduling.Core 42/232

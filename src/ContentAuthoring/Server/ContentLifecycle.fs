@@ -139,7 +139,19 @@ let promoteIfDue (now: DateTimeOffset) (page: PublicPage) : PublicPage =
 /// the job scheduler" with no per-page job bookkeeping. `actor` is the
 /// principal the job is scheduled under and is stamped on every
 /// promotion (Phase 806) — the deployment that registers the job names
-/// it; a sweep no principal owns passes `EntityPrincipal.system`.
+/// it.
+///
+/// This is the ONE seam in the SDK where `EntityPrincipal.system` is a
+/// legitimate argument (Phase 814): the sweep is fired by a timer, not a
+/// request, so there is no caller to name — the page's author scheduled
+/// it, but the promotion is the host's act at the scheduled instant. A
+/// deployment whose job scheduler carries a principal passes that; one
+/// with none passes `EntityPrincipal.system`, and the row then says
+/// exactly that. Every other seam that writes through the entity store
+/// carries its caller — `IFormStore`, `IReportTemplateStore`,
+/// `IBookingScheduler`, `INarrativePagePublisher` — and the Platform
+/// pack's source-reading test refuses a new `EntityPrincipal.system`
+/// site anywhere else.
 let runScheduledPublishSweep (store: IEntityStore) (actor: EntityPrincipal) (now: DateTimeOffset) : Async<string list> = async {
     let! refs = store.ListAll<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, 0, 5000)
 

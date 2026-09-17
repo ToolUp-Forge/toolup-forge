@@ -2514,6 +2514,12 @@
         <Compile Include="InProcess\BackupCoordinatorTests.fs" />
         <!-- Phase 441 — notification preference filter + digest job. -->
         <Compile Include="InProcess\NotificationPreferenceTests.fs" />
+        <!-- Phase 814 — the four module seams carry their caller: the principal-recording
+             IEntityStore decorator (source-linked into the Forms / Scheduling packs), the
+             narrative-publisher and report-template row cases, and the source-reading guard
+             that refuses a new EntityPrincipal.system site or the pre-814 spelling. -->
+        <Compile Include="Support\PrincipalRecordingEntityStore.fs" />
+        <Compile Include="InProcess\SeamPrincipalTests.fs" />
         <Compile Include="Support\TestRegistrationGuard.fs" />
         <!-- Phase 762 — the TOOLUP_TEST_LANE gate lanes. TestLane.fs is
              the shared vocabulary (System-only, source-linked into
