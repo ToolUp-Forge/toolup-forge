@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Sinks.fs" />
+    <Compile Include="Already.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ToolUp.Platform.Server" />
+    <PackageReference Include="ToolUp.Platform.AuditSinks.S3Archive" />
+    <PackageReference Include="ToolUp.Platform.NotificationChannels.Redis" />
+    <PackageReference Include="ToolUp.Platform.Metrics.OpenTelemetry" />
+    <PackageReference Include="ToolUp.Storage.Azure" />
+    <PackageReference Include="ToolUp.Storage.AzureBlob" />
+    <PackageReference Include="ToolUp.AuthProviders.OidcClient" />
+  </ItemGroup>
+</Project>

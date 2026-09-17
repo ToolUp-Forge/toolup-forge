@@ -23,6 +23,12 @@
              consumed by the Publish target in SDK.Build.fs (compiled
              after this). -->
         <Compile Include="Build\SDK.Sbom.fs" />
+        <!-- Phase 183 — the consumer codemod for the Epoch-1 0.x breaking
+             renames (Phase 73 / 66 / 11.C.5): rules as data, the per-file
+             rewrite, the walk and the renderings, FAKE-free. Compiled
+             ahead of SDK.Build.fs, like SDK.Sbom.fs, because the `Codemod`
+             target registerTargets registers is what runs it. -->
+        <Compile Include="Build\SDK.Codemod.fs" />
         <Compile Include="Build\SDK.Build.fs" />
         <Compile Include="Build\SDK.HostPackaging.fs" />
         <!-- Phase 586 — packaged-module shadow-project conformance: the

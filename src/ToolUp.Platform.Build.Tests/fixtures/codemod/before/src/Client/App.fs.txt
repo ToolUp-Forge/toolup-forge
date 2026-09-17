@@ -1,0 +1,28 @@
+module MyApp.Client.App
+
+open Elmish
+open Elmish.React
+#if DEBUG
+open Elmish.HMR
+#endif
+open Fable.Remoting.Client
+open ToolUp.Platform
+
+let config = {
+    ClientConfig.defaults with
+        Mode = PlatformMode.Individual
+        DevDefaultUserId = "dev-admin"
+}
+
+let mode = UserSession.getMode ()
+let configured = UserSession.configure mode
+let surfaces = BundleConstants.platformMode
+
+let clientConfig =
+    ClientConfig.create "MyApp" [ Modules.hello ] Icon.none
+
+let program = Elmish.Program.mkProgram init update view
+
+let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
+
+Elmish.React.Program.withReactSynchronous "app" program |> Program.run

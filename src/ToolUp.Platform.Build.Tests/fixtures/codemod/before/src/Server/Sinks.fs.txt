@@ -1,0 +1,41 @@
+module MyApp.Server.Sinks
+
+open System
+open Microsoft.AspNetCore.Http
+open ToolUp.Platform
+open ToolUp.Platform.Server
+
+type EmailSink() =
+    interface INotificationSink with
+        member _.Kind = NotificationKind.SinkKind.Email
+        member _.Deliver _ = async { return Ok() }
+
+type PushSink() =
+    interface INotificationSink with
+        member _.Kind = NotificationKind.SinkKind.Push
+        member _.Deliver _ = async { return Ok() }
+
+type ArchiveSink() =
+    interface IAuditSink with
+        member _.Name = "archive"
+        member _.Deliver(events: AuditEvent list) = async { return Ok() }
+
+let replicatorOptions = {
+    AuditReplicatorOptions.defaults with
+        RetryPolicy = AuditReplicatorRetryPolicy.defaults
+}
+
+let aiRetry = { MaxRetries = 3; BackoffMs = 500 }
+
+let embeddings (secretStore: ISecretStore) =
+    OpenAI.createWithModel "text-embedding-3-small" 1536 secretStore
+
+type HeaderAuth() =
+    interface IAuthProvider with
+        member _.GetUser(ctx: obj) =
+            let httpCtx = ctx :?> HttpContext
+            async { return { UserId = httpCtx.Request.Headers["X-User"].ToString() } }
+
+        member _.ValidateRequest(ctx: obj) = async { return Error "not validated" }
+
+let legacyJson = Fable.Remoting.Json.FableJsonConverter()

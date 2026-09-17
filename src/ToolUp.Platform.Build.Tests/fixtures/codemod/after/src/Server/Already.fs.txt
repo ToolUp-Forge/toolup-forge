@@ -1,0 +1,16 @@
+module MyApp.Server.Already
+
+open ToolUp.Remoting.Server
+open ToolUp.Remoting.Giraffe
+open ToolUp.Platform
+open ToolUp.Platform.Server
+
+// Hand-migrated already: the codemod must leave this file byte-for-byte alone.
+let config = {
+    ServerConfig.defaults with
+        Surfaces = Surfaces.anonymousAndIndividual
+        AcceptHeaderAuthWhenAuthRequired = true
+}
+
+let label (ctx: AccessContext) =
+    if AccessContext.isAnonymous ctx then "anonymous" else "signed-in"

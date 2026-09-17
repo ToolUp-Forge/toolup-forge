@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <ToolUpSdkVersion>0.23.0</ToolUpSdkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.AuditSinks.S3Archive" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.Azure" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.OidcClient" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+</Project>

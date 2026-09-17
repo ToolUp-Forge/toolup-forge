@@ -1,0 +1,44 @@
+Codemod: 18 site(s) in 3 file(s) need human review (not rewritten):
+  src/Client/App.fs
+    L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
+      -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
+    L18 [66-user-session-configure] let configured = UserSession.configure mode
+      -> Phase 66: §8 — `UserSession.configure` takes a `SubjectKind` (was `PlatformMode`); pick the kind the deployment's surfaces admit
+    L22 [11c5-client-config-create] ClientConfig.create "MyApp" [ Modules.hello ] Icon.none
+      -> Phase 11.C.5: T3.4 — `ClientConfig.create` takes a trailing `ClientHandlerRegistry` argument; pass the registry you wire (or `ClientHandlerRegistry.empty` explicitly)
+    L26 [73-elmish-unknown-namespace] let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
+      -> Phase 73: an `Elmish.*` sub-namespace the ToolUp runtime does not carry (Navigation / UrlParser / Debug / Browser stay upstream) — choose the ToolUp equivalent or keep the upstream package
+  src/Server/Program.fs
+    L7 [73-remoting-unknown-namespace] open Fable.Remoting.AspNetCore
+      -> Phase 73: a `Fable.Remoting` namespace the ToolUp fork does not carry (only Server / Client / Json / Giraffe / MsgPack moved) — check the `ToolUp.Remoting.*` surface for the equivalent, or keep the upstream package
+    L12 [66-auth-enforcement-middleware] // AuthEnforcementMiddleware honoured.
+      -> Phase 66: `AuthEnforcementMiddleware` is retired; `SurfaceEnforcementMiddleware` driven by `SurfaceRequirementRegistry` replaces it — a direct reference usually means a hand-wired pipeline that should now come from the composition root
+    L18 [66-rate-limit-option] RateLimit = Some RateLimitPolicy.defaults
+      -> Phase 66: `ServerConfig.RateLimit` is no longer an option: `RateLimitConfig.none` is the default, and a policy is `{ Default = Some policy; PerShape = Map.empty }` (per-shape keyed by `SubjectKind`)
+    L22 [66-mode-match] match ctx.Mode with
+      -> Phase 66: §4 — the arm mapping onto `Subject` is per site: a predicate read becomes `AccessContext.isAnonymous` / `isAuthenticated` / `inTeamScope` / `isClaimBearer`; a scope read becomes `match ctx.Subject with TeamMember(uid, tid) -> … | _ -> …`
+    L27 [66-mode-read] let isPublic (ctx: AccessContext) = ctx.Mode = Anonymous
+      -> Phase 66: a `.Mode` read: on `ServerConfig` / `ClientConfig` it is now `.Surfaces` (a list), on `AccessContext` it is `.Subject` — an equality test against a `PlatformMode` case becomes the matching `AccessContext.is*` predicate (§4); a consumer-owned `Mode` field is a false positive here
+    L29 [66-platform-mode-type] let submitHandler (config: ServerConfig) (mode: PlatformMode) : HttpHandler = fun next ctx -> next ctx
+      -> Phase 66: `PlatformMode` is retired: `ServerConfig.Mode` / `ClientConfig.Mode` became `Surfaces: SurfaceProfile list`, `AccessContext.Mode` became `Subject: Subject`, and a handler-factory `mode: PlatformMode` parameter drops (§6 — read the subject from `HttpContext.Items["ToolUp.Subject"]`)
+    L36 [66-anonymous-route-prefix] |> ServerApp.withAnonymousRoute "/api/forms/public/"
+      -> Phase 66: §5 — anonymous route prefixes are deleted; declare a per-route `SurfaceRequirement.claimBearerOnly` / `.anonymousOnly` / `.public_` via `ServerModule.withRouteSurfaceRequirement`
+  src/Server/Sinks.fs
+    L15 [11c5-sink-kind-push] member _.Kind = NotificationKind.SinkKind.Push
+      -> Phase 11.C.5: T3.3 — `INotificationSink.Kind` is the `SinkKind` DU: `SinkKind.Email` / `SinkKind.Sms` / `SinkKind.Push PushVariant.WebPush` (or `Fcm` / `Apns` / `Other name`) — choose the push variant
+    L19 [66-audit-sink-contract] interface IAuditSink with
+      -> Phase 66: §7 — a custom `IAuditSink` declares `SchemaVersion = AuditSchemaVersion.current` and takes `AuditEnvelope list` (was `AuditEvent list`) in `Deliver`
+    L28 [11c5-retry-policy-fields] let aiRetry = { MaxRetries = 3; BackoffMs = 500 }
+      -> Phase 11.C.5: T3.2 — `RetryPolicy` is `{ MaxAttempts; InitialBackoff; MaxBackoff }`: `MaxAttempts` INCLUDES the first attempt (`MaxRetries = 3` becomes `MaxAttempts = 4`), `BackoffMs` becomes `InitialBackoff: TimeSpan` plus a `MaxBackoff` cap
+    L31 [11c5-embedding-factory-args] OpenAI.createWithModel "text-embedding-3-small" 1536 secretStore
+      -> Phase 11.C.5: T3.5 — the OpenAI EMBEDDING factories take `secretStore` first (`createWithModel secretStore model dimensions`, `createWithBatchSize secretStore batchSize`); the Claude / OpenAI AI factories already did and need no change
+    L34 [11c5-auth-provider-impl] interface IAuthProvider with
+      -> Phase 11.C.5: T3.1 — `IAuthProvider.GetUser` / `ValidateRequest` take `RequestContext` (was `obj`): unwrap once at the entry point with `RequestContext.value ctx :?> HttpContext`; callers pass `RequestContext.ofHttpContext ctx`
+    L36 [11c5-auth-provider-impl] let httpCtx = ctx :?> HttpContext
+      -> Phase 11.C.5: T3.1 — `IAuthProvider.GetUser` / `ValidateRequest` take `RequestContext` (was `obj`): unwrap once at the entry point with `RequestContext.value ctx :?> HttpContext`; callers pass `RequestContext.ofHttpContext ctx`
+    L41 [73-fable-json-converter] let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
+      -> Phase 73: the Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration — use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` and `System.Text.Json.JsonSerializer` (see the Phase 73 doc's Remoting note)
+  Read:
+    Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
+    Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
+    Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
