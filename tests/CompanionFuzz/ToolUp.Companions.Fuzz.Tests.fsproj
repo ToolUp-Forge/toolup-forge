@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.Companions.Fuzz.Tests — Phase 687's native-parser fuzz corpus,
+    run through the ToolUp.Companions.Isolation seam against Verovio.NET.
+
+    NOT IN ToolUp.Forge.sln and NOT in BuildConfig.TestPacks, on purpose,
+    for two reasons that are each sufficient:
+
+    1. It references `Verovio.NET` as a PACKAGE off the shared local feed,
+       and Verovio.NET is not published on nuget.org. forge's CI restores
+       from nuget.org over an EMPTY local feed, so a solution that carried
+       this project would NU1101 on every push; and the `Pack` target
+       walks `src/**/*.fsproj`, which is why this lives under `tests/`
+       beside the browser-smoke harness rather than under `src/`.
+    2. It runs HOSTILE INPUT against a native parser. Each case runs in
+       its own child under a kernel-enforced memory cap, and the harness
+       refuses to run the cases on a host that cannot hold that cap. It
+       is run deliberately, by an operator, with the README's recipe —
+       never as a side effect of `VerifyAll`. The first draft of this
+       corpus ran in-process and expanded to 126 GB, four times.
+
+    Verovio.NET's version is an explicit override rather than a row in
+    Directory.Packages.props: that file is an integration-lane nexus
+    every solution project restores from, and nothing in the solution
+    consumes this package.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="FuzzCorpus.fs" />
+    <Compile Include="VerovioEntries.fs" />
+    <Compile Include="FuzzTests.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- An Exe referencing an Exe: the isolation assembly carries the
+         worker's entry point, and this runner is the host that starts
+         it, exactly as ToolUp.Companions.Isolation.Tests does. -->
+    <ProjectReference Include="..\..\src\ToolUp.Companions.Isolation\ToolUp.Companions.Isolation.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Expecto" />
+    <PackageReference Include="Verovio.NET" VersionOverride="0.2.2" />
+  </ItemGroup>
+</Project>

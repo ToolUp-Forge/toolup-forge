@@ -7,6 +7,15 @@ ToolUp.RAG.OcrProviders.Tesseract.Health (class)
 ToolUp.RAG.OcrProviders.Tesseract.Health.create(ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions) : ToolUp.Platform.HealthChecks+IHealthCheck
 ToolUp.RAG.OcrProviders.Tesseract.Health+TesseractOcrHealthCheck (class)
 ToolUp.RAG.OcrProviders.Tesseract.Health+TesseractOcrHealthCheck..ctor(ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions)
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation (class)
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation.createIsolated(ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions, ToolUp.Companions.Isolation.ICompanionIsolation) : ToolUp.Platform.IOcrProvider+IOcrProvider
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractIsolationCodec (class)
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractIsolationCodec.decodeArgs(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions, System.String], System.String]
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractIsolationCodec.decodePages(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOcrProvider+OcrPage], System.String]
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractIsolationCodec.encodeArgs(ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractIsolationCodec.encodePages(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IOcrProvider+OcrPage]) : System.Byte[]
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractOcrEntry (class)
+ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation+TesseractOcrEntry..ctor()
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider (class)
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider.create(ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider+TesseractOcrOptions) : ToolUp.Platform.IOcrProvider+IOcrProvider
 ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider.createForTessData(System.String) : ToolUp.Platform.IOcrProvider+IOcrProvider

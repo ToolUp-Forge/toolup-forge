@@ -17,11 +17,16 @@
        licensing) is documented in TesseractOcrProvider.fs and README.md. -->
   <ItemGroup>
     <Compile Include="TesseractOcrProvider.fs" />
+    <Compile Include="TesseractOcrIsolation.fs" />
     <Compile Include="TesseractOcrHealth.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- Phase 687 - the native-boundary isolation seam, for the
+         out-of-process OCR of uploaded documents (createIsolated).
+         BCL-only; no vendor dep. -->
+    <ProjectReference Include="..\..\ToolUp.Companions.Isolation\ToolUp.Companions.Isolation.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. Tesseract is the

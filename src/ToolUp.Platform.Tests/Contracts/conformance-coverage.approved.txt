@@ -188,3 +188,4 @@ ModuleContract
 # Seams that will never carry a pack, with the reason. `<name>: <why>`.
 # Hand-authored; a regeneration preserves these rows.
 [EXEMPT]
+IIsolatedEntryPoint: one unit of native work per implementation (an OCR pass, a Skia decode, a Verovio render), never a substitutable service — implementations are different operations by design and no law spans them; the one law they share (bytes in, bytes or a typed rejection out, never an exception across the seam) belongs to the seam and is pinned by ICompanionIsolationContract, which drives every kind of entry point through both implementations of the seam.

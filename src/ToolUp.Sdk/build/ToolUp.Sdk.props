@@ -166,6 +166,7 @@
     <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Gcp" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Companions.Isolation" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ContainerSchedulers.DockerLocal" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ContentAuthoring" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ContentScanners.ClamAv" Version="$(ToolUpSdkVersion)" />
