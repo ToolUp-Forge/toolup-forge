@@ -46,8 +46,8 @@ gate says so. On Windows the mutex is in the `Global\` namespace so two logon se
 ### What you will see
 
 ```text
-VerifyAll gate: another VerifyAll holds it (pid 41216 started 2026-09-17T08:12:03Z in C:\repos\Fuaran-ToolUp\wt\441) — waiting up to 60:00. Set TOOLUP_VERIFY_NO_GATE_MUTEX=1 to run unserialised.
-VerifyAll gate: still held (pid 41216 started 2026-09-17T08:12:03Z in C:\repos\Fuaran-ToolUp\wt\441) — waited 0:30 of 60:00.
+VerifyAll gate: another VerifyAll holds it (pid 41216 started 2026-09-17T08:12:03Z in <workspace>\wt\441) — waiting up to 60:00. Set TOOLUP_VERIFY_NO_GATE_MUTEX=1 to run unserialised.
+VerifyAll gate: still held (pid 41216 started 2026-09-17T08:12:03Z in <workspace>\wt\441) — waited 0:30 of 60:00.
 …
 VerifyAll gate: acquired after waiting 14:20.
 ```

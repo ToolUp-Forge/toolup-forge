@@ -30,7 +30,7 @@ the bytes; **host-authored** means the deployment produced them.
 **Outside forge — the Companions estate.** `Verovio.NET` (libverovio 6.2.0), `Kuzu.NET`, `Manifold.NET`
 are consumed by applications, not by forge. Their untrusted paths, from a read of the consumers:
 `Verovio.NET` — ScaleMastery's public `/tools/humdrum-to-scale` posts pasted Humdrum straight into
-`Toolkit.LoadData` (**untrusted**); fuaran-music feeds internal MEI only (host-authored). `Kuzu.NET`
+`Toolkit.LoadData` (**untrusted**); a downstream music-notation host feeds internal MEI only (host-authored). `Kuzu.NET`
 and `Manifold.NET` had no upload entry found at the time of the inventory. The seam is generic across
 all three: an application composes `IsolationMode.OutOfProcess` and exposes each native operation as an
 `IIsolatedEntryPoint` in its own assembly, exactly as the fuzz harness does for Verovio.
