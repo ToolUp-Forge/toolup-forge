@@ -360,6 +360,7 @@ type BlobEntityStore
                                         EntityType = core.Type
                                         EntityId = core.Id
                                         Version = newVersion
+                                        Replay = None
                                     }
 
                                     let evt =
@@ -480,6 +481,7 @@ type BlobEntityStore
                                             EntityType = entityType
                                             EntityId = entityId
                                             Version = headVersion
+                                            Replay = None
                                         }
                                     )
                             with _ ->

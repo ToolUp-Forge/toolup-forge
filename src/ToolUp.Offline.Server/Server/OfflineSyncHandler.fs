@@ -151,38 +151,40 @@ module OfflineEntityReplay =
 
 /// Composition-time options for the sync handler.
 ///
-/// `AuditEventStore` is the audit half of the phase, and it is opt-in
-/// (`None` by default) so a deployment that composes the handler pays
-/// nothing for it (GP 11 + GP 13).
+/// `AuditLog` is the audit half of the phase, and it is opt-in (`None`
+/// by default) so a deployment that composes the handler pays nothing
+/// for it (GP 11 + GP 13).
 ///
-/// **Why an `IEventStore` and not the `IAuditLog` seam.** The phase
-/// requires the replayed audit row to carry the mutation's ORIGINAL
-/// `EnqueuedAt` as its `OccurredAt`, and the caller's user id rather
-/// than `"system"`. `IAuditLog.Record(scopeId, event)` accepts neither:
-/// it builds the envelope internally with `Events.create`, which stamps
-/// `DateTime.UtcNow`, and `BlobEntityStore` hard-codes `UserId =
-/// "system"` in its own emission. Writing the `ModuleEvent` directly —
-/// with `SourceModule = AuditSourceModule.value` and the same event-type
-/// name and payload shape the audit codec expects — is the only path
-/// that preserves both facts, and `AuditReplicator` rebuilds the
-/// envelope from `modEvt.OccurredAt`, so downstream sinks see the
-/// origination time with no sink-side change.
+/// **The audit row an applied replay records (Phase 759).** One
+/// lifecycle row per applied version — `EntityCreated` / `EntityUpdated`
+/// / `EntityDeleted` — carrying the REAL user in `UserId` and, in
+/// `EntityLifecycleEventPayload.Replay`, the mutation's origination time
+/// (`EnqueuedAt`), the server's application time and the queue entry's
+/// mutation id. It goes through `IAuditLog.Record` like every other
+/// audit row, so the row's `OccurredAt` is the write time: that is what
+/// keeps it visible to the audit replicator, whose cursor filters on
+/// `OccurredAt` and would never deliver a row backdated behind it (the
+/// Phase 24 direct-`IEventStore` emission had exactly that defect).
 ///
-/// **Known consequence, stated rather than hidden.** When the entity
-/// store is ALSO composed with an `IAuditLog`, an applied replay
-/// produces two lifecycle rows for the same entity version: the store's
-/// (`UserId = "system"`, application time) and this one (real user,
-/// origination time). They are distinguishable by `UserId` and they
-/// record genuinely different facts, but they are not deduplicated.
-/// Collapsing them would require a dedicated `AuditEvent` case, which
-/// is a breaking union-case addition to `ToolUp.Platform.Core` and is
-/// deliberately out of this phase's scope.
+/// **Why the entity store's own row does not double it.** The store
+/// emits a generic `UserId = "system"` lifecycle row from inside
+/// `Save` / `Delete`, because `IEntityStore` does not carry caller
+/// identity. The handler applies each mutation under
+/// `EntityAuditReplayScope.run`, and the SDK-default audit log drops
+/// the store's generic row for that entity while the scope is active —
+/// for that call path only, never globally. **Compose the handler with
+/// the same `IAuditLog` the entity store is composed with** (resolve it
+/// from DI); a deployment whose store has no audit log wired still gets
+/// the handler's row, and one that opts out of `AuditLog` here keeps
+/// the store's generic row exactly as before.
 type OfflineSyncOptions = {
     /// Per-entity-type replay adapters. An entity type absent here is
     /// `Rejected` — the handler never guesses a record shape.
     Replays: OfflineEntityReplay list
-    /// Opt-in audit emission. `None` (default) emits nothing.
-    AuditEventStore: IEventStore option
+    /// Opt-in audit emission through the `IAuditLog` seam. `None`
+    /// (default) emits nothing and leaves the entity store's own
+    /// emission untouched.
+    AuditLog: IAuditLog option
     /// Ceiling on one `ApplyBatch` call. A reconnecting client with a
     /// large backlog is drained across several batches rather than in
     /// one unbounded request — the drain is resumable by construction,
@@ -194,7 +196,7 @@ module OfflineSyncOptions =
     /// No replays registered, no audit, batches of 50.
     let defaults: OfflineSyncOptions = {
         Replays = []
-        AuditEventStore = None
+        AuditLog = None
         MaxBatchSize = 50
     }
 
@@ -203,10 +205,31 @@ module OfflineSyncOptions =
             Replays = replays
     }
 
-    let withAuditEventStore (store: IEventStore) (options: OfflineSyncOptions) : OfflineSyncOptions = {
+    /// Record the replay's provenance-carrying lifecycle row through
+    /// `log`. Pass the `IAuditLog` the entity store is composed with so
+    /// the store's generic row for the same version is the one dropped.
+    let withAuditLog (log: IAuditLog) (options: OfflineSyncOptions) : OfflineSyncOptions = {
         options with
-            AuditEventStore = Some store
+            AuditLog = Some log
     }
+
+    /// The Phase 24 shape, kept so a composition root written against
+    /// it compiles unchanged: audit through an `IEventStore` directly.
+    /// Since Phase 759 this is `withAuditLog` over the SDK-default
+    /// `EventStoreAuditLog` on that store, with a silent logger — the
+    /// row lands with the same source module, event type and payload
+    /// codec `IAuditLog.GetAuditTrail` reads, and failures are swallowed
+    /// exactly as the direct write's were.
+    let withAuditEventStore (store: IEventStore) (options: OfflineSyncOptions) : OfflineSyncOptions =
+        let silent =
+            { new ILogger with
+                member _.Debug _ = ()
+                member _.Info _ = ()
+                member _.Warn _ = ()
+                member _.Error(_, _) = ()
+            }
+
+        withAuditLog (AuditLog.EventStoreAuditLog(store, silent)) options
 
 // ─── Request-scope resolution ────────────────────────────────────────
 
@@ -233,55 +256,64 @@ let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : s
 // ─── Audit ───────────────────────────────────────────────────────────
 
 module private ReplayAudit =
-    let private options = FableConverters.create ()
+    /// The lifecycle event an applied replay records: the real caller
+    /// in `UserId`, and the replay provenance — origination time,
+    /// application time, queue mutation id — in `Replay`.
+    let event (userId: string) (mutation: QueuedMutation) (newVersion: int) (replayedAt: DateTime) : AuditEvent =
+        let payload: EntityLifecycleEventPayload = {
+            UserId = userId
+            EntityType = mutation.EntityType
+            EntityId = mutation.EntityId
+            Version = newVersion
+            Replay =
+                Some {
+                    // THE POINT OF THE WHOLE BLOCK: the origination
+                    // time survives, beside the application time, on
+                    // the one row that records the version.
+                    OriginatedAt = mutation.EnqueuedAt.UtcDateTime
+                    ReplayedAt = replayedAt
+                    MutationId = mutation.Id
+                }
+        }
 
-    /// Emit one lifecycle audit row stamped with the mutation's
-    /// origination time and the resolved caller.
+        match mutation.Operation with
+        | DeleteOp -> AuditEvent.EntityDeleted payload
+        | SaveOp when newVersion <= 1 -> AuditEvent.EntityCreated payload
+        | SaveOp -> AuditEvent.EntityUpdated payload
+
+    /// Record the provenance-carrying lifecycle row through the seam.
     ///
     /// Best-effort in exactly the shape `BlobEntityStore` uses: any
     /// failure is swallowed, because a replay that succeeded must not
     /// be reported to the client as failed merely because its audit row
     /// did not land. The client would re-queue it and apply it twice.
     let emit
-        (eventStore: IEventStore option)
+        (auditLog: IAuditLog option)
         (scopeId: string)
         (userId: string)
         (mutation: QueuedMutation)
         (newVersion: int)
         : Async<unit> =
         async {
-            match eventStore with
+            match auditLog with
             | None -> return ()
-            | Some store ->
+            | Some log ->
                 try
-                    let payload: EntityLifecycleEventPayload = {
-                        UserId = userId
-                        EntityType = mutation.EntityType
-                        EntityId = mutation.EntityId
-                        Version = newVersion
-                    }
-
-                    let auditEvent =
-                        match mutation.Operation with
-                        | DeleteOp -> AuditEvent.EntityDeleted payload
-                        | SaveOp when newVersion <= 1 -> AuditEvent.EntityCreated payload
-                        | SaveOp -> AuditEvent.EntityUpdated payload
-
-                    let moduleEvent: ModuleEvent = {
-                        Id = Guid.NewGuid()
-                        // THE POINT OF THE WHOLE BLOCK: origination
-                        // time, not application time.
-                        OccurredAt = mutation.EnqueuedAt.UtcDateTime
-                        ScopeId = scopeId
-                        SourceModule = AuditSourceModule.value
-                        EventType = AuditEvent.eventTypeName auditEvent
-                        Payload = JsonSerializer.Serialize(payload, options)
-                    }
-
-                    do! store.Write moduleEvent
+                    do! log.Record(scopeId, event userId mutation newVersion DateTime.UtcNow)
                 with _ ->
                     return ()
         }
+
+    /// Apply `write` as the replay of the mutation's entity: while it
+    /// runs, the SDK-default audit log drops the entity store's generic
+    /// `"system"` lifecycle row for that entity, so the row `emit`
+    /// records afterwards is the ONLY one for the version. Entered only
+    /// when the handler has an audit log to record that row through —
+    /// with none, the store's own row stands exactly as before.
+    let scoped (auditLog: IAuditLog option) (mutation: QueuedMutation) (write: Async<'T>) : Async<'T> =
+        match auditLog with
+        | None -> write
+        | Some _ -> AuditLog.EntityAuditReplayScope.run mutation.EntityType mutation.EntityId write
 
 // ─── The handler ─────────────────────────────────────────────────────
 
@@ -338,13 +370,16 @@ let private applyOne
                         match mutation.Operation with
                         | DeleteOp ->
                             match!
-                                replayCtx.Store.Delete(replayCtx.ScopeId, mutation.EntityType, mutation.EntityId)
+                                ReplayAudit.scoped
+                                    options.AuditLog
+                                    mutation
+                                    (replayCtx.Store.Delete(replayCtx.ScopeId, mutation.EntityType, mutation.EntityId))
                             with
                             | Error err -> return Rejected(EntityError.message err)
                             | Ok() ->
                                 do!
                                     ReplayAudit.emit
-                                        options.AuditEventStore
+                                        options.AuditLog
                                         replayCtx.ScopeId
                                         replayCtx.UserId
                                         mutation
@@ -352,12 +387,14 @@ let private applyOne
 
                                 return Applied Array.empty
                         | SaveOp ->
-                            match! replay.Apply replayCtx mutation.Payload with
+                            match!
+                                ReplayAudit.scoped options.AuditLog mutation (replay.Apply replayCtx mutation.Payload)
+                            with
                             | Error msg -> return Rejected msg
                             | Ok(savedBytes, newVersion) ->
                                 do!
                                     ReplayAudit.emit
-                                        options.AuditEventStore
+                                        options.AuditLog
                                         replayCtx.ScopeId
                                         replayCtx.UserId
                                         mutation

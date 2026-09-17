@@ -1967,6 +1967,76 @@ type AuditWriteRefusedException(scopeId: string, eventType: string, inner: exn) 
             inner
         )
 
+/// Phase 759 — the ambient scope under which an entity store's own
+/// generic lifecycle emission is SUPPRESSED, because the caller is about
+/// to record a better row for the same version.
+///
+/// **The problem it solves.** `BlobEntityStore.Save` / `Delete` emit an
+/// `EntityCreated` / `EntityUpdated` / `EntityDeleted` row stamped
+/// `UserId = "system"` at write time, because `IEntityStore.Save` does
+/// not carry caller identity. The offline replay handler knows more —
+/// the real user, the mutation's origination time, the queue entry it
+/// came from — and records a row carrying that provenance
+/// (`EntityLifecycleEventPayload.Replay = Some …`). Without this scope
+/// an applied replay produced TWO lifecycle rows for one entity
+/// version: the store's generic one and the handler's provenance one
+/// (Phase 24's recorded residue).
+///
+/// **Why an `AsyncLocal` and not a store parameter.** The store's
+/// emission sits inside `IEntityStore.Save`, whose signature is the
+/// seam every store implementation and every consumer compiles
+/// against; threading a "suppress audit" flag through it is exactly the
+/// arity widening GP 11 forbids, and a per-call decorator cannot reach
+/// an emission that happens inside the call. Request-scoped context
+/// rides the async chain by design here (GP 7 — the same shape as
+/// `Api.requestScopeId`), and the scope is keyed by `(entityType,
+/// entityId)` so an unrelated emission on the same flow is untouched.
+/// It is honoured by `EventStoreAuditLog.Record` — the SDK-default
+/// `IAuditLog` — and only for a lifecycle row whose `Replay` is `None`:
+/// the provenance-carrying row the scope exists to make room for always
+/// passes.
+///
+/// **It is NEVER global.** `run` sets the scope for the duration of
+/// `work` on the current async flow and restores the previous value on
+/// every exit path; nothing outside that flow observes it, and a
+/// deployment that never composes the offline handler never enters it.
+module EntityAuditReplayScope =
+    let private current = System.Threading.AsyncLocal<(string * string) option>()
+
+    /// Whether `payload` names the entity whose replay is being applied
+    /// on the current async flow. `false` outside any scope.
+    let covers (payload: EntityLifecycleEventPayload) : bool =
+        match current.Value with
+        | Some(entityType, entityId) -> payload.EntityType = entityType && payload.EntityId = entityId
+        | None -> false
+
+    /// Whether the SDK-default audit log should DROP `audit`: a generic
+    /// (`Replay = None`) lifecycle row for the entity under the active
+    /// scope. Every other event — including the provenance-carrying row
+    /// for that same entity — is `false`.
+    let suppresses (audit: AuditEvent) : bool =
+        match audit with
+        | EntityCreated payload
+        | EntityUpdated payload
+        | EntityDeleted payload -> Option.isNone payload.Replay && covers payload
+        | _ -> false
+
+    /// Run `work` as the replay of `(entityType, entityId)`: for its
+    /// duration, on this async flow, the entity store's generic
+    /// lifecycle row for that entity is suppressed by the SDK-default
+    /// audit log. The caller is responsible for recording the
+    /// provenance-carrying row afterwards — entering the scope without
+    /// doing so loses the audit row entirely.
+    let run (entityType: string) (entityId: string) (work: Async<'T>) : Async<'T> = async {
+        let previous = current.Value
+        current.Value <- Some(entityType, entityId)
+
+        try
+            return! work
+        finally
+            current.Value <- previous
+    }
+
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`
 /// so audit events flow through the same retention policy, blob
 /// layout, and webhook hooks as every other platform event.
@@ -2039,109 +2109,130 @@ type EventStoreAuditLog
                 return Error("unanchored", "every chained record is referenced as a predecessor — no head exists")
     }
 
-    interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
-            let eventTypeName = AuditEvent.eventTypeName audit
+    /// The write path proper — everything `IAuditLog.Record` does once
+    /// the Phase 759 replay-scope guard has let the event through.
+    let record (scopeId: string) (audit: AuditEvent) = async {
+        let eventTypeName = AuditEvent.eventTypeName audit
 
-            // Phase 553.A — chain the permission stream. The link is
-            // formed HERE rather than at the emission call sites because
-            // this is the only place that can read the scope's current
-            // head; a call site that supplies its own link (the fallback
-            // replay path re-writing an already-chained record) is left
-            // alone.
-            //
-            // The head read costs one `ReadBySource` per permission
-            // write. That is deliberate and affordable: permission
-            // changes are administrative — a human in a team-admin
-            // surface — so the read happens per click, not per request,
-            // and there is no correct cheaper answer. A cached head
-            // would fork the moment a second instance wrote, and the
-            // store promises no ordering to derive one from.
-            let! audit = async {
-                match audit with
-                | PermissionChanged payload when Option.isNone payload.Chain ->
-                    match! readChainHead scopeId with
-                    | Ok prevHash -> return PermissionChanged(PermissionAuditChain.link scopeId prevHash payload)
-                    | Error(reason, detail) ->
-                        (resolveMetrics ()).Increment(AuditMetrics.ChainHeadUnreadableTotal, Map [ "reason", reason ])
+        // Phase 553.A — chain the permission stream. The link is
+        // formed HERE rather than at the emission call sites because
+        // this is the only place that can read the scope's current
+        // head; a call site that supplies its own link (the fallback
+        // replay path re-writing an already-chained record) is left
+        // alone.
+        //
+        // The head read costs one `ReadBySource` per permission
+        // write. That is deliberate and affordable: permission
+        // changes are administrative — a human in a team-admin
+        // surface — so the read happens per click, not per request,
+        // and there is no correct cheaper answer. A cached head
+        // would fork the moment a second instance wrote, and the
+        // store promises no ordering to derive one from.
+        let! audit = async {
+            match audit with
+            | PermissionChanged payload when Option.isNone payload.Chain ->
+                match! readChainHead scopeId with
+                | Ok prevHash -> return PermissionChanged(PermissionAuditChain.link scopeId prevHash payload)
+                | Error(reason, detail) ->
+                    (resolveMetrics ()).Increment(AuditMetrics.ChainHeadUnreadableTotal, Map [ "reason", reason ])
 
-                        logger.Warn(
-                            sprintf
-                                "[AuditLog] permission chain head unreadable scope=%s reason=%s: %s — recording the event UNCHAINED"
-                                scopeId
-                                reason
-                                detail
+                    logger.Warn(
+                        sprintf
+                            "[AuditLog] permission chain head unreadable scope=%s reason=%s: %s — recording the event UNCHAINED"
+                            scopeId
+                            reason
+                            detail
+                    )
+
+                    // Phase 9t, applied to the chain rather than to
+                    // the write: a deployment that has said it would
+                    // rather fail the action than complete it
+                    // un-audited has equally said it would rather
+                    // fail than complete it un-EVIDENCED.
+                    if policy = RefuseAction then
+                        raise (
+                            AuditWriteRefusedException(
+                                scopeId,
+                                eventTypeName,
+                                exn (sprintf "permission chain head unreadable (%s): %s" reason detail)
+                            )
                         )
 
-                        // Phase 9t, applied to the chain rather than to
-                        // the write: a deployment that has said it would
-                        // rather fail the action than complete it
-                        // un-audited has equally said it would rather
-                        // fail than complete it un-EVIDENCED.
-                        if policy = RefuseAction then
-                            raise (
-                                AuditWriteRefusedException(
-                                    scopeId,
-                                    eventTypeName,
-                                    exn (sprintf "permission chain head unreadable (%s): %s" reason detail)
-                                )
-                            )
+                    // `LogAndContinue` / `DegradeToFile`: record it
+                    // unchained rather than dropping it. The gap is
+                    // not hidden — the verifier counts every
+                    // unchained record, and on a deployment that has
+                    // always chained a non-zero count IS the finding.
+                    return audit
+            | _ -> return audit
+        }
 
-                        // `LogAndContinue` / `DegradeToFile`: record it
-                        // unchained rather than dropping it. The gap is
-                        // not hidden — the verifier counts every
-                        // unchained record, and on a deployment that has
-                        // always chained a non-zero count IS the finding.
-                        return audit
-                | _ -> return audit
-            }
+        // Serialisation is separated from the store write so the
+        // DegradeToFile branch has an envelope to spill — a record
+        // that fails to SERIALISE has nothing spillable and takes
+        // the count+log shape under every policy except Refuse.
+        let envelope =
+            try
+                Ok(Events.create scopeId AuditSourceModule.value eventTypeName (serialiseAuditEvent audit))
+            with ex ->
+                Error ex
 
-            // Serialisation is separated from the store write so the
-            // DegradeToFile branch has an envelope to spill — a record
-            // that fails to SERIALISE has nothing spillable and takes
-            // the count+log shape under every policy except Refuse.
-            let envelope =
-                try
-                    Ok(Events.create scopeId AuditSourceModule.value eventTypeName (serialiseAuditEvent audit))
-                with ex ->
-                    Error ex
+        match envelope with
+        | Error ex ->
+            countAndWarn scopeId eventTypeName ex
 
-            match envelope with
-            | Error ex ->
+            if policy = RefuseAction then
+                raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
+        | Ok evt ->
+            match! Async.Catch(eventStore.Write evt) with
+            | Choice1Of2() -> ()
+            | Choice2Of2 ex ->
+                // Phase 114 — promote the loss signal from Warn-only to
+                // an alertable counter so dropped audit rows are
+                // dashboard-visible. `event_type` tags the case so
+                // operators see WHICH events are being lost.
                 countAndWarn scopeId eventTypeName ex
 
-                if policy = RefuseAction then
-                    raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
-            | Ok evt ->
-                match! Async.Catch(eventStore.Write evt) with
-                | Choice1Of2() -> ()
-                | Choice2Of2 ex ->
-                    // Phase 114 — promote the loss signal from Warn-only to
-                    // an alertable counter so dropped audit rows are
-                    // dashboard-visible. `event_type` tags the case so
-                    // operators see WHICH events are being lost.
-                    countAndWarn scopeId eventTypeName ex
-
-                    match policy with
-                    | LogAndContinue -> ()
-                    | RefuseAction -> raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
-                    | DegradeToFile ->
-                        match fallbackStore with
-                        | Some fb ->
-                            match! fb.Append evt with
-                            | Ok() ->
-                                logger.Info
-                                    $"[AuditLog] event=spilled_to_fallback scope=%s{scopeId} eventType={eventTypeName} — replay service re-ingests on recovery"
-                            | Error msg ->
-                                logger.Error(
-                                    $"[AuditLog] event=fallback_spill_failed scope=%s{scopeId} eventType={eventTypeName}: {msg} — audit record LOST",
-                                    None
-                                )
-                        | None ->
+                match policy with
+                | LogAndContinue -> ()
+                | RefuseAction -> raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
+                | DegradeToFile ->
+                    match fallbackStore with
+                    | Some fb ->
+                        match! fb.Append evt with
+                        | Ok() ->
+                            logger.Info
+                                $"[AuditLog] event=spilled_to_fallback scope=%s{scopeId} eventType={eventTypeName} — replay service re-ingests on recovery"
+                        | Error msg ->
                             logger.Error(
-                                $"[AuditLog] event=fallback_missing scope=%s{scopeId} eventType={eventTypeName} — DegradeToFile with no fallback store wired; audit record LOST",
+                                $"[AuditLog] event=fallback_spill_failed scope=%s{scopeId} eventType={eventTypeName}: {msg} — audit record LOST",
                                 None
                             )
+                    | None ->
+                        logger.Error(
+                            $"[AuditLog] event=fallback_missing scope=%s{scopeId} eventType={eventTypeName} — DegradeToFile with no fallback store wired; audit record LOST",
+                            None
+                        )
+    }
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async {
+            // Phase 759 — under an active `EntityAuditReplayScope` the
+            // entity store's generic ("system", write-time) lifecycle
+            // row for the entity being replayed is dropped: the replay
+            // handler records the provenance-carrying row for the same
+            // version immediately after, so one applied version yields
+            // one row. Every other event, including that provenance
+            // row, takes the ordinary path.
+            if EntityAuditReplayScope.suppresses audit then
+                logger.Debug(
+                    sprintf
+                        "[AuditLog] event=lifecycle_row_suppressed scope=%s eventType=%s — offline replay records the provenance-carrying row"
+                        scopeId
+                        (AuditEvent.eventTypeName audit)
+                )
+            else
+                return! record scopeId audit
         }
 
         member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
