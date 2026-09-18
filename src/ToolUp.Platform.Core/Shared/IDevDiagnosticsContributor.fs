@@ -38,8 +38,9 @@ namespace ToolUp.Platform
 /// - `string` is the panel name shown in the HTML view and used as the
 ///   key in `Contributors`. Use a short Title-Case label
 ///   (e.g., `"SSE trace"`, `"Module hooks"`).
-/// - `obj` is anything `JsonConvert.SerializeObject` can render. F# records,
-///   anonymous records, `Map`, `list`, primitives all serialise cleanly.
+/// - `obj` is anything `System.Text.Json` under the platform's `FableConverters`
+///   options can render. F# records, anonymous records, `Map`, `list`,
+///   primitives all serialise cleanly.
 ///
 /// Multiple contributors registering the same panel name overwrite each
 /// other (last wins) — pick distinctive names.

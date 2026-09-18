@@ -344,7 +344,7 @@ For tracing, the `Logger.trace` API + per-source filter via `TOOLUP_TRACE_CATEGO
 
 ## Dev diagnostics
 
-The `/dev/inspect` endpoint (gated by `ServerConfig.EnableDevEndpoints`, default `false` in production builds; auto-enabled by the reference deployment in `#if DEBUG`) surfaces the caller's resolved `AccessContext` / `StorageScope`, registered modules + per-module data types, data-catalog summary, registered route handlers, `IServiceCollection` descriptor list, health-check snapshot, and config preflight snapshot. Caller-scope only — never enumerates across teams.
+The `/dev/inspect` endpoint (gated solely by `ServerConfig.EnableDevEndpoints`, default `false`; there is no compile-time gate and no sample enables it — an operator opts in per deployment) surfaces the caller's resolved `AccessContext` / `StorageScope`, registered modules + per-module data types, data-catalog summary, registered route handlers, `IServiceCollection` descriptor list, health-check snapshot, and config preflight snapshot. Caller-scope only — never enumerates across teams.
 
 `IDevDiagnosticsContributor` is the extension point for companions wanting to surface their own internals (AI fast-path stats, ingestion queue depth, etc.).
 
