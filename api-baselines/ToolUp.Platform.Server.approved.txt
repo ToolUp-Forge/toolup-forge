@@ -3026,6 +3026,7 @@ ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion (class)
 ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion.found : System.Int32 { get }
 ToolUp.Platform.DevDiagnosticsHandler (class)
 ToolUp.Platform.DevDiagnosticsHandler.buildReport(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsReport]
+ToolUp.Platform.DevDiagnosticsHandler.buildVersionReport(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.DevDiagnosticsHandler+VersionReport
 ToolUp.Platform.DevDiagnosticsHandler.routes(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.DevDiagnosticsHandler.snapshotServices(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DevDiagnosticsHandler+ServiceDescriptorSnapshot]
 ToolUp.Platform.DevDiagnosticsHandler+CallerSummary (class)
@@ -3131,6 +3132,13 @@ ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.ElapsedMs : System.Int64 
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Message : System.String { get }
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Name : System.String { get }
 ToolUp.Platform.DevDiagnosticsHandler+ValidatorSummary.Status : System.String { get }
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport (class)
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentVersion], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport.Commit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport.Companions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentVersion] { get }
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport.DeployedAt : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport.Sdk : System.String { get }
+ToolUp.Platform.DevDiagnosticsHandler+VersionReport.StartedAt : System.String { get }
 ToolUp.Platform.DiagnosticBundleHandler (class)
 ToolUp.Platform.DiagnosticBundleHandler.route(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.DigestJobHandler (class)
