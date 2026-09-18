@@ -10,11 +10,11 @@ Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1237/2422
 ToolUp.AI.Client 79/459
 ToolUp.AI.Core 286/655
-ToolUp.AI.McpHost 133/246
+ToolUp.AI.McpHost 133/247
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 3/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 449/859
+ToolUp.AI.Server 501/946
 ToolUp.AI.Wire 87/220
 ToolUp.AICookbooks.AgChart 7/9
 ToolUp.AICookbooks.AgGridEnterprise 5/7
@@ -123,8 +123,8 @@ ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 251/502
 ToolUp.Platform.Client 2168/6341
-ToolUp.Platform.Core 5261/13379
-ToolUp.Platform.Server 5491/11131
+ToolUp.Platform.Core 5282/13464
+ToolUp.Platform.Server 5492/11135
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062
