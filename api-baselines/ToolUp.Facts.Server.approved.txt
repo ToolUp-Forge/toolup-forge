@@ -34,6 +34,15 @@ ToolUp.Facts.AnswerPlannerModule.questionVocabularyPrompt(Microsoft.FSharp.Core.
 ToolUp.Facts.AnswerPlannerModule.structuredCompiler(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], System.String]]
 ToolUp.Facts.AnswerPlannerModule.structuredQuestionCompiler(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]
 ToolUp.Facts.AnswerPlannerModule.vocabularyPrompt(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : System.String
+ToolUp.Facts.AssemblyTaint (class)
+ToolUp.Facts.AssemblyTaint.contributedBy(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.AssemblyTransform) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.AssemblyTaint.declassify(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, ToolUp.Facts.TaintLabel) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.AssemblyTaint.labelOf(ToolUp.Platform.LabelledTransform`1[ToolUp.Facts.TaintLabel]) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.AssemblyTaint.labelOfSources(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AssemblySource, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel]
+ToolUp.Facts.AssemblyTaint.labelling(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel]) : ToolUp.Platform.TransformLabelling`1[ToolUp.Facts.TaintLabel]
+ToolUp.Facts.AssemblyTaint.lineageOf(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.DatasetAssemblySpec]]) : ToolUp.Facts.ComputedLineage
+ToolUp.Facts.AssemblyTaint.ofSpec(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.DatasetAssemblySpec) : ToolUp.Platform.LabelledAssembly`1[ToolUp.Facts.TaintLabel]
+ToolUp.Facts.AssemblyTaint.outputLabel(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.DatasetAssemblySpec) : ToolUp.Facts.TaintLabel
 ToolUp.Facts.AttestedCertificateVerdict (class)
 ToolUp.Facts.AttestedCertificateVerdict.AttestedCertificateValid : ToolUp.Facts.AttestedCertificateVerdict { get }
 ToolUp.Facts.AttestedCertificateVerdict.IsAttestedCertificateRejected : System.Boolean { get }
@@ -263,6 +272,13 @@ ToolUp.Facts.CoherenceJobHandler..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp
 ToolUp.Facts.CoherenceJobHandlerModule (class)
 ToolUp.Facts.CoherenceJobHandlerModule.HandlerName : System.String (literal)
 ToolUp.Facts.CoherenceJobHandlerModule.create(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.INotificationChannel, ToolUp.Platform.IEventStore, ToolUp.Facts.CoherenceConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.ComputedLineage (class)
+ToolUp.Facts.ComputedLineage..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TaintLabel]])
+ToolUp.Facts.ComputedLineage.LabelOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TaintLabel]] { get }
+ToolUp.Facts.ComputedLineageModule (class)
+ToolUp.Facts.ComputedLineageModule.none : ToolUp.Facts.ComputedLineage { get }
+ToolUp.Facts.ComputedLineageModule.ofList(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.TaintLabel]]) : ToolUp.Facts.ComputedLineage
+ToolUp.Facts.ComputedLineageModule.ofMap(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.TaintLabel]) : ToolUp.Facts.ComputedLineage
 ToolUp.Facts.CoverageNarrative (class)
 ToolUp.Facts.CoverageNarrative.ModuleId : System.String (literal)
 ToolUp.Facts.CoverageNarrative.bandLabel(System.Int32) : System.String
@@ -469,6 +485,7 @@ ToolUp.Facts.DeclassificationHold.Budget : ToolUp.Facts.DeclassificationBudget {
 ToolUp.Facts.DeclassificationHold.Spend : ToolUp.Platform.BudgetSpend { get }
 ToolUp.Facts.DisclosureTaint (class)
 ToolUp.Facts.DisclosureTaint.analyze(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
+ToolUp.Facts.DisclosureTaint.analyzeWithLineage(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.ComputedLineage, ToolUp.Facts.FactDerivationGraph, System.String) : ToolUp.Facts.TaintOutcome
 ToolUp.Facts.DisclosureTaint.buildGraph(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.FactDerivationGraph
 ToolUp.Facts.DisclosureTaint.declassifierOf(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.Fact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
 ToolUp.Facts.EventStoreAmendmentAudit (class)
@@ -782,9 +799,11 @@ ToolUp.Facts.TaintCrossing.DeclassifierFactId : System.String { get }
 ToolUp.Facts.TaintCrossing.OperationId : System.String { get }
 ToolUp.Facts.TaintCrossing.Rationale : System.String { get }
 ToolUp.Facts.TaintOutcome (class)
-ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])
+ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing], ToolUp.Facts.TaintLabel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosureFinding])
 ToolUp.Facts.TaintOutcome.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.Crossings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing] { get }
+ToolUp.Facts.TaintOutcome.Findings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosureFinding] { get }
+ToolUp.Facts.TaintOutcome.InheritedLabel : ToolUp.Facts.TaintLabel { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

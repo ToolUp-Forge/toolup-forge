@@ -295,7 +295,130 @@ module AssemblyProvenance =
         | AssemblySource.TimeSeriesRange b -> sprintf "timeseries:%s/%s@[%O,%O)" b.ScopeId b.Series b.From b.Until
         | AssemblySource.ExternalTable b ->
             let h =
-                SHA256.HashData(Encoding.UTF8.GetBytes(b.Kind + " " + b.Ref + " " + b.Query))
+                SHA256.HashData(Encoding.UTF8.GetBytes(b.Kind + "\u0000" + b.Ref + "\u0000" + b.Query))
                 |> Convert.ToHexStringLower
 
             sprintf "external:%s:%s" b.Kind (h.Substring(0, 16))
+// ─── Phase 794 — the labelled transform algebra ──────────────────────
+//
+// The transform DU above says exactly which inputs each case reads: every
+// case but one folds or rearranges the working frame alone, and `Join`
+// additionally reads a second source — the point in the algebra where two
+// parties' data meet. That is a structural fact about the computation, and
+// it is the fact a label must be propagated along.
+//
+// So the labelling lives here, with the algebra it describes, and it is
+// **generic in the label**: this tier supplies the SHAPE of the
+// computation and knows nothing about disclosure, while the caller
+// supplies the lattice — `bottom`, `join`, and a label per source. There is
+// deliberately no join defined in this file. A second join would be a
+// second algebra to keep honest, and abolishing the unnamed, untested one
+// is the whole point of the phase; the one join lives in the facts tier
+// with its executable laws, and this fold is a client of it.
+//
+// The fold is a `match` over every case of the closed DU, so a transform
+// added later cannot acquire a label by accident — it fails to compile
+// until someone says what it reads.
+
+/// The lattice a labelling runs over, supplied by the caller: the identity,
+/// the join, and the label each source's rows carry. `LabelOfSource` is the
+/// declared part — which party a source belongs to is compose-time data,
+/// never something inferred from the frame.
+type TransformLabelling<'Label> = {
+    Bottom: 'Label
+    Join: 'Label -> 'Label -> 'Label
+    LabelOfSource: AssemblySource -> 'Label
+}
+
+/// One transform paired with the label its output frame carries — the join
+/// of the labels of everything that flowed into it. `Contributed` is the
+/// part THIS node brought in that the incoming frame did not already carry,
+/// which for a `Join` is the right source's label and for every other case
+/// is the identity: the record of where in a pipeline a second party
+/// entered.
+type LabelledTransform<'Label> = {
+    Transform: AssemblyTransform
+    Label: 'Label
+    Contributed: 'Label
+}
+
+/// A labelled pipeline: the base frame's label, one labelled node per
+/// transform in order, and the label of the frame the pipeline produces.
+/// `OutputLabel` is what any consumer of the assembled dataset inherits.
+type LabelledAssembly<'Label> = {
+    BaseLabel: 'Label
+    Nodes: LabelledTransform<'Label> list
+    OutputLabel: 'Label
+}
+
+module AssemblyLabelling =
+
+    /// The label a single transform CONTRIBUTES: the labels of its inputs
+    /// OTHER than the working frame. Only `Join` has one — it names a second
+    /// source, so a joined frame carries both parties' policies from that
+    /// node onward. `Resample` / `Lag` / `Window` / `Filter` read the
+    /// working frame and nothing else, so they contribute the identity and
+    /// carry whatever reached them: an information-losing fold is not a
+    /// declassifier, and only `narrowsTo` under a declared routine may lower
+    /// a label.
+    let contributedBy (labelling: TransformLabelling<'Label>) (transform: AssemblyTransform) : 'Label =
+        match transform with
+        | AssemblyTransform.Join(right, _, _, _) -> labelling.LabelOfSource right
+        | AssemblyTransform.Resample _
+        | AssemblyTransform.Lag _
+        | AssemblyTransform.Window _
+        | AssemblyTransform.Filter _ -> labelling.Bottom
+
+    /// The fold: run the labelling down the pipeline, each node's label the
+    /// join of the incoming frame's label and what the node contributed.
+    let label
+        (labelling: TransformLabelling<'Label>)
+        (baseSource: AssemblySource)
+        (transforms: AssemblyTransform list)
+        : LabelledAssembly<'Label> =
+        let baseLabel = labelling.LabelOfSource baseSource
+
+        let nodes, outputLabel =
+            transforms
+            |> List.mapFold
+                (fun incoming transform ->
+                    let contributed = contributedBy labelling transform
+                    let nodeLabel = labelling.Join incoming contributed
+
+                    {
+                        Transform = transform
+                        Label = nodeLabel
+                        Contributed = contributed
+                    },
+                    nodeLabel)
+                baseLabel
+
+        {
+            BaseLabel = baseLabel
+            Nodes = nodes
+            OutputLabel = outputLabel
+        }
+
+    /// The labelling of a whole spec — its base source and its transforms.
+    /// The split is deliberately not labelled: a split partitions rows, and
+    /// every subset of a labelled frame carries the frame's label.
+    let ofSpec (labelling: TransformLabelling<'Label>) (spec: DatasetAssemblySpec) : LabelledAssembly<'Label> =
+        label labelling spec.Base spec.Transforms
+
+    /// The label of the frame a spec produces — what a consumer of any of
+    /// its output versions inherits.
+    let outputLabelOf (labelling: TransformLabelling<'Label>) (spec: DatasetAssemblySpec) : 'Label =
+        (ofSpec labelling spec).OutputLabel
+
+    /// Every source a spec reads, base first then each `Join`'s right side
+    /// in pipeline order — what a caller enumerates to build its
+    /// `LabelOfSource` binding without re-walking the DU.
+    let sourcesOf (spec: DatasetAssemblySpec) : AssemblySource list =
+        spec.Base
+        :: (spec.Transforms
+            |> List.choose (function
+                | AssemblyTransform.Join(right, _, _, _) -> Some right
+                | AssemblyTransform.Resample _
+                | AssemblyTransform.Lag _
+                | AssemblyTransform.Window _
+                | AssemblyTransform.Filter _ -> None))

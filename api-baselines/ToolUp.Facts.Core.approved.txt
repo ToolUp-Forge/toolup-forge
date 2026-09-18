@@ -71,6 +71,12 @@ ToolUp.Facts.DisclosureEvents (class)
 ToolUp.Facts.DisclosureEvents.AccessedType : System.String (literal)
 ToolUp.Facts.DisclosureEvents.DeclassifiedType : System.String (literal)
 ToolUp.Facts.DisclosureEvents.DeniedType : System.String (literal)
+ToolUp.Facts.DisclosureFinding (class)
+ToolUp.Facts.DisclosureFinding.Tag : System.Int32 { get }
+ToolUp.Facts.DisclosureFinding.factIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.DisclosureFindingModule (class)
+ToolUp.Facts.DisclosureFindingModule.LineageInferredRef : System.String (literal)
+ToolUp.Facts.DisclosureFindingModule.describe(ToolUp.Facts.DisclosureFinding) : System.String
 ToolUp.Facts.DisclosureMode (class)
 ToolUp.Facts.DisclosureMode.IsPlain : System.Boolean { get }
 ToolUp.Facts.DisclosureMode.IsTaintPropagating : System.Boolean { get }
@@ -118,6 +124,7 @@ ToolUp.Facts.DisclosureTaintConfigModule.ofLists(Microsoft.FSharp.Collections.FS
 ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintConfig, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -455,6 +462,25 @@ ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
 ToolUp.Facts.SubjectRef.Path : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.SubjectRefModule (class)
 ToolUp.Facts.SubjectRefModule.toString(ToolUp.Facts.SubjectRef) : System.String
+ToolUp.Facts.TaintLabel (class)
+ToolUp.Facts.TaintLabelModule (class)
+ToolUp.Facts.TaintLabelModule.below(ToolUp.Facts.TaintLabel, ToolUp.Facts.TaintLabel) : System.Boolean
+ToolUp.Facts.TaintLabelModule.bottom : ToolUp.Facts.TaintLabel { get }
+ToolUp.Facts.TaintLabelModule.clearedBy(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.Facts.TaintLabel) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.contains(System.String, ToolUp.Facts.TaintLabel) : System.Boolean
+ToolUp.Facts.TaintLabelModule.isBottom(ToolUp.Facts.TaintLabel) : System.Boolean
+ToolUp.Facts.TaintLabelModule.join(ToolUp.Facts.TaintLabel, ToolUp.Facts.TaintLabel) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.TaintLabelModule.joinAll(System.Collections.Generic.IEnumerable`1[ToolUp.Facts.TaintLabel]) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.TaintLabelModule.joinLawFailures(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.joinLawFailuresOf(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.TaintLabel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.TaintLabel, ToolUp.Facts.TaintLabel]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.narrowingLawFailures(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.narrowingLawFailuresOf(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.TaintLabel, ToolUp.Facts.TaintLabel]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.narrowsTo(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.Facts.TaintLabel) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.TaintLabelModule.ofPolicyRef(System.String) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.TaintLabelModule.ofPolicyRefs(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Facts.TaintLabel
+ToolUp.Facts.TaintLabelModule.policyRefs(ToolUp.Facts.TaintLabel) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.TaintLabelModule.render(ToolUp.Facts.TaintLabel) : System.String
+ToolUp.Facts.TaintLabelModule.vocabulary(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]
 ToolUp.Facts.TemporalExtent (class)
 ToolUp.Facts.TemporalExtent..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.TemporalExtent.From : System.DateTime { get }

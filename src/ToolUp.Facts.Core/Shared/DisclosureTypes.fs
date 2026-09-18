@@ -314,6 +314,250 @@ module DisclosureTaintConfig =
         | None -> true
         | Some party -> List.contains party routine.AcceptingScopes
 
+
+    /// Phase 794 — the closed label alphabet a deployment declares: its
+    /// registered `TaintPropagating` policy refs, distinct and sorted. A
+    /// `Plain` policy never taints and an unregistered ref is not a taint
+    /// source at all, so neither is a label. Closed because the vocabulary
+    /// is compose-time data, which is what makes the lattice laws checkable
+    /// EXHAUSTIVELY over a deployment rather than only sampled.
+    let taintVocabulary (config: DisclosureTaintConfig) : string list =
+        config.Policies
+        |> Map.toList
+        |> List.choose (fun (policyRef, policy) ->
+            if policy.Mode = TaintPropagating then
+                Some policyRef
+            else
+                None)
+        |> List.distinct
+        |> List.sort
+
+// ─── Phase 794 — the taint label lattice ─────────────────────────────
+//
+// Taint has been a `string list` of policy refs since Phase 562, combined
+// wherever two lineages met by `List.collect … |> List.distinct`: a join in
+// fact, with no name, no stated law, and no test that it is one. This
+// phase gives it a type. A `TaintLabel` is the SET of taint-propagating
+// policy refs a value's lineage carries, ordered by inclusion — `bottom`
+// (nothing reaches the value) at the foot, the whole declared vocabulary
+// at the head.
+//
+// `join` is the least upper bound: what a value carries when two lineages
+// meet. It is associative, commutative, idempotent, and has `bottom` as a
+// two-sided identity. `narrowsTo` is the ONE operator in the model that
+// moves DOWN the lattice, and it moves only as far as a declared
+// declassification routine's accepting scopes entitle it to
+// (`routineClears` above, unchanged by this phase). Nothing else can lower
+// a label — which is the property every downstream claim rests on, and the
+// reason declassification is a single named operator rather than a
+// scattering of filters.
+//
+// **The laws are executable, and parameterised over the operator under
+// test.** `joinLawFailuresOf` / `narrowingLawFailuresOf` return a readable
+// sentence per violation rather than asserting, so each is consumed twice:
+// bound to the real operator and asserted empty, and bound to a
+// deliberately-broken one to assert the specific law that must catch it
+// fires. A law that stopped having teeth fails its go-red control instead
+// of quietly passing everywhere. And because the vocabulary is closed,
+// `vocabulary` enumerates every label a deployment can express, so the
+// laws are checked over all of them and not only over samples.
+
+/// The taint a value's lineage carries: the set of taint-propagating
+/// policy refs that reach it. Built only through the `TaintLabel` module —
+/// the `string list` representation is retired behind the type, so no
+/// caller can combine two labels by concatenating them and no caller can
+/// lower one except through `narrowsTo`.
+type TaintLabel = private TaintRefs of Set<string>
+
+module TaintLabel =
+
+    /// The clean label: no policy reaches the value. The join's identity
+    /// and the bottom of the order.
+    let bottom: TaintLabel = TaintRefs Set.empty
+
+    /// The label carrying exactly one policy ref.
+    let ofPolicyRef (policyRef: string) : TaintLabel = TaintRefs(Set.singleton policyRef)
+
+    /// The label carrying every ref given. Order and duplicates are
+    /// immaterial — which is the whole point of the type.
+    let ofPolicyRefs (policyRefs: string seq) : TaintLabel = TaintRefs(Set.ofSeq policyRefs)
+
+    /// The refs a label carries, distinct and sorted.
+    let policyRefs (TaintRefs refs) : string list = Set.toList refs
+
+    /// Nothing reaches the value.
+    let isBottom (TaintRefs refs) : bool = Set.isEmpty refs
+
+    /// Whether the named policy reaches the value.
+    let contains (policyRef: string) (TaintRefs refs) : bool = Set.contains policyRef refs
+
+    /// The least upper bound — what a value carries when two lineages meet.
+    let join (TaintRefs a) (TaintRefs b) : TaintLabel = TaintRefs(Set.union a b)
+
+    /// The join of many. `bottom` over an empty sequence, which is the
+    /// identity law doing its work rather than a special case.
+    let joinAll (labels: TaintLabel seq) : TaintLabel = Seq.fold join bottom labels
+
+    /// The lattice order: `a` is at or below `b` when joining it into `b`
+    /// adds nothing.
+    let below (a: TaintLabel) (b: TaintLabel) : bool = join a b = b
+
+    /// Declassification — the ONE operator that LOWERS a label. `clears` is
+    /// the routine's entitlement predicate
+    /// (`DisclosureTaintConfig.routineClears config routine`): an unscoped
+    /// policy is cleared by any declared routine, a party-scoped one only
+    /// by a routine that party accepted. So one party's consent can never
+    /// lower another party's label, and no other code path can lower one at
+    /// all.
+    let narrowsTo (clears: string -> bool) (TaintRefs refs) : TaintLabel =
+        TaintRefs(refs |> Set.filter (clears >> not))
+
+    /// The refs `narrowsTo` would drop — what a crossing actually cleared.
+    /// Empty ⇒ the routine cleared nothing, so the crossing declassified
+    /// nothing and is not recorded as one.
+    let clearedBy (clears: string -> bool) (TaintRefs refs) : string list = refs |> Set.filter clears |> Set.toList
+
+    /// A readable rendering for law-failure messages.
+    let render (label: TaintLabel) : string =
+        if isBottom label then
+            "(clean)"
+        else
+            policyRefs label |> String.concat "+"
+
+    /// Every label expressible over a closed policy vocabulary — its power
+    /// set, `2^n` labels. This is what makes the laws checkable
+    /// exhaustively; keep the vocabulary small when calling it, because the
+    /// associativity law is cubic in the result.
+    let vocabulary (policyRefs: string list) : TaintLabel list =
+        policyRefs
+        |> List.distinct
+        |> List.sort
+        |> List.fold
+            (fun acc policyRef ->
+                acc
+                @ (acc |> List.map (fun (TaintRefs refs) -> TaintRefs(Set.add policyRef refs))))
+            [ bottom ]
+
+    /// Every way the join under test fails a lattice law over `labels`, as
+    /// readable sentences. A broken law fails at many points at once, so
+    /// each failure names the labels that witness it. Parameterised over
+    /// the operator so a test can perturb it and prove the check has teeth.
+    let joinLawFailuresOf (j: TaintLabel -> TaintLabel -> TaintLabel) (labels: TaintLabel list) : string list =
+        let coveredBy a b = j a b = b
+
+        [
+            for a in labels do
+                if j a a <> a then
+                    yield sprintf "join is not idempotent at %s" (render a)
+
+                if j bottom a <> a then
+                    yield sprintf "bottom is not a LEFT identity at %s" (render a)
+
+                if j a bottom <> a then
+                    yield sprintf "bottom is not a RIGHT identity at %s" (render a)
+
+            for a in labels do
+                for b in labels do
+                    if j a b <> j b a then
+                        yield sprintf "join is not commutative at %s / %s" (render a) (render b)
+
+                    let ab = j a b
+
+                    if not (coveredBy a ab && coveredBy b ab) then
+                        yield sprintf "the join does not cover its parts at %s / %s" (render a) (render b)
+
+            for a in labels do
+                for b in labels do
+                    for c in labels do
+                        if j (j a b) c <> j a (j b c) then
+                            yield sprintf "join is not associative at %s / %s / %s" (render a) (render b) (render c)
+        ]
+
+    /// The join laws bound to the real `join`.
+    let joinLawFailures (labels: TaintLabel list) : string list = joinLawFailuresOf join labels
+
+    /// Every way the narrowing under test fails a declassification law,
+    /// given the entitlement predicate it is handed. Same shape and same
+    /// reason as `joinLawFailuresOf`.
+    let narrowingLawFailuresOf
+        (n: (string -> bool) -> TaintLabel -> TaintLabel)
+        (clears: string -> bool)
+        (labels: TaintLabel list)
+        : string list =
+        [
+            for a in labels do
+                let narrowed = n clears a
+
+                if not (below narrowed a) then
+                    yield
+                        sprintf "narrowing did not LOWER the label at %s — it produced %s" (render a) (render narrowed)
+
+                if n clears narrowed <> narrowed then
+                    yield sprintf "narrowing is not idempotent at %s" (render a)
+
+                if n (fun _ -> false) a <> a then
+                    yield sprintf "a routine entitled to clear nothing still lowered the label at %s" (render a)
+
+                if not (isBottom (n (fun _ -> true) a)) then
+                    yield sprintf "a routine entitled to clear everything left taint behind at %s" (render a)
+
+                for policyRef in policyRefs a do
+                    if contains policyRef narrowed <> not (clears policyRef) then
+                        yield
+                            sprintf
+                                "narrowing cleared the wrong refs at %s: the ref %s %s"
+                                (render a)
+                                policyRef
+                                (if clears policyRef then
+                                     "survived a routine entitled to clear it"
+                                 else
+                                     "was cleared by a routine not entitled to clear it")
+
+            for a in labels do
+                for b in labels do
+                    if below a b && not (below (n clears a) (n clears b)) then
+                        yield sprintf "narrowing is not monotone at %s / %s" (render a) (render b)
+        ]
+
+    /// The narrowing laws bound to the real `narrowsTo`.
+    let narrowingLawFailures (clears: string -> bool) (labels: TaintLabel list) : string list =
+        narrowingLawFailuresOf narrowsTo clears labels
+
+/// Phase 794 — a finding raised alongside a disclosure verdict: something
+/// the verdict's reader must be told that is not itself an allow or a deny.
+/// A finding never changes a verdict — it qualifies the EVIDENCE the
+/// verdict rests on — which is why it is a separate value and not a third
+/// verdict case (`DisclosureEgress.evaluate` is unchanged).
+[<RequireQualifiedAccess>]
+type DisclosureFinding =
+    /// The named facts' upstream was INFERRED from evidence linkage (the
+    /// Phase 562 projection: a fact's `Evidence.InputHashes` matched against
+    /// whichever fact emitted that data-object version as `Series`) rather
+    /// than COMPUTED from the transform tree that produced them. That
+    /// inference is sound only where a derivation is routed through a series
+    /// output; a derivation that is not is invisible to it, and an invisible
+    /// upstream carries no taint at all. So a verdict resting on inference
+    /// is weaker than one resting on computation, and this is how every
+    /// party is told which of the two it was given.
+    | LineageInferred of factIds: string list
+
+module DisclosureFinding =
+
+    /// Stable, greppable ref for the inferred-lineage finding — the same
+    /// role `DisclosureContributorScope.UnsatisfiedPrefix` plays for the
+    /// conjunction refusal.
+    [<Literal>]
+    let LineageInferredRef = "lineage-inferred"
+
+    let describe (finding: DisclosureFinding) : string =
+        match finding with
+        | DisclosureFinding.LineageInferred factIds ->
+            sprintf
+                "%s: the lineage of %d fact(s) was inferred from evidence linkage rather than computed from a transform tree (%s)"
+                LineageInferredRef
+                (List.length factIds)
+                (String.concat ", " factIds)
+
 /// Payload of a `FactDisclosureDeclassified` audit event (Phase 562.C —
 /// JSON-serialised into `ModuleEvent.Payload`). PII-free: the fact being
 /// disclosed, the declassifier fact on its derivation path, the operation

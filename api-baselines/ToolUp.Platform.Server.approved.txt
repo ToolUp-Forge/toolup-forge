@@ -421,6 +421,12 @@ ToolUp.Platform.AssemblyJoinKind.Tag : System.Int32 { get }
 ToolUp.Platform.AssemblyJoinKind+Tags (class)
 ToolUp.Platform.AssemblyJoinKind+Tags.Inner : System.Int32 (literal)
 ToolUp.Platform.AssemblyJoinKind+Tags.LeftOuter : System.Int32 (literal)
+ToolUp.Platform.AssemblyLabelling (class)
+ToolUp.Platform.AssemblyLabelling.contributedBy`1(ToolUp.Platform.TransformLabelling`1[Label], ToolUp.Platform.AssemblyTransform) : Label
+ToolUp.Platform.AssemblyLabelling.label`1(ToolUp.Platform.TransformLabelling`1[Label], ToolUp.Platform.AssemblySource, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AssemblyTransform]) : ToolUp.Platform.LabelledAssembly`1[Label]
+ToolUp.Platform.AssemblyLabelling.ofSpec`1(ToolUp.Platform.TransformLabelling`1[Label], ToolUp.Platform.DatasetAssemblySpec) : ToolUp.Platform.LabelledAssembly`1[Label]
+ToolUp.Platform.AssemblyLabelling.outputLabelOf`1(ToolUp.Platform.TransformLabelling`1[Label], ToolUp.Platform.DatasetAssemblySpec) : Label
+ToolUp.Platform.AssemblyLabelling.sourcesOf(ToolUp.Platform.DatasetAssemblySpec) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AssemblySource]
 ToolUp.Platform.AssemblyProvenance (class)
 ToolUp.Platform.AssemblyProvenance.SourcesKey : System.String (literal)
 ToolUp.Platform.AssemblyProvenance.SpecHashKey : System.String (literal)
@@ -6317,6 +6323,16 @@ ToolUp.Platform.KeyDestroyAckCoverageValidator+KeyDestroyAckCoverageValidator..c
 ToolUp.Platform.KeyedByteSigning (class)
 ToolUp.Platform.KeyedByteSigning.BindingVersion : System.String (literal)
 ToolUp.Platform.KeyedByteSigning.bindKeyId(System.String, System.Byte[]) : System.Byte[]
+ToolUp.Platform.LabelledAssembly`1 (class)
+ToolUp.Platform.LabelledAssembly`1..ctor(Label, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LabelledTransform`1[Label]], Label)
+ToolUp.Platform.LabelledAssembly`1.BaseLabel : Label { get }
+ToolUp.Platform.LabelledAssembly`1.Nodes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LabelledTransform`1[Label]] { get }
+ToolUp.Platform.LabelledAssembly`1.OutputLabel : Label { get }
+ToolUp.Platform.LabelledTransform`1 (class)
+ToolUp.Platform.LabelledTransform`1..ctor(ToolUp.Platform.AssemblyTransform, Label, Label)
+ToolUp.Platform.LabelledTransform`1.Contributed : Label { get }
+ToolUp.Platform.LabelledTransform`1.Label : Label { get }
+ToolUp.Platform.LabelledTransform`1.Transform : ToolUp.Platform.AssemblyTransform { get }
 ToolUp.Platform.Lease (class)
 ToolUp.Platform.Lease..ctor(System.String, System.Int64, System.DateTime, System.DateTime)
 ToolUp.Platform.Lease.AcquiredAt : System.DateTime { get }
@@ -9943,6 +9959,11 @@ ToolUp.Platform.TransactionalRetryPolicy.MaxBackoff : System.TimeSpan { get }
 ToolUp.Platform.TransactionalRetryPolicyModule (class)
 ToolUp.Platform.TransactionalRetryPolicyModule.defaults : ToolUp.Platform.TransactionalRetryPolicy { get }
 ToolUp.Platform.TransactionalRetryPolicyModule.delayFor(ToolUp.Platform.TransactionalRetryPolicy, System.Int32) : System.TimeSpan
+ToolUp.Platform.TransformLabelling`1 (class)
+ToolUp.Platform.TransformLabelling`1..ctor(Label, Microsoft.FSharp.Core.FSharpFunc`2[Label, Microsoft.FSharp.Core.FSharpFunc`2[Label, Label]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, Label])
+ToolUp.Platform.TransformLabelling`1.Bottom : Label { get }
+ToolUp.Platform.TransformLabelling`1.Join : Microsoft.FSharp.Core.FSharpFunc`2[Label, Microsoft.FSharp.Core.FSharpFunc`2[Label, Label]] { get }
+ToolUp.Platform.TransformLabelling`1.LabelOfSource : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, Label] { get }
 ToolUp.Platform.TransientFault (class)
 ToolUp.Platform.TransientFault+BackoffSchedule (class)
 ToolUp.Platform.TransientFault+BackoffSchedule.IsExponential : System.Boolean { get }

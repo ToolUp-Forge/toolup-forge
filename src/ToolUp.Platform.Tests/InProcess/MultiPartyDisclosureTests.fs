@@ -453,5 +453,310 @@ let gateTests =
         }
     ]
 
+// ── Phase 794 — the labelled transform algebra over two parties ───
+//
+// Phase 674 asked whether the conjunction holds over the lineage the store
+// can SEE. This asks where that lineage comes from. The taint walk's graph
+// is inferred — a fact's `Evidence.InputHashes` matched against whichever
+// fact published that data-object version as a `Series` — so a derivation
+// routed any other way is invisible, and an invisible upstream carries no
+// taint at all. The transform tree that actually produced the frame knows
+// better, and Phase 794 lets the walk consume it.
+//
+// The generated trees below are the property's subject: arbitrary
+// pipelines over two parties' sources, with `Join` the case where a second
+// party enters. The ORACLE is computed independently of the fold — the set
+// of sources the generator actually used — so the test compares two
+// derivations of the same fact rather than the fold against itself. Seeds
+// are printed on failure so any counterexample is reproducible; there is no
+// property-testing dependency in this repository and adding one is a CPM +
+// supply-chain change this phase has no business making.
+
+let private sourceOf (datasetId: string) : AssemblySource =
+    AssemblySource.DatasetVersion {
+        ScopeId = "clean-room"
+        DatasetId = datasetId
+        Version = 1
+    }
+
+let private sourceA = sourceOf "party-a-raw"
+let private sourceB = sourceOf "party-b-raw"
+
+/// A source carrying no restricted data — the declaration that makes
+/// "unlabelled" a positive statement rather than an omission.
+let private sourceOpen = sourceOf "public-reference"
+
+let private declaredLabels =
+    AssemblyTaint.labelOfSources [ sourceA, [ policyA ]; sourceB, [ policyB ]; sourceOpen, [] ]
+
+let private joinablePool = [| sourceA; sourceB; sourceOpen |]
+
+/// A pipeline and, beside it, the sources it actually reads — the oracle
+/// the fold is checked against.
+let private generateTree (seed: int) (length: int) : AssemblySource * AssemblyTransform list * AssemblySource list =
+    let rng = Random(seed)
+    let baseSource = joinablePool[rng.Next joinablePool.Length]
+    let read = ResizeArray [ baseSource ]
+
+    let transforms = [
+        for _ in 1..length ->
+            match rng.Next 5 with
+            | 0 ->
+                let right = joinablePool[rng.Next joinablePool.Length]
+                read.Add right
+                AssemblyTransform.Join(right, [ "unit" ], [ "unit" ], AssemblyJoinKind.Inner)
+            | 1 -> AssemblyTransform.Lag("value", 1, [ "unit" ], "period", "value_lag1")
+            | 2 ->
+                AssemblyTransform.Window("value", 3, TimeSeriesAggregation.Average, [ "unit" ], "period", "value_roll")
+            | 3 ->
+                AssemblyTransform.Filter [
+                    {
+                        Column = "value"
+                        Op = DatasetFilterOp.Gt
+                        Value = DatasetValue.Float 0.0
+                    }
+                ]
+            | _ ->
+                AssemblyTransform.Resample(
+                    "period",
+                    TimeSpan.FromDays 1.0,
+                    [ "unit" ],
+                    [
+                        {
+                            Column = "value"
+                            Aggregation = TimeSeriesAggregation.Sum
+                            As = "value"
+                        }
+                    ]
+                )
+    ]
+
+    baseSource, transforms, List.ofSeq read
+
+let private labelling = AssemblyTaint.labelling declaredLabels
+
+/// The orphan lineage: a fact whose evidence names two data objects that no
+/// fact in the graph published as a `Series`. The inferred projection finds
+/// no upstream for it at all — this is the derivation the file header calls
+/// invisible, made concrete.
+let private orphan =
+    mkFact "O" "orphan" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-a"; "dov-b" ]
+
+let private orphanGraph = DisclosureTaint.buildGraph [ orphan ]
+
+let private jointLabel = TaintLabel.ofPolicyRefs [ policyA; policyB ]
+
+let labelledLineageTests =
+    testList "Phase 794 labelled transform algebra" [
+
+        test "a generated pipeline's output label is the join of every source it reads" {
+            for seed in [ 794; 11; 2026 ] do
+                for length in [ 1; 3; 7 ] do
+                    let baseSource, transforms, read = generateTree seed length
+                    let labelled = AssemblyLabelling.label labelling baseSource transforms
+                    let oracle = read |> List.map declaredLabels |> TaintLabel.joinAll
+
+                    Expect.equal
+                        labelled.OutputLabel
+                        oracle
+                        (sprintf "seed %d length %d: the fold disagrees with the sources it read" seed length)
+        }
+
+        test "every node carries the join of its inputs, and a label never falls along a pipeline" {
+            for seed in [ 794; 11; 2026 ] do
+                let baseSource, transforms, _ = generateTree seed 8
+                let labelled = AssemblyLabelling.label labelling baseSource transforms
+
+                let running =
+                    labelled.Nodes
+                    |> List.scan
+                        (fun incoming node ->
+                            Expect.equal
+                                node.Label
+                                (TaintLabel.join incoming node.Contributed)
+                                (sprintf "seed %d: a node's label is not the join of its inputs" seed)
+
+                            Expect.isTrue
+                                (TaintLabel.below incoming node.Label)
+                                (sprintf "seed %d: a transform LOWERED a label — only a declassifier may" seed)
+
+                            node.Label)
+                        labelled.BaseLabel
+
+                Expect.equal
+                    (List.last running)
+                    labelled.OutputLabel
+                    (sprintf "seed %d: the running join does not reach the output label" seed)
+        }
+
+        test "only a Join contributes a second party; every other case contributes nothing" {
+            for seed in [ 794; 11; 2026 ] do
+                let baseSource, transforms, _ = generateTree seed 8
+                let labelled = AssemblyLabelling.label labelling baseSource transforms
+
+                for node in labelled.Nodes do
+                    match node.Transform with
+                    | AssemblyTransform.Join(right, _, _, _) ->
+                        Expect.equal
+                            node.Contributed
+                            (declaredLabels right)
+                            "a Join carries the right source's policies — both parties, from this node on"
+                    | _ ->
+                        Expect.equal
+                            node.Contributed
+                            TaintLabel.bottom
+                            "an information-losing fold is not a declassifier: it contributes nothing and clears nothing"
+        }
+
+        test "a Q-visible output over a tree with no declassifier naming P carries P's label" {
+            for seed in [ 794; 11; 2026; 5 ] do
+                let baseSource, transforms, read = generateTree seed 6
+
+                // Force party P into the tree so the property has a subject.
+                let withP =
+                    AssemblyTransform.Join(sourceA, [ "unit" ], [ "unit" ], AssemblyJoinKind.Inner)
+                    :: transforms
+
+                let labelled = AssemblyLabelling.label labelling baseSource withP
+
+                Expect.isTrue
+                    (TaintLabel.contains policyA labelled.OutputLabel)
+                    (sprintf "seed %d: party A's data entered the pipeline and its label did not survive" seed)
+
+                // And the walk agrees: a fact taking that label as its
+                // computed lineage denies, naming party A as unsatisfied,
+                // because no routine in this config accepted anything.
+                let lineage = ComputedLineage.ofList [ "O", labelled.OutputLabel ]
+
+                let outcome =
+                    DisclosureTaint.analyzeWithLineage (twoPartyCfg []) lineage orphanGraph "O"
+
+                Expect.isTrue
+                    (List.contains partyA outcome.UnsatisfiedScopes)
+                    (sprintf "seed %d: party A's consent is missing and the verdict does not say so" seed)
+
+                ignore read
+        }
+
+        test "an inferred lineage is reported on the verdict, never silently" {
+            let outcome = DisclosureTaint.analyze (twoPartyCfg []) jointGraph "J"
+
+            Expect.equal
+                outcome.Findings
+                [ DisclosureFinding.LineageInferred [ "J" ] ]
+                "the joint fact's upstream came from evidence linkage, and the outcome says so"
+
+            Expect.equal
+                outcome.UnsatisfiedScopes
+                [ partyA; partyB ]
+                "and the Phase 674 verdict is unchanged — a finding qualifies evidence, it never decides"
+        }
+
+        test "a leaf raises no finding — there is no derivation there to have inferred" {
+            let leafGraph = DisclosureTaint.buildGraph [ rawA ]
+            let outcome = DisclosureTaint.analyze (twoPartyCfg []) leafGraph "RA"
+
+            Expect.isEmpty
+                outcome.Findings
+                "a fact with no evidence inputs was neither computed nor inferred, so reporting it would be noise"
+        }
+
+        test "a computed lineage raises no finding, and its label drives the verdict" {
+            let lineage = ComputedLineage.ofList [ "J", jointLabel ]
+
+            let outcome =
+                DisclosureTaint.analyzeWithLineage (twoPartyCfg [ partyA ]) lineage jointGraph "J"
+
+            Expect.isEmpty outcome.Findings "nothing was inferred — the transform tree said what flowed in"
+
+            Expect.equal
+                outcome.UnsatisfiedScopes
+                [ partyB ]
+                "party A accepted the routine, party B did not — exactly the Phase 674 conjunction"
+
+            Expect.equal
+                outcome.InheritedLabel
+                (TaintLabel.ofPolicyRef policyB)
+                "and the surviving taint is available as a lattice element"
+        }
+
+        test "the invisible derivation: computed lineage taints what the inferred graph cannot see" {
+            let inferredOnly = DisclosureTaint.analyze (twoPartyCfg []) orphanGraph "O"
+
+            Expect.equal
+                inferredOnly.InheritedPolicyRef
+                None
+                "no fact published those data objects as a Series, so the inference finds no upstream at all"
+
+            Expect.equal
+                inferredOnly.Findings
+                [ DisclosureFinding.LineageInferred [ "O" ] ]
+                "which is precisely the case the finding exists to surface"
+
+            let computed =
+                DisclosureTaint.analyzeWithLineage
+                    (twoPartyCfg [])
+                    (ComputedLineage.ofList [ "O", jointLabel ])
+                    orphanGraph
+                    "O"
+
+            Expect.equal
+                computed.UnsatisfiedScopes
+                [ partyA; partyB ]
+                "the computation says both parties' data flowed in, and the verdict follows the computation"
+
+            Expect.isEmpty computed.Findings "and nothing was inferred"
+        }
+
+        test "a computed lineage for an unrelated fact leaves an existing verdict identical" {
+            let unrelated = ComputedLineage.ofList [ "somewhere-else", jointLabel ]
+
+            let before = DisclosureTaint.analyze (twoPartyCfg [ partyA ]) jointGraph "J"
+
+            let after =
+                DisclosureTaint.analyzeWithLineage (twoPartyCfg [ partyA ]) unrelated jointGraph "J"
+
+            Expect.equal after.InheritedPolicyRef before.InheritedPolicyRef "the deny ref is unchanged"
+            Expect.equal after.InheritedPolicyRefs before.InheritedPolicyRefs "and every surviving policy"
+            Expect.equal after.UnsatisfiedScopes before.UnsatisfiedScopes "and the unsatisfied parties"
+            Expect.equal after.ContributorScopes before.ContributorScopes "and the contribution facet"
+            Expect.equal after.Crossings before.Crossings "and the crossings"
+        }
+
+        test "a spec's output label is what a fact asserted from it inherits" {
+            let spec: DatasetAssemblySpec = {
+                Scope = "clean-room"
+                Base = sourceA
+                Transforms = [
+                    AssemblyTransform.Join(sourceB, [ "unit" ], [ "unit" ], AssemblyJoinKind.Inner)
+                ]
+                Split = None
+                OutputDatasetId = "joint-panel"
+                OutputRoles = []
+                Policy = Versioned
+            }
+
+            Expect.equal
+                (AssemblyTaint.outputLabel declaredLabels spec)
+                jointLabel
+                "a two-party join produces a two-party label"
+
+            Expect.equal
+                (AssemblyLabelling.sourcesOf spec)
+                [ sourceA; sourceB ]
+                "and the sources it reads are enumerable without re-walking the DU"
+
+            let lineage = AssemblyTaint.lineageOf declaredLabels [ "O", spec ]
+
+            let outcome =
+                DisclosureTaint.analyzeWithLineage (twoPartyCfg []) lineage orphanGraph "O"
+
+            Expect.equal
+                outcome.UnsatisfiedScopes
+                [ partyA; partyB ]
+                "and a fact asserted from that spec inherits both parties' restrictions"
+        }
+    ]
+
 let tests =
-    testList "Phase 674 multi-party disclosure conjunction" [ conjunctionTests; gateTests ]
+    testList "Phase 674 multi-party disclosure conjunction" [ conjunctionTests; gateTests; labelledLineageTests ]

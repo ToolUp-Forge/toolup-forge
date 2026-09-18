@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open System.Collections.Generic
+open ToolUp.Platform
 
 // ─── DisclosureTaint (Phase 562) ─────────────────────────────────────
 //
@@ -33,6 +34,19 @@ open System.Collections.Generic
 // a party-scoped policy needs an explicit acceptance, and an unscoped
 // policy behaves exactly as Phase 562, so a deployment declaring no scope
 // is unchanged.
+//
+// **Phase 794 — computed lineage.** The graph above is INFERRED, and the
+// sentence two paragraphs up states the consequence plainly: a derivation
+// not routed through a `Series` output is invisible, and an invisible
+// upstream carries no taint. That is a property of the projection, not of
+// the computation — the transform tree that produced the frame knows what
+// flowed into it. `analyzeWithLineage` therefore consumes a computed label
+// where one exists (`ComputedLineage`, fed from the assembly algebra by
+// `AssemblyTaint`) and uses the inferred graph only where none does. The
+// fallback is not silent: it raises a `LineageInferred` finding naming the
+// facts it fell back on, so a verdict resting on inference can never pass
+// for one resting on computation. Verdicts are otherwise unchanged — a
+// deployment wiring no transform trees is byte-for-byte Phase 674.
 //
 // **Pure core.** The walk (`analyze`) is a pure function over an explicit
 // `FactDerivationGraph`, so it is unit-testable with hand-built graphs and
@@ -90,7 +104,46 @@ type TaintOutcome = {
     /// Declassification crossings on the target's derivation (deduped by
     /// declassifier fact id). Audited when the target discloses.
     Crossings: TaintCrossing list
+    /// Phase 794 — `InheritedPolicyRefs` as a lattice element. The same
+    /// content, in the type that has a named join and executable laws; the
+    /// list beside it keeps its nearest-declared-first ORDER, which is what
+    /// picks `InheritedPolicyRef` and is why the Phase 562 deny ref is
+    /// unchanged.
+    InheritedLabel: TaintLabel
+    /// Phase 794 — what the reader of this verdict must know about the
+    /// EVIDENCE it rests on, over and above the verdict itself. Findings
+    /// never change a verdict. The one raised here names the facts whose
+    /// upstream was inferred from evidence linkage rather than computed from
+    /// a transform tree, so a weaker derivation can never pass for a
+    /// stronger one silently.
+    Findings: DisclosureFinding list
 }
+
+/// Phase 794 — the COMPUTED side of lineage: the label a fact's own
+/// transform tree computed for it, for the facts that have one.
+///
+/// The inferred graph beside it answers "what does the store's evidence
+/// linkage suggest flowed in"; this answers "what does the computation say
+/// flowed in". Where both exist the computed answer wins, because it is the
+/// derivation rather than a projection of it — and, crucially, a fact with a
+/// computed label needs no upstream edge at all, so a derivation that never
+/// routed through a `Series` output stops being invisible.
+///
+/// `LabelOf` returns `None` for a fact with no computed lineage, which is
+/// the fallback — recorded as a `LineageInferred` finding, never silent.
+type ComputedLineage = { LabelOf: string -> TaintLabel option }
+
+module ComputedLineage =
+
+    /// Nothing is computed: every derivation falls back to the inferred
+    /// graph and says so. What `analyze` passes, so a deployment that has
+    /// wired no transform trees keeps its Phase 562 / 674 verdicts exactly
+    /// and gains only the honesty about how they were reached.
+    let none: ComputedLineage = { LabelOf = fun _ -> None }
+
+    let ofMap (labels: Map<string, TaintLabel>) : ComputedLineage = { LabelOf = labels.TryFind }
+
+    let ofList (labels: (string * TaintLabel) list) : ComputedLineage = ofMap (Map.ofList labels)
 
 module DisclosureTaint =
 
@@ -140,7 +193,24 @@ module DisclosureTaint =
     /// denies. An **unscoped** policy is cleared by any declared routine —
     /// exactly Phase 562 — so a deployment that declares no contributor
     /// scope is byte-for-byte unchanged (GP 11 / GP 13).
-    let analyze (config: DisclosureTaintConfig) (graph: FactDerivationGraph) (targetId: string) : TaintOutcome =
+    ///
+    /// **Phase 794 — computed lineage, with the inferred graph as a reported
+    /// fallback.** Where `lineage` supplies a label a transform tree
+    /// computed for a fact, that label IS the fact's upstream: the
+    /// computation says what flowed in, so the inferred adjacency is neither
+    /// consulted nor needed, and a derivation that never routed through a
+    /// `Series` output is no longer invisible. Where it does not, the walk
+    /// falls back to the inferred graph exactly as before — and records a
+    /// `LineageInferred` finding naming the facts it fell back on, so no
+    /// party can mistake an inference for a computation. A fact with no
+    /// evidence inputs at all raises nothing: there is no derivation there to
+    /// have inferred.
+    let analyzeWithLineage
+        (config: DisclosureTaintConfig)
+        (lineage: ComputedLineage)
+        (graph: FactDerivationGraph)
+        (targetId: string)
+        : TaintOutcome =
         // Memoised output-taint per fact id: the distinct policy refs the
         // fact's output carries, nearest-declared first. Empty ⇒ clean.
         let memo = Dictionary<string, string list>()
@@ -149,6 +219,16 @@ module DisclosureTaint =
         // Phase 674 — every contributing party seen anywhere on the walked
         // lineage, cleared or not (the contribution facet).
         let contributors = HashSet<string>()
+        // Phase 794 — facts whose upstream the walk took from the inferred
+        // graph because no transform tree had labelled them.
+        let inferred = HashSet<string>()
+
+        /// A fact with evidence inputs but no computed label had its upstream
+        /// INFERRED. A fact with no inputs is a leaf: nothing was inferred
+        /// about it, so reporting it would be noise on every clean lineage.
+        let noteInferred (factId: string) (fact: Fact) =
+            if not (List.isEmpty fact.Evidence.InputHashes) then
+                inferred.Add factId |> ignore
 
         let noteContributor (policyRef: string) =
             match DisclosureTaintConfig.scopeOf config policyRef with
@@ -186,7 +266,12 @@ module DisclosureTaint =
                             let visiting' = Set.add factId visiting
 
                             let inputTaint =
-                                graph.UpstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
+                                match lineage.LabelOf factId with
+                                | Some computed -> TaintLabel.policyRefs computed
+                                | None ->
+                                    noteInferred factId fact
+
+                                    graph.UpstreamOf factId |> List.collect (outputTaint visiting') |> List.distinct
 
                             match declassifierOf config fact with
                             | Some routine ->
@@ -224,12 +309,17 @@ module DisclosureTaint =
         // The target's inherited taint = the union of its inputs' output
         // taint, less whatever the target's own routine (if it is a
         // declassifier) is entitled to clear.
-        let inputTaint =
-            graph.UpstreamOf targetId
-            |> List.collect (outputTaint Set.empty)
-            |> List.distinct
-
         let targetFact = graph.Facts.TryFind targetId
+
+        let inputTaint =
+            match lineage.LabelOf targetId with
+            | Some computed -> TaintLabel.policyRefs computed
+            | None ->
+                targetFact |> Option.iter (noteInferred targetId)
+
+                graph.UpstreamOf targetId
+                |> List.collect (outputTaint Set.empty)
+                |> List.distinct
 
         let inheritedPolicyRefs =
             match targetFact |> Option.bind (declassifierOf config) with
@@ -265,7 +355,20 @@ module DisclosureTaint =
                 |> List.sort
             ContributorScopes = contributors |> List.ofSeq |> List.sort
             Crossings = crossings.Values |> List.ofSeq
+            InheritedLabel = TaintLabel.ofPolicyRefs inheritedPolicyRefs
+            Findings =
+                if inferred.Count = 0 then
+                    []
+                else
+                    [ DisclosureFinding.LineageInferred(inferred |> List.ofSeq |> List.sort) ]
         }
+
+    /// The walk with no computed lineage — every derivation taken from the
+    /// inferred graph, which is what the store can offer on its own. Verdicts
+    /// are byte-for-byte Phase 674; the only difference is that the outcome
+    /// now SAYS its lineage was inferred.
+    let analyze (config: DisclosureTaintConfig) (graph: FactDerivationGraph) (targetId: string) : TaintOutcome =
+        analyzeWithLineage config ComputedLineage.none graph targetId
 
     /// Project a fact listing onto a `FactDerivationGraph`. The upstream
     /// adjacency links a fact's `Evidence.InputHashes` to the facts whose
@@ -300,3 +403,80 @@ module DisclosureTaint =
             Facts = byId
             UpstreamOf = upstreamOf
         }
+
+/// Phase 794 — the bridge between the dataset-assembly transform algebra
+/// and the taint lattice: the one place the two tiers meet.
+///
+/// The algebra's fold (`AssemblyLabelling`) is generic in the label and
+/// knows nothing about disclosure; the lattice (`TaintLabel`) knows nothing
+/// about frames. This module supplies one to the other, so there is exactly
+/// one join in the estate and the transform tier never grew a second.
+module AssemblyTaint =
+
+    /// The labelling the algebra's fold runs over: the lattice, plus the
+    /// caller's declared label per source.
+    let labelling (labelOfSource: AssemblySource -> TaintLabel) : TransformLabelling<TaintLabel> = {
+        Bottom = TaintLabel.bottom
+        Join = TaintLabel.join
+        LabelOfSource = labelOfSource
+    }
+
+    /// A per-source labelling from declared `(source, policy refs)` pairs,
+    /// keyed by the source's provenance identity so two bindings that name
+    /// the same vintage agree.
+    ///
+    /// A source nobody declared labels as `bottom` — a positive statement
+    /// that it carries no restricted data, not an oversight the model can
+    /// detect. That is why the declaration is compose-time data: which party
+    /// a source belongs to is knowledge the composition has and the frame
+    /// does not.
+    let labelOfSources (sourceLabels: (AssemblySource * string list) list) : AssemblySource -> TaintLabel =
+        let byIdentity =
+            sourceLabels
+            |> List.map (fun (source, policyRefs) ->
+                AssemblyProvenance.sourceIdentity source, TaintLabel.ofPolicyRefs policyRefs)
+            |> Map.ofList
+
+        fun source ->
+            byIdentity.TryFind(AssemblyProvenance.sourceIdentity source)
+            |> Option.defaultValue TaintLabel.bottom
+
+    /// The label a labelled node's output frame carries — the join of
+    /// everything that flowed into it.
+    let labelOf (node: LabelledTransform<TaintLabel>) : TaintLabel = node.Label
+
+    /// The label a single transform CONTRIBUTES, as a function of the node
+    /// alone. Only `Join` contributes anything: it is where a second party
+    /// enters the pipeline.
+    let contributedBy (labelOfSource: AssemblySource -> TaintLabel) (transform: AssemblyTransform) : TaintLabel =
+        AssemblyLabelling.contributedBy (labelling labelOfSource) transform
+
+    /// The labelled pipeline of a spec: every node with the label its output
+    /// carries, and the label of the frame the spec produces.
+    let ofSpec (labelOfSource: AssemblySource -> TaintLabel) (spec: DatasetAssemblySpec) =
+        AssemblyLabelling.ofSpec (labelling labelOfSource) spec
+
+    /// The label of the frame a spec produces — what a fact asserted from any
+    /// of its output versions inherits.
+    let outputLabel (labelOfSource: AssemblySource -> TaintLabel) (spec: DatasetAssemblySpec) : TaintLabel =
+        AssemblyLabelling.outputLabelOf (labelling labelOfSource) spec
+
+    /// Declassification of a computed label under a declared routine — the
+    /// one operator that lowers it, entitled exactly as far as
+    /// `DisclosureTaintConfig.routineClears` says. The walk above filters its
+    /// ordered ref list by the same predicate; that the two agree on every
+    /// label is a stated law rather than an assumption.
+    let declassify (config: DisclosureTaintConfig) (routine: DeclassificationRoutine) (label: TaintLabel) : TaintLabel =
+        TaintLabel.narrowsTo (DisclosureTaintConfig.routineClears config routine) label
+
+    /// The computed lineage for facts asserted from labelled assemblies:
+    /// each fact takes the output label of the spec that produced it. The
+    /// `ComputedLineage` the walk consumes, and the reason those facts raise
+    /// no `LineageInferred` finding.
+    let lineageOf
+        (labelOfSource: AssemblySource -> TaintLabel)
+        (producedBy: (string * DatasetAssemblySpec) list)
+        : ComputedLineage =
+        producedBy
+        |> List.map (fun (factId, spec) -> factId, outputLabel labelOfSource spec)
+        |> ComputedLineage.ofList

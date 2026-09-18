@@ -421,5 +421,247 @@ let gateTests =
         }
     ]
 
+// ── Phase 794 — the taint label lattice ───────────────────────────
+//
+// The laws are predicates, not assertions, and that is deliberate — the
+// `CommutativeCipher` pack's idiom, for its reason. A commutativity
+// assertion written directly as an Expecto case passes against any
+// operator that happens to agree on the two labels the case chose; a law
+// quantified over the whole vocabulary does not. Each law set is therefore
+// consumed twice: bound to the real operator and asserted empty, and bound
+// to a deliberately-broken one to assert that the SPECIFIC law which must
+// catch it fires. A law that stopped having teeth fails its control rather
+// than passing everywhere.
+//
+// The three broken joins fail on different axes, so no single law carries
+// the pack:
+//   - `leftProjection` is idempotent and associative, and is neither
+//     commutative nor identity-respecting;
+//   - `intersecting` is idempotent, commutative and associative — it is a
+//     MEET, a perfectly good lattice operator that is the wrong one — and
+//     is caught only by the identity laws;
+//   - `truncating` is the only one of the three that is not IDEMPOTENT,
+//     which is the axis the other two pass cleanly.
+//
+// Two sweeps: EXHAUSTIVE over the power set of a closed vocabulary (which
+// is what a deployment's label alphabet actually is), and a seeded random
+// sample over a wider alphabet, whose seed is printed on failure so a
+// counterexample is reproducible.
+
+/// A three-ref alphabet: 8 labels, 512 associativity triples. Small enough
+/// to check exhaustively, wide enough that a two-ref-blind operator cannot
+/// hide.
+let private latticeAlphabet = [ "licensed"; "party-a"; "party-b" ]
+
+let private exhaustiveLabels = TaintLabel.vocabulary latticeAlphabet
+
+/// The entitlement predicate a party-A-accepting routine would hand
+/// `narrowsTo`: it clears exactly one ref of the alphabet, so a narrowing
+/// that clears too much and one that clears too little are both visible.
+let private clearsPartyA (policyRef: string) = policyRef = "party-a"
+
+let private leftProjection (a: TaintLabel) (_: TaintLabel) = a
+
+let private intersecting (a: TaintLabel) (b: TaintLabel) =
+    TaintLabel.policyRefs a
+    |> List.filter (fun policyRef -> TaintLabel.contains policyRef b)
+    |> TaintLabel.ofPolicyRefs
+
+let private truncating (a: TaintLabel) (b: TaintLabel) =
+    TaintLabel.join a b
+    |> TaintLabel.policyRefs
+    |> List.truncate 1
+    |> TaintLabel.ofPolicyRefs
+
+let private raisingNarrow (_: string -> bool) (label: TaintLabel) =
+    TaintLabel.join label (TaintLabel.ofPolicyRef "smuggled-in")
+
+let private erasingNarrow (_: string -> bool) (_: TaintLabel) = TaintLabel.bottom
+
+let private inertNarrow (_: string -> bool) (label: TaintLabel) = label
+
+/// A reproducible sample of labels over a wider alphabet than the
+/// exhaustive sweep can afford.
+let private sampledLabels (seed: int) (count: int) : TaintLabel list =
+    let alphabet = [| "p-a"; "p-b"; "p-c"; "p-d"; "p-e"; "p-f" |]
+    let rng = Random(seed)
+
+    [
+        for _ in 1..count -> alphabet |> Array.filter (fun _ -> rng.Next 2 = 0) |> TaintLabel.ofPolicyRefs
+    ]
+
+let private mentions (fragment: string) (failures: string list) =
+    failures |> List.exists (fun failure -> failure.Contains fragment)
+
+let latticeLawTests =
+    testList "Phase 794 taint label lattice" [
+        testCase "the label vocabulary is the taint-propagating policies, and only those"
+        <| fun () ->
+            Expect.equal
+                (DisclosureTaintConfig.taintVocabulary taintCfg)
+                [ "licensed" ]
+                "a Plain policy never taints, so it is not part of the label alphabet"
+
+        testCase "the power set of a closed vocabulary is every label it can express"
+        <| fun () ->
+            Expect.equal (List.length exhaustiveLabels) 8 "three refs admit 2^3 labels"
+
+            Expect.equal
+                (List.length (List.distinct exhaustiveLabels))
+                8
+                "and they are distinct — a label is a set, so no two enumerations collide"
+
+            Expect.isTrue (List.contains TaintLabel.bottom exhaustiveLabels) "bottom is one of them"
+
+        testCase "the join obeys every lattice law, exhaustively over the closed vocabulary"
+        <| fun () ->
+            let failures = TaintLabel.joinLawFailures exhaustiveLabels
+
+            Expect.isEmpty failures (sprintf "join law violations over all 8 labels: %A" failures)
+
+        testCase "the join obeys every lattice law over a seeded random sample"
+        <| fun () ->
+            for seed in [ 794; 1; 20260917 ] do
+                let failures = TaintLabel.joinLawFailures (sampledLabels seed 16)
+
+                Expect.isEmpty failures (sprintf "join law violations at seed %d: %A" seed failures)
+
+        testCase "go-red: a left-projecting join is caught by the identity and commutativity laws"
+        <| fun () ->
+            let failures = TaintLabel.joinLawFailuresOf leftProjection exhaustiveLabels
+
+            Expect.isTrue (mentions "LEFT identity" failures) "a projection discards bottom's identity"
+            Expect.isTrue (mentions "not commutative" failures) "and it is order-dependent"
+            Expect.isTrue (mentions "does not cover its parts" failures) "and it loses the right label entirely"
+
+        testCase "go-red: an intersecting join is a MEET — caught by the identity laws alone"
+        <| fun () ->
+            let failures = TaintLabel.joinLawFailuresOf intersecting exhaustiveLabels
+
+            Expect.isTrue (mentions "identity" failures) "intersecting with bottom is bottom, not the label"
+
+            Expect.isFalse
+                (mentions "not commutative" failures)
+                "intersection IS commutative — which is exactly why a commutativity test alone proves nothing"
+
+            Expect.isFalse (mentions "not associative" failures) "and associative, and idempotent"
+
+        testCase "go-red: a truncating join is caught by idempotence — the axis the other two controls pass"
+        <| fun () ->
+            let failures = TaintLabel.joinLawFailuresOf truncating exhaustiveLabels
+
+            Expect.isTrue (mentions "not idempotent" failures) "truncation loses refs a label already carried"
+
+            Expect.isEmpty
+                (TaintLabel.joinLawFailuresOf leftProjection exhaustiveLabels
+                 |> List.filter (fun failure -> failure.Contains "not idempotent"))
+                "left projection is idempotent, so idempotence alone would not catch it"
+
+            Expect.isEmpty
+                (TaintLabel.joinLawFailuresOf intersecting exhaustiveLabels
+                 |> List.filter (fun failure -> failure.Contains "not idempotent"))
+                "and so is intersection — no single law carries this pack"
+
+        testCase "narrowing obeys every declassification law, exhaustively"
+        <| fun () ->
+            let failures = TaintLabel.narrowingLawFailures clearsPartyA exhaustiveLabels
+
+            Expect.isEmpty failures (sprintf "narrowing law violations: %A" failures)
+
+        testCase "narrowing obeys every declassification law over a seeded random sample"
+        <| fun () ->
+            for seed in [ 794; 7; 20260917 ] do
+                let clearsC (policyRef: string) = policyRef = "p-c"
+                let failures = TaintLabel.narrowingLawFailures clearsC (sampledLabels seed 16)
+
+                Expect.isEmpty failures (sprintf "narrowing law violations at seed %d: %A" seed failures)
+
+        testCase "go-red: a narrowing that RAISES the label is caught"
+        <| fun () ->
+            let failures =
+                TaintLabel.narrowingLawFailuresOf raisingNarrow clearsPartyA exhaustiveLabels
+
+            Expect.isTrue (mentions "did not LOWER" failures) "adding a ref is not declassification"
+
+        testCase "go-red: a narrowing that clears everything regardless of entitlement is caught"
+        <| fun () ->
+            let failures =
+                TaintLabel.narrowingLawFailuresOf erasingNarrow clearsPartyA exhaustiveLabels
+
+            Expect.isTrue
+                (mentions "entitled to clear nothing still lowered" failures)
+                "this is the laundering shape: a routine no party accepted must clear nothing"
+
+        testCase "go-red: a narrowing that ignores its entitlement entirely is caught"
+        <| fun () ->
+            let failures =
+                TaintLabel.narrowingLawFailuresOf inertNarrow clearsPartyA exhaustiveLabels
+
+            Expect.isTrue
+                (mentions "entitled to clear everything left taint behind" failures)
+                "an inert narrowing declassifies nothing it was entitled to"
+
+            Expect.isTrue (mentions "cleared the wrong refs" failures) "and leaves the ref the routine covered"
+
+        testCase "narrowing is the walk's partition — the lattice and the walk agree on every label"
+        <| fun () ->
+            for label in exhaustiveLabels do
+                let viaLattice = TaintLabel.narrowsTo clearsPartyA label
+
+                let viaPartition =
+                    TaintLabel.policyRefs label
+                    |> List.partition clearsPartyA
+                    |> snd
+                    |> TaintLabel.ofPolicyRefs
+
+                Expect.equal
+                    viaLattice
+                    viaPartition
+                    (sprintf "narrowsTo and the walk's own partition disagree at %s" (TaintLabel.render label))
+
+                Expect.equal
+                    (TaintLabel.clearedBy clearsPartyA label)
+                    (TaintLabel.policyRefs label |> List.filter clearsPartyA)
+                    "and clearedBy names exactly what was dropped"
+
+        testCase "narrowing is entitled exactly as routineClears says"
+        <| fun () ->
+            let cfg =
+                DisclosureTaintConfig.ofLists [
+                    {
+                        PolicyRef = "a-licensed"
+                        Mode = TaintPropagating
+                        PermitSurfaces = [ FactRetrieval ]
+                        ContributorScope = Some "party-a"
+                    }
+                    {
+                        PolicyRef = "b-licensed"
+                        Mode = TaintPropagating
+                        PermitSurfaces = [ FactRetrieval ]
+                        ContributorScope = Some "party-b"
+                    }
+                ] []
+
+            let acceptedByA = {
+                OperationId = "joint-aggregate"
+                Rationale = "aggregation over >=5 members loses individual attribution"
+                AcceptingScopes = [ "party-a" ]
+            }
+
+            let joint = TaintLabel.ofPolicyRefs [ "a-licensed"; "b-licensed" ]
+            let narrowed = AssemblyTaint.declassify cfg acceptedByA joint
+
+            Expect.isFalse (TaintLabel.contains "a-licensed" narrowed) "the accepting party's own label is cleared"
+
+            Expect.isTrue
+                (TaintLabel.contains "b-licensed" narrowed)
+                "and the other party's survives — one party's consent never launders another's data"
+    ]
+
 let tests =
-    testList "Phase 562 taint-propagating disclosure" [ pureWalkTests; resolverVocabularyTests; gateTests ]
+    testList "Phase 562 taint-propagating disclosure" [
+        pureWalkTests
+        resolverVocabularyTests
+        gateTests
+        latticeLawTests
+    ]
