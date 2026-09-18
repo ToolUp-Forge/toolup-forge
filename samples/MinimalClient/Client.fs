@@ -5,7 +5,7 @@ open ToolUp.Elmish
 open ToolUp.Elmish.React
 open Feliz
 open ToolUp.Platform
-open ToolUp.Platform.AgGrid
+open Feliz.AgGrid
 
 importSideEffects "./index.css"
 
@@ -78,7 +78,7 @@ let provenanceDemo () : ReactElement =
 // — it needs a project that ProjectReferences AgGridEnterprise — and is
 // deferred with the rest of the UiGallery consumer work.
 
-open ToolUp.Platform.AgChart
+open Feliz.AgCharts
 
 type private GalleryRow = {
     Month: string

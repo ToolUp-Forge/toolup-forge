@@ -183,7 +183,7 @@ type InMemoryModuleQueryBus
                 | Some moduleHandlers ->
                     // Phase 4 RBAC: caller must have Read on target module.
                     // Empty permission map = unrestricted (opt-in RBAC), same
-                    // convention as `makePermissionGuardedApi`.
+                    // convention as the `ServerModule.withGuardedApi` gate.
                     if not (AccessContext.hasPermission request.TargetModule ModulePermission.Read ctx) then
                         return Some(Error(PermissionDenied request.TargetModule))
                     else

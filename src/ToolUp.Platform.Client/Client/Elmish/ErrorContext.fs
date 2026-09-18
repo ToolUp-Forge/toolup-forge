@@ -49,8 +49,9 @@ type ErrorContext = {
 [<RequireQualifiedAccess>]
 module ErrorContext =
 
-    /// Construct a context from raw upstream-shape arguments. Used by the
-    /// `withErrorHandler` compat shim — most code doesn't need to call this.
+    /// Construct a context from raw upstream-shape arguments. Used by
+    /// `Program.withErrorReporter` to route the runtime's upstream-shape
+    /// `onError` into the reporter — most code doesn't need to call this.
     let ofUpstreamShape (text: string) (ex: exn) = {
         Phase = ErrorPhase.Update(box ())
         ModuleId = None

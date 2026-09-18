@@ -87,7 +87,7 @@ module PageAmbient =
     type SkuAnalysisApi = { GetSkus: unit -> Async<string list> }
 
     /// What the composition root passes to `ServerModule.withGuardedApi`:
-    /// a per-request factory the SDK wraps in `makePermissionGuardedApi`.
+    /// a per-request factory the SDK wraps in its module-access gate.
     let apiFactory: HttpContext -> SkuAnalysisApi = failwith "ambient"
 
     let salesDataType: DataType = failwith "ambient"

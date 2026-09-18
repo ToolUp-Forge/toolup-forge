@@ -65,7 +65,8 @@ module Program =
         Log.onError (ctx.Message, ctx.Exception)
 
     /// Default upstream-shape onError. The runtime uses `errorReporter`
-    /// internally; this exists so `withErrorHandler` can keep working.
+    /// internally; this is the seed `withErrorReporter` replaces with its
+    /// upstream-shape shim.
     let private defaultOnError = Log.onError
 
     /// Typical program — `init` and `update` produce commands alongside state.
@@ -137,45 +138,14 @@ module Program =
     let effectIds (program: Program<'arg, 'model, 'msg, 'view>) : string list =
         program.effects |> List.rev |> List.map _.Id
 
-    /// Trace every message and model transition to the platform console.
-    /// Kept as an `[<Obsolete>]` shim for source-compat with consumers
-    /// migrating from upstream Elmish; prefer composing
-    /// `Program.withErrorReporter` with a per-update interceptor for
-    /// structured / filterable observability.
-    [<System.Obsolete("Use Program.withErrorReporter + an update interceptor for structured tracing. withConsoleTrace will be removed in a future major.")>]
-    let withConsoleTrace (program: Program<'arg, 'model, 'msg, 'view>) =
-        // Log bounded string reprs (`safeMsgRepr`), never the live msg/model
-        // object — a message can carry a multi-MB payload (uploaded file
-        // contents), which `%A`-formats to a stack overflow on the .NET sink
-        // and pins memory in the Fable devtools sink.
-        let traceInit (arg: 'arg) =
-            let initModel, cmd = program.init arg
-            Log.toConsole ("Initial state:", safeMsgRepr initModel)
-            initModel, cmd
-
-        let traceUpdate msg model =
-            Log.toConsole ("New message:", safeMsgRepr msg)
-            let newModel, cmd = program.update msg model
-            Log.toConsole ("Updated state:", safeMsgRepr newModel)
-            newModel, cmd
-
-        let traceSubscribe model =
-            let sub = program.subscribe model
-            Log.toConsole ("Updated subs:", sub |> List.map fst)
-            sub
-
-        {
-            program with
-                init = traceInit
-                update = traceUpdate
-                subscribe = traceSubscribe
-        }
-
     /// Trace messages as they update the model and subscriptions. The
     /// callback receives `(msg, newState, activeSubIds)`. Preserved from
-    /// upstream as an opt-in tracing hook — for structured per-message
-    /// observability prefer `withErrorReporter` + a middleware
-    /// interceptor when one ships.
+    /// upstream as an opt-in tracing hook, and the per-message
+    /// interceptor that replaced the upstream-shape `withConsoleTrace`
+    /// shim (removed in Phase 815): log bounded string reprs via
+    /// `safeMsgRepr`, never the live msg/model object — a message can
+    /// carry a multi-MB payload, which `%A`-formats to a stack overflow on
+    /// the .NET sink and pins memory in the Fable devtools sink.
     let withTrace trace (program: Program<'arg, 'model, 'msg, 'view>) =
         let update msg model =
             let state, cmd = program.update msg model
@@ -185,23 +155,13 @@ module Program =
 
         { program with update = update }
 
-    /// Upstream-shape error handler. Kept for source-compat with code
-    /// migrated from `Fable.Elmish`; new code should prefer
-    /// `withErrorReporter` to access the structured `ErrorContext`.
-    [<System.Obsolete("Use Program.withErrorReporter for the structured ErrorContext shape (Phase / ModuleId / CorrelationId / Message / Exception). withErrorHandler will be removed in a future major.")>]
-    let withErrorHandler (onError: string * exn -> unit) (program: Program<'arg, 'model, 'msg, 'view>) =
-        let reporter (ctx: ErrorContext) = onError (ctx.Message, ctx.Exception)
-
-        {
-            program with
-                onError = onError
-                errorReporter = reporter
-        }
-
     /// Structured error reporter — receives the full `ErrorContext`
     /// including `Phase`, optional `ModuleId`, optional `CorrelationId`,
     /// the message-string the upstream `onError` would have passed, and
-    /// the raw exception. Replaces `withErrorHandler` for new code.
+    /// the raw exception. The one error hook since Phase 815 removed the
+    /// upstream-shape `withErrorHandler` shim: an upstream
+    /// `string * exn -> unit` callback composes as
+    /// `withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))`.
     let withErrorReporter (reporter: ErrorContext -> unit) (program: Program<'arg, 'model, 'msg, 'view>) =
         let upstreamShim (text: string, ex: exn) =
             reporter (ErrorContext.ofUpstreamShape text ex)

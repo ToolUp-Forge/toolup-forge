@@ -98,9 +98,9 @@ type PageConfig = {
 /// `Id` is the stable identifier — used as the Map key for module state,
 /// the sidebar-filter lookup against `GetAccessibleModules`, the
 /// `AIMessageRequest.ActiveModule` payload, and (for modules exposed by
-/// the app server) the `makePermissionGuardedApi` / `AccessContext`
+/// the app server) the `ServerModule.withGuardedApi` / `AccessContext`
 /// permission key. Convention: PascalCase with no spaces, matching the
-/// string passed to `makePermissionGuardedApi` in the app server (e.g.
+/// `ServerModule.create` name in the app server (e.g.
 /// "SkuAnalysis", "KnowledgeBase"). Must be unique across the module
 /// list. Never shown to users.
 ///
@@ -2261,9 +2261,10 @@ type ClientConfig = {
     /// with explicit operator opt-in.
     ///
     /// 0.4.1 — implemented via a tiny `update` interceptor + the
-    /// structured `Program.withErrorReporter`, replacing the now-deprecated
-    /// `Program.withConsoleTrace` shim. Trace records carry the same
-    /// `(initial state, msg, updated state, sub-ids)` shape as before.
+    /// structured `Program.withErrorReporter`, replacing the upstream-shape
+    /// `withConsoleTrace` shim (removed in Phase 815). Trace records carry
+    /// the same `(initial state, msg, updated state, sub-ids)` shape as
+    /// before.
     EnableElmishConsoleTrace: bool
     /// 0.4.1 — structured Elmish error reporter. When `Some`, every
     /// Elmish runtime exception (Init / Update / View / Subscription /
@@ -2274,9 +2275,9 @@ type ClientConfig = {
     ///
     /// Default `None` — the SDK falls back to logging via
     /// `Logger.forCategory "client.elmish"`. Consumers wiring this MUST
-    /// not also subscribe to `withErrorHandler` upstream-shape callbacks
-    /// (the SDK installs `withErrorReporter` as the structured path;
-    /// upstream-shape `onError` still routes through the compat shim).
+    /// not also install their own `withErrorReporter` on the program
+    /// (the SDK installs it as the one structured path; the runtime's
+    /// upstream-shape `onError` routes through it).
     OnElmishError: (ErrorContext -> unit) option
     /// Dev-tooling: when `true`, modules registered with
     /// `ModuleAvailability = DebugOnly` are surfaced in the sidebar.
@@ -3214,7 +3215,7 @@ module ClientModule =
     /// derives the Id as `Name.Replace(" ", "")`. SDK built-in modules
     /// (and any module that wants a stable Id distinct from its display
     /// Name) use this helper to set an explicit value — the Id is the
-    /// RBAC key against `makePermissionGuardedApi`, the routing key for
+    /// RBAC key `ServerModule.withGuardedApi` gates on, the routing key for
     /// `ModuleAction` notifications, and the sidebar-state key, so it
     /// must be stable across renames.
     let withId (id: string) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {

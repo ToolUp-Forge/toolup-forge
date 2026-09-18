@@ -534,21 +534,12 @@ type DOMLayout =
         | AutoHeight -> "autoHeight"
         | Print -> "print"
 
-/// Legacy string theme classes. Deprecated in favour of the Theming API
-/// (`AgGrid.theme` + the `Theme` builder below), which is the AG Grid v31+
-/// recommended path. Kept for consumers still on CSS-class theming.
-[<System.Obsolete "Prefer the Theming API: AgGrid.theme (Theme.themeQuartz |> Theme.withParams ...). ThemeClass will be removed in a future major.">]
-module ThemeClass =
-    let Alpine = "ag-theme-alpine"
-    let AlpineDark = "ag-theme-alpine-dark"
-    let Balham = "ag-theme-balham"
-    let BalhamDark = "ag-theme-balham-dark"
-    let Material = "ag-theme-material"
-
 // ─── Theming API (Phase 12e — AG Grid v31+ Theming API) ──────────
 //
-// The v31+ Theming API replaces CSS-class themes (`ThemeClass` above) with
-// typed, composable Theme objects passed to the grid via `AgGrid.theme`.
+// The v31+ Theming API replaces the legacy CSS-class themes (the
+// `ThemeClass` string constants, removed in Phase 815 — see
+// docs/migrations/815-remove-open-deprecations.md) with typed,
+// composable Theme objects passed to the grid via `AgGrid.theme`.
 // `themeQuartz` / `themeBalham` / `themeMaterial` / `themeAlpine` are runtime
 // exports from ag-grid-community; a Theme is chained through `.withParams(...)`
 // (typed `ThemeParams` record) and `.withPart(...)` (a Part such as
@@ -1518,8 +1509,9 @@ type AgGrid<'row> =
     static member inline enableRtl(v: bool) = agGridProp<'row> ("enableRtl" ==> v)
 
     // ─── Theming API (Phase 12e) ────────────────────────────────
-    /// Theming-API theme object (from the `Theme` builder). Supersedes the
-    /// legacy `className = ThemeClass.*` approach.
+    /// Theming-API theme object (from the `Theme` builder). The only
+    /// theming path since Phase 815 removed the legacy `ThemeClass`
+    /// CSS-class strings.
     static member inline theme(t: obj) = agGridProp<'row> ("theme" ==> t)
 
     // ─── localeText (Phase 12e) ─────────────────────────────────

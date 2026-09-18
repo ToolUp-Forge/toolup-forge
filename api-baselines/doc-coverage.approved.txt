@@ -5,7 +5,7 @@
 # Phase 175 tracked public surface. The GRADED property is (total - documented): it must not
 # increase. Improving coverage never fails — see docs/platform/doc-coverage.md.
 Feliz.AgCharts 40/333
-Feliz.AgGrid 63/686
+Feliz.AgGrid 62/680
 Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1237/2422
 ToolUp.AI.Client 79/459
@@ -121,10 +121,10 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 102/298
 ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
-ToolUp.Platform.Build 251/499
-ToolUp.Platform.Client 2185/6458
+ToolUp.Platform.Build 251/502
+ToolUp.Platform.Client 2168/6341
 ToolUp.Platform.Core 5261/13379
-ToolUp.Platform.Server 5484/11111
+ToolUp.Platform.Server 5483/11110
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062

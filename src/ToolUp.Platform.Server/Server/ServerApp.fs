@@ -32,7 +32,7 @@ open ToolUp.Platform.Server
 /// A server module's full contribution to the application.
 type ServerModule = {
     /// Unique module identifier — must match the client `ClientModule.Definition.Id`.
-    /// Used as the permission key in `makePermissionGuardedApi` and populated
+    /// Used as the permission key `withGuardedApi` gates on and populated
     /// into `ServerConfig.ModuleNames` for RBAC / sidebar enumeration.
     Name: string
     Handlers: HttpHandler list

@@ -665,13 +665,6 @@ Feliz.AgGrid+Theme.withCustomCss(System.Object, System.Object) : System.Object
 Feliz.AgGrid+Theme.withParams(Feliz.AgGrid+ThemeParams, System.Object) : System.Object
 Feliz.AgGrid+Theme.withPart(System.Object, System.Object) : System.Object
 Feliz.AgGrid+Theme.withoutPart(System.String, System.Object) : System.Object
-Feliz.AgGrid+ThemeClass (class)
-Feliz.AgGrid+ThemeClass (class)  (obsolete)
-Feliz.AgGrid+ThemeClass.Alpine : System.String { get }
-Feliz.AgGrid+ThemeClass.AlpineDark : System.String { get }
-Feliz.AgGrid+ThemeClass.Balham : System.String { get }
-Feliz.AgGrid+ThemeClass.BalhamDark : System.String { get }
-Feliz.AgGrid+ThemeClass.Material : System.String { get }
 Feliz.AgGrid+ThemeParams (class)
 Feliz.AgGrid+ThemeParams..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 Feliz.AgGrid+ThemeParams.accentColor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

@@ -800,8 +800,8 @@ let withSidePanel
         // visitors and every Remoting call 401'd behind it.
         Client.viewWithSignIn config allModules chrome model.Shell (ShellMsg >> dispatch)
 
-    // 0.4.1 — structured `withErrorReporter` replaces the obsoleted
-    // `withConsoleTrace` here too. Trace and error routing follow the
+    // 0.4.1 — structured `withErrorReporter` replaces the upstream-shape
+    // `withConsoleTrace` shim (removed in Phase 815) here too. Trace and error routing follow the
     // shape Client.program already uses (see SDK.Client.fs program/run).
     let elmishLog = Logger.forCategory "client.elmish"
 

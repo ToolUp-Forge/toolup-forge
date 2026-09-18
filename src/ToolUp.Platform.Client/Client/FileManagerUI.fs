@@ -555,10 +555,13 @@ let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Mode
         | [||] -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesMatchFilter ]
         | rows ->
             Html.div [
-                prop.className ThemeClass.Balham
                 prop.children [
                     AgGrid.grid [
-                        !!(prop.custom ("theme", "legacy"))
+                        // Phase 815 — the Theming API replaces the legacy
+                        // `ag-theme-balham` CSS class + `theme = "legacy"`
+                        // pair; the theme is self-contained, no stylesheet
+                        // import required.
+                        AgGrid.theme Theme.themeBalham
                         AgGrid.domLayout AutoHeight
                         AgGrid.columnDefs [
                             ColumnDef.create [

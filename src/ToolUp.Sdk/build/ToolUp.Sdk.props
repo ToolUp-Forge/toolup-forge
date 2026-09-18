@@ -68,9 +68,10 @@
         consumer that renders no grid pays for none of it (GP 13), and
         one that wants only the binding can take it without the SDK.
         `ToolUp.Platform.Client` still depends on both, so an existing
-        consumer needs no fsproj change: they arrive transitively, and
-        the compat re-export keeps `open ToolUp.Platform.AgGrid` /
-        `.AgChart` compiling (GP 11).
+        consumer needs no fsproj change: they arrive transitively. The
+        compat re-export that kept `open ToolUp.Platform.AgGrid` /
+        `.AgChart` compiling was retired in Phase 815 — open
+        `Feliz.AgGrid` / `Feliz.AgCharts` directly.
 
       * ToolUp.Feliz.AgGrid.Enterprise (Phase 344, id settled by Phase
         754) — the RENAMED `ToolUp.AgGridEnterprise`: same opt-in

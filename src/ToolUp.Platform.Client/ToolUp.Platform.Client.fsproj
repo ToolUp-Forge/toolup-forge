@@ -120,25 +120,23 @@
         <Compile Include="Client\PseudoLocaleCatalog.fs" />
         <Compile Include="Client\MessageCatalogProvider.fs" />
         <!-- Phase 344 — the AG Charts / AG Grid bindings moved out to the
-             standalone Feliz.AgCharts / Feliz.AgGrid packages. What is left
-             here is the backward-compat re-export that keeps
-             `open ToolUp.Platform.AgChart` / `.AgGrid` compiling (GP 11);
-             each sits where its binding used to, so the compile order the
-             files below were written against is unchanged. The Enterprise
+             standalone Feliz.AgCharts / Feliz.AgGrid packages. The
+             backward-compat re-exports that kept `open ToolUp.Platform.AgChart`
+             / `.AgGrid` compiling (GP 11) were retired in Phase 815 —
+             consumers `open Feliz.AgCharts` / `open Feliz.AgGrid` directly
+             (docs/migrations/815-remove-open-deprecations.md). The Enterprise
              augmentation that used to sit beside AgGrid.fs
              (AgGrid.Enterprise.fs) moved to the opt-in
              Feliz.AgGrid.Enterprise package, which is where it always
              belonged under GP 2 — the default-composed Client tier no
              longer carries Enterprise-gated members at all. -->
-        <Compile Include="Client\UI\AgChartCompat.fs" />
         <!-- Phase 578 — capture a rendered AG chart as export-ready image
-             bytes + package it as a report image placeholder. Sits
-             immediately after AgChart.fs: it is the same surface's export
+             bytes + package it as a report image placeholder. Sits where
+             the AG chart binding used to: it is the same surface's export
              leg, and it names nothing from the client tier beyond
              Fable.Core / Browser.Dom, so anywhere after this point would
              compile equally and beside its subject is where it is found. -->
         <Compile Include="Client\UI\AgChartExport.fs" />
-        <Compile Include="Client\UI\AgGridCompat.fs" />
         <Compile Include="Client\SidebarPreferences.fs" />
         <!-- v0.5.0 — the SvgProp / DataProp / AriaProp typed helpers wrap
              `prop.custom` with a typed entry per attribute so the call-site

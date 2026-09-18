@@ -484,7 +484,7 @@ module Client =
     /// (`GetAccessibleModules`). Used to fetch the per-user accessible-
     /// modules list on shell startup so the sidebar can hide entries
     /// the user can't use. Not a security boundary — the server's
-    /// `makePermissionGuardedApi` is the actual enforcement; this proxy
+    /// `ServerModule.withGuardedApi` gate is the actual enforcement; this proxy
     /// is purely UX.
     let private accessibilityApi: AccessibilityApi =
         Api.makeProxy<AccessibilityApi> (customOptions = UserSession.withRequestHeaders)
@@ -4759,10 +4759,10 @@ module Client =
                     elmishLog.Error("OnElmishError sink raised", Some ex)
             | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
 
-        // 0.4.1 — `withConsoleTrace` is [<Obsolete>]; replaced by an
-        // update interceptor that logs each transition through the
-        // category logger. Same shape (initial state / message /
-        // updated state) but now grep-able by category.
+        // 0.4.1 — the upstream-shape `withConsoleTrace` shim (removed in
+        // Phase 815) is replaced by an update interceptor that logs each
+        // transition through the category logger. Same shape (initial
+        // state / message / updated state) but now grep-able by category.
         let traceLog = Logger.forCategory "client.elmish.trace"
 
         let traceUpdate (msg: Msg) (model: Model) =

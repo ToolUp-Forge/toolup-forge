@@ -465,6 +465,26 @@ let private obsoleteSeamFixtures =
         }
     ]
 
+/// Phase 815 — the fixture the Phase 258 renderer wiring is proven
+/// against, now that no shipped package carries a live `[<Obsolete>]`
+/// (the last seven were removed at the 1.0 cut). Same reasoning as
+/// `DocCoverageFixture` below: the test assembly is never packable, so
+/// nothing here reaches a committed baseline, but it is rendered by the
+/// same walk every shipped package goes through — so a marker that
+/// shows up here proves the renderer emits them, and a live deprecation
+/// is no longer the only thing standing between this gate and dormancy.
+module DeprecationRenderFixture =
+
+    /// A type with one deprecated member and one that replaces it.
+    type Retired() =
+        /// The deprecated member — the notice conforms to the 258 policy
+        /// so the same render also passes the message gate.
+        [<System.Obsolete("Use Retired.Retained instead. Removed in 1.0.")>]
+        member _.Old() : int = 0
+
+        /// Its replacement.
+        member _.Retained() : int = 1
+
 // ── Phase 258 — the deprecation-MESSAGE policy. The comparer fixtures
 //    above pin what a deprecation does to the BASELINE; these pin what
 //    the notice itself has to SAY. Pure over `ObsoleteMember`, so the
@@ -556,6 +576,9 @@ let private deprecationPolicyFixtures =
             // would teach authors to satisfy the parser, not the reader —
             // so the recogniser is measured against real notices rather
             // than against a template invented alongside it.
+            // The first two notices were retired by Phase 815 (the members
+            // are gone); they stay here as the real 0.x wording the policy
+            // was written against, not as claims about the live surface.
             let live = [
                 "Use Program.withErrorReporter + an update interceptor for structured tracing. withConsoleTrace will be removed in a future major."
                 "The AG Grid binding moved to the standalone Feliz.AgGrid package — `open Feliz.AgGrid` instead. This compat module is retired in a future minor."
@@ -581,23 +604,42 @@ let private deprecationPolicyFixtures =
         // ── Anti-dormancy. The two seam fixtures above would pass with
         //    the renderer emitting no attributes at all — which is
         //    exactly the state Phase 618 left behind and Phase 258
-        //    fixed. This asserts the wiring from the committed
-        //    baselines: at least one `(obsolete)` marker is folded in,
-        //    so the renderer demonstrably emits them. Deliberately not
-        //    pinned to a specific member — a deprecation that reaches
-        //    its removal must not redden an unrelated gate. ──
-        test "the committed baselines carry obsolete markers — the renderer emits them" {
-            let markers =
-                Directory.EnumerateFiles(baselineDir root, "*.approved.txt")
-                |> Seq.sumBy (fun f ->
-                    File.ReadLines f
-                    |> Seq.filter (fun l -> l.EndsWith "  (obsolete)")
-                    |> Seq.length)
+        //    fixed. Until Phase 815 this was asserted from the committed
+        //    baselines (at least one `(obsolete)` marker folded in) —
+        //    which held only while some 0.x deprecation was still LIVE.
+        //    815 removed the last seven, so the proof now comes from the
+        //    test assembly's own `DeprecationRenderFixture`, rendered
+        //    through the same walk every shipped package goes through:
+        //    the marker line beside the member's unchanged token, and
+        //    the marking carrying its message into the policy gate. ──
+        test "the renderer emits the obsolete marker — proven on the fixture, not on a live deprecation" {
+            let selfDll = Assembly.GetExecutingAssembly().Location
+            let render = renderSurfaceDetail selfDll pool.Value
 
-            Expect.isGreaterThan
-                markers
-                0
-                "no committed baseline carries an obsolete marker, yet src/ ships [<Obsolete>] members — the Phase 258 rendering is not wired, so a deprecation is invisible to this gate"
+            let lines =
+                render.Text.Split '\n'
+                |> Array.filter (fun l -> l.Contains "DeprecationRenderFixture" && l.Contains ".Old()")
+
+            Expect.isTrue
+                (lines |> Array.exists (fun l -> l.EndsWith "  (obsolete)"))
+                "the fixture's [<Obsolete>] member renders no `  (obsolete)` marker line — the Phase 258 rendering is not wired, so a deprecation is invisible to this gate"
+
+            Expect.isTrue
+                (lines |> Array.exists (fun l -> not (l.EndsWith "  (obsolete)")))
+                "the marker must be a SEPARATE line beside the member's unchanged token — an in-place `[obsolete]` would read as a removal"
+
+            match
+                render.Obsolete
+                |> List.tryFind (fun m -> m.Token.Contains "DeprecationRenderFixture" && m.Token.Contains ".Old()")
+            with
+            | Some marking ->
+                Expect.equal
+                    marking.Message
+                    "Use Retired.Retained instead. Removed in 1.0."
+                    "the marking carries the authored message, which is what the policy gate grades"
+            | None ->
+                failtest
+                    "the fixture's deprecation is not among the render's Obsolete markings — the message policy would grade nothing"
         }
     ]
 

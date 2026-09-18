@@ -65,10 +65,11 @@ let makeApi<'impl> (api: HttpContext -> 'impl) =
 
     Api.make (api, errorHandler = errorHandler)
 
-/// Module-access gate + standard error handling shared by
-/// `ServerModule.withGuardedApi` (the canonical module composition path)
-/// and the obsolete public `makePermissionGuardedApi` shim below. Gates
-/// a module's routes on `AccessContext.canAccessModule moduleName` —
+/// Module-access gate + standard error handling behind
+/// `ServerModule.withGuardedApi` (the canonical module composition path;
+/// the public `makePermissionGuardedApi` shim that also reached it was
+/// removed in Phase 815). Gates a module's routes on
+/// `AccessContext.canAccessModule moduleName` —
 /// module-level RBAC (per-team module grants via `IPermissionStore`),
 /// which is a DIFFERENT axis from Phase 69d's per-method authorisation
 /// attributes and therefore survives their adoption.
@@ -164,17 +165,3 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
                 ToolUp.Remoting.Server.ErrorResult.Propagate ex
 
     Api.make (guardedBuilder, errorHandler = errorHandler)
-
-/// `makeApi` variant that gates a module's routes on
-/// `AccessContext.canAccessModule moduleName`.
-///
-/// Phase 69d.tail — obsolete as a public entry point. Compose modules
-/// via `ServerModule.withGuardedApi` (which carries the same module-
-/// access gate), and declare method-level authorisation with the
-/// per-method attributes (`[<RequiresRole>]` / `[<RequiresClaim>]` /
-/// `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]`)
-/// that the dispatcher's startup classifier now enforces default-on.
-/// Deletion target: next major version.
-[<Obsolete("Compose modules via ServerModule.withGuardedApi and declare method-level authorisation with per-method attributes ([<RequiresRole>] / [<TenantScoped>] / [<AllowAnonymous>] / ...) — the startup classifier enforces them default-on (Phase 69d.tail). See docs/migrations/69d-authorization-metadata.md. makePermissionGuardedApi will be removed in a future major.")>]
-let makePermissionGuardedApi<'T> (moduleName: string) (apiBuilder: HttpContext -> 'T) : HttpHandler =
-    permissionGuardedApiCore<'T> moduleName apiBuilder

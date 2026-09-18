@@ -2385,13 +2385,9 @@ ToolUp.Elmish.ProgramModule.safeMsgRepr`1(msg) : System.String
 ToolUp.Elmish.ProgramModule.setState`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
 ToolUp.Elmish.ProgramModule.update`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]
 ToolUp.Elmish.ProgramModule.view`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]]
-ToolUp.Elmish.ProgramModule.withConsoleTrace`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withConsoleTrace`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]  (obsolete)
 ToolUp.Elmish.ProgramModule.withDispatcherHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IDispatcher`1[msg], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withEffectControllerHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IEffectController, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withEffect`4(ToolUp.Elmish.EffectHandle`1[msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]  (obsolete)
 ToolUp.Elmish.ProgramModule.withErrorReporter`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withRingBufferCapacity`4(System.Int32, ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withSetState`4(Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
@@ -2523,44 +2519,6 @@ ToolUp.Platform.AdminTiles+LandingState`1+Tags.NoTilesForSubject : System.Int32 
 ToolUp.Platform.AdminTiles+LandingState`1+Tags.Tiles : System.Int32 (literal)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles (class)
 ToolUp.Platform.AdminTiles+LandingState`1+Tiles.Item : Microsoft.FSharp.Collections.FSharpList`1[t] { get }
-ToolUp.Platform.AgChart (class)
-ToolUp.Platform.AgChart (class)  (obsolete)
-ToolUp.Platform.AgChart.Area : Feliz.AgCharts+SeriesKind { get }
-ToolUp.Platform.AgChart.Bar : Feliz.AgCharts+SeriesKind { get }
-ToolUp.Platform.AgChart.Bottom : Feliz.AgCharts+ChartPosition { get }
-ToolUp.Platform.AgChart.Circle : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.Cross : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.Diamond : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.Histogram : Feliz.AgCharts+SeriesKind { get }
-ToolUp.Platform.AgChart.Left : Feliz.AgCharts+ChartPosition { get }
-ToolUp.Platform.AgChart.Line : Feliz.AgCharts+SeriesKind { get }
-ToolUp.Platform.AgChart.Marker(Feliz.AgCharts+MarkerShape, System.Int32, System.String, System.String) : Feliz.AgCharts+SeriesMarker
-ToolUp.Platform.AgChart.MemoizedChart`1(a) : Fable.React.ReactElement
-ToolUp.Platform.AgChart.NoMarker : Feliz.AgCharts+SeriesMarker { get }
-ToolUp.Platform.AgChart.Plus : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.Right : Feliz.AgCharts+ChartPosition { get }
-ToolUp.Platform.AgChart.Scatter : Feliz.AgCharts+SeriesKind { get }
-ToolUp.Platform.AgChart.Square : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.Top : Feliz.AgCharts+ChartPosition { get }
-ToolUp.Platform.AgChart.Triangle : Feliz.AgCharts+MarkerShape { get }
-ToolUp.Platform.AgChart.agChart : System.Object { get }
-ToolUp.Platform.AgChart.ensureChartsModulesRegistered() : System.Void
-ToolUp.Platform.AgChart.setChartsModulesRegistered() : System.Void
-ToolUp.Platform.AgChart+AxisLabelModule (class)
-ToolUp.Platform.AgChart+AxisLabelModule.empty : Feliz.AgCharts+AxisLabel { get }
-ToolUp.Platform.AgChart+ChartPalette (class)
-ToolUp.Platform.AgChart+ChartPalette.accentColor : System.String { get; set }
-ToolUp.Platform.AgChart+ChartPalette.fills : System.String[] { get; set }
-ToolUp.Platform.AgChart+ChartPalette.fontFamily : System.String { get; set }
-ToolUp.Platform.AgChart+ChartPalette.markerFill : System.String { get; set }
-ToolUp.Platform.AgChart+ChartPalette.markerStroke : System.String { get; set }
-ToolUp.Platform.AgChart+ChartPalette.refreshFromTheme() : System.Void
-ToolUp.Platform.AgChart+ChartPalette.strokes : System.String[] { get; set }
-ToolUp.Platform.AgChart+ChartThemeBuilderModule (class)
-ToolUp.Platform.AgChart+ChartThemeBuilderModule.empty : Feliz.AgCharts+ChartThemeBuilder { get }
-ToolUp.Platform.AgChart+ChartThemeBuilderModule.toTheme(Feliz.AgCharts+ChartThemeBuilder) : System.Object
-ToolUp.Platform.AgChart+LegendOptionsModule (class)
-ToolUp.Platform.AgChart+LegendOptionsModule.empty : Feliz.AgCharts+LegendOptions { get }
 ToolUp.Platform.AgChartExport (class)
 ToolUp.Platform.AgChartExport.asPlaceholder`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.String, System.Byte[], System.String) : System.Tuple`2[System.String, value]
 ToolUp.Platform.AgChartExport.asPlaceholders`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Byte[], System.String], value], System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.Tuple`2[System.Byte[], System.String]]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, value]
@@ -2616,86 +2574,6 @@ ToolUp.Platform.AgChartExport+DataUrl.decode(System.String) : Microsoft.FSharp.C
 ToolUp.Platform.AgChartExport+Sizing (class)
 ToolUp.Platform.AgChartExport+Sizing.requested(ToolUp.Platform.AgChartExport+CaptureOptions, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Int32, System.Int32]]
 ToolUp.Platform.AgChartExport+Sizing.scaleDimension(System.Double, System.Int32) : System.Int32
-ToolUp.Platform.AgGrid (class)
-ToolUp.Platform.AgGrid (class)  (obsolete)
-ToolUp.Platform.AgGrid.Asc : Feliz.AgGrid+SortDirection { get }
-ToolUp.Platform.AgGrid.AutoHeight : Feliz.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value], Fable.React.ReactElement], Feliz.AgGrid+CallbackParams+ICellRendererParams`2[row, value]) : Fable.React.ReactElement
-ToolUp.Platform.AgGrid.Desc : Feliz.AgGrid+SortDirection { get }
-ToolUp.Platform.AgGrid.MemoizedGrid`1(a) : Fable.React.ReactElement
-ToolUp.Platform.AgGrid.Multiple : Feliz.AgGrid+RowSelection { get }
-ToolUp.Platform.AgGrid.Normal : Feliz.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid.NumericColumn : Feliz.AgGrid+ColumnType { get }
-ToolUp.Platform.AgGrid.Print : Feliz.AgGrid+DOMLayout { get }
-ToolUp.Platform.AgGrid.RightAligned : Feliz.AgGrid+ColumnType { get }
-ToolUp.Platform.AgGrid.Single : Feliz.AgGrid+RowSelection { get }
-ToolUp.Platform.AgGrid.agGrid : System.Object { get }
-ToolUp.Platform.AgGrid.agGridProp`1(System.Object) : Feliz.AgGrid+IAgGridProp`1[row]
-ToolUp.Platform.AgGrid.columnDefProp`2() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnDefProp`2[row, value]]
-ToolUp.Platform.AgGrid.columnDef`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Feliz.AgGrid+IColumnDef`1[row]]
-ToolUp.Platform.AgGrid.columnGroupDefProp`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnGroupDefProp`1[row]]
-ToolUp.Platform.AgGrid.ensureGridModulesRegistered() : System.Void
-ToolUp.Platform.AgGrid.openClosed(System.Boolean) : System.String
-ToolUp.Platform.AgGrid.provider(Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
-ToolUp.Platform.AgGrid.setGridModulesRegistered() : System.Void
-ToolUp.Platform.AgGrid+AgGridModuleConfigModule (class)
-ToolUp.Platform.AgGrid+AgGridModuleConfigModule.community : Feliz.AgGrid+AgGridModuleConfig { get }
-ToolUp.Platform.AgGrid+CallbackParams (class)
-ToolUp.Platform.AgGrid+CallbackParams.AdvancedFilter : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.Cell : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.ColumnToolPanelColumn : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.ColumnToolPanelColumnGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.FilterToolPanelColumnGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.FullWidthRow : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.Header : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.HeaderGroup : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.Menu : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.PivotColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.RowGroupColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.SetFilterValue : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CallbackParams.ValueColumnsList : Feliz.AgGrid+CallbackParams+TooltipLocation { get }
-ToolUp.Platform.AgGrid+CsvExportParamsModule (class)
-ToolUp.Platform.AgGrid+CsvExportParamsModule.empty : Feliz.AgGrid+CsvExportParams { get }
-ToolUp.Platform.AgGrid+DateFilterParamsModule (class)
-ToolUp.Platform.AgGrid+DateFilterParamsModule.empty : Feliz.AgGrid+DateFilterParams { get }
-ToolUp.Platform.AgGrid+GridApiRegistry (class)
-ToolUp.Platform.AgGrid+GridApiRegistry.listKeys() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Platform.AgGrid+GridApiRegistry.publish`1(System.String, Feliz.AgGrid+IGridApi`1[row]) : System.Void
-ToolUp.Platform.AgGrid+GridApiRegistry.remove(System.String) : System.Void
-ToolUp.Platform.AgGrid+GridApiRegistry.tryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+IGridApi`1[System.Object]]
-ToolUp.Platform.AgGrid+GridEvents (class)
-ToolUp.Platform.AgGrid+IFilterModelEntryModule (class)
-ToolUp.Platform.AgGrid+IFilterModelEntryModule.empty : Feliz.AgGrid+IFilterModelEntry { get }
-ToolUp.Platform.AgGrid+LocaleTextModule (class)
-ToolUp.Platform.AgGrid+LocaleTextModule.empty : Feliz.AgGrid+LocaleText { get }
-ToolUp.Platform.AgGrid+NumberFilterParamsModule (class)
-ToolUp.Platform.AgGrid+NumberFilterParamsModule.empty : Feliz.AgGrid+NumberFilterParams { get }
-ToolUp.Platform.AgGrid+TextFilterParamsModule (class)
-ToolUp.Platform.AgGrid+TextFilterParamsModule.empty : Feliz.AgGrid+TextFilterParams { get }
-ToolUp.Platform.AgGrid+Theme (class)
-ToolUp.Platform.AgGrid+Theme.colorSchemeDark : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.colorSchemeDarkBlue : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.colorSchemeLight : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.iconSetAlpine : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.iconSetMaterial : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.iconSetQuartz : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.themeAlpine : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.themeBalham : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.themeMaterial : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.themeQuartz : System.Object { get }
-ToolUp.Platform.AgGrid+Theme.withCustomCss(System.Object, System.Object) : System.Object
-ToolUp.Platform.AgGrid+Theme.withParams(Feliz.AgGrid+ThemeParams, System.Object) : System.Object
-ToolUp.Platform.AgGrid+Theme.withPart(System.Object, System.Object) : System.Object
-ToolUp.Platform.AgGrid+Theme.withoutPart(System.String, System.Object) : System.Object
-ToolUp.Platform.AgGrid+ThemeClass (class)
-ToolUp.Platform.AgGrid+ThemeClass (class)  (obsolete)
-ToolUp.Platform.AgGrid+ThemeClass.Alpine : System.String { get }
-ToolUp.Platform.AgGrid+ThemeClass.AlpineDark : System.String { get }
-ToolUp.Platform.AgGrid+ThemeClass.Balham : System.String { get }
-ToolUp.Platform.AgGrid+ThemeClass.BalhamDark : System.String { get }
-ToolUp.Platform.AgGrid+ThemeClass.Material : System.String { get }
-ToolUp.Platform.AgGrid+ThemeParamsModule (class)
-ToolUp.Platform.AgGrid+ThemeParamsModule.empty : Feliz.AgGrid+ThemeParams { get }
 ToolUp.Platform.Api (class)
 ToolUp.Platform.Api.makeProxy`1(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.RemoteBuilderOptions, ToolUp.Remoting.Client.RemoteBuilderOptions]]) : TApi
 ToolUp.Platform.AuditLogMessages (class)
