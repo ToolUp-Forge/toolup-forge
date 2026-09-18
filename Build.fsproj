@@ -88,6 +88,15 @@
          seam is. It is BCL-only for exactly this reason. -->
     <Compile Include="src\ToolUp.Platform.Build.Tests\ConformanceCoverage.fs" Link="ConformanceCoverage.fs" />
     <Compile Include="V1Readiness.fs" />
+    <!-- Phase 262 — the per-release CHANGELOG generated from the
+         api-baselines diffs, behind the Changelog target Build.fs
+         registers. Same shape and same reason as SemVerBump.fs above:
+         release hygiene rather than SDK surface, FAKE-free, and
+         source-linked (not copied) into ToolUp.Platform.Build.Tests so
+         the target and its fixture renders run one implementation. It
+         reads SemVerBump's per-package classification, so it compiles
+         after it. -->
+    <Compile Include="Changelog.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

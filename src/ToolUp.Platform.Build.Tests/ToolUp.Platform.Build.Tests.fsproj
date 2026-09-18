@@ -80,6 +80,14 @@
              coverage row reads. -->
         <Compile Include="..\..\V1Readiness.fs" Link="V1Readiness.fs" />
         <Compile Include="V1ReadinessTests.fs" />
+        <!-- Phase 262 — the generated CHANGELOG. Source-linked from the
+             repo root for the same reason SemVerBump.fs above is: the
+             Changelog target and these fixture renders (Added / Changed /
+             Removed each represented, idempotent, order-insensitive) run
+             one implementation. Compiled after SemVerBump.fs, whose
+             per-package classification it pairs into signature changes. -->
+        <Compile Include="..\..\Changelog.fs" Link="Changelog.fs" />
+        <Compile Include="ChangelogTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

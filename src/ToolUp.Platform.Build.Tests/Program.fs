@@ -61,6 +61,12 @@ let private registeredTests =
         // every unavailable input is an explicit not-yet row, and the
         // committed inputs parse. Pure over strings; no git, no network.
         V1ReadinessTests.tests
+        // Phase 262 — the generated CHANGELOG: a fixture diff renders a
+        // section with Added / Changed / Removed each represented, a
+        // signature change pairs into one Changed line, regeneration is
+        // idempotent and order-insensitive, and the committed CHANGELOG.md
+        // is the generator's. Pure over strings; no git, no network.
+        ChangelogTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

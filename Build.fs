@@ -4927,6 +4927,248 @@ let main args =
                 failingIds
                 outPath)
 
+    // ── Phase 262 — the generated CHANGELOG ──
+    //
+    // One `## [version]` section per release tag, newest first, each
+    // carrying the public-surface movement since the release before it
+    // (Added / Changed / Removed) and the migration notes that belong to
+    // it, written to `CHANGELOG.md` at the repo root. What a section
+    // says and why is in `Changelog.fs`; this target only does the
+    // READING — the tags, each tag's committed baselines, the migration
+    // docs each interval introduced — and hands the data to the pure
+    // renderer, so a fixture can render a section without a checkout.
+    //
+    //   dotnet run --project Build.fsproj -- Changelog
+    //   dotnet run --project Build.fsproj -- Changelog --check
+    //
+    // The default regenerates the file and exits 0. `--check` writes
+    // nothing and exits 1 when the committed file is not what this tree
+    // renders — the release workflow's guard against a stale changelog.
+    //
+    // The diff per interval is the one VerifySemVerBump takes at a
+    // release, read the same way: `git diff --name-only` between the two
+    // tags names the baselines that MOVED, and only those are read on
+    // both sides, so the cost tracks the churn rather than the ~165-file
+    // baseline set times the tag count. A tag that predates
+    // `api-baselines/` renders as a section saying so. The draft at the
+    // top is the declared `<Version>`'s movement since the newest tag,
+    // over the WORKING tree's baselines — the same interval the
+    // scorecard's stability row and the bump check read.
+    //
+    // Registered here and NOT added to `verify.ps1`, for the reason
+    // V1Readiness gives: the draft section moves with every commit that
+    // moves a baseline, so gating it per commit would make every
+    // surface change a two-file commit for no per-commit fact. The
+    // renderer's rules run on every commit in the Build test pack.
+    Target.create "Changelog" (fun _ ->
+        let root = Path.getFullName "."
+
+        let checkOnly = System.Environment.GetCommandLineArgs() |> Array.contains "--check"
+
+        let gitProc (args: string list) =
+            CreateProcess.fromRawCommand "git" args
+            |> CreateProcess.withWorkingDirectory root
+            |> CreateProcess.redirectOutput
+            |> CreateProcess.disableTraceCommand
+
+        let git (args: string list) =
+            (gitProc args |> CreateProcess.ensureExitCode |> Proc.run).Result.Output
+
+        let lines (text: string) =
+            text.Replace("\r\n", "\n").Split('\n')
+            |> Array.map _.Trim()
+            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+            |> List.ofArray
+
+        let isBaseline (path: string) =
+            path.StartsWith "api-baselines/"
+            && path.EndsWith ".approved.txt"
+            && not (path.EndsWith "doc-coverage.approved.txt")
+
+        // ── the release line, oldest first ──
+        let tags =
+            git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
+            |> lines
+            |> SemVerBump.releaseTags
+            |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare a b)
+
+        let dateOf (tag: string) =
+            git [ "log"; "-1"; "--format=%cs"; tag ] |> lines |> List.head
+
+        let baselinesAt (rev: string) =
+            git [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "api-baselines" ]
+            |> lines
+            |> List.filter isBaseline
+            |> Set.ofList
+
+        let docsAt (rev: string) =
+            git [ "ls-tree"; "-r"; "--name-only"; rev; "--"; "docs/migrations" ]
+            |> lines
+            |> List.filter (fun p -> p.EndsWith ".md")
+            |> Set.ofList
+
+        // The migration docs a section may LINK are the ones in the
+        // working tree — a doc a tag carried and a later commit deleted
+        // would render as a dead link. A release's docs are therefore the
+        // working-tree docs whose name claims its version, plus the
+        // version-less ones its interval introduced that still exist.
+        let workingDocs =
+            Directory.GetFiles(Path.Combine(root, "docs", "migrations"), "*.md")
+            |> Array.map (fun p -> "docs/migrations/" + Path.GetFileName p)
+            |> Set.ofArray
+
+        let releasedVersions = tags |> List.map (snd >> SemVerBump.Version.render)
+
+        let showAt (rev: string) (pathsAtRev: Set<string>) (path: string) =
+            if pathsAtRev.Contains path then
+                Some(git [ "show"; sprintf "%s:%s" rev path ])
+            else
+                None
+
+        // The entries for one interval: the baselines that moved, each
+        // read on both sides only because it moved. `readSince` reads the
+        // near side (a tag); `readCurrent` the far side — a tag for a
+        // release, the working tree for the draft.
+        let entriesBetween
+            (changed: string list)
+            (readSince: string -> string option)
+            (readCurrent: string -> string option)
+            =
+            changed
+            |> List.filter isBaseline
+            |> List.map (fun path ->
+                SemVerBump.classifyPackage (SemVerBump.packageOfBaselinePath path) (readSince path) (readCurrent path)
+                |> Changelog.entryOf)
+
+        let releases =
+            tags
+            |> List.mapi (fun i (tag, version) ->
+                let since = if i = 0 then None else Some(fst tags[i - 1])
+                let pathsHere = baselinesAt tag
+
+                let surface =
+                    if Set.isEmpty pathsHere then
+                        Changelog.NoBaselines
+                    else
+                        match since with
+                        | Some s ->
+                            let changed = git [ "diff"; "--name-only"; s; tag; "--"; "api-baselines" ] |> lines
+
+                            Changelog.Baselines(
+                                entriesBetween changed (showAt s (baselinesAt s)) (showAt tag pathsHere)
+                            )
+                        | None ->
+                            Changelog.Baselines(
+                                entriesBetween (Set.toList pathsHere) (fun _ -> None) (showAt tag pathsHere)
+                            )
+
+                let docsIntroduced =
+                    let here = docsAt tag
+
+                    match since with
+                    | Some s -> Set.difference here (docsAt s)
+                    | None -> here
+                    |> Set.intersect workingDocs
+
+                let docs =
+                    Changelog.docsForRelease
+                        (SemVerBump.Version.render version)
+                        releasedVersions
+                        workingDocs
+                        docsIntroduced
+
+                {
+                    Changelog.Version = SemVerBump.Version.render version
+                    Changelog.Tag = Some tag
+                    Changelog.Date = Some(dateOf tag)
+                    Changelog.Since = since
+                    Changelog.Surface = surface
+                    Changelog.MigrationDocs = docs
+                })
+
+        // ── the draft: the declared version since the newest tag ──
+        let draft =
+            match List.tryLast tags with
+            | None -> []
+            | Some(newest, newestVersion) ->
+                let propsPath = Path.Combine(root, "Directory.Build.props")
+
+                let declared =
+                    match SemVerBump.declaredVersionIn (File.ReadAllText propsPath) with
+                    | Ok v -> v
+                    | Error e -> failwithf "Changelog: cannot read the declared SDK version — %s (%s)." e propsPath
+
+                let changed =
+                    git [ "diff"; "--name-only"; newest; "--"; "api-baselines" ]
+                    |> lines
+                    |> List.filter isBaseline
+
+                let docsIntroduced = Set.difference workingDocs (docsAt newest)
+
+                let docs =
+                    Changelog.docsForRelease
+                        (SemVerBump.Version.render declared)
+                        (SemVerBump.Version.render declared :: releasedVersions)
+                        workingDocs
+                        docsIntroduced
+
+                if List.isEmpty changed && Set.isEmpty docsIntroduced then
+                    []
+                else
+                    let surface =
+                        Changelog.Baselines(
+                            entriesBetween
+                                changed
+                                (showAt newest (baselinesAt newest))
+                                (SemVerBump.currentBaseline root)
+                        )
+
+                    let heading =
+                        if SemVerBump.Version.compare declared newestVersion > 0 then
+                            SemVerBump.Version.render declared
+                        else
+                            "Unreleased"
+
+                    [
+                        {
+                            Changelog.Version = heading
+                            Changelog.Tag = None
+                            Changelog.Date = None
+                            Changelog.Since = Some newest
+                            Changelog.Surface = surface
+                            Changelog.MigrationDocs = docs
+                        }
+                    ]
+
+        let document = Changelog.render Changelog.defaultLimits (draft @ List.rev releases)
+
+        let outPath = Path.Combine(root, "CHANGELOG.md")
+
+        let existing =
+            if File.Exists outPath then
+                Some(File.ReadAllText(outPath).Replace("\r\n", "\n"))
+            else
+                None
+
+        let regenerate =
+            "regenerate with `dotnet run --project Build.fsproj -- Changelog` and commit CHANGELOG.md"
+
+        match checkOnly, existing with
+        | true, Some current when current = document ->
+            Trace.tracefn "▶ Changelog --check: CHANGELOG.md is current (%d release(s))." releases.Length
+        | true, Some _ ->
+            failwithf "Changelog --check: CHANGELOG.md is STALE — this tree renders a different file; %s." regenerate
+        | true, None -> failwithf "Changelog --check: CHANGELOG.md is absent — %s." regenerate
+        | false, Some current when current = document ->
+            Trace.tracefn "▶ Changelog: CHANGELOG.md unchanged (%d release(s))." releases.Length
+        | false, _ ->
+            File.WriteAllText(outPath, document)
+
+            Trace.tracefn
+                "▶ Changelog: CHANGELOG.md regenerated (%d release(s)%s). Commit it."
+                releases.Length
+                (if List.isEmpty draft then "" else " + the unreleased draft"))
+
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every
     // worktree of this clone contends for ONE gate and a second run waits
