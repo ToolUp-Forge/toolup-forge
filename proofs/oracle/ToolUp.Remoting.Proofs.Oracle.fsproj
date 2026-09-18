@@ -51,5 +51,8 @@
              order between the two extractions is immaterial; later proof
              phases APPEND their extraction below. -->
         <Compile Include="DisclosureFold.fs" />
+        <!-- Phase 793 — the tool gate model, extracted. Same discipline: the
+             byte-diff in check.ps1 holds it identical to the prover output. -->
+        <Compile Include="ToolGate.fs" />
     </ItemGroup>
 </Project>

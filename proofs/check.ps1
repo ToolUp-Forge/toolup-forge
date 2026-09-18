@@ -2,7 +2,8 @@
 <#
 .SYNOPSIS
     The whole proof leg for every model under proofs/ — Phase 787's
-    remoting decoder algebra and Phase 790's disclosure fold.
+    remoting decoder algebra, Phase 790's disclosure fold and Phase 793's
+    tool gate.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
@@ -112,6 +113,14 @@ $modules = @(
         HostList     = "ToolUp.Platform.Tests.Phase 790 - the proved fold as oracle"
         HostMinCases = 7
         HostSubject  = "the door packs' rankings and a generated set"
+    }
+    @{
+        Name         = "ToolGate"
+        Source       = "ToolGate.fst"
+        Oracle       = "oracle/ToolGate.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 793 - the proved gate as oracle"
+        HostMinCases = 7
+        HostSubject  = "every in-tree tool under generated policies"
     }
 )
 

@@ -5,9 +5,9 @@ Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
 # `proofs/` — the machine-checked theorems
 
-This directory holds two theorems and the machinery that keeps them honest. Each has its own
-claims ladder below, because the two say different things and a reader should not have to work
-out which rung a sentence about one belongs to by reading the other.
+This directory holds three theorems and the machinery that keeps them honest. Each has its own
+claims ladder below, because the three say different things and a reader should not have to work
+out which rung a sentence about one belongs to by reading the others.
 
 **The decoder totality theorem (Phase 787).** Given a parsed `Value`, no combinator in
 `ToolUp.Remoting.Decode` and no decoder built from them can diverge, throw, or reach a state that
@@ -22,17 +22,27 @@ suppresses the magnitude block exactly when anything was withheld, and produces 
 for two rankings that agree on their disclosable facts, whatever the withheld facts' values. Its
 ladder is [further down](#the-claims-ladder--the-disclosure-fold-phase-790).
 
+**The tool gate soundness theorem (Phase 793).** For any RBAC predicate, any grant-liveness
+predicate, any tool policy and any registry, the one decision behind the AI tool surface —
+`ToolGate.decideDeclared`, which `ListAccessible` applies as a filter and the agent loop's dispatch
+re-check applies to the tool a name resolves to — lists no tool whose declared effects exceed the
+policy's ceiling, lists exactly the tools it admits, never admits at dispatch a name the list would
+have refused, and never lets a tool declaring `Egress` through a ceiling that does not name it. Its
+ladder is [at the end](#the-claims-ladder--the-tool-gate-phase-793).
+
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
 |---|---|
 | `RemotingDecode.fst` | the decoder model — `Decode.fs` clause for clause, each definition naming its F# counterpart, every refusal message reproduced verbatim |
 | `DisclosureFold.fst` | the disclosure model — `DisclosureEgress.evaluate` and `PopulationDisclosure.fold` / `valuesWithheld` / `disclosedStats` clause for clause, each definition naming its F# counterpart |
+| `ToolGate.fst` | the tool gate model — `ToolGate.decideDeclared`, `AIToolRegistry.ListAccessible`, `FindByName` and the dispatch re-check clause for clause, each definition naming its F# counterpart; RBAC and grant liveness taken from the host as predicates |
 | `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
 | `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract and byte-diff; build the oracle project; run each module's differential host |
 | `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
 | `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
-| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; the second model references a subset of the same nine |
+| `oracle/ToolGate.fs` | **generated** — the tool gate model extracted to F#, committed for the same reason |
+| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; the second and third models reference a subset of the same nine |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -287,6 +297,102 @@ Not proved. *Measured*, on every run of the gate.
 
 ---
 
+## The claims ladder — the tool gate (Phase 793)
+
+The same four rungs, for `ToolGate.fst`. The subject is the decision every AI tool passes twice:
+`ToolGate.decideDeclared` (`AIToolRegistry.fs`) — RBAC, grant liveness, then the declared effect
+classes against the deployment's `ToolPolicy` ceiling — applied by `ListAccessible` as the filter
+that builds the list the model is offered, and applied again at the agent loop's dispatch site to
+the tool a produced name resolves to. Pure and total over closed types, with the two authority
+predicates taken from the host.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these four
+lemmas alone:**
+
+* **`list_sound_against_policy`.** No tool whose declared effects exceed the policy's ceiling is
+  listed — for any RBAC predicate, any grant predicate, any policy, any registry. Stated over a
+  predicate that spells the ceiling out: under a bounded ceiling every listed tool's every declared
+  effect has a class the ceiling names, and an undeclared tool is listed only when the policy admits
+  undeclared tools. Its support, `admitted_iff_within`, is an *equality*: an admitting verdict is
+  exactly the two authority predicates answering yes and the declaration sitting within the ceiling.
+* **`listed_iff_admitted`.** A tool is in the list exactly when it is in the registry and the
+  decision admits it. Nothing the decision refused reaches the list and nothing it admits is
+  dropped — the list filter and the decision are one function, not two that happen to agree.
+* **`dispatch_never_wider_than_list`.** If the dispatch re-check admits the name the model produced
+  — looked up by authored name or provider alias, then decided — the list the model was offered
+  carries a tool of that name. The "two gates that must agree should share their whole decision"
+  comment on `ListAccessible`, as a lemma: a forged, hallucinated or replayed name the list would
+  have refused is refused at dispatch too.
+* **`egress_never_escapes`.** A tool declaring `Egress` to any destination is refused under every
+  bounded ceiling that does not name the egress class, whatever else it declares and whatever the
+  authority predicates answer. This is the go-red property in proof form.
+
+Two things the model leaves *opaque*, each because the gate reads one bit of it per tool and a second
+implementation here would be free to disagree with the host's: RBAC (`isToolSourcePermittedFor`,
+with its permission hierarchy and reserved-namespace exemption) and grant liveness
+(`moduleGrantGate`, a per-request verdict over consent stamps). Both are earlier phases' decisions;
+the theorem takes them as total arrows and holds for every pair.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate.
+
+* **The model agrees with production.** `ToolGateProofOracleTests` runs the extracted gate beside
+  the shipped one over every in-tree tool definition it can reach — the narrative and cross-module
+  built-ins, the three fact tools, the sample client tool — and sixty generated tools with generated
+  declarations, under twenty-eight generated policies (the external-principal view of each
+  included), eleven generated callers and their grant predicates. The two must agree on the
+  **verdict** for every tuple, on the **listed set, in order**, and on the **dispatch answer** by
+  authored name, by provider alias and for an unknown name.
+* **The committed extraction is what the prover produced.** `check.ps1` re-extracts and byte-diffs
+  against `oracle/ToolGate.fs`.
+* **The differential is known to be able to fail.** A committed go-red gate drops `Egress` from a
+  declaration before deciding — measuring a tool by what it reads rather than where it reaches — and
+  the comparison is asserted to catch it, with the mechanism pinned on one tool declaring only
+  `Egress` under the read-only policy: production and the honest oracle refuse naming the egress,
+  the blind gate admits.
+
+### Rung 3 — Assumed, and stated
+
+* **The authority predicates are host-supplied.** What RBAC and grant liveness *answer* is not
+  verified here — only that the gate composes them with the ceiling in one place. The differential
+  passes production's own RBAC predicate and generated grant predicates to both sides, so the
+  verdicts compared include the two refusals those predicates produce.
+* **The envelope binds only the seams.** The theorem is about *which tools run*. What a running body
+  may *do* is `ToolEffectEnvelope`'s business, and it refuses only what a declared tool reaches for
+  through the SDK's seams — a host capability through `guardInvoke`, an outbound request through
+  `guardEgress`, a scoped write through `guardWrite`. An executor that constructs its own
+  `HttpClient` is outside every check, exactly as it is outside the composition capability gate;
+  nothing short of process-level isolation closes that, and nothing here claims to. The verified
+  composition profile makes the declaration mandatory, so under it every in-tree tool is bound at
+  the seams.
+* **The bridge is hand-written.** An effect case for case, a declared set as its sorted list, a
+  policy's ceiling and undeclared flag, a tool's name, alias, source and folded declaration. Short on
+  purpose; the go-red gate is built from production's own decision over a perturbed declaration, so
+  the comparison is known to see a declaration defect.
+* The extractor, the F# compiler, the `Prims` shim, and reproducibility resting on the pin plus
+  `--quake` — exactly as for the two models above.
+
+### Rung 4 — Not claimed
+
+* **The ceiling is by class.** A policy admits or refuses effect *classes*, with payloads erased; it
+  cannot say "egress to one host but nowhere else". That is a decision, not an omission: a ceiling
+  that could only name exact destinations could never say "no egress at all". The exact payload is
+  checked at the moment of use by the envelope, which refuses `Egress "b"` under a declaration of
+  `Egress "a"`.
+* **Client-resident bodies.** A client-resident tool's body runs in the browser and is outside the
+  envelope; the client-tool allowlist seam binds it. The gate's list and dispatch decisions apply to
+  both locations alike.
+* **The approval keying is a policy, not a theorem.** `ToolPolicy.RequireApproval` holds a tool for
+  the user's decision by declared class, ahead of the deployment's own `IToolApprovalPolicy`; the
+  external-principal ceiling applies the same keying to an agent's grants, default-deny by class.
+  Where and why that is decided is `docs/migrations/793-tool-effect-class.md`; the manifest carries
+  it as a `policy` entry rather than letting Rung 1 imply it.
+
+---
+
 ## Method, and where it comes from
 
 The method is not new. An open-source F# wire decoder whose combinators were proved total in F\*
@@ -314,14 +420,17 @@ recorded beside the code they constrain:
   unparseable under F#'s offside rule however the indentation flags are set. As an ordinary function
   it extracts as four flat calls.
 
-And two from the disclosure model (Phase 790), the first second module and so the first to find out
-what the leg had assumed about there being one:
+And three from the later models — the disclosure fold (Phase 790), the first second module and so
+the first to find out what the leg had assumed about there being one, and the tool gate (Phase 793):
 
 * **A recursive ghost predicate that sits under `/\` must return `prop`, not `Type0`.** `each_rank_true
   ranked offset rest` as a `Tot Type0` conjunct fails with "Expected type Prims.prop but … has type
   Type0"; declaring the predicate `Tot prop` is the whole fix, and `True` / `False` / `==` / `==>`
   all sit happily inside it. A predicate that needs no `==` (a check on an `eqtype`) is better as a
   `bool` anyway.
+* **`effect` is a keyword.** F\* reserves it for effect declarations, so a type named for the
+  thing the third model is about would not parse (`Syntax error` at the type's first constructor,
+  with nothing to say why). The model calls it `tool_effect`; the F# side keeps `ToolEffect`.
 * **Nothing in the leg should name a module twice.** The first version of `check.ps1` carried the
   module name in the pin's `extract` flags *and* in the script's steps; the second module would have
   meant a second flag set. The pin now carries only `--codegen FSharp`, and the script appends

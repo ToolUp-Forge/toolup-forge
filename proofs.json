@@ -19,11 +19,15 @@
     "second manifest.",
     "",
     "Phase 790 appended the disclosure-fold claims (ids prefixed `disclosure-`); the five headline",
-    "lemmas are one `proved` entry each, so an evidence check resolves them by name."
+    "lemmas are one `proved` entry each, so an evidence check resolves them by name.",
+    "",
+    "Phase 793 appended the tool-gate claims (ids prefixed `toolgate-`): the four lemmas, the",
+    "differential host, the two opaque authority predicates, and the policy entries that say what the",
+    "envelope does not bind and where the approval-by-class keying is decided."
   ],
   "kind": "proofs",
   "version": 1,
-  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); and the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790)",
+  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793)",
   "provers": {
     "fstar-pinned": {
       "tool": "fstar",
@@ -385,6 +389,132 @@
       "level": "policy",
       "statement": "Statistical disclosure control is OUT. The theorem says nothing about what a determined reader could infer from a count, a period range or a freshness histogram, nor from the magnitudes of a ranking with nothing withheld.",
       "reason": "the disclosure vocabulary is a declared classification enforced at egress, not an inference-control regime, and the shipped code's honesty boundary says so in the same words"
+    },
+    {
+      "id": "toolgate-list-sound-against-policy",
+      "level": "proved",
+      "statement": "For any RBAC predicate, any grant-liveness predicate, any ToolPolicy and any registry, no tool whose declared effects exceed the policy's ceiling is listed: under a bounded ceiling every listed tool's every declared effect has a class the ceiling names, and an undeclared tool is listed only when the policy admits undeclared tools. The supporting equality says an admitting verdict is EXACTLY the two authority predicates answering yes and the declaration sitting within the ceiling.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ToolGate.fst",
+        "lemmas": [
+          "list_sound_against_policy",
+          "admitted_iff_within"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-list-is-the-decision",
+      "level": "proved",
+      "statement": "A tool is in the list exactly when it is in the registry and the decision admits it. Nothing the decision refused reaches the list, and nothing it admits is dropped - the list filter and the decision are one function, not two that happen to agree.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ToolGate.fst",
+        "lemmas": [
+          "listed_iff_admitted"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-dispatch-never-wider-than-list",
+      "level": "proved",
+      "statement": "If the dispatch-site re-check admits the name the model produced - looked up by authored name or provider alias, then decided - the list the model was offered carries a tool of that name. A forged, hallucinated or replayed name the list would have refused is refused at dispatch too. This is the 'two gates that must agree share their whole decision' comment on ListAccessible, as a lemma.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ToolGate.fst",
+        "lemmas": [
+          "dispatch_never_wider_than_list"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-egress-never-escapes",
+      "level": "proved",
+      "statement": "A tool declaring Egress to any destination is refused under every bounded ceiling that does not name the egress class, whatever else it declares and whatever the two authority predicates answer. This is the go-red property in proof form: a gate that dropped Egress before deciding would violate it.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ToolGate.fst",
+        "lemmas": [
+          "egress_never_escapes"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-model-agrees-with-shipped-code",
+      "level": "tested",
+      "statement": "The extracted model and the shipped gate agree on the VERDICT for every in-tree tool the host can reach (the narrative and cross-module built-ins, the three fact tools, the sample client tool) and for 60 generated tools, under 28 generated policies including the external-principal view of each, 11 generated callers and their grant predicates; on the LISTED SET, in order, under every policy and caller; and on the DISPATCH answer by authored name, by provider alias and for an unknown name. This is the only thing that says the proved model is about the code that runs.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ToolGateProofOracleTests.fs",
+        "list": "Phase 793 - the proved gate as oracle",
+        "cases": [
+          "the extracted decision agrees with production over every in-tree tool, policy, caller and grant predicate",
+          "the extracted decision agrees with production over generated tools with generated declarations",
+          "the extracted list agrees with ListAccessible - the same tools, in the same order - under every policy and caller",
+          "the extracted dispatch check agrees with FindByName-then-decide, by authored name, by alias, and for an unknown name",
+          "the model never throws, on any tool, under any policy, caller or grant predicate"
+        ],
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "toolgate-committed-extraction-is-what-the-prover-produced",
+      "level": "tested",
+      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "evidence": {
+        "runner": "proofs/check.ps1 step 4",
+        "artifact": "proofs/oracle/ToolGate.fs"
+      }
+    },
+    {
+      "id": "toolgate-differential-is-known-to-fail",
+      "level": "tested",
+      "statement": "A committed go-red gate drops Egress from a declaration before deciding - measuring a tool by what it reads rather than where it reaches - and the comparison is asserted to catch it, with the mechanism pinned on one tool declaring only Egress under the read-only policy: production and the honest oracle refuse naming the egress, the blind gate admits. A differential never shown to fail agrees with whatever it is shown.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ToolGateProofOracleTests.fs",
+        "cases": [
+          "the differential CATCHES a gate that ignores Egress - the go-red case",
+          "and egress under a read-only ceiling is what it catches"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-authority-predicates-host-supplied",
+      "level": "assumed",
+      "statement": "RBAC (isToolSourcePermittedFor over the caller's permission map, its Read/Write/Admin hierarchy and the SDK-reserved-namespace exemption) and grant liveness (moduleGrantGate over the request's consent stamps) are host-supplied predicates the model takes as total arrows. Every lemma holds for any pair; what the model does not verify is what either answers. They are earlier phases' decisions, and modelling them would introduce a second implementation free to disagree with the host's.",
+      "mitigation": "the differential host passes production's own isToolSourcePermittedFor and generated grant predicates to BOTH sides, so the verdicts compared include the two refusals those predicates produce"
+    },
+    {
+      "id": "toolgate-bridge-hand-written",
+      "level": "assumed",
+      "statement": "The bridge from the shipped types to the model's is hand-written: an effect case for case, a declared set as its sorted list, a policy's ceiling and undeclared flag, a registered tool's name, alias, source and folded declaration. A defect in it would make the comparison compare the wrong thing.",
+      "mitigation": "short and case-for-case on purpose; the go-red gate beside it is built from production's OWN decision over a perturbed declaration, so the comparison is known to see a declaration defect"
+    },
+    {
+      "id": "toolgate-envelope-binds-only-the-seams",
+      "level": "assumed",
+      "statement": "The effect envelope refuses what a DECLARED tool body reaches for through the SDK's seams - a host capability through ToolEffectEnvelope.guardInvoke, an outbound request through guardEgress, a scoped write through guardWrite. An executor that constructs its own HttpClient, opens a socket or writes a file directly is outside every check, exactly as it is outside the composition capability gate. Nothing short of process-level isolation closes that, and nothing here claims to.",
+      "evidence": {
+        "source": "src/ToolUp.AI.Server/Server/ToolEffectEnvelope.fs"
+      },
+      "mitigation": "the verified composition profile makes the declaration mandatory, so under it every in-tree tool is bound at the seams; a tool's own outbound call is the one place an author must route through guardEgress, and the envelope test pack pins that a ReadFacts tool cannot send through it"
+    },
+    {
+      "id": "toolgate-ceiling-is-by-class",
+      "level": "policy",
+      "statement": "The policy ceiling is expressed over effect CLASSES, with payloads erased; a ceiling cannot say 'egress to api.example.com but nowhere else'.",
+      "reason": "a ceiling that could only name exact destinations or scopes could never say 'no egress at all', which is the sentence a policy most needs to say; the exact payload is checked at the moment of use by the envelope, which refuses Egress 'b' under a declaration of Egress 'a'"
+    },
+    {
+      "id": "toolgate-approval-keyed-on-effect-class",
+      "level": "policy",
+      "statement": "The human-in-the-loop approval hold is keyed on effect class through ToolPolicy.RequireApproval and ToolApprovalDispatch.requirementByClass, in FRONT of the deployment's own IToolApprovalPolicy: a tool declaring a held class is held whatever that policy says about it by name, and a tool declaring none falls through to it unchanged.",
+      "reason": "a per-tool name list widens silently the moment a module registers a new tool; a class-keyed hold binds the new tool by what it declares. The composition and its rationale are in docs/migrations/793-tool-effect-class.md and docs/ai/extending.md; the external-principal ceiling (ToolPolicy.ExternalPrincipalCeiling) is the same keying applied to an agent's grants, default-deny by class"
+    },
+    {
+      "id": "toolgate-client-resident-bodies",
+      "level": "policy",
+      "statement": "A client-resident tool's body runs in the browser and is OUT of the envelope.",
+      "reason": "the envelope is an ambient server-side value around Execute, and a client-resident dispatch never calls Execute; the browser-side body is bound by the client-tool allowlist seam instead, and the gate's list and dispatch decisions apply to both locations alike"
     }
   ]
 }
