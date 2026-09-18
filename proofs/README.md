@@ -427,6 +427,143 @@ Not proved. *Measured*, on every run of the gate.
 
 ---
 
+## The claims ladder — the model input (Phase 792)
+
+The same four rungs, for `ModelInput.fst`. The subject is the value every provider call is given —
+the facts, the retrieved passages, the assembled prompt blocks, the post-budget tool results and
+the conversation turns — together with the smart constructor that populates it, the assembly a
+caller folds over that constructor, and the pure `render` that turns the value into the two
+arguments the provider interface takes.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these three
+lemmas and their companions alone:**
+
+* **`admissible_by_construction`.** For *any* candidate store — whatever verdicts it carries,
+  whatever scopes those verdicts were resolved for, in any mixture — the assembled value holds only
+  facts whose verdict is affirmative **and** whose scope is the caller's resolved one. Nothing about
+  the store has to be checked in advance, which is what "by construction" means: the arm that would
+  break the invariant is the arm that refuses. Its supporting lemmas say where the guarantee comes
+  from and where it stops — `add_fact_preserves_admissible` needs no premise on the fact's verdict,
+  `blocks_and_turns_preserve_admissible` covers the three constructors that touch neither facts nor
+  passages, and `add_chunk_preserves_admissible` is the one that *does* carry a premise (Rung 3).
+* **`render_faithful`**, with its relational companion **`render_blind_to_facts`**. Four clauses:
+  the turns pass through untouched; the system prompt is exactly the blocks' text joined on the
+  separator the prompt composer uses, and absent when there are no blocks, which is how a call that
+  sent no system prompt stays byte for byte unchanged; every id the leak differential *reports* is
+  genuinely present in the rendering and genuinely undeclared in the value; and every candidate id
+  that is present and undeclared *is* reported — so an empty report means what a reader takes it to
+  mean rather than merely that a filter found nothing. `render_blind_to_facts` is the stronger half
+  and the reason the others matter: two values agreeing on their blocks and turns render
+  identically whatever their facts, passages and tool results are, so the renderer cannot read the
+  fact list at all and no rendering can depend on one.
+* **`input_noninterference`.** Two stores that agree on every fact disclosable for the resolved
+  scope assemble to the *same* value, and therefore to the same rendering and the same bytes. The
+  withheld facts are quantified away entirely: the two stores may differ in how many they hold, in
+  their identities, in their contents and in their policies, and no observation of what the
+  provider is shown distinguishes one from the other. The renderer that turns admitted facts into
+  the block a reader sees is *universally quantified*, so this holds for every one a caller might
+  write — including one that prints each admitted fact's content verbatim. What it could not
+  survive is a renderer handed the whole store, which is exactly why the shipped shape hands it
+  what was admitted, and why the theorem is stated over the assembly rather than over `render`
+  alone.
+
+Three things the model leaves *opaque*, each because a second implementation here would be free to
+disagree with the host's: substring containment (the leak differential asks the host `Contains`;
+every lemma holds for any containment test at all), scope resolution (compared, never derived — see
+Rung 3), and the fact renderer just described. The turn type is *narrowed* rather than opaque — the
+model carries the three fields rendering reads and the host's bridge passes the production record
+through unchanged — which is stated here rather than left to be discovered.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate.
+
+* **The model agrees with production.** `ModelInputProofOracleTests` runs the extracted value,
+  constructor, assembly and renderer beside the shipped ones over a pinned corpus and 150 generated
+  cases, and requires them to agree on the **assembled value, the constructor's refusal wording,
+  the mirrored tool-result record, the rendering, every byte of the rendered text, and the leak
+  differential over it — at once**. The migration seam is compared on its own first, over the
+  prompt shapes every provider entry lifts through, because a value assembled some other way would
+  not exercise it. Agreement on the value alone would miss a renderer that showed the model
+  something the value never admitted, which is the whole failure this phase exists to exclude.
+* **The non-entry probe, re-run over both halves.** A 250-subject population is offered to the
+  assembly as a *store*: three facts carry an affirmative verdict for the caller's scope, and the
+  other 247 are denied one of three ways — an internal classification, a named policy, or an
+  affirmative verdict resolved for somebody else's scope, which only the scope half of the
+  invariant excludes. Exactly three enter the value, exactly three reach the rendering, and not one
+  of the other 247 appears in the bytes a provider would be handed. The end-to-end probe in
+  `PopulationQueryToolTests` asserts the transcript half of the same claim against a live agent
+  loop and now asserts the rendering half beside it; a subject absent from a transcript because a
+  tool happened not to return it is otherwise indistinguishable, there, from one the value refused.
+* **Noninterference, run rather than only proved.** Every case with something withheld is replayed
+  against a store that keeps the disclosable facts and replaces the rest wholesale — different
+  identities, different contents, different policies, a different count — and nothing a provider
+  boundary can observe is allowed to move.
+* **The committed extraction is what the prover produced.** `check.ps1` re-extracts and byte-diffs
+  against `oracle/ModelInput.fs`.
+* **The differential is known to be able to fail.** A committed go-red oracle renders one fact the
+  constructor refused — the mistake a plausible reimplementation reaches by rendering from the
+  store rather than from what was admitted — and the comparison is asserted to catch it **on every
+  case that has a withheld fact to leak**, not merely on one. The mechanism is pinned separately on
+  a three-fact case: the value is *identical* under both oracles and only the rendering differs,
+  which is precisely the failure a value-only comparison would have passed.
+
+### Rung 3 — Assumed, and stated
+
+* **Scope resolution is assumed correct.** The scope is a caller-supplied string. The model
+  compares it and never derives it, so everything above is conditional on that string being the
+  scope the caller is actually entitled to — and on the verdict having been resolved against the
+  same one. This is the load-bearing assumption of the whole input-side claim, and closing it is a
+  separate piece of work.
+* **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
+  sentence a reader wants — that a model is isolated from knowledge except what is explicitly
+  permitted — additionally needs that the tools a model may call cannot fetch what the input side
+  refused, and nothing in this module can see that. It sits on this rung rather than the next one
+  because it is load-bearing for the claim rather than merely outside it: a tool that reads freely
+  would defeat everything above without contradicting any lemma in it. It is the subject of its own
+  theorem, and this rung is where it stays until that lands.
+* **The passage gate is CHECKED, not enforced.** The shipped constructor accepts a retrieved
+  passage whatever its gate result, and offers a predicate for a caller to ask instead. So the
+  passage clause of admissibility is proved as a *premise* on the add
+  (`add_chunk_preserves_admissible`) and as a total *decision procedure*
+  (`has_failed_gates_decides`), never as the unconditional invariant the fact clause is. A caller
+  that never asks can hold a value carrying a failed passage, and nothing in the type stops it.
+  "Ungated" is likewise recorded honestly: it says the gate did not run, never that it passed.
+* **The model is the assembly's counterpart, and the assembly is a caller's code.** The shipped
+  module ships the constructors; the fold over a candidate set is what each caller writes around
+  them. The model states the theorem over that fold because a statement about one constructor call
+  says nothing about a store — but a caller free to write a different fold is free to write one
+  these lemmas do not describe. What keeps that honest is the differential, which runs production's
+  constructors in the same sequence.
+* **The bridge is hand-written.** A defect in it would make the comparison compare the wrong thing.
+  It is case-for-case on purpose, and the block renderer is *shared* between the two sides — the
+  model's facts are mapped back to production records and handed to production's own renderer —
+  precisely so no second implementation can quietly disagree.
+* The extractor, the F# compiler, the `Prims` shim, and reproducibility resting on the pin plus
+  `--quake` — exactly as for the two models above.
+
+### Rung 4 — Not claimed
+
+* **The transport.** That the rendered bytes reach a provider unaltered, and that the provider
+  sends what it was given. `render` is where this theorem stops.
+* **The model itself.** Nothing here says anything whatever about what a language model does with
+  the bytes, what it answers, or what it may have learned elsewhere. A theorem that implied any of
+  that would be claiming something it cannot see; the value of keeping the model *outside* the
+  trusted set is the entire point of stating the input side this precisely.
+* **The builders' IO.** A block's text is data by the time the value holds it. How a builder
+  obtained it — which store it read, which gate it ran, whether it was entitled to — is its own
+  obligation and is not visible here.
+* **That every caller runs the assembly this way.** The theorem describes a fold over the shipped
+  constructors; a caller that hand-assembles the record type directly is outside it. The type is
+  the seam, and what makes the seam worth having is that the constructor is the only way to add a
+  fact — but nothing here forces a caller through it.
+* **What can be inferred from what was disclosed.** Nothing above says what a reader could deduce
+  from the facts that *were* admitted, from their count, or from their absence.
+
+---
+
 ## The claims ladder — the taint flow (Phase 795)
 
 The same four rungs, for `TaintFlow.fst`. The subject is what multi-party disclosure policies rest
@@ -636,6 +773,22 @@ the first to find out what the leg had assumed about there being one, and the to
   `--extract <module>` per entry of one `$modules` list — source, committed oracle, host list and
   case floor — so a third model is one entry and no other edit.
 
+And two from the model-input model (Phase 792), which confirmed the sentence above — one `$modules` entry, no flag change, no other edit to the leg:
+
+* **`introduce … ==> …` no longer binds a name for the hypothesis.** The older `with h. e` spelling
+  is a syntax error on the pinned release, which says so and names the fix: write `with e`, and the
+  hypothesis is available in `e`'s proof context. Worth knowing because the two proof styles are
+  otherwise indistinguishable in published examples, and the error arrives at parse time with a
+  line number pointing at the `with`.
+* **An F\* module whose name collides with a production module is a real hazard, not a cosmetic
+  one.** This model is `ModelInput`, and so is the shipped module it is about; the extraction is a
+  top-level F# module in the global namespace, so after the host's `open` of the production
+  namespace the bare name resolves to production. A host that got this wrong would compare
+  production with production and pass. The host therefore binds a module abbreviation *before* that
+  `open`, where the name is unambiguous, and every model call site reads through it. Naming the
+  model something else would also have worked and was rejected: the model should be named for what
+  it models, and the alias documents the hazard at the one place it could bite.
+
 ---
 
 And three from the taint-flow model (Phase 795), the first to carry mutually-recursive *definitions*
@@ -662,215 +815,6 @@ The 790 note above predicted a third model would be one `$modules` entry and no 
 held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`,
 `.fantomasignore` gains the generated extraction, and the differential host is registered in the test
 pack like any other — four lines in four files, none of them the proof leg.
-
-## When the byte-diff fails
-
-It means a committed `oracle/*.fs` is not what the prover produces from the current `.fst` beside
-it. That is the expected state after any model edit, and the fix is to copy the
-fresh extraction over the committed one and commit the two together — `check.ps1` prints the exact
-command and the first forty lines of the diff. It is *not* a state to resolve by editing the
-extraction: the next run would simply report it again.
-
-## Licence
-
-Apache-2.0, like everything beside it. See [`LICENSE`](../LICENSE).
-
-## The claims ladder — the model input (Phase 792)
-
-The same four rungs, for `ModelInput.fst`. The subject is the value every provider call is given —
-the facts, the retrieved passages, the assembled prompt blocks, the post-budget tool results and
-the conversation turns — together with the smart constructor that populates it, the assembly a
-caller folds over that constructor, and the pure `render` that turns the value into the two
-arguments the provider interface takes.
-
-### Rung 1 — Proved
-
-**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these three
-lemmas and their companions alone:**
-
-* **`admissible_by_construction`.** For *any* candidate store — whatever verdicts it carries,
-  whatever scopes those verdicts were resolved for, in any mixture — the assembled value holds only
-  facts whose verdict is affirmative **and** whose scope is the caller's resolved one. Nothing about
-  the store has to be checked in advance, which is what "by construction" means: the arm that would
-  break the invariant is the arm that refuses. Its supporting lemmas say where the guarantee comes
-  from and where it stops — `add_fact_preserves_admissible` needs no premise on the fact's verdict,
-  `blocks_and_turns_preserve_admissible` covers the three constructors that touch neither facts nor
-  passages, and `add_chunk_preserves_admissible` is the one that *does* carry a premise (Rung 3).
-* **`render_faithful`**, with its relational companion **`render_blind_to_facts`**. Four clauses:
-  the turns pass through untouched; the system prompt is exactly the blocks' text joined on the
-  separator the prompt composer uses, and absent when there are no blocks, which is how a call that
-  sent no system prompt stays byte for byte unchanged; every id the leak differential *reports* is
-  genuinely present in the rendering and genuinely undeclared in the value; and every candidate id
-  that is present and undeclared *is* reported — so an empty report means what a reader takes it to
-  mean rather than merely that a filter found nothing. `render_blind_to_facts` is the stronger half
-  and the reason the others matter: two values agreeing on their blocks and turns render
-  identically whatever their facts, passages and tool results are, so the renderer cannot read the
-  fact list at all and no rendering can depend on one.
-* **`input_noninterference`.** Two stores that agree on every fact disclosable for the resolved
-  scope assemble to the *same* value, and therefore to the same rendering and the same bytes. The
-  withheld facts are quantified away entirely: the two stores may differ in how many they hold, in
-  their identities, in their contents and in their policies, and no observation of what the
-  provider is shown distinguishes one from the other. The renderer that turns admitted facts into
-  the block a reader sees is *universally quantified*, so this holds for every one a caller might
-  write — including one that prints each admitted fact's content verbatim. What it could not
-  survive is a renderer handed the whole store, which is exactly why the shipped shape hands it
-  what was admitted, and why the theorem is stated over the assembly rather than over `render`
-  alone.
-
-Three things the model leaves *opaque*, each because a second implementation here would be free to
-disagree with the host's: substring containment (the leak differential asks the host `Contains`;
-every lemma holds for any containment test at all), scope resolution (compared, never derived — see
-Rung 3), and the fact renderer just described. The turn type is *narrowed* rather than opaque — the
-model carries the three fields rendering reads and the host's bridge passes the production record
-through unchanged — which is stated here rather than left to be discovered.
-
-### Rung 2 — Differentially tested
-
-Not proved. *Measured*, on every run of the gate.
-
-* **The model agrees with production.** `ModelInputProofOracleTests` runs the extracted value,
-  constructor, assembly and renderer beside the shipped ones over a pinned corpus and 150 generated
-  cases, and requires them to agree on the **assembled value, the constructor's refusal wording,
-  the mirrored tool-result record, the rendering, every byte of the rendered text, and the leak
-  differential over it — at once**. The migration seam is compared on its own first, over the
-  prompt shapes every provider entry lifts through, because a value assembled some other way would
-  not exercise it. Agreement on the value alone would miss a renderer that showed the model
-  something the value never admitted, which is the whole failure this phase exists to exclude.
-* **The non-entry probe, re-run over both halves.** A 250-subject population is offered to the
-  assembly as a *store*: three facts carry an affirmative verdict for the caller's scope, and the
-  other 247 are denied one of three ways — an internal classification, a named policy, or an
-  affirmative verdict resolved for somebody else's scope, which only the scope half of the
-  invariant excludes. Exactly three enter the value, exactly three reach the rendering, and not one
-  of the other 247 appears in the bytes a provider would be handed. The end-to-end probe in
-  `PopulationQueryToolTests` asserts the transcript half of the same claim against a live agent
-  loop and now asserts the rendering half beside it; a subject absent from a transcript because a
-  tool happened not to return it is otherwise indistinguishable, there, from one the value refused.
-* **Noninterference, run rather than only proved.** Every case with something withheld is replayed
-  against a store that keeps the disclosable facts and replaces the rest wholesale — different
-  identities, different contents, different policies, a different count — and nothing a provider
-  boundary can observe is allowed to move.
-* **The committed extraction is what the prover produced.** `check.ps1` re-extracts and byte-diffs
-  against `oracle/ModelInput.fs`.
-* **The differential is known to be able to fail.** A committed go-red oracle renders one fact the
-  constructor refused — the mistake a plausible reimplementation reaches by rendering from the
-  store rather than from what was admitted — and the comparison is asserted to catch it **on every
-  case that has a withheld fact to leak**, not merely on one. The mechanism is pinned separately on
-  a three-fact case: the value is *identical* under both oracles and only the rendering differs,
-  which is precisely the failure a value-only comparison would have passed.
-
-### Rung 3 — Assumed, and stated
-
-* **Scope resolution is assumed correct.** The scope is a caller-supplied string. The model
-  compares it and never derives it, so everything above is conditional on that string being the
-  scope the caller is actually entitled to — and on the verdict having been resolved against the
-  same one. This is the load-bearing assumption of the whole input-side claim, and closing it is a
-  separate piece of work.
-* **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
-  sentence a reader wants — that a model is isolated from knowledge except what is explicitly
-  permitted — additionally needs that the tools a model may call cannot fetch what the input side
-  refused, and nothing in this module can see that. It sits on this rung rather than the next one
-  because it is load-bearing for the claim rather than merely outside it: a tool that reads freely
-  would defeat everything above without contradicting any lemma in it. It is the subject of its own
-  theorem, and this rung is where it stays until that lands.
-* **The passage gate is CHECKED, not enforced.** The shipped constructor accepts a retrieved
-  passage whatever its gate result, and offers a predicate for a caller to ask instead. So the
-  passage clause of admissibility is proved as a *premise* on the add
-  (`add_chunk_preserves_admissible`) and as a total *decision procedure*
-  (`has_failed_gates_decides`), never as the unconditional invariant the fact clause is. A caller
-  that never asks can hold a value carrying a failed passage, and nothing in the type stops it.
-  "Ungated" is likewise recorded honestly: it says the gate did not run, never that it passed.
-* **The model is the assembly's counterpart, and the assembly is a caller's code.** The shipped
-  module ships the constructors; the fold over a candidate set is what each caller writes around
-  them. The model states the theorem over that fold because a statement about one constructor call
-  says nothing about a store — but a caller free to write a different fold is free to write one
-  these lemmas do not describe. What keeps that honest is the differential, which runs production's
-  constructors in the same sequence.
-* **The bridge is hand-written.** A defect in it would make the comparison compare the wrong thing.
-  It is case-for-case on purpose, and the block renderer is *shared* between the two sides — the
-  model's facts are mapped back to production records and handed to production's own renderer —
-  precisely so no second implementation can quietly disagree.
-* The extractor, the F# compiler, the `Prims` shim, and reproducibility resting on the pin plus
-  `--quake` — exactly as for the two models above.
-
-### Rung 4 — Not claimed
-
-* **The transport.** That the rendered bytes reach a provider unaltered, and that the provider
-  sends what it was given. `render` is where this theorem stops.
-* **The model itself.** Nothing here says anything whatever about what a language model does with
-  the bytes, what it answers, or what it may have learned elsewhere. A theorem that implied any of
-  that would be claiming something it cannot see; the value of keeping the model *outside* the
-  trusted set is the entire point of stating the input side this precisely.
-* **The builders' IO.** A block's text is data by the time the value holds it. How a builder
-  obtained it — which store it read, which gate it ran, whether it was entitled to — is its own
-  obligation and is not visible here.
-* **That every caller runs the assembly this way.** The theorem describes a fold over the shipped
-  constructors; a caller that hand-assembles the record type directly is outside it. The type is
-  the seam, and what makes the seam worth having is that the constructor is the only way to add a
-  fact — but nothing here forces a caller through it.
-* **What can be inferred from what was disclosed.** Nothing above says what a reader could deduce
-  from the facts that *were* admitted, from their count, or from their absence.
-
----
-
-## Method, and where it comes from
-
-The method is not new. An open-source F# wire decoder whose combinators were proved total in F\*
-established it — a hand-written model over an abstract value, extracted and run as a differential
-host against the production implementation — and this directory inherits its findings rather than
-rediscovering them. They are recorded here because each one cost a build to learn and each will be
-met again by anyone touching this file:
-
-* Proof hints no longer exist; the pin, the `z3rlimit` margin and `--quake` replace them.
-* The F# backend ships no runtime, so a `Prims` shim is required.
-* The emitted F# uses pre-F#-8 indentation, so the oracle project — and only that project — relaxes
-  strict indentation and silences `FS0058`.
-* A ghost definition needs `noextract_to "FSharp"`; refinement types are erased regardless.
-* Extraction refuses outright on an unchecked module, so the leg is check-then-extract against the
-  cache, never one pass.
-
-Two further findings are this directory's own, learned by building rather than by reading, and
-recorded beside the code they constrain:
-
-* **A mutually-recursive type group extracts with its `and` indented**, which F# rejects
-  (`FS0010: Unexpected keyword 'and' in member definition`). Fixed at source — the map case carries
-  a parameterised pair rather than a second mutual inductive — not by post-processing the output.
-* **`unfold` on the applicative pipeline operator is unusable.** It inlines at every step, and a
-  four-step pipeline then extracts as four nested `match` expressions whose cases begin at column 0,
-  unparseable under F#'s offside rule however the indentation flags are set. As an ordinary function
-  it extracts as four flat calls.
-
-And two from the disclosure model (Phase 790), the first second module and so the first to find out
-what the leg had assumed about there being one:
-
-* **A recursive ghost predicate that sits under `/\` must return `prop`, not `Type0`.** `each_rank_true
-  ranked offset rest` as a `Tot Type0` conjunct fails with "Expected type Prims.prop but … has type
-  Type0"; declaring the predicate `Tot prop` is the whole fix, and `True` / `False` / `==` / `==>`
-  all sit happily inside it. A predicate that needs no `==` (a check on an `eqtype`) is better as a
-  `bool` anyway.
-* **Nothing in the leg should name a module twice.** The first version of `check.ps1` carried the
-  module name in the pin's `extract` flags *and* in the script's steps; the second module would have
-  meant a second flag set. The pin now carries only `--codegen FSharp`, and the script appends
-  `--extract <module>` per entry of one `$modules` list — source, committed oracle, host list and
-  case floor — so a third model is one entry and no other edit.
-
-And two from the model-input model (Phase 792), which was that third model and confirmed the last
-sentence above — one `$modules` entry, no flag change, no other edit to the leg:
-
-* **`introduce … ==> …` no longer binds a name for the hypothesis.** The older `with h. e` spelling
-  is a syntax error on the pinned release, which says so and names the fix: write `with e`, and the
-  hypothesis is available in `e`'s proof context. Worth knowing because the two proof styles are
-  otherwise indistinguishable in published examples, and the error arrives at parse time with a
-  line number pointing at the `with`.
-* **An F\* module whose name collides with a production module is a real hazard, not a cosmetic
-  one.** This model is `ModelInput`, and so is the shipped module it is about; the extraction is a
-  top-level F# module in the global namespace, so after the host's `open` of the production
-  namespace the bare name resolves to production. A host that got this wrong would compare
-  production with production and pass. The host therefore binds a module abbreviation *before* that
-  `open`, where the name is unambiguous, and every model call site reads through it. Naming the
-  model something else would also have worked and was rejected: the model should be named for what
-  it models, and the alias documents the hazard at the one place it could bite.
-
----
 
 ## When the byte-diff fails
 
