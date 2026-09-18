@@ -16,11 +16,14 @@
     "the proof leg (proofs/check.ps1) is what looks.",
     "",
     "Every later proof phase in this repository appends its claims here rather than starting a",
-    "second manifest."
+    "second manifest.",
+    "",
+    "Phase 790 appended the disclosure-fold claims (ids prefixed `disclosure-`); the five headline",
+    "lemmas are one `proved` entry each, so an evidence check resolves them by name."
   ],
   "kind": "proofs",
   "version": 1,
-  "subject": "ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model",
+  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); and the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790)",
   "provers": {
     "fstar-pinned": {
       "tool": "fstar",
@@ -236,6 +239,152 @@
       "level": "policy",
       "statement": "A record still decoding through the reflection path is outside every claim above.",
       "reason": "the algebra is an opt-in replacement for a decoder that already works; the shipped default is unchanged"
+    },
+    {
+      "id": "disclosure-no-undisclosed-output",
+      "level": "proved",
+      "statement": "For any ranking, any total verdict function and any policy assignment, no fact whose verdict is not-disclosable appears in the disclosed list.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "no_undisclosed_output"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-withheld-is-count-only",
+      "level": "proved",
+      "statement": "The withheld count and the withheld projection are functions of the verdict list alone - the count is the number of not-disclosable verdicts and the projection is countBy-then-sortBy over their policy refs. The relational corollary states it over two rankings whose facts may differ in every field and even in TYPE: pointwise-equal verdicts give an identical projection, so no withheld fact's identity, rank or value was consulted.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "withheld_is_count_only",
+          "withheld_blind_to_values"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-ranks-preserved",
+      "level": "proved",
+      "statement": "Every disclosed (rank, fact) has fact at one-based position rank of the input ranking. A withheld member leaves a gap; a contiguous renumbering cannot satisfy this.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "ranks_preserved"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-magnitudes-absent-iff-withheld",
+      "level": "proved",
+      "statement": "When anything was withheld, the gated summary's minimum, maximum and mean are absent; when nothing was, the summary is returned untouched; the existence-level fields ride through in both cases; and the gate fires exactly when some verdict denied. The biconditional is over the gate's ACTION - it does not say an absent magnitude implies a withheld member, since a summary over nothing comparable carries none to begin with.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "magnitudes_absent_iff_withheld",
+          "withheld_iff_any_denied"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-verdict-noninterference",
+      "level": "proved",
+      "statement": "Two rankings that agree on every disclosable fact and on every verdict yield IDENTICAL PopulationDisclosure records - the same disclosed list, the same withheld count, the same withheld projection - whatever the withheld facts' identities or values. No observation of the fold's output distinguishes one withheld population from another.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "verdict_noninterference"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-egress-predicate-characterised",
+      "level": "proved",
+      "statement": "Which verdict, for which classification: Surfaceable is always disclosable, Internal never (naming the classification as its policy ref), and Restricted exactly when the resolver answers Some true - Some false and None both deny, so an unknown policy ref can never fail open. The conservative default denies every Restricted fact at every surface.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/DisclosureFold.fst",
+        "lemmas": [
+          "evaluate_characterised",
+          "unknown_policy_denies"
+        ],
+        "note": "supporting, not one of the five: it is what ties the verdicts the fold consumes to the predicate that produces them"
+      }
+    },
+    {
+      "id": "disclosure-model-agrees-with-shipped-code",
+      "level": "tested",
+      "statement": "The extracted model and the shipped fold agree, on every ranking the three door packs pin (reproduced as data) and on 400 generated rankings with generated verdicts, on the disclosed list, the withheld projection and the gated summary AT ONCE; and the extracted predicate agrees with the shipped one over every classification, resolver and surface. This is the only thing that says the proved model is about the code that runs.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/DisclosureProofOracleTests.fs",
+        "list": "Phase 790 - the proved fold as oracle",
+        "cases": [
+          "the extracted egress predicate agrees with production over every classification, resolver and surface",
+          "the extracted fold agrees with production over every suite ranking",
+          "the extracted fold agrees with production over generated rankings with generated verdicts",
+          "the model never throws, on any ranking, through any of the three functions"
+        ],
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "disclosure-committed-extraction-is-what-the-prover-produced",
+      "level": "tested",
+      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "evidence": {
+        "runner": "proofs/check.ps1 step 4",
+        "artifact": "proofs/oracle/DisclosureFold.fs"
+      }
+    },
+    {
+      "id": "disclosure-differential-is-known-to-fail",
+      "level": "tested",
+      "statement": "A committed go-red oracle renumbers the disclosed ranks contiguously - the tidy-looking mistake that reports the third-best as the second-best - and the comparison is asserted to catch it, with the mechanism pinned on a three-member ranking (true ranks 1 and 3 against the oracle's 1 and 2). A differential never shown to fail agrees with whatever it is shown.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/DisclosureProofOracleTests.fs",
+        "cases": [
+          "the differential CATCHES an oracle that renumbers ranks contiguously - the go-red case",
+          "and the true-rank gap is what it catches"
+        ]
+      }
+    },
+    {
+      "id": "disclosure-mean-residual",
+      "level": "assumed",
+      "statement": "The theorem is about the FOLD, and the fold gates a summary the store computed over the WHOLE matched population. A restricted member ranked below the ceiling still contributed to that summary's Mean, and under a highest-first ranking can BE its Minimum. What is proved is that the gate acts on the summary exactly when it acts on the members; what is NOT proved, or claimed, is that a magnitude the gate lets through carries no information about a member the caller was never returned. The shipped code calls this a floor, not a proof, and so does this entry.",
+      "evidence": {
+        "source": "src/ToolUp.Facts.Core/Shared/PopulationQueryTypes.fs - PopulationDisclosure.disclosedStats"
+      },
+      "mitigation": "when ANY member of the ranking is withheld the whole magnitude block goes, so the residual is confined to members outside the ranking the caller asked for; a whole-population disclosure probe is a different capability"
+    },
+    {
+      "id": "disclosure-string-ordering-host-supplied",
+      "level": "assumed",
+      "statement": "The ordering List.sortBy fst sorts the withheld projection by is host-supplied to the model as a before: string -> string -> bool, because F* has no string comparison that extracts to Prims alone. Every lemma holds for ANY ordering; what the model does not verify is that the host's ordinal comparison is the one the shipped code uses.",
+      "mitigation": "the differential compares the projection's ORDER as part of the withheld projection, so a host ordering that disagreed with List.sortBy would fail the leg on any ranking withheld under two policies"
+    },
+    {
+      "id": "disclosure-bridge-hand-written",
+      "level": "assumed",
+      "statement": "The Fact-to-model and PopulationStats-to-model bridges in the differential host are hand-written. A defect in either would make the comparison compare the wrong thing.",
+      "mitigation": "short and case-for-case on purpose: a fact is its id plus itself as the opaque payload, a summary is its three magnitudes plus itself as the opaque existence-level rest, so the read-back is a structural comparison of production's own records"
+    },
+    {
+      "id": "disclosure-doors-must-call-disclosed-stats",
+      "level": "policy",
+      "statement": "That every door CALLS disclosedStats before reporting a summary is OUT of the theorem.",
+      "reason": "the theorem is about what the fold computes, not about who calls it; a summary type does not force the call, and the obligation is stated on the not-claimed rung of proofs/README.md, where the door packs are named as the evidence that the two shipped doors do"
+    },
+    {
+      "id": "disclosure-statistical-inference",
+      "level": "policy",
+      "statement": "Statistical disclosure control is OUT. The theorem says nothing about what a determined reader could infer from a count, a period range or a freshness histogram, nor from the magnitudes of a ranking with nothing withheld.",
+      "reason": "the disclosure vocabulary is a declared classification enforced at egress, not an inference-control regime, and the shipped code's honesty boundary says so in the same words"
     }
   ]
 }

@@ -46,5 +46,10 @@
         <Compile Include="Prims.fs" />
         <!-- GENERATED from ../RemotingDecode.fst — do not edit. -->
         <Compile Include="RemotingDecode.fs" />
+        <!-- Phase 790 — GENERATED from ../DisclosureFold.fst — do not edit.
+             Independent of RemotingDecode.fs (it owns its own opt/pair), so
+             order between the two extractions is immaterial; later proof
+             phases APPEND their extraction below. -->
+        <Compile Include="DisclosureFold.fs" />
     </ItemGroup>
 </Project>

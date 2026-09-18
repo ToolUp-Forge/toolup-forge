@@ -78,9 +78,10 @@ docs-snippets/generated/
 # ~200 MB pinned toolchain that `proofs/check.ps1` downloads and hash-verifies
 # on demand; `.cache/` is F*'s `.checked` output, deliberately wiped before
 # every run so a repeat check cannot ride a warm cache; `.extract/` is the
-# fresh extraction the byte-diff compares against the COMMITTED
-# `proofs/oracle/RemotingDecode.fs`, which IS tracked — the repository builds
-# and tests against it, so that a contributor never needs a prover.
+# fresh extractions the byte-diff compares against the COMMITTED
+# `proofs/oracle/*.fs` (RemotingDecode.fs, and since Phase 790 DisclosureFold.fs),
+# which ARE tracked — the repository builds and tests against them, so that a
+# contributor never needs a prover.
 /proofs/.fstar/
 /proofs/.cache/
 /proofs/.extract/
