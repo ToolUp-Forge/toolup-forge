@@ -948,6 +948,9 @@
         <Compile Include="InProcess\StoreIdSanitisingTests.fs" />
         <Compile Include="InProcess\SecureByDefaultValidatorTests.fs" />
         <Compile Include="InProcess\InMemoryPendingInviteStoreTests.fs" />
+        <!-- Phase 5h — the ETag-based BlobPendingInviteStore binding of the same
+             contract pack, plus its concurrency / retry / validator-gate cases. -->
+        <Compile Include="InProcess\BlobPendingInviteStoreTests.fs" />
         <!-- Phase 205 — blob-corruption chaos / fault-injection pack: drives the
              shipped Phase 116 fail-closed RMW sites (pending-invites decode +
              quarantine, share-token MarkUsed single-instance UseLimit=1, KB

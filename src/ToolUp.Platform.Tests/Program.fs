@@ -711,6 +711,10 @@ let private registeredTests =
         StoreIdSanitisingTests.tests
         SecureByDefaultValidatorTests.tests
         InMemoryPendingInviteStoreTests.tests
+        // Phase 5h — the Blob binding of the same pack (the second implementation
+        // the Phase 259 ratchet counts) + the resolved-store validator gate.
+        BlobPendingInviteStoreTests.tests
+        BlobPendingInviteStoreTests.validatorGateTests
         // Phase 205 — blob-corruption chaos / fault-injection pack: the shipped
         // Phase 116 fail-closed RMW sites under corrupt / torn / dropped writes
         // and concurrency (pending-invites decode+quarantine, share-token
