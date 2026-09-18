@@ -2340,6 +2340,14 @@ let private registeredTests =
         // are compared at once, and a committed go-red oracle renders one
         // withheld fact so the comparison is known to be able to fail.
         ModelInputProofOracleTests.tests
+
+        // Phase 795 — the F* model of the taint lattice, the labelled
+        // transform algebra and the derivation walk, extracted and run
+        // beside production over the two-party fixtures and the generated
+        // pipelines. Two arms measure the relational laws directly rather
+        // than comparing outputs, and a committed go-red oracle blinds the
+        // Join contribution so both are known to be able to fail.
+        TaintFlowProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

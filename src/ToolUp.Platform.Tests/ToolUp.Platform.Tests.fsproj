@@ -1400,6 +1400,13 @@
              in-tree tool under generated policies, callers and grant
              predicates, with a committed go-red gate that ignores Egress. -->
         <Compile Include="InProcess\ToolGateProofOracleTests.fs" />
+        <!-- Phase 795 — the third proved model's differential host: the taint
+             lattice, the labelled transform algebra and the derivation walk,
+             run beside production. AFTER MultiPartyDisclosureTests.fs and
+             DisclosureTaintTests.fs for the same reason as the line above —
+             it reproduces those packs' two-party vocabulary as data and is
+             the later claim. -->
+        <Compile Include="InProcess\TaintFlowProofOracleTests.fs" />
         <!-- Phase 708 — the fact-clause feeder: the production producer the
              Phase 522 push path never had. Plan-step projection, the prompt
              path pushing a fact ahead of the chunks, byte-identity for a
