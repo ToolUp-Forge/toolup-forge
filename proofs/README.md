@@ -5,8 +5,8 @@ Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
 # `proofs/` — the machine-checked theorems
 
-This directory holds three theorems and the machinery that keeps them honest. Each has its own
-claims ladder below, because the four say different things and a reader should not have to work
+This directory holds five theorems and the machinery that keeps them honest. Each has its own
+claims ladder below, because the five say different things and a reader should not have to work
 out which rung a sentence about one belongs to by reading the others.
 
 **The decoder totality theorem (Phase 787).** Given a parsed `Value`, no combinator in
@@ -50,6 +50,16 @@ that half is a check a caller must run rather than an invariant the type enforce
 proves exactly the decision procedure and the premise, not the guarantee. Its ladder is
 [further down](#the-claims-ladder--the-model-input-phase-792).
 
+**The taint-flow noninterference theorem (Phase 795).** One contributor's data does not reach
+another contributor absent a declassification the first accepted. For any pipeline in the transform
+algebra, any two input assignments differing only in one contributor's data, and any output whose
+computed label does not carry that contributor, the outputs are *identical* — and over a sequence of
+releases, the same holds of each contributor's whole observable slice, so ordering and count are
+covered rather than one output at a time. The exception is stated as the exception: a label lost a
+contributor only through a declassification routine that contributor's own scope accepted, and
+nothing else lowers a label at all. Its ladder is
+[further down still](#the-claims-ladder--the-taint-flow-phase-795).
+
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
@@ -58,12 +68,14 @@ proves exactly the decision procedure and the premise, not the guarantee. Its la
 | `DisclosureFold.fst` | the disclosure model — `DisclosureEgress.evaluate` and `PopulationDisclosure.fold` / `valuesWithheld` / `disclosedStats` clause for clause, each definition naming its F# counterpart |
 | `ToolGate.fst` | the tool gate model — `ToolGate.decideDeclared`, `AIToolRegistry.ListAccessible`, `FindByName` and the dispatch re-check clause for clause, each definition naming its F# counterpart; RBAC and grant liveness taken from the host as predicates |
 | `ModelInput.fst` | the model-input model — the closed value, its smart constructor, the assembly a caller folds over it, and `render` clause for clause, each definition naming its F# counterpart |
+| `TaintFlow.fst` | the taint-flow model — the label lattice, `AssemblyLabelling.contributedBy` / `label`, `DisclosureTaintConfig.routineClears` and the derivation walk clause for clause, each definition naming its F# counterpart |
 | `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
 | `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract and byte-diff; build the oracle project; run each module's differential host |
 | `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
 | `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
 | `oracle/ToolGate.fs` | **generated** — the tool gate model extracted to F#, committed for the same reason |
 | `oracle/ModelInput.fs` | **generated** — the model-input model extracted to F#, committed for the same reason |
+| `oracle/TaintFlow.fs` | **generated** — the taint-flow model extracted to F#, committed for the same reason |
 | `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; the second and third models reference a subset of the same nine |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
@@ -415,6 +427,171 @@ Not proved. *Measured*, on every run of the gate.
 
 ---
 
+## The claims ladder — the taint flow (Phase 795)
+
+The same four rungs, for `TaintFlow.fst`. The subject is what multi-party disclosure policies rest
+on: the taint-label lattice a value's lineage carries, the label-generic fold that propagates it
+down a transform pipeline, the entitlement predicate that decides whether a declassification routine
+may clear a given policy, and the derivation walk whose empty result is the gate's whole condition.
+
+Rung 4 of the disclosure-fold ladder above hands *taint propagation and declassification* back as
+unclaimed. **This is the ladder where they land.** What that rung says about a resolver is
+unchanged: the egress predicate still takes one as a total function and still claims nothing about
+what a particular resolver answers.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these seven
+lemmas alone:**
+
+* **`join_laws`.** The six laws the shipped lattice checks executably. Associativity and `bottom` as
+  a two-sided identity hold *on the nose*; commutativity, idempotence and the upper-bound law hold up
+  to label equality — which is set equality, and the shipped label *is* a set. `join_is_least` adds
+  the other half of the order, so the join is the *least* upper bound and the order is a lattice
+  order rather than merely some order. `below_is_sub` proves the shipped definition of the order
+  (`join a b = b`) is the same relation the model reasons with.
+* **`label_monotone`.** Raise any source's declared label — one of them, all of them — and the label
+  the pipeline's output carries can only rise. Adding a contributor's data to an input never lowers
+  what the output is known to carry.
+* **`label_never_falls`.** Along the pipeline the label is non-decreasing at *every* node. The fold
+  only ever joins, so nothing in the transform algebra can lower a label. This is the other half of
+  `declassify_only_lowers` below, proved over the algebra rather than over one operator.
+* **`flow_noninterference`.** The flow half. For any pipeline, any two input assignments differing
+  only in one contributor's data, and any output whose computed label does not carry that
+  contributor — the outputs are *identical*. It is quantified over **every semantics** of the
+  transform cases, so it is not a claim about what the transforms happen to compute; it is a claim
+  about what they are *able to read*, which is the thing the label tracks. That quantification is why
+  the model needs nothing from the production executor.
+* **`declassify_only_lowers`.** The exception, stated as the exception. If a label carried a
+  contributor and the narrowed label does not, the routine's entitlement predicate cleared it — and
+  where that contributor's policy declares a contributor scope, the routine's accepting scopes name
+  that scope. One contributor's consent can never lower another's label.
+* **`conjunction_sound`.** An empty inherited-policy set means every taint-propagating source that
+  reached the target was *dropped* somewhere on its derivation, and every drop anywhere in that
+  derivation was made by a routine entitled to make it. So the gate's single condition — "this list
+  is empty" — is exactly "a path satisfies every contributing scope's policy".
+* **`trace_noninterference`.** The flow half over a **sequence**. A room emits an ordered trace of
+  releases; `slice_tr q` is one contributor's view of it, with scoped segments that contributor is
+  outside dropping out. Two runs differing only in another contributor's data give the same slice —
+  the same values, in the same order, and the same number of them. Ordering and count are covered
+  because the conclusion is list equality, not equality of one output.
+
+And **`refinement_leaks_no_more`**, the seventh: an amended room whose contributor-`q` view can be
+exhibited as a function of the baseline's contributor-`q` view and public data inherits the
+baseline's noninterference. The obligation is on whoever supplies the rebuild function; the lemma is
+that supplying it *suffices*, which is the whole content of the refinement pattern.
+
+**The trace form is borrowed, and from a proof rather than a paper's abstract.** Rastogi, Swamy and
+Hicks, *Wys⋆: A DSL for Verified Secure Multi-party Computations* (2019), proves security as a
+delimited-release lemma over an observable trace, with each party's view a slice of the global trace
+and an amended computation shown to leak nothing new by exhibiting its trace as a function of the
+baseline trace plus public data. Three things transfer and none of the runtime: the trace-and-slice
+statement, the refinement pattern, and the attacker model on Rung 3.
+
+Four things the model leaves *opaque*, each because the code under proof never inspects it: a
+source (the labelling hands it to the declared per-source lookup and reads nothing else), a frame
+(the algebra never looks inside one, which is what lets the flow lemma say "whatever the other
+contributor's rows" and mean it), a policy's contributor scope (resolved from the registered
+vocabulary, which is compose-time data), and — the load-bearing one — the **semantics** of each
+transform case.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate.
+
+* **The model agrees with production.** `TaintFlowProofOracleTests` runs the extracted model beside
+  the shipped code over the two-contributor fixtures and the Phase 794 generated pipelines. Four arms
+  compare: the lattice over the power set of a three-ref vocabulary (`join`, the order, `isBottom`,
+  `narrowsTo` under every clearing predicate), the entitlement predicate over every config and
+  acceptance set including an undeclared scope, **the whole labelled assembly** — every node's label
+  *and what that node contributed*, not merely the output, because the contribution is where a second
+  contributor enters — and the derivation walk against production's own `InheritedLabel`.
+* **The two relational laws are measured directly, not restated.** Comparing outputs cannot test a
+  relational law, so these arms do the experiment: relabel one contributor's input rows and require
+  the pipeline's output to be identical wherever production's *own* computed label says that
+  contributor did not reach it; and the same over a room, comparing the other contributor's slice, so
+  ordering and count are what is compared. The frame is a **transcript** — the free term over the two
+  step functions — which is the most discriminating semantics available: nothing is combined and
+  nothing is lost, so any dependence at all shows as a literal difference.
+* **Both relational arms carry a sample-adequacy guard**, because a relational law over a sample in
+  which the premise never holds passes for free. The sample must contain pipelines that *do* carry
+  the contributor and pipelines that do not, and at least one of the latter must contain a join — or
+  the label only ever tracked a single source. The trace arm additionally pins the premise *doing
+  work*: a room where the observer does see a release computed from the other contributor's data
+  fails the premise and its slice demonstrably **moves**.
+* **`conjunction_sound` is run rather than restated too.** Wherever production reports an empty
+  inherited set, the model's own `drop_occurred` and `drops_are_entitled` are evaluated over the same
+  derivation, and the arm asserts it found such a case at all.
+* **The committed extraction is what the prover produced.** `check.ps1` re-extracts and byte-diffs
+  against `oracle/TaintFlow.fs`.
+* **The differential is known to be able to fail.** The committed go-red oracle is the **blind
+  join**: a fold that forgets a join brings a second source into the pipeline. It must be caught
+  twice — by the labelling comparison, and by the relational arm, where a blinded label reports a
+  frame as free of a contributor whose output moves when that contributor's rows move. The mechanism
+  is pinned on a one-join fixture: production and the honest oracle carry both contributors past the
+  join, the blind oracle carries one.
+
+### Rung 3 — Assumed, and stated
+
+* **The attacker is honest-but-curious.** The theorem is about what a *composed computation* can
+  carry to whom. It assumes the parties run the computation as composed and observe what they are
+  given; it says nothing about an adversary who deviates from the protocol, and nothing about one who
+  can read memory, modify a binary, or reach the data outside the computation at all. That is the
+  same attacker model the borrowed trace form was proved under, and naming it here is the point of
+  this rung: containment read as operator-proof is the one overclaim this whole ladder exists to
+  prevent.
+* **The declassification routines' own correctness.** Whether an aggregation-over-k or a noise
+  addition actually loses attribution is the routine's business, not this theorem's. **This is a
+  proof about walls, not about routines.** `declassify_only_lowers` says a label was lowered only by
+  a routine the contributor accepted; it does not say the routine deserved to be accepted.
+* **Inference across declassified outputs.** A release whose computed label carries a contributor is
+  *outside* the trace lemma by construction: that release is a declassification, the contributor's
+  data did influence it, and that is what a declassification means. What a determined reader could
+  reconstruct across a *sequence* of such releases is a budget question, and a budget is a metered
+  allowance, never a proof. Nothing here meters one.
+* **The storage scope is assumed resolved.** The theorem is about the computation's information flow.
+  Where the inputs and outputs are held, and under whose control, is a separate obligation the
+  theorem takes as discharged.
+* **The derivation is modelled as a tree.** Production walks a graph with a memo table and a cycle
+  guard. A memo cannot change a value; the content-addressed store is acyclic, and a tree is the
+  acyclic case unfolded — where a graph shares an upstream the unfolding visits it twice and joins
+  the same refs into the same label, which is immaterial under set equality. The differential checks
+  the unfolding against the real walk on every fixture rather than leaving it asserted, and mirrors
+  the cycle guard so a malformed graph cannot diverge in the host either.
+* **The theorem is about the label, not the ordered ref list.** Production keeps the inherited refs
+  in nearest-declared-first order so the single deny ref it reports is unchanged from Phase 562.
+  Order is a presentation fact about a refusal message; the label is the set, and the set is what is
+  reasoned about.
+* **The bridges are hand-written.** A label crosses as its own contents and returns through the
+  shipped constructor; a transform crosses as its case; a fact's derivation is unfolded from the
+  graph, mirroring the private source-policy test rather than reaching for it. Short on purpose, and
+  the go-red oracle beside them exercises the one field most likely to be got wrong.
+* The extractor, the F# compiler, the `Prims` shim, and reproducibility resting on the pin plus
+  `--quake` — exactly as for the two models above.
+
+### Rung 4 — Not claimed
+
+Named because an unstated exclusion reads, to anyone who finds it later, as a claim that failed.
+
+* **The inferred-lineage fallback.** Where no transform tree has labelled a fact, the walk falls back
+  to lineage inferred from evidence linkage — and that inference is sound only where a derivation was
+  routed through a series output. A derivation that was not is invisible to it, and an invisible
+  upstream carries no taint at all. The theorem covers the **computed** side; the shipped code raises
+  a finding naming every fact it fell back on, precisely so a verdict resting on inference cannot
+  pass for one resting on computation, and this ladder does not quietly promote it.
+* **A hostile operator.** Root access, memory dumps, a modified binary and a compromised host are all
+  outside every sentence above, and no amount of information-flow proof reaches them. Closing that
+  gap is a hardware-attestation question, not a theorem.
+* **That every pipeline declares its sources honestly.** A source nobody declared labels as clean.
+  That is a *positive statement* the composition makes — which contributor a source belongs to is
+  knowledge the composition has and the frame does not — and nothing here can detect a declaration
+  that was simply wrong.
+* **That the transform algebra stays closed.** `contributedBy` is an exhaustive match, so a sixth
+  transform case fails to compile until someone says what it reads; that is production's guard, not
+  this theorem's, and the model would have to gain the case too.
+
+---
+
 ## Method, and where it comes from
 
 The method is not new. An open-source F# wire decoder whose combinators were proved total in F\*
@@ -460,6 +637,31 @@ the first to find out what the leg had assumed about there being one, and the to
   case floor — so a third model is one entry and no other edit.
 
 ---
+
+And three from the taint-flow model (Phase 795), the first to carry mutually-recursive *definitions*
+rather than only mutually-recursive proofs:
+
+* **An attribute cannot precede `and`.** `[@@ noextract_to "FSharp"]` on the second binding of a
+  mutually-recursive group is a bare syntax error, so a ghost predicate defined by mutual recursion
+  cannot be marked ghost the usual way. The fix is better than the workaround: every such predicate
+  here is *decidable*, so it returns `bool` and extracts like any other definition — and the
+  differential host then computes its sample-adequacy guards with **the model's own predicates**
+  instead of a second implementation of them that would be free to disagree. A predicate that
+  genuinely cannot be decided (the flow lemma's "these two assignments agree away from this
+  contributor", which quantifies over all sources) stays `prop`, and is not recursive, so the
+  attribute goes where it always did.
+* **A record whose fields are functions needs `noeq`.** F\* derives decidable equality for a record
+  type by default and fails on the first arrow field, reporting it against the *field* rather than
+  the type — which reads as a problem with the function until you notice every field is one.
+* **The extractor silently renames a type that collides in scope.** `event` came out as `event1`,
+  compiling perfectly and leaving the host referring to a name the model does not contain. Renamed at
+  source, so the extraction and the `.fst` agree; worth a glance at the emitted top-level names after
+  any new model, because nothing fails when this happens.
+
+The 790 note above predicted a third model would be one `$modules` entry and no other edit. That
+held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`,
+`.fantomasignore` gains the generated extraction, and the differential host is registered in the test
+pack like any other — four lines in four files, none of them the proof leg.
 
 ## When the byte-diff fails
 
