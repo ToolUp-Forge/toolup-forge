@@ -59,5 +59,9 @@
              adds its own outcome), so order among the three is immaterial;
              later proof phases APPEND their extraction below. -->
         <Compile Include="ModelInput.fs" />
+        <!-- Phase 795 — GENERATED from ../TaintFlow.fst — do not edit.
+             Independent of both extractions above (it owns its own opt/pair),
+             so order between the three is immaterial. -->
+        <Compile Include="TaintFlow.fs" />
     </ItemGroup>
 </Project>

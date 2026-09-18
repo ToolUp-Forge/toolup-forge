@@ -11,11 +11,13 @@ docs-snippets/generated/
 # committed copy. Formatting it would break that diff on every run, over source
 # nobody wrote. Same class as the generated doc snippets above. Phase 790's
 # `DisclosureFold.fs` is the second extraction, held by the same byte-diff;
-# Phase 793's `ToolGate.fs` and Phase 792's `ModelInput.fs` follow it.
+# Phase 793's `ToolGate.fs`, Phase 792's `ModelInput.fs` and Phase 795's `TaintFlow.fs`
+# follow it.
 proofs/oracle/RemotingDecode.fs
 proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
 proofs/oracle/ModelInput.fs
+proofs/oracle/TaintFlow.fs
 # The proof leg's working directories: the downloaded toolchain, F*'s
 # .checked cache, and the fresh extraction the byte-diff compares. All
 # gitignored, but Fantomas reads THIS file rather than .gitignore, so a

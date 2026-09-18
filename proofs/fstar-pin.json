@@ -12,7 +12,10 @@
     "Phase 792 adds ModelInput.fst, the model-input admissibility theorem. It needed no flag",
     "change either: the `extract` set below still carries only --codegen FSharp, and check.ps1",
     "appends --extract <module> per entry of its own module list. A model that ever DID need a",
-    "flag of its own would take a per-module override here rather than widening this set."
+    "flag of its own would take a per-module override here rather than widening this set.",
+    "Phase 795 appended TaintFlow.fst to check.ps1's module list and needed no flag change here:",
+    "the shared check/extract/quake sets already cover it, and its extraction references the same",
+    "five Prims names the shim already carries. A module needing its own flags would be the first."
   ],
   "tool": "fstar",
   "version": "v2026.09.06",

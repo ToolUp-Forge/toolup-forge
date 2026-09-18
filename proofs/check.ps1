@@ -121,12 +121,22 @@ $modules = @(
         HostList     = "ToolUp.Platform.Tests.Phase 793 - the proved gate as oracle"
         HostMinCases = 7
         HostSubject  = "every in-tree tool under generated policies"
+    }
+    @{
         Name         = "ModelInput"
         Source       = "ModelInput.fst"
         Oracle       = "oracle/ModelInput.fs"
         HostList     = "ToolUp.Platform.Tests.Phase 792 - the proved model input as oracle"
         HostMinCases = 9
         HostSubject  = "a 250-subject seeded population and a leaky store"
+    }
+    @{
+        Name         = "TaintFlow"
+        Source       = "TaintFlow.fst"
+        Oracle       = "oracle/TaintFlow.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 795 - the proved taint flow as oracle"
+        HostMinCases = 11
+        HostSubject  = "the two-party fixtures and the generated pipelines"
     }
 )
 
