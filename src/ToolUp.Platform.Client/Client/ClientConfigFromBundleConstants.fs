@@ -196,7 +196,7 @@ let fromBundleConstantValues
     // override-record value. Consumer-authored literals via
     // `{ ClientConfig.defaults with Surfaces = ... }` bypass this
     // helper and still take precedence over both. Mirrors the server
-    // side semantics in `ServerConfigOverrides.fromEnv` so a deployment
+    // side semantics in `ServerConfig.fromEnv` so a deployment
     // with `TOOLUP_PLATFORM_SURFACES=team` plus
     // `__TOOLUP_PLATFORM_SURFACES__=team` lands consistently on both
     // sides regardless of override-record posture.

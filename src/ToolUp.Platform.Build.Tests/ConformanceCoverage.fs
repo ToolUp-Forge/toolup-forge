@@ -71,7 +71,7 @@
 /// fail.
 ///
 /// **Namespace note (Phase 257).** The module sits under `ToolUp.Forge`
-/// rather than `ToolUp.Platform.Build.Tests` because the readiness
+/// rather than a `Tests` namespace under `ToolUp.Platform.Build` because the readiness
 /// scorecard's `Build.fsproj` source-links this file for its
 /// conformance row, and that assembly already defines
 /// `ToolUp.Platform.Build` as a MODULE — a namespace of the same name
