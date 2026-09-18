@@ -47,6 +47,7 @@ let private defWith (name: string) (parameters: ToolParameterSchema list) : AITo
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = UndeclaredEffects
 }
 
 let private flat (name: string) (typeName: string) (description: string) (required: bool) : ToolParameterSchema = {

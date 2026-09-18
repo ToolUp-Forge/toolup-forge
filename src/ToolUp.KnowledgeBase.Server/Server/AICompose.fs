@@ -73,6 +73,7 @@ let private listDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeList (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -125,6 +126,7 @@ let private getDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = async {

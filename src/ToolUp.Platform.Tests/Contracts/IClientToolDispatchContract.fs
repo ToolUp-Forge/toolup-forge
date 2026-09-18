@@ -101,6 +101,7 @@ let private buildRegistry (allowedName: string) (deniedName: string) : AIToolReg
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
     }
 
     // Executor never runs — Allow path completes via the simulator's

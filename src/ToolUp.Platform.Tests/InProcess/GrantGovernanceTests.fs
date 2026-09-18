@@ -151,6 +151,7 @@ let private toolFor (name: string) (sourceModule: string) : RegisteredTool = {
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
         EmitsActions = None
     }
     ProviderDef = {

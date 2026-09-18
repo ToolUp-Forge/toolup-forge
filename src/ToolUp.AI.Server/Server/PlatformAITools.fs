@@ -299,6 +299,7 @@ let private listAccessibleModulesDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -377,6 +378,7 @@ let private listDataTypesDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeListDataTypes (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
@@ -466,6 +468,7 @@ let private queryModuleDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -715,6 +718,7 @@ let private queryEntityDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -896,6 +900,7 @@ let private listResultsDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let private resultTypeOf (moduleName: string) (objectId: string) : string =
@@ -1031,6 +1036,7 @@ let private getLatestResultDef: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async<string> = async {

@@ -371,6 +371,7 @@ let myAnalysisTool: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 ```
 
@@ -442,6 +443,7 @@ let analyseRowsTool: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let analyseRowsExecutor (_ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -498,6 +500,7 @@ let setFieldTool: AIToolDefinition = {
     Surface = FullPageOnly
     IsLiveInterface = true
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.declare [ WriteState "live-interface" ]
 }
 ```
 
@@ -514,8 +517,58 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 - **Executor must handle missing / malformed args gracefully.** An executor returns a plain JSON `string`; there is no error-result type. The `ToolHelpers` argument validators (`requireString`, `requireDecimal`, `requireDecoded`, …) signal a bad argument by *raising* — `ToolArgumentError` for a missing / wrong-typed value, and `JsonException` from the parse — and the agent loop catches both at its dispatch site and classifies them as `InvalidArguments`, so the model is told to repair its arguments rather than to retry the same call. A tool that declares a rich schema gets the check for free: `requireDecoded` validates against the declaration and names the offending path.
 - **Any other exception is classified as `ToolThrew`.** The turn is not aborted: the loop renders the failure as a tool-result string the model can read (`ToolInvocationError.toToolResultContent`) and continues. Prefer returning a domain-shaped JSON error the model can act on over throwing, and reserve `ToolArgumentError` for genuine argument defects.
 - **Result size**: every tool result passes a per-tool context budget at agent-loop dispatch (`ResultBudget` on the definition). `DefaultResultBudget` resolves to a generous SDK-wide ceiling no well-behaved result approaches; a tool whose result grows with data cardinality declares its own `ResultBudgetChars n` (characters of the returned JSON, must be positive), and an export-shaped tool whose whole point is the payload declares `NoResultBudget`. An over-budget result reaches the model as a typed JSON marker naming the tool and the elided size, with a steer to narrow the query — the call still counts as a success, not an error.
+- **Effects**: every definition declares what its body may DO — `Effects = ToolEffectDeclaration.readFacts` / `.readContent` / `.computeFacts`, or `ToolEffectDeclaration.declare [ ReadFacts; WriteState "orders"; Egress "api.example.com" ]`. The deployment's `ToolPolicy` reads the declared classes at list and dispatch time (a tool outside the ceiling is never offered to the model and is refused with a typed `Denied` if named anyway), and the running body is held to the declared set at the seams: route an outbound call through `ToolEffectEnvelope.guardEgress`, a host capability through `guardInvoke`, a scoped write through `guardWrite`. `UndeclaredEffects` is admitted under the default policy and refused by a composition on `CompositionProfile.Verified`. See [Declaring effects](#declaring-effects-and-the-tool-policy).
 - **Idempotency**: if a tool writes data, design it idempotent. The agent may retry on transient errors. Idempotency keys flow through the tool args.
 - **Permissions**: tools enforce their own permission checks against `AccessContext`. The SDK's module-access gate (`ServerModule.withGuardedApi`) covers HTTP API permissions but does NOT auto-wrap tool executors.
+
+### Declaring effects and the tool policy
+
+A tool's `Effects` is the one place the SDK learns what a body does, and three things read it. The
+gate — `ToolGate.decide`, shared by `AIToolRegistry.ListAccessible`, the agent loop's dispatch
+re-check and the MCP host — admits a tool only when every declared effect's class sits within the
+deployment's `ToolPolicy` ceiling. The envelope — `ToolEffectEnvelope`, stamped around `Execute` —
+refuses a host-capability invocation, an outbound request or a scoped write the body makes through
+the SDK's seams unless the matching effect was declared, and lands the refusal on the
+`_platform.ai.tool_allowlist_denial` stream that `/dev/ai-allowlist` reads. And composition under
+`CompositionProfile.Verified` refuses a tool that declares nothing.
+
+```fsharp
+let fetchRates (_ctx: HttpContext) (_argsJson: string) : Async<string> = async {
+    match! ToolEffectEnvelope.guardEgress "rates.example.com" (fun () -> async { return "{}" }) with
+    | Ok body -> return body
+    | Error denial -> return denial.Reason
+}
+
+let fetchRatesTool: AIToolDefinition = {
+    Name = "fx.fetch_rates"
+    Description = "Fetch today's exchange rates."
+    Parameters = []
+    SourceModule = "Fx"
+    EmitsActions = None
+    Location = ServerResident
+    Surface = Both
+    IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.declare [ ReadFacts; Egress "rates.example.com" ]
+}
+```
+
+Composing a policy is optional; without one the registry runs under `ToolPolicy.unrestricted` and
+every tool, declared or not, is on the pre-793 path. With one:
+
+```fsharp
+AIServerApp.create aiProviderFactory providerProfile
+|> AIServerApp.withToolEffects
+    CompositionProfile.Verified
+    (AIToolRegistry.ToolPolicy.readOnly
+     |> AIToolRegistry.ToolPolicy.withApprovalFor [ ToolEffectClass.WriteState; ToolEffectClass.Spend ]
+     |> AIToolRegistry.ToolPolicy.withExternalPrincipalCeiling [ ToolEffectClass.ReadFacts ])
+```
+
+`withApprovalFor` keys the human-in-the-loop approval prompt on effect class, ahead of any
+`IToolApprovalPolicy` the deployment registers; `withExternalPrincipalCeiling` is the ceiling an MCP
+agent is gated under — a bounded policy admits an agent to no class it did not name. The theorem
+behind the gate, and what it does and does not claim, is in `proofs/README.md`.
 
 ### `ClientResident` tool authorization — `IClientToolAuthorizer` seam
 

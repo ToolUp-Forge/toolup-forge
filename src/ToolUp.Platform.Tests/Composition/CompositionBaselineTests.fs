@@ -152,6 +152,7 @@ let private stubTool
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
     },
     (fun _ _ -> async { return "" })
 

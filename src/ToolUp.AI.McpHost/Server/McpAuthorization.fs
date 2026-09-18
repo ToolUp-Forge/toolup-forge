@@ -96,6 +96,19 @@ let resolvePrincipal (grants: IAgentToolGrantStore) (ctx: HttpContext) : Async<R
 ///
 /// Pure over its arguments (the `HttpContext`-shaped gates are passed in
 /// already applied), so every branch is exercisable without a server.
+/// Phase 793 — the gate's verdict on a tool for an EXTERNAL principal:
+/// the same `ToolGate.decide` the list and the agent loop run, under the
+/// policy's `ExternalPrincipalCeiling` rather than its human ceiling. A
+/// bounded policy admits an agent to no class it did not name — Phase
+/// 489's default-deny, expressed by class rather than only by name.
+let externalVerdict
+    (registry: AIToolRegistry)
+    (access: AccessContext)
+    (isModuleGrantLive: string -> bool)
+    (tool: RegisteredTool)
+    : ToolGateVerdict =
+    ToolGate.decide access isModuleGrantLive (ToolPolicy.forExternalPrincipal registry.Policy) tool.Definition
+
 let visibleTools
     (registry: AIToolRegistry)
     (access: AccessContext)
@@ -104,6 +117,7 @@ let visibleTools
     : RegisteredTool list =
     registry.ListAccessible(access, isModuleGrantLive)
     |> List.filter (fun tool -> agent.GrantedTools |> Set.contains tool.Definition.Name)
+    |> List.filter (fun tool -> ToolGate.admits (externalVerdict registry access isModuleGrantLive tool))
 
 /// Classify a `tools/call` against the same decision.
 ///
@@ -118,7 +132,7 @@ let visibleTools
 /// WAS granted but cannot reach is `ToolDenied` naming the module — so
 /// an operator reading the trail can tell "I forgot to grant this" from
 /// "the grant is there and the RBAC is not".
-let classifyCall
+let rec classifyCall
     (registry: AIToolRegistry)
     (access: AccessContext)
     (isModuleGrantLive: string -> bool)
@@ -140,23 +154,49 @@ let classifyCall
                     sprintf "agent '%s' has no grant for this tool" agent.AccountId
                 )
             )
-        elif
-            not (
-                visibleTools registry access isModuleGrantLive agent
-                |> List.exists (fun t -> t.Definition.Name = tool.Definition.Name)
-            )
-        then
-            Error(
-                McpError.ToolDenied(
-                    tool.Definition.Name,
-                    sprintf
-                        "agent '%s' is granted this tool but holds no live Read on its source module '%s'"
-                        agent.AccountId
-                        tool.Definition.SourceModule
-                )
-            )
         else
-            Ok tool
+            match externalVerdict registry access isModuleGrantLive tool with
+            | ToolRefusedUndeclared
+            | ToolRefusedEffects _ as refused ->
+                Error(
+                    McpError.ToolDenied(
+                        tool.Definition.Name,
+                        sprintf
+                            "agent '%s' is granted this tool by name, but not by effect class: %s"
+                            agent.AccountId
+                            (ToolGate.describe tool.Definition.Name refused)
+                    )
+                )
+            | ToolAdmitted
+            | ToolRefusedSource _
+            | ToolRefusedGrant _ -> classifyReach registry access isModuleGrantLive agent tool
+
+/// The Phase 489 reach check, unchanged: a name the agent was granted but
+/// cannot reach under the platform's own RBAC and grant filters.
+and private classifyReach
+    (registry: AIToolRegistry)
+    (access: AccessContext)
+    (isModuleGrantLive: string -> bool)
+    (agent: AgentPrincipal)
+    (tool: RegisteredTool)
+    : Result<RegisteredTool, McpError> =
+    if
+        not (
+            visibleTools registry access isModuleGrantLive agent
+            |> List.exists (fun t -> t.Definition.Name = tool.Definition.Name)
+        )
+    then
+        Error(
+            McpError.ToolDenied(
+                tool.Definition.Name,
+                sprintf
+                    "agent '%s' is granted this tool but holds no live Read on its source module '%s'"
+                    agent.AccountId
+                    tool.Definition.SourceModule
+            )
+        )
+    else
+        Ok tool
 
 /// The MCP view of one registered tool.
 ///

@@ -124,6 +124,12 @@ type AIServerApp = {
     /// "undeclared" here — every deployment has a consent posture, and
     /// the default IS one.
     ConsentMode: AIConsentMode
+    /// Phase 793 — the tool effect policy and the profile it is mandatory
+    /// under. `None` (the default) runs the registry under
+    /// `ToolPolicy.unrestricted`, byte-for-byte the pre-793 tool surface;
+    /// `Some` composes the policy and, under `CompositionProfile.Verified`,
+    /// refuses any registered tool that declares no effects.
+    ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -248,8 +254,27 @@ let composeAI (app: AIServerApp) : ServerApp =
     let registeredModuleTools =
         moduleTools |> List.map (fun (def, exec) -> createTool def exec)
 
-    let registry = AIToolRegistry()
+    // Phase 793 — the registry lists and dispatches under the deployment's
+    // `ToolPolicy`; none declared is `ToolPolicy.unrestricted` (GP 11).
+    let toolPolicy =
+        app.ToolEffects
+        |> Option.map (fun (composition: ToolEffectEnvelope.ToolEffectComposition) -> composition.Policy)
+        |> Option.defaultValue ToolPolicy.unrestricted
+
+    let registry = AIToolRegistry(toolPolicy)
     registry.RegisterAll(NarrativeTools.builtInTools @ PlatformAITools.builtIn @ registeredModuleTools)
+
+    // Phase 793 — under the verified profile every registered tool, built-in
+    // and module-declared alike, must declare its effects: a mandatory
+    // envelope with nothing to check against would admit everything while
+    // presenting as enforcement. Refused here, at compose, beside the
+    // tool-name collision check, and never at the first turn.
+    match app.ToolEffects with
+    | Some composition ->
+        match ToolEffectEnvelope.refuseUndeclared composition.Profile (registry.GetAll() |> List.map _.Definition) with
+        | Ok() -> ()
+        | Error refusal -> failwith (CompositionProfileRefusal.describe refusal)
+    | None -> ()
 
     let moduleAIContextMap =
         moduleAIContexts |> List.map (fun c -> c.ModuleName, c) |> Map.ofList
@@ -644,6 +669,7 @@ module AIServerApp =
         ModuleAIContexts = []
         DenialRateAlert = None
         ConsentMode = RememberPerConversation
+        ToolEffects = None
     }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into an
@@ -673,6 +699,7 @@ module AIServerApp =
             ModuleAIContexts = []
             DenialRateAlert = None
             ConsentMode = RememberPerConversation
+            ToolEffects = None
         }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*` / `add*`) ───
@@ -1043,6 +1070,17 @@ module AIServerApp =
     ///
     ///     AIServerApp.withAIConsentMode TrustEverything
     let withAIConsentMode (mode: AIConsentMode) (app: AIServerApp) : AIServerApp = { app with ConsentMode = mode }
+
+    /// Phase 793 — compose the tool effect policy. `policy` is what the
+    /// registry lists and dispatches under (`ToolPolicy.readOnly`,
+    /// `ToolPolicy.bounded [ … ]`, or `ToolPolicy.unrestricted` narrowed
+    /// with `withApprovalFor` / `withExternalPrincipalCeiling`); `profile`
+    /// decides whether a tool that declares no effects is a composition
+    /// error (`Verified`) or a per-tool policy question (`Standard`).
+    let withToolEffects (profile: CompositionProfile) (policy: ToolPolicy) (app: AIServerApp) : AIServerApp = {
+        app with
+            ToolEffects = Some { Profile = profile; Policy = policy }
+    }
 
     /// Phase 70 A.5 — additively declare a platform provider on the
     /// `AIServerApp` pipeline. Each call appends to

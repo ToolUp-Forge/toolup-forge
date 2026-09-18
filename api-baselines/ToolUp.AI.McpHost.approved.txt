@@ -106,6 +106,7 @@ ToolUp.AI.McpHost.McpAudit+McpAuditPayloadModule (class)
 ToolUp.AI.McpHost.McpAudit+McpAuditPayloadModule.create(ToolUp.AI.McpHost.AgentPrincipal, System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.McpHost.McpAudit+McpAuditPayload
 ToolUp.AI.McpHost.McpAuthorization (class)
 ToolUp.AI.McpHost.McpAuthorization.classifyCall(ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.McpHost.AgentPrincipal, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.AIToolRegistry+RegisteredTool, ToolUp.AI.McpHost.McpError]
+ToolUp.AI.McpHost.McpAuthorization.externalVerdict(ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.AIToolRegistry+RegisteredTool) : ToolUp.AI.AIToolRegistry+ToolGateVerdict
 ToolUp.AI.McpHost.McpAuthorization.resolvePrincipal(ToolUp.AI.McpHost.IAgentToolGrantStore, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.McpHost.AgentPrincipal, ToolUp.AI.McpHost.McpError]]
 ToolUp.AI.McpHost.McpAuthorization.servicePrincipal(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceAccountPrincipal]
 ToolUp.AI.McpHost.McpAuthorization.toolView(ToolUp.AI.AIToolRegistry+RegisteredTool) : ToolUp.AI.McpHost.McpProtocol+McpToolView

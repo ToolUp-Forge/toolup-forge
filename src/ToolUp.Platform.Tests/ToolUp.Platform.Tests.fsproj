@@ -1391,6 +1391,15 @@
              as data and is the later claim (they say the doors run the one
              fold; this says the proved model agrees with that fold). -->
         <Compile Include="InProcess\DisclosureProofOracleTests.fs" />
+        <!-- Phase 793 — the tool effect class: the policy as one decision,
+             the envelope around Execute, the verified-profile refusal, and
+             the 503 / 489 keyings by class. -->
+        <Compile Include="InProcess\ToolEffectEnvelopeTests.fs" />
+        <!-- Phase 793 — the F* model of the tool gate, extracted to F# and
+             run as a differential oracle beside production over every
+             in-tree tool under generated policies, callers and grant
+             predicates, with a committed go-red gate that ignores Egress. -->
+        <Compile Include="InProcess\ToolGateProofOracleTests.fs" />
         <!-- Phase 708 — the fact-clause feeder: the production producer the
              Phase 522 push path never had. Plan-step projection, the prompt
              path pushing a fact ahead of the chunks, byte-identity for a

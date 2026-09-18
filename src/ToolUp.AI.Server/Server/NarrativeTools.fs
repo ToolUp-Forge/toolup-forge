@@ -155,6 +155,7 @@ let private listDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeList (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -204,6 +205,7 @@ let private getDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -303,6 +305,7 @@ let private getSectionDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<string> = async {
@@ -492,6 +495,7 @@ let private publishDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.declare [ ReadContent; WriteState "narratives" ]
 }
 
 let private parseCollisionPolicy (raw: string option) : SlugCollisionPolicy =
@@ -685,6 +689,7 @@ let private listLayoutsDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readContent
 }
 
 let private executeListLayouts (ctx: HttpContext) (_argsJson: string) : Async<string> = async {

@@ -930,8 +930,29 @@ let private runFullAgentLoop
 
                             let! result = async {
                                 try
-                                    match toolOpt with
-                                    | Some tool when not (isToolPermittedFor access tool.Definition) ->
+                                    // ─── Phase 793 — ONE decision, four refusals ───
+                                    //
+                                    // The RBAC arm and the grant arm below used
+                                    // to be two guards over two functions; the
+                                    // list filter composed the same two by hand.
+                                    // `ToolGate.decide` is now the whole
+                                    // decision — RBAC, grant liveness, effect
+                                    // ceiling — and the list, this re-check and
+                                    // the MCP host all call it, so the tools the
+                                    // model was offered and the tools this site
+                                    // will run are the same set by construction
+                                    // (`proofs/ToolGate.fst`,
+                                    // `dispatch_never_wider_than_list`). Each
+                                    // refusing case keeps its own audit stream:
+                                    // the verdict names which gate refused, and
+                                    // that is what the operator needs to read.
+                                    let verdict =
+                                        match toolOpt with
+                                        | Some tool -> ToolGate.decide access grantGate registry.Policy tool.Definition
+                                        | None -> ToolAdmitted
+
+                                    match toolOpt, verdict with
+                                    | Some tool, ToolRefusedSource _ ->
                                         // ─── Phase 36.A — dispatch-site re-check ───
                                         //
                                         // Defence in depth. The per-turn tool
@@ -977,7 +998,14 @@ let private runFullAgentLoop
                                         do! writeUnauthorizedToolAudit tool.Definition.Name reason
 
                                         return Error(Denied(tc.Name, reason))
-                                    | Some tool when not (guardToolGrant ctx access tool.Definition.SourceModule) ->
+                                    | Some tool, ToolRefusedGrant _ ->
+                                        // Phase 793: the decision was taken above;
+                                        // this call is the AUDIT half of the Phase
+                                        // 730 guard — it re-derives the same
+                                        // verdict from the same stamps and emits
+                                        // the `UnconsentedGrantRefused` row.
+                                        guardToolGrant ctx access tool.Definition.SourceModule |> ignore
+
                                         // ─── Phase 730 — grant / consent re-check ───
                                         //
                                         // The same defence-in-depth argument as
@@ -1011,7 +1039,31 @@ let private runFullAgentLoop
                                         )
 
                                         return Error(Denied(tc.Name, reason))
-                                    | Some tool ->
+                                    | Some tool, (ToolRefusedUndeclared | ToolRefusedEffects _ as refused) ->
+                                        // ─── Phase 793 — effect-ceiling re-check ───
+                                        //
+                                        // The list filter already dropped this tool
+                                        // under the deployment's `ToolPolicy`, so a
+                                        // name reaching here is forged or replayed,
+                                        // exactly as in the two arms above. The
+                                        // refusal rides the allowlist denial stream
+                                        // — a ceiling is a policy the deployment
+                                        // authored, which is that stream's meaning
+                                        // — so `/dev/ai-allowlist` and the denial
+                                        // rate monitor see it with no second reader.
+                                        let reason = ToolGate.describe tool.Definition.Name refused
+
+                                        logger.Warn(
+                                            sprintf
+                                                "AI tool '%s' (source module '%s') refused at dispatch by the tool effect policy: %s. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
+                                                tool.Definition.Name
+                                                tool.Definition.SourceModule
+                                                reason
+                                        )
+
+                                        do! writeDenialAudit tool.Definition.Name reason
+                                        return Error(Denied(tc.Name, reason))
+                                    | Some tool, ToolAdmitted ->
                                         // ─── Phase 503 — the last two gates, then the
                                         // routing. The ORDER is the contract.
                                         //
@@ -1076,8 +1128,18 @@ let private runFullAgentLoop
                                                 // composed this is one failed
                                                 // `GetService` and `ApprovalGranted`, so
                                                 // the turn is what it was (GP 11 / GP 13).
+                                                //
+                                                // Phase 793: the hold is keyed on effect
+                                                // CLASS first — a tool declaring a class
+                                                // the `ToolPolicy` names is held whatever
+                                                // the deployment's `IToolApprovalPolicy`
+                                                // says about it by name — and falls
+                                                // through to that policy otherwise.
                                                 let! approval =
-                                                    ToolApprovalDispatch.requireApproval
+                                                    ToolApprovalDispatch.requireApprovalKeyed
+                                                        (ToolApprovalDispatch.requirementByClass
+                                                            registry.Policy
+                                                            tool.Definition)
                                                         ctx
                                                         logger
                                                         tool.Definition.Name
@@ -1118,7 +1180,26 @@ let private runFullAgentLoop
                                         match gated, tool.Definition.Location with
                                         | Error err, _ -> return Error err
                                         | Ok(), ServerResident ->
-                                            let! executed = tool.Execute ctx tc.Arguments
+                                            // Phase 793 — the body runs inside its
+                                            // declared effect envelope: a host
+                                            // capability invocation or an outbound
+                                            // request it makes through the SDK's
+                                            // seams is refused unless declared, and
+                                            // the refusal lands on the allowlist
+                                            // denial stream through `writeDenialAudit`.
+                                            // An undeclared tool has no envelope and
+                                            // runs exactly as it did (GP 11).
+                                            let! executed =
+                                                ToolEffectEnvelope.runWithin
+                                                    {
+                                                        ToolName = tool.Definition.Name
+                                                        Effects = AIToolEffects.declaredOf tool.Definition
+                                                        OnDenied =
+                                                            fun denial ->
+                                                                writeDenialAudit tool.Definition.Name denial.Reason
+                                                    }
+                                                    (tool.Execute ctx tc.Arguments)
+
                                             return Ok executed
                                         | Ok(), ClientResident ->
                                             // Phase 36.A: record the tool's
@@ -1188,7 +1269,7 @@ let private runFullAgentLoop
                                                             $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
                                                         )
                                                     )
-                                    | None -> return Error(UnknownTool tc.Name)
+                                    | None, _ -> return Error(UnknownTool tc.Name)
                                 with
                                 | :? Text.Json.JsonException as ex ->
                                     return Error(InvalidArguments(tc.Name, ex.Message))

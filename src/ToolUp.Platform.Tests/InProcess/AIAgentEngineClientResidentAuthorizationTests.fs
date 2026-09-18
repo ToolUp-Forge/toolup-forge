@@ -131,6 +131,7 @@ let private buildToolRegistry (toolName: string) : AIToolRegistry.AIToolRegistry
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
     }
 
     let executor _ctx _argsJson = async {

@@ -102,6 +102,7 @@ let private toolDef (name: string) (sourceModule: string) : AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = UndeclaredEffects
 }
 
 /// An executor that must never run. Every deny-path tool carries it, so a

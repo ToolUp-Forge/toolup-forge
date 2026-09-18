@@ -159,7 +159,7 @@ ToolUp.AI.AICompose (class)
 ToolUp.AI.AICompose.composeAI(ToolUp.AI.AICompose+AIServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withAI(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose+AIServerApp (class)
-ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode)
+ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])
 ToolUp.AI.AICompose+AIServerApp.AIConfig : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig] { get }
 ToolUp.AI.AICompose+AIServerApp.AIProviderFactory : ToolUp.AI.IAIProviderFactory { get }
 ToolUp.AI.AICompose+AIServerApp.Base : ToolUp.Platform.ServerApp { get }
@@ -169,6 +169,7 @@ ToolUp.AI.AICompose+AIServerApp.ModuleAIContexts : Microsoft.FSharp.Collections.
 ToolUp.AI.AICompose+AIServerApp.PlatformKeyStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore] { get }
 ToolUp.AI.AICompose+AIServerApp.PlatformProviders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider] { get }
 ToolUp.AI.AICompose+AIServerApp.ProviderProfile : ToolUp.Platform.Providers+IProviderProfile { get }
+ToolUp.AI.AICompose+AIServerApp.ToolEffects : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition] { get }
 ToolUp.AI.AICompose+AIServerAppModule (class)
 ToolUp.AI.AICompose+AIServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.addModules(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
@@ -207,6 +208,7 @@ ToolUp.AI.AICompose+AIServerAppModule.withProviderProfile(ToolUp.Platform.Provid
 ToolUp.AI.AICompose+AIServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withToolEffects(ToolUp.Platform.CompositionProfile, ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withUserDirectory(ToolUp.Platform.IUserDirectory, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AIConsentDispatch (class)
@@ -425,10 +427,12 @@ ToolUp.AI.AIToolRegistry.recordUnauthorizedToolDenial(Microsoft.AspNetCore.Http.
 ToolUp.AI.AIToolRegistry.toProviderDef(ToolUp.Platform.AIToolDefinition) : ToolUp.Platform.AI.AIProviderToolDef
 ToolUp.AI.AIToolRegistry+AIToolRegistry (class)
 ToolUp.AI.AIToolRegistry+AIToolRegistry..ctor()
+ToolUp.AI.AIToolRegistry+AIToolRegistry..ctor(ToolUp.AI.AIToolRegistry+ToolPolicy)
 ToolUp.AI.AIToolRegistry+AIToolRegistry.FindByName(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.GetAll() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.ListAccessible(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
 ToolUp.AI.AIToolRegistry+AIToolRegistry.ListAccessible(ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]
+ToolUp.AI.AIToolRegistry+AIToolRegistry.Policy : ToolUp.AI.AIToolRegistry+ToolPolicy { get }
 ToolUp.AI.AIToolRegistry+AIToolRegistry.RegisterAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]) : System.Void
 ToolUp.AI.AIToolRegistry+AIToolRegistry.TryClaimBudgetWarning(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry+RegisteredTool (class)
@@ -436,6 +440,59 @@ ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, 
 ToolUp.AI.AIToolRegistry+RegisteredTool.Definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.Execute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.ProviderDef : ToolUp.Platform.AI.AIProviderToolDef { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling (class)
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling.IsBoundedCeiling : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling.IsUnboundedCeiling : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling.Tag : System.Int32 { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling.UnboundedCeiling : ToolUp.AI.AIToolRegistry+ToolEffectCeiling { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling+BoundedCeiling (class)
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling+BoundedCeiling.Item : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffectClass] { get }
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling+Tags (class)
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling+Tags.BoundedCeiling : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolEffectCeiling+Tags.UnboundedCeiling : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGate (class)
+ToolUp.AI.AIToolRegistry+ToolGate.admits(ToolUp.AI.AIToolRegistry+ToolGateVerdict) : System.Boolean
+ToolUp.AI.AIToolRegistry+ToolGate.approvalClasses(ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.Platform.AIToolDefinition) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffectClass]
+ToolUp.AI.AIToolRegistry+ToolGate.approvalRequired(ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.Platform.AIToolDefinition) : System.Boolean
+ToolUp.AI.AIToolRegistry+ToolGate.decide(ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.Platform.AIToolDefinition) : ToolUp.AI.AIToolRegistry+ToolGateVerdict
+ToolUp.AI.AIToolRegistry+ToolGate.decideDeclared(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.AIToolRegistry+ToolPolicy, System.String, ToolUp.Platform.ToolEffectDeclaration) : ToolUp.AI.AIToolRegistry+ToolGateVerdict
+ToolUp.AI.AIToolRegistry+ToolGate.describe(System.String, ToolUp.AI.AIToolRegistry+ToolGateVerdict) : System.String
+ToolUp.AI.AIToolRegistry+ToolGate.exceeding(ToolUp.AI.AIToolRegistry+ToolEffectCeiling, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffect]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffect]
+ToolUp.AI.AIToolRegistry+ToolGateVerdict (class)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.IsToolAdmitted : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.IsToolRefusedEffects : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.IsToolRefusedGrant : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.IsToolRefusedSource : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.IsToolRefusedUndeclared : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.Tag : System.Int32 { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.ToolAdmitted : ToolUp.AI.AIToolRegistry+ToolGateVerdict { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict.ToolRefusedUndeclared : ToolUp.AI.AIToolRegistry+ToolGateVerdict { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags (class)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags.ToolAdmitted : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags.ToolRefusedEffects : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags.ToolRefusedGrant : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags.ToolRefusedSource : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+Tags.ToolRefusedUndeclared : System.Int32 (literal)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedEffects (class)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedEffects.exceeding : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffect] { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedGrant (class)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedGrant.sourceModule : System.String { get }
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedSource (class)
+ToolUp.AI.AIToolRegistry+ToolGateVerdict+ToolRefusedSource.sourceModule : System.String { get }
+ToolUp.AI.AIToolRegistry+ToolPolicy (class)
+ToolUp.AI.AIToolRegistry+ToolPolicy..ctor(ToolUp.AI.AIToolRegistry+ToolEffectCeiling, System.Boolean, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffectClass], ToolUp.AI.AIToolRegistry+ToolEffectCeiling)
+ToolUp.AI.AIToolRegistry+ToolPolicy.Ceiling : ToolUp.AI.AIToolRegistry+ToolEffectCeiling { get }
+ToolUp.AI.AIToolRegistry+ToolPolicy.ExternalPrincipalCeiling : ToolUp.AI.AIToolRegistry+ToolEffectCeiling { get }
+ToolUp.AI.AIToolRegistry+ToolPolicy.PermitUndeclared : System.Boolean { get }
+ToolUp.AI.AIToolRegistry+ToolPolicy.RequireApproval : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffectClass] { get }
+ToolUp.AI.AIToolRegistry+ToolPolicyModule (class)
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.bounded(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffectClass]) : ToolUp.AI.AIToolRegistry+ToolPolicy
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.forExternalPrincipal(ToolUp.AI.AIToolRegistry+ToolPolicy) : ToolUp.AI.AIToolRegistry+ToolPolicy
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.permittingUndeclared(ToolUp.AI.AIToolRegistry+ToolPolicy) : ToolUp.AI.AIToolRegistry+ToolPolicy
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.readOnly : ToolUp.AI.AIToolRegistry+ToolPolicy { get }
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.unrestricted : ToolUp.AI.AIToolRegistry+ToolPolicy { get }
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.withApprovalFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffectClass], ToolUp.AI.AIToolRegistry+ToolPolicy) : ToolUp.AI.AIToolRegistry+ToolPolicy
+ToolUp.AI.AIToolRegistry+ToolPolicyModule.withExternalPrincipalCeiling(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffectClass], ToolUp.AI.AIToolRegistry+ToolPolicy) : ToolUp.AI.AIToolRegistry+ToolPolicy
 ToolUp.AI.AIToolRegistry+ToolResultBudget (class)
 ToolUp.AI.AIToolRegistry+ToolResultBudget.apply(System.String, ToolUp.Platform.AIToolResultBudget, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]
 ToolUp.AI.AIToolRegistry+ToolResultBudget.elisionMarker(System.String, System.Int32, System.Int32) : System.String
@@ -789,7 +846,10 @@ ToolUp.AI.ToolApprovalDispatch.ApprovalRejectedEvent : System.String (literal)
 ToolUp.AI.ToolApprovalDispatch.ApprovalRequestedEvent : System.String (literal)
 ToolUp.AI.ToolApprovalDispatch.argumentsDigest(System.String) : System.String
 ToolUp.AI.ToolApprovalDispatch.requireApproval(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
+ToolUp.AI.ToolApprovalDispatch.requireApprovalKeyed(ToolUp.AI.ToolApprovalRequirement, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
+ToolUp.AI.ToolApprovalDispatch.requireApprovalKeyedWithin(ToolUp.AI.ToolApprovalRequirement, System.Int32, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
 ToolUp.AI.ToolApprovalDispatch.requireApprovalWithin(System.Int32, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ILogger, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome]
+ToolUp.AI.ToolApprovalDispatch.requirementByClass(ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.Platform.AIToolDefinition) : ToolUp.AI.ToolApprovalRequirement
 ToolUp.AI.ToolApprovalDispatch.resolvePolicy(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IToolApprovalPolicy]
 ToolUp.AI.ToolApprovalDispatch.writeApprovalAudit(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.Platform.ILogger, System.String, ToolUp.AI.ToolApprovalDispatch+PendingApproval) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome (class)
@@ -821,6 +881,33 @@ ToolUp.AI.ToolApprovalHandler (class)
 ToolUp.AI.ToolApprovalHandler.toolApprovalDecisionHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.ToolContext (class)
 ToolUp.AI.ToolContext.emitAction(Microsoft.AspNetCore.Http.HttpContext, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.ToolEffectEnvelope (class)
+ToolUp.AI.ToolEffectEnvelope.DenialAuditSource : System.String (literal)
+ToolUp.AI.ToolEffectEnvelope.DenialEventType : System.String (literal)
+ToolUp.AI.ToolEffectEnvelope.current() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope]
+ToolUp.AI.ToolEffectEnvelope.guardEgress`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial]]
+ToolUp.AI.ToolEffectEnvelope.guardInvoke(ToolUp.Platform.ICompositionCapabilityGate, ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability, ToolUp.Platform.IHostCapabilityRegistry, ToolUp.Platform.CapabilityId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostCapabilityOutcome]
+ToolUp.AI.ToolEffectEnvelope.guardWrite`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial]]
+ToolUp.AI.ToolEffectEnvelope.permits(ToolUp.Platform.ToolEffectDeclaration, ToolUp.Platform.ToolEffect) : System.Boolean
+ToolUp.AI.ToolEffectEnvelope.refuseUndeclared(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.AI.ToolEffectEnvelope.require(ToolUp.Platform.ToolEffect) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial]]
+ToolUp.AI.ToolEffectEnvelope.runWithin`1(ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.AI.ToolEffectEnvelope.undeclaredTools(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope (class)
+ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope..ctor(System.String, ToolUp.Platform.ToolEffectDeclaration, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope.Effects : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope.OnDenied : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.AI.ToolEffectEnvelope+ActiveEnvelope.ToolName : System.String { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition (class)
+ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition..ctor(ToolUp.Platform.CompositionProfile, ToolUp.AI.AIToolRegistry+ToolPolicy)
+ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition.Policy : ToolUp.AI.AIToolRegistry+ToolPolicy { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition.Profile : ToolUp.Platform.CompositionProfile { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial (class)
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial..ctor(System.String, ToolUp.Platform.ToolEffect, ToolUp.Platform.ToolEffectDeclaration, System.String)
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial.Declared : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial.Reason : System.String { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial.Required : ToolUp.Platform.ToolEffect { get }
+ToolUp.AI.ToolEffectEnvelope+ToolEffectDenial.ToolName : System.String { get }
 ToolUp.AI.ToolHelpers (class)
 ToolUp.AI.ToolHelpers.decodeArg`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.AI.ToolHelpers+ToolArgumentRefusal]
 ToolUp.AI.ToolHelpers.decodeOptionalArg`1(System.Text.Json.JsonElement, System.String, ToolUp.Platform.ToolSchemaNode) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.AI.ToolHelpers+ToolArgumentRefusal]

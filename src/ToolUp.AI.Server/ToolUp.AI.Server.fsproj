@@ -37,6 +37,12 @@
         <Compile Include="Server\ToolContext.fs" />
         <Compile Include="Server\ToolHelpers.fs" />
         <Compile Include="Server\AIToolRegistry.fs" />
+        <!-- Phase 793 — the effect envelope a running tool body is held to:
+             the ambient declaration, the host-capability and outbound seams
+             under it, and the verified-profile refusal of an undeclared tool.
+             Depends on AIToolRegistry (the policy) and the platform capability
+             gate; MUST precede AIAgentEngine, which stamps it around Execute. -->
+        <Compile Include="Server\ToolEffectEnvelope.fs" />
         <Compile Include="Server\NarrativeTools.fs" />
         <!-- Phase 503 — the suspended-dispatch mechanism, once: the
              pending-prompt registry, the abandon-on-timeout race, and the

@@ -144,6 +144,7 @@ module CoverageTool =
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = ToolEffectDeclaration.readFacts
     }
 
     // ── Argument parsing ──────────────────────────────────────────

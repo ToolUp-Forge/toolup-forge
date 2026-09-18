@@ -146,6 +146,7 @@ let private buildToolRegistry (location: ToolLocation) (ran: bool ref) =
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
     }
 
     let executor _ctx _argsJson = async {

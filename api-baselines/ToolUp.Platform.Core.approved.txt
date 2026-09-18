@@ -416,8 +416,9 @@ ToolUp.Platform.AISurfaceFilter+Tags.Both : System.Int32 (literal)
 ToolUp.Platform.AISurfaceFilter+Tags.FullPageOnly : System.Int32 (literal)
 ToolUp.Platform.AISurfaceFilter+Tags.SidePanelOnly : System.Int32 (literal)
 ToolUp.Platform.AIToolDefinition (class)
-ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean, ToolUp.Platform.AIToolResultBudget)
+ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean, ToolUp.Platform.AIToolResultBudget, ToolUp.Platform.ToolEffectDeclaration)
 ToolUp.Platform.AIToolDefinition.Description : System.String { get }
+ToolUp.Platform.AIToolDefinition.Effects : ToolUp.Platform.ToolEffectDeclaration { get }
 ToolUp.Platform.AIToolDefinition.EmitsActions : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]] { get }
 ToolUp.Platform.AIToolDefinition.IsLiveInterface : System.Boolean { get }
 ToolUp.Platform.AIToolDefinition.Location : ToolUp.Platform.ToolLocation { get }
@@ -426,6 +427,8 @@ ToolUp.Platform.AIToolDefinition.Parameters : Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.AIToolDefinition.ResultBudget : ToolUp.Platform.AIToolResultBudget { get }
 ToolUp.Platform.AIToolDefinition.SourceModule : System.String { get }
 ToolUp.Platform.AIToolDefinition.Surface : ToolUp.Platform.AISurfaceFilter { get }
+ToolUp.Platform.AIToolEffects (class)
+ToolUp.Platform.AIToolEffects.declaredOf(ToolUp.Platform.AIToolDefinition) : ToolUp.Platform.ToolEffectDeclaration
 ToolUp.Platform.AIToolResultBudget (class)
 ToolUp.Platform.AIToolResultBudget.DefaultResultBudget : ToolUp.Platform.AIToolResultBudget { get }
 ToolUp.Platform.AIToolResultBudget.IsDefaultResultBudget : System.Boolean { get }
@@ -11915,6 +11918,88 @@ ToolUp.Platform.ToolDataCount..ctor(System.String, System.String, System.Int32)
 ToolUp.Platform.ToolDataCount.Count : System.Int32 { get }
 ToolUp.Platform.ToolDataCount.DisplayName : System.String { get }
 ToolUp.Platform.ToolDataCount.TypeId : System.String { get }
+ToolUp.Platform.ToolEffect (class)
+ToolUp.Platform.ToolEffect.ComputeFacts : ToolUp.Platform.ToolEffect { get }
+ToolUp.Platform.ToolEffect.EmitsActions : ToolUp.Platform.ToolEffect { get }
+ToolUp.Platform.ToolEffect.IsComputeFacts : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsEgress : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsEmitsActions : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsExternal : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsReadContent : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsReadFacts : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsSpend : System.Boolean { get }
+ToolUp.Platform.ToolEffect.IsWriteState : System.Boolean { get }
+ToolUp.Platform.ToolEffect.ReadContent : ToolUp.Platform.ToolEffect { get }
+ToolUp.Platform.ToolEffect.ReadFacts : ToolUp.Platform.ToolEffect { get }
+ToolUp.Platform.ToolEffect.Tag : System.Int32 { get }
+ToolUp.Platform.ToolEffect+Egress (class)
+ToolUp.Platform.ToolEffect+Egress.destination : System.String { get }
+ToolUp.Platform.ToolEffect+External (class)
+ToolUp.Platform.ToolEffect+External.capabilityId : System.String { get }
+ToolUp.Platform.ToolEffect+Spend (class)
+ToolUp.Platform.ToolEffect+Spend.budgetClass : System.String { get }
+ToolUp.Platform.ToolEffect+Tags (class)
+ToolUp.Platform.ToolEffect+Tags.ComputeFacts : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.Egress : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.EmitsActions : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.External : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.ReadContent : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.ReadFacts : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.Spend : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+Tags.WriteState : System.Int32 (literal)
+ToolUp.Platform.ToolEffect+WriteState (class)
+ToolUp.Platform.ToolEffect+WriteState.scope : System.String { get }
+ToolUp.Platform.ToolEffectClass (class)
+ToolUp.Platform.ToolEffectClass.ComputeFacts : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.Egress : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.EmitsActions : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.External : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.IsComputeFacts : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsEgress : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsEmitsActions : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsExternal : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsReadContent : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsReadFacts : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsSpend : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.IsWriteState : System.Boolean { get }
+ToolUp.Platform.ToolEffectClass.ReadContent : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.ReadFacts : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.Spend : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass.Tag : System.Int32 { get }
+ToolUp.Platform.ToolEffectClass.WriteState : ToolUp.Platform.ToolEffectClass { get }
+ToolUp.Platform.ToolEffectClass+Tags (class)
+ToolUp.Platform.ToolEffectClass+Tags.ComputeFacts : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.Egress : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.EmitsActions : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.External : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.ReadContent : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.ReadFacts : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.Spend : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClass+Tags.WriteState : System.Int32 (literal)
+ToolUp.Platform.ToolEffectClassModule (class)
+ToolUp.Platform.ToolEffectClassModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffectClass] { get }
+ToolUp.Platform.ToolEffectClassModule.label(ToolUp.Platform.ToolEffectClass) : System.String
+ToolUp.Platform.ToolEffectClassModule.readOnly : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffectClass] { get }
+ToolUp.Platform.ToolEffectDeclaration (class)
+ToolUp.Platform.ToolEffectDeclaration.IsDeclaredEffects : System.Boolean { get }
+ToolUp.Platform.ToolEffectDeclaration.IsUndeclaredEffects : System.Boolean { get }
+ToolUp.Platform.ToolEffectDeclaration.Tag : System.Int32 { get }
+ToolUp.Platform.ToolEffectDeclaration.UndeclaredEffects : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.Platform.ToolEffectDeclaration+DeclaredEffects (class)
+ToolUp.Platform.ToolEffectDeclaration+DeclaredEffects.Item : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffect] { get }
+ToolUp.Platform.ToolEffectDeclaration+Tags (class)
+ToolUp.Platform.ToolEffectDeclaration+Tags.DeclaredEffects : System.Int32 (literal)
+ToolUp.Platform.ToolEffectDeclaration+Tags.UndeclaredEffects : System.Int32 (literal)
+ToolUp.Platform.ToolEffectDeclarationModule (class)
+ToolUp.Platform.ToolEffectDeclarationModule.classes(ToolUp.Platform.ToolEffectDeclaration) : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.ToolEffectClass]
+ToolUp.Platform.ToolEffectDeclarationModule.computeFacts : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.Platform.ToolEffectDeclarationModule.declare(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolEffect]) : ToolUp.Platform.ToolEffectDeclaration
+ToolUp.Platform.ToolEffectDeclarationModule.describe(ToolUp.Platform.ToolEffectDeclaration) : System.String
+ToolUp.Platform.ToolEffectDeclarationModule.readContent : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.Platform.ToolEffectDeclarationModule.readFacts : ToolUp.Platform.ToolEffectDeclaration { get }
+ToolUp.Platform.ToolEffectModule (class)
+ToolUp.Platform.ToolEffectModule.classOf(ToolUp.Platform.ToolEffect) : ToolUp.Platform.ToolEffectClass
+ToolUp.Platform.ToolEffectModule.describe(ToolUp.Platform.ToolEffect) : System.String
 ToolUp.Platform.ToolLocation (class)
 ToolUp.Platform.ToolLocation.ClientResident : ToolUp.Platform.ToolLocation { get }
 ToolUp.Platform.ToolLocation.IsClientResident : System.Boolean { get }

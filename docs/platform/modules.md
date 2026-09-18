@@ -299,6 +299,7 @@ let myTool: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 ```
 

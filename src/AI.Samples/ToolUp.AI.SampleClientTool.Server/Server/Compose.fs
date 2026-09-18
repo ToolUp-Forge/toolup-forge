@@ -66,6 +66,7 @@ let toolDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.computeFacts
 }
 
 /// Server-side stub executor. Never runs in a correctly-wired

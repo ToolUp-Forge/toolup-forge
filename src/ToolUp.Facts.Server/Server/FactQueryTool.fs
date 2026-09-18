@@ -130,6 +130,7 @@ module FactQueryTool =
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = ToolEffectDeclaration.readFacts
     }
 
     // ── Argument parsing + validation (559.A / 559.D) ─────────────

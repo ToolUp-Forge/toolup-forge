@@ -131,6 +131,189 @@ type AIToolResultBudget =
     /// whole point is the payload.
     | NoResultBudget
 
+// ─── Phase 793 — the tool effect class ──────────────────────────
+//
+// A tool definition said what a tool was CALLED, what it TOOK, which
+// module supplied it, where it RAN and how large its result could be —
+// and nothing about what it DID. An executor is `HttpContext -> string
+// -> Async<string>`, so the set of actions a model output could cause
+// was whatever an executor body happened to do, and the claim "no model
+// output can cause an action outside the permitted set" had no set to
+// quantify over. `ToolEffect` is that set's vocabulary, declared per
+// tool by the module that authors it: the party that knows whether the
+// body writes, spends, or reaches outside the deployment.
+//
+// The declaration is read at three points, and the three are what make
+// it a boundary rather than documentation:
+//
+//   * the LIST / DISPATCH gate (`ToolGate.decide`, `ToolUp.AI`) admits a
+//     tool only when its declared classes sit within the deployment's
+//     `ToolPolicy` ceiling, so a tool the policy would refuse is never
+//     described to the model and never runs if the model names it anyway;
+//   * the ENVELOPE (`ToolEffectEnvelope`) binds the running body: a
+//     host-capability invocation or an outbound request the body makes
+//     through the SDK's seams is refused unless the matching effect was
+//     declared;
+//   * COMPOSITION under the verified profile refuses a tool that declares
+//     nothing, because a mandatory envelope with nothing to check against
+//     would admit everything while presenting as enforcement.
+//
+// `UndeclaredEffects` is what every tool authored before this phase
+// carries: no envelope, no ceiling — byte-for-byte the pre-793 behaviour
+// under the default policy (GP 11), refused only under a policy that
+// says undeclared tools are not admitted, or the verified profile.
+
+/// One effect a tool body may exercise. A closed vocabulary rather than
+/// free strings, so a policy ceiling can name a CLASS ("no egress at
+/// all") and a proof can quantify over every case; the payloads are what
+/// the envelope checks at the moment of use (WHICH capability, WHICH
+/// destination) and what a denial names.
+type ToolEffect =
+    /// Reads facts, results, entities or other structured data the
+    /// deployment holds.
+    | ReadFacts
+    /// Computes over its arguments or over data it read — an analytical
+    /// primitive, an aggregate, a transformation. No new state.
+    | ComputeFacts
+    /// Reads documents, narratives, layouts, catalogue metadata — content
+    /// rather than measured facts.
+    | ReadContent
+    /// Writes state within the named scope — a store, a module, a
+    /// narrative. The scope is a declaration the tool author owns.
+    | WriteState of scope: string
+    /// Makes an outbound request to the named destination. A tool that
+    /// reaches several declares one `Egress` per destination.
+    | Egress of destination: string
+    /// Consumes a metered budget of the named class (a model call, a paid
+    /// API, a notification send).
+    | Spend of budgetClass: string
+    /// Invokes the named host capability through `IHostCapabilityRegistry`.
+    | External of capabilityId: string
+    /// Publishes client-side actions alongside its result. Subsumes the
+    /// `EmitsActions` field's declaration: a tool with `EmitsActions = Some
+    /// _` carries this class whether or not it lists it, see
+    /// `ToolEffect.declaredOf`.
+    | EmitsActions
+
+/// The class of a `ToolEffect` — the effect with its payload erased. What
+/// a `ToolPolicy` ceiling is expressed over: a ceiling that could only
+/// name exact destinations or exact scopes could never say "no writes".
+[<RequireQualifiedAccess>]
+type ToolEffectClass =
+    | ReadFacts
+    | ComputeFacts
+    | ReadContent
+    | WriteState
+    | Egress
+    | Spend
+    | External
+    | EmitsActions
+
+/// What a tool declares about its effects. `UndeclaredEffects` is
+/// distinguishable from `DeclaredEffects Set.empty` on purpose: the
+/// second is a tool that says it exercises nothing and is held to it, the
+/// first is a tool that has not said, which the default policy admits and
+/// the verified profile refuses.
+type ToolEffectDeclaration =
+    /// No declaration — every pre-793 tool. Admitted under the default
+    /// policy with no envelope; refused wherever a declaration is
+    /// mandatory.
+    | UndeclaredEffects
+    /// The effects this tool's body may exercise. The envelope refuses
+    /// anything outside it.
+    | DeclaredEffects of Set<ToolEffect>
+
+[<RequireQualifiedAccess>]
+module ToolEffectClass =
+    /// Stable lowercase label for policy files, audit payloads and
+    /// refusal reasons.
+    let label (c: ToolEffectClass) : string =
+        match c with
+        | ToolEffectClass.ReadFacts -> "read-facts"
+        | ToolEffectClass.ComputeFacts -> "compute-facts"
+        | ToolEffectClass.ReadContent -> "read-content"
+        | ToolEffectClass.WriteState -> "write-state"
+        | ToolEffectClass.Egress -> "egress"
+        | ToolEffectClass.Spend -> "spend"
+        | ToolEffectClass.External -> "external"
+        | ToolEffectClass.EmitsActions -> "emits-actions"
+
+    /// Every class, in declaration order.
+    let all: ToolEffectClass list = [
+        ToolEffectClass.ReadFacts
+        ToolEffectClass.ComputeFacts
+        ToolEffectClass.ReadContent
+        ToolEffectClass.WriteState
+        ToolEffectClass.Egress
+        ToolEffectClass.Spend
+        ToolEffectClass.External
+        ToolEffectClass.EmitsActions
+    ]
+
+    /// The read-only classes: what a tool that inspects and computes but
+    /// changes nothing and reaches nowhere exercises.
+    let readOnly: Set<ToolEffectClass> =
+        Set.ofList [
+            ToolEffectClass.ReadFacts
+            ToolEffectClass.ComputeFacts
+            ToolEffectClass.ReadContent
+        ]
+
+[<RequireQualifiedAccess>]
+module ToolEffect =
+    /// The effect's class — its payload erased.
+    let classOf (e: ToolEffect) : ToolEffectClass =
+        match e with
+        | ReadFacts -> ToolEffectClass.ReadFacts
+        | ComputeFacts -> ToolEffectClass.ComputeFacts
+        | ReadContent -> ToolEffectClass.ReadContent
+        | WriteState _ -> ToolEffectClass.WriteState
+        | Egress _ -> ToolEffectClass.Egress
+        | Spend _ -> ToolEffectClass.Spend
+        | External _ -> ToolEffectClass.External
+        | EmitsActions -> ToolEffectClass.EmitsActions
+
+    /// Human-readable rendering — the class label plus the payload, for a
+    /// refusal reason or an audit row.
+    let describe (e: ToolEffect) : string =
+        match e with
+        | WriteState scope -> $"write-state({scope})"
+        | Egress destination -> $"egress({destination})"
+        | Spend budgetClass -> $"spend({budgetClass})"
+        | External capabilityId -> $"external({capabilityId})"
+        | ReadFacts
+        | ComputeFacts
+        | ReadContent
+        | EmitsActions -> ToolEffectClass.label (classOf e)
+
+[<RequireQualifiedAccess>]
+module ToolEffectDeclaration =
+    /// Declare a set of effects from a list.
+    let declare (effects: ToolEffect list) : ToolEffectDeclaration = DeclaredEffects(Set.ofList effects)
+
+    /// A tool that reads facts and nothing else.
+    let readFacts: ToolEffectDeclaration = declare [ ReadFacts ]
+
+    /// A tool that reads content and nothing else.
+    let readContent: ToolEffectDeclaration = declare [ ReadContent ]
+
+    /// A tool that computes over its arguments and nothing else.
+    let computeFacts: ToolEffectDeclaration = declare [ ComputeFacts ]
+
+    /// The classes a declaration exercises; empty for an undeclared tool,
+    /// which has no classes rather than every class.
+    let classes (d: ToolEffectDeclaration) : Set<ToolEffectClass> =
+        match d with
+        | UndeclaredEffects -> Set.empty
+        | DeclaredEffects effects -> effects |> Set.map ToolEffect.classOf
+
+    /// Render a declaration for a refusal reason or an audit row.
+    let describe (d: ToolEffectDeclaration) : string =
+        match d with
+        | UndeclaredEffects -> "(undeclared)"
+        | DeclaredEffects effects when Set.isEmpty effects -> "(none)"
+        | DeclaredEffects effects -> effects |> Set.toList |> List.map ToolEffect.describe |> String.concat ", "
+
 /// A tool that an AI agent can invoke. Registered by modules.
 /// Contains metadata only — the Execute function is server-only and lives
 /// in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime.
@@ -205,7 +388,32 @@ type AIToolDefinition = {
     /// exposure; the composition root that calls
     /// `AIToolRegistry.createTool` does not.
     ResultBudget: AIToolResultBudget
+    /// Phase 793 — the effects this tool's body may exercise, declared by
+    /// the module that authors it. `UndeclaredEffects` (the value every
+    /// pre-793 tool carries) leaves the default policy's behaviour
+    /// byte-for-byte unchanged (GP 11); a `ToolPolicy` ceiling reads the
+    /// declared classes at list and dispatch time, and the envelope holds
+    /// the running body to the declared set. Composition under the
+    /// verified profile refuses an undeclared tool.
+    ///
+    /// Declared on the definition rather than at the registration seam for
+    /// the same reason `ResultBudget` is: the author of the body is the
+    /// party that knows what it does.
+    Effects: ToolEffectDeclaration
 }
+
+[<RequireQualifiedAccess>]
+module AIToolEffects =
+    /// Phase 793 — the effects a definition declares, with the
+    /// `EmitsActions` field folded in: a tool that declares client actions
+    /// on that field carries the `EmitsActions` class whether or not its
+    /// `Effects` set lists it, so the older declaration is subsumed rather
+    /// than duplicated. An undeclared tool stays undeclared — the field
+    /// alone does not turn it into a declared one.
+    let declaredOf (def: AIToolDefinition) : ToolEffectDeclaration =
+        match def.Effects, def.EmitsActions with
+        | DeclaredEffects effects, Some _ -> DeclaredEffects(Set.add EmitsActions effects)
+        | declared, _ -> declared
 
 // ─── Phase 508 — rich (recursive) tool parameter schemas ─────────
 //

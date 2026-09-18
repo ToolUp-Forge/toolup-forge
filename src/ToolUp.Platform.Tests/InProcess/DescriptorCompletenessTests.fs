@@ -49,6 +49,7 @@ let private stubTool (name: string) : AIToolDefinition * (HttpContext -> string 
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = UndeclaredEffects
     },
     (fun _ _ -> async { return "" })
 

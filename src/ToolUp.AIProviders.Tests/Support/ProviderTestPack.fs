@@ -350,6 +350,7 @@ let private nestedSchemaToolDefinition: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = UndeclaredEffects
 }
 
 let private nestedSchemaProviderDef =

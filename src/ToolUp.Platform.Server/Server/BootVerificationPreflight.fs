@@ -455,6 +455,10 @@ type CompositionProfileRefusal =
     /// graph. `records` names each one, because "some record" is not a
     /// finding an operator can act on.
     | RemotingDecodersUnregistered of records: string list
+    /// Phase 793 — the verified profile was declared and one or more
+    /// registered AI tools declare no effects, so their bodies are bound to
+    /// no envelope. `tools` names each one.
+    | ToolEffectsUndeclared of tools: string list
 
 [<RequireQualifiedAccess>]
 module CompositionProfileRefusal =
@@ -472,6 +476,10 @@ module CompositionProfileRefusal =
             let named = String.concat "; " records
 
             $"the verified composition profile requires every registered API record to decode through the closed remoting decoder algebra, and these decode by reflection: {named}. Register a decoder for each wire type they carry (RemotingDecoders.register, see docs/platform/remoting-decoder-algebra.md), or run CompositionProfile.Standard."
+        | ToolEffectsUndeclared tools ->
+            let named = String.concat "; " tools
+
+            $"the verified composition profile requires every registered AI tool to declare the effects its body may exercise, and these declare none: {named}. Set AIToolDefinition.Effects on each (ToolEffectDeclaration.readFacts, or ToolEffectDeclaration.declare [ … ]), or run CompositionProfile.Standard."
         | IsolationPostureShortfall(backend, missing) ->
             let clauses = String.concat "; " missing
 

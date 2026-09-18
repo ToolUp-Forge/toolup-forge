@@ -141,6 +141,230 @@ let isToolSourcePermittedFor (access: AccessContext) (sourceModule: string) : bo
 let isToolPermittedFor (access: AccessContext) (def: AIToolDefinition) : bool =
     isToolSourcePermittedFor access def.SourceModule
 
+// ─── Phase 793 — the tool policy, and the ONE gate decision ──────────
+//
+// Two gates governed the tool surface and each was pure, but they were
+// two functions: `isToolPermittedFor` at list time and the Phase 730
+// grant guard at dispatch, composed by hand at each of four call sites.
+// The registry's own comment on `ListAccessible` said why that was
+// fragile — "two gates that must agree should share their whole
+// decision, not most of it" — and this is that sentence implemented.
+// `ToolGate.decide` is the whole decision: RBAC, grant liveness, and
+// the effect ceiling, in that order, as ONE pure function over
+// `(AccessContext, ToolPolicy, ToolEffectDeclaration)`. The list filter
+// calls it; the dispatch re-check calls it; the MCP host calls it; the
+// F* model in `proofs/ToolGate.fst` is it, clause for clause, and the
+// differential host runs the extraction beside this over every in-tree
+// tool.
+//
+// The ceiling is expressed over CLASSES, not effects: a ceiling that
+// could only name exact destinations or exact scopes could never say
+// "this deployment permits no egress at all", which is the sentence a
+// policy most needs to say. The payloads are the ENVELOPE's business
+// (`ToolEffectEnvelope`): which capability, which destination, at the
+// moment of use.
+
+/// The classes a policy admits. `UnboundedCeiling` is the pre-793
+/// posture — every class admitted, and undeclared tools with them.
+type ToolEffectCeiling =
+    /// Every effect class is admitted.
+    | UnboundedCeiling
+    /// Exactly these classes are admitted; a tool declaring any other is
+    /// refused at list time and at dispatch.
+    | BoundedCeiling of Set<ToolEffectClass>
+
+/// A deployment's policy over the AI tool surface.
+type ToolPolicy = {
+    /// The classes a human caller's tools may exercise.
+    Ceiling: ToolEffectCeiling
+    /// Whether a tool that declares nothing is admitted. `true` is the
+    /// pre-793 posture; a bounded policy defaults it to `false`, because
+    /// an undeclared tool under a ceiling is a tool the ceiling cannot
+    /// measure.
+    PermitUndeclared: bool
+    /// Phase 503's approval gate, keyed on CLASS: a tool declaring any of
+    /// these classes is held for the user's decision before it runs,
+    /// whatever the deployment's `IToolApprovalPolicy` says about it by
+    /// name.
+    RequireApproval: Set<ToolEffectClass>
+    /// Phase 489's external principals — an MCP agent acting on its own
+    /// service-account credential — are gated under THIS ceiling rather
+    /// than `Ceiling`: default-deny by class, so a bounded policy admits
+    /// an external principal to no class it did not name.
+    ExternalPrincipalCeiling: ToolEffectCeiling
+}
+
+[<RequireQualifiedAccess>]
+module ToolPolicy =
+    /// The policy a deployment that composes none runs under: every class
+    /// admitted, undeclared tools admitted, nothing held for approval by
+    /// class, external principals under the same unbounded ceiling. The
+    /// pre-793 tool surface, byte for byte (GP 11).
+    let unrestricted: ToolPolicy = {
+        Ceiling = UnboundedCeiling
+        PermitUndeclared = true
+        RequireApproval = Set.empty
+        ExternalPrincipalCeiling = UnboundedCeiling
+    }
+
+    /// A policy admitting exactly `classes`. Undeclared tools are refused,
+    /// nothing is held for approval by class, and external principals
+    /// are admitted to NO class until `withExternalPrincipalCeiling`
+    /// names some.
+    let bounded (classes: ToolEffectClass list) : ToolPolicy = {
+        Ceiling = BoundedCeiling(Set.ofList classes)
+        PermitUndeclared = false
+        RequireApproval = Set.empty
+        ExternalPrincipalCeiling = BoundedCeiling Set.empty
+    }
+
+    /// A policy admitting the three read-only classes and nothing else.
+    let readOnly: ToolPolicy = bounded (Set.toList ToolEffectClass.readOnly)
+
+    /// Hold every tool declaring any of `classes` for the user's approval.
+    let withApprovalFor (classes: ToolEffectClass list) (policy: ToolPolicy) : ToolPolicy = {
+        policy with
+            RequireApproval = Set.union policy.RequireApproval (Set.ofList classes)
+    }
+
+    /// Admit external principals to exactly `classes`.
+    let withExternalPrincipalCeiling (classes: ToolEffectClass list) (policy: ToolPolicy) : ToolPolicy = {
+        policy with
+            ExternalPrincipalCeiling = BoundedCeiling(Set.ofList classes)
+    }
+
+    /// Admit undeclared tools under a bounded policy — the deliberate
+    /// opt-back for a deployment migrating its tools one at a time.
+    let permittingUndeclared (policy: ToolPolicy) : ToolPolicy = { policy with PermitUndeclared = true }
+
+    /// The policy an EXTERNAL principal is decided under: the same
+    /// policy with its external ceiling in force. What the MCP host
+    /// passes to `ToolGate.decide`.
+    let forExternalPrincipal (policy: ToolPolicy) : ToolPolicy = {
+        policy with
+            Ceiling = policy.ExternalPrincipalCeiling
+    }
+
+/// The gate's decision. One admitting case and four refusing ones, each
+/// naming what refused so the dispatch site can audit on the right
+/// stream and the model can be told the right thing.
+type ToolGateVerdict =
+    /// Within RBAC, the grant is live, and the declared effects sit within
+    /// the ceiling.
+    | ToolAdmitted
+    /// The caller holds no `Read` on the tool's source module (Phase
+    /// 36.A).
+    | ToolRefusedSource of sourceModule: string
+    /// The caller's grant on the source module is not live (Phase 730).
+    | ToolRefusedGrant of sourceModule: string
+    /// The tool declares no effects and the policy does not admit
+    /// undeclared tools.
+    | ToolRefusedUndeclared
+    /// The tool declares effects whose classes the ceiling does not
+    /// admit; `exceeding` is every such effect, so the refusal names
+    /// them all.
+    | ToolRefusedEffects of exceeding: ToolEffect list
+
+[<RequireQualifiedAccess>]
+module ToolGate =
+
+    /// The declared effects whose class the ceiling does not admit, in
+    /// declaration order. Empty exactly when the declaration sits within
+    /// the ceiling.
+    let exceeding (ceiling: ToolEffectCeiling) (effects: Set<ToolEffect>) : ToolEffect list =
+        match ceiling with
+        | UnboundedCeiling -> []
+        | BoundedCeiling classes ->
+            effects
+            |> Set.toList
+            |> List.filter (fun e -> not (Set.contains (ToolEffect.classOf e) classes))
+
+    /// **The one decision**, over its inputs as predicates. `sourcePermitted`
+    /// is `isToolSourcePermittedFor access`; `isModuleGrantLive` is
+    /// `moduleGrantGate ctx`. Pure and total: nothing here reads a
+    /// framework type, and this is the function `proofs/ToolGate.fst`
+    /// models clause for clause.
+    let decideDeclared
+        (sourcePermitted: string -> bool)
+        (isModuleGrantLive: string -> bool)
+        (policy: ToolPolicy)
+        (sourceModule: string)
+        (effects: ToolEffectDeclaration)
+        : ToolGateVerdict =
+        if not (sourcePermitted sourceModule) then
+            ToolRefusedSource sourceModule
+        elif not (isModuleGrantLive sourceModule) then
+            ToolRefusedGrant sourceModule
+        else
+            match effects with
+            | UndeclaredEffects ->
+                if policy.PermitUndeclared then
+                    ToolAdmitted
+                else
+                    ToolRefusedUndeclared
+            | DeclaredEffects declared ->
+                match exceeding policy.Ceiling declared with
+                | [] -> ToolAdmitted
+                | over -> ToolRefusedEffects over
+
+    /// `decideDeclared` over a caller and a tool definition — the form
+    /// every call site uses. The definition's `EmitsActions` field is
+    /// folded into its declaration first (`AIToolEffects.declaredOf`).
+    let decide
+        (access: AccessContext)
+        (isModuleGrantLive: string -> bool)
+        (policy: ToolPolicy)
+        (def: AIToolDefinition)
+        : ToolGateVerdict =
+        decideDeclared
+            (isToolSourcePermittedFor access)
+            isModuleGrantLive
+            policy
+            def.SourceModule
+            (AIToolEffects.declaredOf def)
+
+    /// Whether a verdict admits the tool.
+    let admits (verdict: ToolGateVerdict) : bool =
+        match verdict with
+        | ToolAdmitted -> true
+        | ToolRefusedSource _
+        | ToolRefusedGrant _
+        | ToolRefusedUndeclared
+        | ToolRefusedEffects _ -> false
+
+    /// Phase 503 keyed on class: whether `policy` holds this tool for the
+    /// user's approval because of what it declares. An undeclared tool is
+    /// never held by class — there is no class to key on — which is one
+    /// more reason a bounded policy refuses it.
+    let approvalRequired (policy: ToolPolicy) (def: AIToolDefinition) : bool =
+        not (
+            Set.isEmpty (
+                Set.intersect policy.RequireApproval (ToolEffectDeclaration.classes (AIToolEffects.declaredOf def))
+            )
+        )
+
+    /// The classes of a tool's declaration that the policy holds for
+    /// approval — what the approval prompt names.
+    let approvalClasses (policy: ToolPolicy) (def: AIToolDefinition) : ToolEffectClass list =
+        Set.intersect policy.RequireApproval (ToolEffectDeclaration.classes (AIToolEffects.declaredOf def))
+        |> Set.toList
+
+    /// The reason a refusing verdict carries — what the model is told and
+    /// what the audit row records. Names the module for the two
+    /// authority refusals and every exceeding effect for the ceiling one.
+    let describe (toolName: string) (verdict: ToolGateVerdict) : string =
+        match verdict with
+        | ToolAdmitted -> $"tool '{toolName}' is admitted"
+        | ToolRefusedSource sourceModule -> $"requires Read on module '{sourceModule}', which you do not have access to"
+        | ToolRefusedGrant sourceModule ->
+            $"module '{sourceModule}' requires a live grant under its declared policy; yours is not currently live"
+        | ToolRefusedUndeclared ->
+            $"tool '{toolName}' declares no effects, and this deployment's tool policy admits only tools whose effects are declared"
+        | ToolRefusedEffects over ->
+            let named = over |> List.map ToolEffect.describe |> String.concat ", "
+
+            $"tool '{toolName}' declares effects outside this deployment's tool policy ceiling: {named}"
+
 /// Phase 36.A — reconstruct the caller's `AccessContext` from the
 /// per-request items.
 ///
@@ -591,8 +815,16 @@ let createTool (def: AIToolDefinition) (execute: HttpContext -> string -> Async<
 
 /// Mutable registry of AI-callable tools, populated at startup.
 /// Modules register their tools via compose; the registry is immutable after startup.
-type AIToolRegistry() =
+///
+/// Phase 793 — the registry carries the deployment's `ToolPolicy`, so
+/// every list built from it and every dispatch re-check against it
+/// decides under the same policy without any call site threading it.
+/// The parameterless constructor is the pre-793 one, kept as an explicit
+/// secondary so its token stays in the public-API baseline (Phase 175's
+/// optional-argument rule); it runs under `ToolPolicy.unrestricted`.
+type AIToolRegistry(policy: ToolPolicy) =
     let mutable tools: RegisteredTool list = []
+
 
     /// Phase 709 — tools that have already logged a budget-elision Warn
     /// on this registry. Instance state rather than a module-level
@@ -600,6 +832,11 @@ type AIToolRegistry() =
     /// do not share a suppression set.
     let budgetWarned =
         System.Collections.Concurrent.ConcurrentDictionary<string, bool>()
+
+    new() = AIToolRegistry(ToolPolicy.unrestricted)
+
+    /// Phase 793 — the policy this registry lists and dispatches under.
+    member _.Policy: ToolPolicy = policy
 
     /// Register a list of tools (called during server startup)
     member _.RegisterAll(newTools: RegisteredTool list) = tools <- newTools @ tools
@@ -660,11 +897,17 @@ type AIToolRegistry() =
     /// live — and, worse, it would make this filter and the dispatch-time
     /// `guardToolGrant` structurally different. Two gates that must agree
     /// should share their whole decision, not most of it.
+    ///
+    /// **Phase 793 — the filter IS `ToolGate.decide`.** The two predicates
+    /// this overload used to compose by hand are the first two clauses of
+    /// that decision; the effect ceiling is its third. The dispatch
+    /// re-check in the agent loop and the MCP host's `visibleTools` call
+    /// the same function, so the list the model is offered, the boundary
+    /// that would refuse a forged name, and the proved model in
+    /// `proofs/ToolGate.fst` cannot disagree.
     member _.ListAccessible(access: AccessContext, isModuleGrantLive: string -> bool) : RegisteredTool list =
         tools
-        |> List.filter (fun t ->
-            isToolPermittedFor access t.Definition
-            && isModuleGrantLive t.Definition.SourceModule)
+        |> List.filter (fun t -> ToolGate.admits (ToolGate.decide access isModuleGrantLive policy t.Definition))
 
     /// Phase 709 — claim the one budget-elision Warn allowed for this
     /// tool. Returns `true` exactly once per tool name per registry;

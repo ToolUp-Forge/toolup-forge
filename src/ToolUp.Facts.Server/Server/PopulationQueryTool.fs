@@ -207,6 +207,7 @@ module PopulationQueryTool =
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = ToolEffectDeclaration.readFacts
     }
 
     // ── Argument parsing + validation (703.A / 703.D) ──────────────

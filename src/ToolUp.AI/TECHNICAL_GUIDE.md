@@ -576,6 +576,7 @@ let tools: AIToolDefinition list = [
         Surface = Both
         IsLiveInterface = false
         ResultBudget = DefaultResultBudget
+        Effects = ToolEffectDeclaration.readFacts
     }
     // ...
 ]
@@ -679,6 +680,7 @@ let applyOptimisedBudgetTool: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.declare [ ReadFacts; WriteState "media_optimisation" ]
 }
 ```
 

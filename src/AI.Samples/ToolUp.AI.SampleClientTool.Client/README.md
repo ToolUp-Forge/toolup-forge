@@ -63,6 +63,9 @@ let toolDefinition: AIToolDefinition = {
     EmitsActions = None
     Location = ClientResident  // ← this is the load-bearing line
     Surface = Both
+    IsLiveInterface = false
+    ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.computeFacts
 }
 
 let private clientResidentStub _ctx _argsJson = async {

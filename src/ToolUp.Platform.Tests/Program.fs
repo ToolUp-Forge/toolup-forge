@@ -2325,6 +2325,14 @@ let private registeredTests =
         // generated set, with a committed go-red oracle that renumbers
         // ranks contiguously so the comparison is known to be able to fail.
         DisclosureProofOracleTests.tests
+        // Phase 793 — the tool effect class: the policy as one decision,
+        // the envelope around Execute, the verified-profile refusal and the
+        // class-keyed approval / external-principal ceilings.
+        ToolEffectEnvelopeTests.tests
+        // Phase 793 — the F* model of the tool gate, extracted and run
+        // beside production over every in-tree tool under generated
+        // policies, with a committed go-red gate that ignores Egress.
+        ToolGateProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

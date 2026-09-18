@@ -29,6 +29,7 @@ let private mkDef (name: string) (budget: AIToolResultBudget) : AIToolDefinition
     Surface = Both
     IsLiveInterface = false
     ResultBudget = budget
+    Effects = UndeclaredEffects
 }
 
 /// A JSON-ish payload of exactly `n` characters — stands in for the

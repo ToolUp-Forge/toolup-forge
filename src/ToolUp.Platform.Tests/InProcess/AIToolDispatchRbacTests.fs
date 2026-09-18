@@ -54,6 +54,7 @@ let private toolDef (name: string) (sourceModule: string) (location: ToolLocatio
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = UndeclaredEffects
 }
 
 /// An executor that must never run. Every deny-path test registers its

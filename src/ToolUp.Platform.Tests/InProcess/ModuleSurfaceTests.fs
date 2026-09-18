@@ -67,6 +67,7 @@ let private toolDefinition (name: string) : AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = UndeclaredEffects
 }
 
 let private configSchema: ModuleConfigSchema =

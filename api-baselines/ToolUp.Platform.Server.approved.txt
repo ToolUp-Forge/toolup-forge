@@ -1904,6 +1904,7 @@ ToolUp.Platform.CompositionProfileRefusal.IsCapabilityGateUndeclared : System.Bo
 ToolUp.Platform.CompositionProfileRefusal.IsIsolationPostureShortfall : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsRemotingDecodersUnregistered : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsSeamGrantsUndeclared : System.Boolean { get }
+ToolUp.Platform.CompositionProfileRefusal.IsToolEffectsUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall (class)
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.backend : System.String { get }
@@ -1917,6 +1918,9 @@ ToolUp.Platform.CompositionProfileRefusal+Tags.CapabilityGateUndeclared : System
 ToolUp.Platform.CompositionProfileRefusal+Tags.IsolationPostureShortfall : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.RemotingDecodersUnregistered : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.SeamGrantsUndeclared : System.Int32 (literal)
+ToolUp.Platform.CompositionProfileRefusal+Tags.ToolEffectsUndeclared : System.Int32 (literal)
+ToolUp.Platform.CompositionProfileRefusal+ToolEffectsUndeclared (class)
+ToolUp.Platform.CompositionProfileRefusal+ToolEffectsUndeclared.tools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionProfileRefusalModule (class)
 ToolUp.Platform.CompositionProfileRefusalModule.describe(ToolUp.Platform.CompositionProfileRefusal) : System.String
 ToolUp.Platform.CompositionReferences (class)

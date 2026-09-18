@@ -355,6 +355,7 @@ let private referenceTool: AIToolDefinition = {
     Surface = Both
     IsLiveInterface = false
     ResultBudget = DefaultResultBudget
+    Effects = ToolEffectDeclaration.readFacts
 }
 
 let private referenceServer () : ServerModule =
