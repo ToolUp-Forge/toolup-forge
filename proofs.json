@@ -23,11 +23,18 @@
     "",
     "Phase 793 appended the tool-gate claims (ids prefixed `toolgate-`): the four lemmas, the",
     "differential host, the two opaque authority predicates, and the policy entries that say what the",
-    "envelope does not bind and where the approval-by-class keying is decided."
+    "envelope does not bind and where the approval-by-class keying is decided.",
+    "",
+    "Phase 792 appended the model-input claims (ids prefixed `model-input-`): three `proved` entries,",
+    "one per headline lemma. Note what is deliberately NOT among them - there is no claim, at any",
+    "level, about what a language model does with the rendering, and none about the transport beyond",
+    "the `policy` entries that say so. Those two are recorded as exclusions rather than omitted",
+    "outright because this file's own rule is that an unstated exclusion reads, to whoever finds it",
+    "later, as a claim that failed."
   ],
   "kind": "proofs",
   "version": 1,
-  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793)",
+  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792)",
   "provers": {
     "fstar-pinned": {
       "tool": "fstar",
@@ -515,6 +522,162 @@
       "level": "policy",
       "statement": "A client-resident tool's body runs in the browser and is OUT of the envelope.",
       "reason": "the envelope is an ambient server-side value around Execute, and a client-resident dispatch never calls Execute; the browser-side body is bound by the client-tool allowlist seam instead, and the gate's list and dispatch decisions apply to both locations alike"
+    },
+    {
+      "id": "model-input-admissible-by-construction",
+      "level": "proved",
+      "statement": "For ANY candidate store - whatever verdicts it carries, whatever scopes those verdicts were resolved for, in any mixture - the assembled model input holds only facts whose disclosure verdict is affirmative AND whose scope is the caller's resolved one. An affirmative verdict for another scope is not permission and is refused by the same invariant. Nothing about the store has to be checked in advance: the arm that would break the invariant is the arm that refuses.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ModelInput.fst",
+        "lemmas": [
+          "admissible_by_construction",
+          "build_admissible",
+          "add_fact_preserves_admissible",
+          "blocks_and_turns_preserve_admissible"
+        ]
+      }
+    },
+    {
+      "id": "model-input-render-faithful",
+      "level": "proved",
+      "statement": "Rendering introduces nothing the value does not carry. The turns pass through untouched; the system prompt is exactly the blocks' text joined on the composer's separator, and absent when there are no blocks, so a call that sent no system prompt is byte-for-byte unchanged; every id the leak differential reports is genuinely present in the rendering and genuinely undeclared in the value; and every candidate id that is present and undeclared IS reported, so an empty report means what a reader takes it to mean. The relational companion is the stronger half: two values agreeing on their blocks and turns render identically whatever their facts, passages and tool results are, so the renderer cannot read the fact list at all.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ModelInput.fst",
+        "lemmas": [
+          "render_faithful",
+          "render_blind_to_facts",
+          "leaked_is_mentioned_and_undeclared",
+          "mentioned_undeclared_is_leaked"
+        ],
+        "note": "substring containment is host-supplied; every clause holds for ANY containment test - see the assumption `model-input-containment-host-supplied`"
+      }
+    },
+    {
+      "id": "model-input-noninterference",
+      "level": "proved",
+      "statement": "Two fact stores that agree on every fact disclosable for the resolved scope assemble to the SAME value, and therefore to the same rendering and the same bytes. The withheld facts are quantified away entirely - the stores may differ in count, identity, content and policy, and no observation of what the provider is shown distinguishes one from the other. The renderer that turns admitted facts into the block a reader sees is universally quantified, so this holds for every renderer a caller might write, including one that prints each admitted fact's content verbatim.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ModelInput.fst",
+        "lemmas": [
+          "input_noninterference",
+          "admit_all_is_visible_only",
+          "visible_skips_undisclosable"
+        ],
+        "premise": "the assembly hands the block renderer WHAT WAS ADMITTED, not the store. A renderer handed the store could not satisfy this, which is why the theorem is stated over the assembly rather than over render alone."
+      }
+    },
+    {
+      "id": "model-input-chunk-gate-checked-not-enforced",
+      "level": "assumed",
+      "statement": "The retrieved-passage half of admissibility is CHECKED, not enforced. The shipped constructor accepts a passage whatever its content-gate result, so that clause is proved as a premise on the add and as a total decision procedure a caller may run - never as the unconditional invariant the fact clause is. A caller that never asks can hold a value carrying a failed passage, and nothing in the type stops it. `NotGated` is recorded honestly: it says the gate did not run, never that it passed.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ModelInput.fst",
+        "lemmas": [
+          "add_chunk_preserves_admissible",
+          "has_failed_gates_decides"
+        ]
+      },
+      "mitigation": "the decision procedure is proved total and is compared against the shipped predicate on every differential case, so a caller that DOES ask gets an answer the theorem covers"
+    },
+    {
+      "id": "model-input-scope-resolution",
+      "level": "assumed",
+      "statement": "Scope resolution is assumed correct. The scope is a caller-supplied string; the model compares it and never derives it, so every claim above is conditional on that string being the scope the caller is entitled to, and on the verdict having been resolved against the same one. This is the load-bearing assumption of the whole input-side claim.",
+      "retired_by": "the phase that makes scope resolution a single choke point",
+      "mitigation": "the scope is compared rather than ignored, so an affirmative verdict resolved for a DIFFERENT scope is refused by `admissible_by_construction` - the assumption is about which string is right, not about whether the string is consulted"
+    },
+    {
+      "id": "model-input-tool-effect-side",
+      "level": "assumed",
+      "statement": "The tool-effect side is assumed, not checked here. This theorem is about what goes in. The plain-English sentence a reader wants additionally needs that the tools a model may call cannot fetch what the input side refused, and nothing in this module can see that. It is recorded as an assumption rather than an exclusion because it is load-bearing for the claim rather than merely outside it: a tool that read freely would defeat everything proved above without contradicting any lemma in it.",
+      "retired_by": "the tool-effect theorem"
+    },
+    {
+      "id": "model-input-assembly-is-callers-code",
+      "level": "assumed",
+      "statement": "The shipped module ships the constructors; the fold over a candidate set is what each caller writes around them. The model states the theorem over that fold, because a statement about one constructor call says nothing about a store - but a caller free to write a different fold is free to write one these lemmas do not describe.",
+      "mitigation": "the differential host runs PRODUCTION's constructors in the same sequence the model folds, so a divergence between the modelled assembly and the shipped constructors is caught; what it cannot catch is a caller elsewhere folding differently"
+    },
+    {
+      "id": "model-input-containment-host-supplied",
+      "level": "assumed",
+      "statement": "The substring containment the leak differential asks for is host-supplied, because F* has no substring test that extracts to Prims alone. Every clause holds for ANY containment test; what the model does not verify is that the host's test is the one the shipped code uses.",
+      "mitigation": "the differential compares the leak list itself on every case, so a host test that disagreed with the shipped `Contains` would fail the leg on any case whose rendering names an undeclared candidate"
+    },
+    {
+      "id": "model-input-bridge-hand-written",
+      "level": "assumed",
+      "statement": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing. The turn type is additionally NARROWED - the model carries the three fields rendering reads, and the bridge passes the production record through unchanged.",
+      "mitigation": "case-for-case on purpose, and the block renderer is SHARED between the two sides: the model's facts are mapped back to production records and handed to production's own renderer, so no second implementation can quietly disagree"
+    },
+    {
+      "id": "model-input-model-agrees-with-shipped-code",
+      "level": "tested",
+      "statement": "The extracted value, constructor, assembly and renderer agree with the shipped ones over a pinned corpus and 150 generated cases, on the assembled value, the constructor's refusal wording, the mirrored tool-result record, the rendering, every byte of the rendered text and the leak differential over it AT ONCE. The migration seam every provider entry lifts through is compared on its own first. A 250-subject population is offered as a store with three facts admissible and 247 denied three different ways, and exactly three enter the value, exactly three reach the rendering, and none of the other 247 appears in the bytes a provider would be handed. Noninterference is run as well as proved: every case with something withheld is replayed against a store that replaces the withheld facts wholesale, and nothing a provider boundary observes may move.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ModelInputProofOracleTests.fs",
+        "list": "Phase 792 - the proved model input as oracle",
+        "cases": [
+          "the extracted lift agrees with production over the entry corpus",
+          "the extracted constructor agrees with production on every verdict, refusal text included",
+          "the extracted value and rendering agree with production over the pinned corpus",
+          "the extracted value and rendering agree with production over the generated corpus",
+          "the non-entry probe over both value and rendering - 250 seeded subjects, a leaky store",
+          "two stores that differ only in what was withheld are indistinguishable - input_noninterference running",
+          "the model never throws, on any case, through any of its functions"
+        ],
+        "companion-host": "src/ToolUp.Platform.Tests/InProcess/PopulationQueryToolTests.fs - the live agent-loop probe, which asserts the transcript half of the same claim and now the rendering half beside it",
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "model-input-committed-extraction-is-what-the-prover-produced",
+      "level": "tested",
+      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "evidence": {
+        "runner": "proofs/check.ps1 step 4",
+        "artifact": "proofs/oracle/ModelInput.fs"
+      }
+    },
+    {
+      "id": "model-input-differential-is-known-to-fail",
+      "level": "tested",
+      "statement": "A committed go-red oracle renders one fact the constructor refused - the mistake a plausible reimplementation reaches by rendering from the store rather than from what was admitted - and the comparison is asserted to catch it on EVERY case that has a withheld fact to leak, not merely on one. The mechanism is pinned separately on a three-fact case where the VALUE is identical under both oracles and only the rendering differs, which is exactly the failure a value-only comparison would have passed.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ModelInputProofOracleTests.fs",
+        "cases": [
+          "the differential CATCHES an oracle that renders one withheld fact - the go-red case",
+          "and the rendered withheld fact is what it catches"
+        ]
+      }
+    },
+    {
+      "id": "model-input-transport",
+      "level": "policy",
+      "statement": "The transport is OUT. That the rendered bytes reach a provider unaltered, and that the provider sends what it was given, are not claimed at any level.",
+      "reason": "`render` is where this theorem stops - it produces the two arguments the provider interface takes, and everything past that boundary is another component's obligation"
+    },
+    {
+      "id": "model-input-the-model-itself",
+      "level": "policy",
+      "statement": "The language model is OUT, entirely. Nothing here says what it does with the bytes, what it answers, or what it may have learned elsewhere.",
+      "reason": "keeping the model outside the trusted set is the whole point of stating the input side this precisely; a theorem that implied anything about its behaviour would be claiming something it cannot see"
+    },
+    {
+      "id": "model-input-builder-io",
+      "level": "policy",
+      "statement": "How a builder obtained a block's text is OUT. By the time the value holds it, it is data.",
+      "reason": "the split is deliberate - assembly keeps its IO, rendering is total and effect-free, and it is the second half a theorem can be stated about. Which store a builder read and whether it was entitled to is that builder's own obligation."
+    },
+    {
+      "id": "model-input-inference-from-what-was-disclosed",
+      "level": "policy",
+      "statement": "What a reader could deduce from the facts that WERE admitted, from their count, or from their absence is OUT.",
+      "reason": "the disclosure vocabulary is a declared classification enforced at the boundary, not an inference-control regime - the same honesty boundary the disclosure fold's ladder states in the same words"
     }
   ]
 }
