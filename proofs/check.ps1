@@ -2,10 +2,8 @@
 <#
 .SYNOPSIS
     The whole proof leg for every model under proofs/ — Phase 787's
-    remoting decoder algebra, Phase 790's disclosure fold and Phase 793's
-    tool gate.
-    remoting decoder algebra, Phase 790's disclosure fold, and Phase
-    792's model-input admissibility.
+    remoting decoder algebra, Phase 790's disclosure fold, Phase 793's
+    tool gate and Phase 792's model-input admissibility.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
