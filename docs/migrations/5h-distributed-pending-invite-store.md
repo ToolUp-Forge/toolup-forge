@@ -57,3 +57,29 @@ Revert the SDK phase commit. The interface, the rename, the DI registration, and
 ## What's deferred to a follow-up
 
 Tracked in the phase body — all four ETag-based blob-default sub-tasks + the optional Redis cache companion + the validator gate update wait for Phase 9c half-2's `IBlobStorage.UploadWithETag` substrate. The interface seam shipped here is the load-bearing piece for that drop-in; the rest is mechanical once the ETag substrate exists.
+
+## Blob default is now real (2026-09-18 follow-up)
+
+**What changed.** `BlobPendingInviteStore` shipped — the ETag-based multi-instance implementation over the Phase 600 `IConditionalBlobStorage` seam (the surface lives there, not on `IBlobStorage` as the seam half assumed). Same blob (`_platform/pending-invites.json`) and codec as the in-memory store, so a deployment that grows from one replica to several keeps its pending entries; no process-local cache; every mutation is read-with-ETag → transform → `UploadWithETag IfMatch` with a bounded retry (`BlobPendingInviteStoreOptions`: 3 retries at 100 / 200 / 400 ms by default) that surfaces `PendingInviteStoreError.Conflict` when exhausted. The store is silent on the audit log except for the `TeamInviteExpired` rows a sweep owns, exactly like the in-memory store.
+
+**When it is auto-selected.** `compose` picks it when **both** hold: `ServerConfig.ReplicaCount > 1`, and the resolved `IBlobStorage` implements `IConditionalBlobStorage` (the local, Azure, S3 and GCS backends all do, as do the encrypting / resilient decorators). One replica keeps `InMemoryPendingInviteStore` (its read cache is a real throughput win there). A `ServerApp.withPendingInviteStore` override still wins over the auto-selection in every case.
+
+**What it requires.** A conditional-write-capable blob backend. A consumer-supplied `IBlobStorage` that does not implement `IConditionalBlobStorage` cannot host it, and the SDK does **not** degrade to a racy download-modify-upload: it falls back to the in-memory store and `PendingInviteStoreInstanceValidator` says so at preflight. That validator now fires only when the RESOLVED store is `InMemoryPendingInviteStore` under `ReplicaCount > 1` — a deployment on the blob store (auto-selected or supplied) is clean regardless of replica count.
+
+**How to opt out.** Either supply the in-memory store explicitly and set `AcceptPendingInviteStoreInMultiInstance = true` (`TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE=1`) — the escape hatch is unchanged — or supply any custom `IPendingInviteStore`:
+
+```fsharp skip=fragment
+|> ServerApp.withPendingInviteStore (InMemoryPendingInviteStore(blobStorage, logger) :> IPendingInviteStore)
+```
+
+To tune the retry budget rather than opt out, construct the blob store yourself over a conditional backend:
+
+```fsharp skip=fragment
+|> ServerApp.withPendingInviteStore (
+    BlobPendingInviteStore(conditionalStorage, logger, Some auditLog, None, { MaxRetries = 5; InitialBackoff = TimeSpan.FromMilliseconds 50.0 })
+    :> IPendingInviteStore)
+```
+
+**Verification.** `IPendingInviteStoreContract` now runs against both stores (`InProcess/BlobPendingInviteStoreTests.fs`), plus concurrency cases — two replicas upserting both land, two replicas consuming one entry admit exactly one, N forced conflicts then success, N+1 forced conflicts surface `Conflict` — and the validator gate cases. The Phase 259 conformance ratchet no longer lists `IPendingInviteStoreContract` as single-bound.
+
+**Still deferred.** The optional `RedisPendingInviteCache` decorator (separate sub-phase, only if multi-instance read load becomes load-bearing).
