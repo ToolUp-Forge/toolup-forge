@@ -84,8 +84,8 @@ ToolUp.EntityStores.Postgres 11/17
 ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 97/144
-ToolUp.Facts.Core 254/484
-ToolUp.Facts.Server 425/785
+ToolUp.Facts.Core 274/510
+ToolUp.Facts.Server 439/804
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 150/533
@@ -124,7 +124,7 @@ ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 251/502
 ToolUp.Platform.Client 2168/6341
 ToolUp.Platform.Core 5261/13379
-ToolUp.Platform.Server 5483/11110
+ToolUp.Platform.Server 5491/11131
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062
