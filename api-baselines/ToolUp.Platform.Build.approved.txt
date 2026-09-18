@@ -83,7 +83,9 @@ ToolUp.Platform.CodemodFinding.RuleId : System.String { get }
 ToolUp.Platform.CodemodFinding.Text : System.String { get }
 ToolUp.Platform.CodemodMigration (class)
 ToolUp.Platform.CodemodMigration.ApiStability : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
@@ -91,6 +93,7 @@ ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { g
 ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
 ToolUp.Platform.CodemodMigration+Tags (class)
 ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigrationModule (class)

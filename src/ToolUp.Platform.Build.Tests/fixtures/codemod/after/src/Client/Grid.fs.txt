@@ -1,0 +1,25 @@
+module MyApp.Client.Grid
+
+open Feliz
+open ToolUp.Elmish
+open Feliz.AgGrid
+open Feliz.AgCharts
+
+let grid rows =
+    Html.div [
+        prop.className ThemeClass.Balham
+        prop.children [ AgGrid.grid [ AgGrid.rowData rows ] ]
+    ]
+
+let chart series = Feliz.AgCharts.AgChart.chart [ AgChart.series series ]
+
+let private onError (text: string, ex: exn) = printfn "%s: %A" text ex
+
+let program =
+    Program.mkProgram init update view
+    |> Program.withTrace (fun msg model _ -> printfn "New message: %s -> updated state: %s" (Program.safeMsgRepr msg) (Program.safeMsgRepr model))
+    |> Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))
+
+let inlineHandled =
+    Program.mkProgram init update view
+    |> Program.withErrorHandler (fun (text, ex) -> printfn "%s: %A" text ex)

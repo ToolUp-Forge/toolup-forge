@@ -17,6 +17,8 @@ type CodemodMigration =
     | Surfaces
     /// Phase 11.C.5 — package-id renames (Tier 2) and interface-shape renames (Tier 3).
     | ApiStability
+    /// Phase 815 — the seven 0.x deprecations removed at the 1.0 cut.
+    | Deprecations
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -26,6 +28,7 @@ module CodemodMigration =
         | CodemodMigration.Remoting -> "docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md"
         | CodemodMigration.Surfaces -> "docs/migrations/0.X.0-platform-mode-to-surfaces.md"
         | CodemodMigration.ApiStability -> "docs/migrations/11-C-5-public-api-stability-cluster.md"
+        | CodemodMigration.Deprecations -> "docs/migrations/815-remove-open-deprecations.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -33,6 +36,7 @@ module CodemodMigration =
         | CodemodMigration.Remoting -> "Phase 73"
         | CodemodMigration.Surfaces -> "Phase 66"
         | CodemodMigration.ApiStability -> "Phase 11.C.5"
+        | CodemodMigration.Deprecations -> "Phase 815"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -161,7 +165,9 @@ type CodemodPlan = {
 /// Phase 66's `PlatformMode` → `Subject` / `SurfaceProfile` redesign
 /// (`docs/migrations/0.X.0-platform-mode-to-surfaces.md`), and Phase
 /// 11.C.5's package-id and interface renames
-/// (`docs/migrations/11-C-5-public-api-stability-cluster.md`). This module
+/// (`docs/migrations/11-C-5-public-api-stability-cluster.md`), and Phase
+/// 815's removal of the seven 0.x deprecations at the 1.0 cut
+/// (`docs/migrations/815-remove-open-deprecations.md`). This module
 /// is the deciding half of the `Codemod` FAKE target `SDK.Build.fs`
 /// registers (`dotnet run -- Codemod <dir> [--check]`): the rules as data,
 /// the per-file rewrite, the walk, and the two renderings (diff and
@@ -379,6 +385,51 @@ module Codemod =
             @"\bToolUp\.AuthProviders\.OidcClient\b"
             "ToolUp.AuthProviders.Oidc.Client"
             "`ToolUp.AuthProviders.OidcClient` → `ToolUp.AuthProviders.Oidc.Client`"
+        // Phase 815 — the AG Grid / AG Charts compat re-exports. The
+        // module names are gone; every member they forwarded lives under
+        // the standalone binding's module with the same name, so an
+        // `open` or a qualified access moves 1:1. `\b` keeps
+        // `ToolUp.Platform.AgGridEnterprise` / `.AgChartExport` — both
+        // still real — out of reach.
+        rewrite
+            "815-aggrid-compat-module"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bToolUp\.Platform\.AgGrid\b"
+            "Feliz.AgGrid"
+            "`ToolUp.Platform.AgGrid` (the compat re-export) → `Feliz.AgGrid` (opens and qualified references)"
+        rewrite
+            "815-agchart-compat-module"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bToolUp\.Platform\.AgChart\b"
+            "Feliz.AgCharts"
+            "`ToolUp.Platform.AgChart` (the compat re-export) → `Feliz.AgCharts` (opens and qualified references)"
+        // Phase 815 — `Program.withErrorHandler onError` in its pipeline
+        // form (a named callback, nothing after it but the next `|>` or
+        // the line end). The upstream-shape callback composes onto the
+        // structured reporter exactly as the removed shim did internally,
+        // so the rewrite is the shim's own body. A lambda argument, or a
+        // call with the program applied on the same line, is a review
+        // finding below.
+        rewrite
+            "815-elmish-error-handler"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bProgram\.withErrorHandler\s+([A-Za-z_][\w'.]*)(?=\s*(\|>|$))"
+            "Program.withErrorReporter (fun ctx -> $1 (ctx.Message, ctx.Exception))"
+            "`Program.withErrorHandler onError` → `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))`"
+        // Phase 815 — `Program.withConsoleTrace` took nothing but the
+        // program, so its replacement is a fixed expression: the
+        // upstream `withTrace` hook, logging the same bounded reprs the
+        // shim logged (`safeMsgRepr` — never the live msg/model object).
+        rewrite
+            "815-elmish-console-trace"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bProgram\.withConsoleTrace\b"
+            "Program.withTrace (fun msg model _ -> printfn \"New message: %s -> updated state: %s\" (Program.safeMsgRepr msg) (Program.safeMsgRepr model))"
+            "`Program.withConsoleTrace` → `Program.withTrace` with a console-logging callback over `Program.safeMsgRepr`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -489,6 +540,24 @@ module Codemod =
             CodemodFileClass.Source
             @"\bcreateWithModel\b|\bcreateWithBatchSize\b"
             "T3.5 — the OpenAI EMBEDDING factories take `secretStore` first (`createWithModel secretStore model dimensions`, `createWithBatchSize secretStore batchSize`); the Claude / OpenAI AI factories already did and need no change"
+        review
+            "815-elmish-error-handler-inline"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bProgram\.withErrorHandler\b"
+            "`Program.withErrorHandler` is removed: wrap the upstream-shape callback as `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))` — a named callback in pipeline position is rewritten; an inline lambda or a call with the program applied on the same line is left for you to reshape"
+        review
+            "815-remoting-permission-guarded-api"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bmakePermissionGuardedApi\b"
+            "`RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md"
+        review
+            "815-aggrid-theme-class"
+            CodemodMigration.Deprecations
+            CodemodFileClass.Source
+            @"\bThemeClass\.(Alpine|AlpineDark|Balham|BalhamDark|Material)\b"
+            "the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = \"legacy\"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API"
     ]
 
     // ── Per-file decision ─────────────────────────────────────────────

@@ -1,0 +1,12 @@
+module MyApp.Server.Guarded
+
+open Microsoft.AspNetCore.Http
+open ToolUp.Platform
+open ToolUp.Platform.Server
+
+// Enterprise grid init still lives in its own module; the compat
+// re-export is what moved, and `ToolUp.Platform.AgGridEnterprise` is
+// not it.
+let apiFactory (ctx: HttpContext) = { GetSkus = fun () -> async { return [] } }
+
+let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory

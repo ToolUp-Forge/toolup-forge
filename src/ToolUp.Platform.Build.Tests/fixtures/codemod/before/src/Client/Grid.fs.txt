@@ -1,0 +1,25 @@
+module MyApp.Client.Grid
+
+open Feliz
+open ToolUp.Elmish
+open ToolUp.Platform.AgGrid
+open ToolUp.Platform.AgChart
+
+let grid rows =
+    Html.div [
+        prop.className ThemeClass.Balham
+        prop.children [ AgGrid.grid [ AgGrid.rowData rows ] ]
+    ]
+
+let chart series = ToolUp.Platform.AgChart.AgChart.chart [ AgChart.series series ]
+
+let private onError (text: string, ex: exn) = printfn "%s: %A" text ex
+
+let program =
+    Program.mkProgram init update view
+    |> Program.withConsoleTrace
+    |> Program.withErrorHandler onError
+
+let inlineHandled =
+    Program.mkProgram init update view
+    |> Program.withErrorHandler (fun (text, ex) -> printfn "%s: %A" text ex)

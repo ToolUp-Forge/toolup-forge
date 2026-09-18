@@ -122,6 +122,7 @@ let tests =
                         [
                             "Directory.Packages.props"
                             "src/Client/App.fs"
+                            "src/Client/Grid.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
@@ -155,7 +156,9 @@ let tests =
                         [
                             "Directory.Packages.props"
                             "src/Client/App.fs"
+                            "src/Client/Grid.fs"
                             "src/Server/Already.fs"
+                            "src/Server/Guarded.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
@@ -232,7 +235,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 6 file(s) visited, 29 rewrite(s) in 5 file(s), 18 site(s) for review."
+                        "Codemod: 8 file(s) visited, 34 rewrite(s) in 6 file(s), 21 site(s) for review."
                         "summary")
         ]
 
@@ -374,6 +377,89 @@ let tests =
                     rewritten
                     "define: { __TOOLUP_PLATFORM_SURFACES__: JSON.stringify(process.env.TOOLUP_PLATFORM_SURFACES) }"
                     "both spellings"
+
+            // ── Phase 815 — the removed deprecations ──────────────────────
+            //
+            // Each rule below goes red on its own if the rule is dropped or
+            // widened: the golden tree pins that every 815 rule fires, and
+            // these pin the boundary each one must NOT cross.
+
+            testCase "815: a named error handler in pipeline position is rewritten onto the reporter"
+            <| fun () ->
+                let line = "    |> Program.withErrorHandler onError"
+                let rewritten, rewrites = rewriteSource line
+
+                Expect.equal
+                    rewritten
+                    "    |> Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))"
+                    "the shim's own body, composed onto withErrorReporter"
+
+                Expect.equal (rewrites |> List.map _.RuleId) [ "815-elmish-error-handler" ] "rule"
+                Expect.isEmpty (reviewSource rewritten) "a rewritten site is not also reported"
+
+            testCase "815: an inline lambda, or the program applied on the line, is reported and never rewritten"
+            <| fun () ->
+                for line in
+                    [
+                        "    |> Program.withErrorHandler (fun (text, ex) -> printfn \"%s: %A\" text ex)"
+                        "let p = Program.withErrorHandler onError program"
+                    ] do
+                    let rewritten, rewrites = rewriteSource line
+                    Expect.equal rewritten line (sprintf "not rewritten: %s" line)
+                    Expect.isEmpty rewrites "no rewrite record"
+
+                    Expect.equal
+                        (reviewSource line |> List.map _.RuleId)
+                        [ "815-elmish-error-handler-inline" ]
+                        (sprintf "reported for reshaping: %s" line)
+
+            testCase "815: withConsoleTrace becomes the withTrace hook over safeMsgRepr"
+            <| fun () ->
+                let rewritten, rewrites = rewriteSource "    |> Program.withConsoleTrace"
+
+                Expect.stringStarts rewritten "    |> Program.withTrace (fun msg model _ ->" "the withTrace hook"
+                Expect.stringContains rewritten "Program.safeMsgRepr msg" "bounded repr of the message"
+                Expect.stringContains rewritten "Program.safeMsgRepr model" "bounded repr of the model"
+                Expect.equal (rewrites |> List.map _.RuleId) [ "815-elmish-console-trace" ] "rule"
+
+            testCase "815: the compat module names move to the standalone bindings, and their real neighbours do not"
+            <| fun () ->
+                let rewritten, rewrites =
+                    rewriteSource "open ToolUp.Platform.AgGrid\nopen ToolUp.Platform.AgChart\n"
+
+                Expect.equal rewritten "open Feliz.AgGrid\nopen Feliz.AgCharts\n" "both opens move"
+
+                Expect.equal
+                    (rewrites |> List.map _.RuleId)
+                    [ "815-aggrid-compat-module"; "815-agchart-compat-module" ]
+                    "one rule each"
+
+                for untouched in
+                    [
+                        "open ToolUp.Platform.AgGridEnterprise"
+                        "open ToolUp.Platform.AgChartExport"
+                        "module MyApp.AgGrid"
+                    ] do
+                    let same, none = rewriteSource untouched
+                    Expect.equal same untouched (sprintf "still real, left alone: %s" untouched)
+                    Expect.isEmpty none "no rewrite"
+
+            testCase "815: ThemeClass and makePermissionGuardedApi are reported, never rewritten"
+            <| fun () ->
+                let theme = "        prop.className ThemeClass.BalhamDark"
+
+                let guarded =
+                    "let handler = RemotingHelpers.makePermissionGuardedApi \"Sku\" apiFactory"
+
+                for line, rule in
+                    [
+                        theme, "815-aggrid-theme-class"
+                        guarded, "815-remoting-permission-guarded-api"
+                    ] do
+                    let rewritten, rewrites = rewriteSource line
+                    Expect.equal rewritten line (sprintf "the target depends on the site: %s" line)
+                    Expect.isEmpty rewrites "no rewrite"
+                    Expect.equal (reviewSource line |> List.map _.RuleId) [ rule ] (sprintf "reported under %s" rule)
 
             testCase "rule ids are unique and every rule carries its one-line account"
             <| fun () ->

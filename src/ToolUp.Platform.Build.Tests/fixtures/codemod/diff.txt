@@ -44,6 +44,23 @@
 @@ L28 [73-elmish-qualified]
 -Elmish.React.Program.withReactSynchronous "app" program |> Program.run
 +ToolUp.Elmish.React.Program.withReactSynchronous "app" program |> Program.run
+--- a/src/Client/Grid.fs
++++ b/src/Client/Grid.fs
+@@ L5 [815-aggrid-compat-module]
+-open ToolUp.Platform.AgGrid
++open Feliz.AgGrid
+@@ L6 [815-agchart-compat-module]
+-open ToolUp.Platform.AgChart
++open Feliz.AgCharts
+@@ L14 [815-agchart-compat-module]
+-let chart series = ToolUp.Platform.AgChart.AgChart.chart [ AgChart.series series ]
++let chart series = Feliz.AgCharts.AgChart.chart [ AgChart.series series ]
+@@ L20 [815-elmish-console-trace]
+-    |> Program.withConsoleTrace
++    |> Program.withTrace (fun msg model _ -> printfn "New message: %s -> updated state: %s" (Program.safeMsgRepr msg) (Program.safeMsgRepr model))
+@@ L21 [815-elmish-error-handler]
+-    |> Program.withErrorHandler onError
++    |> Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -95,4 +112,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 29 rewrite(s) across 5 file(s) pending.
+Codemod: 34 rewrite(s) across 6 file(s) pending.

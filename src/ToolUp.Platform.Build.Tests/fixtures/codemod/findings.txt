@@ -1,4 +1,4 @@
-Codemod: 18 site(s) in 3 file(s) need human review (not rewritten):
+Codemod: 21 site(s) in 5 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -8,6 +8,14 @@ Codemod: 18 site(s) in 3 file(s) need human review (not rewritten):
       -> Phase 11.C.5: T3.4 — `ClientConfig.create` takes a trailing `ClientHandlerRegistry` argument; pass the registry you wire (or `ClientHandlerRegistry.empty` explicitly)
     L26 [73-elmish-unknown-namespace] let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
       -> Phase 73: an `Elmish.*` sub-namespace the ToolUp runtime does not carry (Navigation / UrlParser / Debug / Browser stay upstream) — choose the ToolUp equivalent or keep the upstream package
+  src/Client/Grid.fs
+    L10 [815-aggrid-theme-class] prop.className ThemeClass.Balham
+      -> Phase 815: the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = "legacy"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API
+    L25 [815-elmish-error-handler-inline] |> Program.withErrorHandler (fun (text, ex) -> printfn "%s: %A" text ex)
+      -> Phase 815: `Program.withErrorHandler` is removed: wrap the upstream-shape callback as `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))` — a named callback in pipeline position is rewritten; an inline lambda or a call with the program applied on the same line is left for you to reshape
+  src/Server/Guarded.fs
+    L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
+      -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
   src/Server/Program.fs
     L7 [73-remoting-unknown-namespace] open Fable.Remoting.AspNetCore
       -> Phase 73: a `Fable.Remoting` namespace the ToolUp fork does not carry (only Server / Client / Json / Giraffe / MsgPack moved) — check the `ToolUp.Remoting.*` surface for the equivalent, or keep the upstream package
@@ -42,3 +50,4 @@ Codemod: 18 site(s) in 3 file(s) need human review (not rewritten):
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
+    Phase 815 — docs/migrations/815-remove-open-deprecations.md
