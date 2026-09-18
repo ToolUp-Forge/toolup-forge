@@ -2632,6 +2632,10 @@ ToolUp.Platform.ComponentRequirementsModule.resolve(Microsoft.FSharp.Collections
 ToolUp.Platform.ComponentRequirementsModule.signatureOf(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.ComponentRequirements]) : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentRequirements]
 ToolUp.Platform.ComponentRequirementsModule.withConfig(ToolUp.Platform.ConfigRequirement, ToolUp.Platform.ComponentRequirements) : ToolUp.Platform.ComponentRequirements
 ToolUp.Platform.ComponentRequirementsModule.withSecret(ToolUp.Platform.SecretRequirement, ToolUp.Platform.ComponentRequirements) : ToolUp.Platform.ComponentRequirements
+ToolUp.Platform.ComponentVersion (class)
+ToolUp.Platform.ComponentVersion..ctor(System.String, System.String)
+ToolUp.Platform.ComponentVersion.Name : System.String { get }
+ToolUp.Platform.ComponentVersion.Version : System.String { get }
 ToolUp.Platform.CompositionCapabilityRefusedPayload (class)
 ToolUp.Platform.CompositionCapabilityRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.CompositionCapabilityRefusedPayload.Component : System.String { get }

@@ -384,6 +384,11 @@
              in the Fable-packed source alongside DeploymentReadiness.fs. -->
         <Compile Include="Shared\DeploymentVerification.fs" />
         <Compile Include="Shared\IDevDiagnosticsContributor.fs" />
+        <!-- Phase 9a follow-up: the DI-registered version record `/dev/version`
+             appends to its assembly-derived list. Fable-safe (a two-string
+             record), so it ships with the packed source beside the
+             contributor seam. -->
+        <Compile Include="Shared\ComponentVersion.fs" />
         <Compile Include="Shared\NarrativeTypes.fs" />
         <!-- Phase 521 — pure fact-reference walk over narrative spans. -->
         <Compile Include="Shared\NarrativeFacts.fs" />

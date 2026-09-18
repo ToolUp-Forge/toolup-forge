@@ -853,6 +853,9 @@ let private registeredTests =
         // Phase 47 - AI action-denial observability: the rollup and the
         // sustained-rate alert.
         AIAllowlistDiagnosticsTests.tests
+        // Phase 9a follow-up - /dev/version: shape, zero-registration
+        // listing, the DI extension, and the gate.
+        DevVersionEndpointTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         // Phase 489 - the MCP server host companion: an off-the-shelf-shaped

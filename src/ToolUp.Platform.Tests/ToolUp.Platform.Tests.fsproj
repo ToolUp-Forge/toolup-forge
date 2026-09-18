@@ -1150,6 +1150,11 @@
              production-safe IAIDenialRollupProbe seam) + the sustained
              denial-rate alert monitor. -->
         <Compile Include="InProcess\AIAllowlistDiagnosticsTests.fs" />
+        <!-- Phase 9a follow-up - the /dev/version endpoint: payload shape,
+             zero-registration assembly listing, the DI ComponentVersion
+             extension, and the EnableDevEndpoints gate driven through the
+             real buildRouteHandlers over a TestServer. -->
+        <Compile Include="InProcess\DevVersionEndpointTests.fs" />
         <Compile Include="InProcess\ClientToolDispatchContractBindings.fs" />
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <!-- Phase 489 - MCP server host + agent principals: protocol

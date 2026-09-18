@@ -348,6 +348,19 @@ The `/dev/inspect` endpoint (gated by `ServerConfig.EnableDevEndpoints`, default
 
 `IDevDiagnosticsContributor` is the extension point for companions wanting to surface their own internals (AI fast-path stats, ingestion queue depth, etc.).
 
+`/dev/version`, mounted under the same `EnableDevEndpoints` gate, answers "is this deployment running the build I think it is?" in one request: `Sdk` (the `ToolUp.Platform.Server` version), `Commit` (the sha Source Link stamps onto a git build, `null` when the build carried none — never invented), `Companions` (every loaded `ToolUp.*` assembly with its informational version, zero registration required, followed by any `ComponentVersion` registered in DI — the route for a P/Invoke companion to report the native library version it actually loaded), `DeployedAt` (the entry assembly's file time, so a redeploy is distinguishable from a restart) and `StartedAt` (process start).
+
+```bash
+curl -s http://localhost:5000/dev/version
+# {
+#   "Sdk": "0.23.0",
+#   "Companions": [ { "Name": "ToolUp.Platform.Core", "Version": "0.23.0+3dd8a12c…" }, … ],
+#   "Commit": "3dd8a12c…",
+#   "DeployedAt": "2026-09-18T11:02:14.0000000Z",
+#   "StartedAt": "2026-09-18T11:05:41.1234567Z"
+# }
+```
+
 ## What this docs site does NOT cover
 
 - **Source-level walkthroughs of every module** — that's better read from the source code with the type definitions in scope.

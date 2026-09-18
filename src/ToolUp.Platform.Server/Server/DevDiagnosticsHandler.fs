@@ -40,6 +40,14 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // to its case name as a string so `System.Text.Json` produces a clean,
 // human-readable shape for `curl` / browser. No `FableConverters`
 // dependency: this endpoint is for humans, not Fable.
+//
+// **`/dev/version` (Phase 9a follow-up).** A sibling JSON route in the
+// same `routes` list — so it is mounted under the same
+// `EnableDevEndpoints` gate and can never be reachable when
+// `/dev/inspect` is not — answering "is this deployment running the
+// build I think it is?": SDK version, build commit, every loaded
+// `ToolUp.*` assembly's version, and the deploy / process-start
+// timestamps. See `VersionReport` for the shape and its sources.
 
 // ─── Report DTO ──────────────────────────────────────────────────────
 
@@ -217,6 +225,46 @@ type DevDiagnosticsReport = {
     /// at the end of the report so existing JSON consumers continue
     /// to find every field they expect.
     ProcessProfile: ProcessProfileSummary
+}
+
+/// Phase 9a follow-up — the `/dev/version` payload. Answers "is this
+/// deployment running the build I think it is?" from one request:
+/// the SDK version, the commit it was built from, every loaded
+/// `ToolUp.*` assembly's version, and the two timestamps an operator
+/// actually asks about. Same `EnableDevEndpoints` gate as
+/// `/dev/inspect`; same PascalCase field names on the wire.
+type VersionReport = {
+    /// The SDK version: the `ToolUp.Platform.Server` assembly's
+    /// informational version with its `+<metadata>` suffix removed —
+    /// that suffix is the build commit and is surfaced as `Commit`.
+    /// The Server tier is chosen because it is the assembly hosting
+    /// this handler; `ToolUp.Platform.Core` appears in `Companions`
+    /// like every other loaded assembly.
+    Sdk: string
+    /// Every loaded assembly whose simple name starts with `ToolUp.`
+    /// (the platform tiers included), sorted by name, each with its
+    /// informational version verbatim (falling back to the assembly
+    /// version), followed by every `ComponentVersion` registered in
+    /// DI — the route for a native library's version, which no
+    /// assembly attribute can carry. Only LOADED assemblies appear: a
+    /// referenced companion is listed once the runtime has loaded it,
+    /// which for anything composed into the app has happened before
+    /// this endpoint is reachable.
+    Companions: ComponentVersion list
+    /// The build commit, read from the `+<sha>` build-metadata suffix
+    /// that Source Link stamps onto the informational version of a git
+    /// build. `None` (JSON `null`) when the build carried none — it is
+    /// never invented.
+    Commit: string option
+    /// When this build was PUT HERE: the entry assembly's file
+    /// last-write time, UTC ISO-8601. Stable across restarts, so it
+    /// tells a redeploy from a bounce. `None` when the host exposes no
+    /// entry-assembly file (a single-file bundle, a custom host).
+    DeployedAt: string option
+    /// When this PROCESS started, UTC ISO-8601. With `DeployedAt` this
+    /// answers both operator questions — "which build?" and "how long
+    /// has it been up?" — without a second request.
+    StartedAt: string
 }
 
 // ─── Compose-time captures ───────────────────────────────────────────
@@ -672,6 +720,100 @@ let buildReport
             Contributors = contributors
             ProcessProfile = processProfile
         }
+    }
+
+// ─── Version report (Phase 9a follow-up) ─────────────────────────────
+
+/// Split an informational version into the version proper and its
+/// `+` build metadata: `"0.23.0+abc"` gives `("0.23.0", Some "abc")`;
+/// a version carrying no metadata keeps `None`.
+let private splitBuildMetadata (informational: string) : string * string option =
+    match informational.IndexOf '+' with
+    | -1 -> informational, None
+    | i -> informational.Substring(0, i), Some(informational.Substring(i + 1))
+
+/// The assembly's informational version when it carries one, else its
+/// four-part assembly version. Never empty: an assembly with neither
+/// reads `<unknown>` rather than being dropped from the list.
+let private assemblyVersionString (asm: System.Reflection.Assembly) : string =
+    let informational =
+        asm.GetCustomAttributes(typeof<System.Reflection.AssemblyInformationalVersionAttribute>, false)
+        |> Seq.tryHead
+        |> Option.map (fun a -> (a :?> System.Reflection.AssemblyInformationalVersionAttribute).InformationalVersion)
+        |> Option.filter (fun v -> not (String.IsNullOrWhiteSpace v))
+
+    match informational with
+    | Some v -> v
+    | None ->
+        let v = asm.GetName().Version
+        if isNull v then "<unknown>" else v.ToString()
+
+/// Every non-dynamic loaded assembly whose simple name starts with
+/// `ToolUp.`, sorted by name. Read per request rather than once at
+/// module init, so a companion the runtime loads late still appears.
+let private loadedToolUpAssemblies () : ComponentVersion list =
+    AppDomain.CurrentDomain.GetAssemblies()
+    |> Array.filter (fun a -> not a.IsDynamic)
+    |> Array.choose (fun a ->
+        let name = a.GetName().Name
+
+        if not (isNull name) && name.StartsWith("ToolUp.", StringComparison.Ordinal) then
+            Some(
+                {
+                    Name = name
+                    Version = assemblyVersionString a
+                }
+                : ComponentVersion
+            )
+        else
+            None)
+    |> Array.sortBy _.Name
+    |> Array.toList
+
+/// The assembly hosting this handler — `ToolUp.Platform.Server` — whose
+/// informational version is the `Sdk` slot.
+let private sdkAssembly = typeof<VersionReport>.Assembly
+
+/// The entry assembly's file last-write time, UTC ISO-8601, or `None`
+/// when there is no entry assembly or it has no on-disk location (a
+/// single-file bundle, a custom host). Read per request: cheap, and a
+/// file replaced under a running process then reports the new time,
+/// which is the signal an operator wants.
+let private deployedAt () : string option =
+    let entry = System.Reflection.Assembly.GetEntryAssembly()
+
+    if isNull entry then
+        None
+    else
+        let location =
+            try
+                entry.Location
+            with _ ->
+                ""
+
+        if String.IsNullOrEmpty location || not (IO.File.Exists location) then
+            None
+        else
+            Some(IO.File.GetLastWriteTimeUtc(location).ToString("o"))
+
+/// Build the `/dev/version` payload for one request. Pure over the
+/// process's loaded assemblies plus the `ComponentVersion` instances
+/// registered in the request's DI container; touches no store and
+/// reads nothing caller-scoped, so it carries no team-isolation
+/// concern (GP 4).
+let buildVersionReport (ctx: HttpContext) : VersionReport =
+    let sdkVersion, commit = splitBuildMetadata (assemblyVersionString sdkAssembly)
+    let registered = ctx.RequestServices.GetServices<ComponentVersion>() |> List.ofSeq
+
+    let startedAt =
+        System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("o")
+
+    {
+        Sdk = sdkVersion
+        Companions = loadedToolUpAssemblies () @ registered
+        Commit = commit
+        DeployedAt = deployedAt ()
+        StartedAt = startedAt
     }
 
 // ─── Renderers ───────────────────────────────────────────────────────
@@ -1167,11 +1309,27 @@ let private htmlHandler (config: ServerConfig) (capture: DevDiagnosticsCapture) 
         return! next ctx
     }
 
+/// JSON handler for `/dev/version` (Phase 9a follow-up). Same
+/// `no-store` as `/dev/inspect`: a cached answer to "which build is
+/// this?" is worse than none.
+let private versionHandler: HttpHandler =
+    fun next ctx -> task {
+        let report = buildVersionReport ctx
+        ctx.Response.ContentType <- "application/json; charset=utf-8"
+        ctx.Response.Headers["Cache-Control"] <- "no-store"
+        do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, jsonOptions))
+        return! next ctx
+    }
+
 /// Routes for the dev diagnostics endpoint. `/dev/inspect/html` is the
 /// browser-friendly view; `/dev/inspect` is JSON. Order matters here —
 /// the more specific `/html` route matches first inside Giraffe's
-/// `choose`, otherwise `/dev/inspect` would shadow it.
+/// `choose`, otherwise `/dev/inspect` would shadow it. `/dev/version`
+/// sits in this same list so that it is mounted under the same
+/// `EnableDevEndpoints` gate (`devDiagnosticsRoutes` in
+/// `BuildRouteHandlers`) and shares its fate exactly.
 let routes (config: ServerConfig) (capture: DevDiagnosticsCapture) : HttpHandler list = [
     route "/dev/inspect/html" >=> htmlHandler config capture
     route "/dev/inspect" >=> jsonHandler config capture
+    route "/dev/version" >=> versionHandler
 ]
