@@ -33,6 +33,7 @@ Migration notes:
 - [259-conformance-pack-coverage-gate](docs/migrations/259-conformance-pack-coverage-gate.md)
 - [260-semver-bump-from-api-diff](docs/migrations/260-semver-bump-from-api-diff.md)
 - [261-public-xml-doc-coverage-gate](docs/migrations/261-public-xml-doc-coverage-gate.md)
+- [262-changelog-upgrade-guide-generator](docs/migrations/262-changelog-upgrade-guide-generator.md)
 - [326-sdk-manifest-reconcile](docs/migrations/326-sdk-manifest-reconcile.md)
 - [347-shared-types-split](docs/migrations/347-shared-types-split.md)
 - [36-D-cross-module-read-consent](docs/migrations/36-D-cross-module-read-consent.md)
@@ -61,6 +62,7 @@ Migration notes:
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
 - [814-seam-principals](docs/migrations/814-seam-principals.md)
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
+- [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
 _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7406 members added, 103 members changed, 1304 members removed; 18 packages new, 2 packages withdrawn._
 

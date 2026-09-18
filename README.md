@@ -177,6 +177,8 @@ Every refactor that requires consumer-side changes ships a per-entry migration d
 
 If a release lands no consumer-visible changes, no migration entry is added — silence on a version bump means the upgrade is a pure `<PackageVersion>` edit.
 
+[`CHANGELOG.md`](./CHANGELOG.md) is the per-release record of the public surface itself — every member added, changed and removed between two releases, generated from the committed API baselines and linking each release's migration entries — and [`docs/migrations/upgrading-to-1.0.md`](./docs/migrations/upgrading-to-1.0.md) consolidates every breaking rename and internalization on the `0.x` line into the one page to read when moving to `1.0`.
+
 ## License
 
 [Apache License 2.0](LICENSE). Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK).
