@@ -1011,9 +1011,11 @@ type ServerConfig = {
     /// Default `false` — `PendingInviteStoreInstanceValidator` emits
     /// `Warning` (not Error — the link-based invitation flow is
     /// unaffected; only the IssuePendingInviteByEmail surface
-    /// silently corrupts). The escape hatch is ETag-based optimistic
-    /// concurrency on `IBlobStorage.Upload` (the Phase 9c half-2
-    /// follow-up); set `true` (or
+    /// silently corrupts). Since Phase 5h the SDK auto-selects the
+    /// ETag-based `BlobPendingInviteStore` for `ReplicaCount > 1` when
+    /// the blob backend supports conditional writes, so the Warning
+    /// fires only when the in-memory store is still the resolved one;
+    /// set `true` (or
     /// `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE=1`) only
     /// when the deployment knows the risk is acceptable.
     AcceptPendingInviteStoreInMultiInstance: bool

@@ -9753,6 +9753,19 @@ ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey (class)
 ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.container(System.String) : System.String
 ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.scoped(System.String, System.String) : System.String
 ToolUp.Platform.TeamScopedSecretStore+TeamSecretKey.unscoped(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Teams.BlobPendingInviteStore (class)
+ToolUp.Platform.Teams.BlobPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IConditionalBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.Teams.BlobPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IConditionalBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Platform.Teams.BlobPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IConditionalBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]])
+ToolUp.Platform.Teams.BlobPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IConditionalBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.Teams.BlobPendingInviteStoreOptions)
+ToolUp.Platform.Teams.BlobPendingInviteStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]
+ToolUp.Platform.Teams.BlobPendingInviteStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PendingInviteByEmail]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptions (class)
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptions..ctor(System.Int32, System.TimeSpan)
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptions.InitialBackoff : System.TimeSpan { get }
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptions.MaxRetries : System.Int32 { get }
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptionsModule (class)
+ToolUp.Platform.Teams.BlobPendingInviteStoreOptionsModule.defaults : ToolUp.Platform.Teams.BlobPendingInviteStoreOptions { get }
 ToolUp.Platform.Teams.InMemoryPendingInviteStore (class)
 ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
 ToolUp.Platform.Teams.InMemoryPendingInviteStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
@@ -9766,6 +9779,7 @@ ToolUp.Platform.Teams.PendingInviteStore.upsert(ToolUp.Platform.BlobStorage+IBlo
 ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator (class)
 ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator (class)
 ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt (class)
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt..ctor()
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)

@@ -883,10 +883,10 @@ type ServerApp = {
     /// store (`IPendingInviteStore`). When `None` (default), `compose`
     /// registers `InMemoryPendingInviteStore` over the resolved
     /// `IBlobStorage` — the single-instance blob+lock+cache impl
-    /// carried forward from Phase 3d. Distributed deployments wanting
-    /// multi-instance correctness on the pending-by-email flow swap in
-    /// `BlobPendingInviteStore` (lands once Phase 9c half-2's
-    /// `IConditionalBlobStorage.UploadWithETag` surface ships); an optional
+    /// carried forward from Phase 3d — for a single replica, and the
+    /// ETag-based `BlobPendingInviteStore` (over the Phase 600
+    /// `IConditionalBlobStorage` seam) for `ReplicaCount > 1` when the
+    /// resolved storage supports conditional writes. An optional
     /// `RedisPendingInviteCache` decorator may also bind here for
     /// cross-process cache invalidation under high read load. The
     /// interface is registered unconditionally so the team-invitation
@@ -1836,14 +1836,14 @@ module ServerApp =
     }
 
     /// Phase 5h — register a custom `IPendingInviteStore` implementation.
-    /// When omitted, `compose` registers `InMemoryPendingInviteStore`
+    /// When omitted, `compose` auto-selects: `InMemoryPendingInviteStore`
     /// over the resolved `IBlobStorage` — the single-instance blob+lock+
-    /// cache impl carried forward from Phase 3d. Distributed deployments
-    /// wanting multi-instance correctness on the pending-by-email flow
-    /// call `withPendingInviteStore (BlobPendingInviteStore.create ...)`
-    /// once that companion ships (depends on forge Phase 9c half-2's
-    /// `IConditionalBlobStorage.UploadWithETag` substrate). Calling this multiple
-    /// times keeps the last store.
+    /// cache impl carried forward from Phase 3d — for one replica, and
+    /// the ETag-based `BlobPendingInviteStore` for `ReplicaCount > 1`
+    /// when that storage implements `IConditionalBlobStorage`. Supply a
+    /// store here to override the selection either way — e.g. a
+    /// `BlobPendingInviteStore` with a custom retry budget, or a
+    /// decorated one. Calling this multiple times keeps the last store.
     let withPendingInviteStore (store: IPendingInviteStore) (app: ServerApp) : ServerApp = {
         app with
             PendingInviteStore = Some store

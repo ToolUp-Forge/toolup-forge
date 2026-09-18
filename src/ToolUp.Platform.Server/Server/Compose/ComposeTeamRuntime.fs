@@ -23,8 +23,12 @@ open ToolUp.Platform.TeamManagement
 /// `ComposeScopeResolver`) — the same instance is used both places so
 /// `SetActiveTeam`'s cache invalidation lands in the right cache.
 /// `IPendingInviteStore` defaults to `InMemoryPendingInviteStore` over
-/// the resolved `IBlobStorage`; a custom implementation supplied via
-/// `ServerApp.withPendingInviteStore` replaces it. `IPermissionStore`
+/// the resolved `IBlobStorage` for a single replica, and (Phase 5h) to
+/// the ETag-based `BlobPendingInviteStore` for `ReplicaCount > 1` when
+/// that storage implements `IConditionalBlobStorage`; a custom
+/// implementation supplied via `ServerApp.withPendingInviteStore`
+/// replaces either. The `PendingInviteStoreInstanceValidator` is
+/// registered here too, over the store actually resolved. `IPermissionStore`
 /// is the Phase 4 RBAC backing — registered unconditionally so
 /// request handlers can resolve it regardless of mode.
 ///
@@ -102,31 +106,82 @@ let registerTeamPermissionStores
         else
             None
 
-    // Phase 5h — register `IPendingInviteStore`. Default
-    // `InMemoryPendingInviteStore` over the resolved `IBlobStorage`
-    // preserves the single-instance blob+lock+cache impl carried
-    // forward from Phase 3d; a custom implementation supplied via
-    // `ServerApp.withPendingInviteStore` replaces it. Registered
-    // unconditionally so `TeamInvitationHandler` resolves the
-    // interface from DI without a mode-conditional fallback —
-    // non-team modes never call into the store.
-    // Phase 547 — pass the resolved `IAuditLog` so the default store emits
-    // `TeamInviteExpired` under `team-{TeamId}` scope on every expiry sweep
-    // (GP 6). A consumer-supplied override owns its own audit wiring; the
-    // default single-instance store gets the log (and the Phase 547.C
-    // notifier, when opted in) via its 4-arg constructor.
+    // Phase 5h — register `IPendingInviteStore`. A custom implementation
+    // supplied via `ServerApp.withPendingInviteStore` always wins.
+    // Otherwise the default is auto-selected on the same gate the
+    // validator reads: `ReplicaCount > 1` picks the ETag-based
+    // `BlobPendingInviteStore` — but ONLY when the resolved `IBlobStorage`
+    // implements `IConditionalBlobStorage` (the local, Azure, S3 and GCS
+    // backends do; a consumer-supplied backend may not). A backend
+    // without conditional writes falls back to the single-instance
+    // `InMemoryPendingInviteStore` and `PendingInviteStoreInstanceValidator`
+    // below says so at preflight: never silently pick a store that
+    // cannot be correct, and never silently pick one that merely looks
+    // distributed. A single replica keeps the in-memory blob+lock+cache
+    // impl carried forward from Phase 3d (its read cache is a real
+    // throughput win there). Registered unconditionally so
+    // `TeamInvitationHandler` resolves the interface from DI without a
+    // mode-conditional fallback — non-team modes never call into the
+    // store.
+    // Phase 547 — pass the resolved `IAuditLog` so either default store
+    // emits `TeamInviteExpired` under `team-{TeamId}` scope on every
+    // expiry sweep (GP 6). A consumer-supplied override owns its own
+    // audit wiring; the defaults get the log (and the Phase 547.C
+    // notifier, when opted in) via their 4-arg constructors.
     let resolvedPendingInviteStore: IPendingInviteStore =
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
-            ToolUp.Platform.Teams.InMemoryPendingInviteStore(
-                resolvedBlobStorage,
-                resolvedLogger,
-                Some auditLog,
-                inviteExpiryNotifier
-            )
-            :> IPendingInviteStore)
+            let blobDefault =
+                if config.ReplicaCount > 1 then
+                    ToolUp.Platform.Teams.BlobPendingInviteStore.TryCreate(
+                        resolvedBlobStorage,
+                        resolvedLogger,
+                        Some auditLog,
+                        inviteExpiryNotifier
+                    )
+                else
+                    None
+
+            match blobDefault with
+            | Some store ->
+                resolvedLogger.Info(
+                    sprintf
+                        "[ComposeTeamRuntime] event=pending_invite_store_selected store=BlobPendingInviteStore ServerConfig.ReplicaCount = %d and the composed IBlobStorage implements IConditionalBlobStorage — pending-by-email invitations use ETag-guarded writes across replicas."
+                        config.ReplicaCount
+                )
+
+                store
+            | None ->
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(
+                    resolvedBlobStorage,
+                    resolvedLogger,
+                    Some auditLog,
+                    inviteExpiryNotifier
+                )
+                :> IPendingInviteStore)
 
     services.AddSingleton<IPendingInviteStore>(resolvedPendingInviteStore) |> ignore
+
+    // Phase 3d / Cluster A4 → Phase 5h — PendingInviteStore single-instance
+    // enforcement, registered HERE (not with the other post-bootstrap
+    // validators) because it reads the store this function just resolved:
+    // the Warning fires only when that store is `InMemoryPendingInviteStore`
+    // under `ReplicaCount > 1` — i.e. the auto-selection above could not
+    // pick the blob store, or a consumer supplied the in-memory one — and
+    // the `AcceptPendingInviteStoreInMultiInstance` escape hatch still
+    // silences it. Warning (not Error) because the link-based invitation
+    // flow is unaffected — only the pending-by-email surface corrupts. The
+    // aggregator collects every `AddSingleton<IConfigValidator>` regardless
+    // of registration site, and it requires an INSTANCE, which is why the
+    // validator cannot be registered before the store is in hand.
+    services.AddSingleton<ConfigValidation.IConfigValidator>(
+        ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator.PendingInviteStoreInstanceValidator(
+            config,
+            Some resolvedPendingInviteStore
+        )
+        :> ConfigValidation.IConfigValidator
+    )
+    |> ignore
 
     // PermissionStore backs Phase 4 RBAC. Registered unconditionally
     // so request handlers can resolve it regardless of mode; the
@@ -341,19 +396,9 @@ let registerPostBootstrapValidators
     )
     |> ignore
 
-    // Phase 3d / Cluster A4 — PendingInviteStore single-instance
-    // enforcement. Single-instance-only by design (process-local
-    // SemaphoreSlim + full-blob overwrite + per-process 30s read
-    // cache); ReplicaCount > 1 deployments using the
-    // IssuePendingInviteByEmail surface silently lose updates +
-    // double-apply auto-joins. Warning (not Error) because the
-    // link-based invitation flow is unaffected — only the
-    // pending-by-email surface corrupts.
-    services.AddSingleton<ConfigValidation.IConfigValidator>(
-        ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator.PendingInviteStoreInstanceValidator(config)
-        :> ConfigValidation.IConfigValidator
-    )
-    |> ignore
+    // Phase 3d / Cluster A4 — the PendingInviteStore single-instance
+    // validator used to register here; since Phase 5h it registers in
+    // `registerTeamPermissionStores` above, beside the store it inspects.
 
     // Phase 66 Stream B.2 — surface coherence validator. Needs the
     // ORIGINAL `authProvider: IAuthProvider option` (to fire Rule 8

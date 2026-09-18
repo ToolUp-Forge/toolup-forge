@@ -32,17 +32,20 @@ open ToolUp.Platform.BlobStorage
 //
 // **Concurrency.** Cross-process writes are serialised by a single
 // `SemaphoreSlim` — sufficient for single-instance deployments
-// (the canonical Phase 5f shape). Distributed deployments require
-// ETag-based optimistic concurrency on `IBlobStorage.Upload` (Phase
-// 9c follow-up); the eventual `BlobPendingInviteStore` will bind to
-// `IPendingInviteStore` against the ETag substrate without touching
-// callers — they resolve the interface from DI.
+// (the canonical Phase 5f shape). Distributed deployments get
+// ETag-based optimistic concurrency from `BlobPendingInviteStore`
+// (Phase 5h, over the Phase 600 `IConditionalBlobStorage` seam),
+// which binds to `IPendingInviteStore` without touching callers —
+// they resolve the interface from DI. The two stores share this
+// file's blob layout and codec (the `internal` helpers below), so a
+// deployment that grows from one replica to several keeps its
+// pending entries.
 //
 // **Phase 5h.** File renamed from `PendingInviteStore.fs` to
 // `InMemoryPendingInviteStore.fs`; the `InMemoryPendingInviteStore`
 // type at namespace level adopts `IPendingInviteStore` explicitly so
 // `ServerApp.withPendingInviteStore` can swap in alternative impls
-// (the future `BlobPendingInviteStore`, an optional `RedisPendingInviteCache`
+// (`BlobPendingInviteStore`, an optional `RedisPendingInviteCache`
 // decorator). The pre-existing `module PendingInviteStore` is preserved
 // as a backward-compat shim — call sites depending on
 // `PendingInviteStore.upsert` / `.remove` / etc. compile unchanged
@@ -83,10 +86,14 @@ module PendingInviteStore =
     /// called from production code paths.
     let internal __internal_resetForTests () = cache <- None
 
-    let private platformContainer = "_platform"
-    let private blobName = "pending-invites.json"
+    /// Container + blob name of the pending-invites map. `internal` (not
+    /// `private`) since Phase 5h's blob default: `BlobPendingInviteStore`
+    /// reads and writes the SAME blob with the SAME codec, so the two
+    /// stores are migration-compatible in both directions.
+    let internal platformContainer = "_platform"
+    let internal blobName = "pending-invites.json"
 
-    let private encodeMap (map: Map<string, PendingInviteByEmail>) : byte[] =
+    let internal encodeMap (map: Map<string, PendingInviteByEmail>) : byte[] =
         JsonSerializer.Serialize(map, jsonOptions) |> Encoding.UTF8.GetBytes
 
     /// Decode the persisted blob. An empty / missing blob is the
@@ -97,7 +104,7 @@ module PendingInviteStore =
     /// which — combined with the full-blob-overwrite write path — meant
     /// one corrupt blob irreversibly erased every pending invite on the
     /// next `upsert`.
-    let private decodeMap (bytes: byte[]) : Result<Map<string, PendingInviteByEmail>, string> =
+    let internal decodeMap (bytes: byte[]) : Result<Map<string, PendingInviteByEmail>, string> =
         if isNull bytes || bytes.Length = 0 then
             Ok Map.empty
         else
@@ -120,7 +127,7 @@ module PendingInviteStore =
     /// canonical blob name so an operator can find and recover it. The
     /// canonical name is then freed (renamed-aside) so the store
     /// self-heals to empty on the next read instead of erroring forever.
-    let private quarantineBlobName () =
+    let internal quarantineBlobName () =
         sprintf "%s.corrupt-%s" blobName (DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffZ"))
 
     let private loadFromStore (storage: IBlobStorage) : Async<Map<string, PendingInviteByEmail>> = async {
@@ -173,7 +180,7 @@ module PendingInviteStore =
     /// dropped entry (Phase 547). Supersedes the earlier count-only
     /// `dropExpired`: the dropped entries themselves are needed so the
     /// audit hook can name inviter / invitee / team on each one.
-    let private partitionExpired
+    let internal partitionExpired
         (now: DateTime)
         (map: Map<string, PendingInviteByEmail>)
         : Map<string, PendingInviteByEmail> * (string * PendingInviteByEmail) list =
@@ -347,41 +354,28 @@ module PendingInviteStore =
     let tryConsumeForEmail (storage: IBlobStorage) (email: string) : Async<PendingInviteByEmail option> =
         tryConsumeForEmailWith noExpiryHook storage email
 
-/// Single-instance, in-memory-cached implementation of
-/// `IPendingInviteStore`. Wraps the `PendingInviteStore` module's
-/// blob+lock+cache impl; one instance per deployment (a second one
-/// against the same `IBlobStorage` would share the module-level
-/// semaphore and cache anyway, so multi-instantiation is a code smell
-/// rather than a correctness hazard).
-///
-/// Maps the module-function impl's exception-throwing failure model
-/// onto the interface's `Result<_, PendingInviteStoreError>` shape:
-/// every method catches `exn` and surfaces `StorageFailed ex.Message`.
-/// `Conflict` is never raised by this implementation — single-instance
-/// `SemaphoreSlim` serialisation is conflict-free by construction.
-/// `Remove` returns `Error NotFound` when no entry was present (the
-/// module-function `remove` collapses this to `Ok ()`).
-///
-/// Phase 116 — takes an `ILogger` so a quarantined-corrupt-blob event
-/// (raised as `PendingInvitesBlobCorrupt` by the load path) is surfaced
-/// at `Error` level rather than disappearing into a generic
-/// `StorageFailed` string.
-type InMemoryPendingInviteStore
-    (
-        storage: IBlobStorage,
-        logger: ILogger,
-        auditLog: IAuditLog option,
-        expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
-    ) =
+/// Phase 5h — the expiry side-effect hook shared by every SDK-shipped
+/// `IPendingInviteStore` implementation (`InMemoryPendingInviteStore`,
+/// `BlobPendingInviteStore`). Builds the `onExpired` function a store
+/// runs AFTER a sweep / upsert / consume has durably dropped expired
+/// entries: one `TeamInviteExpired` audit row per entry (Phase 547) and
+/// then, when composed, the inviter notification (Phase 547.C). Lives
+/// here rather than in either store because the posture — best-effort,
+/// a throwing sink degrades to a `Warn`, never fails the store operation
+/// — is a property of the seam, not of one backend.
+module internal PendingInviteExpiryHook =
 
-    /// Phase 547 — per-expiry audit hook. Emits one `TeamInviteExpired`
-    /// under the entry's `team-{TeamId}` scope for every entry a sweep
-    /// drops. Best-effort: a throwing `IAuditLog.Record` (misconfigured
-    /// sink, unreachable `IEventStore`) must never fail the sweep — the
-    /// entry is already durably gone — so each emission is guarded and a
+    /// Per-expiry audit hook. Emits one `TeamInviteExpired` under the
+    /// entry's `team-{TeamId}` scope for every entry a sweep drops.
+    /// Best-effort: a throwing `IAuditLog.Record` (misconfigured sink,
+    /// unreachable `IEventStore`) must never fail the sweep — the entry
+    /// is already durably gone — so each emission is guarded and a
     /// failure degrades to a `Warn`. No audit log composed → no-op (GP 11
     /// / GP 13).
-    let auditExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+    let private auditExpired
+        (logger: ILogger)
+        (auditLog: IAuditLog option)
+        : (string * PendingInviteByEmail) list -> Async<unit> =
         match auditLog with
         | None -> fun _ -> async { return () }
         | Some log ->
@@ -409,16 +403,20 @@ type InMemoryPendingInviteStore
                         )
             }
 
-    /// Phase 547.C — the optional inviter-notification leg, run AFTER
+    /// The full hook: audit emission first, then — only when a notifier
+    /// was composed — the Phase 547.C inviter notification, run AFTER
     /// audit emission so the durable trail row exists whatever the
-    /// notification transport does. Same best-effort posture as the
-    /// audit hook: a throwing notifier degrades to a `Warn`, never
-    /// fails the sweep. Not composed (`None` — the default, and the
-    /// only state reachable through the 2-/3-arg constructors) → the
-    /// hook is byte-for-byte the pre-547.C audit-only shape (GP 11 /
-    /// GP 13). `ComposeTeamRuntime` wires a real notifier only when
-    /// `ServerConfig.NotifyInviterOnInviteExpiry` is `true`.
-    let onExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+    /// notification transport does. Same best-effort posture: a throwing
+    /// notifier degrades to a `Warn`, never fails the sweep. `None`
+    /// notifier → the hook is byte-for-byte the pre-547.C audit-only
+    /// shape (GP 11 / GP 13).
+    let build
+        (logger: ILogger)
+        (auditLog: IAuditLog option)
+        (expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option)
+        : (string * PendingInviteByEmail) list -> Async<unit> =
+        let auditExpired = auditExpired logger auditLog
+
         match expiryNotifier with
         | None -> auditExpired
         | Some notify ->
@@ -431,6 +429,40 @@ type InMemoryPendingInviteStore
                     with ex ->
                         logger.Warn(sprintf "[PendingInviteStore] invite-expiry notification failed: %s" ex.Message)
             }
+
+/// Single-instance, in-memory-cached implementation of
+/// `IPendingInviteStore`. Wraps the `PendingInviteStore` module's
+/// blob+lock+cache impl; one instance per deployment (a second one
+/// against the same `IBlobStorage` would share the module-level
+/// semaphore and cache anyway, so multi-instantiation is a code smell
+/// rather than a correctness hazard).
+///
+/// Maps the module-function impl's exception-throwing failure model
+/// onto the interface's `Result<_, PendingInviteStoreError>` shape:
+/// every method catches `exn` and surfaces `StorageFailed ex.Message`.
+/// `Conflict` is never raised by this implementation — single-instance
+/// `SemaphoreSlim` serialisation is conflict-free by construction.
+/// `Remove` returns `Error NotFound` when no entry was present (the
+/// module-function `remove` collapses this to `Ok ()`).
+///
+/// Phase 116 — takes an `ILogger` so a quarantined-corrupt-blob event
+/// (raised as `PendingInvitesBlobCorrupt` by the load path) is surfaced
+/// at `Error` level rather than disappearing into a generic
+/// `StorageFailed` string.
+type InMemoryPendingInviteStore
+    (
+        storage: IBlobStorage,
+        logger: ILogger,
+        auditLog: IAuditLog option,
+        expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
+    ) =
+
+    /// Phase 547 / 547.C — the expiry side-effect hook (audit row per
+    /// dropped entry, then the opt-in inviter notification). Built by
+    /// `PendingInviteExpiryHook.build`, shared with `BlobPendingInviteStore`
+    /// since Phase 5h's blob default; the posture is unchanged.
+    let onExpired: (string * PendingInviteByEmail) list -> Async<unit> =
+        PendingInviteExpiryHook.build logger auditLog expiryNotifier
 
     /// Map a load-path failure onto the interface's error shape. A
     /// `PendingInvitesBlobCorrupt` is logged at `Error` (operator must

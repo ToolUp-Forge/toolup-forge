@@ -8,12 +8,13 @@ open System
 // ─── IPendingInviteStore ─────────────────────────────────────────────
 //
 // SDK-level interface for the email-keyed pending-invitation substrate
-// (Phase 5h). The default impl is `InMemoryPendingInviteStore` — a
-// single-instance blob+lock+cache impl carried forward from Phase 3d.
-// A future `BlobPendingInviteStore` (deferred until forge Phase 9c
-// half-2 ships `IBlobStorage.UploadWithETag`) binds to this interface
-// without touching call sites; an optional `RedisPendingInviteCache`
-// decorator may also bind here.
+// (Phase 5h). Two SDK-shipped impls bind to it, auto-selected by
+// `compose` on `ServerConfig.ReplicaCount`: `InMemoryPendingInviteStore`
+// — a single-instance blob+lock+cache impl carried forward from Phase
+// 3d — and `BlobPendingInviteStore`, the ETag-based multi-instance
+// default over the Phase 600 `IConditionalBlobStorage` seam. Neither
+// touches call sites; an optional `RedisPendingInviteCache` decorator
+// may also bind here.
 //
 // **Six portability rules** (all honoured):
 //
@@ -29,8 +30,8 @@ open System
 //      default does — 30-second TTL), but every method's correctness
 //      derives from the persisted store, not from in-memory continuity
 //      between calls. A distributed impl that wants per-node correctness
-//      drops the cache entirely (the future `BlobPendingInviteStore`
-//      makes that trade explicitly).
+//      drops the cache entirely (`BlobPendingInviteStore` makes that
+//      trade explicitly).
 //   5. No cross-shard ordering promises. Each email-keyed entry is
 //      independent.
 //   6. Precision N/A — pending-invite validity is timestamp-bounded,
@@ -48,9 +49,9 @@ open System
 [<RequireQualifiedAccess>]
 type PendingInviteStoreError =
     /// Optimistic-concurrency conflict — applies to ETag-aware
-    /// implementations (the future `BlobPendingInviteStore`). The
-    /// substrate observed a concurrent update between read and write;
-    /// the caller's retry budget is exhausted. `InMemoryPendingInviteStore`
+    /// implementations (`BlobPendingInviteStore`). The substrate
+    /// observed a concurrent update between read and write, and the
+    /// store's retry budget is exhausted. `InMemoryPendingInviteStore`
     /// serialises writes via a process-local semaphore and never raises
     /// this case.
     | Conflict

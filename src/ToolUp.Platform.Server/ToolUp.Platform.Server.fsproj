@@ -895,6 +895,11 @@
         <Compile Include="Server\Teams\TeamManagement.fs" />
         <Compile Include="Server\Teams\MembershipDoctor.fs" />
         <Compile Include="Server\Teams\InMemoryPendingInviteStore.fs" />
+        <!-- Phase 5h — the ETag-based multi-instance default over the Phase 600
+             IConditionalBlobStorage seam. After the InMemory store (shares its
+             blob layout + codec + expiry hook), before the validator (which
+             type-tests the resolved store). -->
+        <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
         <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
         <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
         <Compile Include="Server\Infra\BootstrapTeam.fs" />
