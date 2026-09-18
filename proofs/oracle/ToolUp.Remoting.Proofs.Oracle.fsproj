@@ -54,5 +54,10 @@
         <!-- Phase 793 — the tool gate model, extracted. Same discipline: the
              byte-diff in check.ps1 holds it identical to the prover output. -->
         <Compile Include="ToolGate.fs" />
+        <!-- Phase 792 — GENERATED from ../ModelInput.fst — do not edit.
+             Independent of both extractions above (it owns its own opt and
+             adds its own outcome), so order among the three is immaterial;
+             later proof phases APPEND their extraction below. -->
+        <Compile Include="ModelInput.fs" />
     </ItemGroup>
 </Project>

@@ -8,7 +8,11 @@
     "and on the margin in z3rlimit. The release bundles Z3, so the pin covers the solver too",
     "— three of them, and z3version names which one is used.",
     "The hash is over the downloaded archive; proofs/check.ps1 verifies it before extracting",
-    "and refuses to proceed on a mismatch."
+    "and refuses to proceed on a mismatch.",
+    "Phase 792 adds ModelInput.fst, the model-input admissibility theorem. It needed no flag",
+    "change either: the `extract` set below still carries only --codegen FSharp, and check.ps1",
+    "appends --extract <module> per entry of its own module list. A model that ever DID need a",
+    "flag of its own would take a per-module override here rather than widening this set."
   ],
   "tool": "fstar",
   "version": "v2026.09.06",

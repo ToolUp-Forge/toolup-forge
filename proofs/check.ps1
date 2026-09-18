@@ -4,6 +4,8 @@
     The whole proof leg for every model under proofs/ — Phase 787's
     remoting decoder algebra, Phase 790's disclosure fold and Phase 793's
     tool gate.
+    remoting decoder algebra, Phase 790's disclosure fold, and Phase
+    792's model-input admissibility.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
@@ -121,6 +123,12 @@ $modules = @(
         HostList     = "ToolUp.Platform.Tests.Phase 793 - the proved gate as oracle"
         HostMinCases = 7
         HostSubject  = "every in-tree tool under generated policies"
+        Name         = "ModelInput"
+        Source       = "ModelInput.fst"
+        Oracle       = "oracle/ModelInput.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 792 - the proved model input as oracle"
+        HostMinCases = 9
+        HostSubject  = "a 250-subject seeded population and a leaky store"
     }
 )
 

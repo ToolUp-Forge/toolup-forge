@@ -15,6 +15,11 @@ docs-snippets/generated/
 proofs/oracle/RemotingDecode.fs
 proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
+# `DisclosureFold.fs` is the second extraction, held by the same byte-diff, and
+# Phase 792's `ModelInput.fs` is the third.
+proofs/oracle/RemotingDecode.fs
+proofs/oracle/DisclosureFold.fs
+proofs/oracle/ModelInput.fs
 # The proof leg's working directories: the downloaded toolchain, F*'s
 # .checked cache, and the fresh extraction the byte-diff compares. All
 # gitignored, but Fantomas reads THIS file rather than .gitignore, so a

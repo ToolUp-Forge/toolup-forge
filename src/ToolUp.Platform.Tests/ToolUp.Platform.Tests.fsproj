@@ -2548,6 +2548,12 @@
              prompts. After the InProcess packs it scans nothing of; before
              the lane support files. -->
         <Compile Include="InProcess\ModelInputEntryTests.fs" />
+        <!-- Phase 792 — the extracted F* model of that value run beside
+             production: the assembled value, its refusals, the rendering
+             and the leak differential compared at once, over a 250-subject
+             seeded population and a deliberately leaky store, with a
+             committed go-red oracle that renders one withheld fact. -->
+        <Compile Include="InProcess\ModelInputProofOracleTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

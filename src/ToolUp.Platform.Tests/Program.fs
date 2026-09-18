@@ -2333,6 +2333,13 @@ let private registeredTests =
         // beside production over every in-tree tool under generated
         // policies, with a committed go-red gate that ignores Egress.
         ToolGateProofOracleTests.tests
+        // Phase 792 — the F* model of the model-input value and its
+        // renderer, extracted and run beside production over a 250-subject
+        // seeded population and a deliberately leaky store. The value, the
+        // constructor's refusals, the rendering and the leak differential
+        // are compared at once, and a committed go-red oracle renders one
+        // withheld fact so the comparison is known to be able to fail.
+        ModelInputProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

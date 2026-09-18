@@ -1105,6 +1105,33 @@ let demoTests =
                 (ModelInput.disclosedFactIds modelInput |> List.sort)
                 (present |> List.sort)
                 "and the value's declared facts are exactly the subjects the string oracle found — the two probes agree"
+
+            // (6) Phase 792 — the same claim over the RENDERING, which is
+            // the surface a provider is actually handed. The value says
+            // what was admitted; `render` is what the model reads, and a
+            // value-only assertion would not see a renderer that showed it
+            // something the value never carried. `render_faithful` is
+            // proved over the model of this function; this is that lemma's
+            // operational face on the real end-to-end value.
+            let rendered = ModelInput.render modelInput
+
+            Expect.equal
+                rendered.SystemPrompt
+                (Some context)
+                "the rendering is the context the provider was handed, byte for byte — render joins, it does not reformat"
+
+            let renderedText = ModelInput.renderedText modelInput
+
+            let inRendering =
+                seeded |> List.map fst |> List.filter (fun sku -> renderedText.Contains sku)
+
+            Expect.equal
+                (inRendering |> List.sort)
+                (present |> List.sort)
+                (sprintf
+                    "exactly the returned top-%d subjects reach the bytes the provider is handed; the other %d are in neither the value nor the rendering"
+                    topK
+                    (populationSize - topK))
         }
 
         testCase "a rendering that emits a fact the value does not carry fails the differential"
