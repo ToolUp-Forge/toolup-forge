@@ -311,7 +311,7 @@ Auto-injected by `ServerModule.withGuardedApi`:
 - `POST /api/IKnowledgeApi/SetAIContext`
 - `POST /api/IKnowledgeApi/GetIngestionStatus`
 
-All gated by `makePermissionGuardedApi` against the caller's `ModulePermissions`.
+All gated by the `ServerModule.withGuardedApi` module-access check against the caller's `ModulePermissions`.
 
 ## Blob layout
 

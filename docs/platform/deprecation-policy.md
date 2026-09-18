@@ -90,8 +90,8 @@ renders each assembly's surface as a set of one-line tokens and diffs it against
 its token; the member's own token is left exactly as it was:
 
 ```
-ToolUp.Platform.AgGrid.ThemeClass (class)
-ToolUp.Platform.AgGrid.ThemeClass (class)  (obsolete)
+Demo.Widget.Spin(System.Int32) : System.String
+Demo.Widget.Spin(System.Int32) : System.String  (obsolete)
 ```
 
 So a deprecation scores as an **addition** — non-breaking, but unfolded, so the gate fails until the

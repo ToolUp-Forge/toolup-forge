@@ -642,7 +642,7 @@ section eliminates structurally.
 > `src/ToolUp.Platform.Server/Server/Scope/PermissionStore.fs` ·
 > `src/ToolUp.Platform.Server/Server/Teams/TeamManagement.fs` ·
 > `src/ToolUp.Platform.Server/Server/RemotingHelpers.fs`
-> (`makePermissionGuardedApi`) ·
+> (the module-access gate `ServerModule.withGuardedApi` installs) ·
 > `src/ToolUp.Platform.Tests/Contracts/IPermissionStoreContract.fs` ·
 > `docs/platform/auth.md` (§"Permissions + roles")
 

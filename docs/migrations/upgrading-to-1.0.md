@@ -104,24 +104,27 @@ with the `PackageReference` still present fails at **restore** (`NU1101`), not a
 Every withdrawal is also a one-line `package withdrawn` entry under **Removed** in the CHANGELOG
 section of the release that made it, so a later one will be found there rather than here.
 
-## 5. Deprecations — what 1.0 removes, and what it carries
+## 5. Deprecations — what 1.0 removes (all of them), and what it carries (none)
 
 Every `[<Obsolete>]` notice on the `0.x` surface names its replacement and its removal target, and the
-Phase 258 gate holds that sentence to a format. Those targeting "a future major" are decided **at**
-the 1.0 cut: each is either removed there or carried into 1.x with the allowance raised in
-[`v1-readiness.json`](../../v1-readiness.json) (the `open-deprecations` scorecard row), in a commit
-that says why. Move off them now and the decision cannot affect you:
+Phase 258 gate holds that sentence to a format. Those targeting "a future major" were decided **at**
+the 1.0 cut, and the decision was to remove every one of them rather than carry any into 1.x — the
+`openDeprecations` allowance in [`v1-readiness.json`](../../v1-readiness.json) stays at zero, and the
+`open-deprecations` scorecard row reads `0 open` by removal. The seven are gone from `0.23.0`
+([Phase 815](815-remove-open-deprecations.md), which carries the codemod rules that apply the
+mechanical half):
 
-| Deprecated member | Use instead |
+| Removed member | Use instead |
 |---|---|
-| `ToolUp.Elmish.Program.withConsoleTrace` | `Program.withErrorReporter` plus an update interceptor |
-| `ToolUp.Elmish.Program.withErrorHandler` | `Program.withErrorReporter` (structured `ErrorContext`) |
+| `ToolUp.Elmish.Program.withConsoleTrace` | `Program.withTrace` with a callback over `Program.safeMsgRepr`, or `ClientConfig.EnableElmishConsoleTrace` under the SDK shell |
+| `ToolUp.Elmish.Program.withErrorHandler` | `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))` (structured `ErrorContext`) |
 | `ToolUp.Platform.AgGrid` / `ToolUp.Platform.AgChart` compat modules (`ToolUp.Platform.Client`) | `open Feliz.AgGrid` / `open Feliz.AgCharts` — the bindings are standalone packages since Phase 344 |
-| `AgGrid.ThemeClass` (both the compat module and `Feliz.AgGrid`) | the Theming API: `AgGrid.theme (Theme.themeQuartz |> Theme.withParams …)` |
+| `ThemeClass` (both the compat module's and `Feliz.AgGrid`'s) | the Theming API: `AgGrid.theme Theme.themeBalham` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) |
 | `ToolUp.Platform.RemotingHelpers.makePermissionGuardedApi` | `ServerModule.withGuardedApi` with per-method `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` attributes — [69d-authorization-metadata.md](69d-authorization-metadata.md) |
 
-The list above is the tree this page was written against; the authoritative one is the set of
-`(obsolete)` marker lines in `api-baselines/`, which the scorecard counts.
+The authoritative list is the set of `(obsolete)` marker lines in `api-baselines/`, which the
+scorecard counts — empty on this tree. A deprecation marked after this page was written is decided
+the same way at the next major.
 
 **Renames deliberately NOT in 1.0.** The five parked Tier-4 renames from the 2026-05-24 API audit
 are decided in [Phase 256's table](256-public-surface-minimization.md#the-parked-tier-4-renames-2026-05-24-api-audit--all-five-decided):

@@ -841,7 +841,7 @@ The auth provider is identity-only. The SDK adds:
 - **`TeamRole`** — `Owner` / `Admin` / `Member`. Per-team.
 - **`ModulePermissions`** — per-team, per-module. `Read | Write | Admin | NoAccess`. Empty map = unrestricted.
 
-Module API handlers wrap in `makePermissionGuardedApi` which checks `ModulePermissions` before invoking. The auth provider doesn't see permissions; the SDK does.
+Module API handlers are wrapped by `ServerModule.withGuardedApi`, which checks `ModulePermissions` before invoking. The auth provider doesn't see permissions; the SDK does.
 
 SSE has its own auth caveat — `EventSource` can't send custom headers, so OIDC bearer tokens need an alternative path (query string with short-lived tokens, session cookie, or a pre-handshake POST). See [`platform/auth.md`](../platform/auth.md) "SSE auth caveat".
 

@@ -515,7 +515,7 @@ The client-side runtime (`ClientToolRuntime` in `ToolUp.AI.Client`) handles the 
 - **Any other exception is classified as `ToolThrew`.** The turn is not aborted: the loop renders the failure as a tool-result string the model can read (`ToolInvocationError.toToolResultContent`) and continues. Prefer returning a domain-shaped JSON error the model can act on over throwing, and reserve `ToolArgumentError` for genuine argument defects.
 - **Result size**: every tool result passes a per-tool context budget at agent-loop dispatch (`ResultBudget` on the definition). `DefaultResultBudget` resolves to a generous SDK-wide ceiling no well-behaved result approaches; a tool whose result grows with data cardinality declares its own `ResultBudgetChars n` (characters of the returned JSON, must be positive), and an export-shaped tool whose whole point is the payload declares `NoResultBudget`. An over-budget result reaches the model as a typed JSON marker naming the tool and the elided size, with a steer to narrow the query — the call still counts as a success, not an error.
 - **Idempotency**: if a tool writes data, design it idempotent. The agent may retry on transient errors. Idempotency keys flow through the tool args.
-- **Permissions**: tools enforce their own permission checks against `AccessContext`. The SDK's `makePermissionGuardedApi` covers HTTP API permissions but does NOT auto-wrap tool executors.
+- **Permissions**: tools enforce their own permission checks against `AccessContext`. The SDK's module-access gate (`ServerModule.withGuardedApi`) covers HTTP API permissions but does NOT auto-wrap tool executors.
 
 ### `ClientResident` tool authorization — `IClientToolAuthorizer` seam
 

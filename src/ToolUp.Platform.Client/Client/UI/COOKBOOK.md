@@ -10,9 +10,9 @@ reading the repo. The Enterprise mirror is
 - Bindings: [`AgGrid.fs`](../../../Feliz.AgGrid/AgGrid.fs) (`module Feliz.AgGrid`,
   package `Feliz.AgGrid`) and [`AgChart.fs`](../../../Feliz.AgCharts/AgChart.fs)
   (`module Feliz.AgCharts`, package `Feliz.AgCharts`). Phase 344 promoted both out
-  of this tier; `ToolUp.Platform.Client` re-exports them under their old module
-  names (`ToolUp.Platform.AgGrid` / `.AgChart`) so existing call sites compile
-  unchanged, but new code opens the `Feliz.*` modules the snippets below use.
+  of this tier, and Phase 815 retired the compat re-exports that kept the old
+  `ToolUp.Platform.AgGrid` / `.AgChart` module names compiling — every call site
+  opens the `Feliz.*` modules the snippets below use.
 - Upstream API: the TypeScript `.d.ts` under
   `node_modules/ag-grid-community/dist/types/src/` and
   `node_modules/ag-charts-types/dist/types/src/`. Pinned versions:
@@ -365,7 +365,7 @@ AgGrid.grid [
 ### Theming (v31+ Theming API)
 
 ```fsharp
-// Build a theme once, pass it to AgGrid.theme. Supersedes ThemeClass strings.
+// Build a theme once, pass it to AgGrid.theme (the legacy ThemeClass strings are gone).
 let gridTheme =
     Theme.themeQuartz
     |> Theme.withParams { ThemeParams.empty with accentColor = Some "#59229D"; spacing = Some 8 }

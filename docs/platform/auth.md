@@ -239,7 +239,7 @@ Auth providers don't carry permissions; the SDK does:
 - **`TeamRole`** — per-team. `Owner`, `Admin`, `Member`. Set when a user joins a team; managed via `PlatformApi.ChangeMemberRole`.
 - **`ModulePermission`** — per-team, per-module. `Read | Write | Admin | NoAccess`. Stored via `IPermissionStore`; default empty map = unrestricted.
 
-Module API handlers go through `makePermissionGuardedApi` which checks the caller's `ModulePermissions` before invoking the API function. This is the only sanctioned authorisation choke-point. Modules do not check permissions themselves; the wrap is automatic via `ServerModule.withGuardedApi`.
+Module API handlers go through the module-access gate `ServerModule.withGuardedApi` installs, which checks the caller's `ModulePermissions` before invoking the API function. This is the only sanctioned authorisation choke-point. Modules do not check permissions themselves; the wrap is automatic at composition.
 
 Platform Admin paths (assigning admins, destroying encryption keys, writing to the Platform KB) gate on `PlatformRole.PlatformAdmin`. The audit log records every role assignment and revocation.
 

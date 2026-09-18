@@ -83,7 +83,7 @@ The `AccessContext` used for the in-browser path is best-effort — `UserId` fro
 
 ### Permission check (server-side only)
 
-`InMemoryModuleQueryBus` calls `AccessContext.hasPermission targetModule ModulePermission.Read ctx` before dispatching to the handler. Empty permission map = unrestricted (opt-in RBAC, same convention as `makePermissionGuardedApi`). A denied call returns `Some (Error (PermissionDenied moduleName))` as a typed result — it is **not** a 403 HTTP response. Clients branch on the typed error rather than parsing status codes, and the wire behaviour is identical whether the caller is in-process, another server module, or an HTTP ToolUp.Remoting client.
+`InMemoryModuleQueryBus` calls `AccessContext.hasPermission targetModule ModulePermission.Read ctx` before dispatching to the handler. Empty permission map = unrestricted (opt-in RBAC, same convention as the `ServerModule.withGuardedApi` gate). A denied call returns `Some (Error (PermissionDenied moduleName))` as a typed result — it is **not** a 403 HTTP response. Clients branch on the typed error rather than parsing status codes, and the wire behaviour is identical whether the caller is in-process, another server module, or an HTTP ToolUp.Remoting client.
 
 ### Auto-injected HTTP endpoint
 

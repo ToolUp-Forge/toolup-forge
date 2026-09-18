@@ -121,14 +121,14 @@ let register () : ErasedModule =
         Name = "My Module"                       // display name shown in the sidebar
         Icon = Icon.ofUrl "/svg/chart.svg"
     }
-    |> ClientModule.withId "MyModule"            // stable permission key — matches `makePermissionGuardedApi` in Server.fs
+    |> ClientModule.withId "MyModule"            // stable permission key — matches `ServerModule.create` in Server.fs
     |> ClientModule.withView view
     |> ClientModule.withNeedsData (fun has -> has "MyDataType")
     |> ClientModule.withDataTypes [ myDataTypeDisplay ]
     |> ClientModule.register
 ```
 
-`ModuleDefinition` separates identity (`Id`) from presentation (`Name`). `Id` is the stable string used as a Map key for module state, the sidebar filter key against `GetAccessibleModules`, the `AIMessageRequest.ActiveModule` payload, and — for modules exposed by the app server — the `makePermissionGuardedApi` / `AccessContext` permission key. Convention: PascalCase, no spaces (e.g. "SkuAnalysis"). `create` derives it from `Name` with spaces stripped, so `withId` is only needed when the two must differ. `Name` is free-form human-readable text shown in the sidebar and page header. `Icon` is a typed `ReactElement`, not a path string — `Icon.ofImport` wraps a `vite-plugin-svgr` import (the shape every shipped module uses), and `Icon.ofUrl` is the `<img src=…>` fallback shown above. SDK-built-in modules (FileManager, TeamManager) and companion-provided modules (AI assistant, AI settings) use reserved `Id` prefixes (`_sdk.*`, `_ai.*`) so they can never collide with app module Ids.
+`ModuleDefinition` separates identity (`Id`) from presentation (`Name`). `Id` is the stable string used as a Map key for module state, the sidebar filter key against `GetAccessibleModules`, the `AIMessageRequest.ActiveModule` payload, and — for modules exposed by the app server — the `ServerModule.withGuardedApi` / `AccessContext` permission key. Convention: PascalCase, no spaces (e.g. "SkuAnalysis"). `create` derives it from `Name` with spaces stripped, so `withId` is only needed when the two must differ. `Name` is free-form human-readable text shown in the sidebar and page header. `Icon` is a typed `ReactElement`, not a path string — `Icon.ofImport` wraps a `vite-plugin-svgr` import (the shape every shipped module uses), and `Icon.ofUrl` is the `<img src=…>` fallback shown above. SDK-built-in modules (FileManager, TeamManager) and companion-provided modules (AI assistant, AI settings) use reserved `Id` prefixes (`_sdk.*`, `_ai.*`) so they can never collide with app module Ids.
 
 A module that renders several pages calls `ClientModule.withPages` instead of `withView`; `register` refuses a module with neither.
 
@@ -256,8 +256,8 @@ RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
 A `ServerModule` record collects everything one module contributes to the server:
 
 ```fsharp
-ServerModule.create "SkuAnalysis"           // Name = RBAC key for makePermissionGuardedApi
-|> ServerModule.withGuardedApi apiFactory   // HttpContext -> 'T, wrapped in makePermissionGuardedApi
+ServerModule.create "SkuAnalysis"           // Name = RBAC key the guarded-api gate checks
+|> ServerModule.withGuardedApi apiFactory   // HttpContext -> 'T, wrapped in the module-access gate
 |> ServerModule.withDataTypes [ salesDataType ]
 |> ServerModule.withVectorisation [ embeddingHandler ]
 |> ServerModule.withConfig configSchema
@@ -411,9 +411,9 @@ Three `ServerConfig` fields exist because Saturn's defaults used to provide them
 
 ### `logApiError` and ILogger validation
 
-`logApiError` is the shared diagnostic path used by both `makeApi` and `makePermissionGuardedApi`. It resolves `ILogger` via `GetRequiredService<ILogger>()` per request — there is no `eprintfn` fallback. `compose` validates the registration once at startup (`app.Services.GetRequiredService<ILogger>() |> ignore`) so a missing `ILogger` registration crashes loudly at startup rather than dumping stack traces to a possibly-discarded stderr stream during the first request. This trades a silent-failure mode (where ToolUp.Remoting handler errors vanished into request-scoped exceptions in hosted scenarios with no stderr capture) for a single loud startup throw.
+`logApiError` is the shared diagnostic path used by both `makeApi` and the guarded-api gate behind `ServerModule.withGuardedApi`. It resolves `ILogger` via `GetRequiredService<ILogger>()` per request — there is no `eprintfn` fallback. `compose` validates the registration once at startup (`app.Services.GetRequiredService<ILogger>() |> ignore`) so a missing `ILogger` registration crashes loudly at startup rather than dumping stack traces to a possibly-discarded stderr stream during the first request. This trades a silent-failure mode (where ToolUp.Remoting handler errors vanished into request-scoped exceptions in hosted scenarios with no stderr capture) for a single loud startup throw.
 
-Each module's `Server.fs` exposes pure processing functions. The app's composition root assembles them into `HttpContext -> 'T` API factories, wraps each in `makeApi` (open access) or `makePermissionGuardedApi` (RBAC-gated), and attaches them to a `ServerModule` record via `ServerModule.withGuardedApi`. Crucially, API factory construction lives in the composition root — not in module `Server.fs` — because module projects only see shared types, not server-injected infrastructure like `FileManagement.getFileContents` or `makePermissionGuardedApi`.
+Each module's `Server.fs` exposes pure processing functions. The app's composition root assembles them into `HttpContext -> 'T` API factories, attaches each to a `ServerModule` record via `ServerModule.withGuardedApi` (RBAC-gated; `makeApi` is the open-access shape for platform-level routes). Crucially, API factory construction lives in the composition root — not in module `Server.fs` — because module projects only see shared types, not server-injected infrastructure like `FileManagement.getFileContents` or the `ServerModule` composition helpers.
 
 Infrastructure services (auth, blob storage, event store, scope resolver) are registered in DI by compose and available to module server code via `HttpContext.RequestServices`.
 

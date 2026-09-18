@@ -145,7 +145,7 @@ Helpers:
 - `hasPermission moduleName required ctx` — honours the hierarchy: `Admin` satisfies anything, `Write` satisfies `Read` or `Write`, `Read` satisfies only `Read`.
 
 **Enforcement (Phase 4):**
-- `makePermissionGuardedApi moduleName api` wraps a module's ToolUp.Remoting handler with a `canAccessModule` check. Denials raise `UnauthorizedAccessException`, translated to HTTP 403 by the error handler.
+- `ServerModule.withGuardedApi api` wraps a module's ToolUp.Remoting handler with a `canAccessModule` check on the module's `Name`. Denials raise `UnauthorizedAccessException`, translated to HTTP 403 by the error handler.
 - `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stashes them in `HttpContext.Items["ToolUp.ModulePermissions"]`. The `AccessContext` DI factory reads from Items synchronously — the async resolution has already run.
 
 #### Async ↔ Task adaptation

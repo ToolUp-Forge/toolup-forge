@@ -104,7 +104,7 @@ let helloModule =
     |> ServerModule.withGuardedApi helloApiFactory
 ```
 
-Why? The factory takes `HttpContext` and calls things like `FileManagement.getFileContents` or `makePermissionGuardedApi` — both server-only, injected into the consuming server project via `ToolUp.Platform.Server.props`. Module fsprojs don't import that; they only see shared types. So modules stay framework-agnostic, and the composition root assembles them into the framework-bound API records.
+Why? The factory takes `HttpContext` and calls things like `FileManagement.getFileContents` or `ServerModule.withGuardedApi` — both server-only, injected into the consuming server project via `ToolUp.Platform.Server.props`. Module fsprojs don't import that; they only see shared types. So modules stay framework-agnostic, and the composition root assembles them into the framework-bound API records.
 
 ## Registering a module
 

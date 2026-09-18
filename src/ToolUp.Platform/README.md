@@ -139,7 +139,7 @@ ServerApp.empty
 |> ServerApp.run
 ```
 
-`ServerModule` carries a module's Name (the RBAC key used by `makePermissionGuardedApi`), its `Handlers`, any registered `DataType`s, `VectorisationHandler`s, and an optional `ModuleConfigSchema`. `ServerApp` then aggregates those plus config, auth provider, logger, blob storage, and notification channel — `ServerApp.run` internally calls `SDK.Server.compose` with the flattened lists.
+`ServerModule` carries a module's Name (the RBAC key its `withGuardedApi` gate checks), its `Handlers`, any registered `DataType`s, `VectorisationHandler`s, and an optional `ModuleConfigSchema`. `ServerApp` then aggregates those plus config, auth provider, logger, blob storage, and notification channel — `ServerApp.run` internally calls `SDK.Server.compose` with the flattened lists.
 
 Two companion records layer on top without duplicating the core wiring:
 - `AIServerApp` — wraps `ServerApp`, adds an `AIProviderFactory`, `AIConfigStore`, `AITools`, and optional `ModuleAIContexts`. `AIServerApp.run` calls `composeWithAI`. See [`src/ToolUp.AI/README.md`](../ToolUp.AI/README.md).
@@ -334,7 +334,7 @@ The `_platform` key carries deployment-wide display defaults (currency, date for
 **Permissive default:** `ModulePermissions = Map.empty` means unrestricted — every module accessible. RBAC is opt-in per team; teams that haven't configured permissions preserve pre-Phase-4 "everyone can use everything" behaviour.
 
 **Enforcement (shipped):**
-- `makePermissionGuardedApi moduleName api` wraps a module's ToolUp.Remoting routes with a `canAccessModule moduleName` check before dispatch. Denials raise `UnauthorizedAccessException` which a custom error handler translates to HTTP 403.
+- `ServerModule.withGuardedApi api` wraps a module's ToolUp.Remoting routes with a `canAccessModule moduleName` check before dispatch (the standalone `makePermissionGuardedApi` entry point was removed in Phase 815). Denials raise `UnauthorizedAccessException` which a custom error handler translates to HTTP 403.
 - `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stashes them in `HttpContext.Items` for the `AccessContext` DI factory to pick up.
 - Client shell calls `AccessibilityApi.GetAccessibleModules` on startup to filter the sidebar to modules the user can actually use. Not a security boundary — the per-route guard is the actual enforcement.
 
@@ -481,7 +481,7 @@ All Enterprise imports and module registration calls are at module top level in 
 | `Shared/Api.fs` | `ApiCall<'S,'F>` DU (`Start` / `Finished`) and `RemoteData<'T>` DU + companion module — Elmish message/state helpers re-homed from SAFE.Client.Utils (MIT) |
 | `Server/Api.fs` | `type Api` with `static member make (builder, ?routeBuilder, ?errorHandler, ?customOptions)` — thin wrapper over the in-tree `ToolUp.Remoting.Giraffe` adapter (ships inside `ToolUp.Platform.Server`), keeping the SAFE call-site syntax (injected via `.Server.props`) |
 | `Client/Api.fs` | `type Api` with `static member inline makeProxy<'T> (?routeBuilder, ?customOptions)` — thin wrapper over the in-tree `ToolUp.Remoting.Client` proxy builder (ships inside `ToolUp.Platform.Client`), keeping the SAFE call-site syntax (injected via `.Client.props`) |
-| `SDK.Server.fs` | `WebApplication.CreateBuilder` composition, middleware (`ScopeResolutionMiddleware`, `AuthEnforcementMiddleware`, `RequestTimingMiddleware`, `RemotingBodyNormalizationMiddleware`), `makeApi`, `makePermissionGuardedApi`, the five `platform*ApiHandler` builders (info / team / permission / accessibility / data-catalog), `configApiHandler`, `ServerModule` / `ServerApp` record-based composition API, audit / health / quota / rate-limit DI wiring |
+| `SDK.Server.fs` | `WebApplication.CreateBuilder` composition, middleware (`ScopeResolutionMiddleware`, `AuthEnforcementMiddleware`, `RequestTimingMiddleware`, `RemotingBodyNormalizationMiddleware`), `makeApi`, the module-access gate behind `ServerModule.withGuardedApi`, the five `platform*ApiHandler` builders (info / team / permission / accessibility / data-catalog), `configApiHandler`, `ServerModule` / `ServerApp` record-based composition API, audit / health / quota / rate-limit DI wiring |
 | `AuditLog.fs` | `IAuditLog` interface + `EventStoreAuditLog` default — wraps `IEventStore` under reserved `SourceModule = "_platform.audit"`; fire-and-forget `Record`, scope-filtered `GetAuditTrail` |
 | `Shared/IHealthCheck.fs` | Phase 9k portable interface (`Name`, `Kind`, `Timeout`, `Check : unit -> Async<HealthResult>`) for companion-contributed readiness probes. Lives in Shared so `ProjectReference`-style companions (storage backends) see it without `.Server.props` injection |
 | `Server/HealthCheck.fs` | First-party probes — `BlobStorageHealthCheck`, `AuthProviderHealthCheck`, `EventStoreHealthCheck` (refactored Phase 9k to implement the ToolUp `IHealthCheck` rather than BCL) |
