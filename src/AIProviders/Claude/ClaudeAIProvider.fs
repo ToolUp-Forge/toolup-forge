@@ -58,9 +58,16 @@ let KnownModels = [
 // itself — `BaseAddress` and `Timeout` are stable across every
 // instance, and the per-request `x-api-key` header lives on the
 // `HttpRequestMessage`, not on the client. Sharing is therefore safe.
+//
+// Phase 772 — built through the platform client factory, so the egress
+// policy handler sits in front of the same `HttpClientHandler` a bare
+// `new HttpClient()` would have used. Byte-identical under the default
+// permit-all policy; a verified composition can now refuse this origin.
 let private sharedClient =
     lazy
-        (let c = new HttpClient()
+        (let c =
+            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+
          c.BaseAddress <- Uri("https://api.anthropic.com")
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)
