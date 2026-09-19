@@ -237,14 +237,24 @@ let private httpFetcher
 
 // ─── Built-in probe specs for the three shipped providers ────────────
 
-let private claudeClient =
-    lazy (new HttpClient(BaseAddress = Uri("https://api.anthropic.com")))
+// Phase 772 — the probe clients are built through the platform client
+// factory, so a verified composition that did not declare a provider's
+// origin refuses the probe too — the same answer the provider itself would
+// get, given before either opens a socket. Byte-identical under the
+// default permit-all policy.
+let private probeClient (baseAddress: string) : HttpClient =
+    let c =
+        ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
-let private openAiClient =
-    lazy (new HttpClient(BaseAddress = Uri("https://api.openai.com")))
+    c.BaseAddress <- Uri baseAddress
+    c
+
+let private claudeClient = lazy (probeClient "https://api.anthropic.com")
+
+let private openAiClient = lazy (probeClient "https://api.openai.com")
 
 let private geminiClient =
-    lazy (new HttpClient(BaseAddress = Uri("https://generativelanguage.googleapis.com")))
+    lazy (probeClient "https://generativelanguage.googleapis.com")
 
 let private claudeSpec: ProviderProbeSpec = {
     ProviderId = "anthropic-claude"
