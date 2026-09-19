@@ -92,9 +92,17 @@ type private EmbedAttempt =
 // enforces the configured one per request with a `CancellationTokenSource`.
 // An infinite client timeout is not an unbounded call: every send this
 // module makes passes that token.
+//
+// Phase 772 — built through the platform client factory, so the egress
+// policy handler sits in front of the same `HttpClientHandler` a bare
+// `new HttpClient()` would have used. Byte-identical under the default
+// permit-all policy; a verified composition can now refuse this origin.
 let private sharedClient =
     lazy
-        (let c = new HttpClient(BaseAddress = Uri("https://api.openai.com"))
+        (let c =
+            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+
+         c.BaseAddress <- Uri("https://api.openai.com")
          c.Timeout <- Timeout.InfiniteTimeSpan
          c)
 
@@ -751,9 +759,13 @@ type EmbeddingProbeResult =
     /// degraded, so callers should not treat it as definitively broken.
     | ProbeTransient of message: string
 
+// Phase 772 — through the platform client factory, like `sharedClient`.
 let private probeClient =
     lazy
-        (let c = new HttpClient(BaseAddress = Uri("https://api.openai.com"))
+        (let c =
+            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+
+         c.BaseAddress <- Uri("https://api.openai.com")
          c.Timeout <- TimeSpan.FromSeconds 10.0
          c)
 
