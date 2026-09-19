@@ -1123,7 +1123,7 @@ let reportSectionTests =
             // sections that have been appended since.
             Expect.equal
                 (report.Sections |> List.map _.Id)
-                (priorIds @ [ EvidenceChainSection; RemotingDecoderSection ])
+                (priorIds @ [ EvidenceChainSection; RemotingDecoderSection; EgressSection ])
                 "the section is APPENDED — inserting it would move every later section's canonical line"
         }
 

@@ -159,7 +159,10 @@ let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgeme
 /// interface `healthyEvidence` does not supply, so it reads
 /// `not-composed` for every arrangement in this pack and its own pack
 /// drives it.
-let private chainSectionIds = [ EvidenceChainSection; RemotingDecoderSection ]
+/// Phase 772 joins this list by the same route again: the egress facet
+/// arrives through a sibling interface `healthyEvidence` does not supply,
+/// so it reads `not-composed` here and `EgressPolicyTests` drives it.
+let private chainSectionIds = [ EvidenceChainSection; RemotingDecoderSection; EgressSection ]
 
 let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds
 

@@ -1221,6 +1221,13 @@ let private registeredTests =
         // other, and the read-but-unaffirmed states stay distinct from
         // the verified ones.
         DeploymentVerificationReportTests.tests
+        // Phase 772 — server-side egress policy: the outbound-call seam.
+        // Origin-only destinations, the pure policies, the handler (a deny is
+        // refused before any socket opens; a permit is byte-identical; the
+        // audit row carries origin + component, never the URL), the ambient
+        // component carrier, the DI-named client, and the report's eleventh
+        // section.
+        EgressPolicyTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

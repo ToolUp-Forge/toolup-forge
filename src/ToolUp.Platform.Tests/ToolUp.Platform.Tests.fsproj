@@ -1486,6 +1486,10 @@
              CertificateIssuanceTransparencyTests, whose chained-ledger
              perturbation harness it follows. -->
         <Compile Include="InProcess\DeploymentVerificationReportTests.fs" />
+        <!-- Phase 772 — server-side egress policy: origin-only destinations, the pure policies,
+             the handler (deny before the socket, permit byte-identical, the audit row), the
+             ambient component carrier, the DI-named client and the report's eleventh section. -->
+        <Compile Include="InProcess\EgressPolicyTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />
