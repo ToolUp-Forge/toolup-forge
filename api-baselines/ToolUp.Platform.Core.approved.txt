@@ -983,6 +983,7 @@ ToolUp.Platform.AuditEvent.IsDatasetSpillDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDeploymentVerified : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDiagnosticBundleAccessed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEgressBlocked : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsEgressDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyAcknowledged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyed : System.Boolean { get }
@@ -1235,6 +1236,8 @@ ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed (class)
 ToolUp.Platform.AuditEvent+DiagnosticBundleAccessed.Item : ToolUp.Platform.DiagnosticBundleAccessedPayload { get }
 ToolUp.Platform.AuditEvent+EgressBlocked (class)
 ToolUp.Platform.AuditEvent+EgressBlocked.Item : ToolUp.Platform.EgressBlockedPayload { get }
+ToolUp.Platform.AuditEvent+EgressDenied (class)
+ToolUp.Platform.AuditEvent+EgressDenied.Item : ToolUp.Platform.EgressDeniedPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyCreated (class)
 ToolUp.Platform.AuditEvent+EncryptionKeyCreated.Item : ToolUp.Platform.EncryptionKeyEventPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyDestroyAcknowledged (class)
@@ -1515,6 +1518,7 @@ ToolUp.Platform.AuditEvent+Tags.DatasetSpillDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DeploymentVerified : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DiagnosticBundleAccessed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EgressBlocked : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.EgressDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyAcknowledged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyed : System.Int32 (literal)
@@ -4759,6 +4763,7 @@ ToolUp.Platform.DeploymentVerification.AuditLedgerSection : System.String (liter
 ToolUp.Platform.DeploymentVerification.BootSealSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.CertificateIssuanceSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.ConfigConformanceSection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.EgressSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.EvidenceChainSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.FramingVersion : System.String (literal)
 ToolUp.Platform.DeploymentVerification.GroundingContinuitySection : System.String (literal)
@@ -4945,6 +4950,103 @@ ToolUp.Platform.EgressBlockedPayload.Destination : Microsoft.FSharp.Core.FSharpO
 ToolUp.Platform.EgressBlockedPayload.EntityName : System.String { get }
 ToolUp.Platform.EgressBlockedPayload.FieldPath : System.String { get }
 ToolUp.Platform.EgressBlockedPayload.Level : System.String { get }
+ToolUp.Platform.EgressDeniedPayload (class)
+ToolUp.Platform.EgressDeniedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.EgressDeniedPayload.Component : System.String { get }
+ToolUp.Platform.EgressDeniedPayload.Origin : System.String { get }
+ToolUp.Platform.EgressDeniedPayload.Reason : System.String { get }
+ToolUp.Platform.EgressDeniedPayload.Surface : System.String { get }
+ToolUp.Platform.EgressDestination (class)
+ToolUp.Platform.EgressDestination.Item : System.String { get }
+ToolUp.Platform.EgressDestination.Origin : System.String { get }
+ToolUp.Platform.EgressDestination.Tag : System.Int32 { get }
+ToolUp.Platform.EgressDestination.ToString() : System.String
+ToolUp.Platform.EgressDestinationModule (class)
+ToolUp.Platform.EgressDestinationModule.ofParts(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressDestination]
+ToolUp.Platform.EgressDestinationModule.origin(ToolUp.Platform.EgressDestination) : System.String
+ToolUp.Platform.EgressDestinationModule.parse(System.String) : ToolUp.Platform.EgressDestination
+ToolUp.Platform.EgressDestinationModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressDestination]
+ToolUp.Platform.EgressGrant (class)
+ToolUp.Platform.EgressGrant.IsDeclaredDestinations : System.Boolean { get }
+ToolUp.Platform.EgressGrant.IsUnrestrictedEgress : System.Boolean { get }
+ToolUp.Platform.EgressGrant.Tag : System.Int32 { get }
+ToolUp.Platform.EgressGrant.UnrestrictedEgress : ToolUp.Platform.EgressGrant { get }
+ToolUp.Platform.EgressGrant+DeclaredDestinations (class)
+ToolUp.Platform.EgressGrant+DeclaredDestinations.Item : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.EgressDestination] { get }
+ToolUp.Platform.EgressGrant+Tags (class)
+ToolUp.Platform.EgressGrant+Tags.DeclaredDestinations : System.Int32 (literal)
+ToolUp.Platform.EgressGrant+Tags.UnrestrictedEgress : System.Int32 (literal)
+ToolUp.Platform.EgressGrantModule (class)
+ToolUp.Platform.EgressGrantModule.destinations(ToolUp.Platform.EgressGrant) : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.EgressDestination]
+ToolUp.Platform.EgressGrantModule.isDeclared(ToolUp.Platform.EgressGrant) : System.Boolean
+ToolUp.Platform.EgressGrantModule.ofDestinations(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.EgressDestination]) : ToolUp.Platform.EgressGrant
+ToolUp.Platform.EgressGrantModule.ofOrigins(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.EgressGrant
+ToolUp.Platform.EgressGrantModule.permits(ToolUp.Platform.EgressGrant, ToolUp.Platform.EgressDestination) : System.Boolean
+ToolUp.Platform.EgressGrantModule.render(ToolUp.Platform.EgressGrant) : System.String
+ToolUp.Platform.EgressGrantModule.resolve(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant], ToolUp.Platform.EgressGrant, ToolUp.Platform.ComponentId) : ToolUp.Platform.EgressGrant
+ToolUp.Platform.EgressGrantModule.unrestricted : ToolUp.Platform.EgressGrant { get }
+ToolUp.Platform.EgressPolicy (class)
+ToolUp.Platform.EgressPolicy.bind(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant]]) : ToolUp.Platform.EgressPolicyBinding
+ToolUp.Platform.EgressPolicy.declaredDestinations(ToolUp.Platform.EgressGrant, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant]) : ToolUp.Platform.IEgressPolicy
+ToolUp.Platform.EgressPolicy.permitAll : ToolUp.Platform.IEgressPolicy { get }
+ToolUp.Platform.EgressPolicy.permitAllBinding : ToolUp.Platform.EgressPolicyBinding { get }
+ToolUp.Platform.EgressPolicy.platformComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.EgressPolicyBinding (class)
+ToolUp.Platform.EgressPolicyBinding..ctor(ToolUp.Platform.IEgressPolicy, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant], System.Boolean)
+ToolUp.Platform.EgressPolicyBinding.DeclarationMandatory : System.Boolean { get }
+ToolUp.Platform.EgressPolicyBinding.Grants : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant] { get }
+ToolUp.Platform.EgressPolicyBinding.Policy : ToolUp.Platform.IEgressPolicy { get }
+ToolUp.Platform.EgressPolicyBinding.Posture : ToolUp.Platform.EgressPosture { get }
+ToolUp.Platform.EgressPosture (class)
+ToolUp.Platform.EgressPosture.DenyAll : ToolUp.Platform.EgressPosture { get }
+ToolUp.Platform.EgressPosture.IsDeclared : System.Boolean { get }
+ToolUp.Platform.EgressPosture.IsDenyAll : System.Boolean { get }
+ToolUp.Platform.EgressPosture.IsUnenforced : System.Boolean { get }
+ToolUp.Platform.EgressPosture.Tag : System.Int32 { get }
+ToolUp.Platform.EgressPosture.Unenforced : ToolUp.Platform.EgressPosture { get }
+ToolUp.Platform.EgressPosture+Declared (class)
+ToolUp.Platform.EgressPosture+Declared.components : System.Int32 { get }
+ToolUp.Platform.EgressPosture+Declared.undeclaredDenied : System.Boolean { get }
+ToolUp.Platform.EgressPosture+Tags (class)
+ToolUp.Platform.EgressPosture+Tags.Declared : System.Int32 (literal)
+ToolUp.Platform.EgressPosture+Tags.DenyAll : System.Int32 (literal)
+ToolUp.Platform.EgressPosture+Tags.Unenforced : System.Int32 (literal)
+ToolUp.Platform.EgressPostureModule (class)
+ToolUp.Platform.EgressPostureModule.describe(ToolUp.Platform.EgressPosture) : System.String
+ToolUp.Platform.EgressPostureModule.label(ToolUp.Platform.EgressPosture) : System.String
+ToolUp.Platform.EgressSurface (class)
+ToolUp.Platform.EgressSurface.AIProvider : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface.AuthProvider : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface.IsAIProvider : System.Boolean { get }
+ToolUp.Platform.EgressSurface.IsAuthProvider : System.Boolean { get }
+ToolUp.Platform.EgressSurface.IsModuleHandler : System.Boolean { get }
+ToolUp.Platform.EgressSurface.IsNotification : System.Boolean { get }
+ToolUp.Platform.EgressSurface.IsOther : System.Boolean { get }
+ToolUp.Platform.EgressSurface.IsWebhook : System.Boolean { get }
+ToolUp.Platform.EgressSurface.ModuleHandler : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface.Notification : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface.Other : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface.Tag : System.Int32 { get }
+ToolUp.Platform.EgressSurface.Webhook : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressSurface+Tags (class)
+ToolUp.Platform.EgressSurface+Tags.AIProvider : System.Int32 (literal)
+ToolUp.Platform.EgressSurface+Tags.AuthProvider : System.Int32 (literal)
+ToolUp.Platform.EgressSurface+Tags.ModuleHandler : System.Int32 (literal)
+ToolUp.Platform.EgressSurface+Tags.Notification : System.Int32 (literal)
+ToolUp.Platform.EgressSurface+Tags.Other : System.Int32 (literal)
+ToolUp.Platform.EgressSurface+Tags.Webhook : System.Int32 (literal)
+ToolUp.Platform.EgressSurfaceModule (class)
+ToolUp.Platform.EgressSurfaceModule.label(ToolUp.Platform.EgressSurface) : System.String
+ToolUp.Platform.EgressVerdict (class)
+ToolUp.Platform.EgressVerdict.IsDeny : System.Boolean { get }
+ToolUp.Platform.EgressVerdict.IsPermit : System.Boolean { get }
+ToolUp.Platform.EgressVerdict.Permit : ToolUp.Platform.EgressVerdict { get }
+ToolUp.Platform.EgressVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.EgressVerdict+Deny (class)
+ToolUp.Platform.EgressVerdict+Deny.reason : System.String { get }
+ToolUp.Platform.EgressVerdict+Tags (class)
+ToolUp.Platform.EgressVerdict+Tags.Deny : System.Int32 (literal)
+ToolUp.Platform.EgressVerdict+Tags.Permit : System.Int32 (literal)
 ToolUp.Platform.EmailAddress (class)
 ToolUp.Platform.EmailAddress..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.EmailAddress.Address : System.String { get }
@@ -6659,6 +6761,8 @@ ToolUp.Platform.IDeploymentVerificationApi..ctor(Microsoft.FSharp.Core.FSharpFun
 ToolUp.Platform.IDeploymentVerificationApi.GetVerificationReport : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport, System.String]]] { get }
 ToolUp.Platform.IDevDiagnosticsContributor (interface)
 ToolUp.Platform.IDevDiagnosticsContributor.Contribute() : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, System.Object]]
+ToolUp.Platform.IEgressPolicy (interface)
+ToolUp.Platform.IEgressPolicy.Decide(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface) : ToolUp.Platform.EgressVerdict
 ToolUp.Platform.IEventStore (interface)
 ToolUp.Platform.IEventStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.IEventStore.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]

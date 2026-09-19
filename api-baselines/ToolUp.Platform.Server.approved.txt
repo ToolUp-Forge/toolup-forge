@@ -1305,6 +1305,10 @@ ToolUp.Platform.ComponentConfigResolver.unrecognisedOverrides(Microsoft.FSharp.C
 ToolUp.Platform.ComponentConfigResolver+ComponentConfigOverrideValidator (class)
 ToolUp.Platform.ComponentConfigResolver+ComponentConfigOverrideValidator..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentConfig])
 ToolUp.Platform.ComponentConfigResolver+ComponentConfigOverrideValidator.Name : System.String { get }
+ToolUp.Platform.ComponentEgressGrant (class)
+ToolUp.Platform.ComponentEgressGrant..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant)
+ToolUp.Platform.ComponentEgressGrant.EgressComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.ComponentEgressGrant.EgressDeclaredGrant : ToolUp.Platform.EgressGrant { get }
 ToolUp.Platform.ComponentEntry (class)
 ToolUp.Platform.ComponentEntry..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.ComponentKind, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ComponentEntry.Id : ToolUp.Platform.ComponentId { get }
@@ -1582,6 +1586,7 @@ ToolUp.Platform.ComposeRuntimeServices.registerFileManagementRuntime(Microsoft.E
 ToolUp.Platform.ComposeRuntimeServices.registerHealthStateTracker(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerMetricsAndObservability(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.IMetricsSink], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration], ToolUp.Platform.Tracing.IActivitySink, ToolUp.Platform.ILogger) : ToolUp.Platform.Metrics.IMetricsSink
 ToolUp.Platform.ComposeRuntimeServices.registerOutboundRateLimiter(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDescriptor], ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpRef`1[ToolUp.Platform.IRateLimiter]) : ToolUp.Platform.IRateLimiter
+ToolUp.Platform.ComposeRuntimeServices.registerPlatformHttpClient(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerRateLimitMiddleware(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerSseDevDiagnosticsContributor(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.SSEConnectionManager) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerTraceCategoryDevDiagnosticsContributor(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
@@ -2965,16 +2970,20 @@ ToolUp.Platform.DeploymentReadinessReport.buildReport(ToolUp.Platform.ServerConf
 ToolUp.Platform.DeploymentReadinessReport.deploymentReadinessApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentReadinessApi
 ToolUp.Platform.DeploymentVerificationEvidence (class)
 ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSealIntegrity], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LedgerIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertificateIssuanceIntegrity, System.String]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AnswerJoinIntegrity, System.String]]]]) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.egressOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.evidenceChainOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]]
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
 ToolUp.Platform.DeploymentVerificationEvidence.remotingDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
+ToolUp.Platform.DeploymentVerificationEvidence.withEgress(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
 ToolUp.Platform.DeploymentVerificationReport.ConfigConformanceKeyCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.EgressComponentCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.EgressDenialCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.EvidenceChainFindingCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
@@ -2987,6 +2996,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherAnswerJoins(ToolUp.Platform.I
 ToolUp.Platform.DeploymentVerificationReport.gatherBootSeal(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherCertificates(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherConfigConformance() : ToolUp.Platform.DeploymentVerification+ReportSection
+ToolUp.Platform.DeploymentVerificationReport.gatherEgress(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherEvidenceChain(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
@@ -3500,6 +3510,12 @@ ToolUp.Platform.EgressBoundary+Tags.LogSink : System.Int32 (literal)
 ToolUp.Platform.EgressBoundary+Tags.RpcResponse : System.Int32 (literal)
 ToolUp.Platform.EgressBoundaryModule (class)
 ToolUp.Platform.EgressBoundaryModule.name(ToolUp.Platform.EgressBoundary) : System.String
+ToolUp.Platform.EgressComponentContext (class)
+ToolUp.Platform.EgressComponentContext.claim(ToolUp.Platform.ComponentId) : System.Void
+ToolUp.Platform.EgressComponentContext.clear() : System.Void
+ToolUp.Platform.EgressComponentContext.current() : ToolUp.Platform.ComponentId
+ToolUp.Platform.EgressComponentContext.runAs`1(ToolUp.Platform.ComponentId, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.EgressComponentContext.tryCurrent() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.EgressContext (class)
 ToolUp.Platform.EgressContext..ctor(ToolUp.Platform.EgressBoundary, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.EgressContext.Actor : System.String { get }
@@ -3520,6 +3536,29 @@ ToolUp.Platform.EgressDecision+Tags (class)
 ToolUp.Platform.EgressDecision+Tags.Allow : System.Int32 (literal)
 ToolUp.Platform.EgressDecision+Tags.Block : System.Int32 (literal)
 ToolUp.Platform.EgressDecision+Tags.Redact : System.Int32 (literal)
+ToolUp.Platform.EgressDenialRecord (class)
+ToolUp.Platform.EgressDenialRecord..ctor(ToolUp.Platform.ComponentId, System.String, System.String, System.String)
+ToolUp.Platform.EgressDenialRecord.DeniedComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.EgressDenialRecord.DeniedOrigin : System.String { get }
+ToolUp.Platform.EgressDenialRecord.DeniedReason : System.String { get }
+ToolUp.Platform.EgressDenialRecord.DeniedSurface : System.String { get }
+ToolUp.Platform.EgressDeniedException (class)
+ToolUp.Platform.EgressDeniedException..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface, System.String)
+ToolUp.Platform.EgressDeniedException.Component : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.EgressDeniedException.Destination : ToolUp.Platform.EgressDestination { get }
+ToolUp.Platform.EgressDeniedException.Reason : System.String { get }
+ToolUp.Platform.EgressDeniedException.Surface : ToolUp.Platform.EgressSurface { get }
+ToolUp.Platform.EgressEnforcement (class)
+ToolUp.Platform.EgressEnforcement.AuditScope : System.String (literal)
+ToolUp.Platform.EgressEnforcement.DenialRetention : System.Int32 (literal)
+ToolUp.Platform.EgressEnforcement.bindAudit(ToolUp.Platform.IAuditLog) : System.Void
+ToolUp.Platform.EgressEnforcement.check(ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EgressDeniedException]]
+ToolUp.Platform.EgressEnforcement.current() : ToolUp.Platform.EgressPolicyBinding
+ToolUp.Platform.EgressEnforcement.denialCount() : System.Int32
+ToolUp.Platform.EgressEnforcement.deploymentVerificationEvidence(System.String) : ToolUp.Platform.EgressIntegrity
+ToolUp.Platform.EgressEnforcement.install(ToolUp.Platform.EgressPolicyBinding) : System.Void
+ToolUp.Platform.EgressEnforcement.recentDenials() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord]
+ToolUp.Platform.EgressEnforcement.reset() : System.Void
 ToolUp.Platform.EgressGate (class)
 ToolUp.Platform.EgressGate.RedactedPlaceholder : System.String (literal)
 ToolUp.Platform.EgressGate.apply(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
@@ -3527,6 +3566,19 @@ ToolUp.Platform.EgressGate.forExport(ToolUp.Platform.IFieldClassifier, Microsoft
 ToolUp.Platform.EgressGate.forResponse(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.EgressGate.make(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog) : ToolUp.Platform.IEgressGate
 ToolUp.Platform.EgressGate.permissiveEgressPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressDecision
+ToolUp.Platform.EgressIntegrity (class)
+ToolUp.Platform.EgressIntegrity..ctor(System.String, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEgressGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord], System.Int32)
+ToolUp.Platform.EgressIntegrity.EgressComponents : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEgressGrant] { get }
+ToolUp.Platform.EgressIntegrity.EgressDenials : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord] { get }
+ToolUp.Platform.EgressIntegrity.EgressDenialsSinceBoot : System.Int32 { get }
+ToolUp.Platform.EgressIntegrity.EgressPosture : ToolUp.Platform.EgressPosture { get }
+ToolUp.Platform.EgressIntegrity.EgressProfile : System.String { get }
+ToolUp.Platform.EgressPolicyHandler (class)
+ToolUp.Platform.EgressPolicyHandler..ctor()
+ToolUp.Platform.EgressPolicyHandler..ctor(ToolUp.Platform.EgressSurface)
+ToolUp.Platform.EgressPolicyHandler.Send(System.Net.Http.HttpRequestMessage, System.Threading.CancellationToken) : System.Net.Http.HttpResponseMessage
+ToolUp.Platform.EgressPolicyHandler.SendAsync(System.Net.Http.HttpRequestMessage, System.Threading.CancellationToken) : System.Threading.Tasks.Task`1[System.Net.Http.HttpResponseMessage]
+ToolUp.Platform.EgressPolicyHandler.Surface : ToolUp.Platform.EgressSurface { get }
 ToolUp.Platform.EmbeddingProviderEnv (class)
 ToolUp.Platform.EmbeddingProviderEnv.fromEnv(ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider]) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.Platform.EmbeddingProviderEnv+EmbeddingProviderResolver (class)
@@ -5280,6 +5332,8 @@ ToolUp.Platform.IEdgeCache.PurgePrefix(System.String) : Microsoft.FSharp.Control
 ToolUp.Platform.IEdgeCache.PurgeTags(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EdgePurgeError]]
 ToolUp.Platform.IEdgePurgeMetered (interface)
 ToolUp.Platform.IEdgePurgeMetered.PurgeMetrics : ToolUp.Platform.Metrics.IMetricsSink { get }
+ToolUp.Platform.IEgressEvidence (interface)
+ToolUp.Platform.IEgressEvidence.Egress : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity] { get }
 ToolUp.Platform.IEgressGate (interface)
 ToolUp.Platform.IEgressGate.Apply(ToolUp.Platform.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.IEmbeddingCache (class)
@@ -7823,6 +7877,12 @@ ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.Server
 ToolUp.Platform.PlatformApiHandler.teamApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.TeamApi
 ToolUp.Platform.PlatformApiHandler.teamApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.PlatformApiHandler.withVisibilityProfile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution], ToolUp.Platform.AccessibleModulesResponse) : ToolUp.Platform.AccessibleModulesResponse
+ToolUp.Platform.PlatformHttpClient (class)
+ToolUp.Platform.PlatformHttpClient.Name : System.String (literal)
+ToolUp.Platform.PlatformHttpClient.create(ToolUp.Platform.EgressSurface) : System.Net.Http.HttpClient
+ToolUp.Platform.PlatformHttpClient.createWith(ToolUp.Platform.EgressSurface, System.Net.Http.HttpMessageHandler) : System.Net.Http.HttpClient
+ToolUp.Platform.PlatformHttpClient.handler(ToolUp.Platform.EgressSurface) : System.Net.Http.HttpMessageHandler
+ToolUp.Platform.PlatformHttpClient.wrap(ToolUp.Platform.EgressSurface, System.Net.Http.HttpMessageHandler) : System.Net.Http.HttpMessageHandler
 ToolUp.Platform.PlatformInHandlerGates (class)
 ToolUp.Platform.PlatformInHandlerGates.all(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
 ToolUp.Platform.PlatformInHandlerGates.jobApi(ToolUp.Platform.ComponentId) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InHandlerGateDeclaration]
