@@ -1655,7 +1655,11 @@ module PeerServerApp =
             // profile fetches that share this client, and an expiry
             // stays distinguishable from a caller's cancellation. See
             // `PeerServerApp.withTransportPolicy`.
-            let sharedHttpClient = new HttpClient()
+            // Phase 772 — through the platform client factory (egress policy
+            // handler in front of the same primary handler); byte-identical
+            // under the default permit-all policy, and a verified composition
+            // can now refuse a peer origin it did not declare.
+            let sharedHttpClient = PlatformHttpClient.create EgressSurface.Other
 
             // The handshake's outbound capability fetch. The receiver's
             // `GET /peer/v1/capabilities` answers with a bare
