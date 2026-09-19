@@ -84,7 +84,10 @@ type TwilioNotificationSink
     (addressBook: INotificationAddressBook, secretStore: ISecretStore, settings: TwilioSettings, logger: ILogger option)
     =
 
-    let client = new HttpClient()
+    // Phase 772 — through the platform client factory (egress policy
+    // handler in front of the same primary handler); byte-identical under
+    // the default permit-all policy.
+    let client = PlatformHttpClient.create EgressSurface.Notification
 
     let endpoint =
         settings.EndpointOverride
