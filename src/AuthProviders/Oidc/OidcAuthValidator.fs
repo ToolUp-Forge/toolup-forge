@@ -42,7 +42,12 @@ open ToolUp.Platform.ConfigValidation
 /// Shared HttpClient — module-level `lazy` is thread-safe and
 /// `HttpClient` is designed for reuse. Creating one per call would
 /// exhaust ephemeral sockets under repeat preflights (e.g. CI loops).
-let private httpClient = lazy (new HttpClient())
+//
+// Phase 772 — built through the platform client factory (egress policy
+// handler in front of the same primary handler); byte-identical under
+// the default permit-all policy.
+let private httpClient =
+    lazy (ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
 
 let private discoveryPath = "/.well-known/openid-configuration"
 

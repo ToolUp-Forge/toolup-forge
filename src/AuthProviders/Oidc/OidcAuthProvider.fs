@@ -153,7 +153,12 @@ module OidcJwksCache =
 // client backed by a stub HttpMessageHandler — the JWKS / discovery
 // fetches go through the injected client instead, removing the need
 // for a real OIDC issuer during contract tests.
-let private defaultHttpClient = lazy (new HttpClient())
+// Phase 772 — built through the platform client factory (egress policy
+// handler in front of the same primary handler); byte-identical under
+// the default permit-all policy. `fromConfigWith` callers are unaffected:
+// an injected client is theirs to build.
+let private defaultHttpClient =
+    lazy (PlatformHttpClient.create EgressSurface.AuthProvider)
 
 // ─── Signature verification ──────────────────────────────────────────
 
