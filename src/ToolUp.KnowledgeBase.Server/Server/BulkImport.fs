@@ -364,10 +364,13 @@ type HttpUrlContentFetcher(client: HttpClient) =
     /// sockets); the per-request timeout rides a `CancellationToken`
     /// instead of the client's own, so one policy value cannot pin the
     /// shared instance.
+    /// Phase 772 — the redirect-refusing primary handler is wrapped by the
+    /// platform client factory's egress handler; byte-identical under the
+    /// default permit-all policy.
     static let shared =
         lazy
             (let handler = new HttpClientHandler(AllowAutoRedirect = false)
-             new HttpClient(handler, Timeout = Timeout.InfiniteTimeSpan))
+             new HttpClient(PlatformHttpClient.wrap EgressSurface.Other handler, Timeout = Timeout.InfiniteTimeSpan))
 
     new() = HttpUrlContentFetcher(shared.Value)
 
