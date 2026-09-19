@@ -38,7 +38,12 @@ open ToolUp.AuthProviders.GitHubAuthConfig
 // `fromConfigWith` (tests + advanced callers) injects a client backed by
 // a stub `HttpMessageHandler`, so the /user + membership calls go through
 // the injected client and no real GitHub credentials are needed in CI.
-let private defaultHttpClient = lazy (new HttpClient())
+// Phase 772 — built through the platform client factory (egress policy
+// handler in front of the same primary handler); byte-identical under
+// the default permit-all policy. `fromConfigWith` callers are unaffected:
+// an injected client is theirs to build.
+let private defaultHttpClient =
+    lazy (PlatformHttpClient.create EgressSurface.AuthProvider)
 
 // ─── GitHub-specific metric names ────────────────────────────────────
 //

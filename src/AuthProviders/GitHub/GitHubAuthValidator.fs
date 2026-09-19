@@ -22,7 +22,11 @@ open ToolUp.Platform.ConfigValidation
 // validator is registered (GP 13 — deployments without GitHub pay nothing).
 // When enabled, wire it in via `ServerApp.withConfigValidator`.
 
-let private httpClient = lazy (new HttpClient())
+// Phase 772 — built through the platform client factory (egress policy
+// handler in front of the same primary handler); byte-identical under
+// the default permit-all policy.
+let private httpClient =
+    lazy (ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AuthProvider)
 
 let private metaUrl (apiBaseUrl: string) : string = apiBaseUrl.TrimEnd('/') + "/meta"
 
