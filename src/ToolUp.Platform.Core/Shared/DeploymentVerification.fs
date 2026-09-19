@@ -246,6 +246,19 @@ module DeploymentVerification =
     [<Literal>]
     let RemotingDecoderSection = "remoting-decoders"
 
+    /// Phase 772 — the eleventh section: which origins each composed
+    /// component may reach through the platform client factory, whether
+    /// that declaration binds anything, and every outbound call the
+    /// egress handler refused since boot.
+    ///
+    /// The only section whose subject is what LEAVES the process. Every
+    /// section above reads a substrate that runs inside it; this one
+    /// reads the one seam every in-tree HTTP client resolves through on
+    /// its way out, and says plainly when that seam is the permit-all
+    /// default and bounds nothing.
+    [<Literal>]
+    let EgressSection = "egress"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

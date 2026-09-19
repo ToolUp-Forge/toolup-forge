@@ -1140,6 +1140,11 @@
              which is why this compiles here rather than after the seal
              substrates it reports on (GP 1). -->
         <Compile Include="Server\DeploymentVerificationReport.fs" />
+        <!-- Phase 772 — server-side egress policy, the enforcing half: the DelegatingHandler,
+             the ambient component carrier, the process-wide install seam and the platform client
+             factory. After the report (it produces the report's EgressIntegrity) and before
+             Compose/ComposeRuntimeServices.fs (which registers the named client). -->
+        <Compile Include="Server\EgressPolicyHandler.fs" />
         <Compile Include="Server\HealthStateTracker.fs" />
         <!-- Phase 178 — alert-rule / threshold engine (pure evaluator +
              BackgroundService). After HealthStateTracker (shares the tick

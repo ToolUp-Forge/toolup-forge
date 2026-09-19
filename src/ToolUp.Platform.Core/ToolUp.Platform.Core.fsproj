@@ -79,6 +79,10 @@
              unchanged (GP 11). Fable-safe (DUs + Set only); after
              ComponentId.fs so it can key on the stable identity. -->
         <Compile Include="Shared\CompanionCapability.fs" />
+        <!-- Phase 772 — server-side egress policy, the pure half: origin-only destinations,
+             the IEgressPolicy seam, permit-all + declared-destinations policies and the
+             per-component EgressGrant signature. Needs only ComponentId; Fable-safe. -->
+        <Compile Include="Shared\Types\EgressPolicyTypes.fs" />
         <!-- Phase 432 — component secret & config requirement types: what a
              composed component NEEDS (credential names + classes, config knob
              paths + types), keyed by the same ComponentId. Names and classes

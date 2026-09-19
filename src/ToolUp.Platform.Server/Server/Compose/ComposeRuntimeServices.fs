@@ -226,6 +226,34 @@ let registerCors (services: IServiceCollection) (config: ServerConfig) (resolved
                     policy.AllowCredentials() |> ignore))
         |> ignore
 
+/// Phase 772 — the platform HTTP client factory. Registers the named
+/// `IHttpClientFactory` client (`PlatformHttpClient.Name`) with the
+/// `EgressPolicyHandler` in its chain, so a DI consumer — a module's
+/// handler asking `factory.CreateClient PlatformHttpClient.Name` — runs
+/// under the same installed egress policy as every statically-built
+/// in-tree client; binds the composition's `IAuditLog` to the handler so
+/// a denial leaves an `EgressDenied` row; and logs the posture in force
+/// so a verified composition that declared no destinations says at boot
+/// that it will refuse every outbound call.
+///
+/// Zero behaviour change under the default: nothing installed means
+/// `EgressPolicy.permitAllBinding`, every call is forwarded untouched,
+/// and the only new thing in the process is a pass-through hop (GP 11).
+/// A deployment installs its own binding with `EgressEnforcement.install
+/// (EgressPolicy.bind mandatory grants)` before composing, where
+/// `mandatory` is `CompositionProfile.requiresSeamGrants profile` — the
+/// verified profile's stance.
+let registerPlatformHttpClient (services: IServiceCollection) (auditLog: IAuditLog) (resolvedLogger: ILogger) : unit =
+    EgressEnforcement.bindAudit auditLog
+
+    services
+        .AddHttpClient(PlatformHttpClient.Name)
+        .AddHttpMessageHandler(fun () ->
+            new EgressPolicyHandler(EgressSurface.ModuleHandler) :> System.Net.Http.DelegatingHandler)
+    |> ignore
+
+    resolvedLogger.Info(EgressPosture.describe (EgressEnforcement.current ()).Posture)
+
 /// Phase 9d — usage metering substrate. `NoUsageMetering` (default)
 /// resolves `IUsageLog` / `ITeamQuotaPolicy` to no-ops and skips the
 /// flusher BackgroundService + the `IUsageQueryApi` route.

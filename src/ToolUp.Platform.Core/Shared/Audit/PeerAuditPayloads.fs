@@ -358,3 +358,22 @@ type EgressBlockedPayload = {
     /// — a sink name, a peer URL, a file path. `None` when unspecified.
     Destination: string option
 }
+
+/// Phase 772 — an outbound HTTP call was refused by the server-side
+/// `IEgressPolicy` before its socket opened. Recorded under the reserved
+/// `_platform` scope by the platform client factory's handler. Carries
+/// the ORIGIN and the component, never the path or the query string — a
+/// denial that named the URL would put onto the audit trail exactly the
+/// bytes the policy exists to keep in-process. One row per denial, so a
+/// refused call is observable and never silent (GP 12).
+type EgressDeniedPayload = {
+    /// The calling component's stable `ComponentId` value — the module
+    /// that claimed the async chain, or `module:_platform` when none did.
+    Component: string
+    /// The refused destination's origin — `scheme://host[:port]`.
+    Origin: string
+    /// `EgressSurface.label` of the client that made the call.
+    Surface: string
+    /// The policy's own sentence for the refusal.
+    Reason: string
+}

@@ -1400,6 +1400,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j)
     }
+    // Phase 772 — server-side egress policy deny row (append-only registration).
+    {
+        EventType = "EgressDenied"
+        TryEncode =
+            (function
+            | EgressDenied p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EgressDenied(fromAuditJson<EgressDeniedPayload> j)
+    }
     // Phase 14v — RAG vector-index corrupt-load audit row (append-only registration).
     {
         EventType = "KnowledgeIndexLoadFailed"

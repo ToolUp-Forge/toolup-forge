@@ -598,6 +598,11 @@ type AuditEvent =
     /// Reserved `SourceModule = "_platform.classification"`. Value-free;
     /// one row per non-`Allow` decision so a DLP deny is never silent.
     | EgressBlocked of EgressBlockedPayload
+    /// Phase 772 — an outbound HTTP call was refused by the server-side
+    /// `IEgressPolicy` before its socket opened. Reserved `_platform`
+    /// scope. Carries origin + component, never the URL; one row per
+    /// denial so a refused call is never silent.
+    | EgressDenied of EgressDeniedPayload
     /// Phase 14v — a persisted RAG vector-index blob failed to
     /// deserialise on scope load (disk corruption / partial flush during
     /// a pod kill). Recorded under `KnowledgeSourceModule.value` scope;
@@ -943,6 +948,7 @@ module AuditEvent =
         | AuthorizationDenied _ -> "AuthorizationDenied"
         | HostActionDispatched _ -> "HostActionDispatched"
         | EgressBlocked _ -> "EgressBlocked"
+        | EgressDenied _ -> "EgressDenied"
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
         | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
         | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"

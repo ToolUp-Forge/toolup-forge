@@ -398,6 +398,67 @@ type IRemotingDecoderEvidence =
     /// no API records to the facet.
     abstract RemotingDecoders: RemotingDecoderIntegrity option
 
+/// Phase 772 — one composed component's declared outbound authority, as
+/// the egress policy resolved it. Prefixed field names for the Phase 431
+/// inference reason recorded on `ComponentSeamAuthority`.
+type ComponentEgressGrant = {
+    /// The component's stable id — the key the grant signature uses.
+    EgressComponent: ComponentId
+    /// The grant it resolves to. `UnrestrictedEgress` for a component
+    /// absent from a non-mandatory signature (GP 11).
+    EgressDeclaredGrant: EgressGrant
+}
+
+/// Phase 772 — one outbound call the egress handler refused since boot.
+/// Origin and component only — the row mirrors the audit payload and, like
+/// it, never carries a path or a query string.
+type EgressDenialRecord = {
+    DeniedComponent: ComponentId
+    DeniedOrigin: string
+    DeniedSurface: string
+    DeniedReason: string
+}
+
+/// The outbound-egress posture (Phase 772), mirrored.
+///
+/// Tier-neutral for the reason `SeamAuthorityIntegrity` is: the
+/// `CompositionProfile` that decides whether declaration is mandatory
+/// compiles AFTER this file, so the profile arrives as its label and its
+/// stance. `EgressPosture`, `EgressGrant` and `ComponentId` are
+/// `Platform.Core` value types and cross freely.
+type EgressIntegrity = {
+    /// `CompositionProfile.label` — `"standard"` or `"verified"`.
+    EgressProfile: string
+    /// What the installed policy amounts to. `Unenforced` is the state
+    /// this section exists to make legible: the permit-all default,
+    /// bounding nothing.
+    EgressPosture: EgressPosture
+    /// Every component the grant signature names, with its grant.
+    /// Deterministic order.
+    EgressComponents: ComponentEgressGrant list
+    /// The most recent refusals the handler recorded, newest last. Bounded
+    /// by the handler's own retention; `EgressDenialsSinceBoot` carries the
+    /// full count so a long-running process cannot present as quiet.
+    EgressDenials: EgressDenialRecord list
+    /// Every refusal since boot, retained or not.
+    EgressDenialsSinceBoot: int
+}
+
+/// Phase 772 — the eleventh section's source.
+///
+/// A fourth standalone sibling interface, for the reason Phase 693
+/// recorded when it cut the first: an abstract member added to a shipped
+/// F# interface is a source break. Resolved by type test, so an evidence
+/// value that never heard of egress still compiles and the section reads
+/// `NotComposed` (GP 11). A VALUE rather than a thunk, like the
+/// seam-authority member: the posture is what the composition root
+/// installed at boot, and the denial ledger is an in-process snapshot
+/// the root takes when it builds the evidence.
+type IEgressEvidence =
+    /// The outbound-egress posture. `None` when this deployment supplies
+    /// nothing about it.
+    abstract Egress: EgressIntegrity option
+
 type IEvidenceChainEvidence =
     /// Walk the evidence chain. `None` when no walker is composed.
     /// `Error` carries the walk's typed refusal — an over-cap request or
@@ -447,6 +508,15 @@ module DeploymentVerificationEvidence =
         | :? IRemotingDecoderEvidence as source -> source.RemotingDecoders
         | _ -> None
 
+    /// Phase 772 — read the egress member off an evidence value that
+    /// carries one. `None` for any evidence that does not implement the
+    /// sibling interface, which is every value built before this phase.
+    /// The same single-read-path discipline `seamAuthorityOf` established.
+    let egressOf (evidence: IDeploymentVerificationEvidence) : EgressIntegrity option =
+        match box evidence with
+        | :? IEgressEvidence as source -> source.Egress
+        | _ -> None
+
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
     /// where a value is required rather than an option.
@@ -466,6 +536,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = None
+
+          interface IEgressEvidence with
+              member _.Egress = None
         }
 
     /// Evidence naming whichever sources the composition root holds. Each
@@ -492,6 +565,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = None
+
+          interface IEgressEvidence with
+              member _.Egress = None
         }
 
     /// Replace the grounding-continuity member, preserving every other
@@ -512,6 +588,7 @@ module DeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -528,6 +605,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
         }
 
     /// Phase 693 — supply the seam-authority posture, preserving every
@@ -546,6 +626,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -562,6 +643,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
         }
 
     /// Phase 713 — supply the evidence-chain walk, preserving every other
@@ -578,6 +662,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -594,6 +679,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
         }
 
     /// Phase 785 — supply the remoting-decoder facet, preserving every
@@ -610,6 +698,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
+        let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -626,6 +715,45 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
+        }
+
+    /// Phase 772 — supply the outbound-egress posture, preserving every
+    /// other source.
+    ///
+    /// A wither rather than a sixth argument to `create`, for the reason
+    /// `withSeamAuthority`, `withEvidenceChain` and `withRemotingDecoders`
+    /// are: widening that function's parameter list retypes it, which the
+    /// public-API approval gate reads as a REMOVAL of the five-argument
+    /// form and which breaks every existing call.
+    let withEgress
+        (egress: EgressIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
         }
 
 /// Phase 686 — gather the sections, fold them into the report, and
@@ -1274,6 +1402,149 @@ module DeploymentVerificationReport =
                             (List.length verified)
                             total
                             (List.length reflection)
+                            binding
+                    ))
+                    findings
+
+    // ─── Phase 772 — the eleventh section: what leaves the process ───────
+
+    /// How many per-component grant lines the egress section carries.
+    [<Literal>]
+    let EgressComponentCap = 20
+
+    /// How many refusal lines the egress section carries. The verdict
+    /// already carries the full since-boot count.
+    [<Literal>]
+    let EgressDenialCap = 20
+
+    /// One finding line per declared component, then one per retained
+    /// refusal, each list truncated with an explicit count of what was
+    /// withheld — for the reason the seam-authority section truncates
+    /// that way: a silent truncation would let a large composition
+    /// present as a small one, or a noisy one as quiet.
+    let private egressFindings (integrity: EgressIntegrity) : string list =
+        let components =
+            integrity.EgressComponents
+            |> List.truncate EgressComponentCap
+            |> List.map (fun entry ->
+                sprintf
+                    "%s: %s"
+                    (ComponentId.value entry.EgressComponent)
+                    (EgressGrant.render entry.EgressDeclaredGrant))
+
+        let withheldComponents = integrity.EgressComponents.Length - components.Length
+
+        let denials =
+            integrity.EgressDenials
+            |> List.truncate EgressDenialCap
+            |> List.map (fun denial ->
+                sprintf
+                    "refused: %s -> %s (%s surface)"
+                    (ComponentId.value denial.DeniedComponent)
+                    denial.DeniedOrigin
+                    denial.DeniedSurface)
+
+        let withheldDenials = integrity.EgressDenialsSinceBoot - denials.Length
+
+        [
+            yield! components
+
+            if withheldComponents > 0 then
+                yield sprintf "(%d further component(s) not listed)" withheldComponents
+
+            yield! denials
+
+            if withheldDenials > 0 then
+                yield sprintf "(%d further refusal(s) not listed)" withheldDenials
+        ]
+
+    /// Outbound egress through the platform client factory (Phase 772).
+    ///
+    /// **The section that must say when it bounds nothing.** The SDK ships
+    /// the handler in front of every in-tree client, but the policy it
+    /// consults is the permit-all default until a composition installs
+    /// another — so "the SDK has an egress seam" and "this deployment
+    /// bounds its egress" are different facts, and `Unenforced` reads as
+    /// `Observed` with the reason spelled out rather than borrowing the
+    /// SDK's posture. `Verified` needs a bound that can actually refuse:
+    /// declaration mandatory (an undeclared component is denied) — with
+    /// grants, or with none, where every call is refused and the section
+    /// says so. Declared grants under a profile that leaves undeclared
+    /// components unrestricted are a partial bound and read `Observed`.
+    ///
+    /// Every line is derived from the installed binding and the handler's
+    /// own ledger, never reported by the root: a root cannot overstate its
+    /// coverage by passing a flattering number.
+    let gatherEgress (evidence: IDeploymentVerificationEvidence) : ReportSection =
+        let title = "Outbound egress"
+
+        match DeploymentVerificationEvidence.egressOf evidence with
+        | None ->
+            section
+                EgressSection
+                title
+                (VerificationSectionVerdict.NotComposed
+                    "no egress posture is composed, so which origins each component may reach through the platform client factory is bounded only by what the network will accept")
+                []
+        | Some integrity ->
+            let mandatory =
+                match integrity.EgressPosture with
+                | EgressPosture.Unenforced -> false
+                | EgressPosture.DenyAll -> true
+                | EgressPosture.Declared(_, undeclaredDenied) -> undeclaredDenied
+
+            let binding =
+                sprintf
+                    "profile %s, destination declaration %s"
+                    integrity.EgressProfile
+                    (if mandatory then "mandatory" else "advisory")
+
+            let findings = egressFindings integrity
+            let refusals = integrity.EgressDenialsSinceBoot
+
+            match integrity.EgressPosture with
+            | EgressPosture.Unenforced ->
+                section
+                    EgressSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "the permit-all default is composed: every outbound call from every component through the platform client factory is permitted and nothing is bounded (%s)"
+                            binding
+                    ))
+                    findings
+            | EgressPosture.DenyAll ->
+                section
+                    EgressSection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "declaration is mandatory and no component declares a destination, so every outbound call through the platform client factory is refused before its socket opens; %d refusal(s) recorded since boot (%s)"
+                            refusals
+                            binding
+                    ))
+                    findings
+            | EgressPosture.Declared(components, true) ->
+                section
+                    EgressSection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "declared destinations bind %d component(s) and an undeclared component is refused; %d refusal(s) recorded since boot (%s)"
+                            components
+                            refusals
+                            binding
+                    ))
+                    findings
+            | EgressPosture.Declared(components, false) ->
+                section
+                    EgressSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "declared destinations bind %d component(s) but an undeclared component remains unrestricted, so the bound is partial; %d refusal(s) recorded since boot (%s)"
+                            components
+                            refusals
                             binding
                     ))
                     findings
@@ -2002,6 +2273,24 @@ module DeploymentVerificationReport =
                     else
                         None
             }
+            {
+                // Phase 772. The egress seam sits in front of every client
+                // the platform factory hands out, and only those. A client
+                // constructed by hand — `new HttpClient()` in a module or a
+                // companion that cannot reach the Server tier — never meets
+                // the handler, and no report line can see it. Making that
+                // construction a finding is the compile-time analyser's
+                // subject (Phase 776), not this report's.
+                Id = "egress-covers-the-platform-factory"
+                Statement =
+                    "The egress section governs outbound HTTP made through the platform client factory — the named IHttpClientFactory client and PlatformHttpClient — and only that. A client a module or companion constructs by hand is outside it, as is every non-HTTP egress: SMTP, message brokers, database drivers, raw sockets. A permitted call is a call the policy did not refuse; nothing here inspects what it carried."
+                Narrowing =
+                    if isComposed EgressSection then
+                        Some
+                            "the section names each component's declared origins and every refusal the handler recorded since boot, so what the factory bounds is enumerated origin by origin. What bypasses the factory is not visible here."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -2051,6 +2340,11 @@ module DeploymentVerificationReport =
             // the deployment takes as given.
             let remotingDecoders = gatherRemotingDecoders evidence
 
+            // Phase 772. The one section whose subject is what LEAVES the
+            // process — the origins the platform client factory permits
+            // each component to reach, and what it refused.
+            let egress = gatherEgress evidence
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
@@ -2077,6 +2371,9 @@ module DeploymentVerificationReport =
                 // canonical forms across the upgrade could not tell a
                 // re-ordering from a re-verdict.
                 remotingDecoders
+                // Phase 772 appends for the same reason: the report grew
+                // by one section, and every earlier line keeps its place.
+                egress
             ]
 
             let notProved = notProvedFor sections

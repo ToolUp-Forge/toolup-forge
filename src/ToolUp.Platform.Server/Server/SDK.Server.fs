@@ -556,6 +556,13 @@ let compose
     // `ComposeRuntimeServices.registerCors`).
     registerCors services config resolvedLogger
 
+    // Phase 772 — the platform HTTP client factory: the named
+    // `IHttpClientFactory` client with the egress-policy handler in its
+    // chain, the audit log bound to the handler's denials, and the posture
+    // in force logged (extracted to
+    // `ComposeRuntimeServices.registerPlatformHttpClient`).
+    registerPlatformHttpClient services auditLog resolvedLogger
+
     // `auditLog` is constructed earlier in `compose` (above the
     // transactional dispatcher) so step (b) of Phase 6f can wire
     // `IAuditLog.Record` into delivery outcomes. The original
