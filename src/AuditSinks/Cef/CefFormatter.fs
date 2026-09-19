@@ -152,6 +152,11 @@ let private highEvents =
         "ConfigDrift"
         "DatasetPolicyDenied"
         "EgressBlocked"
+        // Phase 772 — an outbound call refused by the server-side egress
+        // policy. High for the reason `EgressBlocked` is: a refusal rate is
+        // a leading indicator for a misconfigured grant or a component
+        // reaching somewhere it never declared.
+        "EgressDenied"
         "EncryptionKeyRotated"
         // Phase 551 — grant-policy refusals. High for the same reason
         // `SchemaOnlyAccessAttempted` is: a refusal rate is a leading
