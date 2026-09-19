@@ -54,9 +54,15 @@ let private modelPath (model: string) =
 // sustained load. `BaseAddress` and `Timeout` are stable; Gemini's
 // per-request `x-goog-api-key` header rides on the request, never on
 // the client.
+// Phase 772 — built through the platform client factory, so the egress
+// policy handler sits in front of the same `HttpClientHandler` a bare
+// `new HttpClient()` would have used. Byte-identical under the default
+// permit-all policy; a verified composition can now refuse this origin.
 let private sharedClient =
     lazy
-        (let c = new HttpClient()
+        (let c =
+            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+
          c.BaseAddress <- Uri("https://generativelanguage.googleapis.com")
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)
