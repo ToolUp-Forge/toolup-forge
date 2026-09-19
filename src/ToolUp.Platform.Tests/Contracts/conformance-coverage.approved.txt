@@ -15,7 +15,7 @@
 # interface (api-baselines) with two or more production implementations.
 # A new seam therefore arrives here on its own rather than being forgotten.
 #
-# At generation: 53 of 149 replaceable seams packed; 36 of 99 bindable packs bound twice or more.
+# At generation: 58 of 156 replaceable seams packed; 40 of 104 bindable packs bound twice or more.
 
 # Replaceable seams carrying no contract pack. Author the pack and drop the row.
 [UNPACKED]
@@ -44,6 +44,7 @@ IDataExporter
 IDatasetCodec
 IDeploymentVerificationEvidence
 IDevDiagnosticsContributor
+IEgressEvidence
 IEmbeddingCache
 IEmbeddingProvider
 IEnumerableContentSource

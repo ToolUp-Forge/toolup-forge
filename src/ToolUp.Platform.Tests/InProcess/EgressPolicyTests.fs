@@ -555,6 +555,18 @@ let private evidenceTests =
         })
     ]
 
+// The seam's contract pack, bound by both shipped implementations (GP 12
+// treats a portable interface as unproven until a second implementation
+// runs the same pack).
+let private contractTests =
+    testList "IEgressPolicy contract — both shipped policies" [
+        ToolUp.Platform.Tests.Contracts.IEgressPolicyContract.tests "PermitAll" EgressPolicy.permitAll
+
+        ToolUp.Platform.Tests.Contracts.IEgressPolicyContract.tests
+            "DeclaredDestinations"
+            (EgressPolicy.declaredDestinations (DeclaredDestinations Set.empty) grantsForA)
+    ]
+
 let tests =
     testList "Phase 772 — server-side egress policy" [
         destinationTests
@@ -562,4 +574,5 @@ let tests =
         handlerTests
         reportTests
         evidenceTests
+        contractTests
     ]

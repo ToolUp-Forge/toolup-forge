@@ -251,6 +251,9 @@
         <Compile Include="Contracts\IPeerNonFSharpSdkContract.fs" />
         <!-- Wave 8 (Epoch 2) — Compliance-edition substrate contracts. -->
         <Compile Include="Contracts\IEgressGateContract.fs" />
+        <!-- Phase 772 — the server-side egress policy seam: total, pure, a deny names the origin
+             and never a path. Bound by the permit-all and declared-destinations policies. -->
+        <Compile Include="Contracts\IEgressPolicyContract.fs" />
         <Compile Include="Contracts\IEvidencePackGeneratorContract.fs" />
         <!-- Phase 174 — architecture-fitness gate helpers (reflection
              over the compiled tier graph + source-tree open scans). -->
