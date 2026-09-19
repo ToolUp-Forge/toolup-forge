@@ -196,8 +196,10 @@ type SendGridNotificationSink
 
     // Single shared HttpClient — SendGrid's REST endpoint reuses
     // connections happily. Construction is cheap; reuse keeps the
-    // socket pool warm.
-    let client = new HttpClient()
+    // socket pool warm. Phase 772 — through the platform client factory
+    // (egress policy handler in front of the same primary handler);
+    // byte-identical under the default permit-all policy.
+    let client = PlatformHttpClient.create EgressSurface.Notification
 
     let endpoint = settings.EndpointOverride |> Option.defaultValue MailSendEndpoint
 
