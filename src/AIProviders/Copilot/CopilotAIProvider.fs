@@ -73,9 +73,16 @@ let SecretKeyName = "AZURE_OPENAI_API_KEY"
 // No `BaseAddress`: every request uses an absolute per-resource Azure URL,
 // which overrides `BaseAddress` regardless. `Timeout` is instance-wide;
 // per-request auth rides on `HttpRequestMessage`, never on the client.
+// Phase 772 — built through the platform client factory, so the egress
+// policy handler sits in front of the same `HttpClientHandler` a bare
+// `new HttpClient()` would have used. Byte-identical under the default
+// permit-all policy; a verified composition can now refuse an Azure origin
+// it did not declare.
 let private sharedClient =
     lazy
-        (let c = new HttpClient()
+        (let c =
+            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)
 
