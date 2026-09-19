@@ -93,7 +93,10 @@ let private buildHttpClient (config: DockerLocalContainerSchedulerConfig) : Http
         Func<SocketsHttpConnectionContext, CancellationToken, ValueTask<Stream>>(fun _ ct ->
             ValueTask<Stream>(openLocalStream config ct))
 
-    let client = new HttpClient(handler)
+    // Phase 772 — the socket / pipe transport handler is wrapped by the
+    // platform client factory's egress handler (origin `http://localhost`);
+    // byte-identical under the default permit-all policy.
+    let client = PlatformHttpClient.createWith EgressSurface.Other handler
     client.BaseAddress <- Uri(sprintf "http://localhost/%s/" config.ApiVersion)
     client.Timeout <- TimeSpan.FromMinutes 5.0
     client
