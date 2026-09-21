@@ -19,7 +19,10 @@
     "Phase 788 appended ElmishRing.fst and ElmishSub.fst — the Elmish runtime's ring buffer and",
     "subscription diff — and needed no flag change either. ElmishRing.fst is the first model to cite",
     "a ulib lemma (FStar.Math.Lemmas, in the ghost `succ_is_mod` only, so the extraction is unchanged);",
-    "the release ships ulib's checked files, so the cold check still needs nothing beyond the pin."
+    "the release ships ulib's checked files, so the cold check still needs nothing beyond the pin.",
+    "Phase 789 appended ElmishLoop.fst — the dispatch loop as a step machine — with no flag change. It is",
+    "the first module to open another (ElmishRing); the check's per-run cache is what resolves that, so",
+    "check.ps1's list order (ElmishRing before ElmishLoop) is load-bearing rather than the pin."
   ],
   "tool": "fstar",
   "version": "v2026.09.06",

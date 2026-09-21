@@ -2369,6 +2369,7 @@ let private registeredTests =
         // caught, and the campaign asserts it reached the grow step and
         // the diff's shortcut.
         ElmishProofOracleTests.tests
+        ElmishLoopProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

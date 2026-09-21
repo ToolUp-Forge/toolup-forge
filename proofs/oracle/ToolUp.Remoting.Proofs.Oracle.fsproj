@@ -72,5 +72,10 @@
              instead — written and held to these two by the .NET host. -->
         <Compile Include="ElmishRing.fs" />
         <Compile Include="ElmishSub.fs" />
+        <!-- Phase 789 — GENERATED from ../ElmishLoop.fst — do not edit. The
+             FIRST extraction that depends on another: it opens ElmishRing
+             for the ring, its opt/pair and append, so it must follow
+             ElmishRing.fs. Later proof phases APPEND their extraction below. -->
+        <Compile Include="ElmishLoop.fs" />
     </ItemGroup>
 </Project>

@@ -1426,6 +1426,11 @@
              Expecto skin. -->
         <Compile Include="Client\ElmishProofDifferential.fs" />
         <Compile Include="InProcess\ElmishProofOracleTests.fs" />
+        <!-- Phase 789 — the dispatch loop's proved step machine beside the
+             real `Program.runWithDispatch`, driven by generated reentrancy
+             scripts. .NET only: the loop's model is extracted, and the
+             extraction compiles on this host alone (see the 788 note above). -->
+        <Compile Include="InProcess\ElmishLoopProofOracleTests.fs" />
         <!-- Phase 708 — the fact-clause feeder: the production producer the
              Phase 522 push path never had. Plan-step projection, the prompt
              path pushing a fact ahead of the chunks, byte-identity for a

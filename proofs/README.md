@@ -72,6 +72,18 @@ which is where a started-twice / never-stopped leak would have lived. The ring t
 precondition (two slots) is met by construction and shown necessary. Its ladder is
 [at the end](#the-claims-ladder--the-elmish-runtime-phase-788).
 
+**The dispatch loop theorem (Phase 789).** The loop *around* that ring — `Program.runWithDispatch`,
+the scheduling skeleton over the ring, the `reentered` latch, the `terminated` latch and the model —
+is a total step machine once its impure callees are abstracted as an oracle that says only which
+messages they synchronously re-dispatch and whether they call `Terminate`. Over that machine: every
+message `dispatch` accepts is handed to `update` **exactly once, in the order accepted**, from
+outside and from inside alike; a reentrant dispatch is queued at the back and can neither be lost
+nor moved ahead; once terminated, nothing is processed and nothing clears the flag; the boot drain
+that duplicates the critical section by hand *is* that critical section; and `DispatcherCore.active`
+is the loop's `terminated` negated in every reachable state, with the one production arm that
+breaks the encoding computed as the exception. Its ladder is
+[after the runtime's](#the-claims-ladder--the-dispatch-loop-phase-789).
+
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
@@ -863,12 +875,166 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
 * **The dispatch loop around the ring.** `Program.runWith`'s reentrancy flag, its termination
   predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract.
   The ring theorem says every deferred message comes out once and in order; what the loop does with
-  it is a separate model, and `DispatcherCore` and the `Cmd` combinators — the other two untested
-  structures the phase named — remain untested.
+  it is a separate model — **Phase 789's, [below](#the-claims-ladder--the-dispatch-loop-phase-789)**,
+  which claims the synchronous loop and `DispatcherCore`'s two flags. The `Cmd` combinators and the
+  dispatcher's async path remain untested.
 * **What a subscription does when started or stopped.** `Fx.change` calls the host's start and
   dispose functions and reports their exceptions through `onError`; the theorem is about which keys
   survive the call, with the start function opaque and its failure modelled as `None`. Whether a
   start that threw left a resource behind is the subscription author's contract.
+
+---
+
+## The claims ladder — the dispatch loop (Phase 789)
+
+The same four rungs, for `ElmishLoop.fst` — the model of `Program.runWithDispatch`
+(`src/ToolUp.Platform.Client/Client/Elmish/Program.fs`) that Phase 788's Rung 4 named as the
+missing one. The loop is a scheduling skeleton over four mutable cells; its transitions depend on the
+impure callees (`update`, `setState`, `Subs.Fx.change`, `Cmd.exec`) only through **which messages
+they synchronously re-dispatch and whether they call `Terminate`**, so those callees are abstracted
+as one oracle, `update : msg -> model -> model * ev list`, and the loop becomes a total, deterministic
+step function. The ring is *imported* from `ElmishRing.fst` — `push`, `pop`, `wf`, `unread` and the
+788 lemmas — and nothing about it is restated; this proof is about the two latches.
+
+The model carries two observables beside the cells: `trace`, the messages `update` was handed, and
+`log`, the messages `dispatch` accepted (pushed) — external and reentrant alike, in order. Every
+theorem is a statement about those two lists, and the differential compares exactly them.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these lemma
+families alone:**
+
+* **`exactly_once`** — the headline. In every idle, non-terminated state a program reaches — after
+  the boot drain and any sequence of external dispatches and `Terminate` calls — `log == trace`.
+  Every message `dispatch` accepted, whether from a timer outside the loop or from a command inside
+  it, was handed to `update` once and only once, and in the order it was accepted. The invariant it
+  falls out of (`inv`) is the whole proof: while not terminated, `log` is exactly `trace` followed by
+  the ring's unread contents, and an idle machine has drained its ring. `enqueue_spec`, `step_spec`,
+  `loop_spec` and `dispatch_inv` are the single-transition halves it composes.
+* **`in_order`.** In *every* reachable state — mid-drain, stalled, or terminated — `trace` is a
+  prefix of `log`. Nothing is ever handed to `update` out of the order in which it was accepted;
+  termination can only truncate the trace, never permute it.
+* **`reentrant_no_loss`.** A `dispatch` made while the latch is set — from `update`'s command, from
+  `setState`, from a subscription's start — queues its message at the *back* of what is pending,
+  logs it, and processes nothing: the trace, the model and everything already waiting are untouched.
+  With `exactly_once` the message is handed to `update` once the drain reaches it; with `in_order`,
+  after everything accepted before it. `dispatch_latched` is the clause-for-clause fact underneath:
+  under the latch, `dispatch` *is* `enqueue`.
+* **`terminated_absorbing`**, with `terminated_absorbing_boot` and `terminate_then_nothing`. Once
+  `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the
+  model, and nothing clears the flag — the two guards at the head of `dispatch` and of
+  `processMsgs`'s `while`, as a theorem. From any idle state, a `Terminate` from outside means
+  nothing after it is ever processed.
+* **`boot_drain_equiv`**, with `boot_single_is_dispatch`. The tail of `runWithDispatch` —
+  `reentered <- true`, the init effects through `dispatch'`, `processMsgs ()`, `reentered <- false` —
+  is transcribed literally and then shown *equal* to the steady-state critical section run over the
+  events those effects raised under the latch; for a single message it is `dispatch` itself. The
+  hand-duplicated section and the one `dispatch` runs are one function. The source is not unified:
+  the equivalence is proved, and the two copies stay (GP 11 — no behaviour change to the loop).
+* **`active_iff_not_terminated`**, with `fallback_breaks_encoding`. In every reachable state
+  `DispatcherCore.active = not terminated`. Both sites that set `terminated` call `MarkTerminated`
+  and `Wire` set `active` before anything could dispatch; the model carries the two cells in
+  lockstep and the lemma says the lockstep is an invariant. The one production arm that drives them
+  apart — `Dispatcher.fs`'s fallback for a `Terminate` with no callback wired, which clears `active`
+  alone — is modelled as `fallback_terminate` and its result *computed*: `active` false, `terminated`
+  false, a state in which `IDispatcher.Dispatch` refuses while the loop would still process.
+* **The model is total, and the drain's non-termination is reported rather than hidden.**
+  `processMsgs` is a `while` loop whose exit depends on the oracle eventually re-dispatching
+  nothing, which nothing guarantees and production does not guarantee either. The model bounds it
+  with fuel, spent after a message is processed and before the next pop, and a drain that ran out
+  leaves the latch *set* — exactly where production would be, mid-drain — so `run` feeds it no
+  further external events. Every theorem above is partial correctness over every state the machine
+  reaches, finished or not.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate.
+
+* **The model agrees with production, on .NET.** `ElmishLoopProofOracleTests` in the platform pack
+  runs the real `Program.runWithDispatch` with a **scripted `update`**: a generated script says which
+  messages `init`'s command raises during the boot drain, which each message's command raises
+  (including `Terminate`), which messages satisfy the termination predicate, and what the outside
+  world dispatches afterwards through `IDispatcher` — and the same script is the extracted machine's
+  oracle. The two must agree on the messages `update` saw in order, on the messages `dispatch`
+  accepted, on the final model, and on `IsActive`. Four hundred scripts over ids `0..8`, replies
+  pointing forward only so every drain finishes.
+* **The `log` comparison is what holds the two-flag encoding.** Production's log is recorded through
+  `IDispatcher.IsActive` at the moment of each dispatch; the model's through its `terminated` cell.
+  A state in which the two disagreed would log differently on the next dispatch, so
+  `active_iff_not_terminated` is measured on production and not only proved on the model.
+* **The campaign is known to have reached the clauses.** It asserts a counted number of scripts nest
+  a re-dispatch under a sibling (the shape on which a nested drain changes the order), raise two or
+  more messages from the boot drain, dispatch after a `Terminate` raised from *inside* a command,
+  dispatch from outside after a `Terminate`, reach the termination predicate, and end still active —
+  and that no drain stalled, so the fuel bound never decided an agreement.
+* **Two of the theorems are also run on production directly.** `boot_single_is_dispatch`: one
+  message raised from `init`'s command versus the same message dispatched from outside produce the
+  same trace, log and model. `terminated_absorbing`: after a `Terminate`, further dispatches and
+  `Terminate`s change nothing and `IsActive` is false.
+* **Two committed loop skeletons, one go-red.** The loop's scheduling skeleton is transcribed by
+  hand over the production ring with the callees replaced by the script — the same abstraction the
+  model makes, in F#. Faithful, it is asserted to *agree* with the model over the campaign. With one
+  line moved — the latch released *before* the drain instead of after it, so a dispatch from inside
+  `update` recurses into a nested drain, processing a child before its waiting siblings and letting
+  the outer `state <- model'` overwrite the model the nested drain built — it is asserted *caught*.
+  The difference the go-red measures is that one line. A differential that has never been shown to
+  fail agrees with whatever it is shown.
+* **The fallback arm, on production.** A `DispatcherCore` exposed without its terminate callback is
+  driven through `Terminate`: `IsActive` goes false, the wiring defect is reported, the interface
+  refuses a dispatch — the state `fallback_breaks_encoding` computes, reached on the shipped code.
+
+### Rung 3 — Assumed, and stated
+
+* **The two-flag encoding is faithful to production only where the model's sites are production's
+  sites.** The model sets `active` and `terminated` together because `MarkTerminated` accompanies
+  both `terminated <- true` assignments in `Program.fs` and `Wire` precedes every dispatch. A third
+  site added to either cell without the other would leave the theorem true of the model and false of
+  the code. Mitigation: the `log` comparison above measures the encoding on production on every
+  script; a divergence surfaces as a mismatch on the next dispatch after it.
+* **The oracle abstracts the callees, including their exceptions.** `update`, `setState`,
+  `Subs.Fx.change` and `Cmd.exec` are one function returning a model and the events raised before
+  control returns. An exception from any of them is an oracle reply whose model is the old one
+  (production leaves `state` unassigned) carrying whatever was dispatched before the throw — the
+  abstraction admits it, and the differential does not script it. The teardown callbacks on the
+  terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to dispatch; a dispatch they made
+  would land in the ring and never be processed, which `terminated_absorbing` covers.
+* **The bridges are hand-written.** A script's events cross as the model's `Msg` / `Term` cases and
+  `XDispatch` / `XTerminate`; production's log is recorded by the driver, not by the loop. A defect
+  in either would make the comparison compare the wrong thing. Mitigation: short and case-for-case,
+  and the faithful skeleton beside them is a third implementation of the same abstraction that must
+  agree with both.
+* **The `OSome Placeholder` arm is unreachable, by the ring theorem.** `nextMsg.Value` being
+  `Unchecked.defaultof` is a case the model's slot type makes explicit and `placeholder_unobserved`
+  proves a well-formed ring never pops; the loop model's arm exists because the function is total.
+
+### Rung 4 — Not claimed
+
+Named because an unstated exclusion reads, to anyone who finds it later, as a claim that failed.
+
+* **The `DispatchAsync` post-await recheck.** `Dispatcher.fs` re-reads `active` after the awaited
+  block completes; whether a `Terminate` that lands between the await and the recheck, or between
+  the recheck and the dispatch, can slip a message through is an *interleaving* question over two
+  observations of one cell. This is the synchronous machine; the async path needs an interleaving
+  model and is deferred to a later phase.
+* **Liveness of the drain.** That `processMsgs` returns at all depends on `update` eventually
+  re-dispatching nothing. The model reports a drain that did not finish; it does not prove that any
+  drain does, and production does not either.
+* **React, timers and HMR.** What arrives from outside is modelled as a sequence of `IDispatcher`
+  calls between drains. That the host actually delivers them between drains — that no external
+  dispatch is delivered while a synchronous drain has not returned — is the single-threaded host's
+  contract, assumed by the model's `run` and not by anything it proves. React's render scheduling,
+  timer coalescing and HMR's `Terminate` / re-run are all instances of that contract, not of this
+  theorem.
+* **The `Cmd` combinators and the subscription effects.** What a command *does* between being
+  handed `dispatch` and returning — `Cmd.OfAsync`, `Cmd.map`, `Cmd.batch` ordering — and what a
+  subscription's start does, are the callees the oracle abstracts. The theorem is about what the
+  loop does with what they raise, not about what they raise.
+* **Under Fable.** The extraction compiles on .NET only (Phase 788's Rung 2 says why), and 788's
+  answer — the .NET host writing the model's verdicts to a corpus the Fable pack replays — was not
+  taken here: the loop differential drives `Program.runWithDispatch` itself, which would need the
+  script driver in the shared host-neutral module and a corpus of script verdicts. The transpiled
+  loop is the one every browser client executes, and it is not differentially tested by this phase.
 
 ---
 

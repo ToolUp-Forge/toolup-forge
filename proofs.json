@@ -1105,14 +1105,154 @@
     {
       "id": "elmish-ring-dispatch-loop-out",
       "level": "policy",
-      "statement": "The dispatch loop AROUND the ring is OUT.",
-      "reason": "`Program.runWith`'s reentrancy flag, its termination predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract, not the ring's. The ring theorem says every deferred message comes out once and in order; what the loop does with it is a separate model."
+      "statement": "The dispatch loop AROUND the ring is OUT of the RING's claim.",
+      "reason": "`Program.runWith`'s reentrancy flag, its termination predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract, not the ring's. The ring theorem says every deferred message comes out once and in order; what the loop does with it is a separate model - Phase 789's, whose claims are the `elmish-loop-*` rows below."
     },
     {
       "id": "elmish-sub-effects-out",
       "level": "policy",
       "statement": "What a subscription DOES when started or stopped is OUT.",
       "reason": "`Fx.change` calls the host's start and dispose functions and reports their exceptions through `onError`; the theorem is about which keys survive the call, with the start function opaque and its failure modelled as `None`. Whether a start that threw left a resource behind is the subscription author's contract."
+    },
+    {
+      "id": "elmish-loop-exactly-once",
+      "level": "proved",
+      "statement": "In every idle, non-terminated state a program reaches - after the boot drain and any sequence of external dispatches and Terminate calls - the log of accepted messages IS the trace of messages handed to `update`: every message `dispatch` accepted, from outside or re-dispatched from inside, was processed exactly once, in the order it was accepted. The invariant underneath: while not terminated the log is exactly the trace followed by the ring's unread contents, and an idle machine has drained its ring.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "exactly_once",
+          "program_inv",
+          "dispatch_inv",
+          "loop_spec",
+          "step_spec",
+          "enqueue_spec"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-in-order",
+      "level": "proved",
+      "statement": "In EVERY state a program reaches - mid-drain, stalled, or terminated - the trace is a prefix of the log. Nothing is handed to `update` out of the order in which it was accepted; termination can only truncate, never permute.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "in_order"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-reentrant-no-loss",
+      "level": "proved",
+      "statement": "A `dispatch` made while the latch is set - from `update`'s command, from `setState`, from a subscription's start - queues its message at the BACK of what is pending, logs it, and processes nothing: the trace, the model and everything already waiting are untouched. Under the latch `dispatch` IS `enqueue`. With exactly-once and in-order, the message can be neither lost nor moved ahead.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "reentrant_no_loss",
+          "dispatch_latched"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-terminated-absorbing",
+      "level": "proved",
+      "statement": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the model, and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed; a boot drain on a machine terminated before it ran processes nothing.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "terminated_absorbing",
+          "terminated_absorbing_boot",
+          "terminate_then_nothing",
+          "terminated_stays_terminated"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-boot-drain-equiv",
+      "level": "proved",
+      "statement": "The boot drain - the hand-duplicated `reentered <- true; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events those effects raised under the latch; for a single message it is `dispatch` itself. Proved equivalent; the source is not unified (no behaviour change to the loop).",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "boot_drain_equiv",
+          "boot_single_is_dispatch",
+          "boot_evs_are_apply_evs"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-active-iff-not-terminated",
+      "level": "proved",
+      "statement": "In every state a program reaches, `DispatcherCore.active` is the loop's `terminated` negated. And the one production arm that drives the two apart - `Dispatcher.fs`'s fallback for a Terminate with no callback wired, which clears `active` alone - is modelled and its result computed: `active` false, `terminated` false, a state in which `IDispatcher.Dispatch` refuses while the loop would still process.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishLoop.fst",
+        "lemmas": [
+          "active_iff_not_terminated",
+          "fallback_breaks_encoding"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
+      "level": "tested",
+      "statement": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, and IsActive. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain is caught.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
+        "list": "Phase 789 - the proved dispatch loop as oracle",
+        "cases": [
+          "the extracted machine agrees with the production loop over generated reentrancy scripts",
+          "every drain in the campaign finished - the fuel bound never decided an agreement",
+          "the campaign re-dispatched from update, from the boot drain, and after Terminate",
+          "the hand-transcribed skeleton agrees with the model",
+          "a loop that releases the latch before draining is caught - go-red",
+          "a single-message boot drain and a steady-state dispatch process the same trace - boot_drain_equiv, run",
+          "after Terminate nothing is processed and IsActive is false - terminated_absorbing, run",
+          "the fallback arm drives the two flags apart - the encoding's one exception"
+        ],
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "elmish-loop-two-flag-encoding-sites",
+      "level": "assumed",
+      "statement": "The model sets `active` and `terminated` together because `MarkTerminated` accompanies both `terminated <- true` assignments in Program.fs and `Wire` precedes every dispatch. A third site added to either cell without the other would leave the theorem true of the model and false of the code; the fallback arm in Dispatcher.fs is the one known exception, stated in the proved row above.",
+      "mitigation": "the differential records production's log through IDispatcher.IsActive and the model's through its terminated cell, so a state in which the two disagree logs differently on the next dispatch and fails the comparison"
+    },
+    {
+      "id": "elmish-loop-oracle-abstracts-callees",
+      "level": "assumed",
+      "statement": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. The teardown callbacks on the terminating path are assumed not to dispatch.",
+      "mitigation": "a dispatch a teardown callback made would land in the ring and never be processed, which terminated_absorbing covers; the exception shape is expressible as an oracle reply and could be scripted"
+    },
+    {
+      "id": "elmish-loop-bridges-hand-written",
+      "level": "assumed",
+      "statement": "A script's events cross as the model's Msg / Term and XDispatch / XTerminate cases, and production's log is recorded by the driver rather than by the loop. A defect in either would make the comparison compare the wrong thing.",
+      "mitigation": "short and case-for-case on purpose; the faithful skeleton is a third implementation of the same abstraction that must agree with both, and the go-red skeleton is shown caught over the same scripts"
+    },
+    {
+      "id": "elmish-loop-liveness-out",
+      "level": "policy",
+      "statement": "Liveness of the drain is OUT.",
+      "reason": "that `processMsgs` returns at all depends on `update` eventually re-dispatching nothing. The model bounds the drain with fuel and REPORTS a drain that did not finish (its latch stays set and `run` feeds it nothing further); it does not prove that any drain does, and production does not either. Every proved row above is partial correctness."
+    },
+    {
+      "id": "elmish-loop-host-delivery-out",
+      "level": "policy",
+      "statement": "That React, timers and HMR deliver their dispatches BETWEEN drains is OUT.",
+      "reason": "the outside world is modelled as a sequence of IDispatcher calls between drains; that no external dispatch arrives while a synchronous drain has not returned is the single-threaded host's contract, assumed by the model's `run` and proved by nothing here."
+    },
+    {
+      "id": "elmish-loop-fable-out",
+      "level": "policy",
+      "statement": "The transpiled loop under Fable is OUT.",
+      "reason": "the extraction compiles on .NET only, and the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken. The browser's copy of the loop is not differentially tested by this phase."
     }
   ]
 }

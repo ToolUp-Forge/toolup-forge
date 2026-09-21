@@ -164,6 +164,19 @@ $modules = @(
         HostMinCases = 8
         HostSubject  = "generated subscription sets, with duplicates and the shortcut's exact-key-set case"
     }
+    # Phase 789 — the dispatch loop AROUND the ring. The FIRST module that
+    # imports another: ElmishLoop.fst opens ElmishRing for the ring, its
+    # opt/pair and append, so its `.checked` is an input to this one and
+    # the entry MUST follow ElmishRing's — step 2 checks in list order
+    # into one cache per run, which is what makes the import resolve.
+    @{
+        Name         = "ElmishLoop"
+        Source       = "ElmishLoop.fst"
+        Oracle       = "oracle/ElmishLoop.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 789 - the proved dispatch loop as oracle"
+        HostMinCases = 8
+        HostSubject  = "generated reentrancy scripts against the real Program.runWithDispatch"
+    }
 )
 
 function Write-Step {
@@ -279,9 +292,10 @@ for ($run = 1; $run -le $Runs; $run++) {
     # Cold every run, deliberately. A warm `.checked` file is F* telling
     # you it already believed this, which is exactly the thing a repeat
     # run exists not to take on trust. The modules share one cache per
-    # run because they share nothing else: each owns its own small
-    # types and imports only Prims, so no `.checked` of one is an input
-    # to another.
+    # run. Until Phase 789 they shared nothing else — each owned its own
+    # small types and imported only Prims; ElmishLoop.fst opens
+    # ElmishRing, so the shared cache is now also HOW that import
+    # resolves, and the list order above is load-bearing.
     Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
 
