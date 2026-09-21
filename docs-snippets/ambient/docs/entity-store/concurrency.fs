@@ -5,6 +5,7 @@
 // handler the page never shows in full: the entity record itself, the
 // DI-resolved `IEntityStore`, and the caller's resolved scope. Declared
 // here so the blocks compile exactly as a reader would copy them.
+open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 
@@ -31,3 +32,8 @@ module PageAmbient =
 
     /// What the user typed.
     let editedBody: string = failwith "ambient"
+
+    /// The caller the handler resolved — the `AccessContext` whose
+    /// `UserId` becomes the `EntityPrincipal` every mutating member has
+    /// taken since Phase 806 (renamed from `EntityActor` by Phase 814).
+    let caller: AccessContext = failwith "ambient"

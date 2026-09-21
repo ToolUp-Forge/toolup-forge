@@ -536,16 +536,16 @@ type PostgresFormStore(connectionString: string) =
     interface IFormStore with
         member _.GetSchema (scopeId, schemaId, version) = async { return Ok Unchecked.defaultof<_> }
         // ... every other abstract method ...
-        member _.SaveSchema (scopeId, schema) = async { return Ok schema }
+        member _.SaveSchema (scopeId, principal, schema) = async { return Ok schema }
         member _.ListSchemas scopeId = async { return [] }
-        member _.DeleteSchema (scopeId, schemaId) = async { return Ok () }
+        member _.DeleteSchema (scopeId, principal, schemaId) = async { return Ok () }
         member _.SaveSubmission (scopeId, submission) = async { return Ok submission }
         member _.GetSubmission (scopeId, submissionId) = async { return Ok Unchecked.defaultof<_> }
         member _.ListSubmissions (scopeId, query) = async { return Ok [] }
-        member _.DeleteSubmission (scopeId, submissionId) = async { return Ok () }
+        member _.DeleteSubmission (scopeId, principal, submissionId) = async { return Ok () }
 ```
 
-Wire via the SDK's DI registration (replacing the default `FormStore` factory). Conformance: bind to `IFormStoreContract` (in `ToolUp.Forms.Tests`) — the same pack passes for the shipped `FormStore` and any drop-in.
+The `principal` on the three mutating members is the caller's `EntityPrincipal` (Phase 814) — the same value the entity store's mutating members take, so a drop-in store attributes writes the way the shipped one does. Wire via the SDK's DI registration (replacing the default `FormStore` factory). Conformance: bind to `IFormStoreContract` (in `ToolUp.Forms.Tests`) — the same pack passes for the shipped `FormStore` and any drop-in.
 
 The default `WorkflowEngine` constructor accepts `IFormStore`, `IAuditLog`, `IActionLedger`, `IMetricsSink`, a warn callback, plus the workflows / guards / actions / action-policies maps. Replacing it means mirroring that constructor shape so `FormsServerApp.run` can pass through.
 
