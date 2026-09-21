@@ -111,6 +111,14 @@ type opt (a: Type0) =
 type pair (a: Type0) (b: Type0) =
   | Pair : first: a -> second: b -> pair a b
 
+/// F#: `'a * 'b * 'c` (Phase 800 — the payload of `tuple3`).
+type triple (a: Type0) (b: Type0) (c: Type0) =
+  | Triple : first: a -> second: b -> third: c -> triple a b c
+
+/// F#: `'a * 'b * 'c * 'd` (Phase 800 — the payload of `tuple4`).
+type quad (a: Type0) (b: Type0) (c: Type0) (d: Type0) =
+  | Quad : first: a -> second: b -> third: c -> fourth: d -> quad a b c d
+
 /// F#: `DecodeError` (`Shared/Remoting/DecodeError.fs`). `path` is
 /// OUTERMOST-FIRST, exactly as the F# record documents.
 type refusal = {
@@ -690,6 +698,70 @@ let entries_of (#raw #flt #k #w: Type0) (key: decoder raw flt k) (entry: decoder
     | VMap pairs -> walk_entries key entry 0 pairs []
     | _ -> refuse "map" v
 
+// ─── Tuples ──────────────────────────────────────────────────────────
+//
+// Phase 800 — the first of the two combinator gaps Phase 69k's census
+// measured. `Write.writeTuple` emits a tuple EXACTLY as it emits a
+// record — an array of the elements, positionally — so the wire shape of
+// `int * string` and of a two-field record is one and the same, and what
+// makes the term a tuple is only the decoder that reads it. That is why
+// the arity is a refusal rather than a slice: an array of three elements
+// read as a pair would silently drop one.
+
+/// F#: `Decode.tupleOf` — the arity check every `tupleN` runs first.
+let tuple_of (#raw #flt: Type0) (arity: nat) : decoder raw flt unit =
+  fun v ->
+    let expected = "a tuple of " ^ string_of_int arity ^ " element(s)" in
+    match v with
+    | VArr elements ->
+      if count elements = arity then Accepted ()
+      else
+        refuse_with
+          expected
+          ("an array of " ^ string_of_int (count elements) ^ " element(s)")
+    | _ -> refuse expected v
+
+/// F#: `Decode.tuple2` — a pair, from the positional array the writer
+/// emits. A refusal beneath an element is annotated `[0]` / `[1]`
+/// through `index`: the element has no name, so the position is the
+/// honest path.
+let tuple2 (#raw #flt #a #b: Type0) (first: decoder raw flt a) (second: decoder raw flt b)
+  : decoder raw flt (pair a b) =
+  bind
+    (fun _ -> succeed (fun x y -> Pair x y) |>> index 0 first |>> index 1 second)
+    (tuple_of 2)
+
+/// F#: `Decode.tuple3`.
+let tuple3
+  (#raw #flt #a #b #c: Type0)
+  (first: decoder raw flt a)
+  (second: decoder raw flt b)
+  (third: decoder raw flt c)
+  : decoder raw flt (triple a b c) =
+  bind
+    (fun _ ->
+      succeed (fun x y z -> Triple x y z) |>> index 0 first |>> index 1 second |>> index 2 third)
+    (tuple_of 3)
+
+/// F#: `Decode.tuple4`. Wider tuples are not combinators — the
+/// platform's own API surface reaches arity 2, and the generator refuses
+/// a wider one by name.
+let tuple4
+  (#raw #flt #a #b #c #d: Type0)
+  (first: decoder raw flt a)
+  (second: decoder raw flt b)
+  (third: decoder raw flt c)
+  (fourth: decoder raw flt d)
+  : decoder raw flt (quad a b c d) =
+  bind
+    (fun _ ->
+      succeed (fun w x y z -> Quad w x y z)
+      |>> index 0 first
+      |>> index 1 second
+      |>> index 2 third
+      |>> index 3 fourth)
+    (tuple_of 4)
+
 // ─── Unions ──────────────────────────────────────────────────────────
 
 /// F#: `Decode.UnionCase<'T> = Value option -> Result<'T, DecodeError>`.
@@ -719,6 +791,32 @@ let payload (#raw #flt #a: Type0) (d: decoder raw flt a) : union_case raw flt a 
     match carried with
     | OSome v -> d v
     | ONone -> refuse_with "a union case carrying a payload" "a union case with no payload"
+
+/// F#: `Decode.fields` — a union case carrying SEVERAL fields, `arity`
+/// of them, which the writer emits as an inner array in the payload
+/// slot. Phase 800 — the second combinator gap Phase 69k's census
+/// measured, and the third wire shape the `union_case` note describes.
+/// A combinator the case AUTHOR chooses, never a runtime guess: a
+/// single-field case whose field is an array of `arity` elements puts
+/// identical bytes on the wire, and only the case's own arity tells the
+/// two apart. `arity` is at least 2 by the writer's rule — a one-field
+/// case is written DIRECTLY, with no inner array — and the refinement
+/// states that rule where the F# can only document it.
+let fields (#raw #flt #a: Type0) (arity: nat{arity >= 2}) (d: decoder raw flt a)
+  : union_case raw flt a =
+  fun carried ->
+    let expected = "a union case carrying " ^ string_of_int arity ^ " fields" in
+    match carried with
+    | OSome v ->
+      (match v with
+       | VArr inner ->
+         if count inner = arity then d v
+         else
+           refuse_with
+             expected
+             ("an array of " ^ string_of_int (count inner) ^ " element(s)")
+       | _ -> refuse expected v)
+    | ONone -> refuse_with expected "a union case with no payload"
 
 /// F#: `Decode.union` — dispatch on the tag the writer emits.
 ///
@@ -926,6 +1024,77 @@ let lemma_union_refuses_unknown_tag
          | VArr [ VInt n _ ] -> ONone? (cases n)
          | _ -> false))
       (ensures Refused? (union type_name cases v)) = ()
+
+/// **Phase 800 — a tuple of the wrong arity is refused, by both
+/// arities.** `tuple_of` accepts an array of exactly `arity` elements
+/// and nothing else; on an array of any other width the refusal names
+/// the arity the decoder wanted and the one the wire carried, at the
+/// tuple itself (empty path), and on a non-array it refuses by the same
+/// expectation. This is the characterisation the `tupleN` combinators
+/// inherit: each is `tuple_of n` followed by `n` `index` reads, so an
+/// element is never read out of an array that is not the right width.
+let lemma_tuple_of_characterised (#raw #flt: Type0) (arity: nat) (v: value raw flt)
+  : Lemma
+      (match v with
+       | VArr elements ->
+         (count elements = arity ==> tuple_of #raw #flt arity v == Accepted ())
+         /\ (count elements <> arity ==>
+             tuple_of #raw #flt arity v
+             == Refused
+                  (refusal_at
+                    ("a tuple of " ^ string_of_int arity ^ " element(s)")
+                    ("an array of " ^ string_of_int (count elements) ^ " element(s)")))
+       | _ -> Refused? (tuple_of #raw #flt arity v)) = ()
+
+/// **`tuple2` is `tuple_of 2` and then the elements** — a pair never
+/// reaches an element decoder on an array of the wrong width, so a
+/// `tuple2` refusal on such an array is `tuple_of`'s refusal verbatim.
+let lemma_tuple2_refuses_wrong_arity
+  (#raw #flt #a #b: Type0)
+  (first: decoder raw flt a)
+  (second: decoder raw flt b)
+  (v: value raw flt)
+  : Lemma
+      (requires (match v with
+                 | VArr elements -> count elements <> 2
+                 | _ -> true))
+      (ensures (match tuple_of #raw #flt 2 v with
+                | Refused e -> tuple2 first second v == Refused e
+                | Accepted _ -> False)) = ()
+
+/// **Phase 800 — a several-field case is refused on every shape but an
+/// inner array of its own width.** `fields arity` hands the inner array
+/// to the field pipeline exactly when it has `arity` elements; an inner
+/// array of any other width is refused naming both widths, a bare
+/// (non-array) payload is refused by the value's own description, and a
+/// `[tag]` term with no payload slot is refused as such. The path is
+/// empty in every refusal `fields` itself makes — a union is one wire
+/// term — so a field NAME on the path came from the pipeline beneath.
+let lemma_fields_characterised
+  (#raw #flt #a: Type0)
+  (arity: nat{arity >= 2})
+  (d: decoder raw flt a)
+  (carried: opt (value raw flt))
+  : Lemma
+      (match carried with
+       | OSome (VArr inner) ->
+         (count inner = arity ==> fields arity d carried == d (VArr inner))
+         /\ (count inner <> arity ==>
+             fields arity d carried
+             == Refused
+                  (refusal_at
+                    ("a union case carrying " ^ string_of_int arity ^ " fields")
+                    ("an array of " ^ string_of_int (count inner) ^ " element(s)")))
+       | OSome v ->
+         fields arity d carried
+         == Refused
+              (refusal_at ("a union case carrying " ^ string_of_int arity ^ " fields") (describe v))
+       | ONone ->
+         fields arity d carried
+         == Refused
+              (refusal_at
+                ("a union case carrying " ^ string_of_int arity ^ " fields")
+                "a union case with no payload")) = ()
 
 // ─── Phase 786's information rule, as three lemmas ───────────────────
 //
@@ -1158,3 +1327,87 @@ let decode_encode_roundtrip (#raw #flt: Type0) (str_len: string -> nat) (c: ref_
 /// The same for the nested record on its own, so a failure localises.
 let decode_encode_roundtrip_address (#raw #flt: Type0) (str_len: string -> nat) (a: ref_address)
   : Lemma (decode_address #raw #flt (encode_address str_len a) == Accepted a) = ()
+
+(* ───────────────────────────────────────────────────────────────────
+   Phase 800 — the vocabulary widens by exactly what the two new
+   combinators express.
+
+   A leg of the consignment's journey: its `hop` is a PAIR (an
+   `int * string` on the F# side, the shape `IPlatformTenantApi` and
+   three other platform records return), and its `status` is a union
+   with a SEVERAL-field case (the shape nine platform unions carry).
+   The encoder is `Write.writeTuple` for the pair — positional, exactly
+   as a record — and `Write.writeUnion`'s three arms for the union:
+   `[tag]`, `[tag; field]`, `[tag; [field; field]]`.
+   ─────────────────────────────────────────────────────────────────── *)
+
+type ref_status =
+  | Planned : ref_status
+  | Delayed : reason: string -> minutes: i32 -> ref_status
+  | Arrived : at: i32 -> ref_status
+
+type ref_leg = {
+  hop: pair i32 string;
+  status: ref_status;
+}
+
+let encode_status (#raw #flt: Type0) (str_len: string -> nat) (s: ref_status)
+  : value raw flt =
+  match s with
+  | Planned -> VArr [ VInt 0 Fixnum ]
+  | Delayed reason minutes ->
+    VArr [ VInt 1 Fixnum; VArr [ VStr reason (str_len reason); VInt minutes Bits32 ] ]
+  | Arrived at -> VArr [ VInt 2 Fixnum; VInt at Bits32 ]
+
+let encode_leg (#raw #flt: Type0) (str_len: string -> nat) (l: ref_leg) : value raw flt =
+  VArr [
+    (match l.hop with
+     | Pair n s -> VArr [ VInt n Bits32; VStr s (str_len s) ]);
+    encode_status str_len l.status;
+  ]
+
+/// The decoder, in the shape the generator emits for a union whose
+/// cases carry zero, several and one field: `case0`, `fields n` over a
+/// `field` pipeline, `payload`.
+let decode_status (#raw #flt: Type0) : decoder raw flt ref_status =
+  union
+    "RefStatus"
+    (fun tag ->
+      if tag = 0 then OSome (case0 Planned)
+      else if tag = 1 then
+        OSome
+          (fields
+            2
+            (succeed (fun r m -> Delayed r (reinterpret_i32 m))
+             |>> field "reason" 0 as_string
+             |>> field "minutes" 1 as_int32))
+      else if tag = 2 then OSome (payload (map (fun a -> Arrived (reinterpret_i32 a)) as_int32))
+      else ONone)
+
+let decode_leg (#raw #flt: Type0) : decoder raw flt ref_leg =
+  succeed (fun h s -> { hop = h; status = s })
+  |>> field "Hop" 0 (tuple2 (map reinterpret_i32 as_int32) as_string)
+  |>> field "Status" 1 decode_status
+
+/// **`decode_leg_total`** — `decode_total` at the widened instance,
+/// recorded because the phase names it.
+let decode_leg_total (#raw #flt: Type0) (v: value raw flt)
+  : Lemma (Accepted? (decode_leg v) \/ Refused? (decode_leg v)) = ()
+
+/// **`decode_leg_wf`** — a well-formed encoding of a leg always
+/// decodes: the decoder can never refuse a pair or a several-field case
+/// its own encoder produced.
+let decode_leg_wf (#raw #flt: Type0) (str_len: string -> nat) (l: ref_leg)
+  : Lemma (Accepted? (decode_leg #raw #flt (encode_leg str_len l))) = ()
+
+/// **`decode_encode_roundtrip_leg`** — and it decodes back to the value
+/// it started from, for every string-length function the host might
+/// supply. This is the round trip over the two shapes Phase 69k's
+/// census found the algebra could not express.
+let decode_encode_roundtrip_leg (#raw #flt: Type0) (str_len: string -> nat) (l: ref_leg)
+  : Lemma (decode_leg #raw #flt (encode_leg str_len l) == Accepted l) = ()
+
+/// The same for the union on its own, so a failure localises to the
+/// several-field case rather than to the pair beside it.
+let decode_encode_roundtrip_status (#raw #flt: Type0) (str_len: string -> nat) (s: ref_status)
+  : Lemma (decode_status #raw #flt (encode_status str_len s) == Accepted s) = ()

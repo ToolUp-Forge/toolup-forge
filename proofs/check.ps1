@@ -104,7 +104,7 @@ $modules = @(
         Source       = "RemotingDecode.fst"
         Oracle       = "oracle/RemotingDecode.fs"
         HostList     = "ToolUp.Platform.Tests.Phase 787 - the proved model as oracle"
-        HostMinCases = 7
+        HostMinCases = 9 # Phase 800 added the refusal-shape and widened-vocabulary cases
         HostSubject  = "the Phase 784 corpus"
     }
     @{

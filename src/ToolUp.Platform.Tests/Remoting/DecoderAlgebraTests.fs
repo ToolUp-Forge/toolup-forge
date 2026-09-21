@@ -78,13 +78,19 @@ let private outcome: Decoder<Outcome> =
         // `Outcome.Accepted` is qualified because `RefusalOutcome`
         // (declared later in `WireCorpus`) also has an `Accepted` case,
         // and F#'s last-declaration-wins resolution picks that one.
+        //
+        // Phase 800 — the several-field case takes `fields 2`, the arity-
+        // checked form the generator now emits, rather than a bare
+        // `payload` over the inner array. `ProofOracleTests` keeps the
+        // `payload` form paired beside this one, so both shapes stay
+        // measured.
         | 0 ->
             Some(
-                Decode.payload (
-                    Decode.succeed (fun id at -> Outcome.Accepted(id, at))
-                    |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
-                    |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset)
-                )
+                Decode.fields
+                    2
+                    (Decode.succeed (fun id at -> Outcome.Accepted(id, at))
+                     |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
+                     |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset))
             )
         | 1 -> Some(Decode.payload (Decode.asString |> Decode.map Outcome.Rejected))
         | 2 -> Some(Decode.case0 Outcome.Pending)
@@ -162,17 +168,11 @@ let private covered: (Type * (Value -> Result<obj, DecodeError>)) list = [
     entry (Decode.asMap Decode.asInt32 Decode.asString)
     entry (Decode.asSet Decode.asString)
     entry (Decode.asSet Decode.asInt32)
-    entry (
-        Decode.succeed (fun a b -> (a, b))
-        |> Decode.apply (Decode.index 0 Decode.asInt32)
-        |> Decode.apply (Decode.index 1 Decode.asString)
-    )
-    entry (
-        Decode.succeed (fun a b c -> (a, b, c))
-        |> Decode.apply (Decode.index 0 Decode.asInt32)
-        |> Decode.apply (Decode.index 1 Decode.asString)
-        |> Decode.apply (Decode.index 2 Decode.asBool)
-    )
+    // Phase 800 — the tuple cases ride the tuple combinators. Until 800
+    // they were hand-composed here as `succeed |> apply (index …)` with
+    // no arity check, which is what the census could not emit.
+    entry (Decode.tuple2 Decode.asInt32 Decode.asString)
+    entry (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
     entry priority
     entry outcome
     entry address
@@ -628,6 +628,161 @@ let tests =
                     "the algebra refuses nothing the reflection reader did not already refuse, so this phase bought no refusals at all"
         ]
 
+        testList "the Phase 800 combinators — tuples and the several-field union case" [
+            // The two gaps Phase 69k's census measured, closed. Each
+            // refusal is pinned by its text because `ProofOracleTests`
+            // compares the model's messages to these verbatim, and the
+            // wire fact each one encodes — a tuple is positional, a
+            // several-field case is an inner array — is what the
+            // generator now relies on.
+
+            testCase "a tuple decodes from the positional array the writer emits"
+            <| fun () ->
+                let pair = Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven" ]
+
+                Expect.equal
+                    (Decode.tuple2 Decode.asInt32 Decode.asString pair)
+                    (Ok(7, "seven"))
+                    "a two-element array is a pair"
+
+                let triple =
+                    Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
+
+                Expect.equal
+                    (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool triple)
+                    (Ok(7, "seven", true))
+                    "a three-element array is a triple"
+
+                let quad =
+                    Value.Arr [
+                        Value.Int(7L, IntegerWidth.Fixnum)
+                        Value.Str "seven"
+                        Value.Bool true
+                        Value.Nil
+                    ]
+
+                Expect.equal
+                    (Decode.tuple4 Decode.asInt32 Decode.asString Decode.asBool Decode.asUnit quad)
+                    (Ok(7, "seven", true, ()))
+                    "a four-element array is a quadruple"
+
+            testCase "a tuple of the wrong arity is refused by name, never sliced"
+            <| fun () ->
+                let three =
+                    Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
+
+                match Decode.tuple2 Decode.asInt32 Decode.asString three with
+                | Ok _ -> failtest "a three-element array read as a pair would silently drop an element"
+                | Error e ->
+                    Expect.equal e.Expected "a tuple of 2 element(s)" "the expected text names the tuple's arity"
+                    Expect.equal e.Found "an array of 3 element(s)" "the found text names the wire's arity"
+                    Expect.isEmpty e.Path "the arity is refused at the tuple itself, before any element"
+
+                match Decode.tuple2 Decode.asInt32 Decode.asString (Value.Str "not a tuple") with
+                | Ok _ -> failtest "a string is not a tuple"
+                | Error e ->
+                    Expect.equal e.Expected "a tuple of 2 element(s)" "a non-array refuses with the same expectation"
+
+            testCase "a refusal beneath a tuple element carries its position"
+            <| fun () ->
+                let pair = Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Nil ]
+
+                match Decode.tuple2 Decode.asInt32 Decode.asString pair with
+                | Ok _ -> failtest "nil is not a string"
+                | Error e ->
+                    Expect.equal e.Path [ "[1]" ] "the element has no name, so `index` supplies the position"
+                    Expect.equal e.Expected "string" "the element decoder's own refusal is what surfaces"
+
+            testCase "a several-field case decodes from the inner array the writer emits"
+            <| fun () ->
+                // `[tag; [a; b]]` — the third wire shape `Write.writeUnion`
+                // produces, and the one `payload` could read but the
+                // generator could not emit.
+                let term =
+                    Value.Arr [
+                        Value.Int(0L, IntegerWidth.Fixnum)
+                        Value.Arr [ Value.Str "a"; Value.Str "b" ]
+                    ]
+
+                let twoFields =
+                    Decode.union "U" (fun _ ->
+                        Some(
+                            Decode.fields
+                                2
+                                (Decode.succeed (fun a b -> a, b)
+                                 |> Decode.apply (Decode.field "First" 0 Decode.asString)
+                                 |> Decode.apply (Decode.field "Second" 1 Decode.asString))
+                        ))
+
+                Expect.equal (twoFields term) (Ok("a", "b")) "the inner array is the case's fields, positionally"
+
+                // And the corpus's own several-field case, through the
+                // `fields` form `outcome` above now takes.
+                let accepted =
+                    (pinnedCases |> List.find (fun c -> c.Name = "union-multifield")).WriteMsgPack()
+
+                Expect.isOk
+                    (algebraDecode typeof<Outcome> accepted)
+                    "the corpus's several-field `Outcome.Accepted` decodes through `fields 2`"
+
+            testCase "a several-field case refuses the wrong width, a bare value and a missing payload — each by name"
+            <| fun () ->
+                let twoFields =
+                    Decode.union "U" (fun _ ->
+                        Some(
+                            Decode.fields
+                                2
+                                (Decode.succeed (fun a b -> a, b)
+                                 |> Decode.apply (Decode.field "First" 0 Decode.asString)
+                                 |> Decode.apply (Decode.field "Second" 1 Decode.asString))
+                        ))
+
+                let tag = Value.Int(0L, IntegerWidth.Fixnum)
+
+                let refusal (value: Value) =
+                    match twoFields value with
+                    | Ok _ -> failtestf "%s must refuse" (Value.describe value)
+                    | Error e -> e
+
+                let short = refusal (Value.Arr [ tag; Value.Arr [ Value.Str "a" ] ])
+                Expect.equal short.Expected "a union case carrying 2 fields" "the expected text names the case's arity"
+                Expect.equal short.Found "an array of 1 element(s)" "the found text names the inner array's width"
+
+                let bare = refusal (Value.Arr [ tag; Value.Str "a" ])
+                Expect.equal bare.Expected "a union case carrying 2 fields" "a bare payload is not several fields"
+
+                Expect.equal
+                    bare.Found
+                    (Value.describe (Value.Str "a"))
+                    "and the found text is the value's own description"
+
+                let none = refusal (Value.Arr [ tag ])
+                Expect.equal none.Expected "a union case carrying 2 fields" "a `[tag]` term carries no fields at all"
+                Expect.equal none.Found "a union case with no payload" "which is what the found text says"
+
+            testCase "a refusal beneath a several-field case carries the field's name"
+            <| fun () ->
+                let twoFields =
+                    Decode.union "U" (fun _ ->
+                        Some(
+                            Decode.fields
+                                2
+                                (Decode.succeed (fun a b -> a, b)
+                                 |> Decode.apply (Decode.field "First" 0 Decode.asString)
+                                 |> Decode.apply (Decode.field "Second" 1 Decode.asString))
+                        ))
+
+                let term =
+                    Value.Arr [ Value.Int(0L, IntegerWidth.Fixnum); Value.Arr [ Value.Str "a"; Value.Nil ] ]
+
+                match twoFields term with
+                | Ok _ -> failtest "nil is not a string"
+                | Error e ->
+                    // Unannotated by the union, as every case refusal is
+                    // — so the path is the field's name and nothing else.
+                    Expect.equal e.Path [ "Second" ] "the field decoder's name is the whole path"
+        ]
+
         testList "the combinators are total, pure and reflection-free" [
             testCase "no combinator throws on any shape in the value model"
             <| fun () ->
@@ -682,6 +837,20 @@ let tests =
                     "result", erase (Decode.result Decode.asString Decode.asString)
                     "stringEnum", erase (Decode.stringEnum "E" [ "a", 1 ])
                     "union", erase (Decode.union "U" (fun _ -> Some(Decode.case0 1)))
+                    "tuple2", erase (Decode.tuple2 Decode.asString Decode.asString)
+                    "tuple3", erase (Decode.tuple3 Decode.asString Decode.asString Decode.asString)
+                    "tuple4", erase (Decode.tuple4 Decode.asString Decode.asString Decode.asString Decode.asString)
+                    "fields",
+                    erase (
+                        Decode.union "U" (fun _ ->
+                            Some(
+                                Decode.fields
+                                    2
+                                    (Decode.succeed (fun a b -> a, b)
+                                     |> Decode.apply (Decode.field "a" 0 Decode.asString)
+                                     |> Decode.apply (Decode.field "b" 1 Decode.asString))
+                            ))
+                    )
                     "address", erase address
                     "outcome", erase outcome
                     "consignment", erase consignment

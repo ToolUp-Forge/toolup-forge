@@ -158,6 +158,12 @@ let private toOption (o: RemotingDecode.opt<'a>) : 'a option =
     | RemotingDecode.OSome item -> Some item
     | RemotingDecode.ONone -> None
 
+// Phase 800 — the model's own tuple types, back to F#'s. The model
+// declares `pair` / `triple` / `quad` rather than taking F*'s native
+// tuples so that the extraction references `Prims` and nothing else.
+let private toPair (RemotingDecode.Pair(a, b)) : 'a * 'b = a, b
+let private toTriple (RemotingDecode.Triple(a, b, c)) : 'a * 'b * 'c = a, b, c
+
 // ─── The model's decoders, mirroring the production ones ─────────────
 //
 // Each is the same pipeline written against the extracted combinators.
@@ -241,6 +247,16 @@ let private mMap (key: ModelDecoder<'k>) (entry: ModelDecoder<'v>) : ModelDecode
 let private mOption (inner: ModelDecoder<'a>) : ModelDecoder<'a option> =
     RemotingDecode.map toOption (RemotingDecode.as_option inner)
 
+let private mTuple2 (first: ModelDecoder<'a>) (second: ModelDecoder<'b>) : ModelDecoder<'a * 'b> =
+    RemotingDecode.map toPair (RemotingDecode.tuple2 first second)
+
+let private mTuple3
+    (first: ModelDecoder<'a>)
+    (second: ModelDecoder<'b>)
+    (third: ModelDecoder<'c>)
+    : ModelDecoder<'a * 'b * 'c> =
+    RemotingDecode.map toTriple (RemotingDecode.tuple3 first second third)
+
 let private mPriority: ModelDecoder<Priority> =
     RemotingDecode.union "Priority" (fun tag ->
         if tag = ix 0 then
@@ -271,6 +287,28 @@ let private mOutcome: ModelDecoder<Outcome> =
                     |>> RemotingDecode.field "id" (ix 0) mGuid
                     |>> RemotingDecode.field "at" (ix 1) mDateTimeOffset
                 )
+            )
+        elif tag = ix 1 then
+            RemotingDecode.OSome(RemotingDecode.payload (RemotingDecode.map Outcome.Rejected mString))
+        elif tag = ix 2 then
+            RemotingDecode.OSome(RemotingDecode.case0 Outcome.Pending)
+        else
+            RemotingDecode.ONone)
+
+/// Phase 800 — the same union with its several-field case read through
+/// `fields 2`, the arity-checked form, rather than a bare `payload` over
+/// the inner array. Both forms stay paired below: `payload` because
+/// nothing that used it changed, `fields` because it is what the
+/// generator now emits.
+let private mOutcomeFields: ModelDecoder<Outcome> =
+    RemotingDecode.union "Outcome" (fun tag ->
+        if tag = ix 0 then
+            RemotingDecode.OSome(
+                RemotingDecode.fields
+                    (ix 2)
+                    (RemotingDecode.succeed (fun id at -> Outcome.Accepted(id, at))
+                     |>> RemotingDecode.field "id" (ix 0) mGuid
+                     |>> RemotingDecode.field "at" (ix 1) mDateTimeOffset)
             )
         elif tag = ix 1 then
             RemotingDecode.OSome(RemotingDecode.payload (RemotingDecode.map Outcome.Rejected mString))
@@ -335,6 +373,20 @@ let private pOutcome: Decoder<Outcome> =
         | 2 -> Some(Decode.case0 Outcome.Pending)
         | _ -> None)
 
+let private pOutcomeFields: Decoder<Outcome> =
+    Decode.union "Outcome" (function
+        | 0 ->
+            Some(
+                Decode.fields
+                    2
+                    (Decode.succeed (fun id at -> Outcome.Accepted(id, at))
+                     |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
+                     |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset))
+            )
+        | 1 -> Some(Decode.payload (Decode.asString |> Decode.map Outcome.Rejected))
+        | 2 -> Some(Decode.case0 Outcome.Pending)
+        | _ -> None)
+
 let private pConsignment: Decoder<Consignment> =
     Decode.succeed (fun reference origin destination pri outc weights labels -> {
         Reference = reference
@@ -354,18 +406,26 @@ let private pConsignment: Decoder<Consignment> =
     |> Decode.apply (Decode.field "Labels" 6 (Decode.asSet Decode.asString))
 
 /// One corpus type, decoded both ways. `Production` and `Model` are the
-/// two halves whose agreement this pack asserts.
+/// two halves whose agreement this pack asserts. `Label` names the
+/// pairing in a disagreement: since Phase 800 a type can be paired
+/// more than once (`Outcome` through `payload` and through `fields`),
+/// so the type name alone would not say which pair disagreed.
 type private Paired = {
     ClrType: Type
+    Label: string
     Production: Value -> Result<obj, DecodeError>
     Model: ModelValue -> Result<obj, DecodeError>
 }
 
-let private pair<'T> (production: Decoder<'T>) (model: ModelDecoder<'T>) : Paired = {
+let private pairAs<'T> (label: string) (production: Decoder<'T>) (model: ModelDecoder<'T>) : Paired = {
     ClrType = typeof<'T>
+    Label = label
     Production = fun value -> production value |> Result.map box
     Model = fun value -> model value |> toResult |> Result.map box
 }
+
+let private pair<'T> (production: Decoder<'T>) (model: ModelDecoder<'T>) : Paired =
+    pairAs typeof<'T>.Name production model
 
 /// Every corpus type the model covers. `DateOnly` and `TimeOnly` are
 /// absent for the reason Phase 785's covered set records: the Fable
@@ -405,16 +465,24 @@ let private paired: Paired list = [
     pair pOutcome mOutcome
     pair pAddress mAddress
     pair pConsignment mConsignment
+    // Phase 800 — the two shapes the census found inexpressible. The
+    // tuple cases were in the corpus from 784 and are paired here for
+    // the first time; `Outcome` is paired a SECOND time through the
+    // arity-checked several-field form.
+    pair (Decode.tuple2 Decode.asInt32 Decode.asString) (mTuple2 mInt32 mString)
+    pair (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool) (mTuple3 mInt32 mString mBool)
+    pairAs "Outcome via fields" pOutcomeFields mOutcomeFields
 ]
 
-let private tryPaired (target: Type) =
-    paired |> List.tryPick (fun p -> if p.ClrType = target then Some p else None)
+/// Every pairing at a type — one for most, two for `Outcome`.
+let private pairedFor (target: Type) =
+    paired |> List.filter (fun p -> p.ClrType = target)
 
 /// Computed from the corpus rather than listed, so a case added to
 /// Phase 784's corpus at a type this file covers joins this pack with
 /// no edit here.
 let private coveredCases =
-    pinnedCases |> List.filter (fun c -> (tryPaired c.ClrType).IsSome)
+    pinnedCases |> List.filter (fun c -> not (List.isEmpty (pairedFor c.ClrType)))
 
 // ─── Running the two, and comparing all three things at once ─────────
 
@@ -451,34 +519,32 @@ let private runBoth (toModel: Value -> ModelValue) (p: Paired) (value: Value) : 
 
     viaProduction, viaModel
 
-/// Every disagreement over a byte payload, at the type it is declared
-/// at. Returns the empty list when the two agree everywhere.
+/// Every disagreement over a parsed value, at the type it is declared
+/// at and through EVERY pairing at that type. Returns the empty list
+/// when the two agree everywhere.
+let private disagreementsOver (toModel: Value -> ModelValue) (cases: (string * Type * Value) list) =
+    cases
+    |> List.collect (fun (name, target, value) ->
+        pairedFor target
+        |> List.choose (fun p ->
+            let viaProduction, viaModel = runBoth toModel p value
+
+            if viaProduction = viaModel then
+                None
+            else
+                Some(sprintf "%s (%s)\n    production: %s\n    model:      %s" name p.Label viaProduction viaModel)))
+
+/// The same over a byte payload. A payload the one-pass reader itself
+/// refuses never reaches either decoder, so there is nothing to
+/// compare: the reader is outside the theorem and this pack does not
+/// pretend otherwise — see `proofs/README.md`'s last rung.
 let private disagreements (toModel: Value -> ModelValue) (cases: (string * Type * byte[]) list) =
     cases
     |> List.choose (fun (name, target, bytes) ->
-        match tryPaired target with
-        | None -> None
-        | Some p ->
-            match Read.Reader(bytes).TryReadValue() with
-            // A payload the one-pass reader itself refuses never reaches
-            // either decoder, so there is nothing to compare. The reader
-            // is outside the theorem and this pack does not pretend
-            // otherwise — see `proofs/README.md`'s last rung.
-            | Error _ -> None
-            | Ok value ->
-                let viaProduction, viaModel = runBoth toModel p value
-
-                if viaProduction = viaModel then
-                    None
-                else
-                    Some(
-                        sprintf
-                            "%s (%s)\n    production: %s\n    model:      %s"
-                            name
-                            target.Name
-                            viaProduction
-                            viaModel
-                    ))
+        match Read.Reader(bytes).TryReadValue() with
+        | Error _ -> None
+        | Ok value -> Some(name, target, value))
+    |> disagreementsOver toModel
 
 let private acceptCases () =
     coveredCases |> List.map (fun c -> c.Name, c.ClrType, c.WriteMsgPack())
@@ -579,16 +645,15 @@ let tests =
             let threw =
                 acceptCases () @ refuseCases ()
                 |> List.collect (fun (name, target, bytes) ->
-                    match tryPaired target with
-                    | None -> []
-                    | Some p ->
+                    pairedFor target
+                    |> List.collect (fun p ->
                         match Read.Reader(bytes).TryReadValue() with
                         | Error _ -> []
                         | Ok value ->
                             try
                                 p.Model(bridge value) |> ignore
                                 []
-                            with ex -> [ sprintf "%s: %s %s" name (ex.GetType().Name) ex.Message ])
+                            with ex -> [ sprintf "%s: %s %s" name (ex.GetType().Name) ex.Message ]))
 
             Expect.isEmpty threw (sprintf "the extracted model threw:\n  %s" (String.concat "\n  " threw))
 
@@ -619,4 +684,95 @@ let tests =
                 (RemotingDecode.decode_consignment () encoded |> toResult)
                 (Ok consignment)
                 "decode (encode c) = c, over the reference API-record vocabulary"
+
+        testCase "the extracted model agrees with production over every Phase 800 refusal shape"
+        <| fun () ->
+            // The corpus's mutations target records, lists and scalars,
+            // none of them a tuple or a several-field case — so the
+            // refuse path of the two Phase 800 combinators is exercised
+            // here from hand-built values, through every pairing at the
+            // target type. The shapes are the ones the characterisation
+            // lemmas name: a wrong-width array, a non-array, and (for the
+            // case) a bare payload and a missing one.
+            let tag n = Value.Int(n, IntegerWidth.Fixnum)
+            let pairType = typeof<int * string>
+            let tripleType = typeof<int * string * bool>
+
+            let shapes: (string * Type * Value) list = [
+                "tuple-short", pairType, Value.Arr [ tag 1L ]
+                "tuple-long", pairType, Value.Arr [ tag 1L; Value.Str "a"; Value.Bool true ]
+                "tuple-not-array", pairType, Value.Str "a"
+                "tuple-element-refuses", pairType, Value.Arr [ tag 1L; Value.Nil ]
+                "tuple-element-narrows",
+                pairType,
+                Value.Arr [ Value.Int(5000000000L, IntegerWidth.Bits64); Value.Str "a" ]
+                "triple-short", tripleType, Value.Arr [ tag 1L; Value.Str "a" ]
+                "triple-element-refuses", tripleType, Value.Arr [ tag 1L; Value.Str "a"; Value.Nil ]
+                "fields-short", typeof<Outcome>, Value.Arr [ tag 0L; Value.Arr [ Value.Bin(Array.zeroCreate 16) ] ]
+                "fields-long",
+                typeof<Outcome>,
+                Value.Arr [
+                    tag 0L
+                    Value.Arr [ Value.Bin(Array.zeroCreate 16); Value.Arr [ tag 0L; tag 0L ]; Value.Nil ]
+                ]
+                "fields-bare-payload", typeof<Outcome>, Value.Arr [ tag 0L; Value.Str "a" ]
+                "fields-no-payload", typeof<Outcome>, Value.Arr [ tag 0L ]
+                "fields-field-refuses", typeof<Outcome>, Value.Arr [ tag 0L; Value.Arr [ Value.Nil; Value.Nil ] ]
+                "fields-unknown-tag", typeof<Outcome>, Value.Arr [ tag 9L; Value.Arr [ Value.Nil; Value.Nil ] ]
+            ]
+
+            let found = disagreementsOver bridge shapes
+
+            Expect.isEmpty
+                found
+                (sprintf
+                    "the proved model and the shipped algebra must refuse the same tuple and several-field shapes for the same stated reasons:\n  %s"
+                    (String.concat "\n  " found))
+
+            // And the shapes must actually REFUSE, or the agreement above
+            // is agreement on nothing — with one pinned exception that is
+            // the whole reason `fields` exists: an inner array with a
+            // TRAILING element is accepted by the `payload` form (a
+            // pipeline reads the positions it declares and ignores what
+            // follows, exactly as a record decoder does) and refused by
+            // `fields`, whose arity check is the difference.
+            for name, target, value in shapes do
+                for p in pairedFor target do
+                    if name = "fields-long" && p.Label = "Outcome" then
+                        Expect.isOk
+                            (p.Production value)
+                            "the `payload` form ignores a trailing element, as a record decoder does"
+                    else
+                        Expect.isError (p.Production value) (sprintf "%s must refuse through %s" name p.Label)
+
+        testCase "the widened reference vocabulary round-trips through the extracted encoder and decoder"
+        <| fun () ->
+            // `decode_encode_roundtrip_leg` proved this for every leg —
+            // a pair and a union with a several-field case, the two
+            // shapes Phase 800 added. One instance per case of the
+            // union, so the extraction of each arm is what runs.
+            let strLen (s: string) = ix s.Length
+
+            let legs: RemotingDecode.ref_leg list = [
+                {
+                    hop = RemotingDecode.Pair(BigInteger 3, "EDI")
+                    status = RemotingDecode.Planned
+                }
+                {
+                    hop = RemotingDecode.Pair(BigInteger -1, "GLA")
+                    status = RemotingDecode.Delayed("weather", BigInteger 45)
+                }
+                {
+                    hop = RemotingDecode.Pair(BigInteger 2147483647, "ABZ")
+                    status = RemotingDecode.Arrived(BigInteger -2147483648)
+                }
+            ]
+
+            for leg in legs do
+                let encoded: ModelValue = RemotingDecode.encode_leg strLen leg
+
+                Expect.equal
+                    (RemotingDecode.decode_leg () encoded |> toResult)
+                    (Ok leg)
+                    "decode (encode leg) = leg, over the widened vocabulary"
     ]

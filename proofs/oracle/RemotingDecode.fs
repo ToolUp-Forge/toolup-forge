@@ -45,6 +45,60 @@ let __proj__Pair__item__second = (fun ( projectee  :  pair<'a, 'b> ) -> (match (
      second
      end))
 
+type triple<'a, 'b, 'c> =
+| Triple of 'a * 'b * 'c
+
+
+let uu___is_Triple = (fun ( projectee  :  triple<'a, 'b, 'c> ) -> true)
+
+
+let __proj__Triple__item__first = (fun ( projectee  :  triple<'a, 'b, 'c> ) -> (match (projectee) with
+| Triple (first, second, third) -> begin
+     first
+     end))
+
+
+let __proj__Triple__item__second = (fun ( projectee  :  triple<'a, 'b, 'c> ) -> (match (projectee) with
+| Triple (first, second, third) -> begin
+     second
+     end))
+
+
+let __proj__Triple__item__third = (fun ( projectee  :  triple<'a, 'b, 'c> ) -> (match (projectee) with
+| Triple (first, second, third) -> begin
+     third
+     end))
+
+type quad<'a, 'b, 'c, 'd> =
+| Quad of 'a * 'b * 'c * 'd
+
+
+let uu___is_Quad = (fun ( projectee  :  quad<'a, 'b, 'c, 'd> ) -> true)
+
+
+let __proj__Quad__item__first = (fun ( projectee  :  quad<'a, 'b, 'c, 'd> ) -> (match (projectee) with
+| Quad (first, second, third, fourth) -> begin
+     first
+     end))
+
+
+let __proj__Quad__item__second = (fun ( projectee  :  quad<'a, 'b, 'c, 'd> ) -> (match (projectee) with
+| Quad (first, second, third, fourth) -> begin
+     second
+     end))
+
+
+let __proj__Quad__item__third = (fun ( projectee  :  quad<'a, 'b, 'c, 'd> ) -> (match (projectee) with
+| Quad (first, second, third, fourth) -> begin
+     third
+     end))
+
+
+let __proj__Quad__item__fourth = (fun ( projectee  :  quad<'a, 'b, 'c, 'd> ) -> (match (projectee) with
+| Quad (first, second, third, fourth) -> begin
+     fourth
+     end))
+
 type refusal = {path : Prims.list<Prims.string>; expected : Prims.string; found : Prims.string}
 
 
@@ -809,6 +863,32 @@ let entries_of = (fun ( key  :  decoder<'raw, 'flt, 'k> ) ( entry  :  decoder<'r
      end))
 
 
+let tuple_of = (fun ( arity  :  Prims.nat ) ( v  :  value<'raw, 'flt> ) -> (
+
+let expected = (Prims.strcat "a tuple of " (Prims.strcat (Prims.string_of_int arity) " element(s)"))
+in (match (v) with
+| VArr (elements) -> begin
+      
+if (Prims.op_Equals (count elements) arity) then begin
+     Accepted (())
+     end else begin
+     (refuse_with expected (Prims.strcat "an array of " (Prims.strcat (Prims.string_of_int (count elements)) " element(s)")))
+     end
+     end
+| uu___ -> begin
+     (refuse expected v)
+     end)))
+
+
+let tuple2 = (fun ( first  :  decoder<'raw, 'flt, 'a> ) ( second  :  decoder<'raw, 'flt, 'b> ) -> (bind (fun ( uu___  :  unit ) -> (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( x  :  'a ) ( y  :  'b ) -> Pair (x, y))) (index (Prims.parse_int "0") first)) (index (Prims.parse_int "1") second))) (tuple_of (Prims.parse_int "2"))))
+
+
+let tuple3 = (fun ( first  :  decoder<'raw, 'flt, 'a> ) ( second  :  decoder<'raw, 'flt, 'b> ) ( third  :  decoder<'raw, 'flt, 'c> ) -> (bind (fun ( uu___  :  unit ) -> (op_Bar_Greater_Greater (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( x  :  'a ) ( y  :  'b ) ( z  :  'c ) -> Triple (x, y, z))) (index (Prims.parse_int "0") first)) (index (Prims.parse_int "1") second)) (index (Prims.parse_int "2") third))) (tuple_of (Prims.parse_int "3"))))
+
+
+let tuple4 = (fun ( first  :  decoder<'raw, 'flt, 'a> ) ( second  :  decoder<'raw, 'flt, 'b> ) ( third  :  decoder<'raw, 'flt, 'c> ) ( fourth  :  decoder<'raw, 'flt, 'd> ) -> (bind (fun ( uu___  :  unit ) -> (op_Bar_Greater_Greater (op_Bar_Greater_Greater (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( w  :  'a ) ( x  :  'b ) ( y  :  'c ) ( z  :  'd ) -> Quad (w, x, y, z))) (index (Prims.parse_int "0") first)) (index (Prims.parse_int "1") second)) (index (Prims.parse_int "2") third)) (index (Prims.parse_int "3") fourth))) (tuple_of (Prims.parse_int "4"))))
+
+
 type union_case<'raw, 'flt, 'a> = opt<value<'raw, 'flt>>  ->  outcome<'a>
 
 
@@ -828,6 +908,29 @@ let payload = (fun ( d  :  decoder<'raw, 'flt, 'a> ) ( carried  :  opt<value<'ra
 | ONone -> begin
      (refuse_with "a union case carrying a payload" "a union case with no payload")
      end))
+
+
+let fields = (fun ( arity  :  Prims.nat ) ( d  :  decoder<'raw, 'flt, 'a> ) ( carried  :  opt<value<'raw, 'flt>> ) -> (
+
+let expected = (Prims.strcat "a union case carrying " (Prims.strcat (Prims.string_of_int arity) " fields"))
+in (match (carried) with
+| OSome (v) -> begin
+     (match (v) with
+| VArr (inner) -> begin
+      
+if (Prims.op_Equals (count inner) arity) then begin
+     (d v)
+     end else begin
+     (refuse_with expected (Prims.strcat "an array of " (Prims.strcat (Prims.string_of_int (count inner)) " element(s)")))
+     end
+     end
+| uu___ -> begin
+     (refuse expected v)
+     end)
+     end
+| ONone -> begin
+     (refuse_with expected "a union case with no payload")
+     end)))
 
 
 let union = (fun ( type_name  :  Prims.string ) ( cases  :  Prims.int  ->  opt<union_case<'raw, 'flt, 'a>> ) ( v  :  value<'raw, 'flt> ) -> (
@@ -1012,6 +1115,109 @@ if (n <= (Prims.parse_int "4294967295")) then begin
 
 
 let decode_consignment = (fun ( uu___  :  unit ) -> (op_Bar_Greater_Greater (op_Bar_Greater_Greater (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( r  :  Prims.string ) ( o  :  ref_address ) ( w  :  Prims.int ) ( u  :  Prims.bool ) -> {reference = r; origin = o; weight = (reinterpret_i32 w); urgent = u})) (field "Reference" (Prims.parse_int "0") as_string)) (field "Origin" (Prims.parse_int "1") (decode_address ()))) (field "Weight" (Prims.parse_int "2") (as_int32 ()))) (field "Urgent" (Prims.parse_int "3") as_bool)))
+
+type ref_status =
+| Planned
+| Delayed of Prims.string * i32
+| Arrived of i32
+
+
+let uu___is_Planned : ref_status  ->  Prims.bool = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Planned -> begin
+     true
+     end
+| uu___ -> begin
+     false
+     end))
+
+
+let uu___is_Delayed : ref_status  ->  Prims.bool = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Delayed (reason, minutes) -> begin
+     true
+     end
+| uu___ -> begin
+     false
+     end))
+
+
+let __proj__Delayed__item__reason : ref_status  ->  Prims.string = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Delayed (reason, minutes) -> begin
+     reason
+     end))
+
+
+let __proj__Delayed__item__minutes : ref_status  ->  i32 = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Delayed (reason, minutes) -> begin
+     minutes
+     end))
+
+
+let uu___is_Arrived : ref_status  ->  Prims.bool = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Arrived (at) -> begin
+     true
+     end
+| uu___ -> begin
+     false
+     end))
+
+
+let __proj__Arrived__item__at : ref_status  ->  i32 = (fun ( projectee  :  ref_status ) -> (match (projectee) with
+| Arrived (at) -> begin
+     at
+     end))
+
+type ref_leg = {hop : pair<i32, Prims.string>; status : ref_status}
+
+
+let __proj__Mkref_leg__item__hop : ref_leg  ->  pair<i32, Prims.string> = (fun ( projectee  :  ref_leg ) -> (match (projectee) with
+| {hop = hop; status = status} -> begin
+     hop
+     end))
+
+
+let __proj__Mkref_leg__item__status : ref_leg  ->  ref_status = (fun ( projectee  :  ref_leg ) -> (match (projectee) with
+| {hop = hop; status = status} -> begin
+     status
+     end))
+
+
+let encode_status = (fun ( str_len  :  Prims.string  ->  Prims.nat ) ( s  :  ref_status ) -> (match (s) with
+| Planned -> begin
+     VArr ((VInt ((Prims.parse_int "0"), Fixnum))::[])
+     end
+| Delayed (reason, minutes) -> begin
+     VArr ((VInt ((Prims.parse_int "1"), Fixnum))::(VArr ((VStr (reason, (str_len reason)))::(VInt (minutes, Bits32))::[]))::[])
+     end
+| Arrived (at) -> begin
+     VArr ((VInt ((Prims.parse_int "2"), Fixnum))::(VInt (at, Bits32))::[])
+     end))
+
+
+let encode_leg = (fun ( str_len  :  Prims.string  ->  Prims.nat ) ( l  :  ref_leg ) -> VArr (((match (l.hop) with
+| Pair (n, s) -> begin
+     VArr ((VInt (n, Bits32))::(VStr (s, (str_len s)))::[])
+     end))::((encode_status str_len l.status))::[]))
+
+
+let decode_status = (fun ( uu___  :  unit ) -> (union "RefStatus" (fun ( tag  :  Prims.int ) ->  
+if (Prims.op_Equals tag (Prims.parse_int "0")) then begin
+     OSome ((case0 Planned))
+     end else begin
+      
+if (Prims.op_Equals tag (Prims.parse_int "1")) then begin
+     OSome ((fields (Prims.parse_int "2") (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( r  :  Prims.string ) ( m  :  Prims.int ) -> Delayed (r, (reinterpret_i32 m)))) (field "reason" (Prims.parse_int "0") as_string)) (field "minutes" (Prims.parse_int "1") (as_int32 ())))))
+     end else begin
+      
+if (Prims.op_Equals tag (Prims.parse_int "2")) then begin
+     OSome ((payload (map (fun ( a  :  Prims.int ) -> Arrived ((reinterpret_i32 a))) (as_int32 ()))))
+     end else begin
+     ONone
+     end
+     end
+     end)))
+
+
+let decode_leg = (fun ( uu___  :  unit ) -> (op_Bar_Greater_Greater (op_Bar_Greater_Greater (succeed (fun ( h  :  pair<i32, Prims.string> ) ( s  :  ref_status ) -> {hop = h; status = s})) (field "Hop" (Prims.parse_int "0") (tuple2 (map reinterpret_i32 (as_int32 ())) as_string))) (field "Status" (Prims.parse_int "1") (decode_status ()))))
 
 
 

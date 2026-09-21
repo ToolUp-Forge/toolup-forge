@@ -334,6 +334,62 @@ module Decode =
     let asMap<'K, 'V when 'K: comparison> (key: Decoder<'K>) (entry: Decoder<'V>) : Decoder<Map<'K, 'V>> =
         entries key entry |> map Map.ofList
 
+
+    // ─── Tuples ──────────────────────────────────────────────────────
+    //
+    // Phase 800 — the first of the two combinator gaps Phase 69k's
+    // census measured. `Write.writeTuple` emits a tuple EXACTLY as it
+    // emits a record: an array of the elements, positionally. So the
+    // wire shape of `int * string` and of a two-field record is one and
+    // the same, and what makes the term a tuple is only the decoder that
+    // reads it — which is why the arity is a refusal here rather than a
+    // slice: an array of three elements read as a pair would silently
+    // drop one, the exact class `exactly` exists to refuse on records.
+    // A refusal beneath an element is annotated `[0]` / `[1]` through
+    // `index`; the element has no name, so the position is the honest
+    // path.
+
+    /// The arity check every `tupleN` runs first.
+    let private tupleOf (arity: int) : Decoder<unit> =
+        let expected = sprintf "a tuple of %d element(s)" arity
+
+        function
+        | Value.Arr elements when List.length elements = arity -> Ok()
+        | Value.Arr elements -> refuseWith expected (sprintf "an array of %d element(s)" (List.length elements))
+        | value -> refuse expected value
+
+    /// A pair, from the positional array the writer emits.
+    let tuple2 (first: Decoder<'A>) (second: Decoder<'B>) : Decoder<'A * 'B> =
+        tupleOf 2
+        |> bind (fun () -> succeed (fun a b -> a, b) |> apply (index 0 first) |> apply (index 1 second))
+
+    /// A triple, from the positional array the writer emits.
+    let tuple3 (first: Decoder<'A>) (second: Decoder<'B>) (third: Decoder<'C>) : Decoder<'A * 'B * 'C> =
+        tupleOf 3
+        |> bind (fun () ->
+            succeed (fun a b c -> a, b, c)
+            |> apply (index 0 first)
+            |> apply (index 1 second)
+            |> apply (index 2 third))
+
+    /// A quadruple, from the positional array the writer emits. Wider
+    /// tuples are not combinators: the platform's own API surface reaches
+    /// arity 2, and the generator refuses a wider one by name rather than
+    /// this file guessing at a ceiling nobody has asked for.
+    let tuple4
+        (first: Decoder<'A>)
+        (second: Decoder<'B>)
+        (third: Decoder<'C>)
+        (fourth: Decoder<'D>)
+        : Decoder<'A * 'B * 'C * 'D> =
+        tupleOf 4
+        |> bind (fun () ->
+            succeed (fun a b c d -> a, b, c, d)
+            |> apply (index 0 first)
+            |> apply (index 1 second)
+            |> apply (index 2 third)
+            |> apply (index 3 fourth))
+
     // ─── Unions ──────────────────────────────────────────────────────
 
     /// What a union case does with its payload.
@@ -365,6 +421,32 @@ module Decode =
         function
         | Some value -> decoder value
         | None -> refuseWith "a union case carrying a payload" "a union case with no payload"
+
+    /// A union case carrying SEVERAL fields — `arity` of them — which the
+    /// writer emits as an inner array in the payload slot
+    /// (`Write.writeUnion`, the `fieldSerializers.Length > 1` arm).
+    ///
+    /// Phase 800 — the second combinator gap Phase 69k's census measured.
+    /// This is the third wire shape the `UnionCase` note above describes,
+    /// and it is a combinator the case AUTHOR chooses rather than a
+    /// runtime guess: a single-field case whose field is an array of
+    /// `arity` elements puts identical bytes on the wire, and only the
+    /// case's own arity tells the two apart. `payload` remains the
+    /// single-field form (and still admits a pipeline over the inner
+    /// array, as it always has — nothing that used it changes); `fields`
+    /// adds the arity check that makes a case of the wrong width a named
+    /// refusal, and it is what the generator emits for every case with
+    /// more than one field. `arity` is at least 2 by the writer's rule —
+    /// a one-field case is written DIRECTLY, with no inner array, so
+    /// `fields 1` names a shape the writer never produces.
+    let fields (arity: int) (decoder: Decoder<'T>) : UnionCase<'T> =
+        let expected = sprintf "a union case carrying %d fields" arity
+
+        function
+        | Some(Value.Arr inner as value) when List.length inner = arity -> decoder value
+        | Some(Value.Arr inner) -> refuseWith expected (sprintf "an array of %d element(s)" (List.length inner))
+        | Some value -> refuse expected value
+        | None -> refuseWith expected "a union case with no payload"
 
     /// Dispatch on the tag the writer emits.
     ///
