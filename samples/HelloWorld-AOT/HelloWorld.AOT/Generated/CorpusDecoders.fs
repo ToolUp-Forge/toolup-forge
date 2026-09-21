@@ -69,12 +69,28 @@ module CorpusDecoders =
         |> Decode.apply (Decode.field "Weights" 5 (Decode.list Decode.asFloat))
         |> Decode.apply (Decode.field "Labels" 6 (Decode.asSet Decode.asString))
 
+    let rec tree: Decoder<WireCorpus.Tree> =
+        fun value ->
+            (Decode.union "WireCorpus.Tree" (function
+                 | 0 -> Some(Decode.payload (Decode.asString |> Decode.map WireCorpus.Tree.Leaf))
+                 | 1 ->
+                     Some(
+                         Decode.fields
+                             2
+                             (Decode.succeed (fun label children -> WireCorpus.Tree.Branch(label, children))
+                              |> Decode.apply (Decode.field "label" 0 Decode.asString)
+                              |> Decode.apply (Decode.field "children" 1 (Decode.list tree)))
+                     )
+                 | _ -> None))
+                value
+
     /// The wire types this module covers, in registration order.
     let covered: string list = [
         typeof<WireCorpus.Address>.FullName
         typeof<WireCorpus.Priority>.FullName
         typeof<WireCorpus.Outcome>.FullName
         typeof<WireCorpus.Consignment>.FullName
+        typeof<WireCorpus.Tree>.FullName
         typeof<bool>.FullName
         typeof<int>.FullName
         typeof<string>.FullName
@@ -116,6 +132,7 @@ module CorpusDecoders =
         RemotingDecoders.register<WireCorpus.Priority> priority
         RemotingDecoders.register<WireCorpus.Outcome> outcome
         RemotingDecoders.register<WireCorpus.Consignment> consignment
+        RemotingDecoders.register<WireCorpus.Tree> tree
         RemotingDecoders.register<bool> Decode.asBool
         RemotingDecoders.register<int> Decode.asInt32
         RemotingDecoders.register<string> Decode.asString

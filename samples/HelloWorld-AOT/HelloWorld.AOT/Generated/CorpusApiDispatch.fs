@@ -61,6 +61,7 @@ module ICorpusApiDispatch =
         "Consignment", 1
         "Customer", 1
         "Envelope", 1
+        "Tree", 1
     ]
 
     /// Typed argument parse for `ICorpusApi.Bool`.
@@ -491,4 +492,15 @@ module ICorpusApiDispatch =
             Ok(v0)
         | _ ->
             Error(DecodeError.at [ "Envelope(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
+
+    /// Typed argument parse for `ICorpusApi.Tree`.
+    let decodeTreeArgs (options: JsonSerializerOptions) (args: JsonElement list) =
+        match args with
+        | [ a0 ] ->
+            match FableConverters.tryDeserialise<WireCorpus.Tree> a0 options with
+            | Error e -> Error(DecodeError.under "Tree(args)[0]" e)
+            | Ok v0 ->
+            Ok(v0)
+        | _ ->
+            Error(DecodeError.at [ "Tree(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
 

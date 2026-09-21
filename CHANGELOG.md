@@ -68,6 +68,7 @@ Migration notes:
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
 - [814-seam-principals](docs/migrations/814-seam-principals.md)
 - [815-remove-open-deprecations](docs/migrations/815-remove-open-deprecations.md)
+- [816-recursive-wire-types-in-the-generator](docs/migrations/816-recursive-wire-types-in-the-generator.md)
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
@@ -580,7 +581,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7918 members added
 - `ToolUp.RAG.Server` — 2 members:
   - `ToolUp.RAG.RAGCompose+RAGServerApp.ScopeEnumerator : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator] { get }`
   - `ToolUp.RAG.RAGCompose+RAGServerAppModule.withScopeEnumerator(ToolUp.Platform.IScopeEnumerator, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp`
-- `ToolUp.Remoting.Generator` — new package (92 public members)
+- `ToolUp.Remoting.Generator` — new package (93 public members)
 - `ToolUp.Reporting.Core` — 140 members:
   - `ToolUp.Reporting.IStructuralNarrativeRenderer (interface)`
   - `ToolUp.Reporting.IStructuralNarrativeRenderer.StructuralNarrativeFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }`

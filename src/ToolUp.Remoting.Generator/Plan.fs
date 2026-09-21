@@ -141,6 +141,16 @@ type GenerationPlan = {
     /// The roots that could not be, and every type underneath them that
     /// could not be, deduplicated and ordered by name.
     Refusals: Refusal list
+    /// The recursive binding groups (Phase 816): one entry per strongly
+    /// connected component of the binding dependency graph that carries a
+    /// cycle, each listing its members' binding names in emission order.
+    /// `Bindings` is ordered so every group is CONTIGUOUS, and the emitter
+    /// renders a group as one eta-expanded `let rec … and …` while every
+    /// binding outside a group stays the plain `let` it always was — a
+    /// plan with no cycle emits byte for byte what it did before this
+    /// field existed. Named rather than counted so the census can say
+    /// WHICH types recurse.
+    RecursiveGroups: string list list
 }
 
 [<RequireQualifiedAccess>]
@@ -403,7 +413,7 @@ module Plan =
 
     /// Mutable planning state, private to one `plan` call.
     type private State = {
-        mutable Ordered: TypePlan list // reverse order
+        mutable Ordered: (Type * TypePlan) list // reverse order
         Bound: Collections.Generic.HashSet<Type>
         InProgress: Collections.Generic.HashSet<Type>
         Refused: Collections.Generic.Dictionary<string, string>
@@ -415,7 +425,24 @@ module Plan =
         /// numeric suffix.
         Names: Collections.Generic.Dictionary<Type, string>
         Used: Collections.Generic.HashSet<string>
+        /// The planning path — the in-progress types, innermost first —
+        /// so a reference can be recorded as an EDGE from the type being
+        /// planned to the type it reaches (Phase 816). The edges are what
+        /// the recursive groups are computed from.
+        mutable Path: Type list
+        Edges: Collections.Generic.Dictionary<Type, Collections.Generic.HashSet<Type>>
     }
+
+    let private recordEdge (state: State) (target: Type) =
+        match state.Path with
+        | source :: _ ->
+            match state.Edges.TryGetValue source with
+            | true, targets -> targets.Add target |> ignore
+            | _ ->
+                let targets = Collections.Generic.HashSet<Type>(HashIdentity.Reference)
+                targets.Add target |> ignore
+                state.Edges[source] <- targets
+        | [] -> ()
 
     let private allocateName (state: State) (t: Type) : string =
         match state.Names.TryGetValue t with
@@ -532,17 +559,29 @@ module Plan =
     /// Ensure `t` has a named binding, planning it if it does not, and
     /// return the binding name.
     and private bindNamed (state: State) (t: Type) : string option =
+        recordEdge state t
+
         if state.Bound.Contains t then
             Some(allocateName state t)
         elif state.InProgress.Contains t then
-            // A cycle. `let` bindings emitted in dependency order cannot
-            // express one, and `let rec` over `Decoder<'T>` values would
-            // need an explicit thunk at every back-edge. Refused rather
-            // than half-supported.
-            refuse state t "a recursive type — a cycle cannot be emitted as dependency-ordered let bindings"
+            // A cycle — Phase 816. Until then this was refused, on the
+            // grounds that `let` bindings in dependency order cannot
+            // express one. They cannot; a `let rec` group can, and a
+            // recursive decoder is an ordinary value once its body is
+            // eta-expanded so the back-edge is read under a lambda rather
+            // than at initialisation. Which bindings form the group is
+            // decided after planning, from the recorded edges, so that
+            // only a cycle's own members change shape. Termination is the
+            // algebra's own: a recursive reference is only ever reached
+            // through `field` / `index` / `list` / `fields`, each of which
+            // descends into a strictly smaller subterm. The name is bound
+            // now, ahead of the type's own completion, so the reference
+            // and the definition agree on it.
+            Some(allocateName state t)
         else
 
             state.InProgress.Add t |> ignore
+            state.Path <- t :: state.Path
 
             let planned =
                 if isRecord t then
@@ -633,13 +672,108 @@ module Plan =
                         None
 
             state.InProgress.Remove t |> ignore
+            state.Path <- List.tail state.Path
 
             match planned with
             | Some p ->
                 state.Bound.Add t |> ignore
-                state.Ordered <- p :: state.Ordered
+                state.Ordered <- (t, p) :: state.Ordered
                 Some(TypePlan.binding p)
             | None -> None
+
+    /// Phase 816 — the recursive groups, and the binding order that keeps
+    /// each one contiguous.
+    ///
+    /// The strongly connected components of the recorded binding graph,
+    /// by Tarjan's algorithm over the planned types. A component is
+    /// RECURSIVE when it has more than one member or its one member reaches
+    /// itself; every other component is a single ordinary binding.
+    ///
+    /// Ordering: the planner's post-order already places every dependency
+    /// of a binding before it, EXCEPT that a cycle's members may have
+    /// non-members completed between them (a dependency of one member
+    /// visited after another member). Each component is therefore placed
+    /// at the position of its LAST-completing member. That is sound in
+    /// both directions: a non-member completed between two members cannot
+    /// depend on a member (it would then lie on a cycle with them and be
+    /// a member itself), and a member cannot depend on anything completed
+    /// after its component's last member (dependencies complete first).
+    /// A plan with no cycle has every component a singleton at its own
+    /// position, so its order is untouched.
+    let private groupCycles (state: State) : TypePlan list * string list list =
+        let ordered = List.rev state.Ordered
+        let planned = ordered |> List.map fst |> List.toArray
+
+        let position = Collections.Generic.Dictionary<Type, int>(HashIdentity.Reference)
+        planned |> Array.iteri (fun i t -> position[t] <- i)
+
+        let successors (t: Type) =
+            match state.Edges.TryGetValue t with
+            | true, targets -> targets |> Seq.filter position.ContainsKey |> Seq.toList
+            | _ -> []
+
+        // Tarjan. Components come out with every member's index and
+        // whether the component carries a cycle.
+        let index = Collections.Generic.Dictionary<Type, int>(HashIdentity.Reference)
+        let low = Collections.Generic.Dictionary<Type, int>(HashIdentity.Reference)
+        let onStack = Collections.Generic.HashSet<Type>(HashIdentity.Reference)
+        let stack = Collections.Generic.Stack<Type>()
+        let components = ResizeArray<Type list>()
+        let mutable next = 0
+
+        let rec strongConnect (v: Type) =
+            index[v] <- next
+            low[v] <- next
+            next <- next + 1
+            stack.Push v
+            onStack.Add v |> ignore
+
+            for w in successors v do
+                if not (index.ContainsKey w) then
+                    strongConnect w
+                    low[v] <- min low[v] low[w]
+                elif onStack.Contains w then
+                    low[v] <- min low[v] index[w]
+
+            if low[v] = index[v] then
+                let members = ResizeArray<Type>()
+                let mutable finished = false
+
+                while not finished do
+                    let w = stack.Pop()
+                    onStack.Remove w |> ignore
+                    members.Add w
+                    finished <- Object.ReferenceEquals(w, v)
+
+                components.Add(members |> Seq.sortBy (fun t -> position[t]) |> Seq.toList)
+
+        for t in planned do
+            if not (index.ContainsKey t) then
+                strongConnect t
+
+        let isRecursive (members: Type list) =
+            match members with
+            | [ only ] -> successors only |> List.exists (fun s -> Object.ReferenceEquals(s, only))
+            | _ -> true
+
+        let placed =
+            components
+            |> Seq.sortBy (fun members -> members |> List.map (fun t -> position[t]) |> List.max)
+            |> Seq.toList
+
+        let plansByType =
+            Collections.Generic.Dictionary<Type, TypePlan>(HashIdentity.Reference)
+
+        ordered |> List.iter (fun (t, p) -> plansByType[t] <- p)
+
+        let bindings = placed |> List.collect (List.map (fun t -> plansByType[t]))
+
+        let groups =
+            placed
+            |> List.filter isRecursive
+            |> List.map (List.map (fun t -> state.Names[t]))
+
+        bindings, groups
 
     /// Plan decoders for `roots` — the wire types to be registered.
     ///
@@ -654,6 +788,8 @@ module Plan =
             Used = Collections.Generic.HashSet<string>()
             InProgress = Collections.Generic.HashSet<Type>(HashIdentity.Reference)
             Refused = Collections.Generic.Dictionary<string, string>()
+            Path = []
+            Edges = Collections.Generic.Dictionary<Type, Collections.Generic.HashSet<Type>>(HashIdentity.Reference)
         }
 
         let rootPlans =
@@ -668,14 +804,17 @@ module Plan =
                 }))
             |> Seq.toList
 
+        let ordered, groups = groupCycles state
+
         {
-            Bindings = List.rev state.Ordered
+            Bindings = ordered
             Roots = rootPlans
             Refusals =
                 state.Refused
                 |> Seq.map (fun kv -> { RefusedType = kv.Key; Why = kv.Value })
                 |> Seq.sortBy _.RefusedType
                 |> Seq.toList
+            RecursiveGroups = groups
         }
 
     // ─── API records ─────────────────────────────────────────────────

@@ -52,6 +52,22 @@ open Microsoft.FSharp.Reflection
 // that matters goes red exactly when the coverage gap CLOSES, which is the
 // correct moment to revisit this phase.
 
+// ─── Phase 816 — a two-member cycle with a bystander ─────────────────────
+//
+// `Ring` reaches `Chain`, `Chain` reaches `Ring` back; `Plain` is a
+// dependency of `Ring` that the planner completes BETWEEN the two members
+// (post-order: chain, plain, ring). The pin below asserts the planner
+// regroups so the cycle is contiguous and the bystander stays a plain
+// `let` — the ordering argument in `Plan.groupCycles`, made executable.
+
+type Chain =
+    | End
+    | Link of Ring
+
+and Ring = { Next: Chain; Pad: Plain }
+
+and Plain = { Id: int }
+
 // ─── The two Phase 785 records ───────────────────────────────────────────
 
 let private healthMonitorApi = typeof<IHealthMonitorApi>
@@ -380,6 +396,101 @@ let tests =
                     "reach arity 4"
                     "the refusal names the ceiling rather than reading as a generic miss"
 
+            testCase "a recursive union plans as a `let rec` group, and the emission is eta-expanded"
+            <| fun () ->
+                // Phase 816. `ColumnExpr` reaches itself through a list
+                // (`Concat`, `Format`) and through a several-field case
+                // (`SplitTake`, `Substring`); until 816 the planner refused
+                // the cycle. The plan names the recursive binding, and the
+                // emission is one `let rec` whose body is `fun value -> (…)
+                // value`, so the recursive reference is read on decode.
+                let plan = Plan.forTypes [ typeof<ColumnMappingTypes.ColumnExpr> ]
+                Expect.isEmpty plan.Refusals "ColumnExpr is expressible since Phase 816"
+                Expect.equal plan.RecursiveGroups [ [ "columnExpr" ] ] "the cycle is one group of one"
+
+                let emitted =
+                    Emit.compilationUnit
+                        {
+                            Namespace = "Probe"
+                            ModuleName = "Probe"
+                            Opens = [ "ToolUp.Platform" ]
+                            ApiRecords = []
+                        }
+                        plan
+
+                Expect.stringContains
+                    emitted
+                    "    let rec columnExpr: Decoder<ColumnMappingTypes.ColumnExpr> =\n        fun value ->\n            (Decode.union"
+                    "the recursive binding is `let rec`, eta-expanded over `value`"
+
+                Expect.stringContains
+                    emitted
+                    "(Decode.field \"parts\" 0 (Decode.list columnExpr))"
+                    "the back-edge is the binding's own name"
+
+                Expect.stringContains
+                    emitted
+                    "| _ -> None))\n                value\n"
+                    "the wrapped body is applied to `value`"
+
+                // A plan with no cycle is untouched: plain `let`, no wrap.
+                let plain = Plan.forTypes [ typeof<ConfigFieldKind> ]
+                Expect.isEmpty plain.RecursiveGroups "no cycle, no recursive group"
+
+                let plainText =
+                    Emit.compilationUnit
+                        {
+                            Namespace = "Probe"
+                            ModuleName = "Probe"
+                            Opens = [ "ToolUp.Platform" ]
+                            ApiRecords = []
+                        }
+                        plain
+
+                Expect.isFalse (plainText.Contains "let rec") "a plan without a cycle emits plain `let`"
+                Expect.isFalse (plainText.Contains "fun value ->") "and no eta-expansion"
+
+            testCase
+                "a two-member cycle is one contiguous `let rec … and …` group, and a bystander between them stays plain"
+            <| fun () ->
+                let plan = Plan.forTypes [ typeof<Ring> ]
+                Expect.isEmpty plan.Refusals "the cycle is expressible"
+
+                Expect.equal
+                    (plan.Bindings |> List.map TypePlan.binding)
+                    [ "plain"; "chain"; "ring" ]
+                    "the bystander (completed between the members in post-order) is moved ahead of the group"
+
+                Expect.equal
+                    plan.RecursiveGroups
+                    [ [ "chain"; "ring" ] ]
+                    "the two members are one group, in completion order"
+
+                let emitted =
+                    Emit.compilationUnit
+                        {
+                            Namespace = "Probe"
+                            ModuleName = "Probe"
+                            Opens = [ "ToolUp.Platform.Tests.Remoting.GeneratorFidelityTests" ]
+                            ApiRecords = []
+                        }
+                        plan
+
+                Expect.stringContains
+                    emitted
+                    "    let plain: Decoder<GeneratorFidelityTests.Plain> =\n        Decode.succeed"
+                    "the bystander is a plain `let`, not eta-expanded"
+
+                Expect.stringContains
+                    emitted
+                    "    let rec chain: Decoder<GeneratorFidelityTests.Chain> =\n        fun value ->"
+                    "the group opens with `let rec`"
+
+                Expect.stringContains
+                    emitted
+                    "    and ring: Decoder<GeneratorFidelityTests.Ring> =\n        fun value ->"
+                    "and continues with `and`"
+
             testCase "the fidelity comparison CATCHES a wrong plan — the go-red case"
             <| fun () ->
                 // A pin that agrees with whatever it is compared against
@@ -476,25 +587,30 @@ let tests =
                      |> List.filter (fun r -> r.Why.Contains "union case" || r.Why.Contains "more than one field"))
                     "a union case is refused — the several-field gap has REOPENED"
 
-            testCase "every record the two gaps alone blocked is now expressible, and the remaining refusals are named"
+                // Phase 816 — and the cycle gap, likewise inverted.
+                Expect.isEmpty
+                    (everyRefusal |> List.filter (fun r -> r.Why.Contains "recursive"))
+                    "a recursive type is refused — the cycle gap has REOPENED"
+
+            testCase "every record the two gaps alone blocked is now expressible, and the remaining refusal is named"
             <| fun () ->
                 // The measured result of Phase 800, pinned so a regression
                 // that re-refuses any of them goes red by name. Fourteen
                 // records were blocked on the day (69k counted 13 over a
-                // smaller assembly); twelve moved onto the algebra path.
-                // The other two were ALSO blocked by a gap this phase does
-                // not own, and each is pinned as a remaining refusal rather
-                // than left as an unstated exclusion: `FileManagementApi`
-                // holds an `obj`-typed field (`FileUploadResponse`), which no
-                // closed algebra can express; `IConversionApi` returns
-                // `ColumnExpr`, a RECURSIVE union (`Concat of parts:
-                // ColumnExpr list * …`) — its several-field cases plan now,
-                // but a cycle cannot be emitted as dependency-ordered `let`
-                // bindings, which is the generator's own stated refusal.
+                // smaller assembly); twelve moved onto the algebra path,
+                // and Phase 816 moved `IConversionApi` (whose `ColumnExpr`
+                // is a RECURSIVE union — the generator's cycle refusal, not
+                // the algebra's) after it. The one that remains is pinned as
+                // a refusal rather than left as an unstated exclusion:
+                // `FileManagementApi` holds an `obj`-typed field
+                // (`ProcessedFileEntry.Info`, the module-summary erasure
+                // boundary), which no closed algebra can express — that is
+                // a wire-shape decision, not a combinator.
                 let expressibleNames =
                     expressible |> List.map (fst >> Plan.simpleName) |> Set.ofList
 
                 let moved = [
+                    "IConversionApi"
                     "IDataSubjectRequestApi"
                     "IConfigApi"
                     "IFeatureFlagApi"
@@ -518,19 +634,11 @@ let tests =
                     |> List.filter (fun (_, plan) -> not (List.isEmpty plan.Refusals))
                     |> List.map (fst >> Plan.simpleName)
 
-                Expect.equal
-                    stillBlocked
-                    [ "IConversionApi"; "FileManagementApi" ]
-                    "exactly two records remain on the reflection path"
+                Expect.equal stillBlocked [ "FileManagementApi" ] "exactly one record remains on the reflection path"
 
                 Expect.isTrue
                     (everyRefusal |> List.exists (fun r -> r.RefusedType = "System.Object"))
                     "what blocks `FileManagementApi` is an `obj` field, which no closed algebra can express"
-
-                Expect.isTrue
-                    (everyRefusal
-                     |> List.exists (fun r -> r.RefusedType.EndsWith "ColumnExpr" && r.Why.Contains "recursive"))
-                    "what blocks `IConversionApi` is `ColumnExpr`'s recursion, not its several-field cases"
 
             testCase "a refusal names the type it refused"
             <| fun () ->

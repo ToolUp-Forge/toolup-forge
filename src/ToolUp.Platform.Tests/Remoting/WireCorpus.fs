@@ -141,6 +141,10 @@ type WireClass =
     /// A record of records, holding a collection, a union, an option and
     /// a date — the shape an actual API method returns.
     | NestedRecord
+    /// A RECURSIVE union — Phase 816. Recursion through a list and through
+    /// a several-field case, the two routes `ColumnMappingTypes.ColumnExpr`
+    /// takes; the class the generator's `let rec` group is proved on.
+    | Recursive
 
 #if TOOLUP_WIRE_CORPUS_DOTNET
 /// Every class, in declaration order. Derived by reflection so it cannot
@@ -179,6 +183,16 @@ type Outcome =
     | Accepted of id: System.Guid * at: DateTimeOffset
     | Rejected of reason: string
     | Pending
+
+/// A recursive union — Phase 816. `Branch` reaches `Tree` again through
+/// a list AND sits in a several-field case, which is exactly the shape
+/// of the platform's own `ColumnExpr` (`Concat of parts: ColumnExpr list *
+/// separator: string`). A decoder for it is a `let rec`, and the corpus
+/// carries one so the generator's recursive emission is compiled and run
+/// (the AOT sample) rather than only rendered (the fidelity pins).
+type Tree =
+    | Leaf of string
+    | Branch of label: string * children: Tree list
 
 type Address = {
     Line1: string
@@ -417,6 +431,19 @@ let private sampleEnvelope = {
     Payload = [| 0uy; 1uy; 127uy; 128uy; 255uy |]
 }
 
+/// Three levels deep, with a leaf beside a branch at every level — so a
+/// decoder that recursed only through the first child, or only through
+/// the last, would decode a different tree.
+let private sampleTree =
+    Branch(
+        "root",
+        [
+            Leaf "a"
+            Branch("inner", [ Leaf "b"; Branch("deep", []); Leaf "c" ])
+            Leaf "d"
+        ]
+    )
+
 /// A string that crosses the `str8` length header (> 31 characters).
 let private mediumString = String.replicate 8 "0123456789"
 
@@ -545,6 +572,10 @@ let pinnedCases: WireCase list = [
     both WireClass.Union "union-onefield" (Rejected "quota exceeded")
     both WireClass.Union "union-multifield" (Accepted(sampleGuid, DateTimeOffset(2026, 9, 13, 8, 30, 0, TimeSpan.Zero)))
     both WireClass.Union "union-emptycase" Pending
+
+    // ── Recursive (Phase 816) ──
+    both WireClass.Recursive "recursive-leaf" (Leaf "x")
+    both WireClass.Recursive "recursive-tree" sampleTree
 
     // ── Record / NestedRecord ──
     both WireClass.Record "record-flat" sampleAddress
@@ -879,6 +910,15 @@ let private randomOutcome (rng: Rng) =
     | 1 -> Rejected(randomString rng 5)
     | _ -> Pending
 
+/// Depth-bounded by `size`; every branch draws between zero and three
+/// children, so a size-0 draw is always a leaf and a larger one is a
+/// tree whose shape the seed decides.
+let rec private randomTree (rng: Rng) (size: int) =
+    if size <= 0 || rng.Next 3 = 0 then
+        Leaf(randomString rng 2)
+    else
+        Branch(randomString rng 3, List.init (rng.Next 4) (fun _ -> randomTree rng (size - 1)))
+
 let private randomCustomer (rng: Rng) (size: int) = {
     Id = System.Guid(Array.init 16 (fun _ -> byte (rng.Next 256)))
     Name = randomString rng (1 + size)
@@ -993,6 +1033,8 @@ let shapeGenerators: ShapeGenerator list = [
         both WireClass.Union (sprintf "gen-union-%d" size) (randomOutcome rng))
     generator "gen-record" WireClass.Record (fun rng size ->
         both WireClass.Record (sprintf "gen-record-%d" size) (randomAddress rng))
+    generator "gen-tree" WireClass.Recursive (fun rng size ->
+        both WireClass.Recursive (sprintf "gen-tree-%d" size) (randomTree rng size))
     generator "gen-envelope" WireClass.NestedRecord (fun rng size ->
         both WireClass.NestedRecord (sprintf "gen-envelope-%d" size) (randomEnvelope rng size))
     generator "gen-customer" WireClass.NestedRecord (fun rng size ->

@@ -114,6 +114,28 @@ let private consignment: Decoder<Consignment> =
     |> Decode.apply (Decode.field "Weights" 5 (Decode.list Decode.asFloat))
     |> Decode.apply (Decode.field "Labels" 6 (Decode.asSet Decode.asString))
 
+/// Phase 816 — the corpus's recursive union, in exactly the shape the
+/// generator emits for a cycle: a `let rec` whose body is eta-expanded,
+/// so the recursive reference is read on the first decode rather than at
+/// initialisation (no FS0040, no runtime init check). It terminates for
+/// the reason every combinator does — `tree` is reached only through
+/// `list` and `field`, each of which descends into a strictly smaller
+/// subterm.
+let rec private tree: Decoder<Tree> =
+    fun value ->
+        (Decode.union "Tree" (function
+            | 0 -> Some(Decode.payload (Decode.asString |> Decode.map Leaf))
+            | 1 ->
+                Some(
+                    Decode.fields
+                        2
+                        (Decode.succeed (fun label children -> Branch(label, children))
+                         |> Decode.apply (Decode.field "label" 0 Decode.asString)
+                         |> Decode.apply (Decode.field "children" 1 (Decode.list tree)))
+                )
+            | _ -> None))
+            value
+
 /// The go-red decoder: an `int` decoder that reads at 64 bits and casts
 /// down, which is exactly what `interpretIntegerAs` did before Phase
 /// 786. Registered for nothing — it exists only so the differential
@@ -177,6 +199,7 @@ let private covered: (Type * (Value -> Result<obj, DecodeError>)) list = [
     entry outcome
     entry address
     entry consignment
+    entry tree
 ]
 
 let private tryAlgebra (target: Type) =
@@ -783,6 +806,63 @@ let tests =
                     Expect.equal e.Path [ "Second" ] "the field decoder's name is the whole path"
         ]
 
+        testList "Phase 816 — a recursive decoder, in the shape the generator emits" [
+            testCase "a deep tree decodes, and what bounds the depth is the reader's ceiling, not the decoder"
+            <| fun () ->
+                // A left spine: each level is a `Branch` term — the case
+                // array, its fields array, its children list — so a spine
+                // of `n` levels nests 3n + 1 containers. Phase 786's one-pass reader refuses a
+                // payload past 64 containers deep BEFORE any decoder runs
+                // — so the decoder's recursion is bounded by the value's
+                // own depth, and the value's depth is bounded by the
+                // reader. Both halves are pinned: the deepest spine the
+                // reader admits decodes, and the next one is the READER's
+                // refusal, named as such.
+                let rec spine n =
+                    if n = 0 then
+                        Leaf "end"
+                    else
+                        Branch("level", [ spine (n - 1) ])
+
+                let bytesOf (t: Tree) =
+                    let serializer = Write.makeSerializer<Tree> ()
+                    use buffer = new System.IO.MemoryStream()
+                    serializer.Invoke(t, buffer)
+                    buffer.ToArray()
+
+                let deepest = spine 21 // 64 containers, the ceiling exactly
+
+                match Read.Reader(bytesOf deepest).TryReadValue() |> Result.bind tree with
+                | Ok decoded -> Expect.equal decoded deepest "the decoded tree is the encoded one"
+                | Error e -> failtestf "a well-formed tree inside the ceiling must decode: %s" (DecodeError.render e)
+
+                match Read.Reader(bytesOf (spine 22)).TryReadValue() with
+                | Ok _ -> failtest "67 containers must not pass the reader's ceiling"
+                | Error e ->
+                    Expect.stringContains
+                        e.Expected
+                        "nesting at most 64 container(s) deep"
+                        "the refusal is the reader's depth ceiling, reached before the decoder"
+
+            testCase "a refusal inside a nested branch carries the path down to it"
+            <| fun () ->
+                // `Branch("root", [ Leaf "a"; Branch(<nil>, []) ])` — the
+                // second child's label is not a string.
+                let leaf s =
+                    Value.Arr [ Value.Int(0L, IntegerWidth.Fixnum); Value.Str s ]
+
+                let branch label children =
+                    Value.Arr [ Value.Int(1L, IntegerWidth.Fixnum); Value.Arr [ label; Value.Arr children ] ]
+
+                match tree (branch (Value.Str "root") [ leaf "a"; branch Value.Nil [] ]) with
+                | Ok _ -> failtest "a nil label is not a string"
+                | Error e ->
+                    Expect.equal
+                        e.Path
+                        [ "children"; "[1]"; "label" ]
+                        "the union adds no segment, so the path is field / index / field, outermost first"
+        ]
+
         testList "the combinators are total, pure and reflection-free" [
             testCase "no combinator throws on any shape in the value model"
             <| fun () ->
@@ -854,6 +934,7 @@ let tests =
                     "address", erase address
                     "outcome", erase outcome
                     "consignment", erase consignment
+                    "tree", erase tree
                 ]
 
                 for name, probe in probes do

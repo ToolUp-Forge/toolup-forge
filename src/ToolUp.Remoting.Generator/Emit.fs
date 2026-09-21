@@ -88,7 +88,7 @@ module Emit =
         ]
 
     /// A record decoder: an applicative chain over the construction lambda.
-    let private recordBody (binding: string) (typeSpelling: string) (fields: FieldPlan list) =
+    let private recordBody (keyword: string) (binding: string) (typeSpelling: string) (fields: FieldPlan list) =
         let parameters =
             fields
             |> List.map (fun f -> Plan.parameterName f.FieldName)
@@ -122,7 +122,7 @@ module Emit =
             |> String.concat "\n"
 
         [
-            sprintf "    let %s: Decoder<%s> =" binding typeSpelling
+            sprintf "    %s %s: Decoder<%s> =" keyword binding typeSpelling
             sprintf "        Decode.succeed (fun %s -> ({" parameters
             assignments
             sprintf "        }: %s))" typeSpelling
@@ -132,7 +132,7 @@ module Emit =
 
     /// A union decoder: a total tag match, with an unrecognised tag
     /// refusing rather than falling through.
-    let private unionBody (binding: string) (typeSpelling: string) (cases: UnionCasePlan list) =
+    let private unionBody (keyword: string) (binding: string) (typeSpelling: string) (cases: UnionCasePlan list) =
         let arms =
             cases
             |> List.collect (fun c ->
@@ -201,16 +201,56 @@ module Emit =
                     @ [ "                )" ])
 
         [
-            sprintf "    let %s: Decoder<%s> =" binding typeSpelling
+            sprintf "    %s %s: Decoder<%s> =" keyword binding typeSpelling
             sprintf "        Decode.union \"%s\" (function" typeSpelling
         ]
         @ arms
         @ [ "            | _ -> None)"; "" ]
 
-    let private bindingBody =
+    let private bindingBody (keyword: string) =
         function
-        | RecordDecoder(b, t, fields) -> recordBody b t fields
-        | UnionDecoder(b, t, cases) -> unionBody b t cases
+        | RecordDecoder(b, t, fields) -> recordBody keyword b t fields
+        | UnionDecoder(b, t, cases) -> unionBody keyword b t cases
+
+    /// Phase 816 — a binding of a `let rec` group, eta-expanded.
+    ///
+    /// The body a plain binding evaluates at initialisation is wrapped in
+    /// `fun value -> (…) value`, so a recursive reference inside it is read
+    /// on the first DECODE rather than while the group is being built.
+    /// That is what keeps a recursive plan an ordinary value: without it
+    /// F# would either reject the group or guard every back-edge with a
+    /// runtime initialisation check (warning FS0040), and the emitted code
+    /// would carry a hazard the algebra has no name for. Applied to every
+    /// member of a recursive group and to nothing else; the cost is one
+    /// closure allocation per member at module load.
+    let private etaExpand (lines: string list) =
+        // A body line may carry several source lines joined by `\n` (the
+        // record shape's assignments and applies do), so flatten first;
+        // the trailing blank separator is re-appended after the wrap.
+        let flat = lines |> List.collect (fun l -> l.Split '\n' |> List.ofArray)
+
+        match flat with
+        | header :: body ->
+            let body = body |> List.filter (fun l -> l <> "")
+
+            // Every body line sits at eight spaces or deeper; the wrap
+            // re-homes it under the lambda at twelve, one further for the
+            // continuation lines so they stay right of the opening paren.
+            let wrapped =
+                body
+                |> List.mapi (fun i l ->
+                    let content = l.Substring 8
+
+                    let shifted =
+                        if i = 0 then
+                            "            (" + content
+                        else
+                            "             " + content
+
+                    if i = List.length body - 1 then shifted + ")" else shifted)
+
+            [ header; "        fun value ->" ] @ wrapped @ [ "                value"; "" ]
+        | [] -> []
 
     /// Every key the emitted `registerAll` registers, bindings first then
     /// roots, deduplicated by `Type.FullName` and order-preserving.
@@ -289,7 +329,24 @@ module Emit =
             lines |> List.iter (fun l -> sb.Append(l).Append('\n') |> ignore)
 
         write (header options)
-        plan.Bindings |> List.iter (bindingBody >> write)
+
+        // Phase 816 — each recursive group (contiguous in `Bindings`, by
+        // the planner's ordering) is one `let rec … and …` of eta-expanded
+        // bindings; every binding outside a group is the plain `let` it
+        // always was, byte for byte.
+        let groupOf (name: string) =
+            plan.RecursiveGroups |> List.tryFind (List.contains name)
+
+        plan.Bindings
+        |> List.iter (fun binding ->
+            let name = TypePlan.binding binding
+
+            match groupOf name with
+            | None -> write (bindingBody "let" binding)
+            | Some group ->
+                let keyword = if List.head group = name then "let rec" else "and"
+                write (etaExpand (bindingBody keyword binding)))
+
         write (coveredBlock plan)
         write (registerBlock plan)
         write (apiRecordsBlock options)

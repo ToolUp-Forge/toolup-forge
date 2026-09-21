@@ -63,4 +63,6 @@ type ICorpusApi = {
     Consignment: Consignment -> Async<Consignment>
     Customer: Customer -> Async<Customer>
     Envelope: ApiEnvelope -> Async<ApiEnvelope>
+    /// Phase 816 — the recursive union; its generated decoder is a `let rec`.
+    Tree: Tree -> Async<Tree>
 }

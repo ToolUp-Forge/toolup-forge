@@ -317,6 +317,28 @@ let private mOutcomeFields: ModelDecoder<Outcome> =
         else
             RemotingDecode.ONone)
 
+/// Phase 816 — the corpus's recursive union over the EXTRACTED
+/// combinators, in the same eta-expanded `let rec` shape the generator
+/// emits. The model proves nothing about this binding (it is host-side
+/// composition); what the pairing below shows is that the extracted
+/// combinators compose recursively and agree with production when they do.
+let rec private mTree: ModelDecoder<Tree> =
+    fun value ->
+        (RemotingDecode.union "Tree" (fun tag ->
+            if tag = ix 0 then
+                RemotingDecode.OSome(RemotingDecode.payload (RemotingDecode.map Leaf mString))
+            elif tag = ix 1 then
+                RemotingDecode.OSome(
+                    RemotingDecode.fields
+                        (ix 2)
+                        (RemotingDecode.succeed (fun label children -> Branch(label, children))
+                         |>> RemotingDecode.field "label" (ix 0) mString
+                         |>> RemotingDecode.field "children" (ix 1) (mList mTree))
+                )
+            else
+                RemotingDecode.ONone))
+            value
+
 let private mConsignment: ModelDecoder<Consignment> =
     RemotingDecode.succeed (fun reference origin destination pri outc weights labels -> {
         Reference = reference
@@ -386,6 +408,21 @@ let private pOutcomeFields: Decoder<Outcome> =
         | 1 -> Some(Decode.payload (Decode.asString |> Decode.map Outcome.Rejected))
         | 2 -> Some(Decode.case0 Outcome.Pending)
         | _ -> None)
+
+let rec private pTree: Decoder<Tree> =
+    fun value ->
+        (Decode.union "Tree" (function
+            | 0 -> Some(Decode.payload (Decode.asString |> Decode.map Leaf))
+            | 1 ->
+                Some(
+                    Decode.fields
+                        2
+                        (Decode.succeed (fun label children -> Branch(label, children))
+                         |> Decode.apply (Decode.field "label" 0 Decode.asString)
+                         |> Decode.apply (Decode.field "children" 1 (Decode.list pTree)))
+                )
+            | _ -> None))
+            value
 
 let private pConsignment: Decoder<Consignment> =
     Decode.succeed (fun reference origin destination pri outc weights labels -> {
@@ -472,6 +509,8 @@ let private paired: Paired list = [
     pair (Decode.tuple2 Decode.asInt32 Decode.asString) (mTuple2 mInt32 mString)
     pair (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool) (mTuple3 mInt32 mString mBool)
     pairAs "Outcome via fields" pOutcomeFields mOutcomeFields
+    // Phase 816 — the recursive union, both sides a `let rec`.
+    pair pTree mTree
 ]
 
 /// Every pairing at a type — one for most, two for `Outcome`.

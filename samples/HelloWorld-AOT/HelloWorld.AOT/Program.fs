@@ -97,6 +97,7 @@ let private argumentArms: (Type * (JsonSerializerOptions -> JsonElement list -> 
     typeof<Consignment>, (fun o a -> ICorpusApiDispatch.decodeConsignmentArgs o a |> Result.map box)
     typeof<Customer>, (fun o a -> ICorpusApiDispatch.decodeCustomerArgs o a |> Result.map box)
     typeof<ApiEnvelope>, (fun o a -> ICorpusApiDispatch.decodeEnvelopeArgs o a |> Result.map box)
+    typeof<Tree>, (fun o a -> ICorpusApiDispatch.decodeTreeArgs o a |> Result.map box)
 ]
 
 // ─── The fixtures the generator REFUSES a decoder for, by name ───────────

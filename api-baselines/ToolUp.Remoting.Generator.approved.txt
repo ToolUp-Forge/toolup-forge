@@ -47,8 +47,9 @@ ToolUp.Remoting.Generator.FieldPlan.FieldName : System.String { get }
 ToolUp.Remoting.Generator.FieldPlan.Position : System.Int32 { get }
 ToolUp.Remoting.Generator.FieldPlan.TypeSpelling : System.String { get }
 ToolUp.Remoting.Generator.GenerationPlan (class)
-ToolUp.Remoting.Generator.GenerationPlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.TypePlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.RootPlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal])
+ToolUp.Remoting.Generator.GenerationPlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.TypePlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.RootPlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Remoting.Generator.GenerationPlan.Bindings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.TypePlan] { get }
+ToolUp.Remoting.Generator.GenerationPlan.RecursiveGroups : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Remoting.Generator.GenerationPlan.Refusals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal] { get }
 ToolUp.Remoting.Generator.GenerationPlan.Roots : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.RootPlan] { get }
 ToolUp.Remoting.Generator.Plan (class)

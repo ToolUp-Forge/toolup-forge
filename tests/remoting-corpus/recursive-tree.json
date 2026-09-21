@@ -1,0 +1,1 @@
+{"Branch":["root",[{"Leaf":"a"},{"Branch":["inner",[{"Leaf":"b"},{"Branch":["deep",[]]},{"Leaf":"c"}]]},{"Leaf":"d"}]]}

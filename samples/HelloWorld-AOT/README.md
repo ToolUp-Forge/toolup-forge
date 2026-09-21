@@ -24,7 +24,9 @@ parses through the generated argument table. The seven fixtures the generator **
 for are named with their reason: `DateOnly` / `TimeOnly`, which have no cross-host combinator, and
 the two records holding one. (Until Phase 800 the list also carried the tuple and multi-field
 union-case fixtures — the two combinator gaps that phase closed; `tuple-pair`, `tuple-triple`, the
-`union-*` fixtures and `record-consignment` now decode through the generated decoders.) The program
+`union-*` fixtures and `record-consignment` now decode through the generated decoders. Phase 816
+added the corpus's recursive union, `recursive-leaf` / `recursive-tree`, whose generated decoder
+is a `let rec` — the first emitted recursion this sample compiles.) The program
 also fails if that refused set changes, so a widening of the algebra is noticed here rather than
 silently un-checked.
 
@@ -60,7 +62,7 @@ segment in the `index` combinator, fixed in this phase); `Program.fs` itself con
 
 | Path | Result |
 |---|---|
-| Generated decoders (binary response) | 58 of 58 expressible fixtures decode to their declaration; the 10 refusals are the algebra's recorded reach (measured before Phase 800 — under the JIT the same run now reads 64 of 71 with 7 refusals, the six fixtures Phase 800 made expressible plus Phase 803's three boundary fixtures; the native run has not been re-measured) |
+| Generated decoders (binary response) | 58 of 58 expressible fixtures decode to their declaration; the 10 refusals are the algebra's recorded reach (measured before Phase 800 — under the JIT the same run now reads 66 of 73 with 7 refusals — the six fixtures Phase 800 made expressible, Phase 803's three boundary fixtures, and Phase 816's two recursive fixtures; the native run has not been re-measured) |
 | Generated argument table (JSON request) | 46 of 68 parse; **22 are reflection-bound** — every option, list, set, map, tuple, union and record fixture. The table's one call is the typed STJ seam, and that seam runs the reflection converter set: generic converters over value types have no native instantiation, and record / union construction goes through a reflective invoke the AOT runtime refuses |
 
 So the reflection-free claim holds for the **decode** path end to end, and the argument path is

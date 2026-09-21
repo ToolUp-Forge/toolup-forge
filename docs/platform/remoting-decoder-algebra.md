@@ -173,6 +173,39 @@ same bytes on the wire, and what makes the term a tuple is only the decoder that
 the wrong width is refused naming both arities, never sliced, and a refusal beneath an element
 carries `[n]` because the element has no name to carry.
 
+**A recursive type needs no combinator — it needs a `let rec`.** A union that reaches itself
+(`ColumnExpr`'s `Concat of parts: ColumnExpr list * …`) is decoded by an ordinary recursive
+binding whose body is eta-expanded, so the recursive reference is read on the first decode rather
+than while the module initialises:
+
+```fsharp skip=fragment
+type Tree =
+    | Leaf of string
+    | Branch of label: string * children: Tree list
+
+let rec tree: Decoder<Tree> =
+    fun value ->
+        (Decode.union "Tree" (function
+            | 0 -> Some(Decode.payload (Decode.asString |> Decode.map Leaf))
+            | 1 ->
+                Some(
+                    Decode.fields
+                        2
+                        (Decode.succeed (fun label children -> Branch(label, children))
+                         |> Decode.apply (Decode.field "label" 0 Decode.asString)
+                         |> Decode.apply (Decode.field "children" 1 (Decode.list tree)))
+                )
+            | _ -> None))
+            value
+```
+
+It terminates for the reason every combinator does: `tree` is only ever reached through `field`,
+`index`, `list` or `fields`, each of which descends into a strictly smaller subterm — and the
+one-pass reader's 64-container ceiling bounds the value's depth before any decoder runs. Since
+Phase 816 the generator emits exactly this shape for a cycle, as one `let rec … and …` group per
+strongly connected component of the type graph, leaving every binding outside a cycle the plain
+`let` it always was.
+
 ---
 
 ## 4. How a consumer writes a decoder

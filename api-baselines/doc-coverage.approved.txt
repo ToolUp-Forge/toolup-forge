@@ -135,7 +135,7 @@ ToolUp.RAG.StaticCorpus.Core 4/19
 ToolUp.RAG.StaticCorpus.Server 6/9
 ToolUp.RateLimit.AzureTableStorage 6/10
 ToolUp.RateLimit.Redis 5/9
-ToolUp.Remoting.Generator 45/92
+ToolUp.Remoting.Generator 46/93
 ToolUp.Reporting.Core 114/362
 ToolUp.Reporting.Docx 12/31
 ToolUp.Reporting.HtmlPdf 15/31
