@@ -111,7 +111,7 @@ module EgressComponentContext =
 /// nobody computed a lineage for whatever is about to leave. Under the
 /// permit-all default and under an advisory grant signature that costs
 /// nothing (GP 11); under a profile that makes declaration mandatory it
-/// is the refusal `EgressPolicy.requireLabel` raises.
+/// is the refusal `EgressPolicy.requireClearedLabel` raises.
 [<RequireQualifiedAccess>]
 module EgressLabelContext =
 
