@@ -200,13 +200,20 @@ module Program =
     }
 
     /// Override the message ring-buffer capacity. Default 10 (matches
-    /// upstream). Capacity auto-doubles on overflow, so this is purely an
+    /// upstream). Capacity auto-grows on overflow, so this is purely an
     /// optimisation hint for apps whose `update` synchronously dispatches
-    /// many follow-up messages from a single handler.
+    /// many follow-up messages from a single handler. Floored at
+    /// `RingBuffer.MinimumCapacity` (2) — the same floor the constructor
+    /// applies and the one the Phase 788 proof's precondition needs; this
+    /// used to floor at 1, a value the constructor then silently overrode
+    /// with 10.
     let withRingBufferCapacity (capacity: int) (program: Program<'arg, 'model, 'msg, 'view>) = {
         program with
-            ringBufferCapacity = max 1 capacity
+            ringBufferCapacity = max RingBuffer<'msg>.MinimumCapacity capacity
     }
+
+    /// Return the configured ring-buffer capacity (Phase 788).
+    let ringBufferCapacity (program: Program<'arg, 'model, 'msg, 'view>) = program.ringBufferCapacity
 
     /// Termination criteria and handler. Override the predicate to stop
     /// the program on a specific message; the cleanup runs after the loop

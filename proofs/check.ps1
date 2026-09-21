@@ -3,7 +3,8 @@
 .SYNOPSIS
     The whole proof leg for every model under proofs/ — Phase 787's
     remoting decoder algebra, Phase 790's disclosure fold, Phase 793's
-    tool gate and Phase 792's model-input admissibility.
+    tool gate, Phase 792's model-input admissibility, Phase 795's taint
+    flow, and Phase 788's Elmish ring buffer and subscription diff.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
@@ -137,6 +138,31 @@ $modules = @(
         HostList     = "ToolUp.Platform.Tests.Phase 795 - the proved taint flow as oracle"
         HostMinCases = 11
         HostSubject  = "the two-party fixtures and the generated pipelines"
+    }
+    # Phase 788 — two models, ONE differential host: the ring and the
+    # subscription diff are both the Elmish runtime, and the host that
+    # drives them beside production is one Expecto list, so the two
+    # entries below name the same list. Step 6 therefore runs it twice;
+    # that is the price of keeping "one entry per model" true, and it
+    # is seconds. The SAME differential also runs under Fable
+    # (`src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs`, via
+    # `VerifyFable`), which this leg does not drive — the fable-tier CI
+    # job does.
+    @{
+        Name         = "ElmishRing"
+        Source       = "ElmishRing.fst"
+        Oracle       = "oracle/ElmishRing.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
+        HostMinCases = 8
+        HostSubject  = "generated push/pop sequences, past several doublings"
+    }
+    @{
+        Name         = "ElmishSub"
+        Source       = "ElmishSub.fst"
+        Oracle       = "oracle/ElmishSub.fs"
+        HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
+        HostMinCases = 8
+        HostSubject  = "generated subscription sets, with duplicates and the shortcut's exact-key-set case"
     }
 )
 

@@ -1418,6 +1418,14 @@
              it reproduces those packs' two-party vocabulary as data and is
              the later claim. -->
         <Compile Include="InProcess\TaintFlowProofOracleTests.fs" />
+        <!-- Phase 788 — the Elmish runtime's two proved models (the ring
+             buffer, the subscription diff) beside production. The
+             differential itself is the host-NEUTRAL module under Client/,
+             compiled here and into the Fable pack (WireCorpus.fs precedent),
+             because the runtime ships to both hosts; this file is the
+             Expecto skin. -->
+        <Compile Include="Client\ElmishProofDifferential.fs" />
+        <Compile Include="InProcess\ElmishProofOracleTests.fs" />
         <!-- Phase 708 — the fact-clause feeder: the production producer the
              Phase 522 push path never had. Plan-step projection, the prompt
              path pushing a fact ahead of the chunks, byte-identity for a

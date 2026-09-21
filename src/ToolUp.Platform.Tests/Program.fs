@@ -2362,6 +2362,13 @@ let private registeredTests =
         // than comparing outputs, and a committed go-red oracle blinds the
         // Join contribution so both are known to be able to fail.
         TaintFlowProofOracleTests.tests
+        // Phase 788 — the Elmish runtime's ring buffer and subscription
+        // diff, run beside their proved models over generated sequences
+        // on this host (the Fable pack runs the same differential against
+        // the transpiled runtime). Two committed go-red cases are asserted
+        // caught, and the campaign asserts it reached the grow step and
+        // the diff's shortcut.
+        ElmishProofOracleTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

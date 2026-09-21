@@ -60,6 +60,18 @@ contributor only through a declassification routine that contributor's own scope
 nothing else lowers a label at all. Its ladder is
 [further down still](#the-claims-ladder--the-taint-flow-phase-795).
 
+**The Elmish runtime theorems (Phase 788).** Two models of the in-tree MVU runtime, the loop every
+client on the platform runs on, whose core had no test on either host until this phase. The
+**ring buffer** every reentrant `dispatch` waits in is a FIFO queue: over *any* sequence of pushes
+and pops it produces exactly the outputs a reference queue produces, through every grow — so every
+deferred message comes out once, in order, and never as one of the placeholder slots the grow step
+manufactures. The **subscription diff** run after every `update` starts exactly the deduplicated new
+subscriptions, stops exactly the removed ones, keeps exactly the common ones, never both for one key,
+reports exactly the duplicates — and its `keys = newKeys` shortcut agrees with the general path,
+which is where a started-twice / never-stopped leak would have lived. The ring theorem's one
+precondition (two slots) is met by construction and shown necessary. Its ladder is
+[at the end](#the-claims-ladder--the-elmish-runtime-phase-788).
+
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
@@ -69,6 +81,8 @@ nothing else lowers a label at all. Its ladder is
 | `ToolGate.fst` | the tool gate model — `ToolGate.decideDeclared`, `AIToolRegistry.ListAccessible`, `FindByName` and the dispatch re-check clause for clause, each definition naming its F# counterpart; RBAC and grant liveness taken from the host as predicates |
 | `ModelInput.fst` | the model-input model — the closed value, its smart constructor, the assembly a caller folds over it, and `render` clause for clause, each definition naming its F# counterpart |
 | `TaintFlow.fst` | the taint-flow model — the label lattice, `AssemblyLabelling.contributedBy` / `label`, `DisclosureTaintConfig.routineClears` and the derivation walk clause for clause, each definition naming its F# counterpart |
+| `ElmishRing.fst` | the ring-buffer model — `RingBuffer<'item>`'s two-case state, `Push`, `Pop` and `doubleSize` clause for clause, the backing array as a slot list with the placeholder a constructor, and the `run` driver both hosts execute |
+| `ElmishSub.fst` | the subscription-diff model — `Sub.Internal.diff`, `NewSubs.calculate` and the active-list half of `Fx.change` clause for clause, the key and the start function opaque |
 | `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
 | `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract and byte-diff; build the oracle project; run each module's differential host |
 | `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
@@ -76,7 +90,9 @@ nothing else lowers a label at all. Its ladder is
 | `oracle/ToolGate.fs` | **generated** — the tool gate model extracted to F#, committed for the same reason |
 | `oracle/ModelInput.fs` | **generated** — the model-input model extracted to F#, committed for the same reason |
 | `oracle/TaintFlow.fs` | **generated** — the taint-flow model extracted to F#, committed for the same reason |
-| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; the second and third models reference a subset of the same nine |
+| `oracle/ElmishRing.fs`, `oracle/ElmishSub.fs` | **generated** — the two Elmish models extracted to F#, committed for the same reason |
+| [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime, because an extraction cannot compile under Fable (below) |
+| `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; every later model references a subset of the same nine |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -726,6 +742,133 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
 * **That the transform algebra stays closed.** `contributedBy` is an exhaustive match, so a sixth
   transform case fails to compile until someone says what it reads; that is production's guard, not
   this theorem's, and the model would have to gain the case too.
+
+## The claims ladder — the Elmish runtime (Phase 788)
+
+The same four rungs, for `ElmishRing.fst` and `ElmishSub.fst` together — two models, because they
+are two closed algebraic structures, and one ladder, because they are one runtime and one
+differential host drives both. The subject is `src/ToolUp.Platform.Client/Client/Elmish/`: the
+~2,000-line MVU runtime every client in the estate runs on, whose core (`RingBuffer`,
+`Sub.Internal.diff`, `DispatcherCore`, the `Cmd` combinators) had **no test on either host** before
+this phase. The two structures with their law already written in the source are the ones proved.
+
+### Rung 1 — Proved
+
+**Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these lemma
+families alone:**
+
+*The ring.*
+
+* **`ring_is_queue`** — the headline. For any well-formed ring and *any* sequence of pushes and pops,
+  the ring produces exactly the outputs a reference FIFO queue produces from the ring's unread
+  contents, and ends well-formed holding exactly what the queue holds. That is `fifo`, `no_lost_slot`
+  and `no_double_pop` in one statement, and it holds through every grow: every pushed item is popped
+  exactly once, in push order, however many times the backing array doubles on the way. `push_spec`
+  and `pop_spec` are the two single-step halves it composes; `create_wf` says every ring the
+  constructor builds is well-formed and empty, whatever capacity was asked for.
+* **`fifo`, `no_lost_slot_no_double_pop`** — the phase's lemma families as named corollaries over the
+  ring the constructor builds.
+* **`placeholder_unobserved`.** A pop on a well-formed ring never returns one of the placeholder
+  slots the constructor's `Array.zeroCreate` and the grow step's tail manufacture. The source comment
+  says `Unchecked.defaultof` "is never observed as a value"; this is that sentence as a theorem,
+  which is possible only because the model makes the placeholder a *constructor* rather than an opaque
+  default.
+* **`order_across_grow`.** The grow step in isolation: the push that triggers `doubleSize` leaves the
+  unread contents in order with the pushed item last, in a ring of `2n + 1` slots whose read head is
+  0. The model reproduces what the code does, not what its comment says: the inclusive
+  `0 .. items.Length` range yields `n + 1` placeholders, so "doubling" is `2n + 1`.
+* **`succ_is_mod`.** The modelling step is faithful. The index step is modelled as a case split rather
+  than `(i + 1) % n`, so every lemma above is linear arithmetic — cheap, and stable under `--quake` —
+  and this lemma says the two are the same function on every index the code holds.
+* **The precondition, met and necessary.** Every ring theorem assumes at least two slots. `create_wf`
+  shows the constructor guarantees it (`minimum_capacity = 2`, the one number
+  `RingBuffer.MinimumCapacity` and `Program.withRingBufferCapacity` both read since 788.D), and
+  `capacity_one_loses_an_item` shows it is not a convenience: at one slot the `ReadWritable` state
+  cannot tell one unread slot from none, the second push overwrites the first item before the grow
+  step runs, and the first pop returns the *second* item — computed on the model with the floor
+  bypassed. Before this phase the constructor floored at 10 while `withRingBufferCapacity` floored
+  at 1 and documented per-program configurability; the fork's claim sheet in the top-level README
+  records the reconciliation.
+
+*The diff.*
+
+* **`start_exactly_new`, `stop_exactly_removed`, `keep_exactly_common`.** `toStart` is exactly the
+  deduplicated requested subs whose key was not active, as *pairs* — so the start function that
+  survives dedup is the one the caller runs; `toStop` exactly the active subs no longer requested;
+  `toKeep` exactly the active subs still requested, and with `toStop` a partition of the active list.
+* **`never_both`.** No key is both started and stopped, and none both kept and stopped.
+* **`dupes_exact`.** A key is reported duplicate iff it occurs more than once in the requested subs.
+  `calculate_characterised` pins which occurrence survives: the *last*, because `List.foldBack` folds
+  the last entry first — a fact the source does not state and a caller could reasonably guess the
+  other way.
+* **`fast_path_agrees`.** When `keys = newKeys` the shortcut returns `dupes, [], active, []` — and the
+  general path, run on the same input, returns the same four lists. The shortcut is an optimisation,
+  not a different answer. This is the lemma the phase was really for: a shortcut that disagreed with
+  the general path is precisely where a "started twice / never stopped" leak would live, and nothing
+  else in the tree would have seen it.
+* **`change_keys`.** After `Fx.change`, every active key is a requested key, and — when every start
+  succeeds — every requested key is active.
+
+### Rung 2 — Differentially tested
+
+Not proved. *Measured*, on every run of the gate — **and on both hosts**, which no earlier ladder
+needed: the runtime ships to .NET and, through Fable, to the browser, and the browser's copy is the
+one every client executes.
+
+* **The model agrees with production, on .NET.** `ElmishProofOracleTests` in the platform pack runs
+  the extracted `run` beside the shipped `RingBuffer` over generated push/pop sequences — capacities
+  2–13, push biases that grow the ring past several doublings and drain it to empty, every sequence
+  also run with a full drain appended — and the extracted `diff` / `change` beside the shipped ones
+  over generated subscription sets with duplicates and with the exact active key set, so the shortcut
+  fires. The comparison is on keys **and on the identity** of every handle and start function carried
+  through: production must hand back the same object, not an equal-looking one.
+* **…and under Fable, from the model's recorded verdicts.** The drivers are one shared module
+  (`src/ToolUp.Platform.Tests/Client/ElmishProofDifferential.fs`, no test framework and no model in
+  it) compiled into both packs. The extraction itself compiles on .NET only — the F\* extractor emits
+  pre-F#-8 layout that needs `--strict-indentation-`, and Fable reads no `OtherFlags` from an fsproj
+  (checked against the 5.0.0 CLI), so the Fable pack could compile it only by pinning `LangVersion`
+  back to 7, which the workspace baseline forbids. So the .NET host also writes the model's verdicts
+  for its campaign to `tests/elmish-proof-corpus/` as a self-describing corpus — each case carries its
+  inputs and the outputs the proved model produced — holds that file to the live model on every run,
+  and the Fable pack's `ElmishProofOracleTests` replays it against the transpiled `Ring.fs` /
+  `Sub.fs`. Both hosts hold the shipped code to the proved model's answer; one computes it. The
+  generator is a small LCG rather than `System.Random`, so the sequences are the same by seed on
+  either host.
+* **The campaign is known to have reached the grow step.** The .NET host asserts the largest backing
+  array the model reached is past several doublings, and that the diff campaign hit both the shortcut
+  and the duplicate path — a campaign that only ever exercised the steady state would pass every
+  comparison and prove nothing about the clauses that matter.
+* **Two committed go-red cases.** `BrokenRing` is the production ring with the wrap check removed —
+  the write head runs over unread slots instead of growing. `brokenDiff` computes `toStart` without
+  excluding the active keys, so a key both active and requested is kept *and* started. Each is run
+  against the model over the same campaign and the number of inputs on which it is caught is asserted
+  positive. A differential that has never been shown to fail agrees with whatever it is shown.
+
+### Rung 3 — Assumed, and stated
+
+* **The bridges are hand-written.** An op sequence crosses as its cases; a subscription list as
+  key/handle pairs; the model's popped slot comes back as an `option` with a popped placeholder kept
+  *distinguishable* from `None`, so it can never read as agreement. A defect in any of them would make
+  the comparison compare the wrong thing. Mitigation: short and case-for-case, and the two go-red
+  cases beside them are each shown to be caught.
+* **The subscription key is opaque.** `SubId` is a `string list`; the model takes any type with
+  decidable equality and the host instantiates it with the real one. The diff only ever asks whether
+  two keys are equal, so nothing is lost — but a future diff that ordered or prefix-matched keys would
+  need the model to gain the operation.
+
+### Rung 4 — Not claimed
+
+Named because an unstated exclusion reads, to anyone who finds it later, as a claim that failed.
+
+* **The dispatch loop around the ring.** `Program.runWith`'s reentrancy flag, its termination
+  predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract.
+  The ring theorem says every deferred message comes out once and in order; what the loop does with
+  it is a separate model, and `DispatcherCore` and the `Cmd` combinators — the other two untested
+  structures the phase named — remain untested.
+* **What a subscription does when started or stopped.** `Fx.change` calls the host's start and
+  dispose functions and reports their exceptions through `onError`; the theorem is about which keys
+  survive the call, with the start function opaque and its failure modelled as `None`. Whether a
+  start that threw left a resource behind is the subscription author's contract.
 
 ---
 

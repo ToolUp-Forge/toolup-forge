@@ -86,6 +86,10 @@ let allTests =
         // against. Two readers, one corpus, one set of expected values.
         RemotingCorpusParityTests.tests
         StreamingProxyTests.tests
+        // Phase 788 — the proved Elmish ring buffer and subscription diff
+        // beside the TRANSPILED runtime, from the same shared differential
+        // and the same seed as the .NET pack.
+        ElmishProofOracleTests.tests
     ]
 
 [<EntryPoint>]

@@ -42,11 +42,18 @@
     "omit them entirely. That would be the exact mistake the third paragraph above names: an",
     "unstated exclusion reads, to whoever finds it later, as a claim that failed. They are absent",
     "from every rung that asserts coverage, which is what matters, and present on the rung whose",
-    "whole job is to say so."
+    "whole job is to say so.",
+    "",
+    "Phase 788 appended the Elmish runtime claims (ids prefixed `elmish-ring-` and `elmish-sub-`): the",
+    "ring's headline theorem and its named corollaries, the diff's seven lemmas, one `tested` entry per",
+    "differential host (BOTH runtimes, because the runtime ships to both), the capacity floor as a",
+    "`proved` entry rather than an `assumed` one - 788.D reconciled the floor to the proof's precondition",
+    "in the same phase, so nothing is left assumed - and the policy entries that say what the two models",
+    "do not reach (the dispatch loop around the ring; the effects `change` runs)."
   ],
   "kind": "proofs",
   "version": 1,
-  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795)",
+  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788)",
   "provers": {
     "fstar-pinned": {
       "tool": "fstar",
@@ -885,6 +892,227 @@
       "level": "policy",
       "statement": "That the transform algebra stays closed is OUT.",
       "reason": "the shipped contribution function is an exhaustive match, so a sixth transform case fails to compile until someone says what it reads. That is production's guard, not this theorem's, and the model would have to gain the case too."
+    },
+    {
+      "id": "elmish-ring-is-queue",
+      "level": "proved",
+      "statement": "Over ANY sequence of pushes and pops, a well-formed ring produces exactly the outputs a reference FIFO queue produces from its unread contents, and ends well-formed holding exactly what the queue holds. Every pushed item is popped exactly once, in push order, however many times the ring grows on the way - fifo, no lost slot and no double pop in one statement.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "ring_is_queue",
+          "push_spec",
+          "pop_spec",
+          "create_wf"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-fifo",
+      "level": "proved",
+      "statement": "Two items pushed in order are popped in that order, from the ring the constructor builds.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "fifo"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-no-lost-no-double",
+      "level": "proved",
+      "statement": "After any operation sequence from a fresh ring, the outputs are the reference queue's: no push is dropped and no slot is returned twice.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "no_lost_slot_no_double_pop"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-placeholder-unobserved",
+      "level": "proved",
+      "statement": "A pop on a well-formed ring never returns one of the placeholder slots the constructor and the grow step manufacture - `Unchecked.defaultof` is never observed as a value.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "placeholder_unobserved"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-order-across-grow",
+      "level": "proved",
+      "statement": "A push that triggers `doubleSize` leaves the unread contents in order with the pushed item last, in a ring of 2n + 1 slots whose read head is 0. The grow step is `2n + 1`, not `2n`: the inclusive `0 .. items.Length` range yields one placeholder more than the comment says, and the model reproduces it.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "order_across_grow"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-capacity-floor",
+      "level": "proved",
+      "statement": "The precondition every ring theorem carries - at least two slots - is met by construction: `create` floors its capacity at `minimum_capacity` = 2, the ONE number `RingBuffer.MinimumCapacity` and `Program.withRingBufferCapacity` both read since 788.D. And it is necessary: at one slot the second push overwrites the first item before the grow step runs and the first pop returns the second item - `capacity_one_loses_an_item` is that execution, computed on the model with the floor bypassed.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "create_wf",
+          "capacity_one_loses_an_item"
+        ]
+      }
+    },
+    {
+      "id": "elmish-ring-succ-is-mod",
+      "level": "proved",
+      "statement": "The modelling step is faithful: the case-split index step the model uses IS `(i + 1) % n` on every index the code holds.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishRing.fst",
+        "lemmas": [
+          "succ_is_mod"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-start-exactly-new",
+      "level": "proved",
+      "statement": "`toStart` holds exactly the deduplicated requested subs whose key is not active - as pairs, so the start function that survives dedup is the one the caller will run.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "start_exactly_new"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-stop-exactly-removed",
+      "level": "proved",
+      "statement": "`toStop` holds exactly the active subs whose key is no longer requested.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "stop_exactly_removed"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-keep-exactly-common",
+      "level": "proved",
+      "statement": "`toKeep` holds exactly the active subs whose key is still requested, and with `toStop` partitions the active list.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "keep_exactly_common"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-never-both",
+      "level": "proved",
+      "statement": "No key is both started and stopped, and no key is both kept and stopped.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "never_both"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-dupes-exact",
+      "level": "proved",
+      "statement": "A key is reported as a duplicate iff it occurs more than once in the requested subs; the survivor is the LAST occurrence, because `List.foldBack` folds the last entry first.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "dupes_exact",
+          "calculate_characterised"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-fast-path-agrees",
+      "level": "proved",
+      "statement": "When `keys = newKeys` the shortcut returns `dupes, [], active, []` - and the general path, run on the same input, returns the same four lists. The shortcut is an optimisation, not a different answer; this is where a started-twice / never-stopped leak would have lived.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "fast_path_agrees"
+        ]
+      }
+    },
+    {
+      "id": "elmish-sub-change-keys",
+      "level": "proved",
+      "statement": "After `change`, every active key is a requested key and - when every start succeeds - every requested key is active.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/ElmishSub.fst",
+        "lemmas": [
+          "change_keys"
+        ]
+      }
+    },
+    {
+      "id": "elmish-model-agrees-with-shipped-code-dotnet",
+      "level": "tested",
+      "statement": "The extracted models agree with the production `RingBuffer` and `Sub.Internal.diff` / `Fx.change` over generated operation sequences (pushes, pops, grows past several doublings, full drains) and generated subscription sets (duplicates, the shortcut's exact-key-set case), on .NET - keys AND the identity of every handle and start function carried through.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs",
+        "list": "Phase 788 - the proved Elmish runtime as oracle",
+        "cases": [
+          "the extracted ring agrees with the production ring over generated push/pop sequences",
+          "the campaign grew the ring past several doublings",
+          "the extracted diff agrees with the production diff and change over generated subscription sets",
+          "the campaign exercised the shortcut and the duplicate path",
+          "a ring that skips the wrap check is caught - go-red",
+          "a diff that starts a key it also keeps is caught - go-red",
+          "the floor is one number, and the model's precondition covers it",
+          "at capacity one the model loses an item - why the floor exists"
+        ],
+        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "elmish-model-agrees-with-shipped-code-fable",
+      "level": "tested",
+      "statement": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. The extraction itself is not compiled under Fable: its layout needs the strict-indentation opt-out, which Fable reads from no fsproj, and pinning LangVersion back is forbidden.",
+      "evidence": {
+        "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "list": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
+        "runner": "dotnet run --project Build.fsproj -- VerifyFable (the fable-tier CI job)"
+      }
+    },
+    {
+      "id": "elmish-bridges-hand-written",
+      "level": "assumed",
+      "statement": "The bridges in the differential host are hand-written: an op sequence crosses as its cases, a subscription list as key/handle pairs, and the model's popped slot comes back as an option with a popped placeholder kept distinguishable from None. A defect in any of them would make the comparison compare the wrong thing.",
+      "mitigation": "short and case-for-case on purpose; the two committed go-red oracles beside them are each shown to be caught over the same generated inputs"
+    },
+    {
+      "id": "elmish-ring-dispatch-loop-out",
+      "level": "policy",
+      "statement": "The dispatch loop AROUND the ring is OUT.",
+      "reason": "`Program.runWith`'s reentrancy flag, its termination predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract, not the ring's. The ring theorem says every deferred message comes out once and in order; what the loop does with it is a separate model."
+    },
+    {
+      "id": "elmish-sub-effects-out",
+      "level": "policy",
+      "statement": "What a subscription DOES when started or stopped is OUT.",
+      "reason": "`Fx.change` calls the host's start and dispose functions and reports their exceptions through `onError`; the theorem is about which keys survive the call, with the start function opaque and its failure modelled as `None`. Whether a start that threw left a resource behind is the subscription author's contract."
     }
   ]
 }

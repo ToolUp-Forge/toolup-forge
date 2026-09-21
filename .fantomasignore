@@ -18,6 +18,8 @@ proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
 proofs/oracle/ModelInput.fs
 proofs/oracle/TaintFlow.fs
+proofs/oracle/ElmishRing.fs
+proofs/oracle/ElmishSub.fs
 # The proof leg's working directories: the downloaded toolchain, F*'s
 # .checked cache, and the fresh extraction the byte-diff compares. All
 # gitignored, but Fantomas reads THIS file rather than .gitignore, so a
