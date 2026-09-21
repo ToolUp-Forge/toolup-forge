@@ -15,7 +15,11 @@
     "flag of its own would take a per-module override here rather than widening this set.",
     "Phase 795 appended TaintFlow.fst to check.ps1's module list and needed no flag change here:",
     "the shared check/extract/quake sets already cover it, and its extraction references the same",
-    "five Prims names the shim already carries. A module needing its own flags would be the first."
+    "five Prims names the shim already carries. A module needing its own flags would be the first.",
+    "Phase 788 appended ElmishRing.fst and ElmishSub.fst — the Elmish runtime's ring buffer and",
+    "subscription diff — and needed no flag change either. ElmishRing.fst is the first model to cite",
+    "a ulib lemma (FStar.Math.Lemmas, in the ghost `succ_is_mod` only, so the extraction is unchanged);",
+    "the release ships ulib's checked files, so the cold check still needs nothing beyond the pin."
   ],
   "tool": "fstar",
   "version": "v2026.09.06",

@@ -63,5 +63,14 @@
              Independent of both extractions above (it owns its own opt/pair),
              so order between the three is immaterial. -->
         <Compile Include="TaintFlow.fs" />
+        <!-- Phase 788 — GENERATED from ../ElmishRing.fst and ../ElmishSub.fst
+             — do not edit. Independent of every extraction above (each owns
+             its own opt/pair). The runtime they model also ships to the
+             browser; the Fable pack cannot compile an extraction (its
+             layout needs the strict-indentation opt-out, which Fable does not read),
+             so it replays the model's verdicts from tests/elmish-proof-corpus/
+             instead — written and held to these two by the .NET host. -->
+        <Compile Include="ElmishRing.fs" />
+        <Compile Include="ElmishSub.fs" />
     </ItemGroup>
 </Project>

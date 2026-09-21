@@ -61,6 +61,7 @@ Migration notes:
 - [767-sidebar-toolkit-localization](docs/migrations/767-sidebar-toolkit-localization.md)
 - [772-server-egress-policy](docs/migrations/772-server-egress-policy.md)
 - [783-remoting-decode-named-refusals](docs/migrations/783-remoting-decode-named-refusals.md)
+- [788-elmish-ring-and-sub-diff-theorems](docs/migrations/788-elmish-ring-and-sub-diff-theorems.md)
 - [793-tool-effect-class](docs/migrations/793-tool-effect-class.md)
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
 - [814-seam-principals](docs/migrations/814-seam-principals.md)
@@ -68,7 +69,7 @@ Migration notes:
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
-_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7868 members added, 83 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
+_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7869 members added, 83 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
 
 ### Added
 
@@ -485,7 +486,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7868 members added
   - `ToolUp.Platform.Codemod.reviewText(ToolUp.Platform.CodemodFileClass, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding]`
   - `ToolUp.Platform.Codemod.rewriteRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewriteRule] { get }`
   - … and 327 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Build.approved.txt`
-- `ToolUp.Platform.Client` — 2213 members:
+- `ToolUp.Platform.Client` — 2214 members:
   - `AuditLogUI (class)`
   - `AuditLogUI+Filters (class)`
   - `AuditLogUI+Filters..ctor(System.String, System.String, System.String, System.String)`
@@ -506,7 +507,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7868 members added
   - `AuditLogUI+LoadState.Loaded : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Loading : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Tag : System.Int32 { get }`
-  - … and 2193 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+  - … and 2194 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
 - `ToolUp.Platform.Core` — 1474 members:
   - `ProcessedDataTypes+FileManagementApi.GetSessionInfo : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]] { get }`
   - `ProcessedDataTypes+SessionStoreInfo (class)`

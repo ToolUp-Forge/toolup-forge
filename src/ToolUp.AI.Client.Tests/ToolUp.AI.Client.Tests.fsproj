@@ -178,6 +178,17 @@
              IAsyncEnumerable field, SSE decoding across chunk boundaries,
              every non-happy ending as OnError. fetch is stubbed. -->
         <Compile Include="StreamingProxyTests.fs" />
+        <!-- Phase 788 — the proved Elmish runtime as oracle, under Fable.
+             The SAME host-neutral differential the .NET pack compiles
+             (WireCorpus.fs precedent) replays the model's verdicts from
+             tests/elmish-proof-corpus/ against the transpiled Ring.fs /
+             Sub.fs — the copy every browser client executes. The
+             extraction itself is NOT compiled here: its pre-F#-8 layout
+             needs the strict-indentation opt-out, which Fable does not read from
+             an fsproj (see the differential's header). No new
+             ProjectReference. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" />
+        <Compile Include="ElmishProofOracleTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

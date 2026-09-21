@@ -493,6 +493,14 @@
         <Compile Include="Client\Bootstrap\PrerenderExport.fs" />
     </ItemGroup>
   <ItemGroup>
+    <!-- Phase 788 — the two differential hosts drive the internal
+         `RingBuffer` beside its proved model (`proofs/ElmishRing.fst`),
+         on .NET and under Fable. Test-only visibility; no shipped public
+         surface (the OidcAuthProvider / ContentAuthoring precedent). -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Explicit FSharp.Core reference: the SDK-bundled implicit
          FSharp.Core resolves to a too-old version when this fsproj
          is built transitively via Release-config pack of a downstream
