@@ -58,14 +58,17 @@ Migration notes:
 - [748-oidc-secondary-flow](docs/migrations/748-oidc-secondary-flow.md)
 - [755-oidc-refresh-policy](docs/migrations/755-oidc-refresh-policy.md)
 - [766-cron-tick-election](docs/migrations/766-cron-tick-election.md)
+- [767-sidebar-toolkit-localization](docs/migrations/767-sidebar-toolkit-localization.md)
+- [772-server-egress-policy](docs/migrations/772-server-egress-policy.md)
 - [783-remoting-decode-named-refusals](docs/migrations/783-remoting-decode-named-refusals.md)
+- [793-tool-effect-class](docs/migrations/793-tool-effect-class.md)
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
 - [814-seam-principals](docs/migrations/814-seam-principals.md)
 - [815-remove-open-deprecations](docs/migrations/815-remove-open-deprecations.md)
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
-_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added, 82 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
+_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7868 members added, 83 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
 
 ### Added
 
@@ -103,7 +106,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.ConversationId : System.Guid { get }`
   - `ToolUp.AI.Client.ToolApprovalDialog+PendingApprovalRequest.Detail : System.String { get }`
   - … and 9 more — `git diff v0.22.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
-- `ToolUp.AI.Core` — 208 members:
+- `ToolUp.AI.Core` — 269 members:
   - `ToolUp.AI.AIBudgetConfigKey (class)`
   - `ToolUp.AI.AIBudgetConfigKey.maxSpendPerScope : System.String (literal)`
   - `ToolUp.AI.AIBudgetConfigKey.maxSpendPerUser : System.String (literal)`
@@ -124,9 +127,11 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.AI.AIConsentMode.IsAlwaysAsk : System.Boolean { get }`
   - `ToolUp.AI.AIConsentMode.IsRememberPerConversation : System.Boolean { get }`
   - `ToolUp.AI.AIConsentMode.IsTrustEverything : System.Boolean { get }`
-  - … and 188 more — `git diff v0.22.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
-- `ToolUp.AI.McpHost` — new package (246 public members)
-- `ToolUp.AI.Server` — 314 members:
+  - … and 249 more — `git diff v0.22.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
+- `ToolUp.AI.McpHost` — new package (247 public members)
+- `ToolUp.AI.Server` — 403 members:
+  - `ToolUp.AI.AIAgentEngine.runAgentLoop(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]  (obsolete)`
+  - `ToolUp.AI.AIAgentEngine.runAgentLoopWithInput(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], ToolUp.AI.ModelInput, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]`
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler (class)`
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload (class)`
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler+DenialEventPayload..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Guid, System.Guid)`
@@ -145,9 +150,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler.rollupFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AIDenialRollup]`
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }`
   - `ToolUp.AI.AIAllowlistDiagnosticsHandler.sanitiseReason(System.String) : System.String`
-  - `ToolUp.AI.AIBudgetEnforcer (class)`
-  - `ToolUp.AI.AIBudgetEnforcer+AIBudgetEnforcer (class)`
-  - … and 294 more — `git diff v0.22.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 383 more — `git diff v0.22.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AIProviders.Claude` — 6 members:
   - `ClaudeOAuth (class)`
   - `ClaudeOAuth.FlowName : System.String (literal)`
@@ -314,50 +317,50 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.DataSources.Parquet.ParquetDataSource.toColumnType(System.Type) : DataManagementTypes+ColumnType`
 - `ToolUp.EmbeddingProviders.OpenAI` — 1 member:
   - `OpenAIEmbeddingProvider.createWithClient(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore, OpenAIEmbeddingProvider+OpenAIEmbeddingOptions) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider`
-- `ToolUp.Facts.Core` — 22 members:
+- `ToolUp.Facts.Core` — 48 members:
   - `ToolUp.Facts.DeclassificationRoutine.AcceptingScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
   - `ToolUp.Facts.DisclosureContributorScope (class)`
   - `ToolUp.Facts.DisclosureContributorScope.UnsatisfiedPrefix : System.String (literal)`
   - `ToolUp.Facts.DisclosureContributorScope.unsatisfiedRef(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String`
   - `ToolUp.Facts.DisclosureEvents.AccessedType : System.String (literal)`
+  - `ToolUp.Facts.DisclosureFinding (class)`
+  - `ToolUp.Facts.DisclosureFinding.Tag : System.Int32 { get }`
+  - `ToolUp.Facts.DisclosureFinding.factIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Facts.DisclosureFindingModule (class)`
+  - `ToolUp.Facts.DisclosureFindingModule.LineageInferredRef : System.String (literal)`
+  - `ToolUp.Facts.DisclosureFindingModule.describe(ToolUp.Facts.DisclosureFinding) : System.String`
   - `ToolUp.Facts.DisclosurePolicy.ContributorScope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
   - `ToolUp.Facts.DisclosureTaintConfigModule.contributorScopes(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
   - `ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean`
   - `ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]`
+  - `ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
   - `ToolUp.Facts.FactDisclosureAccessedEvent (class)`
   - `ToolUp.Facts.FactDisclosureAccessedEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String)`
   - `ToolUp.Facts.FactDisclosureAccessedEvent.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
   - `ToolUp.Facts.FactDisclosureAccessedEvent.FactId : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureAccessedEvent.Metric : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureAccessedEvent.Principal : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureAccessedEvent.Purpose : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureAccessedEvent.Surface : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureAccessedEvent.TaxonomyVersion : System.String { get }`
-  - `ToolUp.Facts.FactDisclosureDeclassifiedEvent.AcceptedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
-  - `ToolUp.Facts.FactDisclosureDeclassifiedEvent.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
-  - … and 2 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
-- `ToolUp.Facts.Server` — 142 members:
+  - … and 28 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
+- `ToolUp.Facts.Server` — 161 members:
+  - `ToolUp.Facts.AssemblyTaint (class)`
+  - `ToolUp.Facts.AssemblyTaint.contributedBy(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.AssemblyTransform) : ToolUp.Facts.TaintLabel`
+  - `ToolUp.Facts.AssemblyTaint.declassify(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, ToolUp.Facts.TaintLabel) : ToolUp.Facts.TaintLabel`
+  - `ToolUp.Facts.AssemblyTaint.labelOf(ToolUp.Platform.LabelledTransform`1[ToolUp.Facts.TaintLabel]) : ToolUp.Facts.TaintLabel`
+  - `ToolUp.Facts.AssemblyTaint.labelOfSources(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AssemblySource, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel]`
+  - `ToolUp.Facts.AssemblyTaint.labelling(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel]) : ToolUp.Platform.TransformLabelling`1[ToolUp.Facts.TaintLabel]`
+  - `ToolUp.Facts.AssemblyTaint.lineageOf(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.DatasetAssemblySpec]]) : ToolUp.Facts.ComputedLineage`
+  - `ToolUp.Facts.AssemblyTaint.ofSpec(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.DatasetAssemblySpec) : ToolUp.Platform.LabelledAssembly`1[ToolUp.Facts.TaintLabel]`
+  - `ToolUp.Facts.AssemblyTaint.outputLabel(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.DatasetAssemblySpec) : ToolUp.Facts.TaintLabel`
+  - `ToolUp.Facts.ComputedLineage (class)`
+  - `ToolUp.Facts.ComputedLineage..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TaintLabel]])`
+  - `ToolUp.Facts.ComputedLineage.LabelOf : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TaintLabel]] { get }`
+  - `ToolUp.Facts.ComputedLineageModule (class)`
+  - `ToolUp.Facts.ComputedLineageModule.none : ToolUp.Facts.ComputedLineage { get }`
+  - `ToolUp.Facts.ComputedLineageModule.ofList(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.TaintLabel]]) : ToolUp.Facts.ComputedLineage`
+  - `ToolUp.Facts.ComputedLineageModule.ofMap(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.TaintLabel]) : ToolUp.Facts.ComputedLineage`
   - `ToolUp.Facts.DeclassificationAmendmentConfig (class)`
   - `ToolUp.Facts.DeclassificationAmendmentConfig..ctor(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit])`
   - `ToolUp.Facts.DeclassificationAmendmentConfig.Amendments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment] { get }`
   - `ToolUp.Facts.DeclassificationAmendmentConfig.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit] { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentConfig.Registry : ToolUp.Platform.ICountersignatureRegistry { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentConfig.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentConfigModule (class)`
-  - `ToolUp.Facts.DeclassificationAmendmentConfigModule.chainFor(System.String, System.String, ToolUp.Facts.DeclassificationAmendmentConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]`
-  - `ToolUp.Facts.DeclassificationAmendmentConfigModule.create(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]) : ToolUp.Facts.DeclassificationAmendmentConfig`
-  - `ToolUp.Facts.DeclassificationAmendmentConfigModule.tryCreate(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DeclassificationAmendmentConfig, Microsoft.FSharp.Collections.FSharpList`1[System.String]]`
-  - `ToolUp.Facts.DeclassificationAmendmentConfigModule.withAudit(ToolUp.Facts.IDeclassificationAmendmentAudit, ToolUp.Facts.DeclassificationAmendmentConfig) : ToolUp.Facts.DeclassificationAmendmentConfig`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent (class)`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Decimal, System.Decimal, System.Decimal, System.DateTimeOffset)`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.CeilingAfter : System.Decimal { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.CeilingBefore : System.Decimal { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.CeilingDelta : System.Decimal { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.OccurredAt : System.DateTimeOffset { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.Outcome : System.String { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.PartyId : System.String { get }`
-  - `ToolUp.Facts.DeclassificationAmendmentEvent.Roster : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
-  - … and 122 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 141 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Graph.Neo4j` — 1 member:
   - `ToolUp.Graph.Neo4j.CypherTranslation.isMalformedStatementCode(System.String) : System.Boolean`
 - `ToolUp.Hosts.DeliveredEgress` — new package (38 public members)
@@ -482,7 +485,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.Platform.Codemod.reviewText(ToolUp.Platform.CodemodFileClass, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodFinding]`
   - `ToolUp.Platform.Codemod.rewriteRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodRewriteRule] { get }`
   - … and 327 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Build.approved.txt`
-- `ToolUp.Platform.Client` — 2202 members:
+- `ToolUp.Platform.Client` — 2213 members:
   - `AuditLogUI (class)`
   - `AuditLogUI+Filters (class)`
   - `AuditLogUI+Filters..ctor(System.String, System.String, System.String, System.String)`
@@ -503,8 +506,8 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `AuditLogUI+LoadState.Loaded : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Loading : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Tag : System.Int32 { get }`
-  - … and 2182 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 1281 members:
+  - … and 2193 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+- `ToolUp.Platform.Core` — 1474 members:
   - `ProcessedDataTypes+FileManagementApi.GetSessionInfo : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]] { get }`
   - `ProcessedDataTypes+SessionStoreInfo (class)`
   - `ProcessedDataTypes+SessionStoreInfo..ctor(System.Guid, System.Int32)`
@@ -525,8 +528,8 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.Platform.AIDenialGroupCount.Key : System.String { get }`
   - `ToolUp.Platform.AIDenialRollup (class)`
   - `ToolUp.Platform.AIDenialRollup..ctor(System.DateTime, System.String, System.Int32, System.Int32, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialToolModulePair], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecentAIDenial])`
-  - … and 1261 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 1497 members:
+  - … and 1454 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 1604 members:
   - `ToolUp.Platform.AccessAttestation (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AccessAttestation+AttestedApproval], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)`
@@ -547,7 +550,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources..ctor(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthoritySurface])`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.ConsentVerifier : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier { get }`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.Consents : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore] { get }`
-  - … and 1477 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 1584 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — new package (183 public members)
 - `ToolUp.PublicRendering` — 71 members:
   - `ToolUp.PublicRendering.ContentPreview.canMintPreviewLink(ToolUp.Platform.AccessContext) : System.Boolean`
@@ -668,7 +671,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
 - `ToolUp.AI.Core` — 1 member:
   - `ToolUp.AI.AILatencyRecord..ctor` — `ToolUp.AI.AILatencyRecord..ctor(System.Guid, System.Guid, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])` → `ToolUp.AI.AILatencyRecord..ctor(System.Guid, System.Guid, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
 - `ToolUp.AI.Server` — 1 member:
-  - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode)`
+  - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])`
 - `ToolUp.AssetStore` — 1 member:
   - `ToolUp.AssetStore.AssetCompose+AssetStoreServerApp..ctor` — `ToolUp.AssetStore.AssetCompose+AssetStoreServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AssetStore.AssetStoreOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IDerivativeRenderer], ToolUp.AssetStore.DerivativeProfileRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IAssetStore], ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions])` → `ToolUp.AssetStore.AssetCompose+AssetStoreServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AssetStore.AssetStoreOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IDerivativeRenderer], ToolUp.AssetStore.DerivativeProfileRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.IAssetStore], ToolUp.AssetStore.MimeRendererRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+AsyncDerivationOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetCompose+DerivativeDlqOptions])`
 - `ToolUp.AuditSinks.ChainedLedger` — 1 member:
@@ -687,7 +690,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
 - `ToolUp.Facts.Server` — 3 members:
   - `ToolUp.Facts.FactDisclosureGate..ctor` — `ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig])` → `ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudgetConfig])`
   - `ToolUp.Facts.TaintCrossing..ctor` — `ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String)` → `ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])`
-  - `ToolUp.Facts.TaintOutcome..ctor` — `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])` → `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])`
+  - `ToolUp.Facts.TaintOutcome..ctor` — `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])` → `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing], ToolUp.Facts.TaintLabel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosureFinding])`
 - `ToolUp.Forms.Server` — 3 members:
   - `ToolUp.Forms.IFormStore+IFormStore.DeleteSchema` — `ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]` → `ToolUp.Forms.IFormStore+IFormStore.DeleteSchema(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]`
   - `ToolUp.Forms.IFormStore+IFormStore.DeleteSubmission` — `ToolUp.Forms.IFormStore+IFormStore.DeleteSubmission(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]` → `ToolUp.Forms.IFormStore+IFormStore.DeleteSubmission(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Forms.FormSubmission+FormError]]`
@@ -707,8 +710,9 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7362 members added
   - `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor` — `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode])` → `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode], Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode])`
   - `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules` — `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AgGrid+AgGridModuleConfig] { get }` → `ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules : Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig] { get }`
   - `ToolUp.Platform.OidcUIConfig..ctor` — `ToolUp.Platform.OidcUIConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])` → `ToolUp.Platform.OidcUIConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BearerTokenKind], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcRefreshPolicy])`
-- `ToolUp.Platform.Core` — 11 members:
+- `ToolUp.Platform.Core` — 12 members:
   - `ProcessedDataTypes+FileManagementApi..ctor` — `ProcessedDataTypes+FileManagementApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]])` → `ProcessedDataTypes+FileManagementApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[DataManagementTypes+FileUploadRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+FileUploadResponse, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+FileListSnapshot]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+DataFileUpload, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+ProcessedFileEntry, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]])`
+  - `ToolUp.Platform.AIToolDefinition..ctor` — `ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean, ToolUp.Platform.AIToolResultBudget)` → `ToolUp.Platform.AIToolDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ActionDeclaration]], ToolUp.Platform.ToolLocation, ToolUp.Platform.AISurfaceFilter, System.Boolean, ToolUp.Platform.AIToolResultBudget, ToolUp.Platform.ToolEffectDeclaration)`
   - `ToolUp.Platform.AuthConfig..ctor` — `ToolUp.Platform.AuthConfig..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.KeySource, ToolUp.Platform.TokenLocation, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JwsAlgorithm]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean])` → `ToolUp.Platform.AuthConfig..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.KeySource, ToolUp.Platform.TokenLocation, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JwsAlgorithm]], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClaimMapping])`
   - `ToolUp.Platform.EntityLifecycleEventPayload..ctor` — `ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, System.String, System.String, System.Int32)` → `ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])`
   - `ToolUp.Platform.IHealthMonitorApi..ctor` — `ToolUp.Platform.IHealthMonitorApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightSnapshotView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String]]])` → `ToolUp.Platform.IHealthMonitorApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.HealthSnapshot, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PreflightSnapshotView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String]]])`

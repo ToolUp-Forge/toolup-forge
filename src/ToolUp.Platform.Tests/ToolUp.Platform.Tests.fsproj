@@ -1735,6 +1735,16 @@
              one this pack CAN, because the pseudo-locale gives it
              something observable to compare against. -->
         <Compile Include="InProcess\LocalizationTests.fs" />
+        <!-- Phase 767 — the GENERATED translation skeleton, compiled here so
+             that a catalog field renamed or removed without regenerating it
+             fails this build naming the field (the doc's own promise about
+             translations). LocalizationTests byte-compares it on every run;
+             dev-scripts/generate-localization-skeleton.ps1 rewrites it. It is
+             a module nothing here opens — compiling it IS the test. The
+             Exists() condition is the escape hatch for a skeleton the
+             catalog has moved out from under: delete the file, build, run
+             the script, and the regenerated one compiles again. -->
+        <Compile Include="..\..\docs\platform\message-catalog-skeleton.fs" Link="Generated\message-catalog-skeleton.fs" Condition="Exists('..\..\docs\platform\message-catalog-skeleton.fs')" />
         <!-- Phase 572 — per-user sidebar entry hiding: the pure
              `SidebarPreferences` algebra (hide / restore round-trip, the
              pin/hide rule, the legacy-blob null coercion) plus the

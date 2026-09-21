@@ -47,17 +47,13 @@
     catalog through `Toolup.Sidebar` / `Layout.AppShell` in
     ToolUp.Platform.Client only, never across this boundary.
 
-    THREE literals do not yet honour that posture, and they are named here
-    rather than left to be rediscovered — the i18n successor phase closes
-    them by adding a caller-supplied parameter, which is a signature change
-    on public toolkit functions and therefore that phase's call, not this
-    packaging phase's:
-      * `Toolkit/Forms.fs`      — "CHOOSE FILE" (the file-picker button)
-      * `Toolkit/Forms.fs`      — "No data files available — upload via
-                                   Data Manager" (`dataSourcePicker`'s
-                                   empty state)
-      * `Toolkit/StateViews.fs` — `prop.title "Dismiss"` (`errorBanner`)
-    Everything else in this package already takes its text as a parameter.
+    Every component in this package takes its text as a parameter. The
+    three literals this header used to list as exceptions (the file
+    picker's "CHOOSE FILE", `dataSourcePicker`'s empty state and
+    `errorBanner`'s dismiss tooltip) were closed by Phase 767 with a
+    caller-supplied parameter each, and the localization gate
+    (`LocalizationTests`, in the platform test pack) now sweeps this
+    package so a literal cannot come back unnoticed.
 -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>

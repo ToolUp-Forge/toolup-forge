@@ -13,6 +13,13 @@ open SidebarPreferences
 // ratchets against every kebab-case attribute written the raw way; the
 // fsproj moves DataProp.fs ahead of this file so the open resolves.
 open ToolUp.Platform.DataProp
+// Phase 767 — the sidebar reads its own catalog section. `SidebarMessages`
+// and the built-in English live in the Feliz-free half of the substrate
+// (`Shared/LocalizationTypes.fs` / `Client/MessageCatalog.fs`), which is
+// why the pure `buildSectionsWith` can take the section as a value and
+// the .NET harness can exercise it without a provider; only the
+// `Sidebar` component itself reaches for `MessageCatalogProvider`.
+open ToolUp.Platform
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -300,7 +307,16 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// than in `SidebarVisibility`, which stays a pure access decision that
 /// the route guard and the command palette also derive from. A hidden
 /// entry keeps its route and its palette listing; it loses only its row.
-let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
+///
+/// Phase 767 — `messages` supplies the three section TITLES (`Pinned`,
+/// `Hidden items`, `Other`). Titles are display text: every section is
+/// keyed by its reserved `_pinned` / `_hidden` / `_other` constant and
+/// nothing downstream compares a title, so a translation moves no row.
+let buildSectionsWith
+    (messages: SidebarMessages)
+    (modules: SidebarModuleView list)
+    (prefs: UserSidebarPreferences)
+    : SidebarSection list =
     let pinnedSet = Set.ofList prefs.PinnedModuleIds
     let expandedModules = prefs.ExpandedModules
 
@@ -417,7 +433,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
             [
                 {
                     Key = PinnedKey
-                    Title = Some "Pinned"
+                    Title = Some messages.PinnedSection
                     IsCollapsed = not (prefs.ExpandedGroups.Contains PinnedKey)
                     IsPinnedSection = true
                     Modules = pinnedModules
@@ -506,7 +522,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
             [
                 {
                     Key = HiddenKey
-                    Title = Some "Hidden items"
+                    Title = Some messages.HiddenItemsSection
                     IsCollapsed = not (prefs.ExpandedGroups.Contains HiddenKey)
                     IsPinnedSection = false
                     Modules = entries
@@ -543,7 +559,7 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
                 then
                     None
                 else
-                    Some "Other"
+                    Some messages.OtherSection
 
             [
                 {
@@ -561,6 +577,12 @@ let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferenc
     @ otherSection
     @ trailingSection
     @ hiddenSection
+
+/// `buildSectionsWith` under the built-in English section — the shape
+/// every pre-767 caller and every `buildSections` test still uses. The
+/// shell itself calls `buildSectionsWith` with the resolved catalog.
+let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
+    buildSectionsWith MessageCatalog.english.Sidebar modules prefs
 
 /// Flatten a section list to the ordered entry sequence — used by
 /// consumers that need to resolve the currently-selected id (e.g. the
@@ -1284,17 +1306,17 @@ let private RailFocusRing =
 /// [Phase 567](567-admin-area-two-surface-sidebar-navigation.md) area
 /// switchers (the switcher is the only route *into* the administration
 /// area, the landing the only guaranteed way back).
-let private rowAccessibleName (rowId: string) (displayName: string) : string =
+let private rowAccessibleName (messages: SidebarMessages) (rowId: string) (displayName: string) : string =
     if not (System.String.IsNullOrWhiteSpace displayName) then
         displayName.Trim()
     else
         match rowId with
-        | HomeId -> "Home"
-        | AdminHomeId -> "Administration home"
-        | AdminAreaId -> "Administration"
-        | ProductAreaId -> "Back to app"
+        | HomeId -> messages.HomeEntry
+        | AdminHomeId -> messages.AdminHomeEntry
+        | AdminAreaId -> messages.AdminAreaEntry
+        | ProductAreaId -> messages.ProductAreaEntry
         | other when not (System.String.IsNullOrWhiteSpace other) -> other.Trim()
-        | _ -> "Unnamed entry"
+        | _ -> messages.UnnamedEntry
 
 /// One clickable sidebar row — the shared button + hover-revealed pin and
 /// hide affordances used by leaf modules, multi-page parents, and page
@@ -1312,6 +1334,7 @@ let private rowAccessibleName (rowId: string) (displayName: string) : string =
 /// It is carried purely so the row can always resolve an accessible name —
 /// see `rowAccessibleName` for the naming rule this renderer applies.
 let private renderRow
+    (messages: SidebarMessages)
     (isExpanded: bool)
     (isSelected: bool)
     (hasData: bool)
@@ -1324,14 +1347,19 @@ let private renderRow
     (name: string)
     (onActivate: unit -> unit)
     =
-    let accessibleName = rowAccessibleName rowId name
+    let accessibleName = rowAccessibleName messages rowId name
 
     // The trailing affordances keep their bare-verb tooltips (no visual
     // change), but their accessible names name the row they act on: a rail
     // of a dozen buttons all called "Pin" is unusable by voice control and
     // useless read aloud.
-    let pinTooltip = if controls.IsPinned then "Unpin" else "Pin"
-    let hideTooltip = if controls.IsHidden then "Restore" else "Hide"
+    let pinTooltip = if controls.IsPinned then messages.Unpin else messages.Pin
+
+    let hideTooltip =
+        if controls.IsHidden then
+            messages.Restore
+        else
+            messages.Hide
 
     Html.div [
         prop.className "relative group"
@@ -1479,6 +1507,7 @@ let private renderRow
 /// expanded the active child carries the selection border, so the parent
 /// only takes the border in the narrow rail (where children are hidden).
 let private renderModuleButton
+    (messages: SidebarMessages)
     (isExpanded: bool)
     (inHiddenSection: bool)
     (inPlacedSection: bool)
@@ -1537,6 +1566,7 @@ let private renderModuleButton
 
     if List.isEmpty m.Pages then
         renderRow
+            messages
             isExpanded
             (m.Id = selectedModule)
             m.HasData
@@ -1567,6 +1597,7 @@ let private renderModuleButton
         Html.div [
             prop.children [
                 renderRow
+                    messages
                     isExpanded
                     parentSelected
                     m.HasData
@@ -1588,6 +1619,7 @@ let private renderModuleButton
                             prop.key p.Id
                             prop.children [
                                 renderRow
+                                    messages
                                     isExpanded
                                     (p.Id = selectedModule)
                                     m.HasData
@@ -1682,6 +1714,7 @@ let private SortableItem (id: string) (dragLabel: string) (stopKey: string) (tab
 /// skipped in `railStops`: this button is the only control that opens the
 /// section, so a traversal that stepped over it would strand the contents.
 let private renderSectionHeader
+    (messages: SidebarMessages)
     (onGroupToggled: string -> unit)
     (activeKey: string)
     (section: SidebarSection)
@@ -1703,7 +1736,7 @@ let private renderSectionHeader
         // name stays stable as glyphs accumulate inside the button — it
         // already carries a chevron and, in the pinned section, a pin.
         // No tooltip: the label is right there.
-        prop.ariaLabel (rowAccessibleName section.Key title)
+        prop.ariaLabel (rowAccessibleName messages section.Key title)
         dataProp.custom RailStopAttr stopKey
         prop.tabIndex (railTabIndex activeKey stopKey)
         prop.ariaExpanded (not section.IsCollapsed)
@@ -1756,6 +1789,12 @@ let Sidebar
     (onHideToggled: string -> unit)
     (onReorder: string -> string list -> unit)
     =
+    // Phase 767 — the sidebar's catalog section, read once at the
+    // component boundary and threaded through the plain render functions
+    // below. Outside a provider the hook serves the built-in English, so
+    // a harness mounting the rail alone renders exactly as before.
+    let messages = (MessageCatalogProvider.useMessages ()).Sidebar
+
     // The rail widens on hover — and, since Phase 612, on FOCUS. The two
     // are separate flags rather than one `setIsExpanded` because they can
     // be true at once and each has to be able to end without cancelling
@@ -1893,6 +1932,7 @@ let Sidebar
 
         let renderOne (m: SidebarModule) =
             renderModuleButton
+                messages
                 isExpanded
                 inHiddenSection
                 inPlacedSection
@@ -1939,7 +1979,7 @@ let Sidebar
                     let item =
                         SortableItem
                             m.Id
-                            ("Reorder " + rowAccessibleName m.Id m.Name)
+                            (messages.Reorder(rowAccessibleName messages m.Id m.Name))
                             reorderKey
                             (railTabIndex activeKey reorderKey)
                             (renderOne m)
@@ -1967,7 +2007,9 @@ let Sidebar
             // default). Falling back to the lead module's name is honest —
             // the icon rendered below IS that module's icon.
             let groupLabel =
-                section.Title |> Option.defaultValue lead.Name |> rowAccessibleName section.Key
+                section.Title
+                |> Option.defaultValue lead.Name
+                |> rowAccessibleName messages section.Key
 
             // Phase 612 — the narrow rail's disclosure. One stop stands for
             // the whole collapsed section, and it is the ONLY keyboard route
@@ -2007,7 +2049,7 @@ let Sidebar
                         // `showsRowsInExpandedRail`, whenever it is UNTITLED
                         // and so has no header to toggle in the first place.
                         match section.Title with
-                        | Some title -> renderSectionHeader onGroupToggled activeKey section title
+                        | Some title -> renderSectionHeader messages onGroupToggled activeKey section title
                         | None -> ()
 
                         if showsRowsInExpandedRail section then
@@ -2135,10 +2177,7 @@ let Sidebar
                         ]
                     ]
                     if isExpanded then
-                        Html.span [
-                            prop.className "ml-2 text-white/40 text-xs"
-                            prop.text "Powered by ToolUp-Forge"
-                        ]
+                        Html.span [ prop.className "ml-2 text-white/40 text-xs"; prop.text messages.PoweredBy ]
                 ]
             ]
         ]

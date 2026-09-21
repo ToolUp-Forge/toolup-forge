@@ -105,6 +105,43 @@ Three properties are worth naming, because they are the whole design:
 An override that raises is swallowed back to the built-in catalog. A
 translation bug degrades the shell's language, never its availability.
 
+## Start from the skeleton (Phase 767)
+
+The example above shows the *shape*; the file to actually start from is
+[`message-catalog-skeleton.fs`](message-catalog-skeleton.fs) — every leaf
+the catalog serves, keyed by section and field, with its English text in a
+comment above it, already in that shape. It is generated from
+`MessageCatalog.english` by `dev-scripts/generate-localization-skeleton.ps1`,
+byte-compared by the gate on every run, and compiled into the platform test
+pack, so it is never behind the catalog and never fails to type-check
+against it. Copy it into your client project, rename the module, translate
+the values you want, delete the fields you do not, and wire `catalog`
+through `MessageCatalogOverride` exactly as the French example does.
+
+Two things it does on purpose:
+
+- **Every value starts as its English text, and the English is repeated in
+  the comment.** The comment is what survives your edit — once
+  `SignOut = "Se déconnecter"` is in place, the line above it still says
+  what the string meant, which is what a reviewer or a second translator
+  needs. A field you leave untouched renders English, exactly as if you had
+  deleted it.
+- **A parameterised message is left pointing at the English function**
+  (`ResultsAvailableIn = c.Shell.ResultsAvailableIn`), with its type and a
+  sample rendering in the comment (`"Results available in {a}"` — the
+  `{a}` shows where the argument lands). The generator does not invent a
+  lambda for you: a template recovered from one sample would compile, ship,
+  and be subtly wrong for any message that branches on its argument. Replace
+  it with `fun moduleName -> $"…"` of the shape the comment names.
+
+The sidebar is in it. Its section titles (`Pinned`, `Hidden items`,
+`Other`), the pin / hide tooltips, the accessible-name fallbacks for the
+reserved rows and the rail footer all ride `SidebarMessages`; the section
+keys and row ids the sidebar is keyed on are not strings a translation can
+reach, so translating a title moves no entry and breaks no saved
+preference. The `Layout` loading regions and the empty-shell placeholder
+ride `ShellMessages.Loading` / `NoModulesAvailable`.
+
 ## The worked example: the pseudo-locale (Phase 758)
 
 The section above shows the *shape* of a translation. This one is a
@@ -161,8 +198,14 @@ English source, and — separately — that no swept view passes a bare
 string literal where a catalog field belongs. The second half excludes
 three recorded classes: glyphs and separators (`—`, `×`, `▾`), a label
 that *is* its own wire value (an `Html.option` whose text equals its
-`prop.value`), and `Client/UI/` — the sidebar and toolkit chrome
-deliberately deferred behind the toolkit extraction.
+`prop.value`), and a whole-line comment (a `///` usage example reaches
+no reader). It sweeps the shell, every built-in module, the sidebar, and
+— since Phase 767 — the `ToolUp.Platform.UI` toolkit, which holds no
+catalog at all: every toolkit component takes its text from its caller,
+so a literal there is a component that stopped honouring that posture
+rather than a string that missed the catalog. (The sidebar and the
+toolkit were a recorded deferral behind the toolkit extraction until
+767 swept both; the gate pins that the deferral cannot quietly return.)
 
 ## Switching language in-session
 

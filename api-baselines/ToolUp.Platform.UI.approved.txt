@@ -96,9 +96,9 @@ Toolup.UIToolkit.FilePicker+FilePickerProps.Trigger : Fable.React.ReactElement {
 Toolup.UIToolkit.Forms (class)
 Toolup.UIToolkit.Forms.aiNamed(System.String, Fable.React.ReactElement) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms.checkbox(System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-Toolup.UIToolkit.Forms.dataSourcePicker(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+DataSourceOption], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms.dataSourcePicker(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+DataSourceOption], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms.dropdown(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : Fable.React.ReactElement
-Toolup.UIToolkit.Forms.fileUpload(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[Browser.Types.File, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms.fileUpload(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[Browser.Types.File, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Button (class)
 Toolup.UIToolkit.Forms+Button.primary(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Button.secondary(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
@@ -145,7 +145,7 @@ Toolup.UIToolkit.OutputFormatting.formatPercentage(System.Decimal) : System.Stri
 Toolup.UIToolkit.OutputFormatting.phiChar : System.String { get }
 Toolup.UIToolkit.StateViews (class)
 Toolup.UIToolkit.StateViews.emptyState(Fable.React.ReactElement, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Toolup.UIToolkit.StateViews+EmptyStateAction]) : Fable.React.ReactElement
-Toolup.UIToolkit.StateViews.errorBanner(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
+Toolup.UIToolkit.StateViews.errorBanner(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews.inlineLoading(System.String) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews.noData(System.String) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews+EmptyStateAction (class)

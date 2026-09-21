@@ -62,7 +62,10 @@ module StateViews =
 
     /// Dismissible error banner. Generalises the bespoke red-50 banners each
     /// module hand-rolled. Pass `None` for a non-dismissible banner.
-    let errorBanner (message: string) (onDismiss: (unit -> unit) option) =
+    /// `dismissLabel` is the dismiss button's tooltip / accessible name
+    /// (Phase 767 — caller-supplied; the toolkit carries no string of its
+    /// own).
+    let errorBanner (message: string) (dismissLabel: string) (onDismiss: (unit -> unit) option) =
         Html.div [
             prop.className "flex items-start gap-3 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3"
             prop.children [
@@ -72,7 +75,7 @@ module StateViews =
                     Html.button [
                         prop.className
                             "text-[var(--neg)] hover:text-[var(--neg)]/80 transition-colors flex-shrink-0 text-lg leading-none"
-                        prop.title "Dismiss"
+                        prop.title dismissLabel
                         prop.onClick (fun _ -> dismiss ())
                         prop.text "×"
                     ]

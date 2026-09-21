@@ -5489,14 +5489,16 @@ ToolUp.Platform.SessionSecurityMode+Tags.DefaultSessionSecurity : System.Int32 (
 ToolUp.Platform.SessionSecurityMode+Tags.ExternalSessionSecurity : System.Int32 (literal)
 ToolUp.Platform.SessionSecurityMode+Tags.NoSessionSecurity : System.Int32 (literal)
 ToolUp.Platform.ShellMessages (class)
-ToolUp.Platform.ShellMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String)
+ToolUp.Platform.ShellMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String)
 ToolUp.Platform.ShellMessages.AdministrationArea : System.String { get }
 ToolUp.Platform.ShellMessages.BackToApp : System.String { get }
 ToolUp.Platform.ShellMessages.CreateTeam : System.String { get }
 ToolUp.Platform.ShellMessages.CreateTeamFailed : System.String { get }
 ToolUp.Platform.ShellMessages.CreatingTeam : System.String { get }
+ToolUp.Platform.ShellMessages.Loading : System.String { get }
 ToolUp.Platform.ShellMessages.MemberViewHint : System.String { get }
 ToolUp.Platform.ShellMessages.ModuleNotFound : System.String { get }
+ToolUp.Platform.ShellMessages.NoModulesAvailable : System.String { get }
 ToolUp.Platform.ShellMessages.NoTeamBody : System.String { get }
 ToolUp.Platform.ShellMessages.NoTeamHeading : System.String { get }
 ToolUp.Platform.ShellMessages.NoViewForRoute : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
@@ -5512,12 +5514,20 @@ ToolUp.Platform.ShellMessages.TeamLabel : System.String { get }
 ToolUp.Platform.ShellMessages.TeamNamePlaceholder : System.String { get }
 ToolUp.Platform.ShellMessages.ViewingAllModules : System.String { get }
 ToolUp.Platform.SidebarMessages (class)
-ToolUp.Platform.SidebarMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.SidebarMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.SidebarMessages.AdminAreaEntry : System.String { get }
+ToolUp.Platform.SidebarMessages.AdminHomeEntry : System.String { get }
+ToolUp.Platform.SidebarMessages.HiddenItemsSection : System.String { get }
 ToolUp.Platform.SidebarMessages.Hide : System.String { get }
+ToolUp.Platform.SidebarMessages.HomeEntry : System.String { get }
+ToolUp.Platform.SidebarMessages.OtherSection : System.String { get }
 ToolUp.Platform.SidebarMessages.Pin : System.String { get }
 ToolUp.Platform.SidebarMessages.PinnedSection : System.String { get }
 ToolUp.Platform.SidebarMessages.PoweredBy : System.String { get }
+ToolUp.Platform.SidebarMessages.ProductAreaEntry : System.String { get }
+ToolUp.Platform.SidebarMessages.Reorder : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.SidebarMessages.Restore : System.String { get }
+ToolUp.Platform.SidebarMessages.UnnamedEntry : System.String { get }
 ToolUp.Platform.SidebarMessages.Unpin : System.String { get }
 ToolUp.Platform.SidebarVisibility (class)
 ToolUp.Platform.SidebarVisibility.canNavigateTo`1(Microsoft.FSharp.Core.FSharpFunc`2[m, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts], ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, m) : System.Boolean
@@ -6037,6 +6047,7 @@ Toolup.Sidebar.RailStopAttr : System.String (literal)
 Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.Sidebar.TrailingKey : System.String (literal)
 Toolup.Sidebar.buildSections(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
+Toolup.Sidebar.buildSectionsWith(ToolUp.Platform.SidebarMessages, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
 Toolup.Sidebar.flatten(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModule]
 Toolup.Sidebar.moveHorizontal(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 Toolup.Sidebar.moveVertical(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]

@@ -119,6 +119,8 @@ module MessageCatalog =
             ResultsAvailableIn = fun moduleName -> $"Results available in {moduleName}"
             NoViewForRoute = fun route -> $"No view registered for page route {route}"
             ModuleNotFound = "Error: Module not found"
+            NoModulesAvailable = "No modules are available for this account."
+            Loading = "Loading"
         }
         BootDegradation = {
             Heading = "Some data failed to load"
@@ -185,10 +187,18 @@ module MessageCatalog =
         }
         Sidebar = {
             PinnedSection = "Pinned"
+            HiddenItemsSection = "Hidden items"
+            OtherSection = "Other"
             Pin = "Pin"
             Unpin = "Unpin"
             Hide = "Hide"
             Restore = "Restore"
+            Reorder = fun rowName -> $"Reorder {rowName}"
+            HomeEntry = "Home"
+            AdminHomeEntry = "Administration home"
+            AdminAreaEntry = "Administration"
+            ProductAreaEntry = "Back to app"
+            UnnamedEntry = "Unnamed entry"
             PoweredBy = "Powered by ToolUp-Forge"
         }
         TeamManager = {

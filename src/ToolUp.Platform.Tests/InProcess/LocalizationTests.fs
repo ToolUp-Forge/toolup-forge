@@ -8,6 +8,7 @@ open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
 open Expecto
+open FSharp.Reflection
 open ToolUp.Platform
 
 // ─── Phase 758 — the localization regression gate ─────────────────────
@@ -235,14 +236,24 @@ let private repoRoot () =
     let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
     Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-/// The directories Phase 751 swept. A new client package added outside
-/// this list is not covered — which is a deliberate limit rather than an
-/// oversight: the list is the sweep's own scope, and widening it is the
-/// act of sweeping a package, not of editing a test.
+/// The directories Phase 751 swept, plus the UI toolkit Phase 767 swept.
+/// A new client package added outside this list is not covered — which
+/// is a deliberate limit rather than an oversight: the list is the
+/// sweep's own scope, and widening it is the act of sweeping a package,
+/// not of editing a test.
+///
+/// `ToolUp.Platform.UI` is on the list for a different reason from the
+/// other three: it holds NO catalog and never will (the toolkit takes
+/// every string from its caller — see its fsproj header), so a literal
+/// there is not "un-externalised", it is a component that stopped
+/// honouring the labels-passed-in posture. Same finding, same remedy
+/// shape (a parameter rather than a field), and the same scanner sees
+/// both.
 let private sweptDirs = [
     Path.Combine("src", "ToolUp.Platform.Client", "Client")
     Path.Combine("src", "ToolUp.KnowledgeBase.Client")
     Path.Combine("src", "AuthProviders")
+    Path.Combine("src", "ToolUp.Platform.UI")
 ]
 
 /// The props that put a literal in front of a reader. Deliberately
@@ -261,17 +272,14 @@ let private literalProp =
 let private wireShapedOption =
     Regex(@"prop\.value\s+""((?:[^""\\]|\\.)*)""", RegexOptions.Compiled)
 
-/// The toolkit-adjacent chrome Phase 444 deferred behind the toolkit
-/// extraction (Phases 307 / 344), and Phase 751 was explicitly told not
-/// to sweep. `Client/UI/` is Sidebar plus `Toolkit/`, and they are one
-/// deferral rather than two: 444's note gives the SAME reason for both —
-/// localising them threads the catalog through the exact render surfaces
-/// those phases restructure, and the toolkit boundary should decide
-/// whether it takes a messages parameter or stays string-free with
-/// labels passed in. Excluding them here records the deferral; it does
-/// not extend it. When 307/344 land, delete this arm and sweep.
-let private deferredDir =
-    Path.Combine("Client", "UI") + Path.DirectorySeparatorChar.ToString()
+/// A line that is comment from its first non-blank character. A `///`
+/// doc example (`Data.fs` shows `Html.text "Row 1"` in its usage
+/// comment) or a commented-out prop reaches no reader, so it is not a
+/// finding — and without this arm sweeping the toolkit would have
+/// reported its documentation. Deliberately the WHOLE-line form only: a
+/// trailing `// prop.text "x"` after real code is rare enough that
+/// treating the line as code errs on the side of a finding.
+let private commentLine = Regex(@"^\s*//", RegexOptions.Compiled)
 
 type private Finding = {
     File: string
@@ -280,13 +288,20 @@ type private Finding = {
 }
 
 /// Classify one source line. `None` means nothing to report — either no
-/// literal, or one of the three recorded exclusion classes.
+/// literal, or one of the three recorded exclusion classes (a glyph, a
+/// wire-shaped option, a comment line).
+///
+/// Until Phase 767 there was a fourth: a PATH exclusion over `Client/UI/`
+/// recording the sidebar-and-toolkit deferral Phase 444 made behind the
+/// toolkit extraction. 767 swept both, and the arm is gone rather than
+/// emptied — the go-red test below pins that a Sidebar literal is a
+/// finding again, so the deferral cannot quietly return.
 ///
 /// Factored out of the file walk so it can be exercised on synthetic
 /// input below: a gate whose classifier is only ever run over a tree
 /// that passes is a gate nobody has seen fail.
 let private scanLine (relativePath: string) (lineNumber: int) (text: string) : Finding list =
-    if relativePath.Replace('/', Path.DirectorySeparatorChar).Contains deferredDir then
+    if commentLine.IsMatch text then
         []
     else
         let wireValues =
@@ -388,7 +403,7 @@ let private sourceGateTests =
             Expect.equal found.Line 42 "with its line"
         }
 
-        test "the classifier excludes a glyph, a wire-shaped option and the deferred toolkit" {
+        test "the classifier excludes a glyph, a wire-shaped option and a comment line" {
             Expect.isEmpty (scanLine "a/B.fs" 1 """Html.span [ prop.text "—" ]""") "a dash is not text"
             Expect.isEmpty (scanLine "a/B.fs" 1 """Html.span [ prop.text "" ]""") "nor is a blank"
 
@@ -397,20 +412,43 @@ let private sourceGateTests =
                 "a label that is its own wire value is not prose"
 
             Expect.isEmpty
+                (scanLine "a/B.fs" 1 """    ///     [ Html.text "Row 1"; Html.text "Row 2" ]   // first column""")
+                "a doc-comment example reaches no reader"
+
+            Expect.isEmpty
+                (scanLine "a/B.fs" 1 """        // prop.text "Save changes" """)
+                "nor does a commented-out prop"
+
+            // …and the comment arm is whole-line only: code followed by a
+            // trailing comment is still code.
+            Expect.isNonEmpty
+                (scanLine "a/B.fs" 1 """Html.span [ prop.text "Save changes" ] // was: prop.text "Save" """)
+                "a trailing comment does not exempt the code before it"
+        }
+
+        test "the Sidebar and the toolkit are swept, not deferred — go-red (Phase 767)" {
+            // Phase 444 recorded `Client/UI/` as a path exclusion and 751
+            // honoured it; 767 swept it. This pins the arm's ABSENCE: the
+            // exact probe the old exclusion test used to expect empty must
+            // now be a finding, on both halves of the former deferral.
+            Expect.isNonEmpty
                 (scanLine
                     (Path.Combine("src", "ToolUp.Platform.Client", "Client", "UI", "Sidebar.fs"))
                     1
                     """Html.span [ prop.text "Powered by ToolUp-Forge" ]""")
-                "the Sidebar deferral is recorded, not swept"
+                "a Sidebar literal is a finding again"
 
-            // …and the exclusion is scoped: the same literal elsewhere is
-            // still a finding, so the deferral cannot silently spread.
             Expect.isNonEmpty
                 (scanLine
-                    "src/ToolUp.Platform.Client/Client/Home.fs"
+                    (Path.Combine("src", "ToolUp.Platform.UI", "Toolkit", "Forms.fs"))
                     1
-                    """Html.span [ prop.text "Powered by ToolUp-Forge" ]""")
-                "the deferral is a path exclusion, not a literal one"
+                    """                    prop.text "CHOOSE FILE" """)
+                "a toolkit literal is a finding"
+
+            Expect.contains
+                (sweptFiles () |> List.map fst)
+                (Path.Combine("src", "ToolUp.Platform.UI", "Toolkit", "Forms.fs"))
+                "the toolkit is inside the swept set, so the finding above is reachable by the file walk"
         }
 
         test "a wire-shaped exclusion does not hide a real label on the same line" {
@@ -424,5 +462,284 @@ let private sourceGateTests =
         }
     ]
 
+// ─── 3. The translation skeleton (Phase 767) ──────────────────────────
+//
+// `docs/platform/message-catalog-skeleton.fs` is a GENERATED projection
+// of `MessageCatalog.english`: every leaf the catalog serves, keyed by
+// section and field, with its English text in a comment above it, in the
+// copy-and-update shape `docs/platform/client-localization.md` teaches.
+// Before it existed a consumer authoring a second language had one
+// French fragment in the docs to copy from and a 1,000-line `english`
+// value to read; the skeleton is the thing to copy instead.
+//
+// Same golden-file discipline as the audit-event and config references:
+// the test COMPARES by default and WRITES under
+// `TOOLUP_REGEN_LOCALIZATION_SKELETON=1`, which
+// `dev-scripts/generate-localization-skeleton.ps1` sets. A catalog field
+// added without regenerating fails here, naming the script. The file is
+// also compiled into this test project (see the fsproj), so a skeleton
+// that no longer type-checks against the catalog — a field renamed or
+// removed — fails the BUILD naming the field, which is the doc's own
+// promise about translations ("the compiler is loud where silence would
+// be wrong").
+
+module private CatalogSkeleton =
+
+    let path () =
+        Path.Combine(repoRoot (), "docs", "platform", "message-catalog-skeleton.fs")
+
+    let regen () =
+        match Environment.GetEnvironmentVariable "TOOLUP_REGEN_LOCALIZATION_SKELETON" with
+        | null
+        | "" -> false
+        | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+
+    /// An F# string literal for `text`, escaped so a message carrying a
+    /// quote, a backslash or a line break round-trips through the compiler.
+    let private literal (text: string) =
+        let escaped = text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n")
+
+        "\"" + escaped + "\""
+
+    /// Decompose a curried function type into its argument types and the
+    /// type it finally returns.
+    let rec private signature (t: Type) : Type list * Type =
+        if FSharpType.IsFunction t then
+            let domain, range = FSharpType.GetFunctionElements t
+            let args, result = signature range
+            domain :: args, result
+        else
+            [], t
+
+    let private typeName (t: Type) =
+        if t = typeof<string> then "string"
+        elif t = typeof<int> then "int"
+        elif t = typeof<int64> then "int64"
+        else t.Name
+
+    /// The sample argument for a parameter of type `t`: a string
+    /// parameter is rendered as its placeholder name so the sample text
+    /// shows WHERE the substitution lands; a number is a small literal.
+    let private sampleArg (name: string) (t: Type) : obj =
+        if t = typeof<string> then
+            box $"{{{name}}}"
+        elif t = typeof<int> then
+            box 1
+        elif t = typeof<int64> then
+            box 1L
+        else
+            failwithf
+                "the skeleton generator has no sample for a `%s` parameter — add one beside `sampleArg`"
+                t.FullName
+
+    let private paramNames = [ "a"; "b"; "c"; "d"; "e" ]
+
+    /// Apply a curried F# function value to one sample per parameter and
+    /// return the string it builds. Reflection over `Invoke` is fine
+    /// here — this runs on .NET only, inside the test pack.
+    let private sample (f: obj) (args: Type list) : string =
+        let applied =
+            List.zip (List.truncate args.Length paramNames) args
+            |> List.fold
+                (fun (current: obj) (name, t) ->
+                    let invoke = current.GetType().GetMethod("Invoke", [| t |])
+                    invoke.Invoke(current, [| sampleArg name t |]))
+                f
+
+        applied :?> string
+
+    /// Render the inside of one record's copy-and-update block — the
+    /// `<expr> with` line and the field lines under it, in the shape the
+    /// localization doc teaches. `expr` names the record being updated
+    /// (`c.Shell`, `c.BootDegradation.Sources`, …); `indent` is the
+    /// column of the `Field = {` line that opened the block, so the
+    /// `with` sits one level in and the fields two.
+    let rec private renderRecord
+        (indent: int)
+        (expr: string)
+        (t: Type)
+        (value: obj)
+        (leaves: int ref)
+        (parameterised: int ref)
+        : string list =
+        let withPad = String(' ', indent + 4)
+        let inner = String(' ', indent + 8)
+
+        let body =
+            FSharpType.GetRecordFields(t, true)
+            |> Array.toList
+            |> List.collect (fun field ->
+                let ft = field.PropertyType
+                let fv = field.GetValue value
+                let fieldExpr = $"{expr}.{field.Name}"
+
+                if ft = typeof<string> then
+                    leaves.Value <- leaves.Value + 1
+                    let en = fv :?> string
+                    [ $"{inner}// en: {literal en}"; $"{inner}{field.Name} = {literal en}" ]
+                elif FSharpType.IsFunction ft then
+                    leaves.Value <- leaves.Value + 1
+                    parameterised.Value <- parameterised.Value + 1
+                    let args, result = signature ft
+
+                    if result <> typeof<string> then
+                        failwithf "catalog leaf %s builds a %s, not a string" fieldExpr result.FullName
+
+                    let shape = (args @ [ result ]) |> List.map typeName |> String.concat " -> "
+
+                    let lambdaParams =
+                        List.zip (List.truncate args.Length paramNames) args
+                        |> List.map (fun (n, t) -> $"({n}: {typeName t})")
+                        |> String.concat " "
+
+                    [
+                        $"{inner}// en ({shape}): {literal (sample fv args)}"
+                        $"{inner}// translate as `fun {lambdaParams} -> $\"…\"`; left as the English message until you do"
+                        $"{inner}{field.Name} = {fieldExpr}"
+                    ]
+                elif FSharpType.IsRecord(ft, true) then
+                    [
+                        $"{inner}{field.Name} = {{"
+                        yield! renderRecord (indent + 8) fieldExpr ft fv leaves parameterised
+                        $"{inner}}}"
+                    ]
+                else
+                    failwithf
+                        "catalog field %s has type %s, which the skeleton generator does not render"
+                        fieldExpr
+                        ft.FullName)
+
+        [ $"{withPad}{expr} with"; yield! body ]
+
+    /// The whole skeleton, deterministic from `MessageCatalog.english`.
+    let render () : string =
+        let leaves = ref 0
+        let parameterised = ref 0
+
+        // The root record is special: `Locale` is machinery (it reaches
+        // `Intl`, and the shell stamps it), so the skeleton never sets it
+        // and the walk starts one level down at the sections.
+        let sections =
+            FSharpType.GetRecordFields(typeof<MessageCatalog>, true)
+            |> Array.toList
+            |> List.filter (fun f -> f.Name <> "Locale")
+            |> List.collect (fun field ->
+                if not (FSharpType.IsRecord(field.PropertyType, true)) then
+                    failwithf "root catalog field %s is not a section record" field.Name
+
+                let fieldExpr = $"c.{field.Name}"
+
+                [
+                    $"        {field.Name} = {{"
+                    yield!
+                        renderRecord
+                            8
+                            fieldExpr
+                            field.PropertyType
+                            (field.GetValue MessageCatalog.english)
+                            leaves
+                            parameterised
+                    "        }"
+                ])
+
+        let header = [
+            "// GENERATED FILE — do not edit by hand. Regenerate with `dev-scripts/generate-localization-skeleton.ps1`."
+            "// The source of truth is `MessageCatalog.english` in src/ToolUp.Platform.Client/Client/MessageCatalog.fs."
+            "//"
+            "// A translation skeleton for `MessageCatalog` (Phase 767): every string the SDK's client"
+            "// shell and built-in modules can render, keyed by section and field, with its English"
+            "// text in the comment above it. Copy this file into your client project, rename the"
+            "// module, replace the values you translate, and wire `catalog` through"
+            "// `ClientConfig.MessageCatalogOverride` — see docs/platform/client-localization.md."
+            "//"
+            "// Two properties make a half-finished translation safe to ship: a field you DELETE"
+            "// from this file keeps the built-in English (the shape is ordinary copy-and-update),"
+            "// and a field you leave with its English value renders English too. A parameterised"
+            "// message is a FUNCTION field; it is left pointing at the English message until you"
+            "// replace it with a lambda of the shape its comment names."
+            "//"
+            $"// Leaves: {leaves.Value} ({parameterised.Value} parameterised)."
+            ""
+            "module ToolUp.Platform.Localization.Skeleton"
+            ""
+            "open ToolUp.Platform"
+            ""
+            "/// The translation. `c` is the built-in catalog stamped with the resolved locale;"
+            "/// return it unchanged for every locale you do not cover."
+            "let catalog (c: MessageCatalog) : MessageCatalog = {"
+            "    c with"
+        ]
+
+        // `leaves` is only final after `sections` has been forced, and the
+        // header line that reports it is built after — the list above is
+        // evaluated eagerly in source order, which is why `sections` is
+        // bound first.
+        let rendered = header @ sections @ [ "}"; "" ]
+        String.concat "\n" rendered
+
+let private skeletonTests =
+    testList "translation skeleton (Phase 767)" [
+
+        test "docs/platform/message-catalog-skeleton.fs matches the catalog (regenerable, exhaustive)" {
+            let rendered = CatalogSkeleton.render ()
+            let path = CatalogSkeleton.path ()
+
+            if CatalogSkeleton.regen () then
+                Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+                File.WriteAllText(path, rendered)
+            else
+                Expect.isTrue
+                    (File.Exists path)
+                    $"{path} is missing. Generate it with `dev-scripts/generate-localization-skeleton.ps1`."
+
+                Expect.equal
+                    (File.ReadAllText(path).Replace("\r\n", "\n"))
+                    rendered
+                    "docs/platform/message-catalog-skeleton.fs is stale — a catalog field was added, removed or reworded without regenerating it. Run `dev-scripts/generate-localization-skeleton.ps1` and commit the result with the catalog change."
+        }
+
+        test "the skeleton names every leaf the pseudo-locale walk finds" {
+            // The two walks are independent implementations over the same
+            // record; agreeing on the count is what says the skeleton is
+            // exhaustive rather than a prefix.
+            let rendered = CatalogSkeleton.render ()
+            let expected = List.length (englishLeaves.Force()) - 1 // minus `.Locale`, which the skeleton never sets
+
+            let reported = Regex.Match(rendered, @"// Leaves: (\d+) \((\d+) parameterised\)")
+
+            Expect.isTrue reported.Success "the header reports its leaf count"
+
+            Expect.equal
+                (int reported.Groups[1].Value)
+                expected
+                "leaf count agrees with `PseudoLocaleCatalog.stringLeaves`"
+
+            Expect.isGreaterThan
+                (int reported.Groups[2].Value)
+                0
+                "the catalog has parameterised messages, and the skeleton renders them"
+        }
+
+        test "a parameterised leaf is rendered as a passthrough with its sample, not evaluated into a literal" {
+            let rendered = CatalogSkeleton.render ()
+
+            Expect.stringContains
+                rendered
+                "// en (string -> string): \"Results available in {a}\""
+                "the sample shows where the argument lands"
+
+            Expect.stringContains
+                rendered
+                "ResultsAvailableIn = c.Shell.ResultsAvailableIn"
+                "the value keeps the English function rather than freezing one sample as text"
+        }
+
+        test "the Sidebar section is in the skeleton, with the titles 767 catalogued" {
+            let rendered = CatalogSkeleton.render ()
+            Expect.stringContains rendered "HiddenItemsSection = \"Hidden items\"" "hidden-items title"
+            Expect.stringContains rendered "PoweredBy = \"Powered by ToolUp-Forge\"" "rail footer"
+        }
+    ]
+
 let tests =
-    testList "ToolUp.Platform localization gate (Phase 758)" [ coverageTests; sourceGateTests ]
+    testList "ToolUp.Platform localization gate (Phase 758)" [ coverageTests; sourceGateTests; skeletonTests ]

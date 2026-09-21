@@ -3056,7 +3056,9 @@ module Client =
                         Placement = moduleImpl.Placement
                     })
 
-            Toolup.Sidebar.buildSections (views @ switcherViews) model.SidebarPrefs
+            // Phase 767 — the sidebar's section titles come from the
+            // resolved catalog, like every other shell string.
+            Toolup.Sidebar.buildSectionsWith resolvedCatalog.Sidebar (views @ switcherViews) model.SidebarPrefs
 
         // Header team switcher — only rendered when the deployment
         // declares a `Team` surface with `Switching = HeaderSwitcher`

@@ -969,9 +969,14 @@ let accessibleNameTests =
         test "the row renderer names the row, not its section" {
             let code = sidebarCode ()
 
+            // Phase 767 threaded the catalog section through as the first
+            // argument (`rowAccessibleName messages rowId name`); the claim
+            // — resolved from the ROW's own id and display name — is the
+            // same, so the probe reads the two row arguments, not the
+            // whole call.
             Expect.stringContains
                 code
-                "let accessibleName = rowAccessibleName rowId name"
+                "let accessibleName = rowAccessibleName messages rowId name"
                 "renderRow must resolve the accessible name from the ROW's own id and display \
                  name. The pre-609 rail named only sections (the collapsed-group icon's \
                  `prop.title`), which is exactly the wrong granularity: every row inside a \

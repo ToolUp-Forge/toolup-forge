@@ -109,6 +109,13 @@ type ShellMessages = {
     NoViewForRoute: string -> string
     /// Rendered when the active module id resolves to nothing.
     ModuleNotFound: string
+    /// The empty-shell placeholder `Layout.AppShell` renders when the
+    /// access filter leaves a user with no module at all (Phase 767).
+    NoModulesAvailable: string
+    /// Accessible name of every `role="status"` loading region the shell
+    /// and `Layout` render — the skeleton, the brand mark, the spinner
+    /// (Phase 767).
+    Loading: string
 }
 
 /// Human labels for the boot-degradation banner's per-source rows —
@@ -202,13 +209,37 @@ type CommandPaletteMessages = {
 }
 
 /// The sidebar's per-entry controls and chrome.
+///
+/// Minted by Phase 444 and left unread until Phase 767 — 444 recorded the
+/// sidebar as a deliberate deferral behind the toolkit extraction (Phase
+/// 307), and 767 is the successor that threads this section through
+/// `Toolup.Sidebar`. The section titles and the reserved-row fallbacks
+/// are DISPLAY text only: `buildSections` keys every section by its
+/// stable `_pinned` / `_hidden` / `_other` constant and every row by its
+/// id, so a translation moves no entry and breaks no preference blob.
 type SidebarMessages = {
     /// Title of the pinned section.
     PinnedSection: string
+    /// Title of the per-user "Hidden items" reveal section (Phase 572).
+    HiddenItemsSection: string
+    /// Title of the ungrouped catch-all section, shown only when there is
+    /// another section to contrast it against.
+    OtherSection: string
     Pin: string
     Unpin: string
     Hide: string
     Restore: string
+    /// Accessible name of the drag handle wrapping a reorderable row —
+    /// takes the row's own accessible name.
+    Reorder: string -> string
+    /// Accessible-name fallbacks for the four reserved rows whose loss
+    /// strands the user, used only when the row's display name is blank.
+    HomeEntry: string
+    AdminHomeEntry: string
+    AdminAreaEntry: string
+    ProductAreaEntry: string
+    /// Accessible-name fallback for any other row with a blank name.
+    UnnamedEntry: string
     /// Footer attribution rendered under the rail.
     PoweredBy: string
 }

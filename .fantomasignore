@@ -32,3 +32,10 @@ proofs/.extract/
 # next build re-dirty them, over source nobody wrote. Same class as the
 # oracle above.
 samples/HelloWorld-AOT/HelloWorld.AOT/Generated/
+
+# Phase 767 — `docs/platform/message-catalog-skeleton.fs` is the translation
+# skeleton `LocalizationTests` renders from `MessageCatalog.english` and
+# byte-compares on every run (regenerate with
+# dev-scripts/generate-localization-skeleton.ps1). Formatting it would break
+# that comparison over source nobody wrote — same class as the two above.
+docs/platform/message-catalog-skeleton.fs

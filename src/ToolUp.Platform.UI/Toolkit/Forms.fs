@@ -401,9 +401,13 @@ module Forms =
             prop.className "w-5 h-5 accent-brand border-border rounded focus:ring-2 focus:ring-brand cursor-pointer"
         ]
 
-    /// File upload component
+    /// File upload component. `chooseFileLabel` is the text of the
+    /// choose-file button (Phase 767 — the toolkit takes every string it
+    /// renders from its caller, so a shell reading a message catalog
+    /// passes the localised label in; the toolkit itself carries none).
     let fileUpload
         (label: string)
+        (chooseFileLabel: string)
         (fileName: string option)
         (placeholder: string)
         (onFileSelected: Browser.Types.File -> unit)
@@ -452,7 +456,7 @@ module Forms =
                         "whitespace-nowrap"
                         "flex-shrink-0"
                     ]
-                    prop.text "CHOOSE FILE"
+                    prop.text chooseFileLabel
                 ]
 
                 // File name or placeholder
@@ -469,11 +473,15 @@ module Forms =
             ]
         ]
 
-    /// Data source picker - dropdown to select a processed data file
+    /// Data source picker - dropdown to select a processed data file.
+    /// `emptyMessage` is rendered in place of the dropdown when `options`
+    /// is empty (Phase 767 — caller-supplied, like every other string the
+    /// toolkit renders).
     let dataSourcePicker
         (label: string)
         (selectedFile: string option)
         (placeholder: string)
+        (emptyMessage: string)
         (options: DataSourceOption list)
         (onSelected: string option -> unit)
         =
@@ -490,7 +498,7 @@ module Forms =
                 | [] ->
                     Html.span [
                         prop.className "text-base text-[var(--muted)] italic"
-                        prop.text "No data files available — upload via Data Manager"
+                        prop.text emptyMessage
                     ]
                 | _ ->
                     let dropdownOptions =

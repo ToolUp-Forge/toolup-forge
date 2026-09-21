@@ -134,6 +134,26 @@ module Layout =
     let private pulseBlock (cls: string) : ReactElement =
         Html.div [ prop.className (sprintf "bg-gray-100 rounded animate-pulse %s" cls) ]
 
+    /// Phase 767 — the `role="status"` region every loading placeholder
+    /// below renders into, with its accessible name read from the
+    /// catalog. A component rather than a plain function because the
+    /// name comes from `useMessages ()`, and the loaders themselves are
+    /// plain functions called from the shell's `view` and from module
+    /// views — a hook cannot run there, but it can run inside the element
+    /// they return. Outside a provider the hook serves English, so a
+    /// harness rendering a loader alone sees `aria-label="Loading"` as
+    /// before.
+    [<ReactComponent>]
+    let private LoadingRegion (className: string) (children: ReactElement list) : ReactElement =
+        let messages = (MessageCatalogProvider.useMessages ()).Shell
+
+        Html.div [
+            prop.role "status"
+            prop.ariaLabel messages.Loading
+            prop.className className
+            prop.children children
+        ]
+
     /// 0.5.16 — content-area skeleton placeholder rendered by the shell
     /// during its `Prefetching` lifecycle phase (`Client.InitPhase`).
     /// Wrapped by the shell into `PageContent.Custom` so
@@ -144,19 +164,14 @@ module Layout =
     /// placeholder to assistive tech without announcing every block
     /// individually.
     let loadingSkeleton () : ReactElement =
-        Html.div [
-            prop.role "status"
-            prop.ariaLabel "Loading"
-            prop.className "flex gap-6 p-6 min-h-full"
-            prop.children [
-                Html.div [
-                    prop.className "w-96 shrink-0 space-y-3"
-                    prop.children [ pulseBlock "h-8 w-3/4"; pulseBlock "h-32 w-full"; pulseBlock "h-10 w-1/2" ]
-                ]
-                Html.div [
-                    prop.className "flex-1 min-w-0 space-y-3"
-                    prop.children [ pulseBlock "h-8 w-1/4"; pulseBlock "h-96 w-full" ]
-                ]
+        LoadingRegion "flex gap-6 p-6 min-h-full" [
+            Html.div [
+                prop.className "w-96 shrink-0 space-y-3"
+                prop.children [ pulseBlock "h-8 w-3/4"; pulseBlock "h-32 w-full"; pulseBlock "h-10 w-1/2" ]
+            ]
+            Html.div [
+                prop.className "flex-1 min-w-0 space-y-3"
+                prop.children [ pulseBlock "h-8 w-1/4"; pulseBlock "h-96 w-full" ]
             ]
         ]
 
@@ -168,12 +183,7 @@ module Layout =
     /// self-coloured (gradient) while the spinner picks up `text-*` via
     /// `currentColor`.
     let private centredLoader (wrapperClasses: string) (svgSizeClasses: string) (icon: ReactElement) : ReactElement =
-        Html.div [
-            prop.role "status"
-            prop.ariaLabel "Loading"
-            prop.className wrapperClasses
-            prop.children [ Html.div [ prop.className svgSizeClasses; prop.children [ icon ] ] ]
-        ]
+        LoadingRegion wrapperClasses [ Html.div [ prop.className svgSizeClasses; prop.children [ icon ] ] ]
 
     /// Resolve a `LoadingIndicatorMode` to the full-content-area element
     /// the shell renders during its `Prefetching` phase. `SkeletonLoader`
@@ -204,12 +214,7 @@ module Layout =
     let loadingIndicatorInline (mode: LoadingIndicatorMode) : ReactElement =
         match mode with
         | SkeletonLoader ->
-            Html.div [
-                prop.role "status"
-                prop.ariaLabel "Loading"
-                prop.className "space-y-3 py-8"
-                prop.children [ pulseBlock "h-5 w-1/3"; pulseBlock "h-24 w-full"; pulseBlock "h-5 w-1/4" ]
-            ]
+            LoadingRegion "space-y-3 py-8" [ pulseBlock "h-5 w-1/3"; pulseBlock "h-24 w-full"; pulseBlock "h-5 w-1/4" ]
         | BrandMarkLoader ->
             centredLoader
                 "flex items-center justify-center py-10"
@@ -251,6 +256,9 @@ module Layout =
         (headerAction: ReactElement option)
         (inputsWidth: InputsPaneWidth)
         =
+        // Phase 767 — read unconditionally, ahead of the empty-shell
+        // branch below, because it is a hook.
+        let messages = (MessageCatalogProvider.useMessages ()).Shell
         let flatModules = Toolup.Sidebar.flatten sections
 
         // Empty-module shell: the accessible-modules filter (RBAC) can legitimately
@@ -264,7 +272,7 @@ module Layout =
                         prop.className "text-center text-[var(--muted)]"
                         prop.children [
                             Html.h1 [ prop.className "text-xl font-semibold mb-2"; prop.text appName ]
-                            Html.p [ prop.text "No modules are available for this account." ]
+                            Html.p [ prop.text messages.NoModulesAvailable ]
                         ]
                     ]
                 ]
