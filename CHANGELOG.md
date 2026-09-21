@@ -63,6 +63,7 @@ Migration notes:
 - [783-remoting-decode-named-refusals](docs/migrations/783-remoting-decode-named-refusals.md)
 - [788-elmish-ring-and-sub-diff-theorems](docs/migrations/788-elmish-ring-and-sub-diff-theorems.md)
 - [793-tool-effect-class](docs/migrations/793-tool-effect-class.md)
+- [800-close-the-combinator-gaps](docs/migrations/800-close-the-combinator-gaps.md)
 - [803-fable-reader-parity](docs/migrations/803-fable-reader-parity.md)
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
 - [814-seam-principals](docs/migrations/814-seam-principals.md)
@@ -70,7 +71,7 @@ Migration notes:
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
-_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7914 members added, 84 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
+_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7918 members added, 84 members changed, 1381 members removed; 18 packages new, 2 packages withdrawn._
 
 ### Added
 
@@ -509,7 +510,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7914 members added
   - `AuditLogUI+LoadState.Loading : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Tag : System.Int32 { get }`
   - … and 2194 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 1503 members:
+- `ToolUp.Platform.Core` — 1507 members:
   - `ProcessedDataTypes+FileManagementApi.GetSessionInfo : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]] { get }`
   - `ProcessedDataTypes+SessionStoreInfo (class)`
   - `ProcessedDataTypes+SessionStoreInfo..ctor(System.Guid, System.Int32)`
@@ -530,7 +531,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7914 members added
   - `ToolUp.Platform.AIDenialGroupCount.Key : System.String { get }`
   - `ToolUp.Platform.AIDenialRollup (class)`
   - `ToolUp.Platform.AIDenialRollup..ctor(System.DateTime, System.String, System.Int32, System.Int32, System.Int32, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialGroupCount], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIDenialToolModulePair], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecentAIDenial])`
-  - … and 1483 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+  - … and 1487 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
 - `ToolUp.Platform.Server` — 1616 members:
   - `ToolUp.Platform.AccessAttestation (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload (class)`
@@ -579,7 +580,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7914 members added
 - `ToolUp.RAG.Server` — 2 members:
   - `ToolUp.RAG.RAGCompose+RAGServerApp.ScopeEnumerator : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IScopeEnumerator] { get }`
   - `ToolUp.RAG.RAGCompose+RAGServerAppModule.withScopeEnumerator(ToolUp.Platform.IScopeEnumerator, ToolUp.RAG.RAGCompose+RAGServerApp) : ToolUp.RAG.RAGCompose+RAGServerApp`
-- `ToolUp.Remoting.Generator` — new package (78 public members)
+- `ToolUp.Remoting.Generator` — new package (92 public members)
 - `ToolUp.Reporting.Core` — 140 members:
   - `ToolUp.Reporting.IStructuralNarrativeRenderer (interface)`
   - `ToolUp.Reporting.IStructuralNarrativeRenderer.StructuralNarrativeFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }`

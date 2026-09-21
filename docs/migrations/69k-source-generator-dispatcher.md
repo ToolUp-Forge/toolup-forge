@@ -72,6 +72,8 @@ The 13 that are not expressible are capped by exactly two gaps in the combinator
 
 Neither is fixed here. Adding combinators to the algebra while a concurrent phase is proving the shipped set total would invalidate the surface that proof pins — so the census records the demand, with counts, and the extension is a separate deliberate act. A contract test asserts both refusal classes are still present, so it goes red the day either is closed.
 
+> **Closed by Phase 800** (`Decode.tuple2`..`tuple4`, `Decode.fields`, and the generator arms that emit them — see [`800-close-the-combinator-gaps.md`](800-close-the-combinator-gaps.md)). The contract test above was inverted the same day and now asserts both gaps are CLOSED. Of the 14 records the census found blocked on the day 800 shipped (the assembly had grown to 38), 12 moved onto the algebra path; `FileManagementApi` (an `obj` field) and `IConversionApi` (`ColumnExpr` is *recursive*, a cycle the generator refuses by name) stay on the reflection path for reasons neither gap covered.
+
 `[<StringEnum>]` unions are refused for a different reason and one that is unlikely to change: the wire spelling of a case is Fable's casing rule plus any `[<CompiledName>]` override, and neither is recoverable from .NET metadata with enough confidence to emit.
 
 ## 69k.F was already shipped — as an analyzer
@@ -182,7 +184,7 @@ Revisit only if both change: the JSON follow-on lands and a request-level measur
 
 | | Why |
 |---|---|
-| Tuple and multi-field-union-case combinators | Demand is recorded with counts above. Phase 800 owns both; the AOT sample's recorded refusal set is where their arrival will show. |
+| Tuple and multi-field-union-case combinators | Demand is recorded with counts above. Phase 800 shipped both; the AOT sample's recorded refusal set shrank from ten to seven when they arrived, exactly as this row said it would. |
 | The algebra over the JSON request wire | 785.F's decision stands: a separate phase, over a value model that can carry an `int64`, an exact decimal and a source width. Until it ships the generated argument table is reflection-free only up to the seam it calls, as measured above. |
 | A `GeneratedDispatchRegistry` consumer in the adapter | The registry is unchanged since 69k. The typed table is the manifest and the parse; wiring it into the adapter's route registration is the JSON follow-on's companion, not a step to take while its parse cannot run natively. |
 

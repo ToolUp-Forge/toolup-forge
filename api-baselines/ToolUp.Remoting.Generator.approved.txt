@@ -3,6 +3,20 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Remoting.Generator.CasePayload (class)
+ToolUp.Remoting.Generator.CasePayload.IsNoFields : System.Boolean { get }
+ToolUp.Remoting.Generator.CasePayload.IsOneField : System.Boolean { get }
+ToolUp.Remoting.Generator.CasePayload.IsSeveralFields : System.Boolean { get }
+ToolUp.Remoting.Generator.CasePayload.NoFields : ToolUp.Remoting.Generator.CasePayload { get }
+ToolUp.Remoting.Generator.CasePayload.Tag : System.Int32 { get }
+ToolUp.Remoting.Generator.CasePayload+OneField (class)
+ToolUp.Remoting.Generator.CasePayload+OneField.decoder : System.String { get }
+ToolUp.Remoting.Generator.CasePayload+SeveralFields (class)
+ToolUp.Remoting.Generator.CasePayload+SeveralFields.fields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.FieldPlan] { get }
+ToolUp.Remoting.Generator.CasePayload+Tags (class)
+ToolUp.Remoting.Generator.CasePayload+Tags.NoFields : System.Int32 (literal)
+ToolUp.Remoting.Generator.CasePayload+Tags.OneField : System.Int32 (literal)
+ToolUp.Remoting.Generator.CasePayload+Tags.SeveralFields : System.Int32 (literal)
 ToolUp.Remoting.Generator.Dispatch (class)
 ToolUp.Remoting.Generator.Dispatch.compilationUnit(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Remoting.Generator.DispatchTable) : System.String
 ToolUp.Remoting.Generator.Dispatch.tableFor(System.Type) : ToolUp.Remoting.Generator.DispatchTable
@@ -77,7 +91,7 @@ ToolUp.Remoting.Generator.TypePlanModule (class)
 ToolUp.Remoting.Generator.TypePlanModule.binding(ToolUp.Remoting.Generator.TypePlan) : System.String
 ToolUp.Remoting.Generator.TypePlanModule.typeSpelling(ToolUp.Remoting.Generator.TypePlan) : System.String
 ToolUp.Remoting.Generator.UnionCasePlan (class)
-ToolUp.Remoting.Generator.UnionCasePlan..ctor(System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Remoting.Generator.UnionCasePlan..ctor(System.String, System.Int32, ToolUp.Remoting.Generator.CasePayload)
 ToolUp.Remoting.Generator.UnionCasePlan.CaseName : System.String { get }
-ToolUp.Remoting.Generator.UnionCasePlan.Payload : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.Generator.UnionCasePlan.Payload : ToolUp.Remoting.Generator.CasePayload { get }
 ToolUp.Remoting.Generator.UnionCasePlan.Tag : System.Int32 { get }

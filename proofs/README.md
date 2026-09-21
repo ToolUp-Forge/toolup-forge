@@ -169,6 +169,19 @@ leg rather than quietly weaken the result:
   string, a bounded integer and a flag: the encoding of any value decodes, and decodes back to the
   value it started from. Not "decodes to something" — the decoder can never refuse traffic its own
   encoder produced.
+* **The two combinators Phase 800 added, characterised, and the round trip widened over them.**
+  `tuple_of` (the arity check every `tuple2`..`tuple4` runs first) accepts an array of exactly its
+  arity and refuses every other value naming both arities — never a slice — and `tuple2` on such an
+  array is that refusal verbatim, so an element decoder is never reached on an array of the wrong
+  width (`lemma_tuple_of_characterised`, `lemma_tuple2_refuses_wrong_arity`). `fields` — the
+  several-field union-case form, with `arity >= 2` stated as a refinement because a one-field case
+  is written directly — hands the inner array to its pipeline exactly when it has the case's arity,
+  and refuses a wrong-width array, a bare payload and a missing payload slot each by name
+  (`lemma_fields_characterised`). The reference vocabulary gains a leg whose `hop` is a pair and
+  whose `status` is a union with a several-field case, and `decode_encode_roundtrip_leg` /
+  `decode_encode_roundtrip_status` carry the round trip over both shapes. Each lemma family was
+  shown red on a deliberate break — `fields` accepting the wrong width, the encoder swapping a
+  case's fields, `tuple_of` slicing — before it was trusted.
 
 ### Rung 2 — Differentially tested
 
@@ -187,6 +200,16 @@ Not proved. *Measured*, on every run of the gate, over the Phase 784 wire corpus
   minimum (`-128y`, on the wire as `uint8 128`), two decimal words that arrive unsigned, and the
   compacted `int64` narrowing. A differential that has never been shown to fail agrees with whatever
   it is shown.
+* **The Phase 800 shapes are measured on both paths.** The corpus's tuple fixtures are paired through
+  `tuple2` / `tuple3`, and `Outcome` is paired a *second* time through `fields 2` beside its original
+  `payload` pairing — a type may now carry several labelled pairings, so a disagreement names which.
+  The corpus's mutations target no tuple or several-field case, so their refuse path is run from
+  hand-built values — wrong width, non-array, bare payload, missing payload, an element that
+  refuses, an element that narrows — through every pairing at the type, with one contrast pinned:
+  an inner array carrying a *trailing* element is accepted by `payload` (a pipeline reads the
+  positions it declares, as a record decoder does) and refused by `fields`, whose arity check is
+  the difference. The widened vocabulary's round trip is run through the extraction, one instance
+  per union case.
 
 **Why this rung exists at all.** A hand-written model can drift from the code it describes silently
 and for months, and no amount of proving fixes a model of the wrong thing. Rung 1 says the model has

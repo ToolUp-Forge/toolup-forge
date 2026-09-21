@@ -102,24 +102,26 @@ let private argumentArms: (Type * (JsonSerializerOptions -> JsonElement list -> 
 // ─── The fixtures the generator REFUSES a decoder for, by name ───────────
 //
 // Recorded rather than derived so a change in the algebra's reach is
-// noticed. Three gaps, all named by the generator's census and none of
-// them this sample's to close: tuples and a union case carrying more than
-// one field are the two combinator gaps Phase 800 owns; DateOnly and
-// TimeOnly have no combinator because the Fable reader refuses both, and
-// the algebra ships cross-host or not at all. A record holding any of
-// those keeps the reflection path with it.
+// noticed. One gap remains, named by the generator's census and not this
+// sample's to close: DateOnly and TimeOnly have no combinator because the
+// Fable reader refuses both, and the algebra ships cross-host or not at
+// all. A record holding either keeps the reflection path with it.
+//
+// Phase 800 closed the other two gaps this list used to record - tuples,
+// and a union case carrying more than one field - so `tuple-pair`,
+// `tuple-triple`, the three `union-*` fixtures and `record-consignment`
+// (which holds an Outcome) now decode through the generated decoders and
+// are no longer listed here.
 
 let private expectedRefusals: (string * string) list = [
-    "tuple-pair", "tuple - no combinator (Phase 800)"
-    "tuple-triple", "tuple - no combinator (Phase 800)"
-    "union-onefield", "Outcome carries a case with more than one field (Phase 800)"
-    "union-multifield", "Outcome carries a case with more than one field (Phase 800)"
-    "union-emptycase", "Outcome carries a case with more than one field (Phase 800)"
-    "record-consignment", "holds an Outcome"
     "record-nested", "holds a DateOnly - no cross-host combinator"
     "record-envelope", "holds a Customer, and so a DateOnly, and an Outcome"
     "date-dateonly", "DateOnly - no cross-host combinator"
     "date-timeonly", "TimeOnly - no cross-host combinator"
+    // Phase 803's boundary fixtures for the same two types.
+    "date-dateonly-min", "DateOnly - no cross-host combinator"
+    "date-dateonly-max", "DateOnly - no cross-host combinator"
+    "date-timeonly-max", "TimeOnly - no cross-host combinator"
 ]
 
 // ─── One case, both wires ───────────────────────────────────────────────

@@ -70,15 +70,30 @@ type FieldPlan = {
     TypeSpelling: string
 }
 
+/// What a union case carries, as planned — one of the three wire shapes
+/// `Write.writeUnion` emits, and the combinator each one takes.
+[<RequireQualifiedAccess>]
+type CasePayload =
+    /// `[tag]` — `Decode.case0`.
+    | NoFields
+    /// `[tag; field]` — `Decode.payload`; the writer puts the one field
+    /// DIRECTLY in the payload slot.
+    | OneField of decoder: string
+    /// `[tag; [field; …]]` — `Decode.fields n` over a `field` pipeline in
+    /// the case's own declared field order, which is the order
+    /// `Write.writeUnion` emits (Phase 800). The pipeline is the record
+    /// shape, because on the wire the inner array IS a record of the
+    /// case's fields; `fields` adds the arity check that makes a case of
+    /// the wrong width a named refusal.
+    | SeveralFields of fields: FieldPlan list
+
 /// One union case's decode, as planned.
 type UnionCasePlan = {
     CaseName: string
     /// The case's tag — its index in `FSharpType.GetUnionCases` order,
     /// which is the tag `Write.writeUnion` emits.
     Tag: int
-    /// `None` for a field-less case (`Decode.case0`); `Some expr` for a
-    /// single-payload case (`Decode.payload`).
-    Payload: string option
+    Payload: CasePayload
 }
 
 /// One type's planned decoder.
@@ -286,6 +301,17 @@ module Plan =
 
     let private isRecord (t: Type) = FSharpType.IsRecord(t, true)
 
+    /// A reference tuple. `FSharpType.IsTuple` also answers true for a
+    /// struct tuple, whose CLR type (`ValueTuple`) is not what the
+    /// `tupleN` combinators construct — so a struct tuple is refused by
+    /// name rather than registered under a type it does not produce.
+    let private isReferenceTuple (t: Type) =
+        FSharpType.IsTuple t && not t.IsValueType
+
+    /// The widest tuple the algebra has a combinator for. Phase 800 shipped
+    /// `tuple2`..`tuple4`; the platform's own API surface reaches arity 2.
+    let private widestTuple = 4
+
     let private isPlainUnion (t: Type) =
         FSharpType.IsUnion(t, true)
         && not (isGenericOf optionDef t)
@@ -458,6 +484,31 @@ module Plan =
                 match decoderFor state args[0], decoderFor state args[1] with
                 | Some ok, Some err -> Some(sprintf "Decode.result %s %s" (arg ok) (arg err))
                 | _ -> None
+            elif isReferenceTuple t then
+                // Phase 800 — a tuple is the positional array a record is,
+                // so its decoder is one `tupleN` over the element decoders,
+                // inline: there is no name to bind it under, and the
+                // registration key is the instantiated tuple type itself.
+                let elements = FSharpType.GetTupleElements t
+
+                if elements.Length > widestTuple then
+                    refuse
+                        state
+                        t
+                        (sprintf
+                            "a tuple of %d elements — the algebra's tuple combinators reach arity %d"
+                            elements.Length
+                            widestTuple)
+                else
+                    let planned = elements |> Array.map (decoderFor state)
+
+                    if planned |> Array.forall Option.isSome then
+                        let arguments = planned |> Array.map (Option.get >> arg) |> String.concat " "
+                        Some(sprintf "Decode.tuple%d %s" elements.Length arguments)
+                    else
+                        None
+            elif FSharpType.IsTuple t then
+                refuse state t "a struct tuple — the tuple combinators construct reference tuples"
             elif isRecord t then
                 bindNamed state t
             elif isPlainUnion t then
@@ -530,16 +581,44 @@ module Plan =
                                 Some {
                                     CaseName = c.Name
                                     Tag = c.Tag
-                                    Payload = None
+                                    Payload = CasePayload.NoFields
                                 }
                             | [| single |] ->
                                 decoderFor state single.PropertyType
                                 |> Option.map (fun d -> {
                                     CaseName = c.Name
                                     Tag = c.Tag
-                                    Payload = Some d
+                                    Payload = CasePayload.OneField d
                                 })
-                            | _ -> None)
+                            | several ->
+                                // Phase 800 — the several-field case. Its
+                                // fields are planned exactly as a record's
+                                // are, in `GetFields` order, which is the
+                                // order `Write.writeUnion` writes the inner
+                                // array; the names are the case's own
+                                // (`min` / `max`, or `Item1` / `Item2` for
+                                // an unnamed field), which is what the path
+                                // of a refusal beneath the case reads.
+                                let fields =
+                                    several
+                                    |> Array.mapi (fun i (f: PropertyInfo) ->
+                                        decoderFor state f.PropertyType
+                                        |> Option.map (fun d -> {
+                                            FieldName = f.Name
+                                            Position = i
+                                            Decoder = d
+                                            TypeSpelling = typeSpelling f.PropertyType
+                                        }))
+
+                                if fields |> Array.forall Option.isSome then
+                                    Some {
+                                        CaseName = c.Name
+                                        Tag = c.Tag
+                                        Payload =
+                                            CasePayload.SeveralFields(fields |> Array.map Option.get |> Array.toList)
+                                    }
+                                else
+                                    None)
 
                     if planned |> Array.forall Option.isSome then
                         Some(
@@ -550,9 +629,7 @@ module Plan =
                             )
                         )
                     else
-                        refuse state t "a union case carries more than one field, or a case payload has no decoder"
-                        |> ignore
-
+                        refuse state t "a union case's field has no decoder" |> ignore
                         None
 
             state.InProgress.Remove t |> ignore

@@ -135,22 +135,70 @@ module Emit =
     let private unionBody (binding: string) (typeSpelling: string) (cases: UnionCasePlan list) =
         let arms =
             cases
-            |> List.map (fun c ->
+            |> List.collect (fun c ->
                 match c.Payload with
-                | None -> sprintf "            | %d -> Some(Decode.case0 %s.%s)" c.Tag typeSpelling c.CaseName
-                | Some payload ->
+                | CasePayload.NoFields -> [
+                    sprintf "            | %d -> Some(Decode.case0 %s.%s)" c.Tag typeSpelling c.CaseName
+                  ]
+                | CasePayload.OneField payload ->
                     let d =
                         if payload.Contains " " then
                             "(" + payload + ")"
                         else
                             payload
 
-                    sprintf
-                        "            | %d -> Some(Decode.payload (%s |> Decode.map %s.%s))"
-                        c.Tag
-                        d
-                        typeSpelling
-                        c.CaseName)
+                    [
+                        sprintf
+                            "            | %d -> Some(Decode.payload (%s |> Decode.map %s.%s))"
+                            c.Tag
+                            d
+                            typeSpelling
+                            c.CaseName
+                    ]
+                | CasePayload.SeveralFields fields ->
+                    // Phase 800 — `fields n` over the record-shaped pipeline
+                    // the case's inner array is: `succeed` the case
+                    // constructor, one `field` per declared field, in order.
+                    let parameters =
+                        fields
+                        |> List.map (fun f -> Plan.parameterName f.FieldName)
+                        |> String.concat " "
+
+                    let arguments =
+                        fields
+                        |> List.map (fun f -> Plan.parameterName f.FieldName)
+                        |> String.concat ", "
+
+                    let applies =
+                        fields
+                        |> List.map (fun f ->
+                            let d =
+                                if f.Decoder.Contains " " then
+                                    "(" + f.Decoder + ")"
+                                else
+                                    f.Decoder
+
+                            sprintf
+                                "                         |> Decode.apply (Decode.field \"%s\" %d %s)"
+                                f.FieldName
+                                f.Position
+                                d)
+
+                    [
+                        sprintf "            | %d ->" c.Tag
+                        "                Some("
+                        "                    Decode.fields"
+                        sprintf "                        %d" (List.length fields)
+                        sprintf
+                            "                        (Decode.succeed (fun %s -> %s.%s(%s))"
+                            parameters
+                            typeSpelling
+                            c.CaseName
+                            arguments
+                    ]
+                    @ (applies
+                       |> List.mapi (fun i line -> if i = List.length applies - 1 then line + ")" else line))
+                    @ [ "                )" ])
 
         [
             sprintf "    let %s: Decoder<%s> =" binding typeSpelling

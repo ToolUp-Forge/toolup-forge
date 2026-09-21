@@ -49,7 +49,13 @@
     "differential host (BOTH runtimes, because the runtime ships to both), the capacity floor as a",
     "`proved` entry rather than an `assumed` one - 788.D reconciled the floor to the proof's precondition",
     "in the same phase, so nothing is left assumed - and the policy entries that say what the two models",
-    "do not reach (the dispatch loop around the ring; the effects `change` runs)."
+    "do not reach (the dispatch loop around the ring; the effects `change` runs).",
+    "",
+    "Phase 800 appended to the DECODER's claims (ids prefixed `decoder-`, beside 787's): the two",
+    "combinators it added - tuples and the several-field union case - as `proved` characterisation",
+    "entries, the round trip widened over them as a `proved` entry, and the differential host's two new",
+    "cases as a `tested` entry. Nothing 787 recorded moved: the combinators are additive, and the",
+    "pre-phase differential pack passes unchanged."
   ],
   "kind": "proofs",
   "version": 1,
@@ -1253,6 +1259,55 @@
       "level": "policy",
       "statement": "The transpiled loop under Fable is OUT.",
       "reason": "the extraction compiles on .NET only, and the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken. The browser's copy of the loop is not differentially tested by this phase."
+    },
+    {
+      "id": "decoder-tuple-characterisation",
+      "level": "proved",
+      "statement": "A tuple combinator (Phase 800) accepts a positional array of exactly its arity and refuses every other value naming both arities - never a slice - and on an array of the wrong width the refusal is the arity check's refusal verbatim, so an element decoder is never reached. The element path is `[n]`, because a tuple element has no name to carry.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": ["lemma_tuple_of_characterised", "lemma_tuple2_refuses_wrong_arity"]
+      }
+    },
+    {
+      "id": "decoder-fields-characterisation",
+      "level": "proved",
+      "statement": "The several-field union-case form (Phase 800) hands the inner array to its field pipeline exactly when the array has the case's arity, and refuses a wrong-width array, a bare payload and a missing payload slot each by name with an empty path. The arity is at least 2 as a refinement on the model, because the writer emits a one-field case directly with no inner array.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": ["lemma_fields_characterised"]
+      }
+    },
+    {
+      "id": "decoder-widened-round-trip",
+      "level": "proved",
+      "statement": "Over the reference vocabulary widened by a leg - a pair and a union with a several-field case - the encoding of any value decodes, and decodes back to the value it started from, for every string-length function the host might supply. The union is also proved on its own so a failure localises to the several-field case rather than to the pair beside it.",
+      "evidence": {
+        "prover": "fstar-pinned",
+        "module": "proofs/RemotingDecode.fst",
+        "lemmas": [
+          "decode_leg_total",
+          "decode_leg_wf",
+          "decode_encode_roundtrip_leg",
+          "decode_encode_roundtrip_status"
+        ]
+      }
+    },
+    {
+      "id": "decoder-phase-800-shapes-agree",
+      "level": "tested",
+      "statement": "The extracted model and the shipped algebra agree, outcome class, value, runtime type and message at once, over the corpus's tuple fixtures through tuple2 / tuple3, over Outcome paired both through payload and through fields, and over hand-built refusal shapes for both new combinators - including the one pinned contrast, an inner array with a trailing element that payload accepts and fields refuses. The widened vocabulary's round trip runs through the extraction, one instance per union case.",
+      "evidence": {
+        "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
+        "list": "Phase 787 - the proved model as oracle",
+        "cases": [
+          "the extracted model agrees with production over every Phase 800 refusal shape",
+          "the widened reference vocabulary round-trips through the extracted encoder and decoder"
+        ],
+        "runner": "proofs/check.ps1 step 6, whose HostMinCases for RemotingDecode rose from 7 to 9 with these"
+      }
     }
   ]
 }

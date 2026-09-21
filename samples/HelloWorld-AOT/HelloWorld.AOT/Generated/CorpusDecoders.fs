@@ -37,10 +37,44 @@ module CorpusDecoders =
             | 2 -> Some(Decode.case0 WireCorpus.Priority.High)
             | _ -> None)
 
+    let outcome: Decoder<WireCorpus.Outcome> =
+        Decode.union "WireCorpus.Outcome" (function
+            | 0 ->
+                Some(
+                    Decode.fields
+                        2
+                        (Decode.succeed (fun id at -> WireCorpus.Outcome.Accepted(id, at))
+                         |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
+                         |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset))
+                )
+            | 1 -> Some(Decode.payload (Decode.asString |> Decode.map WireCorpus.Outcome.Rejected))
+            | 2 -> Some(Decode.case0 WireCorpus.Outcome.Pending)
+            | _ -> None)
+
+    let consignment: Decoder<WireCorpus.Consignment> =
+        Decode.succeed (fun reference origin destination priority outcome weights labels -> ({
+            Reference = reference
+            Origin = origin
+            Destination = destination
+            Priority = priority
+            Outcome = outcome
+            Weights = weights
+            Labels = labels
+        }: WireCorpus.Consignment))
+        |> Decode.apply (Decode.field "Reference" 0 Decode.asString)
+        |> Decode.apply (Decode.field "Origin" 1 address)
+        |> Decode.apply (Decode.field "Destination" 2 address)
+        |> Decode.apply (Decode.field "Priority" 3 priority)
+        |> Decode.apply (Decode.field "Outcome" 4 outcome)
+        |> Decode.apply (Decode.field "Weights" 5 (Decode.list Decode.asFloat))
+        |> Decode.apply (Decode.field "Labels" 6 (Decode.asSet Decode.asString))
+
     /// The wire types this module covers, in registration order.
     let covered: string list = [
         typeof<WireCorpus.Address>.FullName
         typeof<WireCorpus.Priority>.FullName
+        typeof<WireCorpus.Outcome>.FullName
+        typeof<WireCorpus.Consignment>.FullName
         typeof<bool>.FullName
         typeof<int>.FullName
         typeof<string>.FullName
@@ -70,6 +104,8 @@ module CorpusDecoders =
         typeof<Map<int, string>>.FullName
         typeof<Set<string>>.FullName
         typeof<Set<int>>.FullName
+        typeof<Tuple<int, string>>.FullName
+        typeof<Tuple<int, string, bool>>.FullName
     ]
 
     /// Register every decoder above. Idempotent, and explicit —
@@ -78,6 +114,8 @@ module CorpusDecoders =
     let registerAll () : unit =
         RemotingDecoders.register<WireCorpus.Address> address
         RemotingDecoders.register<WireCorpus.Priority> priority
+        RemotingDecoders.register<WireCorpus.Outcome> outcome
+        RemotingDecoders.register<WireCorpus.Consignment> consignment
         RemotingDecoders.register<bool> Decode.asBool
         RemotingDecoders.register<int> Decode.asInt32
         RemotingDecoders.register<string> Decode.asString
@@ -107,4 +145,6 @@ module CorpusDecoders =
         RemotingDecoders.register<Map<int, string>> (Decode.asMap Decode.asInt32 Decode.asString)
         RemotingDecoders.register<Set<string>> (Decode.asSet Decode.asString)
         RemotingDecoders.register<Set<int>> (Decode.asSet Decode.asInt32)
+        RemotingDecoders.register<Tuple<int, string>> (Decode.tuple2 Decode.asInt32 Decode.asString)
+        RemotingDecoders.register<Tuple<int, string, bool>> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
 

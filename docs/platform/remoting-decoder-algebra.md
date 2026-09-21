@@ -104,7 +104,8 @@ refusal path and do not resume.
 | Binary | `asBytes`, `asGuid` |
 | Arrays | `items`, `exactly`, `index`, `field`, `list`, `array`, `asSet` |
 | Maps | `entries`, `asMap` |
-| Unions | `union`, `case0`, `payload`, `stringEnum`, `option`, `result` |
+| Tuples | `tuple2`, `tuple3`, `tuple4` (Phase 800) |
+| Unions | `union`, `case0`, `payload`, `fields` (Phase 800), `stringEnum`, `option`, `result` |
 | Composite scalars | `asDateTime`, `asDateTimeOffset`, `asDecimal` |
 
 Four properties hold of every one of them, and each is pinned by a case in
@@ -157,8 +158,20 @@ the attribute and nothing else.
 payload slot; a single-field case writes the field DIRECTLY into the second slot; a several-field
 case writes them as an inner array there. A single-field case whose field is itself an array is
 therefore indistinguishable from a multi-field case by inspection, so `union` hands the case decoder
-a `Value option` and the case's own arity decides — `case0` for no payload, `payload` for either of
-the other two.
+a `Value option` and the case's own arity decides — `case0` for no payload, `payload` for one field,
+and (since Phase 800) `fields n` for several. `fields` is the combinator the case AUTHOR chooses,
+never a runtime guess: it adds the arity check that makes an inner array of the wrong width a named
+refusal, and it is what the generator emits for every case with more than one field. `payload` still
+admits a pipeline over the inner array as it always has, so nothing that used it changes — the
+difference is that `payload` reads the positions its pipeline declares and ignores a trailing
+element, as a record decoder does, while `fields` refuses it.
+
+**A tuple is a record with no names.** `Write.writeTuple` emits a tuple exactly as it emits a
+record — an array of the elements, positionally — so `int * string` and a two-field record put the
+same bytes on the wire, and what makes the term a tuple is only the decoder that reads it.
+`tuple2` / `tuple3` / `tuple4` (Phase 800) are an arity check followed by `index` reads: an array of
+the wrong width is refused naming both arities, never sliced, and a refusal beneath an element
+carries `[n]` because the element has no name to carry.
 
 ---
 
@@ -200,15 +213,25 @@ let deliveryOutcome: Decoder<DeliveryOutcome> =
     Decode.union "DeliveryOutcome" (function
         | 0 ->
             Some(
-                Decode.payload (
-                    Decode.succeed (fun id at -> Accepted(id, at))
-                    |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
-                    |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset)
-                )
+                Decode.fields
+                    2
+                    (Decode.succeed (fun id at -> Accepted(id, at))
+                     |> Decode.apply (Decode.field "id" 0 Decode.asGuid)
+                     |> Decode.apply (Decode.field "at" 1 Decode.asDateTimeOffset))
             )
         | 1 -> Some(Decode.payload (Decode.asString |> Decode.map Rejected))
         | 2 -> Some(Decode.case0 Pending)
         | _ -> None)
+```
+
+A tuple is one combinator over its element decoders, and a method returning one registers it under
+the tuple type itself:
+
+```fsharp skip=fragment
+let roleByName: Decoder<string * DeliveryOutcome> =
+    Decode.tuple2 Decode.asString deliveryOutcome
+
+RemotingDecoders.register<string * DeliveryOutcome> roleByName
 ```
 
 Register it, and register the METHOD RETURN TYPE too — the client's response serializer is handed

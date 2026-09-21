@@ -8,6 +8,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting
 open ToolUp.Remoting.Generator
+open Microsoft.FSharp.Reflection
 
 // =============================================================================
 // Phase 69k.I — the generator's contract
@@ -145,6 +146,28 @@ let private everyRefusal =
     |> List.collect (fun (_, plan) -> plan.Refusals)
     |> List.distinctBy _.RefusedType
 
+/// Every type reachable from `roots` through generic arguments, array
+/// elements, record fields and union-case fields — the same graph the
+/// planner walks, so "the census reaches a tuple" is asserted over what
+/// the planner actually saw rather than over the return types alone.
+let private reachableFrom (roots: Type list) : Type list =
+    let seen = Collections.Generic.HashSet<Type>()
+
+    let rec walk (t: Type) =
+        if seen.Add t then
+            if t.IsArray then
+                walk (t.GetElementType())
+            elif t.IsGenericType then
+                t.GetGenericArguments() |> Array.iter walk
+            elif FSharpType.IsRecord t then
+                FSharpType.GetRecordFields t |> Array.iter (fun f -> walk f.PropertyType)
+            elif FSharpType.IsUnion t then
+                FSharpType.GetUnionCases t
+                |> Array.iter (fun c -> c.GetFields() |> Array.iter (fun f -> walk f.PropertyType))
+
+    roots |> List.iter walk
+    List.ofSeq seen
+
 [<Tests>]
 let tests =
     testList "Phase 69k — the source generator" [
@@ -238,11 +261,11 @@ let tests =
                 Expect.equal
                     (cases |> List.map (fun c -> c.Tag, c.CaseName, c.Payload))
                     [
-                        0, "NotComposed", Some "Decode.asString"
-                        1, "Verified", Some "Decode.asString"
-                        2, "Observed", Some "Decode.asString"
-                        3, "Failed", Some "Decode.asString"
-                        4, "Unreadable", Some "Decode.asString"
+                        0, "NotComposed", CasePayload.OneField "Decode.asString"
+                        1, "Verified", CasePayload.OneField "Decode.asString"
+                        2, "Observed", CasePayload.OneField "Decode.asString"
+                        3, "Failed", CasePayload.OneField "Decode.asString"
+                        4, "Unreadable", CasePayload.OneField "Decode.asString"
                     ]
                     "case tags or payloads differ from the hand-written decoder — the tag is the wire fact"
 
@@ -255,13 +278,107 @@ let tests =
                 Expect.equal
                     (cases |> List.map (fun c -> c.Tag, c.CaseName, c.Payload))
                     [
-                        0, "NothingComposed", None
-                        1, "AllComposedVerified", None
-                        2, "PartiallyVerified", None
-                        3, "FailuresPresent", None
+                        0, "NothingComposed", CasePayload.NoFields
+                        1, "AllComposedVerified", CasePayload.NoFields
+                        2, "PartiallyVerified", CasePayload.NoFields
+                        3, "FailuresPresent", CasePayload.NoFields
                     ]
                     "a field-less union case must plan as `case0` — reading it as a string enum would \
                      refuse every payload the writer emits"
+
+            testCase "a union case carrying several fields plans as `fields n` over the case's own field order"
+            <| fun () ->
+                // Phase 800. `ConfigFieldKind.Int of min: int option * max: int option` —
+                // one of the nine platform unions the census found blocked
+                // on this shape. The plan is the record shape over the
+                // inner array: the case's declared names as path labels,
+                // its declaration order as positions.
+                let plan = Plan.forTypes [ typeof<ConfigFieldKind> ]
+                Expect.isEmpty plan.Refusals "ConfigFieldKind is expressible since Phase 800"
+
+                let cases =
+                    plan.Bindings
+                    |> List.tryPick (function
+                        | UnionDecoder(_, _, cases) -> Some cases
+                        | _ -> None)
+                    |> Option.defaultWith (fun () -> failtest "no union decoder for ConfigFieldKind")
+
+                let intCase =
+                    cases
+                    |> List.tryFind (fun c -> c.CaseName = "Int")
+                    |> Option.defaultWith (fun () -> failtest "no `Int` case planned")
+
+                match intCase.Payload with
+                | CasePayload.SeveralFields fields ->
+                    Expect.equal
+                        (fields |> List.map (fun f -> f.FieldName, f.Position, f.Decoder))
+                        [
+                            "min", 0, "Decode.option Decode.asInt32"
+                            "max", 1, "Decode.option Decode.asInt32"
+                        ]
+                        "the several-field case's fields are planned by name, in declared order"
+                | other -> failtestf "the two-field `Int` case must plan as SeveralFields, not %A" other
+
+                // And the emission is `Decode.fields 2` over a `field`
+                // pipeline — the text the consumer compiles.
+                let emitted =
+                    Emit.compilationUnit
+                        {
+                            Namespace = "Probe"
+                            ModuleName = "Probe"
+                            Opens = [ "ToolUp.Platform" ]
+                            ApiRecords = []
+                        }
+                        plan
+
+                Expect.stringContains emitted "Decode.fields" "the several-field arm takes `fields`"
+
+                Expect.stringContains
+                    emitted
+                    "Decode.field \"min\" 0 (Decode.option Decode.asInt32)"
+                    "the first field, by name and position"
+
+                Expect.stringContains
+                    emitted
+                    "Decode.field \"max\" 1 (Decode.option Decode.asInt32)"
+                    "the second field, by name and position"
+
+                Expect.stringContains
+                    emitted
+                    "ConfigFieldKind.Int(min, max)"
+                    "constructed through the case, in field order"
+
+            testCase "a tuple plans as `tupleN` over its element decoders, inline"
+            <| fun () ->
+                // Phase 800. `string * TeamRole` is what `IPlatformTenantApi`
+                // returns; the tuple is not bound under a name (it has
+                // none) — it is an inline root, registered under the
+                // instantiated tuple type.
+                let plan = Plan.forTypes [ typeof<string * TeamRole> ]
+                Expect.isEmpty plan.Refusals "a pair is expressible since Phase 800"
+
+                let root =
+                    plan.Roots
+                    |> List.tryHead
+                    |> Option.defaultWith (fun () -> failtest "no root planned for the pair")
+
+                Expect.stringStarts
+                    root.RootDecoder
+                    "Decode.tuple2 Decode.asString "
+                    "the pair is `tuple2` over its elements"
+
+                Expect.equal root.RootFullName typeof<string * TeamRole>.FullName "registered under the tuple type"
+
+                // A tuple wider than the algebra reaches is refused by name
+                // — never guessed at, never sliced.
+                let wide = Plan.forTypes [ typeof<int * int * int * int * int> ]
+
+                Expect.hasLength wide.Refusals 1 "a 5-tuple has no combinator"
+
+                Expect.stringContains
+                    wide.Refusals.Head.Why
+                    "reach arity 4"
+                    "the refusal names the ceiling rather than reading as a generic miss"
 
             testCase "the fidelity comparison CATCHES a wrong plan — the go-red case"
             <| fun () ->
@@ -324,25 +441,96 @@ let tests =
                     "the coverage gap this phase measures has closed — every expressible API record is \
                      now declared to the facet, so re-read Phase 69k before changing this"
 
-            testCase "the two refusal classes that cap coverage are both present, by name"
+            testCase "the two refusal classes that capped coverage are both CLOSED, by name"
             <| fun () ->
-                // Named rather than counted, because these are the DEMAND
-                // evidence for whatever phase extends the algebra: a tuple
-                // combinator, and a union case carrying more than one field.
-                // Deliberately NOT fixed here — Phase 787 is proving the
-                // shipped combinator set total, and widening it underneath
-                // that proof would invalidate the surface it pins.
-                let reasons = everyRefusal |> List.map _.Why
+                // Phase 69k left this case asserting both gaps OPEN — a
+                // tuple combinator, and a union case carrying more than one
+                // field — as the demand evidence for whichever phase would
+                // extend the algebra. Phase 800 did, and this is that case
+                // INVERTED: it goes red if either gap reopens. The census
+                // must still REACH both shapes (asserted first, so a closed
+                // gap is not a shape the census stopped seeing), and no
+                // refusal may name either.
+                let reached = allApiRecords |> List.collect Plan.returnTypes |> reachableFrom
 
                 Expect.isTrue
-                    (reasons
-                     |> List.exists (fun r -> r.Contains "no combinator in the closed algebra"))
-                    "no unsupported-type refusal — the tuple class has gone, or the census stopped reaching it"
+                    (reached |> List.exists FSharpType.IsTuple)
+                    "the census no longer reaches a tuple — the closure below would be vacuous"
+
+                let severalFieldUnions =
+                    reached
+                    |> List.filter FSharpType.IsUnion
+                    |> List.filter (fun t ->
+                        FSharpType.GetUnionCases t |> Array.exists (fun c -> c.GetFields().Length > 1))
+
+                Expect.isNonEmpty
+                    severalFieldUnions
+                    "the census no longer reaches a several-field union case — the closure below would be vacuous"
+
+                Expect.isEmpty
+                    (everyRefusal |> List.filter (fun r -> r.RefusedType.StartsWith "System.Tuple"))
+                    "a tuple is refused — the tuple gap has REOPENED"
+
+                Expect.isEmpty
+                    (everyRefusal
+                     |> List.filter (fun r -> r.Why.Contains "union case" || r.Why.Contains "more than one field"))
+                    "a union case is refused — the several-field gap has REOPENED"
+
+            testCase "every record the two gaps alone blocked is now expressible, and the remaining refusals are named"
+            <| fun () ->
+                // The measured result of Phase 800, pinned so a regression
+                // that re-refuses any of them goes red by name. Fourteen
+                // records were blocked on the day (69k counted 13 over a
+                // smaller assembly); twelve moved onto the algebra path.
+                // The other two were ALSO blocked by a gap this phase does
+                // not own, and each is pinned as a remaining refusal rather
+                // than left as an unstated exclusion: `FileManagementApi`
+                // holds an `obj`-typed field (`FileUploadResponse`), which no
+                // closed algebra can express; `IConversionApi` returns
+                // `ColumnExpr`, a RECURSIVE union (`Concat of parts:
+                // ColumnExpr list * …`) — its several-field cases plan now,
+                // but a cycle cannot be emitted as dependency-ordered `let`
+                // bindings, which is the generator's own stated refusal.
+                let expressibleNames =
+                    expressible |> List.map (fst >> Plan.simpleName) |> Set.ofList
+
+                let moved = [
+                    "IDataSubjectRequestApi"
+                    "IConfigApi"
+                    "IFeatureFlagApi"
+                    "IModuleQueryBusApi"
+                    "IPlatformTenantApi"
+                    "IProvenanceQueryApi"
+                    "IProviderProfileApi"
+                    "ITeamInviteApi"
+                    "IUserSchemaApi"
+                    "IWebhookApi"
+                    "JobApi"
+                    "ModelExecutionApi"
+                ]
+
+                Expect.isEmpty
+                    (moved |> List.filter (fun n -> not (expressibleNames.Contains n)))
+                    "a record Phase 800 moved onto the algebra path is refused again"
+
+                let stillBlocked =
+                    census
+                    |> List.filter (fun (_, plan) -> not (List.isEmpty plan.Refusals))
+                    |> List.map (fst >> Plan.simpleName)
+
+                Expect.equal
+                    stillBlocked
+                    [ "IConversionApi"; "FileManagementApi" ]
+                    "exactly two records remain on the reflection path"
 
                 Expect.isTrue
-                    (reasons |> List.exists (fun r -> r.Contains "more than one field"))
-                    "no multi-field union-case refusal — the algebra has gained a combinator for it, \
-                     or the census stopped reaching one"
+                    (everyRefusal |> List.exists (fun r -> r.RefusedType = "System.Object"))
+                    "what blocks `FileManagementApi` is an `obj` field, which no closed algebra can express"
+
+                Expect.isTrue
+                    (everyRefusal
+                     |> List.exists (fun r -> r.RefusedType.EndsWith "ColumnExpr" && r.Why.Contains "recursive"))
+                    "what blocks `IConversionApi` is `ColumnExpr`'s recursion, not its several-field cases"
 
             testCase "a refusal names the type it refused"
             <| fun () ->
