@@ -560,31 +560,60 @@ module EgressPolicy =
                     )
         }
 
-    /// Phase 796 — refuse an `Unlabelled` payload, then defer to `inner`.
+    /// Phase 796 — refuse a payload whose label does not CLEAR egress,
+    /// then defer to `inner`.
     ///
-    /// A decorator rather than a fourth branch inside
-    /// `declaredDestinations`, because the two questions are independent
-    /// and compose: this one asks whether the payload's lineage was
-    /// computed at all, that one asks whether the destination is
-    /// declared. A composition can wrap any policy — including a
-    /// consumer's own — and a reader of `bind` below sees the two
-    /// conditions in the order they apply.
+    /// Two refusals, because there are two ways a label fails to clear
+    /// and they have different remedies:
     ///
-    /// The refusal names the ORIGIN and the surface, never the URL and
-    /// never the payload, exactly as every other denial here does.
-    let requireLabel (inner: IEgressPolicy) : IEgressPolicy =
+    ///   • `Unlabelled` — nobody computed a lineage for this payload.
+    ///     The remedy is to compute one (claim it with
+    ///     `EgressLabelContext.runLabelled` at the emitting surface).
+    ///   • a label still carrying refs — a lineage WAS computed and it
+    ///     carries restricted policy refs that no declassification has
+    ///     cleared. The remedy is a declassification routine the naming
+    ///     party accepted; `TaintLabel.narrowsTo` is the one operator
+    ///     that lowers a label, and a value it has cleared arrives here
+    ///     as `EgressLabel.clean`.
+    ///
+    /// So under a mandatory profile the bar is `clean`: never tainted,
+    /// or tainted and since declassified. Nothing else crosses, and the
+    /// refusal says which of the two it was.
+    ///
+    /// A decorator rather than a branch inside `declaredDestinations`,
+    /// because the two questions are independent and compose: this one
+    /// asks what the payload carries, that one asks where it is going.
+    /// A composition can wrap any policy — including a consumer's own —
+    /// and a reader of `bind` below sees the conditions in the order
+    /// they apply.
+    ///
+    /// Every refusal names the ORIGIN, the surface and the POLICY REFS
+    /// that blocked it — names, never values — exactly as the
+    /// destination denials here name the grant and never the URL.
+    let requireClearedLabel (inner: IEgressPolicy) : IEgressPolicy =
         { new IEgressPolicy with
             member _.Decide(componentId, destination, surface, label) =
-                match label with
-                | Unlabelled ->
+                let refused (why: string) =
                     EgressVerdict.Deny(
                         sprintf
-                            "egress from component %s to origin %s (%s surface) carries no disclosure label; declaration is mandatory under this profile, so a payload whose lineage was never computed is refused"
+                            "egress from component %s to origin %s (%s surface) is refused: %s"
                             (ComponentId.value componentId)
                             (EgressDestination.origin destination)
                             (EgressSurface.label surface)
+                            why
                     )
-                | LabelledRefs _ -> inner.Decide(componentId, destination, surface, label)
+
+                match label with
+                | Unlabelled ->
+                    refused
+                        "the payload carries no disclosure label, and declaration is mandatory under this profile, so a payload whose lineage was never computed cannot leave"
+                | LabelledRefs refs when Set.isEmpty refs -> inner.Decide(componentId, destination, surface, label)
+                | LabelledRefs _ ->
+                    refused (
+                        sprintf
+                            "the payload's lineage carries %s, which no declassification has cleared"
+                            (EgressLabel.render label)
+                    )
         }
 
     /// Resolve the policy a composition runs under from its profile's
@@ -603,9 +632,10 @@ module EgressPolicy =
     ///     undeclared component is refused.
     ///
     /// **Phase 796.** Where declaration is mandatory, the resolved policy
-    /// is additionally wrapped in `requireLabel`: a payload whose lineage
-    /// was never computed is refused before the destination is even
-    /// consulted. Where it is NOT mandatory nothing is wrapped, so the
+    /// is additionally wrapped in `requireClearedLabel`: a payload whose
+    /// lineage was never computed, or whose computed lineage still
+    /// carries uncleared policy refs, is refused before the destination
+    /// is even consulted. Where it is NOT mandatory nothing is wrapped, so the
     /// permit-all default and an advisory grant signature behave
     /// byte-for-byte as they did before the label existed (GP 11) — an
     /// `Unlabelled` payload is simply not a fact the standard profile has
@@ -629,13 +659,13 @@ module EgressPolicy =
             DeclarationMandatory = false
           }
         | true, None -> {
-            Policy = requireLabel (declaredDestinations (DeclaredDestinations Set.empty) Map.empty)
+            Policy = requireClearedLabel (declaredDestinations (DeclaredDestinations Set.empty) Map.empty)
             Posture = EgressPosture.DenyAll
             Grants = Map.empty
             DeclarationMandatory = true
           }
         | true, Some declared -> {
-            Policy = requireLabel (declaredDestinations (DeclaredDestinations Set.empty) declared)
+            Policy = requireClearedLabel (declaredDestinations (DeclaredDestinations Set.empty) declared)
             Posture = EgressPosture.Declared(Map.count declared, true)
             Grants = declared
             DeclarationMandatory = true

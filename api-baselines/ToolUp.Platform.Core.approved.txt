@@ -5019,7 +5019,7 @@ ToolUp.Platform.EgressPolicy.declaredDestinations(ToolUp.Platform.EgressGrant, M
 ToolUp.Platform.EgressPolicy.permitAll : ToolUp.Platform.IEgressPolicy { get }
 ToolUp.Platform.EgressPolicy.permitAllBinding : ToolUp.Platform.EgressPolicyBinding { get }
 ToolUp.Platform.EgressPolicy.platformComponent : ToolUp.Platform.ComponentId { get }
-ToolUp.Platform.EgressPolicy.requireLabel(ToolUp.Platform.IEgressPolicy) : ToolUp.Platform.IEgressPolicy
+ToolUp.Platform.EgressPolicy.requireClearedLabel(ToolUp.Platform.IEgressPolicy) : ToolUp.Platform.IEgressPolicy
 ToolUp.Platform.EgressPolicyBinding (class)
 ToolUp.Platform.EgressPolicyBinding..ctor(ToolUp.Platform.IEgressPolicy, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant], System.Boolean)
 ToolUp.Platform.EgressPolicyBinding.DeclarationMandatory : System.Boolean { get }

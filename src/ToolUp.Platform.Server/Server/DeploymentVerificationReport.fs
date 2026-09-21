@@ -1515,7 +1515,7 @@ module DeploymentVerificationReport =
                     "profile %s, destination declaration %s, payload label %s, ref vocabulary %s"
                     integrity.EgressProfile
                     (if mandatory then "mandatory" else "advisory")
-                    (if mandatory then "required" else "advisory")
+                    (if mandatory then "must be cleared" else "advisory")
                     integrity.EgressLabelVocabulary
 
             let findings = egressFindings integrity

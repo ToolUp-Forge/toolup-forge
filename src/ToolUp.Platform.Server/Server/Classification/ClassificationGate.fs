@@ -290,30 +290,35 @@ module EgressGate =
     /// boundaries a deployment's DLP posture requires.
     let permissiveEgressPolicy: EgressPolicy = fun _ _ -> EgressDecision.Allow
 
-    /// Phase 796 — refuse a classified field whose payload carries no
-    /// computed disclosure label, then defer to `inner`.
+    /// Phase 796 — refuse a classified field whose payload's label does
+    /// not CLEAR egress, then defer to `inner`.
     ///
-    /// The classification-gate half of the same rule
-    /// `EgressPolicy.requireLabel` applies to outbound HTTP: under a
-    /// profile that makes declaration mandatory, a value whose lineage
-    /// was never computed must not cross a boundary on the strength of
-    /// its field classification alone. The refusal is `Block` rather
-    /// than `Redact` for the reason the webhook contract suppresses
-    /// rather than marks — a reader outside the trust boundary learns
-    /// nothing from a placeholder it should not have been told about —
-    /// and `Block` already emits the `EgressBlocked` audit row, so the
-    /// refusal is typed and audited with no new machinery.
+    /// The classification-gate twin of `EgressPolicy.requireClearedLabel`,
+    /// holding the same bar at this boundary for the same reason: under
+    /// a profile that makes declaration mandatory, neither a value whose
+    /// lineage was never computed nor one still carrying uncleared
+    /// policy refs may cross on the strength of its field classification
+    /// alone. A value a declassification routine cleared arrives as
+    /// `EgressLabel.clean` and passes.
+    ///
+    /// The refusal is `Block` rather than `Redact`, for the reason the
+    /// webhook contract suppresses rather than marks — a reader outside
+    /// the trust boundary learns nothing from a placeholder it should
+    /// not have been told about — and `Block` already emits the
+    /// `EgressBlocked` audit row, so the refusal is typed and audited
+    /// with no new machinery.
     ///
     /// UNCLASSIFIED fields are untouched: `apply` never consults the
     /// policy for them, so this narrows only what was already
     /// classified. A deployment that does not compose it is unchanged
     /// (GP 11) — it is a decorator a verified composition opts into,
     /// never a new default.
-    let refuseUnlabelled (inner: EgressPolicy) : EgressPolicy =
+    let requireClearedLabel (inner: EgressPolicy) : EgressPolicy =
         fun level ctx ->
-            match ctx.Label with
-            | Unlabelled -> EgressDecision.Block
-            | LabelledRefs _ -> inner level ctx
+            if EgressLabel.isClean ctx.Label then
+                inner level ctx
+            else
+                EgressDecision.Block
 
     /// Scope under which egress audit is recorded — the reserved
     /// `_platform` cross-tenant audit scope. Egress happens outside a

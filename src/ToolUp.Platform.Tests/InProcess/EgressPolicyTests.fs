@@ -590,8 +590,8 @@ let private contractTests =
         // seam and is held to the same laws, including on the coordinate
         // it was added to read.
         ToolUp.Platform.Tests.Contracts.IEgressPolicyContract.tests
-            "RequireLabel over DeclaredDestinations"
-            (EgressPolicy.requireLabel (EgressPolicy.declaredDestinations UnrestrictedEgress grantsForA))
+            "RequireClearedLabel over DeclaredDestinations"
+            (EgressPolicy.requireClearedLabel (EgressPolicy.declaredDestinations UnrestrictedEgress grantsForA))
     ]
 
 // ─── Phase 796 — the payload's label, and one ref vocabulary ───────────
@@ -687,39 +687,79 @@ let private labelTests =
 
 let private labelledGateTests =
     testList "the gates consult the label" [
-        test "requireLabel refuses an unlabelled payload and defers otherwise" {
-            let policy = EgressPolicy.requireLabel EgressPolicy.permitAll
+        test "requireClearedLabel refuses both ways a label fails to clear, and defers when it does" {
+            let policy = EgressPolicy.requireClearedLabel EgressPolicy.permitAll
             let destination = origin "https://api.example.com"
 
-            match policy.Decide(moduleA, destination, EgressSurface.Webhook, EgressLabel.unlabelled) with
-            | EgressVerdict.Deny reason ->
-                Expect.stringContains reason "carries no disclosure label" "the refusal says why"
-                Expect.stringContains reason "https://api.example.com" "and names the origin"
-                Expect.isFalse (reason.Contains "?") "never a query string"
-            | EgressVerdict.Permit -> failtest "an unlabelled payload was permitted under requireLabel"
+            let denialFor label =
+                match policy.Decide(moduleA, destination, EgressSurface.Webhook, label) with
+                | EgressVerdict.Deny reason ->
+                    Expect.stringContains reason "https://api.example.com" "the refusal names the origin"
+                    Expect.isFalse (reason.Contains "?") "never a query string"
+                    reason
+                | EgressVerdict.Permit -> failtestf "%s was permitted" (EgressLabel.render label)
+
+            // Two failures, two remedies, two distinguishable sentences.
+            Expect.stringContains
+                (denialFor EgressLabel.unlabelled)
+                "carries no disclosure label"
+                "an uncomputed lineage says so"
+
+            let restricted = denialFor (EgressLabel.ofPolicyRef "party-a")
+            Expect.stringContains restricted "no declassification has cleared" "an uncleared lineage says so"
+            Expect.stringContains restricted "labelled{party-a}" "and names the refs — names, never values"
 
             Expect.isTrue
                 (isPermit (policy.Decide(moduleA, destination, EgressSurface.Webhook, EgressLabel.clean)))
-                "a computed-clean payload defers to the inner policy"
+                "a CLEARED payload defers to the inner policy"
         }
 
-        test "a mandatory profile refuses an unlabelled payload at a DECLARED origin" {
-            // The phase in one assertion: the destination is permitted,
-            // and the call is still refused, because the gate now sees
-            // WHAT is leaving and not only where it is going.
+        test "a restricted-labelled value cannot leave through a DECLARED origin under Verified" {
+            // The phase's headline acceptance: the destination is
+            // permitted, and the call is still refused, because the gate
+            // now sees WHAT is leaving and not only where it is going.
+            // The only way past it is a declassification, which lowers
+            // the label to `clean` before it ever reaches this seam.
             let binding = EgressPolicy.bind true (Some grantsForA)
 
-            Expect.isTrue
-                (isPermit (
-                    decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook EgressLabel.clean
-                ))
-                "a declared origin with a computed label is permitted"
+            let decide label =
+                decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook label
 
-            match
-                decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook EgressLabel.unlabelled
-            with
-            | EgressVerdict.Deny _ -> ()
-            | EgressVerdict.Permit -> failtest "a declared origin carried an unlabelled payload out"
+            Expect.isTrue (isPermit (decide EgressLabel.clean)) "a cleared payload crosses a declared origin"
+
+            for blocked in
+                [
+                    EgressLabel.unlabelled
+                    EgressLabel.ofPolicyRef "party-a"
+                    EgressLabel.ofPolicyRefs [ "party-a"; "party-b" ]
+                ] do
+                match decide blocked with
+                | EgressVerdict.Deny _ -> ()
+                | EgressVerdict.Permit -> failtestf "a declared origin carried %s out" (EgressLabel.render blocked)
+        }
+
+        test "the refusal holds at EVERY egress surface, not only the one it was probed at" {
+            // Acceptance asks for this per surface, and a policy that
+            // happened to bound only one would pass every probe above.
+            let binding = EgressPolicy.bind true (Some grantsForA)
+
+            for surface in
+                [
+                    EgressSurface.ModuleHandler
+                    EgressSurface.AIProvider
+                    EgressSurface.AuthProvider
+                    EgressSurface.Notification
+                    EgressSurface.Webhook
+                    EgressSurface.Other
+                ] do
+                let at label =
+                    decideLabelled binding moduleA "https://api.example.com" surface label
+
+                Expect.isTrue (isPermit (at EgressLabel.clean)) (sprintf "%A: a cleared payload crosses" surface)
+
+                match at (EgressLabel.ofPolicyRef "party-a") with
+                | EgressVerdict.Deny _ -> ()
+                | EgressVerdict.Permit -> failtestf "%A let a restricted-labelled payload out" surface
         }
 
         test "the advisory profile is unchanged by the label (GP 11)" {
@@ -750,26 +790,39 @@ let private labelledGateTests =
             | EgressVerdict.Deny r -> failtestf "an unrestricted component was refused: %s" r
         }
 
-        test "the classification gate's refuseUnlabelled blocks an unlabelled crossing" {
+        test "the classification gate holds the same bar at its own boundary" {
             let inner = EgressGate.permissiveEgressPolicy
-            let policy = EgressGate.refuseUnlabelled inner
+            let policy = EgressGate.requireClearedLabel inner
             let unlabelledCtx = EgressContext.create EgressBoundary.ExportPayload "recipient"
-            let labelledCtx = unlabelledCtx |> EgressContext.withLabel EgressLabel.clean
+
+            let restrictedCtx =
+                unlabelledCtx |> EgressContext.withLabel (EgressLabel.ofPolicyRef "party-a")
+
+            let clearedCtx = unlabelledCtx |> EgressContext.withLabel EgressLabel.clean
 
             Expect.equal unlabelledCtx.Label EgressLabel.unlabelled "create leaves the crossing unlabelled"
 
-            for level in [ Public; Confidential; Financial; Pii ] do
-                Expect.equal (policy level unlabelledCtx) EgressDecision.Block "unlabelled is blocked at every level"
-                Expect.equal (policy level labelledCtx) (inner level labelledCtx) "a labelled crossing defers"
+            for boundary in [ EgressBoundary.ExportPayload; EgressBoundary.RpcResponse ] do
+                for level in [ Public; Confidential; Financial; Pii ] do
+                    let at (ctx: EgressContext) =
+                        policy level { ctx with Boundary = boundary }
+
+                    Expect.equal (at unlabelledCtx) EgressDecision.Block "an uncomputed lineage is blocked"
+                    Expect.equal (at restrictedCtx) EgressDecision.Block "an uncleared lineage is blocked"
+
+                    Expect.equal
+                        (at clearedCtx)
+                        (inner level { clearedCtx with Boundary = boundary })
+                        "a cleared crossing defers to the inner policy"
         }
 
-        testCaseAsync "a blocked unlabelled field is dropped and audited, and a labelled one is not"
+        testCaseAsync "a field whose label does not clear is dropped and audited; a cleared one is not"
         <| async {
             let classifier =
                 DefaultFieldClassifier.create [ FieldClassification.create "Customer" "Email" Pii ]
 
             let fields = Map.ofList [ "Email", "a@b.com"; "Unclassified", "x" ]
-            let policy = EgressGate.refuseUnlabelled EgressGate.permissiveEgressPolicy
+            let policy = EgressGate.requireClearedLabel EgressGate.permissiveEgressPolicy
 
             let auditUnlabelled = RecordingAudit()
             let ctx = EgressContext.create EgressBoundary.ExportPayload "recipient"
@@ -780,10 +833,10 @@ let private labelledGateTests =
             Expect.isNonEmpty auditUnlabelled.Events "the refusal is audited"
 
             let auditLabelled = RecordingAudit()
-            let labelledCtx = ctx |> EgressContext.withLabel (EgressLabel.ofPolicyRef "party-a")
-            let! passed = EgressGate.apply classifier policy auditLabelled labelledCtx "Customer" fields
+            let clearedCtx = ctx |> EgressContext.withLabel EgressLabel.clean
+            let! passed = EgressGate.apply classifier policy auditLabelled clearedCtx "Customer" fields
 
-            Expect.equal passed fields "a computed label passes the permissive inner policy through unchanged"
+            Expect.equal passed fields "a cleared label passes the permissive inner policy through unchanged"
             Expect.isEmpty auditLabelled.Events "and audits nothing"
         }
 
