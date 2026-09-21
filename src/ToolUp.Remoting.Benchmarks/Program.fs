@@ -213,6 +213,7 @@ let private impl: ICorpusApi = {
     Consignment = echo
     Customer = echo
     Envelope = echo
+    Tree = echo
 }
 
 /// The options the adapter would build: the default STJ backend with the
