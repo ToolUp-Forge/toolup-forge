@@ -352,12 +352,17 @@ ProcessedDataTypes+ProcessedData..ctor(System.String, System.String)
 ProcessedDataTypes+ProcessedData.Payload : System.String { get }
 ProcessedDataTypes+ProcessedData.TypeName : System.String { get }
 ProcessedDataTypes+ProcessedFileEntry (class)
-ProcessedDataTypes+ProcessedFileEntry..ctor(System.String, System.String, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ProcessedDataTypes+ProcessedFileEntry..ctor(System.String, System.String, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.Object], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+ProcessedData])
 ProcessedDataTypes+ProcessedFileEntry.DataType : System.String { get }
 ProcessedDataTypes+ProcessedFileEntry.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ProcessedDataTypes+ProcessedFileEntry.FileName : System.String { get }
 ProcessedDataTypes+ProcessedFileEntry.Info : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }
+ProcessedDataTypes+ProcessedFileEntry.Info : Microsoft.FSharp.Core.FSharpOption`1[System.Object] { get }  (obsolete)
 ProcessedDataTypes+ProcessedFileEntry.ProcessedAt : System.DateTime { get }
+ProcessedDataTypes+ProcessedFileEntry.Summary : Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+ProcessedData] { get }
+ProcessedDataTypes+ProcessedFileEntryModule (class)
+ProcessedDataTypes+ProcessedFileEntryModule.failed(System.String, System.String, System.DateTime, System.String) : ProcessedDataTypes+ProcessedFileEntry
+ProcessedDataTypes+ProcessedFileEntryModule.summarised(System.String, System.String, System.DateTime, ProcessedDataTypes+ProcessedData) : ProcessedDataTypes+ProcessedFileEntry
 ProcessedDataTypes+SessionStoreInfo (class)
 ProcessedDataTypes+SessionStoreInfo..ctor(System.Guid, System.Int32)
 ProcessedDataTypes+SessionStoreInfo.Epoch : System.Guid { get }

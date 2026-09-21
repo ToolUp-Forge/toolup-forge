@@ -105,13 +105,8 @@ let private firstLine (msg: string) : string =
 let processFile (dataTypes: DataType list) (fileName: string) (dataTypeId: DataTypeId) (contents: string) = async {
     let now = DateTime.UtcNow
 
-    let mkEntry (error: string) = {
-        FileName = fileName
-        DataType = dataTypeId
-        ProcessedAt = now
-        Info = None
-        Error = Some error
-    }
+    let mkEntry (error: string) =
+        ProcessedFileEntry.failed fileName dataTypeId now error
 
     match dataTypes |> List.tryFind (fun dt -> dt.Id = dataTypeId) with
     | Some dataType ->
@@ -146,7 +141,10 @@ let processFile (dataTypes: DataType list) (fileName: string) (dataTypeId: DataT
 //
 // `Info: obj option` round-trips via `FableConverters` — the same
 // converter every existing `ProcessedFileEntry` traversal of an SDK
-// boundary uses today.
+// boundary uses today. Since Phase 817 `Summary: ProcessedData option`
+// rides beside it: a sidecar persisted before the field existed reads
+// back with `Summary = None` (an absent reference-typed field is `null`,
+// and `null` is `None`), so no migration and no re-pin.
 module ProcessedEntryStore =
     open System.Text.Json
     open ToolUp.Remoting.Json.SystemTextJson

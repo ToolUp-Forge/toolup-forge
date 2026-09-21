@@ -1778,15 +1778,15 @@ let private wizardView
     Layout.Panel.panel msgs.ColumnMappingPanelTitle [ Layout.Panel.panelSection "" [ header; Misc.divider; body ] ]
 
 let private processedDataSection (displays: DataTypeDisplay list) (entries: ProcessedFileEntry list) =
+    // Phase 817 — grouped by data type, rendered through the display's
+    // own step (typed envelope or legacy `Info`); see `DataTypeDisplay.render`.
     let grouped =
         entries
+        |> List.filter DataTypeDisplay.hasSummary
         |> List.choose (fun e ->
-            match e.Info with
-            | Some info ->
-                displays
-                |> List.tryFind (fun d -> d.Info.Id = e.DataType)
-                |> Option.map (fun d -> d, info)
-            | None -> None)
+            displays
+            |> List.tryFind (fun d -> d.Info.Id = e.DataType)
+            |> Option.map (fun d -> d, e))
         |> List.groupBy (fun (d, _) -> d.Info.Id)
 
     Html.div [
@@ -1794,9 +1794,9 @@ let private processedDataSection (displays: DataTypeDisplay list) (entries: Proc
         prop.children [
             for (_, items) in grouped do
                 let display = items |> List.head |> fst
-                let infos = items |> List.map snd
+                let groupEntries = items |> List.map snd
                 Typography.subheading display.Info.DisplayName
-                display.RenderSummary infos
+                DataTypeDisplay.render display groupEntries
         ]
     ]
 
@@ -1941,7 +1941,8 @@ let private filesView (msgs: MappingDataManagerMessages) (displays: DataTypeDisp
                                     // it via New Mapping.
                                     let hasOwnObject =
                                         model.ProcessedData
-                                        |> List.exists (fun e -> e.FileName = f.FileName && e.Info.IsSome)
+                                        |> List.exists (fun e ->
+                                            e.FileName = f.FileName && DataTypeDisplay.hasSummary e)
 
                                     let hasDerived = model.Records |> List.exists (fun r -> r.SourceFile = f.FileName)
 

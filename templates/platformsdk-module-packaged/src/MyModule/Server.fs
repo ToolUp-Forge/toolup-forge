@@ -43,17 +43,20 @@ let dataType: DataType = {
     Detect = fun _ -> async { return false }
     Process =
         fun (fileName, _) -> async {
+            // Phase 817 — the entry's summary is a typed envelope. A real
+            // module builds it from its own summary record with
+            // `ProcessedDataCodec.encode summary` on the server and renders
+            // it with `DataTypeDisplay.typed` on the client; construct the
+            // entry through the builder, never a record literal (a literal
+            // must name the deprecated `Info`).
             return
                 {
                     TypeName = DataTypeId
                     Payload = "{}"
                 },
-                {
-                    FileName = fileName
-                    DataType = DataTypeId
-                    ProcessedAt = DateTime.UtcNow
-                    Info = None
-                    Error = None
+                ProcessedDataTypes.ProcessedFileEntry.summarised fileName DataTypeId DateTime.UtcNow {
+                    TypeName = DataTypeId
+                    Payload = "{}"
                 }
         }
 }

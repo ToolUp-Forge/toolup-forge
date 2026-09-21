@@ -328,12 +328,12 @@ let private referenceDataType (id: string) : DataType = {
         fun _ -> async {
             return
                 { TypeName = id; Payload = "{}" },
-                {
-                    FileName = ""
-                    DataType = id
-                    ProcessedAt = DateTime.UnixEpoch
-                    Info = None
-                    Error = None
+                // Phase 817 — the builder, not a literal: the reference
+                // module is what a conforming module is measured against,
+                // and a literal would name the deprecated `Info`.
+                ProcessedDataTypes.ProcessedFileEntry.summarised "" id DateTime.UnixEpoch {
+                    TypeName = id
+                    Payload = "{}"
                 }
         }
 }

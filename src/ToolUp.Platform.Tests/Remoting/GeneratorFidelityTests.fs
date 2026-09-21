@@ -592,7 +592,8 @@ let tests =
                     (everyRefusal |> List.filter (fun r -> r.Why.Contains "recursive"))
                     "a recursive type is refused — the cycle gap has REOPENED"
 
-            testCase "every record the two gaps alone blocked is now expressible, and the remaining refusal is named"
+            testCase
+                "every record the two gaps alone blocked is now expressible, and the one remaining refusal is deprecated with a removal target"
             <| fun () ->
                 // The measured result of Phase 800, pinned so a regression
                 // that re-refuses any of them goes red by name. Fourteen
@@ -639,6 +640,31 @@ let tests =
                 Expect.isTrue
                     (everyRefusal |> List.exists (fun r -> r.RefusedType = "System.Object"))
                     "what blocks `FileManagementApi` is an `obj` field, which no closed algebra can express"
+
+                // Phase 817 — and that field is on its way out. The
+                // summary now rides `ProcessedFileEntry.Summary`, a
+                // `ProcessedData` envelope; `Info` stays for one deprecation
+                // window because removing a record field is the break the
+                // policy reserves for a major. Pinned so the last open point
+                // in the API type graph cannot quietly lose its removal date:
+                // the property carries an `[<Obsolete>]` naming 1.0.
+                let infoProperty =
+                    typeof<ProcessedDataTypes.ProcessedFileEntry>.GetProperty "Info"
+                    |> Option.ofObj
+                    |> Option.defaultWith (fun () ->
+                        failtest
+                            "`ProcessedFileEntry.Info` has gone — this case (and the refusal above) should now be inverted: the record is expressible")
+
+                let notice =
+                    infoProperty.GetCustomAttributes(typeof<ObsoleteAttribute>, false)
+                    |> Array.tryHead
+                    |> Option.map (fun (a: obj) -> (a :?> ObsoleteAttribute).Message)
+
+                match notice with
+                | Some message -> Expect.stringContains message "1.0" "the deprecation names its removal target"
+                | None ->
+                    failtest
+                        "`Info` must be deprecated: it is the one field keeping `FileManagementApi` off the algebra path"
 
             testCase "a refusal names the type it refused"
             <| fun () ->

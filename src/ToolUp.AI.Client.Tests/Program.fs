@@ -18,6 +18,9 @@ let allTests =
         // head-injection behind ClientConfig.HomeModule (Platform.Client
         // tier; ClientConfig.defaults only resolves under Fable).
         HomeLandingTests.tests
+        // Phase 817 — the ProcessedData summary envelope's browser half:
+        // Fable.SimpleJson reads what the server's FableConverters wrote.
+        ProcessedDataEnvelopeTests.tests
         // Phase 217 — module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.

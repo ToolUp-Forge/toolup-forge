@@ -337,15 +337,15 @@ let private processedDataSection
     (displays: DataTypeDisplay list)
     (entries: ProcessedFileEntry list)
     =
+    // Phase 817 — grouped by data type, rendered through the display's
+    // own step (typed envelope or legacy `Info`); see `DataTypeDisplay.render`.
     let grouped =
         entries
+        |> List.filter DataTypeDisplay.hasSummary
         |> List.choose (fun e ->
-            match e.Info with
-            | Some info ->
-                displays
-                |> List.tryFind (fun d -> d.Info.Id = e.DataType)
-                |> Option.map (fun d -> d, info)
-            | None -> None)
+            displays
+            |> List.tryFind (fun d -> d.Info.Id = e.DataType)
+            |> Option.map (fun d -> d, e))
         |> List.groupBy (fun (d, _) -> d.Info.Id)
 
     let errors =
@@ -357,10 +357,10 @@ let private processedDataSection
         prop.children [
             for (_, items) in grouped do
                 let display = items |> List.head |> fst
-                let infos = items |> List.map snd
+                let groupEntries = items |> List.map snd
 
                 Typography.subheading display.Info.DisplayName
-                display.RenderSummary infos
+                DataTypeDisplay.render display groupEntries
 
             if errors.Length > 0 then
                 Typography.subheading msgs.ProcessingErrorsHeading

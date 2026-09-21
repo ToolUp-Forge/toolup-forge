@@ -1093,6 +1093,8 @@
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
+        <!-- Phase 817 — the server half of the ProcessedData summary envelope's codec. -->
+        <Compile Include="Server\Files\ProcessedDataCodec.fs" />
         <Compile Include="Server\Files\FileManagement.fs" />
         <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />

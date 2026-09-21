@@ -298,6 +298,10 @@
              guard it uses to assert the in-repo corpus never resolves into a
              sibling worktree; the two suites must follow it. -->
         <Compile Include="Remoting\WireCorpus.fs" />
+        <!-- Phase 817 — the ProcessedData summary envelope's cross-host contract, pinned as
+             data and compiled into both packs (the WireCorpus.fs precedent): the .NET pack holds
+             the encoder to the literal, the Fable pack holds the decoder to the value. -->
+        <Compile Include="Remoting\ProcessedDataEnvelopeFixture.fs" />
         <Compile Include="Remoting\MsgPackRoundTripTests.fs" />
         <Compile Include="Remoting\StjRoundTripTests.fs" />
         <!-- Phase 785 — the closed decoder algebra, run differentially

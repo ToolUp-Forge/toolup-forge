@@ -139,13 +139,14 @@ let epubDataType: DataType = {
                 Payload = serialiseEpub book
             }
 
-            let entry = {
-                FileName = fileName
-                DataType = "Epub"
-                ProcessedAt = DateTime.UtcNow
-                Info = Some(box book.Chapters.Length)
-                Error = None
-            }
+            // The entry's summary is a typed envelope (Phase 817): encode
+            // the module's own summary record; the display decodes it back.
+            let entry =
+                ProcessedFileEntry.summarised
+                    fileName
+                    "Epub"
+                    DateTime.UtcNow
+                    (ProcessedDataCodec.encode {| Chapters = book.Chapters.Length |})
 
             return processed, entry
         }

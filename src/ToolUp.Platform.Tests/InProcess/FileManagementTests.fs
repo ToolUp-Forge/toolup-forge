@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.FileManagementTests
 
+// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
+// on purpose: the legacy render path stays covered until the field goes.
+#nowarn "44"
+
 open System
 open System.IO
 open Expecto
@@ -10,6 +14,7 @@ open ToolUp.Platform.FileManagement
 open ToolUp.Platform.FileProcessor
 open DataManagementTypes
 open ProcessedDataTypes
+open ToolUp.Platform.Tests.Remoting
 
 // Persisted-ProcessedFileEntry coverage: round-trip across a simulated
 // server restart, stale-DataType branch, loader prefix-filter, delete
@@ -19,6 +24,37 @@ open ProcessedDataTypes
 
 [<Literal>]
 let private TestTypeId = "TestType"
+
+/// Phase 817 — a module-shaped summary record, for the typed envelope.
+type private RowSummary = { Rows: int; Header: string }
+
+/// Phase 817 — the same `DataType` built the post-817 way: the summary is
+/// encoded into the envelope on the server and the entry is constructed
+/// through the builder, so nothing here names `Info`.
+let private mkTypedDataType (id: string) : DataType = {
+    Info = {
+        Id = id
+        DisplayName = "Typed Type"
+        Schema = None
+    }
+    Id = id
+    SchemaVersion = DataTypes.initialSchemaVersion
+    Migrations = []
+    Detect = fun contents -> async { return contents.Contains "header_x" }
+    Process =
+        fun (fileName, contents) -> async {
+            let lines = contents.Split('\n')
+
+            let summary =
+                ProcessedDataCodec.encode {
+                    Rows = lines.Length
+                    Header = lines[0]
+                }
+
+            return
+                { TypeName = id; Payload = contents }, ProcessedFileEntry.summarised fileName id DateTime.UtcNow summary
+        }
+}
 
 /// Counting `DataType`. `processCount` increments on every `Process`
 /// call so the round-trip test can assert the second-construction
@@ -42,6 +78,7 @@ let private mkDataType (processCount: int ref) : DataType = {
                 FileName = fileName
                 DataType = TestTypeId
                 ProcessedAt = DateTime.UtcNow
+                Summary = None
                 Info = Some(box {| Rows = contents.Split('\n').Length |})
                 Error = None
             }
@@ -129,6 +166,148 @@ let tests =
             Expect.isNone entry.Error "entry has no error"
             Expect.isSome entry.Info "entry summary preserved"
         }
+
+        testCaseAsync
+            "Phase 817 — the typed summary envelope survives the sidecar round trip, and decodes back on the server"
+        <| async {
+            let rig = mkRig [ mkTypedDataType TestTypeId ]
+            let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
+            Expect.isOk addResult "AddFile should succeed"
+
+            let store2 = reopen rig [ mkTypedDataType TestTypeId ]
+            let entry = store2.GetProcessedData() |> List.exactlyOne
+
+            Expect.isNone entry.Info "a builder-constructed entry never fills the deprecated field"
+
+            match entry.Summary with
+            | None -> failtest "the envelope must survive persistence"
+            | Some envelope ->
+                Expect.equal
+                    envelope.TypeName
+                    typeof<RowSummary>.FullName
+                    "the envelope is stamped with the summary type"
+
+                match ProcessedDataCodec.tryDecode<RowSummary> envelope with
+                | Ok summary ->
+                    Expect.equal
+                        summary
+                        {
+                            Rows = 4
+                            Header = "header_x,header_y"
+                        }
+                        "the summary decodes to what Process produced"
+                | Error why -> failtestf "the envelope must decode as its own type: %s" why
+        }
+
+        testCase "Phase 817 — a sidecar persisted before the field existed reads back with Summary = None"
+        <| fun () ->
+            // The pre-817 on-disk shape: no `Summary` member at all. An
+            // absent reference-typed member reads as null under the STJ
+            // path, and null is `None` — so an old deployment's sidecars
+            // need no migration and no re-pin.
+            let json =
+                """{"FileName":"old.csv","DataType":"TestType","ProcessedAt":"2026-01-01T00:00:00Z","Info":null,"Error":null}"""
+
+            let entry =
+                System.Text.Json.JsonSerializer.Deserialize<ProcessedFileEntry>(
+                    json,
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                )
+
+            Expect.equal entry.FileName "old.csv" "the old fields read as before"
+            Expect.isNone entry.Summary "the field the sidecar predates reads as None"
+
+        testCase "Phase 817 — the server codec writes the pinned cross-host envelope, byte for byte"
+        <| fun () ->
+            // The literal the Fable-tier pack decodes. A change here is a
+            // change to what every browser client reads; move the literal
+            // and the browser assertion together, never one alone.
+            Expect.equal
+                (ProcessedDataCodec.encode ProcessedDataEnvelopeFixture.sample).Payload
+                ProcessedDataEnvelopeFixture.SamplePayload
+                "the encoder's text is the pinned contract"
+
+            Expect.equal
+                (ProcessedDataCodec.encode ProcessedDataEnvelopeFixture.sampleWithoutNote).Payload
+                ProcessedDataEnvelopeFixture.SampleWithoutNotePayload
+                "an absent option writes as null, an empty list as []"
+
+            Expect.equal
+                (ProcessedDataCodec.tryDecode<ProcessedDataEnvelopeFixture.SampleSummary> (
+                    ProcessedDataEnvelopeFixture.envelope ProcessedDataEnvelopeFixture.SamplePayload
+                ))
+                (Ok ProcessedDataEnvelopeFixture.sample)
+                "and the server reads its own text back"
+
+        testCase "Phase 817 — the codec refuses a payload that is not the type asked for, by name"
+        <| fun () ->
+            let envelope = ProcessedDataCodec.encode { Rows = 1; Header = "h" }
+
+            match ProcessedDataCodec.tryDecode<int list> envelope with
+            | Ok _ -> failtest "a record payload must not read as a list"
+            | Error why -> Expect.stringContains why envelope.TypeName "the refusal names the envelope's type tag"
+
+        testCase "Phase 817 — the client render step dispatches on the display's shape"
+        <| fun () ->
+            // `DataTypeDisplay.render` hands a typed display the envelopes
+            // and a legacy display the boxed `Info`s — each sees only what
+            // its own module produced. Exercised here on .NET, which is
+            // also the one-host proof that what `ProcessedDataCodec`
+            // encodes, `DataTypeDisplay.typed`'s decode reads.
+            let info: DataTypeInfo = {
+                Id = TestTypeId
+                DisplayName = "Test Type"
+                Schema = None
+            }
+
+            let typedSeen = ref []
+            let legacySeen = ref []
+
+            // `typedWith`, injecting the server codec: this tier's own
+            // decoder is browser-only (see `DataTypeDisplay.tryDecode`),
+            // and the browser half is held to the same envelope in the
+            // Fable-tier pack (`ProcessedDataEnvelopeTests`).
+            let typed =
+                DataTypeDisplay.typedWith ProcessedDataCodec.tryDecode<RowSummary> info (fun summaries ->
+                    typedSeen.Value <- summaries
+                    Feliz.Html.none)
+
+            let legacy =
+                DataTypeDisplay.legacy info (fun infos ->
+                    legacySeen.Value <- infos
+                    Feliz.Html.none)
+
+            let typedEntry =
+                ProcessedFileEntry.summarised
+                    "a.csv"
+                    TestTypeId
+                    DateTime.UtcNow
+                    (ProcessedDataCodec.encode { Rows = 2; Header = "h" })
+
+            let legacyEntry = {
+                FileName = "b.csv"
+                DataType = TestTypeId
+                ProcessedAt = DateTime.UtcNow
+                Summary = None
+                Info = Some(box 7)
+                Error = None
+            }
+
+            let failedEntry =
+                ProcessedFileEntry.failed "c.csv" TestTypeId DateTime.UtcNow "boom"
+
+            let entries = [ typedEntry; legacyEntry; failedEntry ]
+
+            DataTypeDisplay.render typed entries |> ignore
+            DataTypeDisplay.render legacy entries |> ignore
+
+            Expect.equal
+                typedSeen.Value
+                [ { Rows = 2; Header = "h" } ]
+                "the typed display decodes exactly the envelope-bearing entry"
+
+            Expect.equal legacySeen.Value [ box 7 ] "the legacy display receives exactly the Info-bearing entry"
+            Expect.isFalse (DataTypeDisplay.hasSummary failedEntry) "a failed entry carries nothing to render"
 
         testCaseAsync "stale DataType: entry surfaces error when its type is no longer registered"
         <| async {

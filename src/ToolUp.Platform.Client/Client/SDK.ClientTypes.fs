@@ -3,8 +3,14 @@
 
 namespace ToolUp.Platform
 
+// Phase 817 — `DataTypeDisplay.RenderSummary` is deprecated below, and the
+// `DataTypeDisplay` builders beside it are the one sanctioned place that
+// still names it.
+#nowarn "44"
+
 open ToolUp.Elmish
 open Feliz
+open Fable.SimpleJson
 
 // ─── Phase 57 — static-prerender substrate types ─────────────────
 //
@@ -19,13 +25,110 @@ open Feliz
 
 /// Client-side metadata for rendering data type summaries in the file manager.
 /// Each module that handles file data provides one of these per data type.
+///
+/// **Phase 817 — build one with `DataTypeDisplay.typed`, not a record
+/// literal.** The summary reaches the client as a `ProcessedData`
+/// envelope (`ProcessedFileEntry.Summary`), and `typed` decodes it to the
+/// module's own summary type before calling the module's render; the
+/// type-erased `RenderSummary` remains for modules that still fill
+/// `ProcessedFileEntry.Info`, and goes when that field does. A literal
+/// must name `RenderSummary`, which warns now and stops compiling then.
 type DataTypeDisplay = {
     /// Shared metadata (Id + DisplayName), declared in the module's SharedTypes.
     Info: DataManagementTypes.DataTypeInfo
     /// Render a summary table from the type-erased Info fields of ProcessedFileEntries.
     /// The function receives a list of unboxed Info objects and returns a ReactElement.
+    [<System.Obsolete("Type-erased summaries — use DataTypeDisplay.typed, which renders from ProcessedFileEntry.Summary. See docs/migrations/817-processed-file-entry-typed-summary.md. RenderSummary is removed in 1.0.")>]
     RenderSummary: obj list -> ReactElement
+    /// Phase 817 — render from the typed envelopes of the entries under
+    /// this data type. `Some` on a display built by `DataTypeDisplay.typed`;
+    /// `None` on a pre-817 display, which the SDK renders through
+    /// `RenderSummary` instead.
+    RenderTyped: (ProcessedDataTypes.ProcessedData list -> ReactElement) option
 }
+
+/// Builders and the SDK's own render step for `DataTypeDisplay` (Phase 817).
+[<RequireQualifiedAccess>]
+module DataTypeDisplay =
+
+    /// The summary back from its envelope, or the reason it did not read
+    /// as `'T`. The client half of the codec whose server half is
+    /// `ProcessedDataCodec.encode`: the envelope's JSON is what the SDK's
+    /// `FableConverters` wrote, which is the shape `Fable.SimpleJson`
+    /// reads. Decodes by shape — `TypeName` is a routing tag, spelled
+    /// differently by the two hosts for a nested type.
+    ///
+    /// Browser-only in substance: `Fable.SimpleJson` ships a .NET assembly
+    /// for compilation, not execution (its parser's type initialiser
+    /// throws there), and this tier carries no other JSON codec. On the
+    /// .NET host the result is a named refusal, and a host that has a
+    /// codec supplies it through `typedWith` — the shared tier's codec
+    /// stays a value (the `ModuleQueryCodec` precedent).
+    let inline tryDecode<'T> (envelope: ProcessedDataTypes.ProcessedData) : Result<'T, string> =
+#if FABLE_COMPILER
+        try
+            Ok(Json.parseAs<'T> envelope.Payload)
+        with ex ->
+            Error(sprintf "the %s payload does not read as %s: %s" envelope.TypeName typeof<'T>.Name ex.Message)
+#else
+        Error(
+            sprintf
+                "no JSON codec for %s on the .NET host — DataTypeDisplay.typed decodes in the browser; supply one through DataTypeDisplay.typedWith (the server's is ProcessedDataCodec.tryDecode)"
+                envelope.TypeName
+        )
+#endif
+
+    /// A display whose render takes the module's OWN summary type, decoded
+    /// from each entry's envelope by `decode`. Every entry whose envelope
+    /// decodes as `'T` reaches `render`; one that does not is dropped from
+    /// the list rather than failing the whole section — a module's summary
+    /// shape moving between deploys is a per-entry fact, and the entry's
+    /// row in the file table still shows.
+    let typedWith
+        (decode: ProcessedDataTypes.ProcessedData -> Result<'T, string>)
+        (info: DataManagementTypes.DataTypeInfo)
+        (render: 'T list -> ReactElement)
+        : DataTypeDisplay =
+        {
+            Info = info
+            RenderSummary = fun _ -> Html.none
+            RenderTyped =
+                Some(fun envelopes ->
+                    envelopes
+                    |> List.choose (fun envelope ->
+                        match decode envelope with
+                        | Ok summary -> Some summary
+                        | Error _ -> None)
+                    |> render)
+        }
+
+    /// `typedWith` over this tier's own decoder — the form a module's
+    /// client code calls.
+    let inline typed (info: DataManagementTypes.DataTypeInfo) (render: 'T list -> ReactElement) : DataTypeDisplay =
+        typedWith tryDecode<'T> info render
+
+    /// The pre-817 shape, for a module that still fills
+    /// `ProcessedFileEntry.Info`. Names the deprecated field on the
+    /// caller's behalf so the module's own source does not.
+    let legacy (info: DataManagementTypes.DataTypeInfo) (render: obj list -> ReactElement) : DataTypeDisplay = {
+        Info = info
+        RenderSummary = render
+        RenderTyped = None
+    }
+
+    /// Render the entries under one data type through its display: the
+    /// typed envelopes when the display is typed, the boxed `Info` values
+    /// otherwise. A typed display sees only entries that carry a `Summary`,
+    /// a legacy one only entries that carry an `Info` — each is what its
+    /// module produced, and the other is the other module's business.
+    let render (display: DataTypeDisplay) (entries: ProcessedDataTypes.ProcessedFileEntry list) : ReactElement =
+        match display.RenderTyped with
+        | Some renderTyped -> entries |> List.choose _.Summary |> renderTyped
+        | None -> entries |> List.choose _.Info |> display.RenderSummary
+
+    /// Whether an entry carries anything a display could render.
+    let hasSummary (entry: ProcessedDataTypes.ProcessedFileEntry) : bool =
+        entry.Summary.IsSome || entry.Info.IsSome
 
 // ─── Module availability ──────────────────────────────────────────
 

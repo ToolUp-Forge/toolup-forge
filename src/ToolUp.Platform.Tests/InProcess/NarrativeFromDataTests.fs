@@ -3,6 +3,10 @@
 
 module ToolUp.Platform.Tests.InProcess.NarrativeFromDataTests
 
+// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
+// on purpose: the legacy render path stays covered until the field goes.
+#nowarn "44"
+
 open System
 open System.Text.Json
 open Expecto
@@ -233,6 +237,7 @@ let tests =
                         FileName = "sales.csv"
                         DataType = "SalesData"
                         ProcessedAt = DateTime(2026, 6, 1)
+                        Summary = None
                         Info = None
                         Error = None
                     }
@@ -240,6 +245,7 @@ let tests =
                         FileName = "broken.csv"
                         DataType = "SalesData"
                         ProcessedAt = DateTime(2026, 6, 2)
+                        Summary = None
                         Info = None
                         Error = Some "detector mismatch"
                     }

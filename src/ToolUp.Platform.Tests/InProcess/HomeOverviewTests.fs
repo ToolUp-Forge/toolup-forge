@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.HomeOverviewTests
 
+// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
+// on purpose: the legacy render path stays covered until the field goes.
+#nowarn "44"
+
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -46,6 +50,7 @@ let private stubProcess (_: string * string) : Async<ProcessedData * ProcessedFi
             FileName = ""
             DataType = ""
             ProcessedAt = DateTime.UtcNow
+            Summary = None
             Info = None
             Error = None
         }

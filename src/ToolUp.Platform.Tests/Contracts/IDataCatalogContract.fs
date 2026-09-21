@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.Contracts.IDataCatalogContract
 
+// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
+// on purpose: the legacy render path stays covered until the field goes.
+#nowarn "44"
+
 open System
 open Expecto
 open ToolUp.Platform
@@ -145,6 +149,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 FileName = ""
                 DataType = ""
                 ProcessedAt = DateTime.UtcNow
+                Summary = None
                 Info = None
                 Error = None
             }

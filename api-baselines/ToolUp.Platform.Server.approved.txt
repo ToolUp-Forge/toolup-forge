@@ -7976,6 +7976,9 @@ ToolUp.Platform.PrivacyBudgetPolicyModule.withWithholdCharge(ToolUp.Platform.Wit
 ToolUp.Platform.ProcessProfileGate (class)
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
+ToolUp.Platform.ProcessedDataCodec (class)
+ToolUp.Platform.ProcessedDataCodec.encode`1(T) : ProcessedDataTypes+ProcessedData
+ToolUp.Platform.ProcessedDataCodec.tryDecode`1(ProcessedDataTypes+ProcessedData) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
 ToolUp.Platform.PromotedArtifact (class)
 ToolUp.Platform.PromotedArtifact..ctor(ToolUp.Platform.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], ToolUp.Platform.ModelArtifactStatus, ToolUp.Platform.ModelTransitionAuthor, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.PromotedArtifact.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment] { get }
