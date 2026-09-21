@@ -34,6 +34,9 @@ ToolUp.Platform.Build+TemplateGate+GatePackage (class)
 ToolUp.Platform.Build+TemplateGate+GatePackage..ctor(System.String, System.String)
 ToolUp.Platform.Build+TemplateGate+GatePackage.Id : System.String { get }
 ToolUp.Platform.Build+TemplateGate+GatePackage.Project : System.String { get }
+ToolUp.Platform.Build+VerifyLeg (class)
+ToolUp.Platform.Build+VerifyLeg.register(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : System.Void
+ToolUp.Platform.Build+VerifyLeg.registeredLegs() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]]]
 ToolUp.Platform.BuildOutput (class)
 ToolUp.Platform.BuildOutput..ctor(System.String, System.String)
 ToolUp.Platform.BuildOutput.ClientBundlePath : System.String { get }

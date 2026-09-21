@@ -269,6 +269,57 @@ module internal Aggregate =
             Trace.tracefn "%s" headline
             failwith headline
 
+// ─── Phase 803 — extra legs a repository composes into `VerifyAll` ──
+
+/// A leg `VerifyAll` runs AFTER its Expecto packs, registered by the
+/// consuming repository's own build script.
+///
+/// **Why a registry and not a `BuildConfig` field.** `BuildConfig` is a
+/// published record: a field added to it retypes the compiler-generated
+/// constructor, reddens the package's Public-API baseline and moves every
+/// consumer's `Build.fs` — the cost `TestPackHost` above records for the
+/// solution path, and the same one here. A registration function grows
+/// the surface by one additive token instead, which is what a repository
+/// with ONE extra leg (this one has a Fable-tier harness) should cost the
+/// package. It is the model FAKE itself uses — `Target.create` is a
+/// process-wide registry consulted when the target runs — so a leg is
+/// registered at script top level, before or after `registerTargets`,
+/// and read when `VerifyAll` executes. The module-level state is the
+/// deliberate, documented exception to the no-mutable rule, for the same
+/// reason FAKE's is: a build script is one process, one run.
+///
+/// **What a leg is.** A name and a body returning an exit code — the
+/// `Aggregate.leg` shape, kept behind a function because that module is
+/// `internal`. A body that throws is recorded as a failure by the
+/// aggregate, never fail-fast. The leg appears in the `VerifyAll
+/// summary:` block as one more `PASS` / `FAIL` line, which is a CI
+/// contract: a repository whose CI counts those lines against a floor
+/// bumps the floor in the same commit it registers a leg (forge's
+/// `EXPECTED_PACKS` did, 24 → 25).
+///
+/// **What it is NOT.** A pack: `TestPacks` are Expecto runners built
+/// once and launched as dlls, and the build-once step, the
+/// `TOOLUP_TEST_ARGS` pass-through and the lane filter are theirs. A leg
+/// owns its own toolchain — which is the point; the Fable harness needs
+/// Node, `npm ci` and a transpile no Expecto pack has.
+[<RequireQualifiedAccess>]
+module VerifyLeg =
+
+    let private registered = ResizeArray<string * (unit -> int)>()
+
+    /// Register a leg by name. Registering the same name twice is refused
+    /// rather than run twice: a repeated registration is a build script
+    /// that composed itself twice, and two `PASS` lines for one leg would
+    /// double-count against a CI floor.
+    let register (name: string) (run: unit -> int) : unit =
+        if registered |> Seq.exists (fun (n, _) -> n = name) then
+            failwithf "VerifyLeg.register: a leg named `%s` is already registered." name
+
+        registered.Add(name, run)
+
+    /// The legs registered so far, in registration order.
+    let registeredLegs () : (string * (unit -> int)) list = List.ofSeq registered
+
 // ─── Build configuration ───────────────────────────────────────────
 
 open ToolUp.Platform
@@ -537,11 +588,18 @@ let registerTargets (config: BuildConfig) =
             | "" -> []
             | v -> v.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
 
-        match config.TestPacks with
-        | [] ->
+        // Phase 803 — the legs the repository registered through
+        // `VerifyLeg.register`, run after every pack in registration
+        // order. Each is one more line in the summary block.
+        let extraLegs =
+            VerifyLeg.registeredLegs ()
+            |> List.map (fun (name, run) -> Aggregate.leg name run)
+
+        match config.TestPacks, extraLegs with
+        | [], [] ->
             Trace.tracefn
                 "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
-        | packs ->
+        | packs, _ ->
             // Outside the aggregate on purpose. The aggregate's whole
             // value is "every leg ran, here is what each did"; a failed
             // build means no leg CAN run, so folding it in as a leg would
@@ -549,11 +607,14 @@ let registerTargets (config: BuildConfig) =
             // one that never was one. It also keeps the summary's PASS /
             // FAIL line count exactly one-per-pack, which CI counts
             // against its EXPECTED_PACKS floor.
-            TestPackHost.buildOnce packs
+            if not (List.isEmpty packs) then
+                TestPackHost.buildOnce packs
 
-            packs
-            |> List.map (fun pack -> Aggregate.leg pack.Name (fun () -> TestPackHost.runPack extraTestArgs pack))
-            |> Aggregate.runAll "VerifyAll" "pack")
+            let packLegs =
+                packs
+                |> List.map (fun pack -> Aggregate.leg pack.Name (fun () -> TestPackHost.runPack extraTestArgs pack))
+
+            Aggregate.runAll "VerifyAll" "pack" (packLegs @ extraLegs))
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed

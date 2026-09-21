@@ -113,6 +113,55 @@ let tests =
             for name, reason in WireCorpus.recordedDivergences do
                 printfn "cross-host divergence — %s: %s" name reason
 
+        // ─── Phase 803.B — the binary frames the corpus does not pin ──
+        //
+        // `binary-past-bin8` pins the `bin16` frame from a committed
+        // fixture. The `bin32` frame needs a payload past 65,535 bytes,
+        // and 64 KiB of committed bytes for one length header is the
+        // wrong trade — so it is built here, in memory, from the same
+        // format bytes the writer would emit, and decoded through the
+        // same reader entry the corpus cases use. The two refusals
+        // beside it are Phase 786's length-vs-remaining guard, asserted
+        // under Fable for the two wide frames: a header that claims more
+        // than the bytes present is refused BEFORE anything is allocated
+        // from it, on this host as on .NET.
+        testCase "decodes a bin32-framed byte array"
+        <| fun () ->
+            let payload = Array.init 65536 (fun i -> byte (i % 251))
+
+            let framed = Array.concat [ [| 0xc6uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]; payload ]
+
+            let decoded = ToolUp.Remoting.MsgPack.Read.Reader(framed).Read typeof<byte[]>
+
+            Expect.equal
+                (decoded :?> byte[])
+                payload
+                "the Fable reader decoded a `c6 00 01 00 00` frame to something other than its 65,536-byte payload"
+
+        testCase "refuses a bin16 header that claims more than the bytes remaining"
+        <| fun () ->
+            // `c5 01 2c` over 300 bytes is `binary-past-bin8`; the same
+            // header over 4 bytes claims 296 the payload does not have.
+            let framed = [| 0xc5uy; 0x01uy; 0x2cuy; 1uy; 2uy; 3uy; 4uy |]
+
+            match ToolUp.Remoting.MsgPack.Read.Reader(framed).TryRead typeof<byte[]> with
+            | Ok _ -> failwith "a bin16 header claiming 300 bytes over a 4-byte payload was ACCEPTED"
+            | Error refusal ->
+                Expect.isTrue
+                    (refusal.Found.Contains "300")
+                    (sprintf "the refusal should name the 300 elements claimed; it said `%s`" refusal.Found)
+
+        testCase "refuses a bin32 header that claims more than the bytes remaining"
+        <| fun () ->
+            let framed = [| 0xc6uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy; 1uy; 2uy; 3uy; 4uy |]
+
+            match ToolUp.Remoting.MsgPack.Read.Reader(framed).TryRead typeof<byte[]> with
+            | Ok _ -> failwith "a bin32 header claiming 65,536 bytes over a 4-byte payload was ACCEPTED"
+            | Error refusal ->
+                Expect.isTrue
+                    (refusal.Found.Contains "65536")
+                    (sprintf "the refusal should name the 65536 elements claimed; it said `%s`" refusal.Found)
+
         yield! [
             for c in cases ->
                 testCase ("decodes " + c.Name)

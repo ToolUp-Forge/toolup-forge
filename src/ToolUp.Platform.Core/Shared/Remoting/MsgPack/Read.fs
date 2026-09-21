@@ -232,8 +232,32 @@ let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
                 TimeSpan(int64 n) |> box
             else
                 refuseWidth typ n
-#if NET6_0_OR_GREATER
-#endif
+        // Phase 803 — the two arms this block was EMPTY for. Fable's
+        // library carries both types (`DateOnly` as a UTC-midnight
+        // `Date`, `TimeOnly` as a millisecond count), so the same
+        // day-number / tick encoding the .NET arm decodes — and the
+        // Fable WRITER beside this file already emits — decodes here
+        // at the same domain bounds. No `#if NET6_0_OR_GREATER` guard:
+        // this arm only ever compiles under Fable, whose shim has the
+        // types unconditionally, and the empty guarded block that stood
+        // here was what made a browser client refuse both outright.
+        //
+        // One host limit, recorded rather than hidden: Fable's
+        // `TimeOnly` is MILLISECOND resolution, so the ticks below one
+        // millisecond are truncated on the way in. The corpus cannot
+        // measure that — its declared value is evaluated under Fable
+        // too, and truncates identically — so it is stated here, at the
+        // arm that does it.
+        elif typeName = "System.DateOnly" then
+            if integerFits sourceBits 0 0L 3652058UL n then
+                DateOnly.FromDayNumber(int32 n) |> box
+            else
+                refuseWidth typ n
+        elif typeName = "System.TimeOnly" then
+            if integerFits sourceBits 0 0L 863999999999UL n then
+                TimeOnly(int64 n) |> box
+            else
+                refuseWidth typ n
         elif typeName = "Microsoft.FSharp.Core.int16`1" then
             if integerFits sourceBits 16 -32768L 32767UL n then
                 int16 n |> box

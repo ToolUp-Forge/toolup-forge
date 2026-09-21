@@ -246,7 +246,10 @@ let main args =
     // collapsed rather than shrunk.
     let fableCaseFloor = 100
 
-    Target.create "VerifyFable" (fun _ ->
+    // Phase 803 — the body is a function rather than the target's lambda
+    // so it can be BOTH the standalone `VerifyFable` target and the leg
+    // `VerifyAll` composes below: one recipe, two entry points, no drift.
+    let runVerifyFable () =
         let testDir = Path.getFullName "src/ToolUp.AI.Client.Tests"
 
         let onPath name =
@@ -328,7 +331,42 @@ let main args =
                 "VerifyFable: node:test printed no TAP `# pass` / `# fail` summary — the harness did not run. `node --test` exits 0 in that case, which is why the counts are checked and not just the exit status."
 
         if result.ExitCode <> 0 then
-            failwithf "VerifyFable: node exited %d." result.ExitCode)
+            failwithf "VerifyFable: node exited %d." result.ExitCode
+
+    Target.create "VerifyFable" (fun _ -> runVerifyFable ())
+
+    // Phase 803 — the Fable leg IN the canonical gate.
+    //
+    // Until this phase `VerifyAll` — and so `verify.ps1` — ran twenty-four
+    // .NET packs and never transpiled the client tier. A `sizeof<'a>` in
+    // a Core file the browser compiles (Phase 786's first draft; Fable
+    // refuses the construct) went green through the whole gate and was
+    // caught only because a worker ran `dotnet fable` by hand, and three
+    // remoting-campaign workers each did that hand run because nothing
+    // else would. The reader those workers were changing has ONE
+    // production caller, and it runs under Fable.
+    //
+    // So the same recipe `VerifyFable` runs is registered as a leg of
+    // `VerifyAll`, after the packs, through the SDK's `VerifyLeg` seam:
+    // it lands in the summary block as `PASS — Fable` (CI's
+    // `EXPECTED_PACKS` floor moved 24 → 25 in the same commit), a failure
+    // is one more named line rather than a fail-fast, and `verify.ps1`
+    // — a hard-denied path on the roadmap side, so untouched here — can
+    // no longer go green on a tree whose Fable tier does not compile.
+    //
+    // Not under `pure`. That lane is the ten-second declared-no-
+    // filesystem set, and a Node toolchain plus a transpile is the
+    // opposite of that claim; `fast` keeps it, because `fast` runs every
+    // pack and drops only the measured slow set INSIDE one of them. Cost
+    // in `full`: the ~1.5-minute `fable-tier` recipe, once, at the end.
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "Fable" (fun () ->
+            Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"
+            runVerifyFable ()
+            0)
 
     // Phase 761 — the browser-level smoke gate.
     //

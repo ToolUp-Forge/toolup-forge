@@ -197,12 +197,14 @@ type Customer = {
 
 /// A second nested record, deliberately free of `DateOnly` / `TimeOnly`.
 ///
-/// It exists because the two records above are not cross-host: the Fable
-/// MsgPack reader cannot decode either of those types at all (see the
-/// recorded divergences), and `Customer.Since` is a `DateOnly`, so
-/// without this the Fable parity leg would have no nested-record coverage
-/// whatsoever — the exact "the class is empty so the green means nothing"
-/// hole the adequacy guard exists to refuse on the .NET side.
+/// It was cut because the two records above were not cross-host until
+/// Phase 803: the Fable MsgPack reader could not decode either of those
+/// types at all, and `Customer.Since` is a `DateOnly`, so without this the
+/// Fable parity leg had no nested-record coverage whatsoever — the exact
+/// "the class is empty so the green means nothing" hole the adequacy
+/// guard exists to refuse on the .NET side. Kept now that all three are
+/// cross-host: a nested record that carries no date is still its own
+/// shape, and the fixture is already pinned.
 type Consignment = {
     Reference: string
     Origin: Address
@@ -479,18 +481,20 @@ let pinnedCases: WireCase list = [
     both WireClass.DateFamily "date-datetimeoffset" (DateTimeOffset(2026, 9, 13, 8, 30, 0, TimeSpan.FromHours 5.5))
     both WireClass.DateFamily "date-timespan" (TimeSpan.FromMinutes 90.0)
     both WireClass.DateFamily "date-timespan-negative" (TimeSpan.FromTicks -1L)
-    case
-        WireClass.DateFamily
-        (DotNetOnly
-            "the Fable MsgPack reader THROWS `Cannot interpret integer 673049 as DateOnly.` — `Read.interpretIntegerAs`'s Fable arm carries an EMPTY `#if NET6_0_OR_GREATER` block where its .NET arm handles DateOnly and TimeOnly, so neither type survives to a browser client at all. Measured 2026-09-13 through the Fable parity leg")
-        "date-dateonly"
-        (DateOnly(1843, 10, 1))
-    case
-        WireClass.DateFamily
-        (DotNetOnly
-            "the Fable MsgPack reader THROWS `Cannot interpret integer 673049 as DateOnly.` — `Read.interpretIntegerAs`'s Fable arm carries an EMPTY `#if NET6_0_OR_GREATER` block where its .NET arm handles DateOnly and TimeOnly, so neither type survives to a browser client at all. Measured 2026-09-13 through the Fable parity leg")
-        "date-timeonly"
-        (TimeOnly(23, 59, 58))
+    // Phase 803 closed these two: until then the Fable reader THREW
+    // `Cannot interpret integer 673049 as DateOnly` — its arm of
+    // `Read.interpretIntegerAsFrom` carried an EMPTY `#if
+    // NET6_0_OR_GREATER` block where the .NET arm handles both types, so
+    // neither survived to a browser client at all (measured 2026-09-13
+    // through this leg). The domain-boundary cases beside them pin the
+    // bounds the reader refuses past — `DateOnly.MaxValue.DayNumber` and
+    // `TimeOnly.MaxValue.Ticks` — on both hosts, at the widest wire
+    // width each takes (`uint32` and `uint64`).
+    both WireClass.DateFamily "date-dateonly" (DateOnly(1843, 10, 1))
+    both WireClass.DateFamily "date-dateonly-min" DateOnly.MinValue
+    both WireClass.DateFamily "date-dateonly-max" DateOnly.MaxValue
+    both WireClass.DateFamily "date-timeonly" (TimeOnly(23, 59, 58))
+    both WireClass.DateFamily "date-timeonly-max" TimeOnly.MaxValue
 
     // ── Guid ──
     both WireClass.Guid "guid" sampleGuid
@@ -499,12 +503,15 @@ let pinnedCases: WireCase list = [
     // ── Binary ──
     both WireClass.Binary "binary-empty" (Array.empty<byte>)
     both WireClass.Binary "binary-small" [| 0uy; 1uy; 127uy; 128uy; 255uy |]
-    case
-        WireClass.Binary
-        (DotNetOnly
-            "the Fable MsgPack reader fails on a `bin16`-framed byte array with `Cannot interpret integer 47 as Byte[]`. The committed fixture is a correct `c5 01 2c` header over 300 bytes and the `bin8`-framed `binary-small` case decodes fine on the same host, so the fault is in the Fable arm's bin16 length read or its ReadBin type dispatch rather than in the fixture. Measured 2026-09-13; the diagnosis belongs to the decoder phases this corpus exists to feed")
-        "binary-past-bin8"
-        (Array.init 300 (fun i -> byte (i % 251)))
+    // Phase 803 re-measured this one and found the reader was never at
+    // fault: the 2026-09-13 divergence (`Cannot interpret integer 47 as
+    // Byte[]` on a correct `c5 01 2c` header) was the Fable HARNESS
+    // reading the fixture through three different pooled `Buffer`s —
+    // the `[<Emit>]` triple-evaluation Phase 69c.D fixed on 2026-09-15 —
+    // and nobody re-ran the claim afterwards. The `bin32` frame has no
+    // committed fixture (it would be 64 KiB of bytes for one header);
+    // the Fable pack builds it in memory instead.
+    both WireClass.Binary "binary-past-bin8" (Array.init 300 (fun i -> byte (i % 251)))
 
     // ── OptionFamily ──
     both WireClass.OptionFamily "option-some-int" (Some 7)
@@ -542,18 +549,10 @@ let pinnedCases: WireCase list = [
     // ── Record / NestedRecord ──
     both WireClass.Record "record-flat" sampleAddress
     both WireClass.NestedRecord "record-consignment" sampleConsignment
-    case
-        WireClass.NestedRecord
-        (DotNetOnly
-            "holds a `DateOnly` (`Customer.Since`), which the Fable reader refuses outright — see the `date-dateonly` divergence. `record-consignment` carries the cross-host nested-record coverage instead")
-        "record-nested"
-        sampleCustomer
-    case
-        WireClass.NestedRecord
-        (DotNetOnly
-            "holds a `Customer`, and so a `DateOnly` the Fable reader refuses — see the `date-dateonly` divergence. `record-consignment` carries the cross-host nested-record coverage instead")
-        "record-envelope"
-        sampleEnvelope
+    // Both cross-host since Phase 803: each holds a `DateOnly`
+    // (`Customer.Since`), which the Fable reader refused until then.
+    both WireClass.NestedRecord "record-nested" sampleCustomer
+    both WireClass.NestedRecord "record-envelope" sampleEnvelope
 ]
 
 /// The cross-host subset — what the Fable leg reads.
