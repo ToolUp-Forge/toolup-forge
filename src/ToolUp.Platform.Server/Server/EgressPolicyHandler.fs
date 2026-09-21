@@ -97,6 +97,65 @@ module EgressComponentContext =
             claimed.Value <- prior
     }
 
+/// Phase 796 — the ambient payload-label carrier. The same `AsyncLocal`
+/// shape `EgressComponentContext` above uses, and for the same reason: an
+/// `HttpRequestMessage` has nowhere to carry a disclosure label, and the
+/// surfaces that KNOW a payload's lineage (a report render, a
+/// notification dispatch, a webhook emission, a fact export) are several
+/// frames above the handler that decides.
+///
+/// A surface that has computed a label claims it for the async chain its
+/// outbound work runs on — `runLabelled`, the shape a handler wraps its
+/// emission in — and the egress handler reads it at decision time. An
+/// unclaimed chain reads `Unlabelled`, which is exactly true of it:
+/// nobody computed a lineage for whatever is about to leave. Under the
+/// permit-all default and under an advisory grant signature that costs
+/// nothing (GP 11); under a profile that makes declaration mandatory it
+/// is the refusal `EgressPolicy.requireLabel` raises.
+[<RequireQualifiedAccess>]
+module EgressLabelContext =
+
+    let private claimed = AsyncLocal<EgressLabel option>()
+
+    /// The label the current async chain claims, if any.
+    let tryCurrent () : EgressLabel option =
+        match claimed.Value with
+        | Some label -> Some label
+        | _ -> None
+
+    /// The label outbound calls on the current chain carry — the claimed
+    /// one, or `Unlabelled` for a chain nobody labelled.
+    let current () : EgressLabel =
+        tryCurrent () |> Option.defaultValue EgressLabel.unlabelled
+
+    /// Claim a label for the current async chain (flows into child
+    /// asyncs, never into siblings or parents).
+    let claim (label: EgressLabel) : unit = claimed.Value <- Some label
+
+    /// Clear the current chain's claim, returning it to `Unlabelled`.
+    let clear () : unit = claimed.Value <- None
+
+    /// Claim the JOIN of `label` with whatever the chain already carries,
+    /// so a payload assembled from several labelled sources ends up
+    /// carrying all of them. `Unlabelled` is absorbing in that join
+    /// (`EgressLabel.join` says why), so folding in an uncomputed source
+    /// makes the whole chain uncomputed rather than silently dropping it.
+    let joinIn (label: EgressLabel) : unit =
+        claimed.Value <- Some(EgressLabel.join (current ()) label)
+
+    /// Run `body` with `label` claimed, restoring the prior claim
+    /// afterwards — the shape an emitting surface wraps its outbound work
+    /// in.
+    let runLabelled (label: EgressLabel) (body: unit -> Async<'T>) : Async<'T> = async {
+        let prior = claimed.Value
+        claimed.Value <- Some label
+
+        try
+            return! body ()
+        finally
+            claimed.Value <- prior
+    }
+
 /// The installed policy and everything a denial leaves behind: the
 /// bounded since-boot ledger the deployment verification report reads,
 /// and the `EgressDenied` audit row.
@@ -178,8 +237,9 @@ module EgressEnforcement =
     /// here opens a connection.
     let check (destination: EgressDestination) (surface: EgressSurface) : Async<Result<unit, EgressDeniedException>> = async {
         let componentId = EgressComponentContext.current ()
+        let label = EgressLabelContext.current ()
 
-        match binding.Policy.Decide(componentId, destination, surface) with
+        match binding.Policy.Decide(componentId, destination, surface, label) with
         | EgressVerdict.Permit -> return Ok()
         | EgressVerdict.Deny reason ->
             let origin = EgressDestination.origin destination
@@ -190,6 +250,7 @@ module EgressEnforcement =
                     DeniedComponent = componentId
                     DeniedOrigin = origin
                     DeniedSurface = surfaceLabel
+                    DeniedLabel = EgressLabel.render label
                     DeniedReason = reason
                 }
 
@@ -238,6 +299,7 @@ module EgressEnforcement =
                     String.CompareOrdinal(ComponentId.value a.EgressComponent, ComponentId.value b.EgressComponent))
             EgressDenials = recentDenials ()
             EgressDenialsSinceBoot = denialCount ()
+            EgressLabelVocabulary = DisclosurePolicyRefSnapshot.Version
         }
 
 /// The handler in front of every platform-issued client. Consults the

@@ -416,6 +416,11 @@ type EgressDenialRecord = {
     DeniedComponent: ComponentId
     DeniedOrigin: string
     DeniedSurface: string
+    /// Phase 796 — the payload's disclosure label as
+    /// `EgressLabel.render` produced it: `unlabelled`, `labelled{}`, or
+    /// `labelled{a,b}`. The refs are policy NAMES, never values, so this
+    /// carries no more than the reason beside it already does.
+    DeniedLabel: string
     DeniedReason: string
 }
 
@@ -442,6 +447,12 @@ type EgressIntegrity = {
     EgressDenials: EgressDenialRecord list
     /// Every refusal since boot, retained or not.
     EgressDenialsSinceBoot: int
+    /// Phase 796 — the version of the pinned disclosure-policy-ref
+    /// vocabulary this deployment's runtime tier holds
+    /// (`DisclosurePolicyRefSnapshot.Version`). The composition tier
+    /// mirrors that snapshot, so an operator comparing the two reports
+    /// can say whether the tiers are speaking one vocabulary or two.
+    EgressLabelVocabulary: string
 }
 
 /// Phase 772 — the eleventh section's source.
@@ -1439,10 +1450,11 @@ module DeploymentVerificationReport =
             |> List.truncate EgressDenialCap
             |> List.map (fun denial ->
                 sprintf
-                    "refused: %s -> %s (%s surface)"
+                    "refused: %s -> %s (%s surface, %s)"
                     (ComponentId.value denial.DeniedComponent)
                     denial.DeniedOrigin
-                    denial.DeniedSurface)
+                    denial.DeniedSurface
+                    denial.DeniedLabel)
 
         let withheldDenials = integrity.EgressDenialsSinceBoot - denials.Length
 
@@ -1493,11 +1505,18 @@ module DeploymentVerificationReport =
                 | EgressPosture.DenyAll -> true
                 | EgressPosture.Declared(_, undeclaredDenied) -> undeclaredDenied
 
+            // Phase 796 — the binding line names the ref vocabulary the
+            // runtime tier holds, and whether an unlabelled payload is
+            // refused. Both travel with the posture rather than as their
+            // own section: they qualify the SAME bound, and a reader
+            // asking "what may leave here" needs the two facts together.
             let binding =
                 sprintf
-                    "profile %s, destination declaration %s"
+                    "profile %s, destination declaration %s, payload label %s, ref vocabulary %s"
                     integrity.EgressProfile
                     (if mandatory then "mandatory" else "advisory")
+                    (if mandatory then "required" else "advisory")
+                    integrity.EgressLabelVocabulary
 
             let findings = egressFindings integrity
             let refusals = integrity.EgressDenialsSinceBoot

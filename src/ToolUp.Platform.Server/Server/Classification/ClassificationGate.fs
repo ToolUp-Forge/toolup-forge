@@ -212,21 +212,39 @@ type EgressContext = {
     /// Optional concrete destination label (sink name, peer URL, file
     /// path). `None` when unspecified.
     Destination: string option
+    /// Phase 796 — the disclosure label of the payload these fields are
+    /// leaving in: the set of policy refs its lineage carries, or
+    /// `Unlabelled` when no lineage was computed for it.
+    ///
+    /// It rides the CONTEXT rather than widening `EgressPolicy`'s own
+    /// signature, which is why that type alias is untouched by this
+    /// phase: the boundary, the actor and the label are all facts about
+    /// the same crossing, and a deployment's existing policy function
+    /// keeps compiling while gaining access to a fourth fact it may now
+    /// read. `create` leaves it `Unlabelled`, so a caller that says
+    /// nothing behaves exactly as it did (GP 11).
+    Label: EgressLabel
 }
 
 module EgressContext =
     /// Context for `boundary` destined for `actor`, no explicit
-    /// destination.
+    /// destination, no computed payload label.
     let create (boundary: EgressBoundary) (actor: string) : EgressContext = {
         Boundary = boundary
         Actor = actor
         Destination = None
+        Label = EgressLabel.unlabelled
     }
 
     let withDestination (destination: string) (ctx: EgressContext) = {
         ctx with
             Destination = Some destination
     }
+
+    /// Phase 796 — record the payload's computed disclosure label on the
+    /// crossing, so a policy can decide on WHAT is leaving and not only
+    /// on where it is going.
+    let withLabel (label: EgressLabel) (ctx: EgressContext) = { ctx with Label = label }
 
 /// Phase 188 — maps a classification level + egress context to a decision.
 /// Deployments supply their own deny rules; the SDK ships
@@ -271,6 +289,31 @@ module EgressGate =
     /// an `EgressPolicy` returning `Redact` / `Block` for the levels +
     /// boundaries a deployment's DLP posture requires.
     let permissiveEgressPolicy: EgressPolicy = fun _ _ -> EgressDecision.Allow
+
+    /// Phase 796 — refuse a classified field whose payload carries no
+    /// computed disclosure label, then defer to `inner`.
+    ///
+    /// The classification-gate half of the same rule
+    /// `EgressPolicy.requireLabel` applies to outbound HTTP: under a
+    /// profile that makes declaration mandatory, a value whose lineage
+    /// was never computed must not cross a boundary on the strength of
+    /// its field classification alone. The refusal is `Block` rather
+    /// than `Redact` for the reason the webhook contract suppresses
+    /// rather than marks — a reader outside the trust boundary learns
+    /// nothing from a placeholder it should not have been told about —
+    /// and `Block` already emits the `EgressBlocked` audit row, so the
+    /// refusal is typed and audited with no new machinery.
+    ///
+    /// UNCLASSIFIED fields are untouched: `apply` never consults the
+    /// policy for them, so this narrows only what was already
+    /// classified. A deployment that does not compose it is unchanged
+    /// (GP 11) — it is a decorator a verified composition opts into,
+    /// never a new default.
+    let refuseUnlabelled (inner: EgressPolicy) : EgressPolicy =
+        fun level ctx ->
+            match ctx.Label with
+            | Unlabelled -> EgressDecision.Block
+            | LabelledRefs _ -> inner level ctx
 
     /// Scope under which egress audit is recorded — the reserved
     /// `_platform` cross-tenant audit scope. Egress happens outside a

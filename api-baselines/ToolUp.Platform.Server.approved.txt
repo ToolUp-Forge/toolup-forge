@@ -3517,13 +3517,15 @@ ToolUp.Platform.EgressComponentContext.current() : ToolUp.Platform.ComponentId
 ToolUp.Platform.EgressComponentContext.runAs`1(ToolUp.Platform.ComponentId, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
 ToolUp.Platform.EgressComponentContext.tryCurrent() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId]
 ToolUp.Platform.EgressContext (class)
-ToolUp.Platform.EgressContext..ctor(ToolUp.Platform.EgressBoundary, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.EgressContext..ctor(ToolUp.Platform.EgressBoundary, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.EgressLabel)
 ToolUp.Platform.EgressContext.Actor : System.String { get }
 ToolUp.Platform.EgressContext.Boundary : ToolUp.Platform.EgressBoundary { get }
 ToolUp.Platform.EgressContext.Destination : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EgressContext.Label : ToolUp.Platform.EgressLabel { get }
 ToolUp.Platform.EgressContextModule (class)
 ToolUp.Platform.EgressContextModule.create(ToolUp.Platform.EgressBoundary, System.String) : ToolUp.Platform.EgressContext
 ToolUp.Platform.EgressContextModule.withDestination(System.String, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressContext
+ToolUp.Platform.EgressContextModule.withLabel(ToolUp.Platform.EgressLabel, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressContext
 ToolUp.Platform.EgressDecision (class)
 ToolUp.Platform.EgressDecision.Allow : ToolUp.Platform.EgressDecision { get }
 ToolUp.Platform.EgressDecision.Block : ToolUp.Platform.EgressDecision { get }
@@ -3537,8 +3539,9 @@ ToolUp.Platform.EgressDecision+Tags.Allow : System.Int32 (literal)
 ToolUp.Platform.EgressDecision+Tags.Block : System.Int32 (literal)
 ToolUp.Platform.EgressDecision+Tags.Redact : System.Int32 (literal)
 ToolUp.Platform.EgressDenialRecord (class)
-ToolUp.Platform.EgressDenialRecord..ctor(ToolUp.Platform.ComponentId, System.String, System.String, System.String)
+ToolUp.Platform.EgressDenialRecord..ctor(ToolUp.Platform.ComponentId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.EgressDenialRecord.DeniedComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.EgressDenialRecord.DeniedLabel : System.String { get }
 ToolUp.Platform.EgressDenialRecord.DeniedOrigin : System.String { get }
 ToolUp.Platform.EgressDenialRecord.DeniedReason : System.String { get }
 ToolUp.Platform.EgressDenialRecord.DeniedSurface : System.String { get }
@@ -3566,13 +3569,22 @@ ToolUp.Platform.EgressGate.forExport(ToolUp.Platform.IFieldClassifier, Microsoft
 ToolUp.Platform.EgressGate.forResponse(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.EgressGate.make(ToolUp.Platform.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.IAuditLog) : ToolUp.Platform.IEgressGate
 ToolUp.Platform.EgressGate.permissiveEgressPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressDecision
+ToolUp.Platform.EgressGate.refuseUnlabelled(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EgressContext, ToolUp.Platform.EgressDecision]], ToolUp.Platform.ClassificationLevel, ToolUp.Platform.EgressContext) : ToolUp.Platform.EgressDecision
 ToolUp.Platform.EgressIntegrity (class)
-ToolUp.Platform.EgressIntegrity..ctor(System.String, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEgressGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord], System.Int32)
+ToolUp.Platform.EgressIntegrity..ctor(System.String, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEgressGrant], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord], System.Int32, System.String)
 ToolUp.Platform.EgressIntegrity.EgressComponents : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEgressGrant] { get }
 ToolUp.Platform.EgressIntegrity.EgressDenials : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EgressDenialRecord] { get }
 ToolUp.Platform.EgressIntegrity.EgressDenialsSinceBoot : System.Int32 { get }
+ToolUp.Platform.EgressIntegrity.EgressLabelVocabulary : System.String { get }
 ToolUp.Platform.EgressIntegrity.EgressPosture : ToolUp.Platform.EgressPosture { get }
 ToolUp.Platform.EgressIntegrity.EgressProfile : System.String { get }
+ToolUp.Platform.EgressLabelContext (class)
+ToolUp.Platform.EgressLabelContext.claim(ToolUp.Platform.EgressLabel) : System.Void
+ToolUp.Platform.EgressLabelContext.clear() : System.Void
+ToolUp.Platform.EgressLabelContext.current() : ToolUp.Platform.EgressLabel
+ToolUp.Platform.EgressLabelContext.joinIn(ToolUp.Platform.EgressLabel) : System.Void
+ToolUp.Platform.EgressLabelContext.runLabelled`1(ToolUp.Platform.EgressLabel, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.EgressLabelContext.tryCurrent() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressLabel]
 ToolUp.Platform.EgressPolicyHandler (class)
 ToolUp.Platform.EgressPolicyHandler..ctor()
 ToolUp.Platform.EgressPolicyHandler..ctor(ToolUp.Platform.EgressSurface)

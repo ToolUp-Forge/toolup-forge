@@ -417,6 +417,23 @@ module TaintLabel =
     /// nothing and is not recorded as one.
     let clearedBy (clears: string -> bool) (TaintRefs refs) : string list = refs |> Set.filter clears |> Set.toList
 
+    /// Phase 796 — the label as the RUNTIME tier's egress decision sees
+    /// it. The projection across the tier boundary, written on this side
+    /// because this is the side that can see both types: `ToolUp.Facts`
+    /// depends on `ToolUp.Platform`, never the reverse, so the egress
+    /// seam cannot name `TaintLabel` and names its mirror instead (the
+    /// cross-pillar rule's second shape — a data mirror plus a drift
+    /// check, not a type reference).
+    ///
+    /// The result is always LABELLED, including for `bottom`: a computed
+    /// lineage that carries nothing is `EgressLabel.clean`, which is a
+    /// different value from `EgressLabel.unlabelled` and is exactly the
+    /// distinction the verified profile refuses on. A surface that has a
+    /// `TaintLabel` at all has computed one; only a surface with NO
+    /// label is unlabelled, and it says so by not calling this.
+    let toEgressLabel (label: TaintLabel) : ToolUp.Platform.EgressLabel =
+        ToolUp.Platform.EgressLabel.ofPolicyRefs (policyRefs label)
+
     /// A readable rendering for law-failure messages.
     let render (label: TaintLabel) : string =
         if isBottom label then

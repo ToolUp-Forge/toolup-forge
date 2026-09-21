@@ -480,6 +480,7 @@ ToolUp.Facts.TaintLabelModule.ofPolicyRef(System.String) : ToolUp.Facts.TaintLab
 ToolUp.Facts.TaintLabelModule.ofPolicyRefs(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Facts.TaintLabel
 ToolUp.Facts.TaintLabelModule.policyRefs(ToolUp.Facts.TaintLabel) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.TaintLabelModule.render(ToolUp.Facts.TaintLabel) : System.String
+ToolUp.Facts.TaintLabelModule.toEgressLabel(ToolUp.Facts.TaintLabel) : ToolUp.Platform.EgressLabel
 ToolUp.Facts.TaintLabelModule.vocabulary(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]
 ToolUp.Facts.TemporalExtent (class)
 ToolUp.Facts.TemporalExtent..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])

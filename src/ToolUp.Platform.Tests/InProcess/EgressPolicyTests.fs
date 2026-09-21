@@ -29,6 +29,13 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.DeploymentVerification
+// Phase 796 — the fact-disclosure surface vocabulary the pinned snapshot
+// mirrors. `ToolUp.Facts` stays fully qualified at its few use sites
+// rather than opened: it is the tier ABOVE `ToolUp.Platform` in the
+// reference graph — which is the whole reason the egress seam holds a
+// mirror instead of naming `TaintLabel` — and spelling it out at the
+// call site is what keeps that direction legible in the probes.
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Doubles ───────────────────────────────────────────────────────────
 
@@ -82,7 +89,11 @@ let private grantsForA: EgressGrantSignature =
     Map.ofList [ moduleA, EgressGrant.ofOrigins [ "https://api.example.com" ] ]
 
 let private decide (binding: EgressPolicyBinding) componentId url surface =
-    binding.Policy.Decide(componentId, origin url, surface)
+    binding.Policy.Decide(componentId, origin url, surface, EgressLabel.clean)
+
+/// Phase 796 — the same decision over an explicit payload label.
+let private decideLabelled (binding: EgressPolicyBinding) componentId url surface label =
+    binding.Policy.Decide(componentId, origin url, surface, label)
 
 let private isPermit =
     function
@@ -383,8 +394,15 @@ let private handlerTests =
             use client =
                 PlatformHttpClient.createWith EgressSurface.ModuleHandler (new RecordingHandler())
 
+            // Phase 796 — this probe is about the COMPONENT axis, and a
+            // mandatory profile now also refuses a payload whose lineage
+            // was never computed, so the chain claims a computed label to
+            // isolate the axis under test. Without it the permitted leg
+            // would be refused for the other reason entirely, and the
+            // probe would pass for the wrong one.
             let get () =
-                sendCatching client (new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/"))
+                EgressLabelContext.runLabelled EgressLabel.clean (fun () ->
+                    sendCatching client (new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/")))
 
             let! asA = EgressComponentContext.runAs moduleA get
             Expect.isOk asA "module:reports declares api.example.com — permitted"
@@ -457,6 +475,7 @@ let private integrity posture denials = {
     ]
     EgressDenials = denials
     EgressDenialsSinceBoot = List.length denials
+    EgressLabelVocabulary = DisclosurePolicyRefSnapshot.Version
 }
 
 let private sectionFor (egress: EgressIntegrity option) =
@@ -492,6 +511,7 @@ let private reportTests =
                 DeniedComponent = EgressPolicy.platformComponent
                 DeniedOrigin = "https://api.example.com"
                 DeniedSurface = "ai-provider"
+                DeniedLabel = "labelled{party-a}"
                 DeniedReason = "r"
             }
 
@@ -501,8 +521,8 @@ let private reportTests =
 
             Expect.contains
                 section.Findings
-                "refused: module:_platform -> https://api.example.com (ai-provider surface)"
-                "the refusal line names origin and component"
+                "refused: module:_platform -> https://api.example.com (ai-provider surface, labelled{party-a})"
+                "the refusal line names origin, component and payload label"
 
             Expect.contains section.Findings "module:reports: declared{https://api.example.com}" "the grant line"
 
@@ -565,14 +585,376 @@ let private contractTests =
         ToolUp.Platform.Tests.Contracts.IEgressPolicyContract.tests
             "DeclaredDestinations"
             (EgressPolicy.declaredDestinations (DeclaredDestinations Set.empty) grantsForA)
+
+        // Phase 796 — the decorator is a third implementation of the same
+        // seam and is held to the same laws, including on the coordinate
+        // it was added to read.
+        ToolUp.Platform.Tests.Contracts.IEgressPolicyContract.tests
+            "RequireLabel over DeclaredDestinations"
+            (EgressPolicy.requireLabel (EgressPolicy.declaredDestinations UnrestrictedEgress grantsForA))
+    ]
+
+// ─── Phase 796 — the payload's label, and one ref vocabulary ───────────
+//
+// Three claims, each probed where it can fail:
+//
+//   • `Unlabelled` and `clean` are DIFFERENT values, and stay different
+//     through every accessor and through the join — the whole phase
+//     rests on "nobody computed a lineage" not collapsing into "a
+//     lineage was computed and carries nothing";
+//   • the gates decide on the label: a payload at a DECLARED origin is
+//     still refused under a mandatory profile when its lineage was never
+//     computed, and the advisory profile is byte-for-byte unchanged
+//     (GP 11);
+//   • the pinned ref vocabulary matches the live surfaces, with a go-red
+//     control proving the check has teeth rather than agreeing with
+//     itself.
+
+let private labelTests =
+    testList "EgressLabel — the mirror and its order" [
+        test "unlabelled is not clean, and the difference survives every accessor" {
+            Expect.notEqual EgressLabel.unlabelled EgressLabel.clean "the two are distinct values"
+            Expect.isFalse (EgressLabel.isLabelled EgressLabel.unlabelled) "unlabelled carries no computation"
+            Expect.isTrue (EgressLabel.isLabelled EgressLabel.clean) "clean is a computed answer"
+            Expect.isFalse (EgressLabel.isClean EgressLabel.unlabelled) "unlabelled is NOT clean"
+            Expect.isTrue (EgressLabel.isClean EgressLabel.clean) "clean is clean"
+
+            // Both read as carrying nothing — which is why `isLabelled`
+            // has to be consulted first, and why `policyRefs` alone can
+            // never be read as evidence that nothing reaches the payload.
+            Expect.isEmpty (EgressLabel.policyRefs EgressLabel.unlabelled) "no refs"
+            Expect.isEmpty (EgressLabel.policyRefs EgressLabel.clean) "no refs"
+            Expect.isFalse (EgressLabel.contains "party-a" EgressLabel.unlabelled) "knows nothing either way"
+        }
+
+        test "join is absorbing on unlabelled and set union on computed labels" {
+            let a = EgressLabel.ofPolicyRef "party-a"
+            let b = EgressLabel.ofPolicyRef "party-b"
+
+            Expect.equal (EgressLabel.join a b) (EgressLabel.ofPolicyRefs [ "party-a"; "party-b" ]) "union"
+            Expect.equal (EgressLabel.join a EgressLabel.clean) a "clean is the identity on computed labels"
+
+            // The fail-open this rules out: an uncomputed source joined
+            // into a computed one must not vanish.
+            Expect.equal (EgressLabel.join a EgressLabel.unlabelled) EgressLabel.unlabelled "absorbing on the right"
+            Expect.equal (EgressLabel.join EgressLabel.unlabelled a) EgressLabel.unlabelled "absorbing on the left"
+
+            Expect.equal
+                (EgressLabel.joinAll [ a; EgressLabel.unlabelled; b ])
+                EgressLabel.unlabelled
+                "one uncomputed source makes the whole payload uncomputed"
+
+            Expect.equal (EgressLabel.joinAll []) EgressLabel.clean "nothing joined is nothing carried"
+        }
+
+        test "the mirror agrees with TaintLabel ref for ref, and bottom projects to clean" {
+            let taint = ToolUp.Facts.TaintLabel.ofPolicyRefs [ "party-b"; "party-a" ]
+            let mirrored = ToolUp.Facts.TaintLabel.toEgressLabel taint
+
+            Expect.equal
+                (EgressLabel.policyRefs mirrored)
+                (ToolUp.Facts.TaintLabel.policyRefs taint)
+                "the two carry the same refs"
+
+            // `bottom` is a COMPUTED lineage carrying nothing, so it must
+            // project to `clean` and never to `unlabelled` — a surface
+            // holding a `TaintLabel` at all has computed one.
+            Expect.equal
+                (ToolUp.Facts.TaintLabel.toEgressLabel ToolUp.Facts.TaintLabel.bottom)
+                EgressLabel.clean
+                "bottom projects to clean"
+
+            // The join commutes with the projection, which is what makes
+            // the mirror faithful rather than merely similarly shaped.
+            let other = ToolUp.Facts.TaintLabel.ofPolicyRef "party-c"
+
+            Expect.equal
+                (ToolUp.Facts.TaintLabel.toEgressLabel (ToolUp.Facts.TaintLabel.join taint other))
+                (EgressLabel.join mirrored (ToolUp.Facts.TaintLabel.toEgressLabel other))
+                "projecting a join is joining the projections"
+        }
+
+        test "render is stable, deterministic, and tells the two empties apart" {
+            Expect.equal (EgressLabel.render EgressLabel.unlabelled) "unlabelled" "unlabelled"
+            Expect.equal (EgressLabel.render EgressLabel.clean) "labelled{}" "clean"
+
+            Expect.equal
+                (EgressLabel.render (EgressLabel.ofPolicyRefs [ "b"; "a" ]))
+                "labelled{a,b}"
+                "refs sorted ordinally"
+        }
+    ]
+
+let private labelledGateTests =
+    testList "the gates consult the label" [
+        test "requireLabel refuses an unlabelled payload and defers otherwise" {
+            let policy = EgressPolicy.requireLabel EgressPolicy.permitAll
+            let destination = origin "https://api.example.com"
+
+            match policy.Decide(moduleA, destination, EgressSurface.Webhook, EgressLabel.unlabelled) with
+            | EgressVerdict.Deny reason ->
+                Expect.stringContains reason "carries no disclosure label" "the refusal says why"
+                Expect.stringContains reason "https://api.example.com" "and names the origin"
+                Expect.isFalse (reason.Contains "?") "never a query string"
+            | EgressVerdict.Permit -> failtest "an unlabelled payload was permitted under requireLabel"
+
+            Expect.isTrue
+                (isPermit (policy.Decide(moduleA, destination, EgressSurface.Webhook, EgressLabel.clean)))
+                "a computed-clean payload defers to the inner policy"
+        }
+
+        test "a mandatory profile refuses an unlabelled payload at a DECLARED origin" {
+            // The phase in one assertion: the destination is permitted,
+            // and the call is still refused, because the gate now sees
+            // WHAT is leaving and not only where it is going.
+            let binding = EgressPolicy.bind true (Some grantsForA)
+
+            Expect.isTrue
+                (isPermit (
+                    decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook EgressLabel.clean
+                ))
+                "a declared origin with a computed label is permitted"
+
+            match
+                decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook EgressLabel.unlabelled
+            with
+            | EgressVerdict.Deny _ -> ()
+            | EgressVerdict.Permit -> failtest "a declared origin carried an unlabelled payload out"
+        }
+
+        test "the advisory profile is unchanged by the label (GP 11)" {
+            for binding in [ EgressPolicy.bind false None; EgressPolicy.bind false (Some grantsForA) ] do
+                for label in [ EgressLabel.unlabelled; EgressLabel.clean; EgressLabel.ofPolicyRef "party-a" ] do
+                    Expect.equal
+                        (decideLabelled binding moduleA "https://api.example.com" EgressSurface.Webhook label)
+                        (decideLabelled
+                            binding
+                            moduleA
+                            "https://api.example.com"
+                            EgressSurface.Webhook
+                            EgressLabel.clean)
+                        "the label changes no verdict where declaration is advisory"
+
+            // And a component the advisory signature leaves unrestricted
+            // still reaches an undeclared origin, unlabelled payload and
+            // all — the pre-796 behaviour, byte for byte.
+            match
+                decideLabelled
+                    (EgressPolicy.bind false (Some grantsForA))
+                    moduleB
+                    "https://other.example"
+                    EgressSurface.Webhook
+                    EgressLabel.unlabelled
+            with
+            | EgressVerdict.Permit -> ()
+            | EgressVerdict.Deny r -> failtestf "an unrestricted component was refused: %s" r
+        }
+
+        test "the classification gate's refuseUnlabelled blocks an unlabelled crossing" {
+            let inner = EgressGate.permissiveEgressPolicy
+            let policy = EgressGate.refuseUnlabelled inner
+            let unlabelledCtx = EgressContext.create EgressBoundary.ExportPayload "recipient"
+            let labelledCtx = unlabelledCtx |> EgressContext.withLabel EgressLabel.clean
+
+            Expect.equal unlabelledCtx.Label EgressLabel.unlabelled "create leaves the crossing unlabelled"
+
+            for level in [ Public; Confidential; Financial; Pii ] do
+                Expect.equal (policy level unlabelledCtx) EgressDecision.Block "unlabelled is blocked at every level"
+                Expect.equal (policy level labelledCtx) (inner level labelledCtx) "a labelled crossing defers"
+        }
+
+        testCaseAsync "a blocked unlabelled field is dropped and audited, and a labelled one is not"
+        <| async {
+            let classifier =
+                DefaultFieldClassifier.create [ FieldClassification.create "Customer" "Email" Pii ]
+
+            let fields = Map.ofList [ "Email", "a@b.com"; "Unclassified", "x" ]
+            let policy = EgressGate.refuseUnlabelled EgressGate.permissiveEgressPolicy
+
+            let auditUnlabelled = RecordingAudit()
+            let ctx = EgressContext.create EgressBoundary.ExportPayload "recipient"
+            let! blocked = EgressGate.apply classifier policy auditUnlabelled ctx "Customer" fields
+
+            Expect.isFalse (blocked.ContainsKey "Email") "the classified field is dropped, never marker-substituted"
+            Expect.equal (blocked.TryFind "Unclassified") (Some "x") "an unclassified field is untouched"
+            Expect.isNonEmpty auditUnlabelled.Events "the refusal is audited"
+
+            let auditLabelled = RecordingAudit()
+            let labelledCtx = ctx |> EgressContext.withLabel (EgressLabel.ofPolicyRef "party-a")
+            let! passed = EgressGate.apply classifier policy auditLabelled labelledCtx "Customer" fields
+
+            Expect.equal passed fields "a computed label passes the permissive inner policy through unchanged"
+            Expect.isEmpty auditLabelled.Events "and audits nothing"
+        }
+
+        testCaseAsync "the ambient label reaches the decision, the ledger and the report"
+        <| isolated (fun () -> async {
+            EgressEnforcement.install (EgressPolicy.bind true (Some grantsForA))
+
+            use client =
+                PlatformHttpClient.createWith EgressSurface.Webhook (new RecordingHandler())
+
+            // A DECLARED origin claimed by the component that declares
+            // it, so the only thing left that can refuse this is the
+            // label the surface claimed for the chain.
+            let emit label =
+                EgressComponentContext.runAs moduleA (fun () ->
+                    EgressLabelContext.runLabelled label (fun () ->
+                        sendCatching client (new HttpRequestMessage(HttpMethod.Post, "https://api.example.com/emit"))))
+
+            let! outcome = emit EgressLabel.unlabelled
+
+            match outcome with
+            | Ok _ -> failtest "an unlabelled payload left through a declared origin"
+            | Error e ->
+                Expect.isTrue (e :? EgressDeniedException) "the typed refusal"
+                Expect.stringContains e.Message "carries no disclosure label" "naming the label"
+
+            let projected = EgressEnforcement.deploymentVerificationEvidence "verified"
+
+            Expect.equal
+                (projected.EgressDenials |> List.map _.DeniedLabel)
+                [ "unlabelled" ]
+                "the ledger names the label"
+
+            Expect.equal
+                projected.EgressLabelVocabulary
+                DisclosurePolicyRefSnapshot.Version
+                "the projection names the pinned vocabulary"
+
+            // The same call with a computed label goes through, which is
+            // what makes the refusal above about the label and not about
+            // anything else in the composition.
+            let! permitted = emit EgressLabel.clean
+            Expect.isOk permitted "a computed label crosses the same declared origin"
+        })
+
+        test "an unclaimed chain reads unlabelled, and a claim does not escape it" {
+            Expect.equal (EgressLabelContext.current ()) EgressLabel.unlabelled "nothing claimed"
+
+            EgressLabelContext.runLabelled (EgressLabel.ofPolicyRef "party-a") (fun () -> async {
+                Expect.equal
+                    (EgressLabelContext.current ())
+                    (EgressLabel.ofPolicyRef "party-a")
+                    "the claim is visible inside"
+
+                EgressLabelContext.joinIn (EgressLabel.ofPolicyRef "party-b")
+
+                Expect.equal
+                    (EgressLabelContext.current ())
+                    (EgressLabel.ofPolicyRefs [ "party-a"; "party-b" ])
+                    "joinIn accumulates"
+            })
+            |> Async.RunSynchronously
+
+            Expect.equal (EgressLabelContext.current ()) EgressLabel.unlabelled "the prior claim is restored"
+        }
+    ]
+
+// ─── One vocabulary, pinned — and the drift check that proves it ───────
+
+/// Every way a pinned list and the live one disagree, as readable
+/// sentences. Returned rather than asserted so the check can be bound
+/// twice: to the real snapshot and asserted empty, and to a deliberately
+/// drifted one to prove it fires. A drift check that only ever agrees
+/// with itself is not a check.
+let private vocabularyDrift (what: string) (pinned: string list) (live: string list) : string list = [
+    for missing in live |> List.filter (fun l -> not (List.contains l pinned)) do
+        yield sprintf "the live %s '%s' is absent from the pinned snapshot" what missing
+
+    for stale in pinned |> List.filter (fun p -> not (List.contains p live)) do
+        yield sprintf "the pinned snapshot names the %s '%s', which no live case produces" what stale
+
+    if List.length pinned = List.length live && pinned <> live then
+        yield sprintf "the pinned %s order %A differs from the live order %A" what pinned live
+]
+
+/// The canonical string of every case of a nullary-case DU, in
+/// declaration order — read off the LIVE type by reflection, so a case
+/// added to it cannot be missed by a hand-maintained list.
+let private liveCases<'T> (render: 'T -> string) : string list =
+    Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<'T>
+    |> Array.map (fun case -> Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(case, [||]) :?> 'T |> render)
+    |> List.ofArray
+
+let private snapshotTests =
+    testList "DisclosurePolicyRefSnapshot — one vocabulary across the tiers" [
+        test "the pinned fact-egress surfaces match the live DU" {
+            let live = liveCases<FactEgressSurface> FactEgressSurface.toString
+
+            Expect.isEmpty
+                (vocabularyDrift "fact-egress surface" DisclosurePolicyRefSnapshot.factEgressSurfaces live)
+                "add the surface to the snapshot and bump DisclosurePolicyRefSnapshot.Version in the same commit"
+        }
+
+        test "the pinned outbound-call surfaces match the live DU" {
+            let live = liveCases<EgressSurface> EgressSurface.label
+
+            Expect.isEmpty
+                (vocabularyDrift "egress surface" DisclosurePolicyRefSnapshot.egressSurfaces live)
+                "add the surface to the snapshot and bump DisclosurePolicyRefSnapshot.Version in the same commit"
+        }
+
+        test "the reserved policy refs are the ones the platform actually emits" {
+            // `Internal` is emitted by the one disclosure predicate, so
+            // the snapshot's claim about it is checked against that
+            // predicate rather than against another list.
+            match
+                ToolUp.Facts.DisclosureEgress.evaluate
+                    ToolUp.Facts.DisclosurePolicyResolver.denyUnknown
+                    FactRetrieval
+                    ToolUp.Facts.Internal
+            with
+            | FactNotDisclosable policyRef ->
+                Expect.contains DisclosurePolicyRefSnapshot.reservedPolicyRefs policyRef "the snapshot names it"
+            | FactDisclosable -> failtest "the Internal classification became disclosable"
+
+            Expect.contains DisclosurePolicyRefSnapshot.reservedPolicyRefs "unknown-fact" "the unresolvable-id ref"
+
+            Expect.equal
+                DisclosurePolicyRefSnapshot.UnlabelledToken
+                (EgressLabel.render EgressLabel.unlabelled)
+                "the snapshot's unlabelled token is what the renderer produces"
+        }
+
+        test "the drift check has teeth — a deliberately drifted snapshot fails it" {
+            let live = liveCases<EgressSurface> EgressSurface.label
+
+            // A case dropped from the mirror: the shape a composition
+            // tier takes when the runtime tier grows a surface it has
+            // not adopted.
+            let dropped =
+                DisclosurePolicyRefSnapshot.egressSurfaces
+                |> List.filter (fun s -> s <> "webhook")
+
+            Expect.isNonEmpty (vocabularyDrift "egress surface" dropped live) "a dropped case is caught"
+
+            // A case the mirror invented, which no live type produces.
+            let invented = DisclosurePolicyRefSnapshot.egressSurfaces @ [ "carrier-pigeon" ]
+            Expect.isNonEmpty (vocabularyDrift "egress surface" invented live) "an invented case is caught"
+
+            // Same membership, different order — the mirror is
+            // field-for-field, so a reordering is drift too.
+            let reordered = List.rev DisclosurePolicyRefSnapshot.egressSurfaces
+            Expect.isNonEmpty (vocabularyDrift "egress surface" reordered live) "a reordering is caught"
+
+            // The control in the other direction: the REAL snapshot
+            // passes the very check the three above fail.
+            Expect.isEmpty
+                (vocabularyDrift "egress surface" DisclosurePolicyRefSnapshot.egressSurfaces live)
+                "the real snapshot is clean under the same check"
+        }
     ]
 
 let tests =
-    testList "Phase 772 — server-side egress policy" [
+    testList "Phase 772 / 796 — server-side egress policy, checked against the payload's label" [
         destinationTests
         policyTests
         handlerTests
         reportTests
         evidenceTests
         contractTests
+        labelTests
+        labelledGateTests
+        snapshotTests
     ]

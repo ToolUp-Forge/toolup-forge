@@ -4892,6 +4892,12 @@ ToolUp.Platform.DirectAddIdentityProof.Tag : System.Int32 { get }
 ToolUp.Platform.DirectAddIdentityProof+Tags (class)
 ToolUp.Platform.DirectAddIdentityProof+Tags.NoIdentityProof : System.Int32 (literal)
 ToolUp.Platform.DirectAddIdentityProof+Tags.RequireDirectoryProof : System.Int32 (literal)
+ToolUp.Platform.DisclosurePolicyRefSnapshot (class)
+ToolUp.Platform.DisclosurePolicyRefSnapshot.UnlabelledToken : System.String (literal)
+ToolUp.Platform.DisclosurePolicyRefSnapshot.Version : System.String (literal)
+ToolUp.Platform.DisclosurePolicyRefSnapshot.egressSurfaces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DisclosurePolicyRefSnapshot.factEgressSurfaces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DisclosurePolicyRefSnapshot.reservedPolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.DisclosureView (class)
 ToolUp.Platform.DisclosureView..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedDeclaration], System.String)
 ToolUp.Platform.DisclosureView.Declarations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedDeclaration] { get }
@@ -4985,12 +4991,35 @@ ToolUp.Platform.EgressGrantModule.permits(ToolUp.Platform.EgressGrant, ToolUp.Pl
 ToolUp.Platform.EgressGrantModule.render(ToolUp.Platform.EgressGrant) : System.String
 ToolUp.Platform.EgressGrantModule.resolve(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant], ToolUp.Platform.EgressGrant, ToolUp.Platform.ComponentId) : ToolUp.Platform.EgressGrant
 ToolUp.Platform.EgressGrantModule.unrestricted : ToolUp.Platform.EgressGrant { get }
+ToolUp.Platform.EgressLabel (class)
+ToolUp.Platform.EgressLabel.IsLabelledRefs : System.Boolean { get }
+ToolUp.Platform.EgressLabel.IsUnlabelled : System.Boolean { get }
+ToolUp.Platform.EgressLabel.Tag : System.Int32 { get }
+ToolUp.Platform.EgressLabel.Unlabelled : ToolUp.Platform.EgressLabel { get }
+ToolUp.Platform.EgressLabel+LabelledRefs (class)
+ToolUp.Platform.EgressLabel+LabelledRefs.Item : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.EgressLabel+Tags (class)
+ToolUp.Platform.EgressLabel+Tags.LabelledRefs : System.Int32 (literal)
+ToolUp.Platform.EgressLabel+Tags.Unlabelled : System.Int32 (literal)
+ToolUp.Platform.EgressLabelModule (class)
+ToolUp.Platform.EgressLabelModule.clean : ToolUp.Platform.EgressLabel { get }
+ToolUp.Platform.EgressLabelModule.contains(System.String, ToolUp.Platform.EgressLabel) : System.Boolean
+ToolUp.Platform.EgressLabelModule.isClean(ToolUp.Platform.EgressLabel) : System.Boolean
+ToolUp.Platform.EgressLabelModule.isLabelled(ToolUp.Platform.EgressLabel) : System.Boolean
+ToolUp.Platform.EgressLabelModule.join(ToolUp.Platform.EgressLabel, ToolUp.Platform.EgressLabel) : ToolUp.Platform.EgressLabel
+ToolUp.Platform.EgressLabelModule.joinAll(System.Collections.Generic.IEnumerable`1[ToolUp.Platform.EgressLabel]) : ToolUp.Platform.EgressLabel
+ToolUp.Platform.EgressLabelModule.ofPolicyRef(System.String) : ToolUp.Platform.EgressLabel
+ToolUp.Platform.EgressLabelModule.ofPolicyRefs(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.EgressLabel
+ToolUp.Platform.EgressLabelModule.policyRefs(ToolUp.Platform.EgressLabel) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.EgressLabelModule.render(ToolUp.Platform.EgressLabel) : System.String
+ToolUp.Platform.EgressLabelModule.unlabelled : ToolUp.Platform.EgressLabel { get }
 ToolUp.Platform.EgressPolicy (class)
 ToolUp.Platform.EgressPolicy.bind(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant]]) : ToolUp.Platform.EgressPolicyBinding
 ToolUp.Platform.EgressPolicy.declaredDestinations(ToolUp.Platform.EgressGrant, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant]) : ToolUp.Platform.IEgressPolicy
 ToolUp.Platform.EgressPolicy.permitAll : ToolUp.Platform.IEgressPolicy { get }
 ToolUp.Platform.EgressPolicy.permitAllBinding : ToolUp.Platform.EgressPolicyBinding { get }
 ToolUp.Platform.EgressPolicy.platformComponent : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.EgressPolicy.requireLabel(ToolUp.Platform.IEgressPolicy) : ToolUp.Platform.IEgressPolicy
 ToolUp.Platform.EgressPolicyBinding (class)
 ToolUp.Platform.EgressPolicyBinding..ctor(ToolUp.Platform.IEgressPolicy, ToolUp.Platform.EgressPosture, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.EgressGrant], System.Boolean)
 ToolUp.Platform.EgressPolicyBinding.DeclarationMandatory : System.Boolean { get }
@@ -6762,7 +6791,7 @@ ToolUp.Platform.IDeploymentVerificationApi.GetVerificationReport : Microsoft.FSh
 ToolUp.Platform.IDevDiagnosticsContributor (interface)
 ToolUp.Platform.IDevDiagnosticsContributor.Contribute() : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, System.Object]]
 ToolUp.Platform.IEgressPolicy (interface)
-ToolUp.Platform.IEgressPolicy.Decide(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface) : ToolUp.Platform.EgressVerdict
+ToolUp.Platform.IEgressPolicy.Decide(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface, ToolUp.Platform.EgressLabel) : ToolUp.Platform.EgressVerdict
 ToolUp.Platform.IEventStore (interface)
 ToolUp.Platform.IEventStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.IEventStore.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]

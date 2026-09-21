@@ -6,7 +6,8 @@ namespace ToolUp.Platform
 // ─── Phase 772 — server-side egress policy: the pure half ────────────
 //
 // The decision over an outbound HTTP call — WHICH component is calling
-// WHICH origin through WHICH surface — is a pure function of three
+// WHICH origin through WHICH surface, carrying WHAT label (Phase 796) —
+// is a pure function of four
 // values, and this file holds exactly that: the value types, the seam
 // (`IEgressPolicy`), the two shipped policies and the per-component
 // grant they are resolved from. Nothing here opens a socket, reads a
@@ -185,6 +186,179 @@ module EgressSurface =
         | EgressSurface.Webhook -> "webhook"
         | EgressSurface.Other -> "other"
 
+// ─── Phase 796 — the payload's label, mirrored into this tier ────────
+//
+// The taint walk computes a `TaintLabel` — the set of taint-propagating
+// policy refs a value's lineage carries — and that type lives in the fact
+// companion, which DEPENDS on this tier. The dependency cannot be
+// inverted, so the egress decision cannot name `TaintLabel`; it names its
+// MIRROR. `EgressLabel` carries the same refs as bare strings, and the
+// projection across the boundary is written on the side that can see both
+// (`TaintLabel.toEgressLabel`, in the fact companion). This is the
+// cross-pillar rule's second shape — a pinned data mirror plus a drift
+// conformance check — rather than its first, because a type reference
+// here would put the whole disclosure model under this tier's floor.
+//
+// **`Unlabelled` is not `clean`, and the difference is the whole point.**
+// `LabelledRefs Set.empty` says a lineage was computed and nothing
+// restricted reaches the value; `Unlabelled` says nobody computed one.
+// The permit-all default treats them alike (GP 11), and a profile that
+// makes declaration mandatory refuses the second — the same two-case
+// shape, for the same reason, as `UnrestrictedEgress` beside
+// `DeclaredDestinations Set.empty` above.
+
+/// The disclosure label a payload leaving the process carries: the set of
+/// policy refs its lineage is known to carry, or `Unlabelled` when no
+/// lineage was computed for it at all.
+type EgressLabel =
+    /// No label was computed for this payload. Permitted under the
+    /// additive default; refused where declaration is mandatory.
+    | Unlabelled
+    /// The payload's lineage was computed and carries exactly these
+    /// policy refs. The EMPTY set is a real answer — "computed, and
+    /// clean" — and is deliberately NOT folded into `Unlabelled`.
+    | LabelledRefs of Set<string>
+
+[<RequireQualifiedAccess>]
+module EgressLabel =
+
+    /// Nobody computed a lineage for this payload.
+    let unlabelled: EgressLabel = Unlabelled
+
+    /// A computed lineage carrying nothing restricted — the bottom of the
+    /// order, and NOT the same value as `unlabelled`.
+    let clean: EgressLabel = LabelledRefs Set.empty
+
+    /// A computed lineage carrying exactly one policy ref.
+    let ofPolicyRef (policyRef: string) : EgressLabel = LabelledRefs(Set.singleton policyRef)
+
+    /// A computed lineage carrying exactly these refs. Order and
+    /// duplicates are immaterial.
+    let ofPolicyRefs (policyRefs: string seq) : EgressLabel = LabelledRefs(Set.ofSeq policyRefs)
+
+    /// Whether a lineage was computed at all.
+    let isLabelled (label: EgressLabel) : bool =
+        match label with
+        | Unlabelled -> false
+        | LabelledRefs _ -> true
+
+    /// A computed lineage carrying nothing. FALSE for `Unlabelled`, which
+    /// is an absence of information rather than an absence of taint.
+    let isClean (label: EgressLabel) : bool = label = clean
+
+    /// The refs a computed label carries, distinct and sorted. EMPTY for
+    /// `Unlabelled` — read it with `isLabelled` first, never as evidence
+    /// that nothing reaches the payload.
+    let policyRefs (label: EgressLabel) : string list =
+        match label with
+        | Unlabelled -> []
+        | LabelledRefs refs -> Set.toList refs
+
+    /// Whether the named policy is known to reach the payload. FALSE for
+    /// `Unlabelled`, which knows nothing either way.
+    let contains (policyRef: string) (label: EgressLabel) : bool =
+        match label with
+        | Unlabelled -> false
+        | LabelledRefs refs -> Set.contains policyRef refs
+
+    /// What a payload carries when two lineages meet.
+    ///
+    /// `Unlabelled` is ABSORBING, not the identity: a payload assembled
+    /// from a known-clean part and a part nobody computed is, as a whole,
+    /// uncomputed. Making it the identity would let an unknown lineage
+    /// vanish into a known one — a fail-open at exactly the join a
+    /// multi-source payload is built by. On the computed labels the
+    /// operator is set union, so it agrees with `TaintLabel.join` ref for
+    /// ref and the mirror stays faithful.
+    let join (a: EgressLabel) (b: EgressLabel) : EgressLabel =
+        match a, b with
+        | Unlabelled, _
+        | _, Unlabelled -> Unlabelled
+        | LabelledRefs x, LabelledRefs y -> LabelledRefs(Set.union x y)
+
+    /// The join of many. `clean` over an empty sequence — nothing joined
+    /// is nothing carried, which is a computed answer; a caller with no
+    /// sources and no lineage says `unlabelled` itself.
+    let joinAll (labels: EgressLabel seq) : EgressLabel = Seq.fold join clean labels
+
+    /// Stable rendering for report lines, denial reasons and audit text:
+    /// `unlabelled`, `labelled{}`, or `labelled{a,b}` with the refs sorted
+    /// ordinally so the line is deterministic.
+    let render (label: EgressLabel) : string =
+        match label with
+        | Unlabelled -> "unlabelled"
+        | LabelledRefs refs ->
+            let sorted =
+                refs
+                |> Set.toList
+                |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+
+            "labelled{" + String.concat "," sorted + "}"
+
+// ─── Phase 796 — the pinned ref vocabulary ───────────────────────────
+//
+// One vocabulary across the tiers, published as DATA. The composition
+// tier mirrors this snapshot field-for-field; the runtime tier is the
+// snapshot's home. Nothing here is derived from the live types on
+// purpose: a snapshot computed from the DUs it describes can never
+// disagree with them, and so could never redden. It is pinned literal
+// text, and the forge-side conformance check compares it against the
+// live `EgressSurface` and `FactEgressSurface` cases — so a case added
+// to either without a snapshot bump fails the gate by name.
+//
+// Bump `Version` in the same commit as any change to the lists below.
+
+/// Phase 796 — the pinned disclosure-policy-ref vocabulary shared by the
+/// runtime tier (this package) and the composition tier (which mirrors
+/// it). The deployment's own `Restricted` policy refs are arbitrary
+/// strings and are NOT enumerable here; what is pinned is the vocabulary
+/// around them — the reserved refs the platform itself emits, and the
+/// surface names a policy is resolved at.
+[<RequireQualifiedAccess>]
+module DisclosurePolicyRefSnapshot =
+
+    /// The snapshot's version. Named by the deployment verification
+    /// report, so an operator reading the report and a composition tier
+    /// reading its mirror can say whether they hold the same vocabulary.
+    [<Literal>]
+    let Version = "796.1"
+
+    /// The token a payload with no computed lineage renders as — the one
+    /// value in the vocabulary that is not a policy ref.
+    [<Literal>]
+    let UnlabelledToken = "unlabelled"
+
+    /// Policy refs the PLATFORM emits itself, as opposed to the ones a
+    /// deployment declares. A mirror must recognise these without the
+    /// deployment declaring them.
+    ///
+    ///  - `Internal` — the fact-level `Internal` classification, refused
+    ///    at every surface.
+    ///  - `unknown-fact` — a fact id the caller's scope cannot resolve.
+    let reservedPolicyRefs: string list = [ "Internal"; "unknown-fact" ]
+
+    /// The fact-disclosure surfaces a policy ref is resolved at — the
+    /// canonical strings `FactEgressSurface.toString` produces, pinned.
+    let factEgressSurfaces: string list = [
+        "Retrieval"
+        "ToolResult"
+        "NarrativePublication"
+        "Export"
+        "Webhook"
+        "PeerEgress"
+    ]
+
+    /// The outbound-call surfaces the egress policy decides over — the
+    /// labels `EgressSurface.label` produces, pinned.
+    let egressSurfaces: string list = [
+        "module-handler"
+        "ai-provider"
+        "auth-provider"
+        "notification"
+        "webhook"
+        "other"
+    ]
+
 /// What the policy said about one outbound call.
 [<RequireQualifiedAccess>]
 type EgressVerdict =
@@ -195,11 +369,21 @@ type EgressVerdict =
     | Deny of reason: string
 
 /// The seam. A pure decision over (calling component, destination
-/// origin, surface). Implementations hold no per-call state and open no
-/// connection; the Server-tier handler asks this before every request
-/// and either forwards it or raises.
+/// origin, surface, payload label). Implementations hold no per-call
+/// state and open no connection; the Server-tier handler asks this
+/// before every request and either forwards it or raises.
+///
+/// **Phase 796 widened this from three coordinates to four.** A policy
+/// that could not see the payload's label could only ever bound WHERE a
+/// value goes, never WHAT goes there — so a restricted value leaving
+/// through a declared origin was governed by destination alone. The
+/// label is the fourth coordinate, carried on the async chain by
+/// `EgressLabelContext` for the same reason the component is: an
+/// `HttpRequestMessage` has nowhere to put it.
 type IEgressPolicy =
-    abstract Decide: component: ComponentId * destination: EgressDestination * surface: EgressSurface -> EgressVerdict
+    abstract Decide:
+        component: ComponentId * destination: EgressDestination * surface: EgressSurface * label: EgressLabel ->
+            EgressVerdict
 
 /// One component's declared outbound authority, mirroring `SeamGrant`'s
 /// two-case shape for the same reason it has two cases: `UnrestrictedEgress`
@@ -350,7 +534,7 @@ module EgressPolicy =
     /// composition that installs nothing runs under.
     let permitAll: IEgressPolicy =
         { new IEgressPolicy with
-            member _.Decide(_, _, _) = EgressVerdict.Permit
+            member _.Decide(_, _, _, _) = EgressVerdict.Permit
         }
 
     /// A policy resolved from per-component grants. `undeclared` is what a
@@ -360,7 +544,7 @@ module EgressPolicy =
     /// without ever carrying a URL.
     let declaredDestinations (undeclared: EgressGrant) (grants: EgressGrantSignature) : IEgressPolicy =
         { new IEgressPolicy with
-            member _.Decide(componentId, destination, surface) =
+            member _.Decide(componentId, destination, surface, _label) =
                 let grant = EgressGrant.resolve grants undeclared componentId
 
                 if EgressGrant.permits grant destination then
@@ -374,6 +558,33 @@ module EgressPolicy =
                             (EgressSurface.label surface)
                             (EgressGrant.render grant)
                     )
+        }
+
+    /// Phase 796 — refuse an `Unlabelled` payload, then defer to `inner`.
+    ///
+    /// A decorator rather than a fourth branch inside
+    /// `declaredDestinations`, because the two questions are independent
+    /// and compose: this one asks whether the payload's lineage was
+    /// computed at all, that one asks whether the destination is
+    /// declared. A composition can wrap any policy — including a
+    /// consumer's own — and a reader of `bind` below sees the two
+    /// conditions in the order they apply.
+    ///
+    /// The refusal names the ORIGIN and the surface, never the URL and
+    /// never the payload, exactly as every other denial here does.
+    let requireLabel (inner: IEgressPolicy) : IEgressPolicy =
+        { new IEgressPolicy with
+            member _.Decide(componentId, destination, surface, label) =
+                match label with
+                | Unlabelled ->
+                    EgressVerdict.Deny(
+                        sprintf
+                            "egress from component %s to origin %s (%s surface) carries no disclosure label; declaration is mandatory under this profile, so a payload whose lineage was never computed is refused"
+                            (ComponentId.value componentId)
+                            (EgressDestination.origin destination)
+                            (EgressSurface.label surface)
+                    )
+                | LabelledRefs _ -> inner.Decide(componentId, destination, surface, label)
         }
 
     /// Resolve the policy a composition runs under from its profile's
@@ -390,6 +601,15 @@ module EgressPolicy =
     ///     so at boot (`EgressPosture.describe`);
     ///   • mandatory, grants → declared components are bound, an
     ///     undeclared component is refused.
+    ///
+    /// **Phase 796.** Where declaration is mandatory, the resolved policy
+    /// is additionally wrapped in `requireLabel`: a payload whose lineage
+    /// was never computed is refused before the destination is even
+    /// consulted. Where it is NOT mandatory nothing is wrapped, so the
+    /// permit-all default and an advisory grant signature behave
+    /// byte-for-byte as they did before the label existed (GP 11) — an
+    /// `Unlabelled` payload is simply not a fact the standard profile has
+    /// an opinion about.
     ///
     /// `declarationMandatory` is the profile's answer — `Verified` says
     /// yes, `Standard` says no — passed as a value because this tier
@@ -409,13 +629,13 @@ module EgressPolicy =
             DeclarationMandatory = false
           }
         | true, None -> {
-            Policy = declaredDestinations (DeclaredDestinations Set.empty) Map.empty
+            Policy = requireLabel (declaredDestinations (DeclaredDestinations Set.empty) Map.empty)
             Posture = EgressPosture.DenyAll
             Grants = Map.empty
             DeclarationMandatory = true
           }
         | true, Some declared -> {
-            Policy = declaredDestinations (DeclaredDestinations Set.empty) declared
+            Policy = requireLabel (declaredDestinations (DeclaredDestinations Set.empty) declared)
             Posture = EgressPosture.Declared(Map.count declared, true)
             Grants = declared
             DeclarationMandatory = true
