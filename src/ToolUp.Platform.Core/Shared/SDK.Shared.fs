@@ -1543,4 +1543,15 @@ type ServerConfig = {
     /// `SqliteLogStore cfg` records every log line into a local SQLite
     /// database and makes it searchable in-platform.
     LogStore: LogStoreMode
+
+    /// Phase 829 — metrics-history selection. Default:
+    /// `NoMetricsHistory` — the live metric registry is never sampled,
+    /// no `BackgroundService` runs and no point is appended, so a
+    /// deployment scraping `/metrics` into an external time-series
+    /// system pays nothing (GP 13) and boots byte-for-byte as it did
+    /// before this substrate existed (GP 11).
+    /// `EnabledMetricsHistory cfg` flushes one point per
+    /// `(metric, tag set)` into the composed `ITimeSeriesStore` on the
+    /// configured cadence and sweeps points past `RetentionDays` daily.
+    MetricsHistory: MetricsHistoryMode
 }

@@ -61,6 +61,15 @@ type private HistogramSeries = {
     Buckets: ConcurrentDictionary<float, int64>
     mutable Sum: float
     mutable Count: int64
+    /// Phase 829 — smallest observation seen, `+Infinity` while `Count`
+    /// is 0. Tracked exactly (the buckets only bound it) so the history
+    /// flusher can record a true min rather than a bucket edge. Updated
+    /// under `SumLock` beside `Sum` / `Count`, so it costs the emission
+    /// path two comparisons inside a lock it already takes.
+    mutable Min: float
+    /// Phase 829 — largest observation seen, `-Infinity` while `Count`
+    /// is 0. See `Min`.
+    mutable Max: float
     /// Snapshot bound on the buckets in registration order. The
     /// dictionary above lets emissions update individual bucket counts
     /// in O(1); this list preserves render-time ordering.
@@ -79,6 +88,8 @@ module private HistogramSeries =
             )
         Sum = 0.0
         Count = 0L
+        Min = Double.PositiveInfinity
+        Max = Double.NegativeInfinity
         Bounds = bounds
         SumLock = obj ()
     }
@@ -91,7 +102,67 @@ module private HistogramSeries =
 
         lock h.SumLock (fun () ->
             h.Sum <- h.Sum + value
-            h.Count <- h.Count + 1L)
+            h.Count <- h.Count + 1L
+
+            if value < h.Min then
+                h.Min <- value
+
+            if value > h.Max then
+                h.Max <- value)
+
+    /// Phase 829 — quantile estimate over the cumulative bucket counts,
+    /// the shape Prometheus' `histogram_quantile` uses: find the first
+    /// bound whose cumulative count reaches `q · total`, then interpolate
+    /// linearly between that bucket's edges. It is an ESTIMATE bounded by
+    /// the bucket resolution — the sink keeps counts, not observations,
+    /// so a true quantile is not recoverable and never was (see the
+    /// `MetricKind.Summary` note in `MetricsTypes.fs`).
+    ///
+    /// Two refinements over the textbook form, both from data this sink
+    /// tracks exactly: the first bucket's lower edge is the observed
+    /// `Min` rather than an assumed zero, and an observation past the
+    /// largest bound resolves to the observed `Max` rather than `+Inf`.
+    /// The result is always within `[Min, Max]`.
+    let quantile (q: float) (h: HistogramSeries) : float =
+        let count, minV, maxV, sortedBounds =
+            lock h.SumLock (fun () -> h.Count, h.Min, h.Max, h.Bounds |> List.sort)
+
+        if count = 0L then
+            0.0
+        else
+            let target = q * float count
+
+            let cumulativeAt (bound: float) =
+                match h.Buckets.TryGetValue bound with
+                | true, c -> float c
+                | false, _ -> 0.0
+
+            // Walk the bounds ascending, carrying the previous bound's
+            // cumulative count as the current bucket's lower edge.
+            let rec walk (bounds: float list) (lowerEdge: float) (cumulativeBelow: float) =
+                match bounds with
+                | [] -> maxV
+                | bound :: rest ->
+                    let cumulative = cumulativeAt bound
+
+                    if cumulative >= target then
+                        let inBucket = cumulative - cumulativeBelow
+
+                        if inBucket <= 0.0 then
+                            bound
+                        else
+                            let rank = target - cumulativeBelow
+                            lowerEdge + (bound - lowerEdge) * (rank / inBucket)
+                    else
+                        walk rest bound cumulative
+
+            let firstEdge =
+                match sortedBounds with
+                | first :: _ -> min minV first
+                | [] -> minV
+
+            let estimate = walk sortedBounds firstEdge 0.0
+            estimate |> max minV |> min maxV
 
 /// Internal — one entry per registered metric. Carries the registration
 /// metadata plus the per-series accumulators.
@@ -156,6 +227,50 @@ module private RegisteredMetric =
         }
 
         resolvedName, metric
+
+/// Phase 829 — the histogram fields of one series at snapshot time.
+/// `Count` / `Sum` are cumulative since the process started (the sink
+/// never resets an accumulator); `Min` / `Max` are the exact extremes
+/// observed; the three percentiles are bucket-interpolated ESTIMATES —
+/// see `HistogramSeries.quantile`. A series with no observations reports
+/// zero in every field.
+type HistogramSnapshot = {
+    Count: int64
+    Sum: float
+    Min: float
+    Max: float
+    P50: float
+    P95: float
+    P99: float
+}
+
+/// Phase 829 — the value half of a snapshot sample.
+/// `[<RequireQualifiedAccess>]` — `Scalar` / `Histogram` would otherwise
+/// collide with `MetricKind.Histogram` in the same namespace.
+[<RequireQualifiedAccess>]
+type MetricSampleValue =
+    /// A counter or gauge series: its single accumulated value. A counter
+    /// value is the cumulative total, never a delta — differencing
+    /// successive reads is the reader's job.
+    | Scalar of float
+    /// A histogram or summary series: its accumulators at snapshot time.
+    | Histogram of HistogramSnapshot
+
+/// Phase 829 — one `(metric, tag set)` series as of a
+/// `PrometheusMetricsSink.Snapshot()` call. `Tags` is the sorted,
+/// allowlist-filtered tag set the emission path keyed the series by, so
+/// two snapshots of the same series carry byte-identical tags.
+type MetricSeriesSample = {
+    /// The post-namespace metric name, e.g. `toolup.requests.total`.
+    Metric: string
+    /// The series' tag set, ascending by key.
+    Tags: (string * string) list
+    /// The registered kind, so a reader can tell a counter's cumulative
+    /// total from a gauge's current reading without consulting the
+    /// registry.
+    Kind: MetricKind
+    Value: MetricSampleValue
+}
 
 /// Default in-process metrics sink. Owns the metric registry and
 /// renders OpenMetrics text on demand. Sink consumers (the
@@ -401,6 +516,74 @@ type PrometheusMetricsSink(config: MetricsSinkConfig, registrations: MetricRegis
                 | false, _ -> None
             | _ -> None
         | false, _ -> None
+
+    /// Phase 829 — enumerate every series that has had at least one
+    /// observation, for the metrics-history flusher. The second read tap
+    /// on the concrete default sink, for the same reason `TryRead` is one
+    /// (Phase 178): `IMetricsSink` stays WRITE-ONLY, so its hot-path
+    /// rule-2 exemption is untouched and no portable contract widens —
+    /// the read lives here, resolved from DI by the flusher's
+    /// `BackgroundService`.
+    ///
+    /// `TryRead` answers "what is THIS series worth"; a flusher cannot
+    /// ask that, because it does not know which tag sets have been
+    /// observed — hence a whole-registry enumeration rather than another
+    /// keyed lookup. Read-only: it creates no series, exactly like
+    /// `TryRead`, and a registered metric nothing has emitted contributes
+    /// nothing. Ordering is unspecified (the registry is a
+    /// `ConcurrentDictionary`); each series' tags are sorted.
+    ///
+    /// Not a consistent snapshot ACROSS series — the registry is read
+    /// without a global lock, by design, so an emission concurrent with
+    /// the walk lands in this sample or the next. For a metrics history
+    /// sampled on a cadence that is the right trade: a global lock would
+    /// put the flusher on the emission hot path.
+    member _.Snapshot() : MetricSeriesSample list = [
+        for KeyValue(_, metric) in registry do
+            match metric.Definition.Kind with
+            | Counter
+            | Gauge ->
+                for KeyValue(fp, cellRef) in metric.NumericSeries do
+                    {
+                        Metric = metric.Name
+                        Tags = fp
+                        Kind = metric.Definition.Kind
+                        Value = MetricSampleValue.Scalar(lock cellRef (fun () -> cellRef.Value))
+                    }
+            | Histogram _
+            | Summary ->
+                for KeyValue(fp, h) in metric.HistogramSeries do
+                    let count, sum, minV, maxV = lock h.SumLock (fun () -> h.Count, h.Sum, h.Min, h.Max)
+
+                    let snapshot =
+                        if count = 0L then
+                            {
+                                Count = 0L
+                                Sum = 0.0
+                                Min = 0.0
+                                Max = 0.0
+                                P50 = 0.0
+                                P95 = 0.0
+                                P99 = 0.0
+                            }
+                        else
+                            {
+                                Count = count
+                                Sum = sum
+                                Min = minV
+                                Max = maxV
+                                P50 = HistogramSeries.quantile 0.50 h
+                                P95 = HistogramSeries.quantile 0.95 h
+                                P99 = HistogramSeries.quantile 0.99 h
+                            }
+
+                    {
+                        Metric = metric.Name
+                        Tags = fp
+                        Kind = metric.Definition.Kind
+                        Value = MetricSampleValue.Histogram snapshot
+                    }
+    ]
 
     interface IMetricsSink with
         member _.Record(name, value, tags) =

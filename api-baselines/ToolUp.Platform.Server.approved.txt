@@ -1579,6 +1579,7 @@ ToolUp.Platform.ComposeObservability (class)
 ToolUp.Platform.ComposeObservability.createLogStore(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]]
 ToolUp.Platform.ComposeObservability.decorateLogger(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : ToolUp.Platform.ILogger
 ToolUp.Platform.ComposeObservability.registerLogStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeObservability.registerMetricsHistory(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices (class)
 ToolUp.Platform.ComposeRuntimeServices.assertCorsCredentialsCompatible(ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerAlertRuleEngine(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
@@ -6654,10 +6655,36 @@ ToolUp.Platform.Metrics.ComponentCorrelation.permitComponentIdDimension(ToolUp.P
 ToolUp.Platform.Metrics.ComponentCorrelation.withComponentId(ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
 ToolUp.Platform.Metrics.FanOutMetricsSink (class)
 ToolUp.Platform.Metrics.FanOutMetricsSink..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.IMetricsSink], ToolUp.Platform.ILogger)
+ToolUp.Platform.Metrics.HistogramSnapshot (class)
+ToolUp.Platform.Metrics.HistogramSnapshot..ctor(System.Int64, System.Double, System.Double, System.Double, System.Double, System.Double, System.Double)
+ToolUp.Platform.Metrics.HistogramSnapshot.Count : System.Int64 { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.Max : System.Double { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.Min : System.Double { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.P50 : System.Double { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.P95 : System.Double { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.P99 : System.Double { get }
+ToolUp.Platform.Metrics.HistogramSnapshot.Sum : System.Double { get }
 ToolUp.Platform.Metrics.IMetricsSink (interface)
 ToolUp.Platform.Metrics.IMetricsSink.Increment(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : System.Void
 ToolUp.Platform.Metrics.IMetricsSink.Record(System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : System.Void
 ToolUp.Platform.Metrics.IMetricsSink.SetGauge(System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : System.Void
+ToolUp.Platform.Metrics.MetricSampleValue (class)
+ToolUp.Platform.Metrics.MetricSampleValue.IsHistogram : System.Boolean { get }
+ToolUp.Platform.Metrics.MetricSampleValue.IsScalar : System.Boolean { get }
+ToolUp.Platform.Metrics.MetricSampleValue.Tag : System.Int32 { get }
+ToolUp.Platform.Metrics.MetricSampleValue+Histogram (class)
+ToolUp.Platform.Metrics.MetricSampleValue+Histogram.Item : ToolUp.Platform.Metrics.HistogramSnapshot { get }
+ToolUp.Platform.Metrics.MetricSampleValue+Scalar (class)
+ToolUp.Platform.Metrics.MetricSampleValue+Scalar.Item : System.Double { get }
+ToolUp.Platform.Metrics.MetricSampleValue+Tags (class)
+ToolUp.Platform.Metrics.MetricSampleValue+Tags.Histogram : System.Int32 (literal)
+ToolUp.Platform.Metrics.MetricSampleValue+Tags.Scalar : System.Int32 (literal)
+ToolUp.Platform.Metrics.MetricSeriesSample (class)
+ToolUp.Platform.Metrics.MetricSeriesSample..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.Metrics.MetricKind, ToolUp.Platform.Metrics.MetricSampleValue)
+ToolUp.Platform.Metrics.MetricSeriesSample.Kind : ToolUp.Platform.Metrics.MetricKind { get }
+ToolUp.Platform.Metrics.MetricSeriesSample.Metric : System.String { get }
+ToolUp.Platform.Metrics.MetricSeriesSample.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.Metrics.MetricSeriesSample.Value : ToolUp.Platform.Metrics.MetricSampleValue { get }
 ToolUp.Platform.Metrics.MetricsMiddleware (class)
 ToolUp.Platform.Metrics.MetricsMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.Metrics.IMetricsSink)
 ToolUp.Platform.Metrics.MetricsMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
@@ -6666,6 +6693,7 @@ ToolUp.Platform.Metrics.NoOpMetricsSink..ctor()
 ToolUp.Platform.Metrics.PrometheusMetricsSink (class)
 ToolUp.Platform.Metrics.PrometheusMetricsSink..ctor(ToolUp.Platform.MetricsSinkConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration], ToolUp.Platform.ILogger)
 ToolUp.Platform.Metrics.PrometheusMetricsSink.Render() : System.String
+ToolUp.Platform.Metrics.PrometheusMetricsSink.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricSeriesSample]
 ToolUp.Platform.Metrics.PrometheusMetricsSink.TryRead(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.Double]
 ToolUp.Platform.Metrics.StandardMetrics (class)
 ToolUp.Platform.Metrics.StandardMetrics.ErrorsTotal : System.String (literal)
@@ -6682,6 +6710,17 @@ ToolUp.Platform.Metrics.StandardMetrics.registrations : Microsoft.FSharp.Collect
 ToolUp.Platform.MetricsEndpoint (class)
 ToolUp.Platform.MetricsEndpoint.handler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.Platform.MetricsEndpoint.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.MetricsHistoryFlusher (class)
+ToolUp.Platform.MetricsHistoryFlusher.ScopeId : System.String (literal)
+ToolUp.Platform.MetricsHistoryFlusher.flushOnce(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricSeriesSample]], ToolUp.Platform.ITimeSeriesStore, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.TimeSeriesError]]]]
+ToolUp.Platform.MetricsHistoryFlusher.histogramFields : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.MetricsHistoryFlusher.planFlush(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricSeriesSample]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.TimeSeriesPoint]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double]]
+ToolUp.Platform.MetricsHistoryFlusher.seriesId(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.String
+ToolUp.Platform.MetricsHistoryFlusher.sweepRetention(ToolUp.Platform.ITimeSeriesStore, System.DateTimeOffset, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.TimeSeriesError]]]]
+ToolUp.Platform.MetricsHistoryFlusher+MetricsHistoryFlusherService (class)
+ToolUp.Platform.MetricsHistoryFlusher+MetricsHistoryFlusherService..ctor(System.IServiceProvider, ToolUp.Platform.MetricsHistoryConfig, ToolUp.Platform.ILogger)
+ToolUp.Platform.MetricsHistoryFlusher+MetricsHistoryFlusherService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.MetricsHistoryFlusher+MetricsHistoryFlusherService.Tick(System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Middleware (class)
 ToolUp.Platform.Middleware.resolverDowngradeSignal(ToolUp.Platform.SubjectResolutionError) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Platform.Middleware+RequestIdMiddleware (class)

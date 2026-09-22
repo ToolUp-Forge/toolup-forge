@@ -77,3 +77,36 @@ let registerLogStore
                 SqliteLogStore.LogStoreRetentionService(logStore, storeConfig, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService)
             |> ignore
+
+/// Phase 829 — register the metrics-history flusher: the
+/// `BackgroundService` that samples the live metric registry into
+/// `ITimeSeriesStore` every `FlushSeconds` and sweeps points past
+/// `RetentionDays` daily. A no-op on `NoMetricsHistory` (the default) —
+/// no hosted service, no read of the sink, no point appended (GP 13).
+///
+/// Both of its dependencies are resolved from the `IServiceProvider` per
+/// tick rather than captured here, so a companion `ITimeSeriesStore`
+/// registered after this point is still seen (the same reason
+/// `AlertRuleEngine` resolves its metric tap per tick). That is also why
+/// this registration does not require them: the flusher names an absent
+/// sink or store once at `Warn` rather than compose refusing a
+/// deployment whose store arrives later.
+///
+/// Gated on `ServerlessHost`, where no long-running tick can be kept
+/// alive — and deliberately NOT on the `ProcessProfile` matrix, for the
+/// log store's reason: each process samples its OWN in-memory metric
+/// accumulators, so a silo that skipped the flush would simply lose its
+/// own metrics rather than let a peer cover for it.
+let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
+    match config.MetricsHistory with
+    | NoMetricsHistory -> ()
+    | EnabledMetricsHistory historyConfig ->
+        match config.ServerlessHost with
+        | ServerlessHost -> ()
+        | KestrelHost ->
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    new MetricsHistoryFlusher.MetricsHistoryFlusherService(sp, historyConfig, resolvedLogger)
+                    :> Microsoft.Extensions.Hosting.IHostedService)
+            )
+            |> ignore
