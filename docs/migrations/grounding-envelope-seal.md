@@ -6,7 +6,7 @@ unchanged (GP 11 / GP 13); there is nothing to migrate unless you want the prope
 ## What changes
 
 The boot preflight seals the composition **at** boot and says plainly that it proves nothing
-about what happens afterwards. For the grounding tier that gap is the live one: the declarations
+about what happens afterwards. For the grounding plane that gap is the live one: the declarations
 a later answer's provenance is judged against are free to move the instant the verdict lands, and
 nothing in the trail says they did.
 
