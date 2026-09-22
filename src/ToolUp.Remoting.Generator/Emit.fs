@@ -82,6 +82,10 @@ module Emit =
         @ (options.Opens |> List.map (sprintf "open %s"))
         @ [
             ""
+            "/// Generated algebra decoders: one per wire type the covered API records"
+            "/// carry, registered by `registerAll` (or, verified against the reflection"
+            "/// reader first, by `registerAllVerified`). Emitted by ToolUp.Remoting.Generator;"
+            "/// do not edit."
             "[<RequireQualifiedAccess>]"
             sprintf "module %s =" options.ModuleName
             ""
@@ -291,6 +295,24 @@ module Emit =
 
                 sprintf "        RemotingDecoders.register<%s> %s" spelling d)
 
+        // Phase 801 — the differential gate, emitted beside the
+        // registrations. `verifyAll` runs every decoder this module
+        // registers beside the reflection reader over draws of its own
+        // type, and `registerAllVerified` registers ONLY when every one
+        // agrees. .NET only, because drawing and encoding a value need
+        // reflection and the shipped writer; the browser registers what a
+        // build gate verified.
+        let verifications =
+            coveredSpellings plan
+            |> List.map (fun (spelling, decoder) ->
+                let d =
+                    if decoder.Contains " " then
+                        "(" + decoder + ")"
+                    else
+                        decoder
+
+                sprintf "        RemotingDecoders.verify<%s> draws seed %s" spelling d)
+
         [
             "    /// Register every decoder above. Idempotent, and explicit —"
             "    /// a static initialiser would fire at a moment nothing states,"
@@ -298,7 +320,45 @@ module Emit =
             "    let registerAll () : unit ="
         ]
         @ registrations
-        @ [ "" ]
+        @ [
+            ""
+            "#if !FABLE_COMPILER"
+            "    /// Phase 801 — every decoder above beside the reflection reader,"
+            "    /// over `draws` draws of its own type from `seed`. One outcome per"
+            "    /// registration, in registration order; a refusal names the type"
+            "    /// and the first diverging draw."
+            "    let verifyAll (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = ["
+        ]
+        @ verifications
+        @ [
+            "    ]"
+            ""
+            "    /// Phase 801 — `registerAll`, gated: registers every decoder above"
+            "    /// only when every one verifies, and registers NOTHING otherwise, so"
+            "    /// a disagreement can never leave the table half-adopted."
+            "    let registerAllVerified (draws: int) (seed: int) : Result<DecoderVerification list, DecoderRefusal list> ="
+            "        let outcomes = verifyAll draws seed"
+            ""
+            "        let refusals ="
+            "            outcomes"
+            "            |> List.choose (function"
+            "                | Error refusal -> Some refusal"
+            "                | Ok _ -> None)"
+            ""
+            "        if List.isEmpty refusals then"
+            "            registerAll ()"
+            ""
+            "            Ok("
+            "                outcomes"
+            "                |> List.choose (function"
+            "                    | Ok verification -> Some verification"
+            "                    | Error _ -> None)"
+            "            )"
+            "        else"
+            "            Error refusals"
+            "#endif"
+            ""
+        ]
 
     let private apiRecordsBlock (options: EmitOptions) =
         if List.isEmpty options.ApiRecords then
@@ -337,15 +397,25 @@ module Emit =
         let groupOf (name: string) =
             plan.RecursiveGroups |> List.tryFind (List.contains name)
 
+        // Phase 801 — every binding is public surface of the module that
+        // hosts it, so each carries the doc comment the tracked surface
+        // asks of a public member (the doc-coverage ratchet): what it
+        // decodes, and that it was read off the type rather than written.
+        let docOf (binding: TypePlan) = [
+            sprintf
+                "    /// Generated decoder for `%s` — one combinator per field or case, read off the type's own shape."
+                (TypePlan.typeSpelling binding)
+        ]
+
         plan.Bindings
         |> List.iter (fun binding ->
             let name = TypePlan.binding binding
 
             match groupOf name with
-            | None -> write (bindingBody "let" binding)
+            | None -> write (docOf binding @ bindingBody "let" binding)
             | Some group ->
                 let keyword = if List.head group = name then "let rec" else "and"
-                write (etaExpand (bindingBody keyword binding)))
+                write (docOf binding @ etaExpand (bindingBody keyword binding)))
 
         write (coveredBlock plan)
         write (registerBlock plan)

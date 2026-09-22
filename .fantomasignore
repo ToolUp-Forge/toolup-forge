@@ -14,6 +14,10 @@ docs-snippets/generated/
 # Phase 793's `ToolGate.fs`, Phase 792's `ModelInput.fs` and Phase 795's `TaintFlow.fs`
 # follow it.
 proofs/oracle/RemotingDecode.fs
+# Phase 801 — the platform's own decoders are the remoting generator's emission over every
+# API record ToolUp.Platform.Core declares, held byte-for-byte to it by
+# Remoting/PlatformDecodersGenerationTests. Same class as the AOT sample's generated files below.
+src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs
 proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
 proofs/oracle/ModelInput.fs

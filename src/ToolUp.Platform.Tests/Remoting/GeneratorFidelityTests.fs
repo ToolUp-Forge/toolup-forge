@@ -190,17 +190,19 @@ let tests =
 
         testList "the generator reproduces the hand-written Phase 785 decoders" [
 
-            testCase "the covered set is exactly the hand-written one"
+            testCase "the Phase 785 records' surface is a subset of the shipped covered set"
             <| fun () ->
-                // Executable, not transcribed: the shipped list on one side,
-                // the generator's plan on the other. This is the whole
-                // fidelity claim in one assertion — same types, same count,
-                // same registration surface.
+                // Executable, not transcribed: the generator's plan for the
+                // two records Phase 785 hand-wrote on one side, the shipped
+                // registration surface on the other. Until Phase 801 the two
+                // were EQUAL — `PlatformDecoders` was the hand-written set
+                // for exactly these records; since 801 that file is the
+                // generator's own emission over EVERY platform API record,
+                // so the 785 surface is a subset of it and the whole-set
+                // equality is `PlatformDecodersGenerationTests`' claim.
                 // The plan carries F# SPELLINGS while `PlatformDecoders.covered`
-                // carries `Type.FullName`, and the two are not the same string,
-                // so the comparison is over the registration SURFACE: one entry
-                // per wire type the module mounts, on each side. A type present
-                // on one side and not the other moves the count.
+                // carries `Type.FullName`, so the comparison is over the
+                // registration surface's COUNT here and its NAMES below.
                 let generated = Emit.coveredSpellings phase785Plan |> List.map fst
 
                 Expect.isNonEmpty generated "the generator planned nothing for the Phase 785 records"
@@ -209,14 +211,12 @@ let tests =
                     (generated |> List.distinct |> List.length = List.length generated)
                     "the generator planned the same wire type twice — a duplicate `register` call"
 
-                let generatedCount = List.length generated
-                let handWrittenCount = List.length PlatformDecoders.covered
+                Expect.equal (List.length generated) 21 "the two records' surface: fifteen wire types and six returns"
 
-                Expect.equal
-                    generatedCount
-                    handWrittenCount
-                    "the generator covers a different NUMBER of wire types than the hand-written set — \
-                     one of the two has a type the other does not"
+                Expect.isGreaterThanOrEqual
+                    (List.length PlatformDecoders.covered)
+                    (List.length generated)
+                    "the shipped set covers at least the 785 surface"
 
             testCase "the generator plans a decoder for every hand-written one, by name"
             <| fun () ->
@@ -535,22 +535,24 @@ let tests =
                      && names.Contains "IDeploymentVerificationApi")
                     "the records Phase 785 hand-wrote decoders for must be expressible by construction"
 
-            testCase "MORE records are expressible than the platform declares to the facet"
+            testCase "every expressible record is declared to the facet — the coverage gap 69k measured is closed"
             <| fun () ->
-                // The measured claim this phase makes, and the reason it
-                // exists. `PlatformDecoders.coveredApiRecords` is what
-                // `RemotingDecoderFacet.inspectPlatform` classifies; every
-                // record outside it is on the reflection path and invisible
-                // to the facet, because an undeclared record is absent
-                // rather than `Reflection`.
-                //
-                // GOES RED WHEN THE GAP CLOSES — which is the correct moment
-                // to revisit this phase, not a regression.
-                Expect.isGreaterThan
+                // Phase 69k's version of this case asserted MORE records
+                // were expressible than the platform declared, and said it
+                // would go red the day the gap closed. Phase 801 closed it:
+                // `PlatformDecoders.coveredApiRecords` is now the generator's
+                // declaration over every API record, so the two counts are
+                // equal, and this case goes red if a record is ever
+                // expressible and undeclared again.
+                Expect.equal
                     (List.length expressible)
                     (List.length PlatformDecoders.coveredApiRecords)
-                    "the coverage gap this phase measures has closed — every expressible API record is \
-                     now declared to the facet, so re-read Phase 69k before changing this"
+                    "an expressible API record is not declared to the facet — regenerate PlatformDecoders.fs"
+
+                Expect.equal
+                    (List.length PlatformDecoders.coveredApiRecords)
+                    (List.length allApiRecords)
+                    "and every record the assembly declares is declared to the facet"
 
             testCase "the two refusal classes that capped coverage are both CLOSED, by name"
             <| fun () ->

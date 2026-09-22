@@ -368,6 +368,14 @@ let private roundTripThroughRegistry<'T> (label: string) (value: 'T) =
 
 /// A declaration naming a wire type nothing registers — the reflection
 /// path, expressed as the facet sees it.
+/// Phase 801 — a one-method API record for the served-facet cases. Its
+/// method is classified (`[<AllowAnonymous>]`) so `Api.make` arms the
+/// dispatcher's startup classifier without refusing.
+type ProbeApi = {
+    [<AllowAnonymous>]
+    Ping: unit -> Async<string>
+}
+
 let private unregisteredRecord: (string * string list * bool) list = [
     "IMadeUpApi", [ "Some.Type.Nobody.Registered" ], true
 ]
@@ -1175,6 +1183,102 @@ let tests =
         // asserted only the first would let the other two be whatever
         // the implementation happened to do.
         testList "the composition-profile facet" [
+            // Phase 801 — the facet over what the composition SERVES.
+            testCase "Api.make records the mounted record, and the served facet classifies it"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                RemotingDecoders.resetForTests ()
+
+                // A mount through the one entry point every mount uses.
+                ToolUp.Platform.Api.make (fun _ ->
+                    ({
+                        Ping = fun () -> async { return "pong" }
+                    }
+                    : ProbeApi))
+                |> ignore
+
+                Expect.equal
+                    (ToolUp.Platform.ServedApiRecords.all ())
+                    [ typeof<ProbeApi> ]
+                    "the dispatcher's own mount is what the served set records"
+
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServed ToolUp.Platform.CompositionProfile.Standard []
+
+                Expect.equal
+                    (facet.FacetBindings
+                     |> List.map (fun b -> b.DecoderApiRecord, b.DecoderUncovered))
+                    [ "ProbeApi", [ typeof<string>.FullName ] ]
+                    "the record is classified by its own method return types, undeclared or not"
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.coverage facet)
+                    (0, 1)
+                    "nothing registered: zero of one"
+
+                PlatformDecoders.registerAll ()
+
+            testCase "coverage is a ratio over the served set, and it moves when a record is opted in"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                RemotingDecoders.resetForTests ()
+                PlatformDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<IHealthMonitorApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
+
+                let before =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedPlatform
+                        ToolUp.Platform.CompositionProfile.Verified
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.coverage before)
+                    (1, 2)
+                    "one served record decodes through the algebra, one does not"
+
+                Expect.stringContains
+                    (ToolUp.Platform.RemotingDecoderFacet.describe before)
+                    "1 of 2 served API record(s)"
+                    "the boot line carries the ratio"
+
+                // Under the verified profile the SERVED record with no
+                // decoder is what refuses — not a declared one.
+                match ToolUp.Platform.RemotingDecoderFacet.verify before with
+                | Ok() -> failtest "a served record with no decoder must refuse under the verified profile"
+                | Error refusal ->
+                    Expect.stringContains
+                        (ToolUp.Platform.CompositionProfileRefusal.describe refusal)
+                        "ProbeApi"
+                        "the refusal names the served record"
+
+                // Opt the record in: its one return type gains a decoder.
+                RemotingDecoders.register<string> Decode.asString
+
+                let after =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedPlatform
+                        ToolUp.Platform.CompositionProfile.Verified
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.coverage after)
+                    (2, 2)
+                    "the ratio moved with the registration"
+
+                Expect.isOk
+                    (ToolUp.Platform.RemotingDecoderFacet.verify after)
+                    "and the verified profile admits the composition"
+
+                // Corpus coverage stays DECLARED: the platform record
+                // carries the generator's declaration, the probe none.
+                let corpus =
+                    after.FacetBindings
+                    |> List.map (fun b -> b.DecoderApiRecord, b.DecoderCorpusCovered)
+
+                Expect.equal
+                    corpus
+                    [ "IHealthMonitorApi", true; "ProbeApi", false ]
+                    "a served record proves nothing about corpus coverage; the declaration does"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+
             testCase "under the verified profile, an unregistered record REFUSES the boot"
             <| fun () ->
                 PlatformDecoders.registerAll ()
