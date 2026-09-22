@@ -129,6 +129,16 @@ And run the pack against their impl in their own test suite. The pack tests beha
 
 A "distributed companion" not bundled with its conformance run is the wrong shape — without the test pack as evidence, the portability claim is unverified.
 
+### The first pack a second backend actually passed (Phase 9c.E)
+
+`IJobSchedulerContract` and `IJobStoreContract` were the pair these rules were shaped around, and until Phase 9c.E exactly one implementation bound each — which is to say the portability claim over the job substrate was an argument, not a result. `ToolUp.JobSchedulers.Quartz` binds **both packs unmodified**, over Quartz.NET, a scheduler nobody here designed the interfaces around. Every case passes as it stands: no pack was relaxed, no case was marked inapplicable, and no interface had to change to admit the second backend. The two rows those packs held in the single-binding half of `conformance-coverage.approved.txt` were dropped in the same change, which is what the ratchet is for.
+
+Three findings from the exercise are worth more than the green tick, because each is a shape the next companion author will meet:
+
+- **Rule 6's precision rejection turned out to be about the TRIGGER VOCABULARY, not the backend.** The Quartz companion rejects `JobPrecision.Second` exactly as the in-process default does — but not because Quartz cannot fire sub-minute. It can; its own cron dialect carries a seconds field. `Trigger.CronTrigger` is a five-field crontab expression whose finest granularity *is* one minute, so no caller can express a sub-minute schedule through this interface whatever the implementation does. A precision floor can be imposed by the request type rather than by the runtime, and rule 6 reads correctly either way.
+- **Rule 3's "retry as data" paid off literally.** Because `JobRetryPolicy` is a record rather than a callback, it mapped onto Quartz's own `RetryPolicy` and the backoff arithmetic stayed in the backend. A callback-shaped retry contract — the shape rule 3 forbids — would have forced the companion to re-implement the retry loop around a framework that already has one. The map is not free of traps (both ends count differently, and both offsets are off-by-one hazards), but it is a map, not a reimplementation.
+- **Rule 1's identity-by-value is what let the two stores separate cleanly.** Quartz models *schedules*; `IJobStore` additionally models scope isolation, an idempotency index, per-attempt run history and the awaiting-external index. Because every lookup is by `(ScopeId, JobId)` and never by a live handle, the companion could keep the canonical record in the shipped store and *project* schedules onto Quartz, rather than choosing between two incompatible persistence models. A handle-based interface would have forced the choice.
+
 **There is no list of current packs here, deliberately.** This section carried one until Phase 259, and it named five packs against the 97 the tree was by then shipping — a prose registry of a growing set is wrong by the time it is read, and a reader who trusted it would have concluded that ninety-two seams were unproven when they were not. `src/ToolUp.Platform.Tests/Contracts/` is the list, and the paragraph below is what keeps it honest.
 
 ## The pack ships with the interface (Phase 259)
