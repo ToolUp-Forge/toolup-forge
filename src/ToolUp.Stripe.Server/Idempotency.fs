@@ -28,6 +28,25 @@ open System.Collections.Generic
 ///   5. No cross-shard ordering — dedup is per-event-id; no ordering
 ///                                across event ids is promised.
 ///   6. Precision at lower bound — n/a (no time semantics).
+///
+/// **The claim-key namespace (Phase 210).** The keys this store sees are
+/// not all Stripe event ids. Two producers share it, and they are kept
+/// apart by a prefix convention rather than by hope:
+///
+///   * `evt_…` — a real Stripe event id, claimed once per delivery by the
+///     webhook handler. Unprefixed, because it is Stripe's own id space.
+///   * `recon:<customerId>:<status>:<yyyyMMddHH>` — a reconcile-sourced
+///     correction (`Reconciliation.idempotencyKey`). A reconcile reads
+///     state rather than receiving an event, so it has no event id to
+///     claim; the `recon:` prefix keeps the synthesised key out of
+///     Stripe's id space, so a correction can never consume a real
+///     event's claim or be consumed by one. The trailing UTC-hour bucket
+///     is what makes the key claimable more than once: a standing
+///     divergence is re-applied hourly, while a burst of ticks inside one
+///     hour applies once.
+///
+/// A third producer adds a third prefix. The rule is only that Stripe's
+/// own ids stay unprefixed and everything synthesised is prefixed.
 type IWebhookIdempotencyStore =
     /// Atomically claim `eventId`. Returns `true` when THIS caller won
     /// the claim (first time the id is seen); `false` when the id was
