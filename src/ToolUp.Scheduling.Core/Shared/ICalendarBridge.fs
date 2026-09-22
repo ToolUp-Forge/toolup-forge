@@ -1,3 +1,6 @@
+/// Phase 20a - the portable calendar-bridge seam: the surface an
+/// external calendar provider implements so bookings round-trip with a
+/// calendar the deployment does not own.
 module ToolUp.Scheduling.ICalendarBridge
 
 open System
@@ -94,6 +97,7 @@ type BridgeError =
     /// Terminal for that payload; other payloads are unaffected.
     | MalformedPayload of message: string
 
+/// Diagnostics and the retry classification over `BridgeError`.
 module BridgeError =
     /// One-line diagnostic text. Stable enough for a log line, NOT a
     /// wire format — callers branch on the case, never on this string.
@@ -144,6 +148,7 @@ type BridgeCapabilities = {
     MinimumPollInterval: TimeSpan
 }
 
+/// Reference `BridgeCapabilities` values a bridge declares itself with.
 module BridgeCapabilities =
     /// The conservative default a new bridge starts from: polling only,
     /// no modification cursor, fifteen-minute floor.
@@ -224,6 +229,7 @@ type ConflictPolicy =
     /// stamp is treated as OLDER, so the local edit survives.
     | LatestModifiedWins
 
+/// Persistence forms of `ConflictPolicy` - a link stores the string.
 module ConflictPolicy =
     /// Stable string form for persistence and index keys.
     let toString (policy: ConflictPolicy) : string =

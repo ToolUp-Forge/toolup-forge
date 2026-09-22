@@ -1,3 +1,6 @@
+/// Phase 20a - the provider-independent half of two-way calendar sync:
+/// the link store, the push and pull paths, the conflict policy, and the
+/// jobs that drive them.
 module ToolUp.Scheduling.CalendarSync
 
 open System
@@ -150,6 +153,7 @@ type CalendarSyncError =
     /// The underlying entity store refused a read or a write.
     | SyncStorageFailure of message: string
 
+/// Diagnostics over `CalendarSyncError`.
 module CalendarSyncError =
     let message (error: CalendarSyncError) : string =
         match error with
@@ -182,6 +186,7 @@ type PullOutcome = {
     Failures: (string * BridgeError) list
 }
 
+/// The zero `PushOutcome` a fan-out accumulates onto.
 module PushOutcome =
     let empty: PushOutcome = {
         Pushed = 0
@@ -189,6 +194,7 @@ module PushOutcome =
         Failures = []
     }
 
+/// The zero `PullOutcome` a fan-out accumulates onto.
 module PullOutcome =
     let empty: PullOutcome = {
         Examined = 0

@@ -1,3 +1,5 @@
+/// Phase 20a - the generic CalDAV `ICalendarBridge`: RFC 4791 over BCL
+/// `HttpClient`, credentials from `ISecretStore` per call.
 module ToolUp.Calendar.CalDAV
 
 open System
@@ -76,6 +78,8 @@ type CalDAVSettings = {
     PullLookbackDays: int
 }
 
+/// Defaults, the environment reader and the effective-base resolution
+/// for `CalDAVSettings`.
 module CalDAVSettings =
     /// `ISecretStore` key the password / app-password is read from, in
     /// the link's own scope. Not a `TOOLUP_*` variable: it is a secret

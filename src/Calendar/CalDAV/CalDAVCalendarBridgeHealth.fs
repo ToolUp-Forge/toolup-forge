@@ -1,3 +1,4 @@
+/// Phase 20a - the CalDAV bridge's readiness probe.
 module ToolUp.Calendar.CalDAVHealth
 
 open System

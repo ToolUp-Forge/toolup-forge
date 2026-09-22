@@ -871,12 +871,15 @@ module Names =
     // password / app-password is NOT here: it resolves per call through
     // ISecretStore, so rotation flows through without a restart.
 
+    /// Base URL of the CalDAV server the calendar bridge talks to.
     [<Literal>]
     let calDavUrl = "TOOLUP_CALDAV_URL"
 
+    /// Username the CalDAV bridge authenticates as.
     [<Literal>]
     let calDavUsername = "TOOLUP_CALDAV_USERNAME"
 
+    /// CalDAV endpoint override, replacing the base URL per request.
     [<Literal>]
     let calDavEndpoint = "TOOLUP_CALDAV_ENDPOINT"
 
