@@ -145,8 +145,6 @@ IExternalComputeDispatcherContract
 IExternalHandleStoreContract
 IFeatureFlagStoreContract
 IGrantConsentStoreContract
-IJobSchedulerContract
-IJobStoreContract
 ILifecycleLockContract
 ILineageStoreContract
 ILiveSessionHostContract

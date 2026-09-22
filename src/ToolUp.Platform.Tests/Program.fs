@@ -179,6 +179,11 @@ let private registeredTests =
         JobStoreTests.tests
         CronExpressionTests.tests
         JobSchedulerTests.tests
+        // Phase 9c.E — the same two job contract packs, bound to the
+        // Quartz.NET companion. The second binding is what makes the
+        // packs portability evidence rather than a restatement of the
+        // in-process default's behaviour.
+        QuartzJobSchedulerTests.tests
         ScheduledJobDeclarationTests.tests
         ModuleQueryBusTests.tests
         InMemoryDataSourceTests.tests

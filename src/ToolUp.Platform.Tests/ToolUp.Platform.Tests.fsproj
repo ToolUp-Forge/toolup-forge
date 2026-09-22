@@ -397,6 +397,12 @@
         <Compile Include="InProcess\JobStoreTests.fs" />
         <Compile Include="InProcess\CronExpressionTests.fs" />
         <Compile Include="InProcess\JobSchedulerTests.fs" />
+        <!-- Phase 9c.E — the SECOND binding of the IJobScheduler and
+             IJobStore contract packs, against the Quartz.NET companion.
+             Needs no external service (Quartz's in-memory store runs in
+             process), so it is a standing gate rather than an env-gated
+             one. -->
+        <Compile Include="InProcess\QuartzJobSchedulerTests.fs" />
         <Compile Include="InProcess\ModuleQueryBusTests.fs" />
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
@@ -2741,6 +2747,10 @@
              <Compile Link> entries (each carries its own implementation
              plus Health / Validator types where present). -->
         <ProjectReference Include="..\NotificationChannels\Redis\ToolUp.NotificationChannels.Redis.fsproj" />
+        <!-- Phase 9c.E — the Quartz.NET job-scheduler companion, bound
+             against both job contract packs in
+             InProcess\QuartzJobSchedulerTests.fs. -->
+        <ProjectReference Include="..\JobSchedulers\Quartz\ToolUp.JobSchedulers.Quartz.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Email\Smtp\ToolUp.NotificationChannels.Email.Smtp.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Email\SendGrid\ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
