@@ -21,6 +21,10 @@
     <Compile Include="Checkout.fs" />
     <!-- Phase 240 — direct-billing IPaymentProvider impl. -->
     <Compile Include="StripeBillingProvider.fs" />
+    <!-- Phase 210 — periodic reconcile of local entitlement state against
+         the provider's authoritative view. After StripeBillingProvider (it
+         reads through IPaymentProvider). -->
+    <Compile Include="Reconciliation.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
   <ItemGroup>

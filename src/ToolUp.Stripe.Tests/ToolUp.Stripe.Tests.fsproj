@@ -25,6 +25,8 @@
     <!-- Phase 211 — real-shaped Stripe event payloads replayed through the
          shipped webhook wire. -->
     <Compile Include="WebhookFixtureReplayTests.fs" />
+    <!-- Phase 210 — the billing-reconcile contract pack. -->
+    <Compile Include="ReconciliationContractTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
