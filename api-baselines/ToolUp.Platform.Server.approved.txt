@@ -1575,6 +1575,10 @@ ToolUp.Platform.ComposeNotifications+NotificationStack.ResolvedNotificationChann
 ToolUp.Platform.ComposeNotifications+NotificationStack.ShareTokenStoreInstance : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IShareTokenStore] { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.SseConnectionManager : ToolUp.Platform.SSEConnectionManager { get }
 ToolUp.Platform.ComposeNotifications+NotificationStack.TransactionalDispatcher : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TransactionalDispatcher+TransactionalDispatcher] { get }
+ToolUp.Platform.ComposeObservability (class)
+ToolUp.Platform.ComposeObservability.createLogStore(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]]
+ToolUp.Platform.ComposeObservability.decorateLogger(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : ToolUp.Platform.ILogger
+ToolUp.Platform.ComposeObservability.registerLogStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices (class)
 ToolUp.Platform.ComposeRuntimeServices.assertCorsCredentialsCompatible(ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerAlertRuleEngine(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
@@ -6512,6 +6516,11 @@ ToolUp.Platform.LocaleResolver+DefaultLocaleResolver..ctor(ToolUp.Platform.Local
 ToolUp.Platform.LocaleResolver+LocaleConfigKeys (class)
 ToolUp.Platform.LocaleResolver+LocaleConfigKeys.TeamLocale : System.String (literal)
 ToolUp.Platform.LocaleResolver+LocaleConfigKeys.UserLocalePrefix : System.String (literal)
+ToolUp.Platform.LogStoreLogger (class)
+ToolUp.Platform.LogStoreLogger.DefaultCapacity : System.Int32 (literal)
+ToolUp.Platform.LogStoreLogger.create(ToolUp.Platform.ILogger, ToolUp.Platform.ILogStore) : ToolUp.Platform.ILogger
+ToolUp.Platform.LogStoreLogger+LogStoreLogger (class)
+ToolUp.Platform.LogStoreLogger+LogStoreLogger..ctor(ToolUp.Platform.ILogger, ToolUp.Platform.ILogStore, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Logger (class)
 ToolUp.Platform.Logger.clearRegisteredCategories() : System.Void
 ToolUp.Platform.Logger.registerCategory(System.String) : System.Void
@@ -7419,6 +7428,10 @@ ToolUp.Platform.NoOpHostedTreeUsageExport (class)
 ToolUp.Platform.NoOpHostedTreeUsageExport..ctor()
 ToolUp.Platform.NoOpJobProgressSink (class)
 ToolUp.Platform.NoOpJobProgressSink..ctor()
+ToolUp.Platform.NoOpLogStore (class)
+ToolUp.Platform.NoOpLogStore..ctor()
+ToolUp.Platform.NoOpLogStoreModule (class)
+ToolUp.Platform.NoOpLogStoreModule.create() : ToolUp.Platform.ILogStore
 ToolUp.Platform.NoOpRateLimiter (class)
 ToolUp.Platform.NoOpRateLimiter..ctor()
 ToolUp.Platform.NoOpUserClaims (class)
@@ -9625,6 +9638,15 @@ ToolUp.Platform.SpendOutcome+SpendReturned.reason : System.String { get }
 ToolUp.Platform.SpendOutcome+Tags (class)
 ToolUp.Platform.SpendOutcome+Tags.SpendCommitted : System.Int32 (literal)
 ToolUp.Platform.SpendOutcome+Tags.SpendReturned : System.Int32 (literal)
+ToolUp.Platform.SqliteLogStore (class)
+ToolUp.Platform.SqliteLogStore.create(ToolUp.Platform.LogStoreConfig) : ToolUp.Platform.ILogStore
+ToolUp.Platform.SqliteLogStore+LogStoreRetentionService (class)
+ToolUp.Platform.SqliteLogStore+LogStoreRetentionService..ctor(ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig, ToolUp.Platform.ILogger)
+ToolUp.Platform.SqliteLogStore+LogStoreRetentionService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.SqliteLogStore+LogStoreRetentionService.SweepOnce() : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.Int32, System.Int32]]
+ToolUp.Platform.SqliteLogStore+SqliteLogStore (class)
+ToolUp.Platform.SqliteLogStore+SqliteLogStore..ctor(ToolUp.Platform.LogStoreConfig)
+ToolUp.Platform.SqliteLogStore+SqliteLogStore.Config : ToolUp.Platform.LogStoreConfig { get }
 ToolUp.Platform.SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator (class)
 ToolUp.Platform.SseAuthModeValidator+SseAuthModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

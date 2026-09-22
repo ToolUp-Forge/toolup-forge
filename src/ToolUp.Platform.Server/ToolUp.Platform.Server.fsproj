@@ -187,6 +187,14 @@
         <Compile Include="Server\Infra\LocalFileStorage.fs" />
         <!-- Phase 161 — dev/test in-memory ITimeSeriesStore default. -->
         <Compile Include="Server\Infra\InMemoryTimeSeriesStore.fs" />
+        <!-- Phase 828 - the self-hosted log store: the SQLite default (and
+             its retention sweep), the inert null object, and the ILogger
+             decorator that feeds the store. After Server/LoggerScope.fs (the
+             correlation context the decorator reads) and before
+             Compose/ComposeObservability.fs, which registers them. -->
+        <Compile Include="Server\Infra\SqliteLogStore.fs" />
+        <Compile Include="Server\Infra\NoOpLogStore.fs" />
+        <Compile Include="Server\LogStoreLogger.fs" />
         <!-- Phase 11.G — `BlobStorage.fromEnv` (env-var-driven dispatch).
              Module name is `BlobStorageEnv` because `BlobStorage` is
              reserved in Core for the interface module. -->
@@ -1314,6 +1322,7 @@
              lineage, conversation, config, module query bus,
              feature flags). -->
         <Compile Include="Server\Compose\ComposeStores.fs" />
+        <Compile Include="Server\Compose\ComposeObservability.fs" />
         <!-- Phase 15e tail — per-tenant team/invite/permission stores
              + post-bootstrap validators (TeamCreationPolicy,
              BootstrapTeam, PendingInviteStoreInstance,
@@ -1729,6 +1738,10 @@
          was a transitive dep of ToolUp.Remoting.Server / Giraffe /
          AspNetCore — now declared explicitly. -->
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+    <!-- Phase 828 - the self-hosted log store's default backend. MIT,
+         freely available, no paid tier (GP 2); the version is pinned
+         centrally in Directory.Packages.props. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <!-- Phase 30a — Ed25519 signing / verification for
          IArtifactSigner / IArtifactVerifier defaults. MIT-licensed
          (GP 2 — no paid deps). Version pinned centrally in

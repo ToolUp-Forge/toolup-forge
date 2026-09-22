@@ -297,6 +297,20 @@ let compose
             else
                 ConsoleLogger.ConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger)
 
+    // ─── Phase 828 — the self-hosted log store ─────────────────────────
+    //
+    // Opened here, ahead of everything that captures `resolvedLogger`, so
+    // the decorator below is what the WHOLE composition writes through —
+    // not only the handlers that resolve `ILogger` from DI. `NoLogStore`
+    // (the default) opens nothing and returns the logger unchanged, so
+    // this is two identity functions on the path a deployment that never
+    // opted in takes (GP 13 / GP 11). The DI registration and the
+    // retention sweep follow much later, beside the other stores.
+    let composedLogStore = ComposeObservability.createLogStore config
+
+    let resolvedLogger =
+        ComposeObservability.decorateLogger composedLogStore resolvedLogger
+
     // ─── Phase 696 — declared-intent statement in the boot log ─────────
     //
     // The hash of the manifest as deployed, logged through the real
@@ -706,6 +720,12 @@ let compose
     // registration entirely; `CustomTimeSeriesStore` leaves the consumer's
     // companion singleton in place.
     registerTimeSeriesStore services config
+
+    // Phase 828 — the self-hosted log store's DI singleton + hourly
+    // retention sweep. The store itself was opened above (the decorator
+    // needed it before the logger was handed out); this is the half that
+    // belongs with the other store registrations. A no-op on `NoLogStore`.
+    ComposeObservability.registerLogStore services config composedLogStore resolvedLogger
 
     // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
     // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
