@@ -3,11 +3,6 @@
 
 namespace ToolUp.Platform
 
-// Phase 817 — `DataTypeDisplay.RenderSummary` is deprecated below, and the
-// `DataTypeDisplay` builders beside it are the one sanctioned place that
-// still names it.
-#nowarn "44"
-
 open ToolUp.Elmish
 open Feliz
 open Fable.SimpleJson
@@ -26,25 +21,18 @@ open Fable.SimpleJson
 /// Client-side metadata for rendering data type summaries in the file manager.
 /// Each module that handles file data provides one of these per data type.
 ///
-/// **Phase 817 — build one with `DataTypeDisplay.typed`, not a record
-/// literal.** The summary reaches the client as a `ProcessedData`
-/// envelope (`ProcessedFileEntry.Summary`), and `typed` decodes it to the
-/// module's own summary type before calling the module's render; the
-/// type-erased `RenderSummary` remains for modules that still fill
-/// `ProcessedFileEntry.Info`, and goes when that field does. A literal
-/// must name `RenderSummary`, which warns now and stops compiling then.
+/// **Phase 817 — build one with `DataTypeDisplay.typed`.** The summary
+/// reaches the client as a `ProcessedData` envelope
+/// (`ProcessedFileEntry.Summary`), and `typed` decodes it to the module's
+/// own summary type before calling the module's render. (Until 817 the
+/// render took the type-erased `obj list` the module's server half had
+/// boxed into the entry's since-removed `Info` field; both went together.)
 type DataTypeDisplay = {
     /// Shared metadata (Id + DisplayName), declared in the module's SharedTypes.
     Info: DataManagementTypes.DataTypeInfo
-    /// Render a summary table from the type-erased Info fields of ProcessedFileEntries.
-    /// The function receives a list of unboxed Info objects and returns a ReactElement.
-    [<System.Obsolete("Type-erased summaries — use DataTypeDisplay.typed, which renders from ProcessedFileEntry.Summary. See docs/migrations/817-processed-file-entry-typed-summary.md. RenderSummary is removed in 1.0.")>]
-    RenderSummary: obj list -> ReactElement
-    /// Phase 817 — render from the typed envelopes of the entries under
-    /// this data type. `Some` on a display built by `DataTypeDisplay.typed`;
-    /// `None` on a pre-817 display, which the SDK renders through
-    /// `RenderSummary` instead.
-    RenderTyped: (ProcessedDataTypes.ProcessedData list -> ReactElement) option
+    /// Render the summaries of the entries under this data type, from
+    /// their typed envelopes. `DataTypeDisplay.typed` supplies the decode.
+    RenderSummary: ProcessedDataTypes.ProcessedData list -> ReactElement
 }
 
 /// Builders and the SDK's own render step for `DataTypeDisplay` (Phase 817).
@@ -91,15 +79,14 @@ module DataTypeDisplay =
         : DataTypeDisplay =
         {
             Info = info
-            RenderSummary = fun _ -> Html.none
-            RenderTyped =
-                Some(fun envelopes ->
+            RenderSummary =
+                fun envelopes ->
                     envelopes
                     |> List.choose (fun envelope ->
                         match decode envelope with
                         | Ok summary -> Some summary
                         | Error _ -> None)
-                    |> render)
+                    |> render
         }
 
     /// `typedWith` over this tier's own decoder — the form a module's
@@ -107,28 +94,14 @@ module DataTypeDisplay =
     let inline typed (info: DataManagementTypes.DataTypeInfo) (render: 'T list -> ReactElement) : DataTypeDisplay =
         typedWith tryDecode<'T> info render
 
-    /// The pre-817 shape, for a module that still fills
-    /// `ProcessedFileEntry.Info`. Names the deprecated field on the
-    /// caller's behalf so the module's own source does not.
-    let legacy (info: DataManagementTypes.DataTypeInfo) (render: obj list -> ReactElement) : DataTypeDisplay = {
-        Info = info
-        RenderSummary = render
-        RenderTyped = None
-    }
-
     /// Render the entries under one data type through its display: the
-    /// typed envelopes when the display is typed, the boxed `Info` values
-    /// otherwise. A typed display sees only entries that carry a `Summary`,
-    /// a legacy one only entries that carry an `Info` — each is what its
-    /// module produced, and the other is the other module's business.
+    /// envelopes of the entries that carry one. A failed entry carries
+    /// none and is reported in the errors list beside, not here.
     let render (display: DataTypeDisplay) (entries: ProcessedDataTypes.ProcessedFileEntry list) : ReactElement =
-        match display.RenderTyped with
-        | Some renderTyped -> entries |> List.choose _.Summary |> renderTyped
-        | None -> entries |> List.choose _.Info |> display.RenderSummary
+        entries |> List.choose _.Summary |> display.RenderSummary
 
-    /// Whether an entry carries anything a display could render.
-    let hasSummary (entry: ProcessedDataTypes.ProcessedFileEntry) : bool =
-        entry.Summary.IsSome || entry.Info.IsSome
+    /// Whether an entry carries a summary a display could render.
+    let hasSummary (entry: ProcessedDataTypes.ProcessedFileEntry) : bool = entry.Summary.IsSome
 
 // ─── Module availability ──────────────────────────────────────────
 

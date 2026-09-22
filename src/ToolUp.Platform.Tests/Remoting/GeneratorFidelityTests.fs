@@ -592,21 +592,18 @@ let tests =
                     (everyRefusal |> List.filter (fun r -> r.Why.Contains "recursive"))
                     "a recursive type is refused — the cycle gap has REOPENED"
 
-            testCase
-                "every record the two gaps alone blocked is now expressible, and the one remaining refusal is deprecated with a removal target"
+            testCase "every platform API record is expressible — the census has no refusal left"
             <| fun () ->
-                // The measured result of Phase 800, pinned so a regression
-                // that re-refuses any of them goes red by name. Fourteen
-                // records were blocked on the day (69k counted 13 over a
-                // smaller assembly); twelve moved onto the algebra path,
-                // and Phase 816 moved `IConversionApi` (whose `ColumnExpr`
-                // is a RECURSIVE union — the generator's cycle refusal, not
-                // the algebra's) after it. The one that remains is pinned as
-                // a refusal rather than left as an unstated exclusion:
-                // `FileManagementApi` holds an `obj`-typed field
-                // (`ProcessedFileEntry.Info`, the module-summary erasure
-                // boundary), which no closed algebra can express — that is
-                // a wire-shape decision, not a combinator.
+                // The measured end state of Phases 800, 816 and 817, pinned
+                // so a regression that re-refuses any record goes red by
+                // name. Fourteen records were blocked on the day 800 shipped
+                // (69k counted 13 over a smaller assembly): twelve moved on
+                // 800 (tuples, several-field cases), `IConversionApi` on 816
+                // (a recursive union), and `FileManagementApi` on 817 —
+                // whose `ProcessedFileEntry.Info: obj option` was the last
+                // open point in the API type graph, closed by the
+                // `ProcessedData` envelope and removed outright (operator
+                // decision 2026-09-22, overriding the deprecation window).
                 let expressibleNames =
                     expressible |> List.map (fst >> Plan.simpleName) |> Set.ofList
 
@@ -624,47 +621,19 @@ let tests =
                     "IWebhookApi"
                     "JobApi"
                     "ModelExecutionApi"
+                    "FileManagementApi"
                 ]
 
                 Expect.isEmpty
                     (moved |> List.filter (fun n -> not (expressibleNames.Contains n)))
-                    "a record Phase 800 moved onto the algebra path is refused again"
+                    "a record the three phases moved onto the algebra path is refused again"
 
-                let stillBlocked =
-                    census
-                    |> List.filter (fun (_, plan) -> not (List.isEmpty plan.Refusals))
-                    |> List.map (fst >> Plan.simpleName)
+                Expect.isEmpty everyRefusal "no platform API record is left on the reflection decode path"
 
-                Expect.equal stillBlocked [ "FileManagementApi" ] "exactly one record remains on the reflection path"
-
-                Expect.isTrue
-                    (everyRefusal |> List.exists (fun r -> r.RefusedType = "System.Object"))
-                    "what blocks `FileManagementApi` is an `obj` field, which no closed algebra can express"
-
-                // Phase 817 — and that field is on its way out. The
-                // summary now rides `ProcessedFileEntry.Summary`, a
-                // `ProcessedData` envelope; `Info` stays for one deprecation
-                // window because removing a record field is the break the
-                // policy reserves for a major. Pinned so the last open point
-                // in the API type graph cannot quietly lose its removal date:
-                // the property carries an `[<Obsolete>]` naming 1.0.
-                let infoProperty =
-                    typeof<ProcessedDataTypes.ProcessedFileEntry>.GetProperty "Info"
-                    |> Option.ofObj
-                    |> Option.defaultWith (fun () ->
-                        failtest
-                            "`ProcessedFileEntry.Info` has gone — this case (and the refusal above) should now be inverted: the record is expressible")
-
-                let notice =
-                    infoProperty.GetCustomAttributes(typeof<ObsoleteAttribute>, false)
-                    |> Array.tryHead
-                    |> Option.map (fun (a: obj) -> (a :?> ObsoleteAttribute).Message)
-
-                match notice with
-                | Some message -> Expect.stringContains message "1.0" "the deprecation names its removal target"
-                | None ->
-                    failtest
-                        "`Info` must be deprecated: it is the one field keeping `FileManagementApi` off the algebra path"
+                Expect.equal
+                    (List.length expressible)
+                    (List.length allApiRecords)
+                    "every record the assembly declares is expressible"
 
             testCase "a refusal names the type it refused"
             <| fun () ->

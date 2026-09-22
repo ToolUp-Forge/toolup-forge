@@ -1,9 +1,5 @@
 module ToolUp.Platform.Tests.InProcess.ModuleSurfaceTests
 
-// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
-// on purpose: the legacy render path stays covered until the field goes.
-#nowarn "44"
-
 open Expecto
 open System
 open System.Text.Json
@@ -50,7 +46,6 @@ let private dataType (id: string) (displayName: string) : DataType = {
                     DataType = id
                     ProcessedAt = DateTime.UnixEpoch
                     Summary = None
-                    Info = None
                     Error = None
                 }
         }
