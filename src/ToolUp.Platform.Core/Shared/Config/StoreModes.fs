@@ -812,3 +812,54 @@ module OffboardConfirmationMode =
         | NoConfirmation -> false
         | TokenConfirmation
         | TwoPersonRule -> true
+
+/// Phase 828 — the self-hosted log store's tuning knobs: where the
+/// database lives, how much of it is kept, and how its full-text index
+/// tokenises. Carried by `LogStoreMode.SqliteLogStore`, so a deployment
+/// that never opts in never constructs one.
+type LogStoreConfig = {
+    /// Path to the store's single database file. Relative paths resolve
+    /// against the process working directory. The containing directory is
+    /// created on first open if it does not exist.
+    DatabasePath: string
+    /// Retention bound by age — entries older than this many days are
+    /// deleted by the hourly sweep. Default 14. Zero or negative disables
+    /// the age bound (the row cap still applies).
+    MaxAgeDays: int
+    /// Retention bound by count — the sweep trims the oldest entries until
+    /// at most this many remain. Default 5,000,000. Zero or negative
+    /// disables the row cap (the age bound still applies).
+    MaxRows: int64
+    /// The FTS5 tokeniser the message index is built with. Default
+    /// `"unicode61"`, whose word rule is the one `LogSearchQuery.tokenise`
+    /// mirrors; changing it is a deliberate departure from the portable
+    /// text-match contract and applies only to a freshly-created index.
+    FtsTokeniser: string
+}
+
+[<RequireQualifiedAccess>]
+module LogStoreConfig =
+    /// The documented defaults — 14 days, 5,000,000 rows, the
+    /// `unicode61` tokeniser — around the caller's chosen database path.
+    let create (databasePath: string) : LogStoreConfig = {
+        DatabasePath = databasePath
+        MaxAgeDays = 14
+        MaxRows = 5_000_000L
+        FtsTokeniser = "unicode61"
+    }
+
+/// Phase 828 — selects the self-hosted log store (`ILogStore`) the
+/// deployment records its own structured log lines into. Default:
+/// `NoLogStore` — nothing registered, no logger decorated, no file
+/// opened, zero cost (GP 13) and a boot path byte-for-byte unchanged
+/// (GP 11).
+type LogStoreMode =
+    /// No log store (default). Log lines go to stdout/stderr exactly as
+    /// they did before this substrate existed; nothing is queryable
+    /// in-platform. A deployment shipping its logs to an external
+    /// aggregator wants this.
+    | NoLogStore
+    /// Record every log line into a local SQLite database at the given
+    /// config, decorate the resolved `ILogger` so writes reach the console
+    /// **and** the store, and run the hourly retention sweep.
+    | SqliteLogStore of LogStoreConfig

@@ -182,6 +182,9 @@ module ServerConfig =
         // attestation is opt-in. A deployment with no `Anonymous`
         // surface, or no platform-paid provider, never reaches the rule.
         AcceptAnonymousModeWithAI = false
+        // Phase 828 — no self-hosted log store: nothing registered, the
+        // logger undecorated, no database file, no sweep (GP 11 / GP 13).
+        LogStore = NoLogStore
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

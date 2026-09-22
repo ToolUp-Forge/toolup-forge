@@ -184,6 +184,12 @@
         <Compile Include="Shared\Types\EvidencePackTypes.fs" />
         <Compile Include="Shared\Interfaces\IBlobStorage.fs" />
         <Compile Include="Shared\Interfaces\ITimeSeriesStore.fs" />
+        <!-- Phase 828 - ILogStore: the self-hosted log store seam. After
+             LogLevel.fs (LogRecord.Level) and before SDK.Shared.fs, which
+             carries the ServerConfig field. Fable-safe (records, primitives,
+             option, the LogLevel DU) so a client renders the same type the
+             server stores. -->
+        <Compile Include="Shared\Interfaces\ILogStore.fs" />
         <Compile Include="Shared\Interfaces\ITelemetrySink.fs" />
         <Compile Include="Shared\Interfaces\ISecretStore.fs" />
         <!-- Phase 11.C.5 Tier 3 — unified RetryPolicy (replaces the
@@ -577,7 +583,7 @@
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
         <!-- Phase 26 — supporting types for the four deploy-plane substrate
              interfaces (BuildRequest/BuildSummary, ProvisioningRequest,
-             DeployState, ContainerSpec, LogEntry, etc.). Fable-compatible
+             DeployState, ContainerSpec, LogRecord, etc.). Fable-compatible
              (Async-free, no streams); the interfaces themselves are
              server-only because IContainerScheduler.StreamLogs returns
              IAsyncEnumerable. -->

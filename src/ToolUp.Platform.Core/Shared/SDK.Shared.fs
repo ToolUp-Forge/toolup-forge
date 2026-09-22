@@ -1533,4 +1533,14 @@ type ServerConfig = {
     ///
     /// Override via `TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`.
     AcceptAnonymousModeWithAI: bool
+
+    /// Phase 828 — self-hosted log-store selection. Default:
+    /// `NoLogStore` — no `ILogStore` is registered, the resolved
+    /// `ILogger` is not decorated, no database file is opened and no
+    /// retention sweep runs, so a deployment shipping its logs to an
+    /// external aggregator pays nothing (GP 13) and boots byte-for-byte
+    /// as it did before this substrate existed (GP 11).
+    /// `SqliteLogStore cfg` records every log line into a local SQLite
+    /// database and makes it searchable in-platform.
+    LogStore: LogStoreMode
 }
