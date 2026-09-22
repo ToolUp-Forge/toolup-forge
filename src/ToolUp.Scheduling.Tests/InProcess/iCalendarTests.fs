@@ -39,6 +39,10 @@ let private singleEvent
                 Tzid = None
                 RRule = rrule
                 Description = None
+                Location = None
+                Organizer = None
+                Attendees = []
+                Extended = Map.empty
             }
         ]
     }

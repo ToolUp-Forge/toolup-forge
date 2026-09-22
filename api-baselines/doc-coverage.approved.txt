@@ -52,6 +52,7 @@ ToolUp.AuthProviders.Passkey 75/150
 ToolUp.AuthProviders.Passkey.Client 6/32
 ToolUp.AuthProviders.Scim 57/275
 ToolUp.BrandKit 65/210
+ToolUp.Calendar.CalDAV 22/25
 ToolUp.Cli 132/279
 ToolUp.Client.ModelViewer 28/65
 ToolUp.Cloud.Aws 0/0
@@ -123,7 +124,7 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 262/505
 ToolUp.Platform.Client 2199/6360
-ToolUp.Platform.Core 5902/14012
+ToolUp.Platform.Core 5905/14015
 ToolUp.Platform.Server 5870/11311
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
@@ -142,8 +143,8 @@ ToolUp.Reporting.HtmlPdf 15/31
 ToolUp.Reporting.Server 90/176
 ToolUp.Reporting.Xlsx 6/11
 ToolUp.Rerankers.Local 9/19
-ToolUp.Scheduling.Core 43/232
-ToolUp.Scheduling.Server 30/64
+ToolUp.Scheduling.Core 94/322
+ToolUp.Scheduling.Server 79/154
 ToolUp.Sdk 0/0
 ToolUp.Secrets.AwsSecretsManager 6/11
 ToolUp.Secrets.AzureKeyVault 5/10

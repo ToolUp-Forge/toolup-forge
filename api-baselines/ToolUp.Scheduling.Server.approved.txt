@@ -19,6 +19,91 @@ ToolUp.Scheduling.BookingScheduler.exceptionRegistration : ToolUp.Platform.Entit
 ToolUp.Scheduling.BookingScheduler.resourceRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Scheduling.SchedulingTypes+BookableResource] { get }
 ToolUp.Scheduling.BookingScheduler+BookingScheduler (class)
 ToolUp.Scheduling.BookingScheduler+BookingScheduler..ctor(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Platform.IEventStore)
+ToolUp.Scheduling.CalendarSync (class)
+ToolUp.Scheduling.CalendarSync.CalendarEventLinkTypeName : System.String (literal)
+ToolUp.Scheduling.CalendarSync.CalendarLinkTypeName : System.String (literal)
+ToolUp.Scheduling.CalendarSync.PollHandlerName : System.String (literal)
+ToolUp.Scheduling.CalendarSync.PushHandlerPrefix : System.String (literal)
+ToolUp.Scheduling.CalendarSync.bookingIdOfEventPayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Scheduling.CalendarSync.bookingsAgree(ToolUp.Scheduling.SchedulingTypes+Booking, ToolUp.Scheduling.SchedulingTypes+Booking) : System.Boolean
+ToolUp.Scheduling.CalendarSync.calendarEventLinkRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Scheduling.CalendarSync+CalendarEventLink] { get }
+ToolUp.Scheduling.CalendarSync.calendarLinkRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Scheduling.CalendarSync+CalendarLink] { get }
+ToolUp.Scheduling.CalendarSync.eventLinkId(System.String, System.String, System.String) : System.String
+ToolUp.Scheduling.CalendarSync.linkId(System.String, System.String) : System.String
+ToolUp.Scheduling.CalendarSync.resolveConflict(ToolUp.Scheduling.ICalendarBridge+ConflictPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Scheduling.CalendarSync+CalendarEventLink], ToolUp.Scheduling.ICalendarBridge+ExternalEvent) : System.Boolean
+ToolUp.Scheduling.CalendarSync.userIdOfEventPayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Scheduling.CalendarSync+CalendarEventLink (class)
+ToolUp.Scheduling.CalendarSync+CalendarEventLink..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.Int32)
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.BookingId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.ExternalEventId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.Id : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.Kind : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.LastPushedAtUtc : System.DateTimeOffset { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.LastPushedVersion : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.ResourceId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.Type : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarEventLink.Version : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink (class)
+ToolUp.Scheduling.CalendarSync+CalendarLink..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Scheduling.CalendarSync+CalendarLink.CursorUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.ExternalCalendarId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.Id : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.Kind : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.Policy : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.ResourceId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.Type : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.UserId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.Version : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+CalendarPollJobHandler (class)
+ToolUp.Scheduling.CalendarSync+CalendarPollJobHandler..ctor(ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Platform.IEntityStore+IEntityStore)
+ToolUp.Scheduling.CalendarSync+CalendarPollJobHandler..ctor(ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Platform.IEntityStore+IEntityStore, System.Int32)
+ToolUp.Scheduling.CalendarSync+CalendarPushJobHandler (class)
+ToolUp.Scheduling.CalendarSync+CalendarPushJobHandler..ctor(ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Scheduling.IBookingScheduler+IBookingScheduler, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Scheduling.CalendarSync+CalendarSync (class)
+ToolUp.Scheduling.CalendarSync+CalendarSync..ctor(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Scheduling.IBookingScheduler+IBookingScheduler, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge])
+ToolUp.Scheduling.CalendarSync+CalendarSync..ctor(ToolUp.Platform.IEntityStore+IEntityStore, ToolUp.Scheduling.IBookingScheduler+IBookingScheduler, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Scheduling.CalendarSync+CalendarSyncError (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError.IsNotLinked : System.Boolean { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError.IsSyncStorageFailure : System.Boolean { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError.IsUnknownBridge : System.Boolean { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError.Tag : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+NotLinked (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+NotLinked.kind : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+NotLinked.resourceId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+SyncStorageFailure (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+SyncStorageFailure.message : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+Tags (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+Tags.NotLinked : System.Int32 (literal)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+Tags.SyncStorageFailure : System.Int32 (literal)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+Tags.UnknownBridge : System.Int32 (literal)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+UnknownBridge (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncError+UnknownBridge.kind : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarSyncErrorModule (class)
+ToolUp.Scheduling.CalendarSync+CalendarSyncErrorModule.message(ToolUp.Scheduling.CalendarSync+CalendarSyncError) : System.String
+ToolUp.Scheduling.CalendarSync+ICalendarSync (interface)
+ToolUp.Scheduling.CalendarSync+ICalendarSync.HandleWebhook(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Scheduling.CalendarSync+ICalendarSync.LinkResource(System.String, System.String, System.String, System.String, System.String, ToolUp.Scheduling.ICalendarBridge+ConflictPolicy, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+CalendarLink, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.ListLinks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.CalendarSync+CalendarLink]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.PullResource(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.PushBooking(System.String, ToolUp.Scheduling.SchedulingTypes+Booking, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PushOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.UnlinkResource(System.String, System.String, System.String, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+PullOutcome (class)
+ToolUp.Scheduling.CalendarSync+PullOutcome..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Scheduling.ICalendarBridge+BridgeError]])
+ToolUp.Scheduling.CalendarSync+PullOutcome.AppliedLocally : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PullOutcome.Examined : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PullOutcome.Failures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Scheduling.ICalendarBridge+BridgeError]] { get }
+ToolUp.Scheduling.CalendarSync+PullOutcome.RePushed : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PullOutcome.Skipped : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PullOutcomeModule (class)
+ToolUp.Scheduling.CalendarSync+PullOutcomeModule.empty : ToolUp.Scheduling.CalendarSync+PullOutcome { get }
+ToolUp.Scheduling.CalendarSync+PushOutcome (class)
+ToolUp.Scheduling.CalendarSync+PushOutcome..ctor(System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Scheduling.ICalendarBridge+BridgeError]])
+ToolUp.Scheduling.CalendarSync+PushOutcome.Failures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Scheduling.ICalendarBridge+BridgeError]] { get }
+ToolUp.Scheduling.CalendarSync+PushOutcome.Pushed : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PushOutcome.Removed : System.Int32 { get }
+ToolUp.Scheduling.CalendarSync+PushOutcomeModule (class)
+ToolUp.Scheduling.CalendarSync+PushOutcomeModule.empty : ToolUp.Scheduling.CalendarSync+PushOutcome { get }
 ToolUp.Scheduling.IBookingScheduler (class)
 ToolUp.Scheduling.IBookingScheduler+IBookingScheduler (interface)
 ToolUp.Scheduling.IBookingScheduler+IBookingScheduler.AddAvailabilityException(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, ToolUp.Scheduling.SchedulingTypes+AvailabilityException) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Scheduling.SchedulingTypes+BookingError]]
@@ -39,9 +124,12 @@ ToolUp.Scheduling.IBookingScheduler+IBookingScheduler.Reschedule(System.String, 
 ToolUp.Scheduling.SchedulingApiHandler (class)
 ToolUp.Scheduling.SchedulingApiHandler.schedulingApi(ToolUp.Scheduling.IBookingScheduler+IBookingScheduler, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Scheduling.SchedulingApi+ISchedulingApi
 ToolUp.Scheduling.SchedulingCompose (class)
+ToolUp.Scheduling.SchedulingCompose.DefaultCalendarPollCron : System.String (literal)
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp (class)
-ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp..ctor(ToolUp.Platform.ServerApp, System.Boolean)
+ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp..ctor(ToolUp.Platform.ServerApp, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger])
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.Base : ToolUp.Platform.ServerApp { get }
+ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.CalendarBridges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.ICalendarBridge+ICalendarBridge] { get }
+ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.CalendarPollTrigger : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Trigger] { get }
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp.RemindersEnabled : System.Boolean { get }
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule (class)
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.addModule(ToolUp.Platform.ServerModule, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
@@ -51,6 +139,8 @@ ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.run(ToolUp.Schedul
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withAuditFailurePolicy(ToolUp.Platform.AuditFailurePolicy, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withAuth(ToolUp.Platform.Auth+IAuthProvider, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withBackfillMissedTicks(System.Boolean, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
+ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withCalendarBridge(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
+ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withCalendarPollTrigger(ToolUp.Platform.Trigger, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withConfig(ToolUp.Platform.ServerConfig, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Scheduling.SchedulingCompose+SchedulingServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp

@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (196 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (199 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -223,6 +223,9 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_AUDIT_FAILURE_POLICY` | enum: log, logandcontinue, refuse, refuseaction, degrade, degradetofile | log | no | yes | What happens when an audit sink write fails: log and continue, refuse the action, or degrade to a local file. |
 | `TOOLUP_AUDIT_LOG` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the audit log and its sink dispatcher. |
 | `TOOLUP_BACKFILL_MISSED_TICKS` | bool | false | no | yes | On startup, runs schedule ticks that were missed while the process was down. |
+| `TOOLUP_CALDAV_ENDPOINT` | string | — | no | pending | CalDAV endpoint override, replacing the base URL for every request. |
+| `TOOLUP_CALDAV_URL` | string | — | no | pending | Base URL of the CalDAV server the calendar bridge talks to. Relative external calendar ids resolve against it. |
+| `TOOLUP_CALDAV_USERNAME` | string | — | no | pending | Username the CalDAV bridge authenticates as. The matching password or app-password comes from ISecretStore, never from the environment. |
 | `TOOLUP_COMPUTE_BUDGET` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables compute-budget accounting and enforcement for long-running work. |
 | `TOOLUP_CONFIG_DRIFT_DETECTION` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables startup detection of drift between persisted config and the composed defaults. |
 | `TOOLUP_DEPLOYMENT_READINESS` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the deployment-readiness report surface. |

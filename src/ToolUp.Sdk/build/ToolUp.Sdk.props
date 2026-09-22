@@ -163,6 +163,7 @@
     <PackageVersion Include="ToolUp.AuthProviders.Passkey.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AuthProviders.Scim" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.BrandKit" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Calendar.CalDAV" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Client.ModelViewer" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Aws" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Cloud.Azure" Version="$(ToolUpSdkVersion)" />

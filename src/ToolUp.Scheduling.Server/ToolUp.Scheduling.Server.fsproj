@@ -25,6 +25,10 @@
         <Compile Include="Server\BookingConflictDetector.fs" />
         <Compile Include="Server\BookingScheduler.fs" />
         <Compile Include="Server\SchedulingApiHandler.fs" />
+        <!-- Phase 20a — the calendar sync engine over the bridge seam.
+             Before SchedulingCompose.fs, which registers its entities,
+             its DI singleton and its jobs. -->
+        <Compile Include="Server\CalendarSync.fs" />
         <Compile Include="Server\SchedulingCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
