@@ -2284,7 +2284,7 @@ module DeploymentVerificationReport =
                 // deployment, and none of them is narrowed by this one.
                 Id = "decode-is-not-authorisation"
                 Statement =
-                    "The remoting decode edge establishes that client bytes become a value of the declared type or a named refusal, with bounded length and depth. It establishes nothing about that value's authorisation, tenancy or session integrity, nothing about its semantic validity, and nothing about the bytes-to-value pass itself, which is BOUNDED rather than proved. Records on the reflection fallback, and the JSON wire, are outside it entirely."
+                    "The remoting decode edge establishes that client bytes become a value of the declared type or a named refusal, with bounded length and depth. It establishes nothing about that value's authorisation, tenancy or session integrity, nothing about its semantic validity, and nothing about the bytes-to-value pass itself, which is BOUNDED rather than proved. Records on the reflection fallback, and argument types with no JSON decoder registered, are outside it entirely."
                 Narrowing =
                     if isComposed RemotingDecoderSection then
                         Some

@@ -306,4 +306,53 @@ let tests =
                 withoutRefusal.DecodeError
                 "the three-argument constructor still exists and defaults the refusal to None (GP 11)"
         }
+
+        // ── Phase 799 — the argument seam consults the JSON algebra ───
+        //
+        // The same probe API, with a JSON algebra decoder REGISTERED for
+        // its argument record. The seam (`FableConverters.tryDeserialise`)
+        // consults `JsonDecoders` before STJ, so the algebra's refusal is
+        // what reaches the `validation` envelope — with the algebra's
+        // path — and a shape STJ would have accepted (a missing field
+        // read as null) is refused by name before the handler runs.
+
+        testAsync "a registered argument type decodes through the JSON algebra, and a missing field is refused by name" {
+            ToolUp.Remoting.Json.JsonDecoders.resetForTests ()
+
+            let probe: ToolUp.Remoting.Json.JsonDecoder<DecodeProbeRequest> =
+                ToolUp.Remoting.Json.JsonDecode.succeed (fun count label -> { Count = count; Label = label })
+                |> ToolUp.Remoting.Json.JsonDecode.apply (
+                    ToolUp.Remoting.Json.JsonDecode.field "Count" ToolUp.Remoting.Json.JsonDecode.asInt32
+                )
+                |> ToolUp.Remoting.Json.JsonDecode.apply (
+                    ToolUp.Remoting.Json.JsonDecode.field "Label" ToolUp.Remoting.Json.JsonDecode.asString
+                )
+
+            try
+                // Not yet registered: STJ reads the absent `Label` as
+                // null and the handler RUNS.
+                let! status, _, invocations = post "Echo" """[{"Count":3}]"""
+                Expect.equal status 200 "the STJ path accepts the absent member"
+                Expect.equal invocations 1 "and the handler ran on a null label"
+
+                ToolUp.Remoting.Json.JsonDecoders.register<DecodeProbeRequest> probe
+
+                let! status, text, invocations = post "Echo" """[{"Count":3}]"""
+                expectRefusal "algebra: missing member" status text invocations
+                Expect.stringContains text "Label" "the refusal names the member the algebra could not find"
+
+                // A mistyped field refuses with the algebra's own path.
+                let! status, text, invocations = post "Echo" """[{"Count":"three","Label":"ok"}]"""
+                expectRefusal "algebra: mistyped member" status text invocations
+                Expect.stringContains text "Count" "the refusal names the member"
+                Expect.stringContains text "Int32" "and the type the algebra required"
+
+                // And the happy path is unchanged.
+                let! status, text, invocations = post "Echo" """[{"Count":3,"Label":"ok"}]"""
+                Expect.equal status 200 "a well-formed request decodes through the algebra"
+                Expect.equal text "\"3:ok\"" "to the same response"
+                Expect.equal invocations 1 "and the handler ran once"
+            finally
+                ToolUp.Remoting.Json.JsonDecoders.resetForTests ()
+        }
     ]

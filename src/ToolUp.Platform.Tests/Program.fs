@@ -2333,6 +2333,11 @@ let private registeredTests =
         // nothing), the round-trip law, and a committed go-red decoder
         // that silently widens so the differential is known to fail.
         DecoderAlgebraTests.tests
+        // Phase 799 — the JSON wire joins the algebra: the corpus through
+        // the lexical value model beside the STJ oracle, the generated
+        // refuse-path mutations per shape, the bounded pass, the IL pin,
+        // and the argument seam consulting the registry first.
+        JsonDecoderAlgebraTests.tests
         // Phase 69k — the source generator, held to the decoders Phase 785
         // hand-wrote: the covered set, the per-field decode of the shapes a
         // generator could plausibly get wrong, the union tags, and a
