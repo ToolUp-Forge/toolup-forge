@@ -1,0 +1,52 @@
+{
+  "id": "evt_1PgF7E2eZvKYlo2CxLpQ4mVd",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721210455,
+  "data": {
+    "object": {
+      "id": "cs_test_a1BcD2eFgH3iJkL4mN5oP6qR7sT8uV9wX0yZ",
+      "object": "checkout.session",
+      "amount_subtotal": 2000,
+      "amount_total": 2000,
+      "automatic_tax": { "enabled": false, "liability": null, "status": null },
+      "cancel_url": "https://example.com/cancel",
+      "client_reference_id": "user_4821",
+      "currency": "usd",
+      "customer": "cus_QZ1sT4hLmN8pKd",
+      "customer_details": {
+        "address": {
+          "city": null,
+          "country": "GB",
+          "line1": null,
+          "line2": null,
+          "postal_code": null,
+          "state": null
+        },
+        "email": "ada@example.com",
+        "name": "Ada L",
+        "phone": null,
+        "tax_exempt": "none",
+        "tax_ids": []
+      },
+      "customer_email": null,
+      "expires_at": 1721296855,
+      "invoice": "in_1PgF4A2eZvKYlo2CqTzWdNmR",
+      "livemode": false,
+      "locale": null,
+      "metadata": {},
+      "mode": "subscription",
+      "payment_intent": null,
+      "payment_status": "paid",
+      "status": "complete",
+      "subscription": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+      "success_url": "https://example.com/success",
+      "ui_mode": "hosted",
+      "url": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "checkout.session.completed"
+}

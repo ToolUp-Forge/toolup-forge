@@ -145,6 +145,13 @@ Components.CommandPalette+CommandPaletteProps.Query : System.String { get }
 Components.ConsentGate (class)
 Components.ConsentGate.ConsentGate(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Fable.React.ReactElement) : Fable.React.ReactElement
 Components.ConsentGate.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Fable.React.ReactElement) : Fable.React.ReactElement
+Components.ConsentGatedScript (class)
+Components.ConsentGatedScript.ConsentGatedScript(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Fable.React.ReactElement) : Fable.React.ReactElement
+Components.ConsentGatedScript+ConsentGated (class)
+Components.ConsentGatedScript+ConsentGated.isPermitted(ToolUp.Platform.ConsentDecision) : System.Boolean
+Components.ConsentGatedScript+ConsentGated.permits(ToolUp.Platform.Consent.IConsentProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+Components.ConsentGatedScript+ConsentGated.run(ToolUp.Platform.Consent.IConsentProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+Components.ConsentGatedScript+ConsentGated.watch(ToolUp.Platform.Consent.IConsentProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit]) : System.IDisposable
 Components.Modal (class)
 Components.Modal.view(Components.Modal+ModalProps) : Fable.React.ReactElement
 Components.Modal+ModalProps (class)

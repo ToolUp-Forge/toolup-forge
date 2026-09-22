@@ -10,6 +10,9 @@
     <Compile Include="StripeEventTests.fs" />
     <Compile Include="TokenTests.fs" />
     <Compile Include="SmokeTests.fs" />
+    <!-- Phase 211 — shared signing / TestServer / POST helpers, lifted out of
+         StripeWebhookHandlerTests so the fixture-replay pack reuses them. -->
+    <Compile Include="WebhookTestHarness.fs" />
     <Compile Include="StripeWebhookHandlerTests.fs" />
     <Compile Include="IdempotencyStoreContractTests.fs" />
     <Compile Include="TierTokenSinkTests.fs" />
@@ -19,7 +22,15 @@
     <Compile Include="SecretStrengthGateTests.fs" />
     <!-- Phase 340 — per-subject epoch revocation + tier-cookie edge hardening. -->
     <Compile Include="TierTokenRevocationTests.fs" />
+    <!-- Phase 211 — real-shaped Stripe event payloads replayed through the
+         shipped webhook wire. -->
+    <Compile Include="WebhookFixtureReplayTests.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 211 — the fixture corpus lands beside the test binary
+         (the ToolUp.Platform.Build.Tests/fixtures/ precedent). -->
+    <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Stripe.Webhook\ToolUp.Stripe.Webhook.fsproj" />
