@@ -247,7 +247,7 @@ The composition root wraps each `DataType` in a `ServerModule.withDataTypes [...
 
 Client-side, modules render summaries of their processed data through a `DataTypeDisplay`. The shell collects every entry of a given `DataType` and hands the list to the registered display.
 
-**The summary is a typed envelope (Phase 817).** `Process` puts the module's own summary record on the entry as a `ProcessedData` — the summary type's name and its JSON — built by the server codec, and the client display decodes it back to that type before rendering. Construct the entry through the builder and the display through `typed`; neither names a deprecated field:
+**The summary is a typed envelope (Phase 817).** `Process` puts the module's own summary record on the entry as a `ProcessedData` — the summary type's name and its JSON — built by the server codec, and the client display decodes it back to that type before rendering. Construct the entry through the builder and the display through `typed`:
 
 ```fsharp skip=fragment
 // Server.fs — inside Process
@@ -262,7 +262,7 @@ let display =
 
 `ProcessedDataCodec.encode` (server, System.Text.Json + `FableConverters`) and `DataTypeDisplay.typed`'s decoder (browser, `Fable.SimpleJson`) are the two halves of one codec, held to a pinned envelope from both sides in the SDK's own packs. The shared tier carries no JSON stack, so a client running on a host with a codec of its own supplies it through `DataTypeDisplay.typedWith`.
 
-Until Phase 817 the summary crossed the wire boxed — `ProcessedFileEntry.Info: obj option`, rendered by `DataTypeDisplay.RenderSummary: obj list -> ReactElement`, each side casting to a type only the module knew. Both remain for one deprecation window (`[<Obsolete>]`, removed in 1.0): a module that still fills `Info` renders exactly as before through `DataTypeDisplay.legacy`, and the shell hands each display only what its own module produced. A record literal for either type names the deprecated member and warns; the builders do not, and survive the removal.
+Until Phase 817 the summary crossed the wire boxed — `ProcessedFileEntry.Info: obj option`, rendered by `DataTypeDisplay.RenderSummary: obj list -> ReactElement`, each side casting to a type only the module knew. Both are gone (removed outright rather than deprecated — an operator decision of 2026-09-22 overriding the deprecation window, so that `FileManagementApi`, the last platform API record on the reflection decode path, joins the proved one now). A module that boxed its summary moves in two lines: `ProcessedDataCodec.encode` in `Process`, `DataTypeDisplay.typed` in the display; a sidecar persisted with the old shape loads with no summary until the file is reprocessed.
 
 `CsvHeaders` helpers are optional — detection can use any predicate (CSV headers, JSON shape, byte-level signature, etc.).
 
@@ -278,7 +278,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
     Html.none, Html.div [ Html.text $"{summaries.Length} sales files" ]
 ```
 
-`ProcessedDataContext.Context` is a React context carrying the shell's aggregated `ProcessedFileEntry list`; `ProcessedData.forType` is the hook over it, filtering to one `DataTypeId` and dropping entries whose processing failed. Each entry's `Summary` is the producing module's summary as a `ProcessedData` envelope (Phase 817), which a consumer decodes with `DataTypeDisplay.tryDecode<TheirSummary>` — the producing module's shared types name it. (Before 817 this was `Info: obj option`, a boxed record the consumer cast to the producer's known type — the symmetric same-module erasure boundary; deprecated, removed in 1.0.) This is the only sanctioned cross-module data flow — modules consume what other modules produce, declared via `ClientModule.withNeedsData` and `ClientModule.withProcessedData`.
+`ProcessedDataContext.Context` is a React context carrying the shell's aggregated `ProcessedFileEntry list`; `ProcessedData.forType` is the hook over it, filtering to one `DataTypeId` and dropping entries whose processing failed. Each entry's `Summary` is the producing module's summary as a `ProcessedData` envelope (Phase 817), which a consumer decodes with `DataTypeDisplay.tryDecode<TheirSummary>` — the producing module's shared types name it. (Before 817 this was `Info: obj option`, a boxed record the consumer cast to the producer's known type — the symmetric same-module erasure boundary, now closed.) This is the only sanctioned cross-module data flow — modules consume what other modules produce, declared via `ClientModule.withNeedsData` and `ClientModule.withProcessedData`.
 
 Modules NEVER reach into another module's namespace or call another module's `update` function directly.
 

@@ -3,10 +3,6 @@
 
 module ProcessedDataTypes
 
-// Phase 817 — `ProcessedFileEntry.Info` is deprecated below, and the
-// builders beside it are the one sanctioned place that still names it.
-#nowarn "44"
-
 open System
 open DataManagementTypes
 // Auth/audit attributes (`AllowAnonymous`, `Audit`) — this file is a
@@ -32,41 +28,35 @@ type ProcessedData = { TypeName: string; Payload: string }
 /// the file — what the Data Manager renders under the data type's heading.
 ///
 /// **Phase 817 — the summary is a `ProcessedData` envelope, not an `obj`.**
-/// `Info` carried the module's summary record BOXED: the module's
-/// `DataType.Process` boxed it, the module's `RenderSummary` unboxed it,
-/// and the SDK moved it opaquely between the two — the type-erasure
-/// boundary the `CLAUDE.md` list numbers 2. An `obj` is an open point in
-/// the type graph: no decoder the SDK can generate or prove can express
-/// a type only the module knows, and the MsgPack reader has no `obj`
-/// arm, so what a boxed record decoded to was whichever host's reflection
-/// fallback ran. `Summary` closes the point at the wire with the envelope
-/// [Phase 1c] already introduced beside it — the summary's type name and
-/// its JSON — so the entry is two strings on every host, and the module
-/// decodes its own summary with the type it knows.
+/// Until 817 the field here was `Info: obj option`: the module's
+/// `DataType.Process` boxed its summary record, the module's client
+/// display unboxed it, and the SDK moved it opaquely between the two —
+/// the type-erasure boundary the `CLAUDE.md` list numbered 2. An `obj`
+/// is an open point in the type graph: no decoder the SDK can generate
+/// or prove can express a type only the module knows, and the MsgPack
+/// reader has no `obj` arm, so what a boxed record decoded to was
+/// whichever host's reflection fallback ran. `Summary` closes the point
+/// at the wire with the envelope [Phase 1c] already introduced beside it
+/// — the summary's type name and its JSON — so the entry is two strings
+/// on every host, and the module decodes its own summary with the type
+/// it knows. The box was removed outright rather than deprecated
+/// (operator decision 2026-09-22, overriding the deprecation window),
+/// which is what puts `FileManagementApi` — the last platform API record
+/// on the reflection decode path — onto the proved one.
 ///
-/// Construct through `ProcessedFileEntry.summarised` / `.failed` rather
-/// than a record literal: a literal must name `Info`, which warns now and
-/// stops compiling when the field is removed in 1.0; the
-/// builders do neither.
+/// Construct through `ProcessedFileEntry.summarised` / `.failed`; a
+/// record literal works too, and names every field.
 type ProcessedFileEntry = {
     FileName: string
     DataType: DataTypeId
     ProcessedAt: DateTime
-    /// The module's summary, boxed. Filled by modules that predate Phase
-    /// 817; the SDK still renders it through the module's `RenderSummary`.
-    [<Obsolete("Type-erased summary — use ProcessedFileEntry.Summary (a ProcessedData envelope, built by ProcessedFileEntry.summarised) and DataTypeDisplay.typed instead. See docs/migrations/817-processed-file-entry-typed-summary.md. Info is removed in 1.0.")>]
-    Info: obj option
     Error: string option
-    /// Phase 817 — the module's summary as a typed envelope: the summary
-    /// type's name and its JSON. `None` on a failed entry and on an entry
-    /// a pre-817 module produced. Appended at the END of the record so the
-    /// positional wire keeps every earlier field where it was.
+    /// The module's summary as a typed envelope: the summary type's name
+    /// and its JSON. `None` on a failed entry.
     Summary: ProcessedData option
 }
 
-/// Builders for `ProcessedFileEntry` (Phase 817). Each names the fields a
-/// caller has, and none names `Info` — so a module built on them neither
-/// warns today nor breaks when `Info` goes.
+/// Builders for `ProcessedFileEntry` (Phase 817).
 [<RequireQualifiedAccess>]
 module ProcessedFileEntry =
 
@@ -78,7 +68,6 @@ module ProcessedFileEntry =
         FileName = fileName
         DataType = dataType
         ProcessedAt = processedAt
-        Info = None
         Error = None
         Summary = Some summary
     }
@@ -88,7 +77,6 @@ module ProcessedFileEntry =
         FileName = fileName
         DataType = dataType
         ProcessedAt = processedAt
-        Info = None
         Error = Some error
         Summary = None
     }

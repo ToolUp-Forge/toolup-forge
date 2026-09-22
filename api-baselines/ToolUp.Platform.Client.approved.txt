@@ -3657,14 +3657,11 @@ ToolUp.Platform.DataSubjectRequestAdminMode+Tags.DefaultDataSubjectRequestAdmin 
 ToolUp.Platform.DataSubjectRequestAdminMode+Tags.ExternalDataSubjectRequestAdmin : System.Int32 (literal)
 ToolUp.Platform.DataSubjectRequestAdminMode+Tags.NoDataSubjectRequestAdmin : System.Int32 (literal)
 ToolUp.Platform.DataTypeDisplay (class)
-ToolUp.Platform.DataTypeDisplay..ctor(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Object], Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedData], Fable.React.ReactElement]])
+ToolUp.Platform.DataTypeDisplay..ctor(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedData], Fable.React.ReactElement])
 ToolUp.Platform.DataTypeDisplay.Info : DataManagementTypes+DataTypeInfo { get }
-ToolUp.Platform.DataTypeDisplay.RenderSummary : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Object], Fable.React.ReactElement] { get }
-ToolUp.Platform.DataTypeDisplay.RenderSummary : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Object], Fable.React.ReactElement] { get }  (obsolete)
-ToolUp.Platform.DataTypeDisplay.RenderTyped : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedData], Fable.React.ReactElement]] { get }
+ToolUp.Platform.DataTypeDisplay.RenderSummary : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedData], Fable.React.ReactElement] { get }
 ToolUp.Platform.DataTypeDisplayModule (class)
 ToolUp.Platform.DataTypeDisplayModule.hasSummary(ProcessedDataTypes+ProcessedFileEntry) : System.Boolean
-ToolUp.Platform.DataTypeDisplayModule.legacy(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.Object], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay
 ToolUp.Platform.DataTypeDisplayModule.render(ToolUp.Platform.DataTypeDisplay, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]) : Fable.React.ReactElement
 ToolUp.Platform.DataTypeDisplayModule.tryDecode`1(ProcessedDataTypes+ProcessedData) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
 ToolUp.Platform.DataTypeDisplayModule.typedWith`1(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]], DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay

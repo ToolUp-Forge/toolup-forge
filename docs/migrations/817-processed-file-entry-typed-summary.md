@@ -2,12 +2,13 @@
 
 **Applies to:** every module that declares a `DataType` (fills a `ProcessedFileEntry` in
 `Process`) or a `DataTypeDisplay` (renders summaries in the Data Manager).
-**Breaking:** at runtime, no — a module that changes nothing renders exactly as before. At
-**compile** time, a **record literal** for either type stops compiling until it names the new
-field, and then warns until it stops naming the deprecated one. Both are one-line edits, and
-both go away for good by moving to the builders. Ships on the standing `0.23.0` draft; `Info` and
-`RenderSummary` are removed in **1.0**.
+**Breaking:** yes — `ProcessedFileEntry.Info: obj option` and the `obj list` form of
+`DataTypeDisplay.RenderSummary` are **removed**, not deprecated (operator decision 2026-09-22,
+overriding the deprecation window: the field was the last open point in the platform's API type
+graph, and removing it is what puts `FileManagementApi` on the proved decode path now). Ships on
+the standing `0.23.0` draft, which already carries breaking surface since `v0.22.0`.
 **Action required:** two lines per data-producing module — one in `Process`, one in the display.
+A module that does not move stops compiling at those two sites; nothing else changes.
 
 ## What changes
 
@@ -25,11 +26,11 @@ shape Phase 1c introduced at the sibling seam for exactly this reason:
 
 | | Before | After |
 |---|---|---|
-| Entry | `Info: obj option` (boxed summary) | `Summary: ProcessedData option` — `Info` kept, `[<Obsolete]`, removed in 1.0 |
+| Entry | `Info: obj option` (boxed summary) | `Summary: ProcessedData option` — `Info` removed |
 | Server | module boxes its summary | `ProcessedDataCodec.encode summary` (System.Text.Json + `FableConverters`) |
-| Client | `RenderSummary: obj list -> …` unboxes | `DataTypeDisplay.typed info (fun (xs: MySummary list) -> …)` decodes (`Fable.SimpleJson`) |
-| Builders | record literals | `ProcessedFileEntry.summarised` / `.failed`; `DataTypeDisplay.typed` / `.legacy` / `.typedWith` |
-| Persisted sidecars | `_processed_entry__*/v1.json` with `Info` | same file; an old one reads with `Summary = None` — no migration |
+| Client | `RenderSummary: obj list -> …` unboxes | `RenderSummary: ProcessedData list -> …`; `DataTypeDisplay.typed info (fun (xs: MySummary list) -> …)` decodes (`Fable.SimpleJson`) |
+| Builders | record literals | `ProcessedFileEntry.summarised` / `.failed`; `DataTypeDisplay.typed` / `.typedWith` |
+| Persisted sidecars | `_processed_entry__*/v1.json` with `Info` | same file; an old one loads with its `Info` ignored and `Summary = None` — no migration, no summary until the file is reprocessed |
 
 The two codec halves are held to one pinned envelope from both sides in the SDK's packs (the .NET
 pack holds the encoder to the literal, the Fable pack holds the browser decoder to the value), so a
@@ -51,37 +52,35 @@ let entry = ProcessedFileEntry.summarised fileName MyId now (ProcessedDataCodec.
 DataTypeDisplay.typed myInfo (fun (summaries: MySummary list) -> render summaries)
 ```
 
-A module that is not ready to move: change the literals to name the new fields (`Summary = None`;
-`RenderTyped = None`) or, better, call `ProcessedFileEntry.failed` / `DataTypeDisplay.legacy` —
-the legacy path is unchanged and the shell hands each display only what its own module produced.
-The `[<Obsolete>]` warning on a literal is the deprecation working: the literal breaks in 1.0, the
-builder does not.
+There is no legacy path: a module that still boxes fails to compile at its `Info =` and its
+`RenderSummary = fun (infos: obj list) -> …`, and the fix is the two lines above. A display
+running on a host with a JSON codec of its own supplies it through `DataTypeDisplay.typedWith`.
 
 Consumers of another module's data (`ProcessedDataContext.ProcessedData.forType`) read
 `entry.Summary` and decode with `DataTypeDisplay.tryDecode<TheirSummary>` — the producer's shared
 types name the summary type, as they always did.
 
-## Why a deprecation window and not a cut
+## Why a cut and not a deprecation window
 
-Removing a record field is the break the [deprecation policy](../platform/deprecation-policy.md)
-reserves for a major, and Phase 815 is clearing deprecations for the 1.0 cut — so this phase adds
-the envelope now, deprecates the box with 1.0 as its named removal target, and the census keeps
-`FileManagementApi` pinned as the one remaining refusal *with that removal date attached*: the
-day `Info` goes, that pin inverts and 38 of 38 platform API records are on the proved path.
+The phase first shipped the envelope beside a deprecated `Info` (removal named as 1.0, per the
+[deprecation policy](../platform/deprecation-policy.md)). The operator overrode the window the
+same day: the field was the one thing keeping `FileManagementApi` off the proved decode path,
+`0.23.0` is an unreleased draft already carrying breaking surface, and a two-line migration is
+cheaper than a release with a known open point. The removal landed as a second commit on the
+same phase; the census pin now asserts **every** platform API record is expressible.
 
 ## Verification
 
 - `FileManagement` in `ToolUp.Platform.Tests`: the envelope round-trips the sidecar store and
-  decodes on the server; a pre-817 sidecar reads with `Summary = None`; the render step hands a
-  typed display the envelopes and a legacy display the boxes; the encoder writes the pinned
-  literal byte for byte.
+  decodes on the server; a pre-817 sidecar loads with `Summary = None`; the render step hands a
+  display exactly the envelopes that decode as its type; the encoder writes the pinned literal
+  byte for byte.
 - `ProcessedData envelope (Phase 817)` in the Fable-tier harness: the browser decoder reads the
   same literal to the same value, `None`/`[]` included, and refuses a wrong shape by name.
-- `Phase 69k` census: one refusal remains (`System.Object`), and `Info` carries an `[<Obsolete>]`
-  naming 1.0.
+- `Phase 69k` census: no refusal remains — 38 of 38 platform API records are expressible.
 - `VerifyPackagedModuleTemplate`: the module template's `Process` uses the builder.
 
 ## Rollback
 
-Revert the phase's commits. No wire bytes and no persisted sidecar changed shape; a sidecar
-written with `Summary` reads under the previous SDK with the field ignored.
+Revert the phase's commits. A sidecar written with `Summary` reads under the previous SDK with
+the field ignored.

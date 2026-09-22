@@ -1,9 +1,5 @@
 module ToolUp.Platform.Tests.InProcess.PlatformTestingFrameworkTests
 
-// Phase 817 — these fixtures still fill the deprecated `ProcessedFileEntry.Info`
-// on purpose: the legacy render path stays covered until the field goes.
-#nowarn "44"
-
 open System.Text
 open ToolUp.Elmish
 open Expecto
@@ -121,9 +117,8 @@ let private sampleDataType: DataType = {
                 FileName = fileName
                 DataType = "SampleCsv"
                 ProcessedAt = System.DateTime.UtcNow
-                Summary = None
-                Info = Some(box rowCount)
                 Error = None
+                Summary = Some(ProcessedDataCodec.encode {| Rows = rowCount |})
             }
 
             return processed, summary
