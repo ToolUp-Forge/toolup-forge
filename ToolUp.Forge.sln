@@ -599,6 +599,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Quartz", "Quartz", "{B2E4D3
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.JobSchedulers.Quartz", "src\JobSchedulers\Quartz\ToolUp.JobSchedulers.Quartz.fsproj", "{C3D5E4F6-1A78-4D9A-AE3C-5F7A9B1D2E43}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Observability", "Observability", "{9BE7C0A1-4D52-4E63-9C18-7A1F2D3E4B50}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Observability.Datadog", "src\Observability\Datadog\ToolUp.Observability.Datadog.fsproj", "{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3153,11 +3157,24 @@ Global
 		{C3D5E4F6-1A78-4D9A-AE3C-5F7A9B1D2E43}.Release|x64.Build.0 = Release|Any CPU
 		{C3D5E4F6-1A78-4D9A-AE3C-5F7A9B1D2E43}.Release|x86.ActiveCfg = Release|Any CPU
 		{C3D5E4F6-1A78-4D9A-AE3C-5F7A9B1D2E43}.Release|x86.Build.0 = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|x64.Build.0 = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Debug|x86.Build.0 = Debug|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|x64.ActiveCfg = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|x64.Build.0 = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|x86.ActiveCfg = Release|Any CPU
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{4D3C2B1A-5E6F-4708-9A1B-2C3D4E5F6071} = {9BE7C0A1-4D52-4E63-9C18-7A1F2D3E4B50}
 		{0BB381DE-2C5B-40BA-9AEE-B7BB81B02D9C} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{4C0DF0B0-84D2-446D-A715-98493F28B477} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{02786FC7-0BEC-4C7E-AFF5-CB94F9213069} = {4C0DF0B0-84D2-446D-A715-98493F28B477}

@@ -600,6 +600,16 @@ let buildRouteHandlers
 
     let premiumUserApiRoutes: HttpHandler list = PremiumUserApi.routes
 
+    // Phase 9w — Datadog readback endpoints (monitors / logs / metric).
+    // Mounted only when `ServerConfig.DatadogReadback =
+    // EnabledDatadogReadback`; the default `NoDatadogReadback` produces
+    // an empty list, so a deployment that does not read from Datadog
+    // carries no route at all (GP 13).
+    let datadogReadbackRoutes: HttpHandler list =
+        match config.DatadogReadback with
+        | NoDatadogReadback -> []
+        | EnabledDatadogReadback readbackConfig -> DatadogReadbackHandlers.routes readbackConfig
+
     // Phase 9h — IDataSubjectRequestApi mount. Gated on
     // `ServerConfig.DataSubjectRequests = Enabled <policy>`; the
     // default `Disabled` skips the route entirely so the proxy
@@ -818,6 +828,7 @@ let buildRouteHandlers
             @ adUnitConfigRoutes
             @ rateLimitEventApiRoutes
             @ premiumUserApiRoutes
+            @ datadogReadbackRoutes
             @ dataSubjectRequestApiHandler
             @ platformTenantApiHandler
             @ serviceAccountApiHandler

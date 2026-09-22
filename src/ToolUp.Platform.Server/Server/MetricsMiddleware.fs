@@ -239,8 +239,16 @@ module StandardMetrics =
     /// emits those tags, and spliced in here so a deployment with a
     /// metrics endpoint has them registered without composing anything
     /// — an unregistered series is silently dropped by the sink.
+    /// Phase 9w — the Datadog-readback counters are declared beside
+    /// their emission for the same reason, in
+    /// `Server/DatadogReadbackMetrics.fs` (which compiles before this
+    /// file), and spliced in here so a deployment that mounts the
+    /// readback surface has both series registered without composing
+    /// anything.
     let registrations: MetricRegistration list =
-        coreRegistrations @ ToolUp.Platform.EdgePurgeMetrics.registrations
+        coreRegistrations
+        @ ToolUp.Platform.EdgePurgeMetrics.registrations
+        @ ToolUp.Platform.DatadogReadbackMetrics.registrations
 
 module private RouteClassifier =
     /// Bucket the request path to a stable two-segment prefix to

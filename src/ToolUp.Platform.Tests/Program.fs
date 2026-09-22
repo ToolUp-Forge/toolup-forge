@@ -692,6 +692,7 @@ let private registeredTests =
         S3ArchiveAuditSinkTests.tests
         SplunkHecAuditSinkTests.tests
         DatadogLogsAuditSinkTests.tests
+        DatadogReadbackClientTests.tests
         CefAuditSinkTests.tests
         ChainedAuditLedgerTests.tests
         AuditReplicatorTests.tests

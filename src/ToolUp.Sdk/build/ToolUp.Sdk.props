@@ -231,6 +231,7 @@
     <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Redis" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Observability.Datadog" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.OcrProviders.Tesseract" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Offline.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Offline.Core" Version="$(ToolUpSdkVersion)" />

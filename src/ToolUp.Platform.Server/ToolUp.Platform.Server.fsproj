@@ -117,6 +117,9 @@
              Depends only on Core (`ILogger`), so it sits with the other
              interface-only seams ahead of any implementation. -->
         <Compile Include="Server\IEdgeCache.fs" />
+        <!-- Phase 9w - Datadog readback metric declarations. Ahead of
+             MetricsMiddleware.fs so StandardMetrics.registrations can splice them. -->
+        <Compile Include="Server\DatadogReadbackMetrics.fs" />
         <Compile Include="Server\Logger.fs" />
         <Compile Include="Server\LoggerScope.fs" />
         <!-- Phase 696 — the deployment configuration manifest loader:
@@ -826,6 +829,7 @@
              Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
         <Compile Include="Server\TelemetryApiHandler.fs" />
         <Compile Include="Server\PlatformAdmin\RateLimitEventApi.fs" />
+        <Compile Include="Server\DatadogReadbackHandlers.fs" />
         <Compile Include="Server\PlatformAdmin\PremiumUserApi.fs" />
         <Compile Include="Server\EncryptedSecretStoreModeValidator.fs" />
         <Compile Include="Server\OAuthSecretEncryptionModeValidator.fs" />

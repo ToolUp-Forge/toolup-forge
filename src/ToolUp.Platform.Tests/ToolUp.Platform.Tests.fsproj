@@ -962,6 +962,7 @@
         <Compile Include="InProcess\S3ArchiveAuditSinkTests.fs" />
         <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
+        <Compile Include="InProcess\DatadogReadbackClientTests.fs" />
         <Compile Include="InProcess\CefAuditSinkTests.fs" />
         <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
@@ -2763,6 +2764,7 @@
         <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
         <ProjectReference Include="..\AuditSinks\SplunkHec\ToolUp.AuditSinks.SplunkHec.fsproj" />
         <ProjectReference Include="..\AuditSinks\DatadogLogs\ToolUp.AuditSinks.DatadogLogs.fsproj" />
+        <ProjectReference Include="..\Observability\Datadog\ToolUp.Observability.Datadog.fsproj" />
         <ProjectReference Include="..\AuditSinks\Cef\ToolUp.AuditSinks.Cef.fsproj" />
         <ProjectReference Include="..\AuditSinks\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
