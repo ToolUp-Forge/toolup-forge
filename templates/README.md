@@ -10,6 +10,14 @@ Templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
 | `platformsdk-module-packaged` | The same module seam, as **its own repository shipped as a NuGet package**: packable project + `fable/` shadow project carrying the client tier as source, `Pack` into a configurable folder feed, `run.ps1`, CPM, tool manifest, README, licence placeholder — and **both conformance layers pre-wired**, so the discipline is the default rather than a retrofit. |
 | `platformsdk-datamanager` | External data manager module: same shape as `platformsdk-module` but registers via `ExternalDataManager` mode and ships an `IDataSource` skeleton. |
 
+### Not a `dotnet new` template
+
+`platformsdk-k8s/` sits beside the templates above but is **not** installable with `dotnet new`: it
+holds the Kubernetes / Helm artefacts that `toolup k8s emit` embeds into the CLI assembly and
+renders from a deploy manifest (Phase 194). It lives here so the emitted artefacts have one source
+of truth next to `platformsdk-docker/`, whose four files the `docker emit` command embeds the same
+way. Edit the files here, not a copy.
+
 ## Install
 
 ```powershell

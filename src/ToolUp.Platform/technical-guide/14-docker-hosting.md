@@ -183,42 +183,47 @@ ECS task definitions describe the container in JSON / YAML; the relevant fragmen
 
 The task definition's `healthCheck` block re-states the Dockerfile's `HEALTHCHECK` — ECS prefers the explicit task-definition declaration over the image-level one for managed-rolling-update sequencing.
 
-### Kubernetes (Deployment + Service)
+### Kubernetes (Deployment + Service) — `toolup k8s emit`
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: <app-name> }
-spec:
-  replicas: 2
-  selector: { matchLabels: { app: <app-name> } }
-  template:
-    metadata: { labels: { app: <app-name> } }
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 10001
-      containers:
-        - name: app
-          image: <registry>/<image>:<tag>
-          ports:
-            - containerPort: 5000
-          env:
-            - name: TOOLUP_PROCESS_PROFILE
-              value: WebOnly
-          livenessProbe:
-            httpGet: { path: /health, port: 5000 }
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 10
-          readinessProbe:
-            httpGet: { path: /ready, port: 5000 }
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
+This chapter used to carry the Deployment and Service YAML for you to copy and adapt. It no longer
+does, because hand-copied YAML drifts from the image spec above the moment either changes. The CLI
+emits it from your deploy manifest instead:
+
+```powershell
+# A Helm chart: Chart.yaml + values.yaml + templates/
+toolup k8s emit --manifest deploy.json --profile WebOnly,WorkerOnly --out ./chart
+
+# Or plain manifests for `kubectl apply -f`
+toolup k8s emit --manifest deploy.json --profile AllInOne --format flat --out ./k8s
 ```
 
-Kubernetes is the case where `livenessProbe` and `readinessProbe` separate cleanly: Liveness against `/health` (restart on failure), Readiness against `/ready` (de-list from Service on failure, do not restart). A second `Deployment` with `replicas: 1` and `TOOLUP_PROCESS_PROFILE=WorkerOnly` shares the substrate via the same Redis Service + the same persistent-volume-claim-backed `IBlobStorage`.
+What it emits, and where each value comes from:
+
+| Emitted | Derived from |
+|---|---|
+| One `Deployment` per `--profile` role | `ProcessProfile` — `TOOLUP_PROCESS_PROFILE` is set per Deployment |
+| `replicas` | 2 for `AllInOne` / `WebOnly`; **pinned to 1** for `WorkerOnly` / `DispatcherOnly` (the caveat above) |
+| `image`, `containerPort`, `securityContext` | the image spec this chapter documents — port 5000, non-root uid/gid 10001 |
+| `livenessProbe` | `runtime.healthcheck.path` (default `/health`), `timeoutSeconds: 10` |
+| `readinessProbe` | `/ready`, `timeoutSeconds: 5` — `IHealthCheck.defaultTimeout` |
+| probe `initialDelaySeconds` / `periodSeconds` | `runtime.healthcheck.initialDelaySeconds` / `intervalSeconds` |
+| env `secretKeyRef` entries | each `secrets[]` entry — **name and key only; the emitter never writes secret material** |
+| `Service` | one per HTTP-serving role; worker and dispatcher roles get none |
+| `Ingress` hosts + TLS secret names | each `domains[]` entry's `hostname` and `tlsMode` |
+
+Kubernetes is the case where `livenessProbe` and `readinessProbe` separate cleanly: Liveness against
+`/health` (restart on failure), Readiness against `/ready` (de-list from Service on failure, do not
+restart) — which is why a liveness timeout is given twice the readiness budget. A second
+`Deployment` with `replicas: 1` and `TOOLUP_PROCESS_PROFILE=WorkerOnly` shares the substrate via the
+same Redis Service + the same persistent-volume-claim-backed `IBlobStorage`; that is exactly what
+`--profile WebOnly,WorkerOnly` above emits.
+
+Three things the emitter deliberately does not do: it never writes a `Secret` object (the deploy
+manifest carries a secret's name and source, never its value — create the Secret out of band before
+installing); it does not consume `app.region`, `modules` or `dependencies`, which are deploy-plane,
+composition-root and provisioning facts rather than cluster objects; and it emits ingress hosts
+literally rather than as chart values, because a host set is a manifest fact — change the manifest
+and re-emit. Run `toolup k8s emit --help` for the full option list.
 
 ## Build-context hygiene — `.dockerignore`
 
