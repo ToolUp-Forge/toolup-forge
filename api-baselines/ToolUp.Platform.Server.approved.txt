@@ -10814,6 +10814,9 @@ ToolUp.Remoting.Server.CustomErrorResult`1..ctor(a, System.Boolean, System.Boole
 ToolUp.Remoting.Server.CustomErrorResult`1.error : a { get }
 ToolUp.Remoting.Server.CustomErrorResult`1.handled : System.Boolean { get }
 ToolUp.Remoting.Server.CustomErrorResult`1.ignored : System.Boolean { get }
+ToolUp.Remoting.Server.DeprecatedSchemaAttribute (class)
+ToolUp.Remoting.Server.DeprecatedSchemaAttribute..ctor(System.String)
+ToolUp.Remoting.Server.DeprecatedSchemaAttribute.RetireAfter : System.String { get }
 ToolUp.Remoting.Server.Diagnostics (class)
 ToolUp.Remoting.Server.Diagnostics.deserializationPhase(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String], System.Type[]) : System.Void
 ToolUp.Remoting.Server.Diagnostics.outputPhase(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.String) : System.Void
@@ -10826,6 +10829,7 @@ ToolUp.Remoting.Server.DispatcherTargetAttribute..ctor()
 ToolUp.Remoting.Server.Docs (class)
 ToolUp.Remoting.Server.Docs.createFor`1() : ToolUp.Remoting.Server.ApiDocs`1[t]
 ToolUp.Remoting.Server.Docs.makeDocsSchema(System.Type, ToolUp.Remoting.Server.Documentation, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]) : System.Text.Json.Nodes.JsonObject
+ToolUp.Remoting.Server.Docs.makeDocsSchemaWithSchemaVersions(System.Type, ToolUp.Remoting.Server.Documentation, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.Int32) : System.Text.Json.Nodes.JsonObject
 ToolUp.Remoting.Server.Docs.routeMethod(System.Type) : System.String
 ToolUp.Remoting.Server.Docs.serialize`1(a) : System.String
 ToolUp.Remoting.Server.DocsApp (class)
@@ -11035,6 +11039,10 @@ ToolUp.Remoting.Server.MethodOutcome+Tags (class)
 ToolUp.Remoting.Server.MethodOutcome+Tags.Failed : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodOutcome+Tags.RateLimited : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodOutcome+Tags.Succeeded : System.Int32 (literal)
+ToolUp.Remoting.Server.MethodSchema (class)
+ToolUp.Remoting.Server.MethodSchema..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.DateTime])
+ToolUp.Remoting.Server.MethodSchema.Deprecated : Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.DateTime] { get }
+ToolUp.Remoting.Server.MethodSchema.Handlers : Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.String] { get }
 ToolUp.Remoting.Server.MethodTelemetry (class)
 ToolUp.Remoting.Server.MethodTelemetry..ctor(System.String, System.Int32, ToolUp.Remoting.Server.MethodOutcome, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Remoting.Server.MethodTelemetry.ChunkCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -11231,6 +11239,33 @@ ToolUp.Remoting.Server.RouteInfo`1.httpContext : ctx { get }
 ToolUp.Remoting.Server.RouteInfo`1.methodName : System.String { get }
 ToolUp.Remoting.Server.RouteInfo`1.path : System.String { get }
 ToolUp.Remoting.Server.RouteInfo`1.requestBodyText : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.Server.SchemaRouting (class)
+ToolUp.Remoting.Server.SchemaRouting.AsAddressed : ToolUp.Remoting.Server.SchemaRouting { get }
+ToolUp.Remoting.Server.SchemaRouting.IsAsAddressed : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaRouting.IsRefused : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaRouting.IsServe : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaRouting.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.SchemaRouting+Refused (class)
+ToolUp.Remoting.Server.SchemaRouting+Refused.Requested : System.String { get }
+ToolUp.Remoting.Server.SchemaRouting+Refused.Supported : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
+ToolUp.Remoting.Server.SchemaRouting+Serve (class)
+ToolUp.Remoting.Server.SchemaRouting+Serve.DeprecatedUntil : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Remoting.Server.SchemaRouting+Serve.Field : System.String { get }
+ToolUp.Remoting.Server.SchemaRouting+Serve.Version : System.Int32 { get }
+ToolUp.Remoting.Server.SchemaRouting+Tags (class)
+ToolUp.Remoting.Server.SchemaRouting+Tags.AsAddressed : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaRouting+Tags.Refused : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaRouting+Tags.Serve : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaVersion (class)
+ToolUp.Remoting.Server.SchemaVersion.Header : System.String (literal)
+ToolUp.Remoting.Server.SchemaVersion.addressableMethods(System.Type) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Remoting.Server.SchemaVersion.applyRouting(ToolUp.Remoting.Server.SchemaRouting, System.String) : System.String
+ToolUp.Remoting.Server.SchemaVersion.classify(System.Type) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema]
+ToolUp.Remoting.Server.SchemaVersion.describe(System.Int32, System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]]]
+ToolUp.Remoting.Server.SchemaVersion.logDeprecation(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.String, System.Int32, System.DateTime) : System.Void
+ToolUp.Remoting.Server.SchemaVersion.negotiate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Remoting.Server.SchemaRouting
+ToolUp.Remoting.Server.SchemaVersion.refusalPayload(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : System.Object
+ToolUp.Remoting.Server.SchemaVersion.supportedVersions(System.Int32, ToolUp.Remoting.Server.MethodSchema) : Microsoft.FSharp.Collections.FSharpList`1[System.Int32]
 ToolUp.Remoting.Server.SerializationType (class)
 ToolUp.Remoting.Server.SerializationType.IsJson : System.Boolean { get }
 ToolUp.Remoting.Server.SerializationType.IsMessagePack : System.Boolean { get }
@@ -11247,6 +11282,10 @@ ToolUp.Remoting.Server.SseFrame.Event : System.String { get }
 ToolUp.Remoting.Server.SseFrame.Id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Remoting.Server.SseFrameModule (class)
 ToolUp.Remoting.Server.SseFrameModule.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.SseFrame]
+ToolUp.Remoting.Server.SupportsSchemaAttribute (class)
+ToolUp.Remoting.Server.SupportsSchemaAttribute..ctor(System.Int32)
+ToolUp.Remoting.Server.SupportsSchemaAttribute..ctor(System.Int32[])
+ToolUp.Remoting.Server.SupportsSchemaAttribute.Versions : System.Int32[] { get }
 ToolUp.Remoting.Server.TenantScopedAttribute (class)
 ToolUp.Remoting.Server.TenantScopedAttribute..ctor()
 ToolUp.Remoting.Server.ThreadSafeCell (class)
