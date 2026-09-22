@@ -154,7 +154,7 @@ let private deploymentWith (keyId: string) (gateFor: IFactStore -> IEventStore -
 let private deployment (keyId: string) =
     deploymentWith keyId (fun store events -> FactDisclosureGate.create store events)
 
-let private seed (d: Deployment) scopeId metric value disclosure = async {
+let private seed (d: Deployment) (scopeId: string) metric value disclosure = async {
     match! d.Store.Assert(scopeId, draft metric value disclosure) with
     | Ok fact -> return fact
     | Error e -> return failtestf "seeding the fact store failed: %s" e

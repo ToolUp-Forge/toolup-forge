@@ -239,6 +239,17 @@
       RESTORE (`NU1101`) rather than at compile. That is the intended
       failure — loud, early, and naming the package — and it is why the
       removal is a minor rather than something quieter.
+
+      The same slot also carries Phase 797, which added a `ResolvedScope`
+      overload of every scoped member to `IFactStore` and to
+      `IFactDisclosureGate`, and retyped the three fact tools' `executeWith`
+      executors from `string` to `ResolvedScope`. Breaking for IMPLEMENTORS
+      of either interface in the same class as 741's `IBlobStorage` members
+      (a custom store or gate stops compiling until it answers them; the
+      string members are untouched), and MINOR is where the SemVer-on-0.x
+      policy puts a break. Not a second bump, for 741's reason: the slot is
+      already past `v0.22.0` and unpublished. Migration recipe:
+      `docs/migrations/797-scope-choke-point.md`.
     -->
     <Version>0.23.0</Version>
     <!--

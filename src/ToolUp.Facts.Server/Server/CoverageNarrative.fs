@@ -971,6 +971,27 @@ module CoverageNarrative =
 
         interface IFactStore with
 
+            // Phase 797 — the typed form delegates to this decorator's own
+            // string form, so an assertion through a resolved scope notes
+            // coverage exactly as one through its shard key does.
+            member this.Assert(scope: ResolvedScope, draft: FactDraft) =
+                (this :> IFactStore).Assert(scope.ScopeId, draft)
+
+            member this.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) =
+                (this :> IFactStore).AssertBatch(scope.ScopeId, drafts)
+
+            member _.Get(scope: ResolvedScope, factId: string) = inner.Get(scope, factId)
+
+            member _.Query(scope: ResolvedScope, query: FactQuery) = inner.Query(scope, query)
+
+            member _.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) =
+                inner.QueryWithCompetition(scope, query)
+
+            member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
+                inner.QuerySupersessionChain(scope, factId)
+
+            member _.QueryPopulation(scope: ResolvedScope, query: PopulationQuery) = inner.QueryPopulation(scope, query)
+
             member _.Assert(scopeId: string, draft: FactDraft) = async {
                 let! outcome = inner.Assert(scopeId, draft)
 

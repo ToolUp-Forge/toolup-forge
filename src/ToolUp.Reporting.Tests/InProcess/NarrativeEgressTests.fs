@@ -104,7 +104,7 @@ type private DenyingGate(denied: (string * string) list) =
     member _.Consulted = List.rev surfaces
 
     interface IFactDisclosureGate with
-        member _.Check(_, _, surface, factIds) = async {
+        member _.Check(_: string, _: string, surface: FactEgressSurface, factIds: string list) = async {
             surfaces <- (surface, factIds) :: surfaces
 
             return
@@ -115,6 +115,12 @@ type private DenyingGate(denied: (string * string) list) =
                     | None -> id, FactDisclosable)
                 |> Map.ofList
         }
+
+        // Phase 797 — the typed form delegates to the string form above.
+        member this.Check
+            (scope: ToolUp.Platform.ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list)
+            =
+            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 /// A renderer that records the values it was handed and emits nothing
 /// interesting. The control for case 4: it claims `Docx` and declares

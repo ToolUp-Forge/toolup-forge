@@ -82,7 +82,7 @@ let private newStore (registry: IMetricRegistry option) : IFactStore =
         (InMemoryEventStore.InMemoryEventStore())
         registry
 
-let private assertOk label (store: IFactStore) scope d = async {
+let private assertOk label (store: IFactStore) (scope: string) d = async {
     let! r = store.Assert(scope, d)
 
     match r with

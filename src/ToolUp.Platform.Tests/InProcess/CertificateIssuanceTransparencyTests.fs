@@ -148,7 +148,7 @@ let private substrate () =
 
     graph, store, gate, events
 
-let private seed (store: IFactStore) scopeId metric inputHash value = async {
+let private seed (store: IFactStore) (scopeId: string) metric inputHash value = async {
     match! store.Assert(scopeId, draft metric inputHash value) with
     | Ok(f: Fact) -> return f.FactId
     | Error e -> return failtestf "seeding the fact store failed: %s" e

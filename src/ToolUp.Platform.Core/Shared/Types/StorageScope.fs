@@ -3,13 +3,9 @@
 
 namespace ToolUp.Platform
 
-/// Resolved storage scope for a request — determines where data is stored
-/// and whether it persists beyond the session.
-type StorageScope = {
-    ScopeId: string // userId, teamId, or sessionId
-    Container: string // "user-abc", "team-xyz", "session-abc"
-    Persist: bool // false for anonymous + ephemeral-authenticated surfaces
-}
+// `StorageScope` itself lives in ResolvedScope.fs since Phase 797 (it is
+// compiled ahead of the disclosure gate's contract); this file keeps the
+// resolver's request and error types, which need `AuthenticatedUser`.
 
 /// Input to `IStorageScopeResolver.Resolve`. Extracted from `HttpContext`
 /// upstream so the resolver interface has no ASP.NET Core coupling and can

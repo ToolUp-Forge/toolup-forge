@@ -464,6 +464,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | Ok scope ->
                             ctx.Items["ToolUp.StorageScope"] <- box scope
 
+                            // Phase 797 — the fact tier's typed scope is
+                            // minted HERE and nowhere else: the resolver's
+                            // output becomes a `ResolvedScope` at the one
+                            // point the platform resolved it. The fact
+                            // doors read it back through
+                            // `ScopeResolution.forRequest`.
+                            StorageScopeResolver.ScopeResolution.remember ctx scope |> ignore
+
                             // Phase 9 audit. Auth providers don't have
                             // a "login" callback (only OIDC's callback
                             // handler does), so we approximate "login"

@@ -351,7 +351,7 @@ ToolUp.Facts.CoverageTool (class)
 ToolUp.Facts.CoverageTool.DisclosureProbeK : System.Int32 (literal)
 ToolUp.Facts.CoverageTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.CoverageTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
-ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.DeclassificationAmendmentConfig (class)
 ToolUp.Facts.DeclassificationAmendmentConfig..ctor(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit])
 ToolUp.Facts.DeclassificationAmendmentConfig.Amendments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment] { get }
@@ -605,7 +605,7 @@ ToolUp.Facts.FactQueryModule.forSubjectMetric(ToolUp.Facts.SubjectRef, ToolUp.Fa
 ToolUp.Facts.FactQueryTool (class)
 ToolUp.Facts.FactQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.FactQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
-ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactStoreEvidenceSource (class)
 ToolUp.Facts.FactStoreEvidenceSource..ctor(ToolUp.Facts.IFactStore)
 ToolUp.Facts.FactStoreEvidenceSourceModule (class)
@@ -708,12 +708,19 @@ ToolUp.Facts.IFactRecomputer (interface)
 ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)
 ToolUp.Facts.IFactStore.Assert(System.String, ToolUp.Facts.FactDraft) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, System.String]]
+ToolUp.Facts.IFactStore.Assert(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactDraft) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, System.String]]
 ToolUp.Facts.IFactStore.AssertBatch(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.BatchAssertReceipt, System.String]]
+ToolUp.Facts.IFactStore.AssertBatch(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.BatchAssertReceipt, System.String]]
 ToolUp.Facts.IFactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.IFactStore.Get(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.Query(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.IFactStore.Query(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QueryPopulation(System.String, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PopulationResult, System.String]]
+ToolUp.Facts.IFactStore.QueryPopulation(ToolUp.Platform.ResolvedScope, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PopulationResult, System.String]]
 ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.IFactStore.QuerySupersessionChain(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
+ToolUp.Facts.IFactStore.QueryWithCompetition(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
 ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
 ToolUp.Facts.IPlannedAnswerRecorder (interface)
@@ -770,7 +777,7 @@ ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
 ToolUp.Facts.PopulationQueryTool (class)
 ToolUp.Facts.PopulationQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PopulationQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
-ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.QuestionCompilerModule (class)
 ToolUp.Facts.QuestionCompilerModule.ofTriples(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], System.String]]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]
 ToolUp.Facts.ReactiveDataChange (class)
