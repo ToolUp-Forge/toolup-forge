@@ -12,6 +12,12 @@ let private registeredTests =
         BookingConflictDetectorTests.tests
         BookingSchedulerTests.tests
         WorkedExampleTests.tests
+        // Phase 20a — the calendar-bridge seam: the contract pack bound
+        // twice (the in-memory fake and the real CalDAV bridge over a
+        // stub server), plus the sync engine's own behaviour.
+        InMemoryCalendarBridgeTests.tests
+        CalDAVCalendarBridgeTests.tests
+        CalendarSyncTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
