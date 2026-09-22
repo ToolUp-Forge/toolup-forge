@@ -389,6 +389,21 @@ let private isCompilerGenerated (attrs: Collections.Generic.IList<CustomAttribut
     attrs
     |> Seq.exists (fun a -> a.AttributeType.FullName = "System.Runtime.CompilerServices.CompilerGeneratedAttribute")
 
+/// Phase 811 — the doc-comment id KIND for a public field. The F# compiler
+/// writes the XML doc of an F# `[<Literal>]` under `P:`, not `F:` (it models
+/// a module-level `let` as a property whatever its IL shape), so keying a
+/// literal as `F:` means a documented literal can never match and never
+/// counts. The test is the `LiteralAttribute` itself, NOT `FieldInfo.IsLiteral`:
+/// an enum case is also an IL literal, and the compiler keys its doc as `F:`.
+/// A type-level `static let` literal is private and erased, so it never
+/// reaches this arm; the module-level `let` is the only public literal shape.
+let private docFieldKind (f: FieldInfo) =
+    let isFSharpLiteral =
+        f.GetCustomAttributesData()
+        |> Seq.exists (fun a -> a.AttributeType.FullName = "Microsoft.FSharp.Core.LiteralAttribute")
+
+    if isFSharpLiteral then "P" else "F"
+
 /// Phase 258 seam — the sanctioned rendering of an `[<Obsolete>]` marking:
 /// a SEPARATE line derived from the member's token, never a rewrite of it.
 /// See the Phase 258 note in this file's header for why the in-place
@@ -805,7 +820,7 @@ let private renderType (t: Type) : RenderedType =
                         (typeName f.FieldType)
                         (if f.IsLiteral then " (literal)" else ""),
                     obsoleteMessageOf (f.GetCustomAttributesData()),
-                    Some(sprintf "F:%s.%s" typeDoc f.Name))
+                    Some(sprintf "%s:%s.%s" (docFieldKind f) typeDoc f.Name))
 
             let events =
                 t.GetEvents memberFlags
