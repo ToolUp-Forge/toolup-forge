@@ -65,6 +65,7 @@ Migration notes:
 - [788-elmish-ring-and-sub-diff-theorems](docs/migrations/788-elmish-ring-and-sub-diff-theorems.md)
 - [793-tool-effect-class](docs/migrations/793-tool-effect-class.md)
 - [797-scope-choke-point](docs/migrations/797-scope-choke-point.md)
+- [799-json-wire-decoder-algebra](docs/migrations/799-json-wire-decoder-algebra.md)
 - [800-close-the-combinator-gaps](docs/migrations/800-close-the-combinator-gaps.md)
 - [801-safe-decoder-adoption](docs/migrations/801-safe-decoder-adoption.md)
 - [803-fable-reader-parity](docs/migrations/803-fable-reader-parity.md)
@@ -76,7 +77,7 @@ Migration notes:
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
-_Surface since `v0.22.0`: **breaking** — 63 packages moved; 8187 members added, 90 members changed, 1382 members removed; 18 packages new, 2 packages withdrawn._
+_Surface since `v0.22.0`: **breaking** — 63 packages moved; 8307 members added, 90 members changed, 1382 members removed; 18 packages new, 2 packages withdrawn._
 
 ### Added
 
@@ -515,7 +516,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 8187 members added
   - `AuditLogUI+LoadState.Loading : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Tag : System.Int32 { get }`
   - … and 2200 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 1750 members:
+- `ToolUp.Platform.Core` — 1862 members:
   - `ProcessedDataTypes+FileManagementApi.GetSessionInfo : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]] { get }`
   - `ProcessedDataTypes+ProcessedFileEntry.Summary : Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+ProcessedData] { get }`
   - `ProcessedDataTypes+ProcessedFileEntryModule (class)`
@@ -536,8 +537,8 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 8187 members added
   - `ProcessedDataTypes.SessionStoreResetReasonProcessRestart : System.String (literal)`
   - `ToolUp.Platform.AIDenialGroupCount (class)`
   - `ToolUp.Platform.AIDenialGroupCount..ctor(System.String, System.Int32)`
-  - … and 1730 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 1629 members:
+  - … and 1842 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 1637 members:
   - `ToolUp.Platform.AccessAttestation (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AccessAttestation+AttestedApproval], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)`
@@ -558,7 +559,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 8187 members added
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources..ctor(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthoritySurface])`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.ConsentVerifier : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier { get }`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.Consents : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore] { get }`
-  - … and 1609 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 1617 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — new package (183 public members)
 - `ToolUp.PublicRendering` — 71 members:
   - `ToolUp.PublicRendering.ContentPreview.canMintPreviewLink(ToolUp.Platform.AccessContext) : System.Boolean`

@@ -310,6 +310,13 @@
              784.D mutation population) and after the two round-trip
              packs, whose declarations it reuses rather than re-deriving. -->
         <Compile Include="Remoting\DecoderAlgebraTests.fs" />
+        <!-- Phase 799 — the same algebra over the JSON wire: the corpus's
+             JSON texts through the lexical value model and the JSON
+             combinators beside the STJ converter set, on the accept path
+             and on a generated per-shape refuse path, plus the argument
+             seam. AFTER DecoderAlgebraTests.fs for the same reason it sits
+             after WireCorpus.fs. -->
+        <Compile Include="Remoting\JsonDecoderAlgebraTests.fs" />
         <!-- Phase 69k — the source generator's contract pack. AFTER
              DecoderAlgebraTests.fs, because its fidelity claim is a link in
              that pack's chain rather than a claim of its own: 785 proved the
