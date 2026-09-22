@@ -4431,6 +4431,57 @@ let main args =
     // commit by the Build test pack; the live reading of git runs at
     // release, from `publish-nuget.yml`, beside Phase 326's manifest
     // check and for the same reason: it is the moment the two facts meet.
+    // The per-package surface classification between a tag and the
+    // WORKING tree — VerifySemVerBump's measurement, shared since Phase
+    // 263 with the release-candidate soak gate, which takes the same
+    // reading from a candidate tag. One reader, so the bump check and the
+    // soak gate cannot disagree about whether the surface moved.
+    //
+    // Only the baselines that MOVED need reading: a blob identical on
+    // both sides contributes an unchanged classification by definition,
+    // and this keeps the cost proportional to the churn rather than to
+    // the ~165-package baseline set. `disableTraceCommand` because the
+    // read is one `git show` per moved baseline, and echoing each would
+    // bury the classification the caller exists to print.
+    let surfaceChangesSince (root: string) (tag: string) : SemVerBump.PackageChange list =
+        let git (args: string list) =
+            let result =
+                CreateProcess.fromRawCommand "git" args
+                |> CreateProcess.withWorkingDirectory root
+                |> CreateProcess.redirectOutput
+                |> CreateProcess.disableTraceCommand
+                |> CreateProcess.ensureExitCode
+                |> Proc.run
+
+            result.Result.Output
+
+        let lines (text: string) =
+            text.Replace("\r\n", "\n").Split('\n')
+            |> Array.map _.Trim()
+            |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+            |> List.ofArray
+
+        let changedPaths =
+            git [ "diff"; "--name-only"; tag; "--"; "api-baselines" ] |> lines
+
+        let pathsAtTag =
+            git [ "ls-tree"; "-r"; "--name-only"; tag; "--"; "api-baselines" ]
+            |> lines
+            |> Set.ofList
+
+        changedPaths
+        |> List.map (fun path ->
+            let taggedText =
+                if pathsAtTag.Contains path then
+                    Some(git [ "show"; sprintf "%s:%s" tag path ])
+                else
+                    None
+
+            SemVerBump.classifyPackage
+                (SemVerBump.packageOfBaselinePath path)
+                taggedText
+                (SemVerBump.currentBaseline root path))
+
     Target.create "VerifySemVerBump" (fun _ ->
         let root = Path.getFullName "."
         // `System.` qualified deliberately: this file opens Fake.Core but
@@ -4501,31 +4552,7 @@ let main args =
                 "VerifySemVerBump: '%s' parses as a version but names no commit in this checkout. If it came from TOOLUP_SEMVER_BASE, check the spelling; otherwise the tag is unfetched — `git fetch --tags --force`."
                 releaseTag
 
-        // Only the baselines that MOVED need reading: a blob identical on
-        // both sides contributes an unchanged classification by
-        // definition, and this keeps the cost proportional to the churn
-        // rather than to the ~165-package baseline set.
-        let changedPaths =
-            git [ "diff"; "--name-only"; releaseTag; "--"; "api-baselines" ] |> lines
-
-        let pathsAtRelease =
-            git [ "ls-tree"; "-r"; "--name-only"; releaseTag; "--"; "api-baselines" ]
-            |> lines
-            |> Set.ofList
-
-        let changes =
-            changedPaths
-            |> List.map (fun path ->
-                let releasedText =
-                    if pathsAtRelease.Contains path then
-                        Some(git [ "show"; sprintf "%s:%s" releaseTag path ])
-                    else
-                        None
-
-                SemVerBump.classifyPackage
-                    (SemVerBump.packageOfBaselinePath path)
-                    releasedText
-                    (SemVerBump.currentBaseline root path))
+        let changes = surfaceChangesSince root releaseTag
 
         let assessment = SemVerBump.assess releaseTag released declared changes
 
@@ -4771,12 +4798,12 @@ let main args =
     // VerifySemVerBump gives: the question is a release question, the
     // pure checks run on every commit in the Build test pack, and the
     // stability row's reading of git is not a per-commit fact.
-    Target.create "V1Readiness" (fun _ ->
-        let root = Path.getFullName "."
-
-        let requireReady =
-            System.Environment.GetCommandLineArgs() |> Array.contains "--require-ready"
-
+    // The Phase 257 scorecard's READING, shared since Phase 263: the
+    // V1Readiness target renders it, and VerifyRcPromotion requires it
+    // all-green before a candidate may be promoted. One reader, so the
+    // document the operator reads and the gate that acts on it cannot
+    // score different rows.
+    let scoreV1Readiness (root: string) =
         // ── thresholds ──
         let thresholdsPath = Path.Combine(root, V1Readiness.thresholdsFileName)
 
@@ -4920,6 +4947,16 @@ let main args =
             V1Readiness.openDeprecations thresholds.OpenDeprecations baselines
         ]
 
+        rows, thresholdsSource, treeSha, matrix, consumers
+
+    Target.create "V1Readiness" (fun _ ->
+        let root = Path.getFullName "."
+
+        let requireReady =
+            System.Environment.GetCommandLineArgs() |> Array.contains "--require-ready"
+
+        let rows, thresholdsSource, treeSha, matrix, consumers = scoreV1Readiness root
+
         let generatedAt = System.DateTime.UtcNow.ToString "yyyy-MM-dd"
         let document = V1Readiness.render generatedAt treeSha thresholdsSource rows
         let outPath = Path.Combine(root, "docs", "reference", "v1-readiness.md")
@@ -5024,9 +5061,15 @@ let main args =
             && not (path.EndsWith "doc-coverage.approved.txt")
 
         // ── the release line, oldest first ──
+        //
+        // Release candidates (Phase 263) are not releases here: each
+        // parses to the version it is a candidate for, so it would render
+        // a second `## [1.0.0]` claiming a release that has not happened.
+        // The stable section covers the whole interval they soaked in.
         let tags =
             git [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
             |> lines
+            |> List.filter (SemVerBump.isPrerelease >> not)
             |> SemVerBump.releaseTags
             |> List.sortWith (fun (_, a) (_, b) -> SemVerBump.Version.compare a b)
 
@@ -5206,6 +5249,253 @@ let main args =
                 "▶ Changelog: CHANGELOG.md regenerated (%d release(s)%s). Commit it."
                 releases.Length
                 (if List.isEmpty draft then "" else " + the unreleased draft"))
+
+    // ── Phase 263 — the release-candidate channel and its soak gate ──
+    //
+    // `1.0.0` is a one-way commitment; a release candidate lets consumers
+    // validate the frozen surface before it is made. The rules are in
+    // `ReleaseChannel.fs` (pure, proven offline by the Build test pack);
+    // the two targets below only READ — git, nuget.org, the scorecard —
+    // and hand the data in. The operator's flow is in
+    // docs/platform/release-process.md.
+    //
+    //   dotnet run --project Build.fsproj -- VerifyReleaseChannel
+    //   dotnet run --project Build.fsproj -- VerifyRcPromotion
+    //
+    // VerifyReleaseChannel runs in publish-nuget.yml BEFORE the credential
+    // is minted, on every release run. It resolves what the run releases
+    // from the tag (`TOOLUP_RELEASE_REF` overrides `GITHUB_REF` for a
+    // local dry run; a non-tag ref releases `<Version>` on the stable
+    // channel, as a branch dispatch always has), refuses a tag the channel
+    // does not accept, applies the mechanical half of the soak gate to a
+    // stable release that must be promoted from a candidate, and — for a
+    // candidate — hands the version to the pack through `GITHUB_ENV`,
+    // where Directory.Build.targets reads it.
+    //
+    // VerifyRcPromotion is the operator's pre-tag check: the whole soak
+    // gate for the declared `<Version>`, INCLUDING the Phase 257
+    // scorecard. The scorecard is not in the workflow because its
+    // adoption row reads private consumer facts the public workflow must
+    // not reach (see `V1Readiness.matrixEnvVar`); the workflow therefore
+    // enforces the window, the unmoved surface and the lineage, and the
+    // scorecard is enforced here, before the tag exists.
+    //
+    // Neither is in `verify.ps1`, for the reason VerifySemVerBump gives:
+    // they answer release questions, and their rules run on every commit
+    // in the Build test pack.
+    let releaseGitRun (root: string) (args: string list) =
+        CreateProcess.fromRawCommand "git" args
+        |> CreateProcess.withWorkingDirectory root
+        |> CreateProcess.redirectOutput
+        |> CreateProcess.disableTraceCommand
+        |> Proc.run
+
+    let releaseTagsIn (root: string) =
+        let r = releaseGitRun root [ "tag"; "--list"; "v*" ]
+
+        if r.ExitCode <> 0 then
+            failwithf "the release tags could not be listed (`git tag --list v*` exited %d)." r.ExitCode
+
+        r.Result.Output.Replace("\r\n", "\n").Split('\n')
+        |> Array.map _.Trim()
+        |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+        |> List.ofArray
+
+    // What nuget.org says about a candidate, read from the registration
+    // leaf of every package the published-package smoke probes — the ids
+    // that job already restores, so no second list of "representative"
+    // packages exists to drift.
+    let candidatePublication (version: string) : ReleaseChannel.Publication =
+        use handler =
+            new System.Net.Http.HttpClientHandler(AutomaticDecompression = System.Net.DecompressionMethods.All)
+
+        use client = new System.Net.Http.HttpClient(handler)
+        client.Timeout <- System.TimeSpan.FromSeconds 60.0
+
+        PublishedSmoke.probeIds
+        |> List.map (fun id ->
+            try
+                use response =
+                    client.GetAsync(ReleaseChannel.registrationLeafUrl id version).GetAwaiter().GetResult()
+
+                if response.StatusCode = System.Net.HttpStatusCode.NotFound then
+                    ReleaseChannel.NotPublished
+                elif not response.IsSuccessStatusCode then
+                    ReleaseChannel.Unreadable(sprintf "%s: HTTP %d" id (int response.StatusCode))
+                else
+                    match
+                        ReleaseChannel.publicationOf (response.Content.ReadAsStringAsync().GetAwaiter().GetResult())
+                    with
+                    | ReleaseChannel.Unreadable why -> ReleaseChannel.Unreadable(sprintf "%s: %s" id why)
+                    | p -> p
+            with e ->
+                ReleaseChannel.Unreadable(sprintf "%s: %s" id e.Message))
+        |> ReleaseChannel.combinePublications
+
+    let promotionEvidence (root: string) (version: ReleaseChannel.ReleaseVersion) (tags: string list) =
+        let now = System.DateTimeOffset.UtcNow
+
+        match ReleaseChannel.candidatesOf version.Core tags |> List.tryLast with
+        | None -> {
+            ReleaseChannel.PromotionEvidence.Version = version
+            ReleaseChannel.PromotionEvidence.Candidate = None
+            ReleaseChannel.PromotionEvidence.CandidateIsAncestor = false
+            ReleaseChannel.PromotionEvidence.Publication = ReleaseChannel.NotPublished
+            ReleaseChannel.PromotionEvidence.SurfaceSinceCandidate = []
+            ReleaseChannel.PromotionEvidence.Now = now
+          }
+        | Some(tag, _) ->
+            Trace.tracefn "▶ promotion: measuring candidate %s" tag
+
+            {
+                ReleaseChannel.PromotionEvidence.Version = version
+                ReleaseChannel.PromotionEvidence.Candidate = Some tag
+                ReleaseChannel.PromotionEvidence.CandidateIsAncestor =
+                    (releaseGitRun root [ "merge-base"; "--is-ancestor"; tag; "HEAD" ]).ExitCode = 0
+                // `v1.0.0-rc.2` → `1.0.0-rc.2`: the tag shape is already
+                // validated, so the version is the tag minus its `v`.
+                ReleaseChannel.PromotionEvidence.Publication = candidatePublication (tag.Substring 1)
+                // The doc-coverage sidecar moves with documentation, not
+                // with the surface — excluded as the scorecard excludes it.
+                ReleaseChannel.PromotionEvidence.SurfaceSinceCandidate =
+                    surfaceChangesSince root tag
+                    |> List.filter (fun c -> c.Package <> "doc-coverage")
+                ReleaseChannel.PromotionEvidence.Now = now
+            }
+
+    Target.create "VerifyReleaseChannel" (fun _ ->
+        let root = Path.getFullName "."
+
+        let tagRef =
+            [ "TOOLUP_RELEASE_REF"; "GITHUB_REF" ]
+            |> List.tryPick (fun name ->
+                match Environment.environVarOrNone name with
+                | Some v when not (System.String.IsNullOrWhiteSpace v) -> Some(v.Trim())
+                | _ -> None)
+            |> Option.filter (fun r -> r.StartsWith "refs/tags/" || r.StartsWith "v")
+
+        let propsText = File.ReadAllText(Path.Combine(root, "Directory.Build.props"))
+
+        let version =
+            match ReleaseChannel.resolve propsText tagRef with
+            | Ok v -> v
+            | Error e -> failwithf "VerifyReleaseChannel: %s" e
+
+        let tags = releaseTagsIn root
+
+        Trace.tracefn
+            "▶ VerifyReleaseChannel: this run releases %s on the %s channel (from %s)"
+            (ReleaseChannel.ReleaseVersion.render version)
+            (match version.Channel with
+             | ReleaseChannel.Stable -> "stable"
+             | ReleaseChannel.Candidate _ -> "release-candidate")
+            (match tagRef with
+             | Some r -> "ref " + r
+             | None -> "Directory.Build.props <Version>")
+
+        match ReleaseChannel.candidateFindings version tags with
+        | [] -> ()
+        | findings ->
+            failwith (ReleaseChannel.findingsReport "VerifyReleaseChannel: this candidate may not publish" findings)
+
+        if ReleaseChannel.promotionRequired version tags then
+            match
+                ReleaseChannel.promotionFindings ReleaseChannel.soakWindow tags (promotionEvidence root version tags)
+            with
+            | [] ->
+                Trace.tracefn
+                    "▶ VerifyReleaseChannel: promotion of %s — the candidate soaked its window, the surface has not moved since it, and this commit descends from it. (The Phase 257 scorecard is enforced before the tag, by VerifyRcPromotion.)"
+                    (ReleaseChannel.ReleaseVersion.render version)
+            | findings ->
+                failwith (
+                    ReleaseChannel.findingsReport
+                        (sprintf
+                            "VerifyReleaseChannel: %s may not be promoted yet"
+                            (ReleaseChannel.ReleaseVersion.render version))
+                        findings
+                )
+
+        let exported = [ ReleaseChannel.coreEnvVar; ReleaseChannel.prereleaseEnvVar ]
+
+        match ReleaseChannel.ReleaseVersion.prereleaseLabel version with
+        | None ->
+            // A stable run must pack the stable version. Either variable
+            // left set in the environment would make Directory.Build.targets
+            // stamp a candidate label onto it.
+            match exported |> List.filter (Environment.environVarOrNone >> Option.isSome) with
+            | [] -> ()
+            | set ->
+                failwithf
+                    "VerifyReleaseChannel: %s is set, but this run releases the STABLE %s — the pack would stamp a candidate label onto it. Unset it."
+                    (String.concat " and " set)
+                    (ReleaseChannel.ReleaseVersion.render version)
+        | Some label ->
+            let core = SemVerBump.Version.render version.Core
+
+            match Environment.environVarOrNone "GITHUB_ENV" with
+            | Some envFile when not (System.String.IsNullOrWhiteSpace envFile) ->
+                File.AppendAllText(
+                    envFile,
+                    sprintf "%s=%s\n%s=%s\n" ReleaseChannel.coreEnvVar core ReleaseChannel.prereleaseEnvVar label
+                )
+
+                Trace.tracefn
+                    "▶ VerifyReleaseChannel: exported %s=%s %s=%s — the lockstep packages pack as %s; independently versioned ones are skipped for this run."
+                    ReleaseChannel.coreEnvVar
+                    core
+                    ReleaseChannel.prereleaseEnvVar
+                    label
+                    (ReleaseChannel.ReleaseVersion.render version)
+            | _ ->
+                Trace.tracefn
+                    "▶ VerifyReleaseChannel: not on GitHub Actions — to pack this candidate locally, set %s=%s and %s=%s before `dotnet pack`."
+                    ReleaseChannel.coreEnvVar
+                    core
+                    ReleaseChannel.prereleaseEnvVar
+                    label)
+
+    Target.create "VerifyRcPromotion" (fun _ ->
+        let root = Path.getFullName "."
+        let propsText = File.ReadAllText(Path.Combine(root, "Directory.Build.props"))
+
+        let version =
+            match ReleaseChannel.resolve propsText None with
+            | Ok v -> v
+            | Error e -> failwithf "VerifyRcPromotion: %s" e
+
+        let rendered = ReleaseChannel.ReleaseVersion.render version
+        let tags = releaseTagsIn root
+
+        match ReleaseChannel.stableTagOf version.Core tags with
+        | Some stable ->
+            failwithf "VerifyRcPromotion: %s is already released (`%s`) — there is nothing to promote." rendered stable
+        | None -> ()
+
+        if not (ReleaseChannel.promotionRequired version tags) then
+            Trace.tracefn
+                "▶ VerifyRcPromotion: %s has no release candidate and is not a new major, so it releases as an ordinary stable tag — there is no soak to check. To validate it first anyway, tag `%s`."
+                rendered
+                (ReleaseChannel.nextCandidateTag version.Core tags)
+        else
+            let mechanical =
+                ReleaseChannel.promotionFindings ReleaseChannel.soakWindow tags (promotionEvidence root version tags)
+
+            let rows, _, _, _, _ = scoreV1Readiness root
+
+            let failing =
+                rows |> List.filter (fun r -> r.Verdict <> V1Readiness.Pass) |> List.map _.Id
+
+            match mechanical @ ReleaseChannel.scorecardFindings (V1Readiness.ready rows) failing with
+            | [] ->
+                Trace.tracefn
+                    "▶ VerifyRcPromotion: %s is ELIGIBLE — the candidate soaked, the surface has not moved since it, this commit descends from it, and the Phase 257 scorecard is all-green. Promote with `git tag -a v%s -m v%s` on this commit and push the tag."
+                    rendered
+                    rendered
+                    rendered
+            | findings ->
+                failwith (
+                    ReleaseChannel.findingsReport (sprintf "VerifyRcPromotion: %s is NOT eligible" rendered) findings
+                ))
 
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every

@@ -34,6 +34,7 @@ Migration notes:
 - [260-semver-bump-from-api-diff](docs/migrations/260-semver-bump-from-api-diff.md)
 - [261-public-xml-doc-coverage-gate](docs/migrations/261-public-xml-doc-coverage-gate.md)
 - [262-changelog-upgrade-guide-generator](docs/migrations/262-changelog-upgrade-guide-generator.md)
+- [263-v1-rc-prerelease-channel](docs/migrations/263-v1-rc-prerelease-channel.md)
 - [326-sdk-manifest-reconcile](docs/migrations/326-sdk-manifest-reconcile.md)
 - [347-shared-types-split](docs/migrations/347-shared-types-split.md)
 - [36-D-cross-module-read-consent](docs/migrations/36-D-cross-module-read-consent.md)

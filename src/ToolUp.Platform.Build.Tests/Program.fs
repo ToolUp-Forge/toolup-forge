@@ -67,6 +67,12 @@ let private registeredTests =
         // idempotent and order-insensitive, and the committed CHANGELOG.md
         // is the generator's. Pure over strings; no git, no network.
         ChangelogTests.tests
+        // Phase 263 - the release-candidate channel and its soak gate: the
+        // tag shapes, the tag-vs-tree agreement, the candidate numbering,
+        // when promotion must come through a candidate, every soak rule in
+        // both directions, and the shipped workflow + Directory.Build.targets.
+        // Pure over strings and two committed files; no git, no network.
+        ReleaseChannelTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

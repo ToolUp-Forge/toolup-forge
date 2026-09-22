@@ -24,11 +24,28 @@
 #   time. Per-package independent bumps remain possible via a per-fsproj
 #   <Version> override; the tag scheme `v{Package}/{Version}` is reserved
 #   for that future shape but not yet wired here.
+# - `v*.*.*-rc.N` tag push — a RELEASE CANDIDATE (Phase 263). The same
+#   `v*.*.*` filter matches it (a filter `*` spans `-rc.N`), so no second
+#   trigger exists to drift from the first. The `VerifyReleaseChannel`
+#   step reads the tag, refuses any shape other than `vX.Y.Z` /
+#   `vX.Y.Z-rc.N` and any tag that does not name the tree's <Version>,
+#   and exports the candidate label so the pack emits `X.Y.Z-rc.N`
+#   (Directory.Build.targets). Before that step existed, EVERY tag
+#   published the tree's <Version> whatever the tag said — an `-rc.1`
+#   tag would have published a stable release. The flow (candidate →
+#   soak → promote) is docs/platform/release-process.md.
 # - `workflow_dispatch` — manual re-run after a transient CI failure.
 #   Idempotent thanks to `--skip-duplicate` in the FAKE Publish target —
 #   re-runs cleanly skip versions already pushed. CAUTION: a dispatch
-#   packs main's CURRENT <Version>, tagged or not — dispatch only to
-#   heal a failed tag run, never to publish ahead of a tag.
+#   from a BRANCH packs main's CURRENT <Version> on the stable channel,
+#   tagged or not — dispatch only to heal a failed tag run, and dispatch
+#   it ON THE TAG (`gh workflow run publish-nuget.yml --ref <tag>`), which
+#   is the only way a candidate run can be healed as a candidate.
+#
+# The trigger block is tag-only plus manual dispatch BY CONSTRUCTION, and
+# `ReleaseChannel.publishWorkflowFindings` lints it from the Build test
+# pack on every push: a branch, pull-request, schedule, workflow_run or
+# release trigger here would make an ordinary push a nuget.org release.
 #
 # ─── Authentication — Trusted Publishing (Phase 346) ─────────────────
 #
@@ -114,6 +131,27 @@ jobs:
       # `nuget.org` for external deps. No effect on the published nupkgs.
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
+
+      # Phase 263 — what does this run release, and on which channel?
+      #
+      # FIRST, and before the login step: a tag the channel refuses — a
+      # shape other than `vX.Y.Z` / `vX.Y.Z-rc.N`, a version the tree does
+      # not declare, a candidate of an already-released version, or a
+      # stable release that must be promoted from a candidate that has not
+      # soaked (window, unmoved surface, lineage) — fails without a
+      # credential ever being minted. For a candidate it appends
+      # TOOLUP_RELEASE_CORE / TOOLUP_RELEASE_PRERELEASE to $GITHUB_ENV, so
+      # every later step in THIS job sees them and the Publish pack stamps
+      # `-rc.N` onto the lockstep packages (Directory.Build.targets) and
+      # skips the independently versioned ones. A stable run exports
+      # nothing and packs exactly as before.
+      #
+      # The Phase 257 scorecard half of the soak gate is NOT here: its
+      # adoption row reads private consumer facts this public workflow must
+      # not reach. The operator runs `VerifyRcPromotion`, which includes it,
+      # before pushing a promotion tag.
+      - name: Verify the release channel (tag shape, candidate vs stable, soak gate)
+        run: dotnet run --project Build.fsproj -- VerifyReleaseChannel
 
       # Phase 326 — the release cannot publish a package the ToolUp.Sdk
       # meta-manifest does not advertise, nor a manifest MSBuild cannot
