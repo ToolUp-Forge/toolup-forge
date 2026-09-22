@@ -1,62 +1,15 @@
 module ToolUp.Stripe.Server.Tests.StripeWebhookHandlerTests
 
-// FS0044: the WebHostBuilder-based TestServer ctor is deprecated in
-// .NET 10 but remains the standard minimal Giraffe test-host pattern.
-#nowarn "44"
-
 open System
 open System.Net
-open System.Net.Http
-open System.Security.Cryptography
-open System.Text
 open System.Threading.Tasks
 open Expecto
-open Microsoft.AspNetCore.Builder
-open Microsoft.AspNetCore.Hosting
-open Microsoft.AspNetCore.TestHost
-open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Logging
-open Giraffe
 open ToolUp.Stripe.Webhook
 open ToolUp.Stripe.Server
-
-let private secret = "whsec_test_32_byte_minimum_padding"
-
-let private config: StripeConfig = {
-    WebhookSecret = secret
-    ApiKey = "sk_test_unused"
-}
-
-/// Sign `body` at `now` and return the `Stripe-Signature` header value.
-let private signHeader (now: DateTimeOffset) (body: string) : string =
-    let timestamp = now.ToUnixTimeSeconds()
-    let payload = sprintf "%d.%s" timestamp body
-    use h = new HMACSHA256(Encoding.UTF8.GetBytes secret)
-
-    let sigHex =
-        Convert.ToHexString(h.ComputeHash(Encoding.UTF8.GetBytes payload)).ToLowerInvariant()
-
-    sprintf "t=%d,v1=%s" timestamp sigHex
-
-/// Spin up a Giraffe TestServer mounting `webApp` at POST /webhook.
-let private makeServer (webApp: HttpHandler) : TestServer =
-    let builder =
-        (new WebHostBuilder())
-            .ConfigureServices(fun services ->
-                services.AddGiraffe() |> ignore
-                services.AddLogging() |> ignore)
-            .Configure(fun app -> app.UseGiraffe(POST >=> route "/webhook" >=> webApp))
-
-    new TestServer(builder)
-
-/// POST a body + signature header and return the response.
-let private post (server: TestServer) (sigHeader: string) (body: string) : Task<HttpResponseMessage> = task {
-    use client = server.CreateClient()
-    use req = new HttpRequestMessage(HttpMethod.Post, "/webhook")
-    req.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-    req.Headers.TryAddWithoutValidation("Stripe-Signature", sigHeader) |> ignore
-    return! client.SendAsync req
-}
+// Phase 211 lifted `secret`, `config`, `signHeader`, `makeServer` and `post`
+// into `WebhookTestHarness` so the fixture-replay pack can reuse them rather
+// than keep a second copy of the signing helper.
+open ToolUp.Stripe.Server.Tests.WebhookTestHarness
 
 let private okHandler
     (calls: int ref)

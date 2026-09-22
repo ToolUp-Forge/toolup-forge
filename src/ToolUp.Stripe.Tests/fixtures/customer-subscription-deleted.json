@@ -1,0 +1,57 @@
+{
+  "id": "evt_1PgF6D2eZvKYlo2CzNrW9kBs",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721390000,
+  "data": {
+    "object": {
+      "id": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+      "object": "subscription",
+      "cancel_at_period_end": false,
+      "canceled_at": 1721389998,
+      "cancellation_details": {
+        "comment": null,
+        "feedback": null,
+        "reason": "cancellation_requested"
+      },
+      "collection_method": "charge_automatically",
+      "created": 1721210460,
+      "currency": "usd",
+      "current_period_end": 1723888860,
+      "current_period_start": 1721210460,
+      "customer": "cus_QZ1sT4hLmN8pKd",
+      "ended_at": 1721389998,
+      "items": {
+        "object": "list",
+        "data": [
+          {
+            "id": "si_QZ1sVhK3pLmRtD",
+            "object": "subscription_item",
+            "price": {
+              "id": "price_1PgEz12eZvKYlo2CnW8qLdBv",
+              "object": "price",
+              "currency": "usd",
+              "product": "prod_QZ1pRkTdHm4xLb",
+              "unit_amount": 2000
+            },
+            "quantity": 1
+          }
+        ],
+        "has_more": false,
+        "total_count": 1
+      },
+      "livemode": false,
+      "metadata": {},
+      "start_date": 1721210460,
+      "status": "canceled"
+    },
+    "previous_attributes": null
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_Rd9vKqPmTz3sWn",
+    "idempotency_key": null
+  },
+  "type": "customer.subscription.deleted"
+}
