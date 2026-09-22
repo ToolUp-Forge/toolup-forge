@@ -53,7 +53,7 @@ ToolUp.AuthProviders.Passkey.Client 6/32
 ToolUp.AuthProviders.Scim 57/275
 ToolUp.BrandKit 65/210
 ToolUp.Calendar.CalDAV 22/25
-ToolUp.Cli 55/163
+ToolUp.Cli 132/279
 ToolUp.Client.ModelViewer 28/65
 ToolUp.Cloud.Aws 0/0
 ToolUp.Cloud.Azure 0/0

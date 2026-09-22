@@ -1,0 +1,16 @@
+{{app-name}} ({{slug}}) is installed.
+
+Roles deployed: {{role-list}}
+Image:          {{image-repository}}:{{image-tag}}
+
+Before traffic flows, create the Secret this chart references — the deploy
+manifest carries only each secret's name and source, never its value:
+
+  kubectl create secret generic {{secret-name}} \
+    --from-literal=<NAME>=<value>   # one flag per secrets[].name entry
+
+Probe wiring: liveness hits {{liveness-path}} (restart on failure),
+readiness hits {{readiness-path}} (de-list from the Service, no restart).
+
+Re-emit this chart with `toolup k8s emit` whenever the deploy manifest
+changes; the chart is generated output, not a hand-maintained artefact.
