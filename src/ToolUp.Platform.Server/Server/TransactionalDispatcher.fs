@@ -143,11 +143,19 @@ let private sinkKindOf (n: Notification) : NotificationKind.SinkKind option =
 /// non-transactional kinds — those don't reach the dispatcher, so this
 /// is a defensive default rather than a meaningful path.
 let private auditFieldsOf (n: Notification) : string list * string option =
-    match n with
-    | TransactionalEmail e -> e.RecipientUserIds, e.CorrelationId
-    | TransactionalSms s -> s.RecipientUserIds, s.CorrelationId
-    | MobilePush p -> p.RecipientUserIds, p.CorrelationId
-    | _ -> [], None
+    let recipients, correlationId =
+        match n with
+        | TransactionalEmail e -> e.Recipients, e.CorrelationId
+        | TransactionalSms s -> s.Recipients, s.CorrelationId
+        | MobilePush p -> p.Recipients, p.CorrelationId
+        | _ -> [], None
+
+    // `toAuditString` renders a platform user as its BARE id, so every
+    // row this dispatcher has ever written keeps its exact shape and
+    // every `hashRecipient` derived from one keeps its exact value
+    // (GP 11). Only the external arm is new, and it carries its prefix
+    // so a reader can tell the two namespaces apart.
+    recipients |> List.map RecipientId.toAuditString, correlationId
 
 /// Reserved actor id used in audit emission when the publishing
 /// caller's identity is not available to the dispatcher. Phase 6f

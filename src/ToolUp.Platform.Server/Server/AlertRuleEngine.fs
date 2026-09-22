@@ -188,19 +188,19 @@ let buildNotifications (rule: AlertRule) : (string * Notification) list =
                 match sinkKind with
                 | NotificationKind.SinkKind.Email ->
                     TransactionalEmail {
-                        RecipientUserIds = []
+                        Recipients = []
                         Content = InlineEmail(subject, body, None)
                         CorrelationId = correlationId
                     }
                 | NotificationKind.SinkKind.Sms ->
                     TransactionalSms {
-                        RecipientUserIds = []
+                        Recipients = []
                         Body = body
                         CorrelationId = correlationId
                     }
                 | NotificationKind.SinkKind.Push _ ->
                     MobilePush {
-                        RecipientUserIds = []
+                        Recipients = []
                         Title = subject
                         Body = body
                         DeepLink = None

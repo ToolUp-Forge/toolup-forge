@@ -147,11 +147,44 @@ let registerCoreSdkSingletons
         .AddSingleton<IAuthProvider>(auth)
         .AddSingleton<Secrets.ISecretStore>(secretStore)
         .AddSingleton<SSEConnectionManager>(sseConnectionManager)
-        .AddSingleton<INotificationChannel>(resolvedNotificationChannel)
+        // Phase 6f.A — the OUTER consent gate. When an external address
+        // book is composed, every DI consumer of `INotificationChannel`
+        // publishes through `ExternalContactConsentFilter`, which sits
+        // OUTSIDE the Phase 441 preference filter already inside
+        // `resolvedNotificationChannel` — so consent is answered before
+        // preference, which is the order the phase requires. Resolved
+        // through a factory rather than wrapped eagerly because the
+        // contact store is itself a DI registration (it needs the
+        // composed `IEntityStore`), and the notification stack is built
+        // before the provider exists.
+        //
+        // With no address book composed the channel is registered
+        // EXACTLY as before: same instance, no decorator, no allocation
+        // (GP 11 + GP 13).
+        .AddSingleton<INotificationChannel>(fun (sp: System.IServiceProvider) ->
+            match sp.GetService(typeof<IExternalContactStore>) with
+            | :? IExternalContactStore as contacts ->
+                ExternalContactConsentFilter(resolvedNotificationChannel, Some contacts, Some auditLog, resolvedLogger)
+                :> INotificationChannel
+            | _ -> resolvedNotificationChannel)
         .AddSingleton<INarrativeStore>(narrativeStore)
-        .AddSingleton<INotificationAddressBook>(
-            NotificationAddressBook.BlobBackedNotificationAddressBook(resolvedBlobStorage, Some resolvedLogger)
-        )
+        // Phase 6f.A — the address book resolves the `External` recipient
+        // arm through the same optionally-composed contact store, and
+        // gates it on a live per-channel consent. Same factory argument
+        // as the channel above; `None` reproduces the pre-6f.A
+        // constructor exactly.
+        .AddSingleton<INotificationAddressBook>(fun (sp: System.IServiceProvider) ->
+            let contacts =
+                match sp.GetService(typeof<IExternalContactStore>) with
+                | :? IExternalContactStore as s -> Some s
+                | _ -> None
+
+            NotificationAddressBook.BlobBackedNotificationAddressBook(
+                resolvedBlobStorage,
+                Some resolvedLogger,
+                contacts
+            )
+            :> INotificationAddressBook)
     |> ignore
 
 /// Phase 462 — refuse the `AllowCredentials = true` + wildcard-origins

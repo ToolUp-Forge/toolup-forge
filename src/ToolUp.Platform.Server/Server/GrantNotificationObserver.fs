@@ -497,7 +497,7 @@ type GrantNotificationObserver
                     channel.Publish(
                         scopeId,
                         TransactionalEmail {
-                            RecipientUserIds = recipients
+                            Recipients = RecipientId.ofUserIds recipients
                             Content = content
                             CorrelationId =
                                 Some

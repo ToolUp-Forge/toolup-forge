@@ -1913,6 +1913,57 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> RestoreDrillFailed(fromAuditJson<RestoreDrillFailedPayload> j)
     }
+    // Phase 6f.A - the external-contact consent trail: who was filed,
+    // who asserted a per-channel consent and on what evidence, who
+    // withdrew it and why, and every send refused for want of one.
+    {
+        EventType = "ContactCreated"
+        TryEncode =
+            (function
+            | ContactCreated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContactCreated(fromAuditJson<ContactCreatedPayload> j)
+    }
+    {
+        EventType = "ContactUpdated"
+        TryEncode =
+            (function
+            | ContactUpdated p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContactUpdated(fromAuditJson<ContactUpdatedPayload> j)
+    }
+    {
+        EventType = "ContactDeleted"
+        TryEncode =
+            (function
+            | ContactDeleted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContactDeleted(fromAuditJson<ContactDeletedPayload> j)
+    }
+    {
+        EventType = "ContactOptInRecorded"
+        TryEncode =
+            (function
+            | ContactOptInRecorded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContactOptInRecorded(fromAuditJson<ContactOptInRecordedPayload> j)
+    }
+    {
+        EventType = "ContactOptInWithdrawn"
+        TryEncode =
+            (function
+            | ContactOptInWithdrawn p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ContactOptInWithdrawn(fromAuditJson<ContactOptInWithdrawnPayload> j)
+    }
+    {
+        EventType = "NotificationDeliveryRefused"
+        TryEncode =
+            (function
+            | NotificationDeliveryRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> NotificationDeliveryRefused(fromAuditJson<NotificationDeliveryRefusedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

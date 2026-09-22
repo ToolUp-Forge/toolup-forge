@@ -1,5 +1,6 @@
 module ToolUp.Platform.NotificationAddressBook
 
+open System
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -24,6 +25,15 @@ open ToolUp.Platform.BlobStorage
 //     flows (an admin UI, a CSV import tool, an authenticated
 //     "save my email" flow); the SDK doesn't ship a write-side
 //     surface in Phase 6f beyond this read-side default.
+//
+// Phase 6f.A widened both to `RecipientId`. The `User` arm is
+// byte-for-byte what it was - same blob path, same shape, same failure
+// semantics. The `External` arm is new, resolves through an
+// optionally-composed `IExternalContactStore`, and is CONSENT-GATED: a
+// contact with no live `OptInRecord` for the channel being resolved
+// returns `None` even when its record holds a perfectly good address.
+// That asymmetry is the whole point of the phase - an address is not
+// permission to use it.
 //
 // Real production deployments swap in a directory-driven impl
 // (LDAP, Okta, Azure AD) by registering a custom
@@ -67,7 +77,8 @@ type NoOpNotificationAddressBook() =
 /// Stateless across calls (Phase 9c rule 4). A future caching layer
 /// would wrap this rather than mutate it. Async at every boundary
 /// (Phase 9c rule 2).
-type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger option) =
+type BlobBackedNotificationAddressBook
+    (storage: IBlobStorage, logger: ILogger option, externalContacts: IExternalContactStore option) =
 
     let logWarn (message: string) =
         match logger with
@@ -113,20 +124,102 @@ type BlobBackedNotificationAddressBook(storage: IBlobStorage, logger: ILogger op
             return UserContact.empty userId
     }
 
+    /// Read an external contact, if an external address book is
+    /// composed at all. A deployment with `NoExternalContactStore`
+    /// resolves every external recipient to `None` - the same answer a
+    /// contact with no consent gets, and the correct one: with no store
+    /// there is no consent record, and with no consent record there is
+    /// no lawful basis.
+    let readExternal (scopeId: string) (contactId: string) : Async<ExternalContact option> = async {
+        match externalContacts with
+        | None -> return None
+        | Some store ->
+            let! result = store.Get(scopeId, contactId)
+
+            match result with
+            | Ok contact -> return Some contact
+            | Error ExternalContactError.NotFound -> return None
+            | Error error ->
+                logWarn
+                    $"[NotificationAddressBook] external contact read failed scope=%s{scopeId} contact=%s{contactId}: %s{ExternalContactError.describe error}"
+
+                return None
+    }
+
+    /// The consent gate. Yields the contact ONLY when it carries a live
+    /// opt-in for `channel`; an expired opt-in reads exactly like an
+    /// absent one.
+    let readConsented
+        (scopeId: string)
+        (contactId: string)
+        (channel: NotificationKind.SinkKind)
+        : Async<ExternalContact option> =
+        async {
+            let! contact = readExternal scopeId contactId
+            return contact |> Option.filter (ExternalContact.hasLiveOptIn DateTime.UtcNow channel)
+        }
+
+    /// The pre-Phase-6f.A shape: no external address book composed, so
+    /// every `External` recipient resolves to nothing. An explicit
+    /// secondary constructor rather than an optional parameter, because
+    /// an optional parameter folds both forms into one widened
+    /// constructor and the public-API approval gate reads that as the
+    /// REMOVAL of the two-argument form.
+    new(storage: IBlobStorage, logger: ILogger option) = BlobBackedNotificationAddressBook(storage, logger, None)
+
     interface INotificationAddressBook with
-        member _.ResolveEmail(userId, scopeId) = async {
-            let! contact = readContact scopeId userId
-            return contact.Email
+        member _.ResolveEmail(recipient, scopeId) = async {
+            match recipient with
+            | RecipientId.User userId ->
+                let! contact = readContact scopeId userId
+                return contact.Email
+            | RecipientId.External contactId ->
+                let! contact = readConsented scopeId contactId NotificationKind.SinkKind.Email
+
+                let address =
+                    contact
+                    |> Option.bind _.OptionalEmailAddress
+                    |> Option.filter (String.IsNullOrWhiteSpace >> not)
+
+                return
+                    address
+                    |> Option.map (fun address -> {
+                        Address = address
+                        DisplayName =
+                            contact
+                            |> Option.map _.DisplayName
+                            |> Option.filter (String.IsNullOrWhiteSpace >> not)
+                    })
         }
 
-        member _.ResolvePhone(userId, scopeId) = async {
-            let! contact = readContact scopeId userId
-            return contact.Phone
+        member _.ResolvePhone(recipient, scopeId) = async {
+            match recipient with
+            | RecipientId.User userId ->
+                let! contact = readContact scopeId userId
+                return contact.Phone
+            | RecipientId.External contactId ->
+                let! contact = readConsented scopeId contactId NotificationKind.SinkKind.Sms
+
+                return
+                    contact
+                    |> Option.bind _.OptionalPhoneNumber
+                    |> Option.filter (String.IsNullOrWhiteSpace >> not)
+                    |> Option.map (fun number -> { E164 = number })
         }
 
-        member _.ResolvePushTokens(userId, scopeId) = async {
-            let! contact = readContact scopeId userId
-            return contact.PushTokens
+        member _.ResolvePushTokens(recipient, scopeId) = async {
+            match recipient with
+            | RecipientId.User userId ->
+                let! contact = readContact scopeId userId
+                return contact.PushTokens
+            | RecipientId.External _ ->
+                // An external contact has no device registration in the
+                // shipped model: push is a channel you opt into from
+                // inside an app you installed, and a recipient who never
+                // installed the app has no token to hold. `[]` rather
+                // than a raise keeps the sink's existing skip path the
+                // one that handles it.
+                return []
         }
 
 /// Persist a `UserContact` for `(userId, scopeId)` so the blob-backed

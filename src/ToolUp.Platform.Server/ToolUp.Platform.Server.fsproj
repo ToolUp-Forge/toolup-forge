@@ -164,6 +164,13 @@
              re-implementing fan-out. Still no CRDT library server-side. -->
         <Compile Include="Server\BlobCrdtDocumentStore.fs" />
         <Compile Include="Server\INotificationSink.fs" />
+        <!-- Phase 6f.A - the external address book seam. Only the
+             INTERFACE sits here: it needs nothing but the Core types, and
+             NotificationAddressBook.fs below takes it as an optional
+             constructor argument to resolve the External recipient arm.
+             The entity-backed default lives with the entity substrate,
+             far below. -->
+        <Compile Include="Server\IExternalContactStore.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />
         <!-- Phase 117 — shared SSE scope resolution. One resolution path
@@ -244,6 +251,11 @@
 
         <Compile Include="Server\EntityQueryExecutor.fs" />
         <Compile Include="Server\EntityStore.fs" />
+        <!-- Phase 6f.A - the SDK-default IExternalContactStore, over
+             IEntityStore for the versioning, the dedupe indexes and the
+             per-scope container. After EntityStore.fs; before
+             ComposeStores.fs registers it. -->
+        <Compile Include="Server\ExternalContactStore.fs" />
         <!-- Phase 7b — user-authored schema store (substrate slice): the
              IUserSchemaStore seam + blob-backed default over IDataObjectStore
              (versioned schema definitions + typed migration execution).
@@ -1030,6 +1042,13 @@
         <Compile Include="Server\INotificationPreferenceStore.fs" />
         <Compile Include="Server\BlobNotificationPreferenceStore.fs" />
         <Compile Include="Server\NotificationPreferenceFilter.fs" />
+        <!-- Phase 6f.A - the OUTER consent gate. Composed AROUND the
+             Phase 441 preference filter, so consent is answered before
+             preference is. After NotificationPreferenceFilter.fs, whose
+             recipientsOf / narrowTo / hashRecipient it reuses rather
+             than duplicating; before ComposeNotifications.fs wraps it
+             onto the channel. -->
+        <Compile Include="Server\ExternalContactConsentFilter.fs" />
         <Compile Include="Server\DigestJobHandler.fs" />
         <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />
@@ -1057,6 +1076,10 @@
              gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
              mounts it on the NotificationPreferences opt-in. -->
         <Compile Include="Server\NotificationPreferenceApiHandler.fs" />
+        <!-- Phase 6f.A - the admin surface over IExternalContactStore.
+             Mounted by Compose/BuildRouteHandlers.fs only when the
+             ExternalContactStore mode opts in. -->
+        <Compile Include="Server\ExternalContactApiHandler.fs" />
         <!-- Phase 7b — IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
              gated writes). After WebhookApiHandler (same handler shape) +
              TeamManagement (the role gate); before BuildRouteHandlers mounts

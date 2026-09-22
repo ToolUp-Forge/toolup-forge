@@ -132,6 +132,23 @@ let registerEntityStore
             | NoConsentStateStore
             | InMemoryConsentStateStore -> effectiveRegistrations
 
+        // Phase 6f.A — when the external address book is on, prepend the
+        // `ExternalContact` registration so the entity store knows the
+        // type before any contact write. Same auto-register convenience
+        // as the two prepends above, gated on the mode so a deployment
+        // without an address book pays nothing (GP 13). A composition
+        // root that wants the entity WITHOUT the rest of the substrate
+        // can still register `ExternalContactStore.registration` itself
+        // through `ServerApp.withEntity`; `Register` is idempotent.
+        let effectiveRegistrations =
+            match config.ExternalContactStore with
+            | EnabledExternalContactStore ->
+                let contactRegister (registry: EntityStore.EntityRegistry) =
+                    registry.Register ExternalContactStore.registration
+
+                contactRegister :: effectiveRegistrations
+            | NoExternalContactStore -> effectiveRegistrations
+
         for registerFn in effectiveRegistrations do
             registerFn entityRegistry
 
@@ -639,6 +656,39 @@ let registerConsentStateStore (services: IServiceCollection) (config: ServerConf
 
             Consent.ConsentStateStore.ConsentStateStore.entityBacked entityStore (resolveAuditLog sp))
         |> ignore
+
+/// Phase 6f.A — register the `IExternalContactStore` when
+/// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`.
+/// `NoExternalContactStore` (default) registers nothing: every
+/// `RecipientId.External` recipient is then refused by the consent
+/// filter for want of a consent record to consult, which is the correct
+/// answer rather than a degraded one (GP 13).
+///
+/// The store is entity-backed, so it needs `EntityStore =
+/// EnabledEntityStore`. That dependency is NAMED here at compose time
+/// rather than left to fail at first resolve: a deployment that turns on
+/// the address book and forgets the entity store would otherwise
+/// discover it only when someone tried to file a contact.
+let registerExternalContactStore (services: IServiceCollection) (config: ServerConfig) : unit =
+    match config.ExternalContactStore with
+    | NoExternalContactStore -> ()
+    | EnabledExternalContactStore ->
+        match config.EntityStore with
+        | NoEntityStore ->
+            failwith
+                "ExternalContactStore = EnabledExternalContactStore requires EntityStore = EnabledEntityStore — the                  external address book is entity-backed (versioned records plus the email / phone duplicate indexes).                  Set TOOLUP_ENTITY_STORE=enabled, or turn the address book off."
+        | EnabledEntityStore ->
+            services.AddSingleton<IExternalContactStore>(fun (sp: System.IServiceProvider) ->
+                let entityStore =
+                    sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
+
+                let auditLog =
+                    match sp.GetService(typeof<IAuditLog>) with
+                    | :? IAuditLog as log -> Some log
+                    | _ -> None
+
+                ExternalContactStore.entityBacked entityStore auditLog)
+            |> ignore
 
 /// Phase 8 / 8a / 53 — conditional store registrations. `IResultStore`
 /// is registered only when `ServerConfig.ResultStore` opts in;

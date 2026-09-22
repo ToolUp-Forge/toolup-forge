@@ -97,7 +97,7 @@ let registerTeamPermissionStores
                         resolvedNotificationChannel.Publish(
                             $"team-{entry.TeamId}",
                             TransactionalEmail {
-                                RecipientUserIds = [ entry.InviterUserId ]
+                                Recipients = [ RecipientId.User entry.InviterUserId ]
                                 Content = InlineEmail(subject, body, None)
                                 CorrelationId = Some $"invite-expiry:{entry.TeamId}:{email}:{entry.ExpiresAt.Ticks}"
                             }

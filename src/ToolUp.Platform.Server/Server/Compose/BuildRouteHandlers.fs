@@ -768,6 +768,19 @@ let buildRouteHandlers
             )
           ]
 
+    // Phase 6f.A — `IExternalContactApi` (the surface behind the
+    // built-in `ExternalContactManagerUI`). Mounted only when the
+    // external address book is opted in, so a default deployment gains
+    // no route (GP 13). The signed-in / persistent-scope / Owner-Admin
+    // gates are enforced inside the handler. Route shape:
+    // `/api/IExternalContactApi/*` via `ExternalContactApi.routeBuilder`.
+    let externalContactApiHandler: HttpHandler list =
+        match config.ExternalContactStore with
+        | NoExternalContactStore -> []
+        | EnabledExternalContactStore -> [
+            Api.make (ExternalContactApiHandler.externalContactApi, routeBuilder = ExternalContactApi.routeBuilder)
+          ]
+
     let router (devRoutes: HttpHandler list) =
         choose (
             [
@@ -822,6 +835,7 @@ let buildRouteHandlers
             @ platformTenantApiHandler
             @ serviceAccountApiHandler
             @ notificationPreferenceApiHandler
+            @ externalContactApiHandler
             @ devRoutes
             @ extensions.Handlers
             @ handlers

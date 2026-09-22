@@ -205,10 +205,6 @@ module ExternalContact =
     [<Literal>]
     let IndexPhone = "phone"
 
-    /// The compound `(owner, tag)` index name.
-    [<Literal>]
-    let IndexOwnerTag = "owner-tag"
-
     /// Normalised index value for an absent optional field, so a
     /// contact with no email does not collide with every other contact
     /// with no email on an exact-match index lookup.
@@ -251,16 +247,6 @@ module ExternalContact =
         match contact.OptionalPhoneNumber with
         | Some phone when not (String.IsNullOrWhiteSpace phone) -> normalisePhone phone
         | _ -> UnsetIndexValue
-
-    /// The compound `(owner, tag)` index values — one entry per tag,
-    /// plus one bare owner entry so an untagged contact is still
-    /// reachable from the compound index.
-    let ownerTagIndexValues (contact: ExternalContact) : string list =
-        let owner = ownerIndexValue contact
-
-        match contact.Tags with
-        | [] -> [ owner ]
-        | tags -> owner :: (tags |> List.map (fun tag -> owner + "|" + tag))
 
     /// The consent record for one channel, `None` when none was given.
     /// Does NOT consider expiry — use `hasLiveOptIn` for the question

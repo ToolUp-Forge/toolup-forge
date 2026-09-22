@@ -90,19 +90,19 @@ module DigestRenderer =
         match channel with
         | PreferenceChannel.Email ->
             TransactionalEmail {
-                RecipientUserIds = [ userId ]
+                Recipients = [ RecipientId.User userId ]
                 Content = InlineEmail(subject settings.DigestEmailSubject count, body items, None)
                 CorrelationId = Some marker
             }
         | PreferenceChannel.Sms ->
             TransactionalSms {
-                RecipientUserIds = [ userId ]
+                Recipients = [ RecipientId.User userId ]
                 Body = body items
                 CorrelationId = Some marker
             }
         | PreferenceChannel.Push ->
             MobilePush {
-                RecipientUserIds = [ userId ]
+                Recipients = [ RecipientId.User userId ]
                 Title = subject settings.DigestEmailSubject count
                 Body = body items
                 DeepLink = None

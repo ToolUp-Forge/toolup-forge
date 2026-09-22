@@ -794,6 +794,11 @@ let compose
     // (default) registers nothing.
     registerConsentStateStore services config
 
+    // Phase 6f.A — the external address book. Conditional on
+    // `ServerConfig.ExternalContactStore`; `NoExternalContactStore`
+    // (default) registers nothing.
+    registerExternalContactStore services config
+
     // Phase 26 — Layer 3 deploy-plane substrate. Conditional on
     // `ServerConfig.DeployPlane`; `NoDeployPlane` (default) skips
     // registration entirely. `SingleNodeDeployPlane` wires

@@ -159,21 +159,46 @@ module NotificationPreferenceFilter =
     let QuietHoursDeferredReason = "quiet_hours_deferred"
 
     /// The recipients and correlation id of a transactional
-    /// notification; `[], None` for any other kind.
-    let recipientsOf (notification: Notification) : string list * string option =
+    /// notification; `[], None` for any other kind. Widened to
+    /// `RecipientId` by Phase 6f.A; this filter reads only the `User`
+    /// arm (see `platformUserIdsOf`).
+    let recipientsOf (notification: Notification) : RecipientId list * string option =
         match notification with
-        | TransactionalEmail e -> e.RecipientUserIds, e.CorrelationId
-        | TransactionalSms s -> s.RecipientUserIds, s.CorrelationId
-        | MobilePush p -> p.RecipientUserIds, p.CorrelationId
+        | TransactionalEmail e -> e.Recipients, e.CorrelationId
+        | TransactionalSms s -> s.Recipients, s.CorrelationId
+        | MobilePush p -> p.Recipients, p.CorrelationId
         | _ -> [], None
 
-    /// A copy of a transactional notification addressed to `userIds`
+    /// The recipients this filter has anything to say about: platform
+    /// users, who have an account and therefore a preference record.
+    ///
+    /// **An external contact is deliberately out of scope here.** It has
+    /// no account, no preference record and no preference UI, so there
+    /// is nothing for a per-user filter to read and nothing a user could
+    /// have chosen. Its send/do-not-send question is a consent question,
+    /// answered by the OUTER `ExternalContactConsentFilter` before this
+    /// one runs. Passing an external recipient through `verdictFor`
+    /// would read an empty record and return `Keep` - the same answer -
+    /// at the cost of a store round-trip per recipient and a
+    /// `PendingNotification` keyed on a user id that does not exist.
+    let platformUserIdsOf (recipients: RecipientId list) : string list = RecipientId.userIds recipients
+
+    /// The external recipients, carried through every narrowing
+    /// untouched. They were admitted by the consent gate; this filter
+    /// neither widens nor narrows that decision.
+    let externalRecipientsOf (recipients: RecipientId list) : RecipientId list =
+        recipients
+        |> List.filter (function
+            | RecipientId.External _ -> true
+            | RecipientId.User _ -> false)
+
+    /// A copy of a transactional notification addressed to `recipients`
     /// only. Any other kind is returned unchanged.
-    let narrowTo (userIds: string list) (notification: Notification) : Notification =
+    let narrowTo (recipients: RecipientId list) (notification: Notification) : Notification =
         match notification with
-        | TransactionalEmail e -> TransactionalEmail { e with RecipientUserIds = userIds }
-        | TransactionalSms s -> TransactionalSms { s with RecipientUserIds = userIds }
-        | MobilePush p -> MobilePush { p with RecipientUserIds = userIds }
+        | TransactionalEmail e -> TransactionalEmail { e with Recipients = recipients }
+        | TransactionalSms s -> TransactionalSms { s with Recipients = recipients }
+        | MobilePush p -> MobilePush { p with Recipients = recipients }
         | other -> other
 
     /// `SHA256(userId)[..8]` — the same PII-free correlation token the
@@ -279,7 +304,13 @@ type NotificationPreferenceFilter
                 UserId = userId
                 Category = category
                 Channel = channel
-                Notification = NotificationPreferenceFilter.narrowTo [ userId ] notification
+                // A held copy is addressed to ONE platform user — the
+                // one whose preference held it. Any external recipient
+                // on the original envelope stays on the copy the filter
+                // publishes now, never on the held one, or a digest
+                // release would re-send to a contact that already
+                // received it.
+                Notification = NotificationPreferenceFilter.narrowTo [ RecipientId.User userId ] notification
                 QueuedAt = nowUtc
                 Disposition = disposition
             }
@@ -292,8 +323,15 @@ type NotificationPreferenceFilter
         }
 
     let filter (scopeId: string) (category: string) (channel: PreferenceChannel) (notification: Notification) = async {
-        let recipients, correlationId =
+        let allRecipients, correlationId =
             NotificationPreferenceFilter.recipientsOf notification
+
+        // Only platform users have a preference record. Externals ride
+        // through untouched — the consent gate outside this filter has
+        // already decided about them.
+        let recipients = NotificationPreferenceFilter.platformUserIdsOf allRecipients
+
+        let externals = NotificationPreferenceFilter.externalRecipientsOf allRecipients
 
         let nowUtc = clock ()
         let kept = ResizeArray<string>()
@@ -329,8 +367,10 @@ type NotificationPreferenceFilter
                 correlationId
                 (List.ofSeq deferred)
 
-        if kept.Count > 0 then
-            do! inner.Publish(scopeId, NotificationPreferenceFilter.narrowTo (List.ofSeq kept) notification)
+        let keptRecipients = (kept |> Seq.map RecipientId.User |> List.ofSeq) @ externals
+
+        if not (List.isEmpty keptRecipients) then
+            do! inner.Publish(scopeId, NotificationPreferenceFilter.narrowTo keptRecipients notification)
     }
 
     /// Production shape: the system clock and the host's zone table.

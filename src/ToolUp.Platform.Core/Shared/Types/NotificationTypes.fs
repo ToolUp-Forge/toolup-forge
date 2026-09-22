@@ -139,6 +139,19 @@ module RecipientId =
         else
             Some(RecipientId.User wire)
 
+    /// The form audit payloads carry. A `User` recipient renders as the
+    /// BARE `userId` — byte-for-byte what `NotificationSentPayload`
+    /// carried before Phase 6f.A, so existing audit rows and the
+    /// `SHA256(recipient)[..8]` correlation hashes derived from them are
+    /// unchanged (GP 11). An `External` recipient keeps its prefix,
+    /// because a contact id and a user id are different namespaces and a
+    /// reader must be able to tell which one a row names. Parses back
+    /// through `tryParse`, whose bare-string arm exists for exactly this.
+    let toAuditString (recipient: RecipientId) : string =
+        match recipient with
+        | RecipientId.User userId -> userId
+        | RecipientId.External contactId -> "external:" + contactId
+
     /// Wrap a plain `userId` — the migration helper for every call site
     /// that addressed an envelope before Phase 6f.A widened it.
     let ofUserId (userId: string) : RecipientId = RecipientId.User userId
