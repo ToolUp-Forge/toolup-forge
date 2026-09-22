@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1321 (200 parameterised).
+// Leaves: 1350 (202 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -3041,5 +3041,68 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 RoutingSaved = "Routing updated."
                 // en: "Fallback order updated."
                 FallbackSaved = "Fallback order updated."
+        }
+        DatadogReadback = {
+            c.DatadogReadback with
+                // en: "Monitors"
+                MonitorsTab = "Monitors"
+                // en: "Recent errors"
+                RecentErrorsTab = "Recent errors"
+                // en: "Key metrics"
+                KeyMetricsTab = "Key metrics"
+                // en: "Refresh"
+                Refresh = "Refresh"
+                // en: "Refreshing…"
+                Refreshing = "Refreshing…"
+                // en: "Loading…"
+                Loading = "Loading…"
+                // en (string -> string): "Showing no data — the last read did not reach Datadog. {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                DegradedWarning = c.DatadogReadback.DegradedWarning
+                // en: "Monitor"
+                ColumnMonitor = "Monitor"
+                // en: "Status"
+                ColumnStatus = "Status"
+                // en: "Last transition"
+                ColumnLastTransition = "Last transition"
+                // en: "Tags"
+                ColumnTags = "Tags"
+                // en: "Time"
+                ColumnTime = "Time"
+                // en: "Service"
+                ColumnService = "Service"
+                // en: "Host"
+                ColumnHost = "Host"
+                // en: "Level"
+                ColumnLevel = "Level"
+                // en: "Message"
+                ColumnMessage = "Message"
+                // en: "OK"
+                StatusOk = "OK"
+                // en: "Warning"
+                StatusWarn = "Warning"
+                // en: "Alert"
+                StatusAlert = "Alert"
+                // en: "No data"
+                StatusNoData = "No data"
+                // en: "Unknown"
+                StatusUnknown = "Unknown"
+                // en: "Never"
+                NeverTransitioned = "Never"
+                // en: "No monitors match this deployment's tag filter."
+                NoMonitors = "No monitors match this deployment's tag filter."
+                // en: "No error or critical log events in this window."
+                NoErrors = "No error or critical log events in this window."
+                // en: "No points in this window."
+                NoPoints = "No points in this window."
+                // en: "Monitor state as Datadog reports it. A state this platform does not recognise reads as Unknown, never as OK."
+                MonitorsFootnote = "Monitor state as Datadog reports it. A state this platform does not recognise reads as Unknown, never as OK."
+                // en: "Error and critical events only, newest first, narrowed to this deployment's configured tags."
+                ErrorsFootnote = "Error and critical events only, newest first, narrowed to this deployment's configured tags."
+                // en: "Re-read every 30 seconds. A gap in a series is a gap in the data, not a zero, so it is left undrawn."
+                MetricsFootnote = "Re-read every 30 seconds. A gap in a series is a gap in the data, not a zero, so it is left undrawn."
+                // en (int -> string): "Last 1 minutes"
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                WindowLabel = c.DatadogReadback.WindowLabel
         }
 }

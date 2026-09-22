@@ -116,6 +116,7 @@ ToolUp.NotificationChannels.Email.Smtp 14/24
 ToolUp.NotificationChannels.Push.WebPush 3/16
 ToolUp.NotificationChannels.Redis 14/28
 ToolUp.NotificationChannels.Sms.Twilio 3/17
+ToolUp.Observability.Datadog 2/4
 ToolUp.OcrProviders.Tesseract 24/37
 ToolUp.Offline.Client 47/101
 ToolUp.Offline.Core 59/151
@@ -124,9 +125,9 @@ ToolUp.OpenXml 104/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 262/505
-ToolUp.Platform.Client 2199/6360
-ToolUp.Platform.Core 5919/14044
-ToolUp.Platform.Server 5888/11350
+ToolUp.Platform.Client 2215/6470
+ToolUp.Platform.Core 5979/14170
+ToolUp.Platform.Server 5902/11366
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 597/1062

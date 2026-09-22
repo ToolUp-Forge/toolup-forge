@@ -1729,6 +1729,40 @@ module MessageCatalog =
             RoutingSaved = "Routing updated."
             FallbackSaved = "Fallback order updated."
         }
+        DatadogReadback = {
+            MonitorsTab = "Monitors"
+            RecentErrorsTab = "Recent errors"
+            KeyMetricsTab = "Key metrics"
+            Refresh = "Refresh"
+            Refreshing = "Refreshing…"
+            Loading = "Loading…"
+            DegradedWarning = fun reason -> $"Showing no data — the last read did not reach Datadog. {reason}"
+            ColumnMonitor = "Monitor"
+            ColumnStatus = "Status"
+            ColumnLastTransition = "Last transition"
+            ColumnTags = "Tags"
+            ColumnTime = "Time"
+            ColumnService = "Service"
+            ColumnHost = "Host"
+            ColumnLevel = "Level"
+            ColumnMessage = "Message"
+            StatusOk = "OK"
+            StatusWarn = "Warning"
+            StatusAlert = "Alert"
+            StatusNoData = "No data"
+            StatusUnknown = "Unknown"
+            NeverTransitioned = "Never"
+            NoMonitors = "No monitors match this deployment's tag filter."
+            NoErrors = "No error or critical log events in this window."
+            NoPoints = "No points in this window."
+            MonitorsFootnote =
+                "Monitor state as Datadog reports it. A state this platform does not recognise reads as Unknown, never as OK."
+            ErrorsFootnote =
+                "Error and critical events only, newest first, narrowed to this deployment's configured tags."
+            MetricsFootnote =
+                "Re-read every 30 seconds. A gap in a series is a gap in the data, not a zero, so it is left undrawn."
+            WindowLabel = fun minutes -> $"Last {minutes} minutes"
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

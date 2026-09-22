@@ -478,6 +478,76 @@ DataSubjectRequestAdminUI+Tab.Tag : System.Int32 { get }
 DataSubjectRequestAdminUI+Tab+Tags (class)
 DataSubjectRequestAdminUI+Tab+Tags.EraseTab : System.Int32 (literal)
 DataSubjectRequestAdminUI+Tab+Tags.ExportTab : System.Int32 (literal)
+DatadogReadbackUI (class)
+DatadogReadbackUI.ObservabilityGroup : System.String (literal)
+DatadogReadbackUI.create(ToolUp.Platform.DatadogReadbackConfig) : ToolUp.Platform.ErasedModule
+DatadogReadbackUI.init(ToolUp.Platform.DatadogReadbackConfig, Microsoft.FSharp.Core.Unit) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DatadogReadbackUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DatadogReadbackUI.update(DatadogReadbackUI+Msg, DatadogReadbackUI+Model) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DatadogReadbackUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DatadogReadbackUI+LoadState`1 (class)
+DatadogReadbackUI+LoadState`1.IsLoadError : System.Boolean { get }
+DatadogReadbackUI+LoadState`1.IsLoaded : System.Boolean { get }
+DatadogReadbackUI+LoadState`1.IsLoading : System.Boolean { get }
+DatadogReadbackUI+LoadState`1.IsNotLoaded : System.Boolean { get }
+DatadogReadbackUI+LoadState`1.Loading : DatadogReadbackUI+LoadState`1[T] { get }
+DatadogReadbackUI+LoadState`1.NotLoaded : DatadogReadbackUI+LoadState`1[T] { get }
+DatadogReadbackUI+LoadState`1.Tag : System.Int32 { get }
+DatadogReadbackUI+LoadState`1+LoadError (class)
+DatadogReadbackUI+LoadState`1+LoadError.Item : System.String { get }
+DatadogReadbackUI+LoadState`1+Loaded (class)
+DatadogReadbackUI+LoadState`1+Loaded.Item : T { get }
+DatadogReadbackUI+LoadState`1+Tags (class)
+DatadogReadbackUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
+DatadogReadbackUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
+DatadogReadbackUI+LoadState`1+Tags.Loading : System.Int32 (literal)
+DatadogReadbackUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
+DatadogReadbackUI+Model (class)
+DatadogReadbackUI+Model..ctor(ToolUp.Platform.DatadogReadbackConfig, DatadogReadbackUI+Tab, DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogMonitorsResponse], DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogLogsResponse], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogMetricResponse]]])
+DatadogReadbackUI+Model.ActiveTab : DatadogReadbackUI+Tab { get }
+DatadogReadbackUI+Model.Config : ToolUp.Platform.DatadogReadbackConfig { get }
+DatadogReadbackUI+Model.Logs : DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogLogsResponse] { get }
+DatadogReadbackUI+Model.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogMetricResponse]]] { get }
+DatadogReadbackUI+Model.Monitors : DatadogReadbackUI+LoadState`1[ToolUp.Platform.DatadogMonitorsResponse] { get }
+DatadogReadbackUI+Msg (class)
+DatadogReadbackUI+Msg.IsLogsLoaded : System.Boolean { get }
+DatadogReadbackUI+Msg.IsMetricLoaded : System.Boolean { get }
+DatadogReadbackUI+Msg.IsMonitorsLoaded : System.Boolean { get }
+DatadogReadbackUI+Msg.IsRefreshLogs : System.Boolean { get }
+DatadogReadbackUI+Msg.IsRefreshMetrics : System.Boolean { get }
+DatadogReadbackUI+Msg.IsRefreshMonitors : System.Boolean { get }
+DatadogReadbackUI+Msg.IsSwitchTab : System.Boolean { get }
+DatadogReadbackUI+Msg.RefreshLogs : DatadogReadbackUI+Msg { get }
+DatadogReadbackUI+Msg.RefreshMetrics : DatadogReadbackUI+Msg { get }
+DatadogReadbackUI+Msg.RefreshMonitors : DatadogReadbackUI+Msg { get }
+DatadogReadbackUI+Msg.Tag : System.Int32 { get }
+DatadogReadbackUI+Msg+LogsLoaded (class)
+DatadogReadbackUI+Msg+LogsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatadogLogsResponse, System.String] { get }
+DatadogReadbackUI+Msg+MetricLoaded (class)
+DatadogReadbackUI+Msg+MetricLoaded.Item1 : System.String { get }
+DatadogReadbackUI+Msg+MetricLoaded.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatadogMetricResponse, System.String] { get }
+DatadogReadbackUI+Msg+MonitorsLoaded (class)
+DatadogReadbackUI+Msg+MonitorsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatadogMonitorsResponse, System.String] { get }
+DatadogReadbackUI+Msg+SwitchTab (class)
+DatadogReadbackUI+Msg+SwitchTab.Item : DatadogReadbackUI+Tab { get }
+DatadogReadbackUI+Msg+Tags (class)
+DatadogReadbackUI+Msg+Tags.LogsLoaded : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.MetricLoaded : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.MonitorsLoaded : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.RefreshLogs : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.RefreshMetrics : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.RefreshMonitors : System.Int32 (literal)
+DatadogReadbackUI+Msg+Tags.SwitchTab : System.Int32 (literal)
+DatadogReadbackUI+Tab (class)
+DatadogReadbackUI+Tab.IsKeyMetricsTab : System.Boolean { get }
+DatadogReadbackUI+Tab.IsMonitorsTab : System.Boolean { get }
+DatadogReadbackUI+Tab.IsRecentErrorsTab : System.Boolean { get }
+DatadogReadbackUI+Tab.KeyMetricsTab : DatadogReadbackUI+Tab { get }
+DatadogReadbackUI+Tab.MonitorsTab : DatadogReadbackUI+Tab { get }
+DatadogReadbackUI+Tab.RecentErrorsTab : DatadogReadbackUI+Tab { get }
+DatadogReadbackUI+Tab.Tag : System.Int32 { get }
+DatadogReadbackUI+Tab+Tags (class)
+DatadogReadbackUI+Tab+Tags.KeyMetricsTab : System.Int32 (literal)
+DatadogReadbackUI+Tab+Tags.MonitorsTab : System.Int32 (literal)
+DatadogReadbackUI+Tab+Tags.RecentErrorsTab : System.Int32 (literal)
 FileManagerUI (class)
 FileManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 FileManagerUI.init() : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -3066,7 +3136,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.DatadogReadbackMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3082,6 +3152,7 @@ ToolUp.Platform.ClientConfig.ConsentProvider : ToolUp.Platform.ConsentProviderMo
 ToolUp.Platform.ClientConfig.DataIngestionAdmin : ToolUp.Platform.DataIngestionAdminMode { get }
 ToolUp.Platform.ClientConfig.DataManager : ToolUp.Platform.DataManagerMode { get }
 ToolUp.Platform.ClientConfig.DataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMode { get }
+ToolUp.Platform.ClientConfig.DatadogReadback : ToolUp.Platform.DatadogReadbackMode { get }
 ToolUp.Platform.ClientConfig.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.EnableElmishConsoleTrace : System.Boolean { get }
 ToolUp.Platform.ClientConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
@@ -3673,6 +3744,37 @@ ToolUp.Platform.DataTypeDisplayModule.render(ToolUp.Platform.DataTypeDisplay, Mi
 ToolUp.Platform.DataTypeDisplayModule.tryDecode`1(ProcessedDataTypes+ProcessedData) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
 ToolUp.Platform.DataTypeDisplayModule.typedWith`1(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]], DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay
 ToolUp.Platform.DataTypeDisplayModule.typed`1(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay
+ToolUp.Platform.DatadogReadbackMessages (class)
+ToolUp.Platform.DatadogReadbackMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String])
+ToolUp.Platform.DatadogReadbackMessages.ColumnHost : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnLastTransition : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnLevel : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnMessage : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnMonitor : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnService : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnStatus : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnTags : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.ColumnTime : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.DegradedWarning : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.DatadogReadbackMessages.ErrorsFootnote : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.KeyMetricsTab : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.Loading : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.MetricsFootnote : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.MonitorsFootnote : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.MonitorsTab : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.NeverTransitioned : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.NoErrors : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.NoMonitors : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.NoPoints : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.RecentErrorsTab : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.Refresh : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.Refreshing : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.StatusAlert : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.StatusNoData : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.StatusOk : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.StatusUnknown : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.StatusWarn : System.String { get }
+ToolUp.Platform.DatadogReadbackMessages.WindowLabel : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
 ToolUp.Platform.ErasedModule (class)
 ToolUp.Platform.ErasedModule..ctor(ToolUp.Platform.ModuleDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], ToolUp.Platform.PageContent]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ModuleAvailability, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+SidebarPlacement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Object]])
 ToolUp.Platform.ErasedModule.ActionDecoder : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object]]] { get }
@@ -4394,7 +4496,7 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
@@ -4404,6 +4506,7 @@ ToolUp.Platform.MessageCatalog.CompositionInspector : ToolUp.Platform.Compositio
 ToolUp.Platform.MessageCatalog.Consent : ToolUp.Platform.ConsentMessages { get }
 ToolUp.Platform.MessageCatalog.DataIngestion : ToolUp.Platform.DataIngestionMessages { get }
 ToolUp.Platform.MessageCatalog.DataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMessages { get }
+ToolUp.Platform.MessageCatalog.DatadogReadback : ToolUp.Platform.DatadogReadbackMessages { get }
 ToolUp.Platform.MessageCatalog.FileManager : ToolUp.Platform.FileManagerMessages { get }
 ToolUp.Platform.MessageCatalog.HealthMonitor : ToolUp.Platform.HealthMonitorMessages { get }
 ToolUp.Platform.MessageCatalog.Home : ToolUp.Platform.HomeMessages { get }

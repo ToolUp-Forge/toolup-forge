@@ -4221,6 +4221,127 @@ ToolUp.Platform.DataVocabularyPack.Entries : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.DataVocabularyPack.Id : System.String { get }
 ToolUp.Platform.DataVocabularyPack.Namespace : System.String { get }
 ToolUp.Platform.DataVocabularyPack.Version : ToolUp.Platform.VocabularyPackVersion { get }
+ToolUp.Platform.DatadogLogEvent (class)
+ToolUp.Platform.DatadogLogEvent..ctor(System.DateTime, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DatadogLogEvent.Host : System.String { get }
+ToolUp.Platform.DatadogLogEvent.Level : System.String { get }
+ToolUp.Platform.DatadogLogEvent.Message : System.String { get }
+ToolUp.Platform.DatadogLogEvent.Service : System.String { get }
+ToolUp.Platform.DatadogLogEvent.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DatadogLogEvent.Timestamp : System.DateTime { get }
+ToolUp.Platform.DatadogLogsResponse (class)
+ToolUp.Platform.DatadogLogsResponse..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogLogEvent], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DatadogLogsResponse.Events : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogLogEvent] { get }
+ToolUp.Platform.DatadogLogsResponse.Warning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DatadogMetricResponse (class)
+ToolUp.Platform.DatadogMetricResponse..ctor(ToolUp.Platform.DatadogMetricSeries, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DatadogMetricResponse.Series : ToolUp.Platform.DatadogMetricSeries { get }
+ToolUp.Platform.DatadogMetricResponse.Warning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DatadogMetricSeries (class)
+ToolUp.Platform.DatadogMetricSeries..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.DateTime, System.Double]], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DatadogMetricSeries.Metric : System.String { get }
+ToolUp.Platform.DatadogMetricSeries.Points : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.DateTime, System.Double]] { get }
+ToolUp.Platform.DatadogMetricSeries.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DatadogMonitorState (class)
+ToolUp.Platform.DatadogMonitorState..ctor(System.Int64, System.String, ToolUp.Platform.DatadogMonitorStatus, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.DatadogMonitorState.Id : System.Int64 { get }
+ToolUp.Platform.DatadogMonitorState.LastTransitionUtc : System.DateTime { get }
+ToolUp.Platform.DatadogMonitorState.Name : System.String { get }
+ToolUp.Platform.DatadogMonitorState.Status : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorState.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DatadogMonitorStatus (class)
+ToolUp.Platform.DatadogMonitorStatus.Alert : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorStatus.IsAlert : System.Boolean { get }
+ToolUp.Platform.DatadogMonitorStatus.IsNoData : System.Boolean { get }
+ToolUp.Platform.DatadogMonitorStatus.IsOK : System.Boolean { get }
+ToolUp.Platform.DatadogMonitorStatus.IsUnknown : System.Boolean { get }
+ToolUp.Platform.DatadogMonitorStatus.IsWarn : System.Boolean { get }
+ToolUp.Platform.DatadogMonitorStatus.NoData : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorStatus.OK : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorStatus.Tag : System.Int32 { get }
+ToolUp.Platform.DatadogMonitorStatus.Unknown : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorStatus.Warn : ToolUp.Platform.DatadogMonitorStatus { get }
+ToolUp.Platform.DatadogMonitorStatus+Tags (class)
+ToolUp.Platform.DatadogMonitorStatus+Tags.Alert : System.Int32 (literal)
+ToolUp.Platform.DatadogMonitorStatus+Tags.NoData : System.Int32 (literal)
+ToolUp.Platform.DatadogMonitorStatus+Tags.OK : System.Int32 (literal)
+ToolUp.Platform.DatadogMonitorStatus+Tags.Unknown : System.Int32 (literal)
+ToolUp.Platform.DatadogMonitorStatus+Tags.Warn : System.Int32 (literal)
+ToolUp.Platform.DatadogMonitorStatusModule (class)
+ToolUp.Platform.DatadogMonitorStatusModule.ofOverallState(System.String) : ToolUp.Platform.DatadogMonitorStatus
+ToolUp.Platform.DatadogMonitorsResponse (class)
+ToolUp.Platform.DatadogMonitorsResponse..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogMonitorState], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DatadogMonitorsResponse.Monitors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogMonitorState] { get }
+ToolUp.Platform.DatadogMonitorsResponse.Warning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DatadogReadback (class)
+ToolUp.Platform.DatadogReadback.ApiKeySecret : System.String (literal)
+ToolUp.Platform.DatadogReadback.ApplicationKeySecret : System.String (literal)
+ToolUp.Platform.DatadogReadback.AuditSourceModule : System.String (literal)
+ToolUp.Platform.DatadogReadback.DefaultErrorQuery : System.String (literal)
+ToolUp.Platform.DatadogReadback.ReadbackFailedEvent : System.String (literal)
+ToolUp.Platform.DatadogReadback.SecretScope : System.String (literal)
+ToolUp.Platform.DatadogReadback.clampLogLimit(System.Int32, System.Int32) : System.Int32
+ToolUp.Platform.DatadogReadback.clampWindowMinutes(System.Int32, System.Int32) : System.Int32
+ToolUp.Platform.DatadogReadback.defaultChartedMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DatadogReadbackConfig (class)
+ToolUp.Platform.DatadogReadbackConfig..ctor(ToolUp.Platform.DatadogRegion, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int32)
+ToolUp.Platform.DatadogReadbackConfig.DefaultTags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DatadogReadbackConfig.DefaultWindowMinutes : System.Int32 { get }
+ToolUp.Platform.DatadogReadbackConfig.LogPageLimit : System.Int32 { get }
+ToolUp.Platform.DatadogReadbackConfig.Region : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogReadbackConfigModule (class)
+ToolUp.Platform.DatadogReadbackConfigModule.defaults : ToolUp.Platform.DatadogReadbackConfig { get }
+ToolUp.Platform.DatadogReadbackError (class)
+ToolUp.Platform.DatadogReadbackError.IsDatadogApiError : System.Boolean { get }
+ToolUp.Platform.DatadogReadbackError.IsMissingCredential : System.Boolean { get }
+ToolUp.Platform.DatadogReadbackError.IsTransportFailure : System.Boolean { get }
+ToolUp.Platform.DatadogReadbackError.Tag : System.Int32 { get }
+ToolUp.Platform.DatadogReadbackError+DatadogApiError (class)
+ToolUp.Platform.DatadogReadbackError+DatadogApiError.body : System.String { get }
+ToolUp.Platform.DatadogReadbackError+DatadogApiError.status : System.Int32 { get }
+ToolUp.Platform.DatadogReadbackError+MissingCredential (class)
+ToolUp.Platform.DatadogReadbackError+MissingCredential.key : System.String { get }
+ToolUp.Platform.DatadogReadbackError+Tags (class)
+ToolUp.Platform.DatadogReadbackError+Tags.DatadogApiError : System.Int32 (literal)
+ToolUp.Platform.DatadogReadbackError+Tags.MissingCredential : System.Int32 (literal)
+ToolUp.Platform.DatadogReadbackError+Tags.TransportFailure : System.Int32 (literal)
+ToolUp.Platform.DatadogReadbackError+TransportFailure (class)
+ToolUp.Platform.DatadogReadbackError+TransportFailure.message : System.String { get }
+ToolUp.Platform.DatadogReadbackErrorModule (class)
+ToolUp.Platform.DatadogReadbackErrorModule.describe(ToolUp.Platform.DatadogReadbackError) : System.String
+ToolUp.Platform.DatadogReadbackErrorModule.statusTag(ToolUp.Platform.DatadogReadbackError) : System.String
+ToolUp.Platform.DatadogReadbackMode (class)
+ToolUp.Platform.DatadogReadbackMode.IsEnabledDatadogReadback : System.Boolean { get }
+ToolUp.Platform.DatadogReadbackMode.IsNoDatadogReadback : System.Boolean { get }
+ToolUp.Platform.DatadogReadbackMode.NoDatadogReadback : ToolUp.Platform.DatadogReadbackMode { get }
+ToolUp.Platform.DatadogReadbackMode.Tag : System.Int32 { get }
+ToolUp.Platform.DatadogReadbackMode+EnabledDatadogReadback (class)
+ToolUp.Platform.DatadogReadbackMode+EnabledDatadogReadback.Item : ToolUp.Platform.DatadogReadbackConfig { get }
+ToolUp.Platform.DatadogReadbackMode+Tags (class)
+ToolUp.Platform.DatadogReadbackMode+Tags.EnabledDatadogReadback : System.Int32 (literal)
+ToolUp.Platform.DatadogReadbackMode+Tags.NoDatadogReadback : System.Int32 (literal)
+ToolUp.Platform.DatadogRegion (class)
+ToolUp.Platform.DatadogRegion.AP1 : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogRegion.EU : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogRegion.IsAP1 : System.Boolean { get }
+ToolUp.Platform.DatadogRegion.IsEU : System.Boolean { get }
+ToolUp.Platform.DatadogRegion.IsUS : System.Boolean { get }
+ToolUp.Platform.DatadogRegion.IsUS3 : System.Boolean { get }
+ToolUp.Platform.DatadogRegion.IsUS5 : System.Boolean { get }
+ToolUp.Platform.DatadogRegion.Tag : System.Int32 { get }
+ToolUp.Platform.DatadogRegion.US : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogRegion.US3 : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogRegion.US5 : ToolUp.Platform.DatadogRegion { get }
+ToolUp.Platform.DatadogRegion+Tags (class)
+ToolUp.Platform.DatadogRegion+Tags.AP1 : System.Int32 (literal)
+ToolUp.Platform.DatadogRegion+Tags.EU : System.Int32 (literal)
+ToolUp.Platform.DatadogRegion+Tags.US : System.Int32 (literal)
+ToolUp.Platform.DatadogRegion+Tags.US3 : System.Int32 (literal)
+ToolUp.Platform.DatadogRegion+Tags.US5 : System.Int32 (literal)
+ToolUp.Platform.DatadogRegionModule (class)
+ToolUp.Platform.DatadogRegionModule.baseUrl(ToolUp.Platform.DatadogRegion) : System.String
+ToolUp.Platform.DatadogRegionModule.host(ToolUp.Platform.DatadogRegion) : System.String
+ToolUp.Platform.DatadogRegionModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatadogRegion]
 ToolUp.Platform.DatasetColumn (class)
 ToolUp.Platform.DatasetColumn..ctor(System.String, ToolUp.Platform.DatasetDType, System.Boolean, ToolUp.Platform.DatasetColumnRole)
 ToolUp.Platform.DatasetColumn.DType : ToolUp.Platform.DatasetDType { get }
@@ -6784,6 +6905,10 @@ ToolUp.Platform.IDataMigrator.DataTypeId : System.String { get }
 ToolUp.Platform.IDataMigrator.FromVersion : System.Int32 { get }
 ToolUp.Platform.IDataMigrator.Migrate(System.Object) : Microsoft.FSharp.Control.FSharpAsync`1[System.Object]
 ToolUp.Platform.IDataMigrator.ToVersion : System.Int32 { get }
+ToolUp.Platform.IDatadogReadbackApi (interface)
+ToolUp.Platform.IDatadogReadbackApi.GetMonitors(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogMonitorState], ToolUp.Platform.DatadogReadbackError]]
+ToolUp.Platform.IDatadogReadbackApi.QueryMetric(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatadogMetricSeries, ToolUp.Platform.DatadogReadbackError]]
+ToolUp.Platform.IDatadogReadbackApi.SearchLogs(System.String, System.DateTime, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatadogLogEvent], ToolUp.Platform.DatadogReadbackError]]
 ToolUp.Platform.IDeployRecordSealer (interface)
 ToolUp.Platform.IDeployRecordSealer.Scheme() : System.String
 ToolUp.Platform.IDeployRecordSealer.Seal(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployRecordSeal, System.String]]
@@ -10828,7 +10953,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.NotificationPreferenceMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, System.Boolean, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.CrdtDocumentMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, ToolUp.Platform.BackupMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.Boolean, ToolUp.Platform.LogStoreMode, ToolUp.Platform.MetricsHistoryMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.NotificationPreferenceMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, System.Boolean, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.CrdtDocumentMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, ToolUp.Platform.BackupMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.Boolean, ToolUp.Platform.LogStoreMode, ToolUp.Platform.MetricsHistoryMode, ToolUp.Platform.DatadogReadbackMode)
 ToolUp.Platform.ServerConfig.AcceptAnonymousModeWithAI : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralShareTokenKey : System.Boolean { get }
@@ -10873,6 +10998,7 @@ ToolUp.Platform.ServerConfig.CrdtDocuments : ToolUp.Platform.CrdtDocumentMode { 
 ToolUp.Platform.ServerConfig.DataIngestion : ToolUp.Platform.DataIngestionMode { get }
 ToolUp.Platform.ServerConfig.DataMigrations : ToolUp.Platform.DataMigrationMode { get }
 ToolUp.Platform.ServerConfig.DataSubjectRequests : ToolUp.Platform.DataSubjectRequestMode { get }
+ToolUp.Platform.ServerConfig.DatadogReadback : ToolUp.Platform.DatadogReadbackMode { get }
 ToolUp.Platform.ServerConfig.Datasets : ToolUp.Platform.DatasetStoreMode { get }
 ToolUp.Platform.ServerConfig.DeclaredDataSchemas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry] { get }
 ToolUp.Platform.ServerConfig.DefaultTeamStorageQuotaBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }

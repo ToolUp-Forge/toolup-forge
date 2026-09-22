@@ -3738,6 +3738,24 @@ module Client =
             | ConfiguredHealthMonitor cfg -> [ HealthMonitorUI.create (Some cfg) ]
             | ExternalHealthMonitor custom -> [ custom ]
 
+        // Phase 9w — the Datadog readback admin. Opt-in (the default is
+        // `NoDatadogReadback`), and gated the same way HealthMonitor is:
+        // monitor state and error logs are deployment-wide data, so the
+        // module declares `NavRole.PlatformAdminOnly` and the endpoints
+        // enforce the same predicate server-side. Mode-agnostic for the
+        // same reason as the built-ins above — a bootstrapped admin in
+        // any mode reaches it, and non-admins never see the entry.
+        //
+        // It coins the "Observability" sidebar group. `HealthMonitorUI`
+        // deliberately stays in "Platform Management": its group name is
+        // still read by the Phase 567 area derivation and the no-active-
+        // team admin escape, so moving it is a behaviour change rather
+        // than a relabel, and this phase does not need it.
+        let datadogReadback =
+            match config.DatadogReadback with
+            | NoDatadogReadback -> []
+            | EnabledDatadogReadback readbackConfig -> [ DatadogReadbackUI.create readbackConfig ]
+
         // Phase 9p.A — service-status-board admin. Same Platform-Admin
         // gating as HealthMonitor: composes deployment-wide observability
         // surfaces (Health, Preflight, Drift, RateLimit, JobQueue,
@@ -3917,6 +3935,7 @@ module Client =
             // so its first-occurrence lands at the bottom of the sidebar.
             @ platformAdmin
             @ healthMonitor
+            @ datadogReadback
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
             @ migrationAdmin

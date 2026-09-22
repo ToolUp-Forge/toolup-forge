@@ -2809,6 +2809,22 @@ ToolUp.Platform.DataSubjectRequestLifecycle.create(System.IServiceProvider) : To
 ToolUp.Platform.DataSubjectRequestLifecycle.exportArchive(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleExportArchive, System.String]]
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle (class)
 ToolUp.Platform.DataSubjectRequestLifecycle+DataSubjectRequestLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.DatadogReadbackHandlers (class)
+ToolUp.Platform.DatadogReadbackHandlers.routes(ToolUp.Platform.DatadogReadbackConfig) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
+ToolUp.Platform.DatadogReadbackHandlers+DatadogReadbackFailure (class)
+ToolUp.Platform.DatadogReadbackHandlers+DatadogReadbackFailure..ctor(System.String, System.String, System.String)
+ToolUp.Platform.DatadogReadbackHandlers+DatadogReadbackFailure.Endpoint : System.String { get }
+ToolUp.Platform.DatadogReadbackHandlers+DatadogReadbackFailure.Reason : System.String { get }
+ToolUp.Platform.DatadogReadbackHandlers+DatadogReadbackFailure.Status : System.String { get }
+ToolUp.Platform.DatadogReadbackMetrics (class)
+ToolUp.Platform.DatadogReadbackMetrics.EndpointLogs : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.EndpointMetric : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.EndpointMonitors : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.EndpointTagKey : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.ErrorsTotal : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.RequestsTotal : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.StatusTagKey : System.String (literal)
+ToolUp.Platform.DatadogReadbackMetrics.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
 ToolUp.Platform.DatasetAssemblyExecutor (class)
 ToolUp.Platform.DatasetAssemblyExecutor..ctor(ToolUp.Platform.IDatasetStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITimeSeriesStore], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ExternalTableBinding, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]]]])
 ToolUp.Platform.DatasetAssemblyExecutorModule (class)
