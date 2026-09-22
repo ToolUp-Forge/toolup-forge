@@ -14,6 +14,7 @@ let main argv =
     let commands = [
         VersionCommand.command
         DockerEmitCommand.command
+        K8sEmitCommand.command
         StampCommand.command
         ModuleCommand.addCommand
         ModuleCommand.removeCommand
