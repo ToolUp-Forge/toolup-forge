@@ -38,7 +38,7 @@ let private draft subjectMember metricId inputHash value : FactDraft = {
     Disclosure = Disclosure.Surfaceable
 }
 
-let private assertOk label (store: IFactStore) scope d = async {
+let private assertOk label (store: IFactStore) (scope: string) d = async {
     let! r = store.Assert(scope, d)
 
     match r with
@@ -46,7 +46,7 @@ let private assertOk label (store: IFactStore) scope d = async {
     | Error e -> return failtestf "%s: expected Ok, got %s" label e
 }
 
-let private assertBatchOk label (store: IFactStore) scope drafts = async {
+let private assertBatchOk label (store: IFactStore) (scope: string) drafts = async {
     let! r = store.AssertBatch(scope, drafts)
 
     match r with
@@ -56,7 +56,7 @@ let private assertBatchOk label (store: IFactStore) scope drafts = async {
 
 /// The whole of a scope's fact base, current heads and superseded alike —
 /// the state two write paths have to agree on.
-let private wholeStore (store: IFactStore) scope = async {
+let private wholeStore (store: IFactStore) (scope: string) = async {
     let! facts =
         store.Query(
             scope,

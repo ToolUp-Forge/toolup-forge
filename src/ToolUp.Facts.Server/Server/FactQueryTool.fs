@@ -273,7 +273,7 @@ module FactQueryTool =
         (gate: IFactDisclosureGate)
         (registry: Grounding.IMetricRegistry option)
         (clock: unit -> DateTime)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
         : Async<string> =
@@ -290,12 +290,12 @@ module FactQueryTool =
                     IncludeSuperseded = args.IncludeSuperseded
                 }
 
-                let! facts = store.Query(scopeId, query)
+                let! facts = store.Query(scope, query)
 
                 // Disclosure at the door (559.B): one gate check over
                 // every returned id at the FactToolResult surface. The
                 // gate audits each deny (GP 6).
-                let! verdicts = gate.Check(scopeId, principal, FactToolResult, facts |> List.map _.FactId)
+                let! verdicts = gate.Check(scope, principal, FactToolResult, facts |> List.map _.FactId)
 
                 // An id the gate returned no verdict for is denied,
                 // conservatively — the door never fails open.
@@ -344,7 +344,7 @@ module FactQueryTool =
                         // The fact's successor, if a later assertion
                         // superseded it (an AsOf reconstruction, or an
                         // include_superseded history read).
-                        let! chain = store.QuerySupersessionChain(scopeId, fact.FactId)
+                        let! chain = store.QuerySupersessionChain(scope, fact.FactId)
 
                         let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some fact.FactId)
 
@@ -379,15 +379,13 @@ module FactQueryTool =
 
     // ── HttpContext adapter (the registered executor) ─────────────
 
-    /// The caller's resolved storage-scope id — the same tenant boundary
-    /// the store shards by and the gate resolves fact ids within (GP 4).
-    let private scopeIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> scope.ScopeId
-        | _ ->
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
+    // Phase 797 — the scope is not read from the request items here. The
+    // door asks `ScopeResolution.forRequest`, which returns the
+    // `ResolvedScope` the scope-resolution middleware minted for this
+    // request or the explicit anonymous scope, and nothing a caller can
+    // fabricate. There is no user-id rung and no literal fallback: an
+    // unresolved request reads the anonymous shard, which holds only what
+    // was asserted anonymously.
 
     let private userIdOf (ctx: HttpContext) : string =
         match ctx.Items.TryGetValue "ToolUp.UserId" with
@@ -408,7 +406,14 @@ module FactQueryTool =
         | Some store, Some gate ->
             let registry = serviceOf<Grounding.IMetricRegistry> ctx
 
-            executeWith store gate registry (fun () -> DateTime.UtcNow) (scopeIdOf ctx) (userIdOf ctx) argsJson
+            executeWith
+                store
+                gate
+                registry
+                (fun () -> DateTime.UtcNow)
+                (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                (userIdOf ctx)
+                argsJson
         | _ -> async {
             return
                 serialize {|

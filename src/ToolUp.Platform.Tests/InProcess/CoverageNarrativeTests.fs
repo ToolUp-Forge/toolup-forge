@@ -89,7 +89,7 @@ type private RecordingIngestor(refuse: string option) =
 /// `unknown-fact` — the conservative contract the real gate honours.
 type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     interface IFactDisclosureGate with
-        member _.Check(_scopeId, _principal, _surface, factIds) = async {
+        member _.Check(_scopeId: string, _principal: string, _surface: FactEgressSurface, factIds: string list) = async {
             return
                 factIds
                 |> List.map (fun id ->
@@ -99,6 +99,10 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
                 |> Map.ofList
         }
+
+        // Phase 797 — the typed form delegates to the string form above.
+        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
+            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Registry + coverage fixtures ──────────────────────────────────
 

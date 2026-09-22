@@ -901,6 +901,35 @@ type BlobFactStore
 
     interface IFactStore with
 
+        // ── Phase 797 — the request-path form. Each typed member is the
+        // string member over the resolved scope's shard key; the store
+        // keys on nothing else, so the two forms cannot diverge. ──
+
+        member this.Assert(scope: ResolvedScope, draft: FactDraft) : Async<Result<Fact, string>> =
+            (this :> IFactStore).Assert(scope.ScopeId, draft)
+
+        member this.AssertBatch
+            (scope: ResolvedScope, drafts: FactDraft list)
+            : Async<Result<BatchAssertReceipt, string>> =
+            (this :> IFactStore).AssertBatch(scope.ScopeId, drafts)
+
+        member this.Get(scope: ResolvedScope, factId: string) : Async<Fact option> =
+            (this :> IFactStore).Get(scope.ScopeId, factId)
+
+        member this.Query(scope: ResolvedScope, query: FactQuery) : Async<Fact list> =
+            (this :> IFactStore).Query(scope.ScopeId, query)
+
+        member this.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) : Async<FactWithCompetition list> =
+            (this :> IFactStore).QueryWithCompetition(scope.ScopeId, query)
+
+        member this.QuerySupersessionChain(scope: ResolvedScope, factId: string) : Async<Fact list> =
+            (this :> IFactStore).QuerySupersessionChain(scope.ScopeId, factId)
+
+        member this.QueryPopulation
+            (scope: ResolvedScope, query: PopulationQuery)
+            : Async<Result<PopulationResult, string>> =
+            (this :> IFactStore).QueryPopulation(scope.ScopeId, query)
+
         member _.Assert(scopeId: string, draft: FactDraft) : Async<Result<Fact, string>> = async {
             try
                 // Phase 704 — a batch of one. The content address, the

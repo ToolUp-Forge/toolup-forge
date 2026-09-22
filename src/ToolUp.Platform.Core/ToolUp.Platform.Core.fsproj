@@ -158,6 +158,11 @@
              Migrations. BCL-only, no server coupling. -->
         <Compile Include="Shared\MigrationTypes.fs" />
         <Compile Include="Shared\Interfaces\IFileProcessor.fs" />
+        <!-- Phase 797 — `StorageScope` + the resolver-minted `ResolvedScope`,
+             ahead of VectorKnowledgeTypes.fs so IFactDisclosureGate can take
+             the typed scope. StorageScope.fs below keeps the resolver's
+             request and error types (they need AuthenticatedUser). -->
+        <Compile Include="Shared\Types\ResolvedScope.fs" />
         <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
         <!-- Phase 648 — the provenance walk's read-only wire contract: the
              Fable-safe mirrors of the server-tier node / edge / ref records,

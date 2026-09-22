@@ -64,6 +64,7 @@ Migration notes:
 - [783-remoting-decode-named-refusals](docs/migrations/783-remoting-decode-named-refusals.md)
 - [788-elmish-ring-and-sub-diff-theorems](docs/migrations/788-elmish-ring-and-sub-diff-theorems.md)
 - [793-tool-effect-class](docs/migrations/793-tool-effect-class.md)
+- [797-scope-choke-point](docs/migrations/797-scope-choke-point.md)
 - [800-close-the-combinator-gaps](docs/migrations/800-close-the-combinator-gaps.md)
 - [803-fable-reader-parity](docs/migrations/803-fable-reader-parity.md)
 - [806-entity-actor](docs/migrations/806-entity-actor.md)
@@ -74,7 +75,7 @@ Migration notes:
 - [per-module-ai-queryability](docs/migrations/per-module-ai-queryability.md)
 - [upgrading-to-1.0](docs/migrations/upgrading-to-1.0.md)
 
-_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added, 87 members changed, 1382 members removed; 18 packages new, 2 packages withdrawn._
+_Surface since `v0.22.0`: **breaking** — 63 packages moved; 7949 members added, 90 members changed, 1382 members removed; 18 packages new, 2 packages withdrawn._
 
 ### Added
 
@@ -345,7 +346,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `ToolUp.Facts.FactDisclosureAccessedEvent.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
   - `ToolUp.Facts.FactDisclosureAccessedEvent.FactId : System.String { get }`
   - … and 29 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
-- `ToolUp.Facts.Server` — 161 members:
+- `ToolUp.Facts.Server` — 168 members:
   - `ToolUp.Facts.AssemblyTaint (class)`
   - `ToolUp.Facts.AssemblyTaint.contributedBy(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AssemblySource, ToolUp.Facts.TaintLabel], ToolUp.Platform.AssemblyTransform) : ToolUp.Facts.TaintLabel`
   - `ToolUp.Facts.AssemblyTaint.declassify(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, ToolUp.Facts.TaintLabel) : ToolUp.Facts.TaintLabel`
@@ -366,7 +367,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `ToolUp.Facts.DeclassificationAmendmentConfig..ctor(ToolUp.Platform.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit])`
   - `ToolUp.Facts.DeclassificationAmendmentConfig.Amendments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetAmendment] { get }`
   - `ToolUp.Facts.DeclassificationAmendmentConfig.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit] { get }`
-  - … and 141 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 148 more — `git diff v0.22.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Graph.Neo4j` — 1 member:
   - `ToolUp.Graph.Neo4j.CypherTranslation.isMalformedStatementCode(System.String) : System.Boolean`
 - `ToolUp.Hosts.DeliveredEgress` — new package (38 public members)
@@ -513,7 +514,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `AuditLogUI+LoadState.Loading : AuditLogUI+LoadState { get }`
   - `AuditLogUI+LoadState.Tag : System.Int32 { get }`
   - … and 2200 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 1511 members:
+- `ToolUp.Platform.Core` — 1520 members:
   - `ProcessedDataTypes+FileManagementApi.GetSessionInfo : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ProcessedDataTypes+SessionStoreInfo]] { get }`
   - `ProcessedDataTypes+ProcessedFileEntry.Summary : Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+ProcessedData] { get }`
   - `ProcessedDataTypes+ProcessedFileEntryModule (class)`
@@ -534,8 +535,8 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `ProcessedDataTypes.SessionStoreResetReasonProcessRestart : System.String (literal)`
   - `ToolUp.Platform.AIDenialGroupCount (class)`
   - `ToolUp.Platform.AIDenialGroupCount..ctor(System.String, System.Int32)`
-  - … and 1491 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 1619 members:
+  - … and 1500 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 1621 members:
   - `ToolUp.Platform.AccessAttestation (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload (class)`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AccessAttestation+AttestedApproval], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTimeOffset)`
@@ -556,7 +557,7 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources..ctor(ToolUp.Platform.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore], ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantAuthoritySurface])`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.ConsentVerifier : ToolUp.Platform.GrantConsentStore+IGrantConsentVerifier { get }`
   - `ToolUp.Platform.AccessAttestation+AccessAttestationSources.Consents : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentStore+IGrantConsentStore] { get }`
-  - … and 1599 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 1601 more — `git diff v0.22.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — new package (183 public members)
 - `ToolUp.PublicRendering` — 71 members:
   - `ToolUp.PublicRendering.ContentPreview.canMintPreviewLink(ToolUp.Platform.AccessContext) : System.Boolean`
@@ -693,8 +694,11 @@ _Surface since `v0.22.0`: **breaking** — 63 packages moved; 7931 members added
   - `ToolUp.Facts.DisclosurePolicy..ctor` — `ToolUp.Facts.DisclosurePolicy..ctor(System.String, ToolUp.Facts.DisclosureMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface])` → `ToolUp.Facts.DisclosurePolicy..ctor(System.String, ToolUp.Facts.DisclosureMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface], Microsoft.FSharp.Core.FSharpOption`1[System.String])`
   - `ToolUp.Facts.FactDisclosureDeclassifiedEvent..ctor` — `ToolUp.Facts.FactDisclosureDeclassifiedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Facts.FactDisclosureDeclassifiedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - `ToolUp.Facts.FactDisclosureDeniedEvent..ctor` — `ToolUp.Facts.FactDisclosureDeniedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Facts.FactDisclosureDeniedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
-- `ToolUp.Facts.Server` — 3 members:
+- `ToolUp.Facts.Server` — 6 members:
+  - `ToolUp.Facts.CoverageTool.executeWith` — `ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]` → `ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]`
   - `ToolUp.Facts.FactDisclosureGate..ctor` — `ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig])` → `ToolUp.Facts.FactDisclosureGate..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosurePurposeConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudgetConfig])`
+  - `ToolUp.Facts.FactQueryTool.executeWith` — `ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]` → `ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]`
+  - `ToolUp.Facts.PopulationQueryTool.executeWith` — `ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]` → `ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]`
   - `ToolUp.Facts.TaintCrossing..ctor` — `ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String)` → `ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - `ToolUp.Facts.TaintOutcome..ctor` — `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing])` → `ToolUp.Facts.TaintOutcome..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintCrossing], ToolUp.Facts.TaintLabel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosureFinding])`
 - `ToolUp.Forms.Server` — 3 members:

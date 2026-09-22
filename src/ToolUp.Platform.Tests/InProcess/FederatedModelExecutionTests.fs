@@ -1068,7 +1068,7 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
     member val Calls = ResizeArray<string * FactEgressSurface * string list * string>() with get
 
     interface IFactDisclosureGate with
-        member this.Check(scopeId, principal, surface, factIds) = async {
+        member this.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
             this.Calls.Add(scopeId, surface, factIds, claimed.Value)
             ignore principal
 
@@ -1078,6 +1078,10 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
                     id, verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
                 |> Map.ofList
         }
+
+        // Phase 797 — the typed form delegates to the string form above.
+        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
+            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 let private authorityLevelTests =
     testList "the levels are ordered and read fail-closed" [

@@ -33,6 +33,15 @@ Four implementations, one per mode:
 | `AuthenticatedScopeResolver` | Required | `user-{userId}` | Yes |
 | `TeamScopeResolver` | Required + active team lookup | `team-{teamId}` | Yes |
 
+**The fact tier's typed scope (Phase 797).** The resolver's `StorageScope` is what the rest of the
+platform carries in `HttpContext.Items`; the fact store, the disclosure gate and the three fact AI
+tools additionally take a `ResolvedScope` — a value with a private representation that only the
+scope-resolution middleware can mint (`ScopeResolution.remember`) and that a door reads back with
+`ScopeResolution.forRequest`. A request the middleware resolved no scope for reads the explicit
+anonymous scope, a shard of its own. The string-keyed members remain for scopes the platform
+carries rather than resolves (jobs, imports, sweeps); the typed form is the string form over
+`scope.ScopeId`. See `docs/migrations/797-scope-choke-point.md`.
+
 ### Client-side session management
 
 `UserSession.fs` mirrors the mode on the client:
