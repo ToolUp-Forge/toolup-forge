@@ -37,7 +37,7 @@ let tests =
 
     let sampleEnvelope (scopeId: string) : NotificationEnvelope =
         let payload: PushEnvelope = {
-            RecipientUserIds = [ "user-x" ]
+            Recipients = [ RecipientId.User "user-x" ]
             Title = "Test push"
             Body = "Body"
             DeepLink = None

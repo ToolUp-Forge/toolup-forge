@@ -392,7 +392,9 @@ let tests =
                 Expect.hasLength emails 2 "one transactional envelope per audience"
 
                 Expect.equal
-                    (emails |> List.collect _.RecipientUserIds |> List.sort)
+                    (emails
+                     |> List.collect (fun e -> e.Recipients |> List.map RecipientId.toAuditString)
+                     |> List.sort)
                     [ "alice"; "dpo-user" ]
                     "addressed to the grantee and the resolved party — the affected principals"
 

@@ -80,13 +80,18 @@ let private categories = [
 
 let private email (userIds: string list) : Notification =
     TransactionalEmail {
-        RecipientUserIds = userIds
+        Recipients = RecipientId.ofUserIds userIds
         Content = InlineEmail("Subject", "Body", None)
         CorrelationId = Some "corr-1"
     }
 
+/// The recipients of a notification as bare user ids. Phase 6f.A
+/// widened the envelopes to `RecipientId`; these cases are all about
+/// the per-user preference machinery, so they keep asserting on user
+/// ids and this helper does the projection once.
 let private recipientsOf (n: Notification) =
     fst (NotificationPreferenceFilter.recipientsOf n)
+    |> List.map RecipientId.toAuditString
 
 type private Harness = {
     Store: INotificationPreferenceStore
@@ -241,7 +246,7 @@ let tests =
 
                 let sms =
                     TransactionalSms {
-                        RecipientUserIds = [ "alice" ]
+                        Recipients = [ RecipientId.User "alice" ]
                         Body = "b"
                         CorrelationId = None
                     }
@@ -451,7 +456,7 @@ let tests =
                     h
                     "reports.summary"
                     (TransactionalEmail {
-                        RecipientUserIds = [ "alice" ]
+                        Recipients = [ RecipientId.User "alice" ]
                         Content = InlineEmail("Second", "More", None)
                         CorrelationId = None
                     })
@@ -466,7 +471,7 @@ let tests =
                 match h.Inner.Published with
                 | [ s, TransactionalEmail e ] ->
                     Expect.equal s scope "published in the user's scope"
-                    Expect.equal e.RecipientUserIds [ "alice" ] "to alice"
+                    Expect.equal e.Recipients [ RecipientId.User "alice" ] "to alice"
                     Expect.equal e.CorrelationId (Some expectedMarker) "digest marker"
                     Expect.isTrue (expectedMarker.StartsWith "digest:daily:") "marker shape"
 

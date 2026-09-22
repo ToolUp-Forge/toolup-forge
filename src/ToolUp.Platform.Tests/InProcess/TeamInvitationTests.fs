@@ -1004,7 +1004,7 @@ let inviteExpiryNotificationTests =
             match published with
             | [ scope, TransactionalEmail envelope ] ->
                 Expect.equal scope "team-teamN" "published under the team scope"
-                Expect.equal envelope.RecipientUserIds [ "alice@example.com" ] "addressed to the inviter"
+                Expect.equal envelope.Recipients [ RecipientId.User "alice@example.com" ] "addressed to the inviter"
 
                 match envelope.Content with
                 | InlineEmail(subject, body, _) ->

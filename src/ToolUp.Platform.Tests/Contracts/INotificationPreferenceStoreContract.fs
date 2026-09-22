@@ -26,7 +26,7 @@ let private noopLogger: ILogger =
 
 let private email (userIds: string list) : Notification =
     TransactionalEmail {
-        RecipientUserIds = userIds
+        Recipients = RecipientId.ofUserIds userIds
         Content = InlineEmail("Subject", "Body", None)
         CorrelationId = None
     }

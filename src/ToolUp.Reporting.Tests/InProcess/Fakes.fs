@@ -71,7 +71,9 @@ type StubAddressBook(known: (string * string) list) =
     let known = Set.ofList known
 
     interface INotificationAddressBook with
-        member _.ResolveEmail(userId, scopeId) = async {
+        member _.ResolveEmail(recipient, scopeId) = async {
+            let userId = RecipientId.toAuditString recipient
+
             return
                 if known.Contains(userId, scopeId) then
                     Some {

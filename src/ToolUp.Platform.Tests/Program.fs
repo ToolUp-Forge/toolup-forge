@@ -345,6 +345,13 @@ let private registeredTests =
         // quiet-hours clock, and the digest job's idempotent drain.
         NotificationPreferenceTests.tests
         NotificationAddressBookTests.tests
+        // Phase 6f.A - the external address book: the
+        // IExternalContactStoreContract pack bound to the entity-backed
+        // default, the address book's consent-gated External arm, the
+        // outer consent filter's refusals, and the case that pins the
+        // ORDER of the two send-path filters by recording what passes
+        // BETWEEN them.
+        ExternalContactTests.tests
         SmtpNotificationSinkTests.tests
         SendGridNotificationSinkTests.tests
         TwilioNotificationSinkTests.tests

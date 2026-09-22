@@ -15,6 +15,13 @@ open ToolUp.Platform
 /// LDAP fixture for a directory companion). Bindings that can't
 /// populate (e.g. read-only auth-provider-driven impls) skip the
 /// "populated lookup" cases by passing a populator that no-ops.
+///
+/// Every case here addresses a `RecipientId.User` recipient, which is
+/// what this pack has always been about: the user-keyed half of the
+/// address book, whose behaviour Phase 6f.A left byte-for-byte alone.
+/// The `External` arm is consent-gated and is covered by
+/// `IExternalContactStoreContract` and the consent-filter tests, where
+/// the store that holds the consent is in scope.
 let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: string -> UserContact -> Async<unit>) =
     let uniqueScope () =
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -24,21 +31,21 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
         testCaseAsync "ResolveEmail returns None for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolveEmail("user-does-not-exist", uniqueScope ())
+            let! result = book.ResolveEmail(RecipientId.User "user-does-not-exist", uniqueScope ())
             Expect.isNone result "no contact = no email"
         }
 
         testCaseAsync "ResolvePhone returns None for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolvePhone("user-does-not-exist", uniqueScope ())
+            let! result = book.ResolvePhone(RecipientId.User "user-does-not-exist", uniqueScope ())
             Expect.isNone result "no contact = no phone"
         }
 
         testCaseAsync "ResolvePushTokens returns [] for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolvePushTokens("user-does-not-exist", uniqueScope ())
+            let! result = book.ResolvePushTokens(RecipientId.User "user-does-not-exist", uniqueScope ())
             Expect.isEmpty result "no contact = no tokens"
         }
 
@@ -60,7 +67,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scope contact
 
-            let! result = book.ResolveEmail("user-A", scope)
+            let! result = book.ResolveEmail(RecipientId.User "user-A", scope)
 
             match result with
             | Some addr ->
@@ -92,7 +99,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scope contact
 
-            let! tokens = book.ResolvePushTokens("user-A", scope)
+            let! tokens = book.ResolvePushTokens(RecipientId.User "user-A", scope)
             Expect.equal tokens.Length 2 "both tokens round-trip"
         }
 
@@ -115,10 +122,10 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scopeA contact
 
-            let! crossScope = book.ResolveEmail("user-A", scopeB)
+            let! crossScope = book.ResolveEmail(RecipientId.User "user-A", scopeB)
             Expect.isNone crossScope "scope-isolated lookup must not leak across scopes"
 
-            let! sameScope = book.ResolveEmail("user-A", scopeA)
+            let! sameScope = book.ResolveEmail(RecipientId.User "user-A", scopeA)
             Expect.isSome sameScope "lookup in the populated scope still works"
         }
     ]

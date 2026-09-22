@@ -38,7 +38,7 @@ let tests =
 
     let sampleEnvelope (scopeId: string) : NotificationEnvelope =
         let payload: EmailEnvelope = {
-            RecipientUserIds = [ "user-x" ]
+            Recipients = [ RecipientId.User "user-x" ]
             Content = InlineEmail("Test subject", "Test body", None)
             CorrelationId = None
         }

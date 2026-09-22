@@ -155,7 +155,7 @@ let private prefsBlockingEmail =
     Map.ofList [ ConfigKeys.NotificationPrefsKeys.EmailEnabled, "false" ]
 
 let private emptyEnvelope () : EmailEnvelope = {
-    RecipientUserIds = [ "user-1" ]
+    Recipients = [ RecipientId.User "user-1" ]
     Content = InlineEmail("Subject", "Body", None)
     CorrelationId = None
 }
@@ -340,7 +340,7 @@ let tests =
 
             try
                 let envelopePayload = {
-                    RecipientUserIds = [ "user-a"; "user-b" ]
+                    Recipients = [ RecipientId.User "user-a"; RecipientId.User "user-b" ]
                     Content = InlineEmail("hi", "body", None)
                     CorrelationId = Some "corr-1"
                 }

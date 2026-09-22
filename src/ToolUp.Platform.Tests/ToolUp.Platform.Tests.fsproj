@@ -62,6 +62,7 @@
         <Compile Include="Contracts\INotificationChannelContract.fs" />
         <Compile Include="Contracts\INotificationSinkContract.fs" />
         <Compile Include="Contracts\INotificationAddressBookContract.fs" />
+        <Compile Include="Contracts\IExternalContactStoreContract.fs" />
         <Compile Include="Contracts\IHealthCheckContract.fs" />
         <Compile Include="Contracts\ISmokeTestContract.fs" />
         <Compile Include="Contracts\IConfigValidatorContract.fs" />
@@ -569,6 +570,7 @@
         <Compile Include="InProcess\RedisDistributedLockTests.fs" />
         <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
         <Compile Include="InProcess\NotificationAddressBookTests.fs" />
+        <Compile Include="InProcess\ExternalContactTests.fs" />
         <Compile Include="InProcess\SmtpNotificationSinkTests.fs" />
         <Compile Include="InProcess\SendGridNotificationSinkTests.fs" />
         <Compile Include="InProcess\TwilioNotificationSinkTests.fs" />
