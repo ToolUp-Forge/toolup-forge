@@ -864,6 +864,9 @@
         <Compile Include="InProcess\HealthStateTrackerTests.fs" />
         <!-- Phase 178 — alert-rule / threshold engine. -->
         <Compile Include="InProcess\AlertRuleEngineTests.fs" />
+        <!-- Phase 829 — the metrics-history flusher, over the two shipped
+             defaults (PrometheusMetricsSink + InMemoryTimeSeriesStore). -->
+        <Compile Include="InProcess\MetricsHistoryFlusherTests.fs" />
         <Compile Include="InProcess\ServiceStatusBoardApiHandlerTests.fs" />
         <Compile Include="InProcess\DeploymentReadinessReportTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelHealthTests.fs" />

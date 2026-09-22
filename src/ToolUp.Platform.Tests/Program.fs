@@ -2403,6 +2403,11 @@ let private registeredTests =
         // caught here; plus the row-cap retention capability, durability
         // across a reopen, and the FTS index following a prune.
         SqliteLogStoreTests.tests
+        // Phase 829 - the metrics-history flusher: the snapshot read tap,
+        // counter deltas across flushes, the histogram field fan-out with
+        // its bucket-interpolated percentiles, the retention sweep's
+        // delete-and-re-append, and the GP 13 default-off registration.
+        MetricsHistoryFlusherTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
