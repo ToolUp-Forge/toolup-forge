@@ -1,0 +1,60 @@
+{
+  "id": "evt_1PgF5C2eZvKYlo2CdVpM3rTa",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721300000,
+  "data": {
+    "object": {
+      "id": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+      "object": "subscription",
+      "billing_cycle_anchor": 1721210460,
+      "cancel_at_period_end": false,
+      "canceled_at": null,
+      "collection_method": "charge_automatically",
+      "created": 1721210460,
+      "currency": "usd",
+      "current_period_end": 1723888860,
+      "current_period_start": 1721210460,
+      "customer": "cus_QZ1sT4hLmN8pKd",
+      "default_payment_method": "pm_1PgF492eZvKYlo2CJ4sXqWmR",
+      "ended_at": null,
+      "items": {
+        "object": "list",
+        "data": [
+          {
+            "id": "si_QZ1sVhK3pLmRtD",
+            "object": "subscription_item",
+            "price": {
+              "id": "price_1PgEz12eZvKYlo2CnW8qLdBv",
+              "object": "price",
+              "currency": "usd",
+              "nickname": "Pro monthly",
+              "product": "prod_QZ1pRkTdHm4xLb",
+              "recurring": { "interval": "month", "interval_count": 1 },
+              "unit_amount": 2000
+            },
+            "quantity": 1,
+            "subscription": "sub_1PgF4A2eZvKYlo2CkHdVbTzp"
+          }
+        ],
+        "has_more": false,
+        "total_count": 1
+      },
+      "latest_invoice": "in_1PgF5B2eZvKYlo2CmXqRdTwN",
+      "livemode": false,
+      "metadata": {},
+      "pause_collection": null,
+      "start_date": 1721210460,
+      "status": "past_due",
+      "trial_end": null,
+      "trial_start": null
+    },
+    "previous_attributes": {
+      "status": "active"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "customer.subscription.updated"
+}
