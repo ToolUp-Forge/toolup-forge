@@ -3,6 +3,10 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Stripe.Server.AuditOnlyDivergenceSink (class)
+ToolUp.Stripe.Server.AuditOnlyDivergenceSink..ctor(ToolUp.Platform.ILogger)
+ToolUp.Stripe.Server.BillingReconciler (class)
+ToolUp.Stripe.Server.BillingReconciler..ctor(ToolUp.Platform.Payments.IPaymentProvider, ToolUp.Stripe.Server.ReconcileReaders, ToolUp.Stripe.Server.IBillingDivergenceSink, ToolUp.Stripe.Server.IWebhookIdempotencyStore, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Stripe.Server.Checkout (class)
 ToolUp.Stripe.Server.Checkout.createSession(ToolUp.Stripe.Server.CheckoutRequest, System.String) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Uri, System.String]]
 ToolUp.Stripe.Server.Checkout.createSessionWith(System.Net.Http.HttpClient, ToolUp.Stripe.Server.CheckoutRequest, System.String) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[System.Uri, System.String]]
@@ -45,12 +49,60 @@ ToolUp.Stripe.Server.CustomerPortal.openSessionLinkWith(System.Net.Http.HttpClie
 ToolUp.Stripe.Server.DurableIdempotencyStore (class)
 ToolUp.Stripe.Server.DurableIdempotencyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Stripe.Server.DurableIdempotencyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, System.String)
+ToolUp.Stripe.Server.IBillingDivergenceSink (interface)
+ToolUp.Stripe.Server.IBillingDivergenceSink.OnDivergence(ToolUp.Stripe.Server.ReconcileOutcome) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Stripe.Server.IBillingReconciler (interface)
+ToolUp.Stripe.Server.IBillingReconciler.ReconcileAll() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Stripe.Server.ReconcileOutcome]]
+ToolUp.Stripe.Server.IBillingReconciler.ReconcileCustomer(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Stripe.Server.ReconcileOutcome]
 ToolUp.Stripe.Server.ITierTokenSink (interface)
 ToolUp.Stripe.Server.ITierTokenSink.OnBillingEvent(ToolUp.Stripe.Webhook.VerifiedEvent, Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Stripe.Server.IWebhookIdempotencyStore (interface)
 ToolUp.Stripe.Server.IWebhookIdempotencyStore.TryClaim(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Stripe.Server.InMemoryIdempotencyStore (class)
 ToolUp.Stripe.Server.InMemoryIdempotencyStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Stripe.Server.ReconcileOutcome (class)
+ToolUp.Stripe.Server.ReconcileOutcome.IsInSync : System.Boolean { get }
+ToolUp.Stripe.Server.ReconcileOutcome.IsLocalAhead : System.Boolean { get }
+ToolUp.Stripe.Server.ReconcileOutcome.IsStripeAhead : System.Boolean { get }
+ToolUp.Stripe.Server.ReconcileOutcome.IsStripeCancelled : System.Boolean { get }
+ToolUp.Stripe.Server.ReconcileOutcome.IsUnreadable : System.Boolean { get }
+ToolUp.Stripe.Server.ReconcileOutcome.Tag : System.Int32 { get }
+ToolUp.Stripe.Server.ReconcileOutcome+InSync (class)
+ToolUp.Stripe.Server.ReconcileOutcome+InSync.customerId : System.String { get }
+ToolUp.Stripe.Server.ReconcileOutcome+InSync.status : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Stripe.Server.ReconcileOutcome+LocalAhead (class)
+ToolUp.Stripe.Server.ReconcileOutcome+LocalAhead.customerId : System.String { get }
+ToolUp.Stripe.Server.ReconcileOutcome+LocalAhead.local : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Stripe.Server.ReconcileOutcome+LocalAhead.remote : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Stripe.Server.ReconcileOutcome+StripeAhead (class)
+ToolUp.Stripe.Server.ReconcileOutcome+StripeAhead.customerId : System.String { get }
+ToolUp.Stripe.Server.ReconcileOutcome+StripeAhead.local : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Payments.SubscriptionStatus] { get }
+ToolUp.Stripe.Server.ReconcileOutcome+StripeAhead.remote : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Stripe.Server.ReconcileOutcome+StripeCancelled (class)
+ToolUp.Stripe.Server.ReconcileOutcome+StripeCancelled.customerId : System.String { get }
+ToolUp.Stripe.Server.ReconcileOutcome+StripeCancelled.local : ToolUp.Platform.Payments.SubscriptionStatus { get }
+ToolUp.Stripe.Server.ReconcileOutcome+Tags (class)
+ToolUp.Stripe.Server.ReconcileOutcome+Tags.InSync : System.Int32 (literal)
+ToolUp.Stripe.Server.ReconcileOutcome+Tags.LocalAhead : System.Int32 (literal)
+ToolUp.Stripe.Server.ReconcileOutcome+Tags.StripeAhead : System.Int32 (literal)
+ToolUp.Stripe.Server.ReconcileOutcome+Tags.StripeCancelled : System.Int32 (literal)
+ToolUp.Stripe.Server.ReconcileOutcome+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Stripe.Server.ReconcileOutcome+Unreadable (class)
+ToolUp.Stripe.Server.ReconcileOutcome+Unreadable.customerId : System.String { get }
+ToolUp.Stripe.Server.ReconcileOutcome+Unreadable.reason : System.String { get }
+ToolUp.Stripe.Server.ReconcileReaders (class)
+ToolUp.Stripe.Server.ReconcileReaders..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Payments.SubscriptionStatus]]])
+ToolUp.Stripe.Server.ReconcileReaders.EnumerateCustomers : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+ToolUp.Stripe.Server.ReconcileReaders.ReadLocalStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Payments.SubscriptionStatus]]] { get }
+ToolUp.Stripe.Server.Reconciliation (class)
+ToolUp.Stripe.Server.Reconciliation.DefaultCronExpression : System.String (literal)
+ToolUp.Stripe.Server.Reconciliation.HandlerName : System.String (literal)
+ToolUp.Stripe.Server.Reconciliation.classify(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Payments.SubscriptionStatus], ToolUp.Platform.Payments.SubscriptionStatus) : ToolUp.Stripe.Server.ReconcileOutcome
+ToolUp.Stripe.Server.Reconciliation.describe(ToolUp.Stripe.Server.ReconcileOutcome) : System.String
+ToolUp.Stripe.Server.Reconciliation.idempotencyKey(System.String, ToolUp.Platform.Payments.SubscriptionStatus, System.DateTime) : System.String
+ToolUp.Stripe.Server.Reconciliation.isDivergence(ToolUp.Stripe.Server.ReconcileOutcome) : System.Boolean
+ToolUp.Stripe.Server.Reconciliation.jobRegistration(System.String, System.String, System.String) : ToolUp.Platform.JobRegistration
+ToolUp.Stripe.Server.Reconciliation.statusToken(ToolUp.Platform.Payments.SubscriptionStatus) : System.String
 ToolUp.Stripe.Server.Routes (class)
 ToolUp.Stripe.Server.Routes.StripeSignatureHeader : System.String (literal)
 ToolUp.Stripe.Server.Routes.stripeWebhook(ToolUp.Stripe.Server.StripeConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Stripe.Webhook.VerifiedEvent, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
