@@ -2382,6 +2382,13 @@ let private registeredTests =
         // the diff's shortcut.
         ElmishProofOracleTests.tests
         ElmishLoopProofOracleTests.tests
+        // Phase 828 - the self-hosted log store: the ILogStoreContract
+        // pack bound to BOTH the shipped SQLite default (over a temp
+        // database file) and an in-memory fake built on the canonical
+        // LogSearchQuery.apply, so a rule only one of them satisfies is
+        // caught here; plus the row-cap retention capability, durability
+        // across a reopen, and the FTS index following a prune.
+        SqliteLogStoreTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

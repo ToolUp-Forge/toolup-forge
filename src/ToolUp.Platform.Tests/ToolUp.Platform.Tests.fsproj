@@ -201,6 +201,7 @@
              revoke / per-scope isolation / staleness bound). -->
         <Compile Include="Contracts\ISessionRegistryContract.fs" />
         <Compile Include="Contracts\ITimeSeriesStoreContract.fs" />
+        <Compile Include="Contracts\ILogStoreContract.fs" />
         <Compile Include="Contracts\IDatasetStoreContract.fs" />
         <!-- Phase 449 — model-fit envelope conformance (bound to the reference provider). -->
         <Compile Include="Contracts\IModelFitProviderContract.fs" />
@@ -542,6 +543,7 @@
         <Compile Include="InProcess\ModelPromotionTransferTests.fs" />
         <Compile Include="InProcess\TimeSeriesStoreTests.fs" />
         <Compile Include="InProcess\TimescaleTimeSeriesStoreTests.fs" />
+        <Compile Include="InProcess\SqliteLogStoreTests.fs" />
         <!-- Phase 531 — Postgres IEntityStore companion (contract + query
              pushdown; env-gated on TOOLUP_TEST_POSTGRES). -->
         <Compile Include="InProcess\PostgresEntityStoreTests.fs" />
