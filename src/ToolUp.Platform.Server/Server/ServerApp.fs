@@ -3158,11 +3158,22 @@ module ServerApp =
         // itself (or through `registerAllVerified`) is unaffected.
         ToolUp.Remoting.PlatformDecoders.registerAll ()
 
+        // Phase 799 — and the platform's own ARGUMENT decoders, on the
+        // JSON wire, for the server's own decode edge (the Phase 783
+        // seam consults `JsonDecoders` before System.Text.Json).
+        ToolUp.Remoting.Json.PlatformJsonDecoders.registerAll ()
+
         app.Logger
         |> Option.iter (fun logger ->
             let facet = RemotingDecoderFacet.inspectServedPlatform CompositionProfile.Standard
 
             if not (List.isEmpty facet.FacetBindings) then
-                logger.Info(RemotingDecoderFacet.describe facet))
+                logger.Info(RemotingDecoderFacet.describe facet)
+
+                logger.Info(
+                    RemotingDecoderFacet.describeArguments (
+                        RemotingDecoderFacet.inspectServedArguments CompositionProfile.Standard
+                    )
+                ))
 
         host.RunBlocking()
