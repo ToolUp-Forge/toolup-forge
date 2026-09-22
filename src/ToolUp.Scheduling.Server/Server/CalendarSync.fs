@@ -240,16 +240,21 @@ type ICalendarSync =
 
     /// Read every link's external calendar and reconcile it against the
     /// local schedule under each link's conflict policy.
-    abstract PullResource:
-        scopeId: string * resourceId: ResourceId * actor: EntityPrincipal ->
-            Async<Result<PullOutcome, CalendarSyncError>>
+    ///
+    /// Takes no `actor`: a pull is driven by a cron tick or a provider
+    /// notification, so there is no caller to name, and the principal
+    /// is DATA rather than context — every write it makes is attributed
+    /// to the link's own `UserId`, the user whose credentials produced
+    /// the events, exactly as the bookings it applies already are.
+    abstract PullResource: scopeId: string * resourceId: ResourceId -> Async<Result<PullOutcome, CalendarSyncError>>
 
     /// Interpret one inbound provider notification and pull whatever it
     /// says changed. `scopeId` is resolved by the deployment's own
     /// webhook route (conventionally from the route path) before the
-    /// call — a notification body never names a storage scope.
+    /// call — a notification body never names a storage scope. Takes no
+    /// `actor`, for the reason `PullResource` gives.
     abstract HandleWebhook:
-        scopeId: string * kind: string * headers: Map<string, string> * body: byte[] * actor: EntityPrincipal ->
+        scopeId: string * kind: string * headers: Map<string, string> * body: byte[] ->
             Async<Result<PullOutcome, CalendarSyncError>>
 
 // ─── Implementation ─────────────────────────────────────────────────
@@ -259,18 +264,32 @@ let private jsonOptions =
     o.PropertyNamingPolicy <- null
     o
 
-/// Every scheduling event payload carries a `BookingId`; the push
-/// handler needs only that field, so it reads it out of the raw JSON
-/// rather than branching on four payload types.
-let bookingIdOfEventPayload (payload: string) : string option =
+/// One string property off a scheduling event payload. Every payload
+/// shape is a flat record of primitives, so the push handler reads the
+/// two fields it needs out of the raw JSON rather than branching on
+/// four payload types.
+let private stringOfEventPayload (property: string) (payload: string) : string option =
     try
         use doc = JsonDocument.Parse payload
 
-        match doc.RootElement.TryGetProperty "BookingId" with
+        match doc.RootElement.TryGetProperty property with
         | true, value when value.ValueKind = JsonValueKind.String -> Some(value.GetString())
         | _ -> None
     with _ ->
         None
+
+/// Every scheduling event payload carries a `BookingId`; the push
+/// handler needs only that field, so it reads it out of the raw JSON
+/// rather than branching on four payload types.
+let bookingIdOfEventPayload (payload: string) : string option =
+    stringOfEventPayload "BookingId" payload
+
+/// Every scheduling event payload also carries the `UserId` of whoever
+/// caused the transition, and that user — not the host — is the
+/// principal the outward mirror is written under. `EntityPrincipal.system`
+/// is for a write no principal exists to name; a lifecycle event always
+/// names one, so the push handler threads this instead.
+let userIdOfEventPayload (payload: string) : string option = stringOfEventPayload "UserId" payload
 
 /// Whether two bookings agree on everything a calendar can express.
 /// Deliberately NOT structural equality on the whole record: `Version`
@@ -503,7 +522,16 @@ type CalendarSync
             | Error _ -> return false
     }
 
-    let pullLink (scopeId: string) (actor: EntityPrincipal) (link: CalendarLink) (outcome: PullOutcome) = async {
+    let pullLink (scopeId: string) (link: CalendarLink) (outcome: PullOutcome) = async {
+        // The principal for everything a pull writes. An external edit
+        // was made by somebody in the provider's calendar, whose
+        // identity this deployment has no account for; the one local
+        // principal it can honestly attribute the write to is the user
+        // whose credentials the bridge used — which is already the user
+        // the applied booking itself is booked by (`defaultsFor`).
+        // `EntityPrincipal.system` would record a write nobody made.
+        let actor = EntityPrincipal.ofPrincipal link.UserId
+
         match tryBridge link.Kind with
         | Error _ -> return outcome
         | Ok bridge ->
@@ -684,18 +712,18 @@ type CalendarSync
             return Ok outcome
         }
 
-        member _.PullResource(scopeId, resourceId, actor) = async {
+        member _.PullResource(scopeId, resourceId) = async {
             let! links = listLinks scopeId resourceId
             let mutable outcome = PullOutcome.empty
 
             for link in links do
-                let! next = pullLink scopeId actor link outcome
+                let! next = pullLink scopeId link outcome
                 outcome <- next
 
             return Ok outcome
         }
 
-        member this.HandleWebhook(scopeId, kind, headers, body, actor) = async {
+        member _.HandleWebhook(scopeId, kind, headers, body) = async {
             match tryBridge kind with
             | Error e -> return Error e
             | Ok bridge ->
@@ -724,7 +752,7 @@ type CalendarSync
                             for r in found do
                                 match! entityStore.Get<CalendarLink>(scopeId, CalendarLinkTypeName, r.Id) with
                                 | Ok link when link.Kind = kind ->
-                                    let! next = pullLink scopeId actor link outcome
+                                    let! next = pullLink scopeId link outcome
                                     outcome <- next
                                 | _ -> ()
 
@@ -757,15 +785,21 @@ type CalendarPushJobHandler
                     warn (sprintf "calendar push: originating %s event %O is no longer readable" eventType eventId)
                     return JobResult.Success
                 | Some evt ->
-                    match bookingIdOfEventPayload evt.Payload with
-                    | None -> return JobResult.PermanentFailure "event payload carries no BookingId"
-                    | Some bookingId ->
+                    match bookingIdOfEventPayload evt.Payload, userIdOfEventPayload evt.Payload with
+                    | None, _ -> return JobResult.PermanentFailure "event payload carries no BookingId"
+                    | _, None -> return JobResult.PermanentFailure "event payload carries no UserId"
+                    | Some bookingId, Some userId ->
                         match! scheduler.GetBooking(ctx.ScopeId, bookingId) with
                         | None ->
                             // Booked and hard-deleted before the mirror ran.
                             return JobResult.Success
                         | Some booking ->
-                            match! sync.PushBooking(ctx.ScopeId, booking, EntityPrincipal.system) with
+                            // The user whose booking action triggered this
+                            // mirror is the principal it is written under —
+                            // the job runs for them, not for the host.
+                            let actor = EntityPrincipal.ofPrincipal userId
+
+                            match! sync.PushBooking(ctx.ScopeId, booking, actor) with
                             | Error e -> return JobResult.PermanentFailure(CalendarSyncError.message e)
                             | Ok outcome ->
                                 match outcome.Failures with
@@ -788,7 +822,9 @@ type CalendarPushJobHandler
 
 /// Polls every link in the scope whose bridge cannot push notifications.
 /// Registered by `SchedulingCompose` on a cron trigger when at least one
-/// composed bridge declares `SupportsWebhooks = false`.
+/// composed bridge declares `SupportsWebhooks = false`. It names no
+/// principal: a cron tick has no caller, and `PullResource` attributes
+/// each link's writes to that link's own user.
 type CalendarPollJobHandler(sync: ICalendarSync, entityStore: IEntityStore, pageSize: int) =
 
     /// Default page size for the per-tick link enumeration.
@@ -817,7 +853,7 @@ type CalendarPollJobHandler(sync: ICalendarSync, entityStore: IEntityStore, page
             let mutable retryable = false
 
             for resourceId in seen do
-                match! sync.PullResource(ctx.ScopeId, resourceId, EntityPrincipal.system) with
+                match! sync.PullResource(ctx.ScopeId, resourceId) with
                 | Error e -> failures.Add(CalendarSyncError.message e)
                 | Ok outcome ->
                     for kind, err in outcome.Failures do

@@ -41,9 +41,20 @@ type InMemoryEntityStore() =
     let bucket scopeId entityType =
         store.GetOrAdd((scopeId, entityType), (fun _ -> ConcurrentDictionary()))
 
+    // Phase 20a — who wrote what. The real store stamps the actor onto
+    // the lifecycle row it records; the stub keeps the same fact in the
+    // simplest form a test can assert, so "this write is attributed to
+    // the link's own user, never to the host" is a law rather than a
+    // comment.
+    let writes = ResizeArray<string * string>()
+
+    /// `(entityType, principal)` for every write this store accepted, in
+    /// order.
+    member _.Writes = List.ofSeq writes
+
     interface IEntityStore with
 
-        member _.Save<'T>(scopeId: string, _actor: EntityPrincipal, entity: 'T) = async {
+        member _.Save<'T>(scopeId: string, actor: EntityPrincipal, entity: 'T) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -56,6 +67,7 @@ type InMemoryEntityStore() =
 
                 let stored = setVersion entity newVersion
                 b[core.Id] <- (box stored, newVersion)
+                writes.Add(core.Type, actor.Principal)
 
                 return
                     Ok {
@@ -67,7 +79,7 @@ type InMemoryEntityStore() =
 
         // Phase 753 — compare-and-set save: the head is the stored
         // version (0 when absent); a mismatch is `VersionConflict`.
-        member _.SaveIfVersion<'T>(scopeId: string, _actor: EntityPrincipal, entity: 'T, expectedVersion: int) = async {
+        member _.SaveIfVersion<'T>(scopeId: string, actor: EntityPrincipal, entity: 'T, expectedVersion: int) = async {
             match tryGetEntityFields entity with
             | Error msg -> return Error(InvalidEntityShape msg)
             | Ok core ->
@@ -84,6 +96,7 @@ type InMemoryEntityStore() =
                     let newVersion = expectedVersion + 1
                     let stored = setVersion entity newVersion
                     b[core.Id] <- (box stored, newVersion)
+                    writes.Add(core.Type, actor.Principal)
 
                     return
                         Ok {
@@ -124,14 +137,15 @@ type InMemoryEntityStore() =
             | _ -> return []
         }
 
-        member _.Delete(scopeId, _actor, entityType, entityId) = async {
+        member _.Delete(scopeId, actor: EntityPrincipal, entityType, entityId) = async {
             let b = bucket scopeId entityType
             b.TryRemove(entityId) |> ignore
+            writes.Add(entityType, actor.Principal)
             return Ok()
         }
 
         // Phase 753 — compare-and-set delete.
-        member _.DeleteIfVersion(scopeId, _actor, entityType, entityId, expectedVersion) = async {
+        member _.DeleteIfVersion(scopeId, actor: EntityPrincipal, entityType, entityId, expectedVersion) = async {
             let b = bucket scopeId entityType
 
             let head =
@@ -143,6 +157,7 @@ type InMemoryEntityStore() =
                 return Error(VersionConflict(entityType, entityId, expectedVersion, head))
             else
                 b.TryRemove(entityId) |> ignore
+                writes.Add(entityType, actor.Principal)
                 return Ok()
         }
 

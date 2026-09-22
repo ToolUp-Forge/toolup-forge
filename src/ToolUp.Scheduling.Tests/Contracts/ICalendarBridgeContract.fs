@@ -385,7 +385,7 @@ let tests (label: string) (factory: BridgeFactory) =
                 })
                 (pinned.AddHours 1.0)
 
-            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId, fixture.Actor) with
+            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId) with
             | Error e -> failtestf "pull refused: %s" (CalendarSyncError.message e)
             | Ok outcome ->
                 Expect.isEmpty outcome.Failures "pull reported a bridge failure"
@@ -407,7 +407,7 @@ let tests (label: string) (factory: BridgeFactory) =
             let! externalId = externalEventIdOf h saved
             h.ExternalEdit externalId (fun b -> { b with Title = "Hijacked externally" }) (pinned.AddHours 1.0)
 
-            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId, fixture.Actor) with
+            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId) with
             | Error e -> failtestf "pull refused: %s" (CalendarSyncError.message e)
             | Ok outcome ->
                 Expect.isEmpty outcome.Failures "pull reported a bridge failure"
@@ -437,14 +437,14 @@ let tests (label: string) (factory: BridgeFactory) =
             // An edit stamped BEFORE our last push loses.
             h.ExternalEdit externalId (fun b -> { b with Title = "Stale external edit" }) (pinned.AddHours -1.0)
 
-            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId, fixture.Actor) with
+            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId) with
             | Error e -> failtestf "pull refused: %s" (CalendarSyncError.message e)
             | Ok outcome -> Expect.equal outcome.AppliedLocally 0 "a stale external edit does not win"
 
             // An edit stamped AFTER it wins.
             h.ExternalEdit externalId (fun b -> { b with Title = "Fresh external edit" }) (pinned.AddHours 1.0)
 
-            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId, fixture.Actor) with
+            match! fixture.Sync.PullResource(fixture.ScopeId, h.Link.ResourceId) with
             | Error e -> failtestf "second pull refused: %s" (CalendarSyncError.message e)
             | Ok outcome ->
                 Expect.equal outcome.AppliedLocally 1 "a fresh external edit wins"

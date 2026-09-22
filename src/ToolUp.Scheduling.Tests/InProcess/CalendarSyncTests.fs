@@ -202,7 +202,7 @@ let tests =
                 Expect.equal (eventLinkId "room-101" "CalDAV" "bk-1") "room-101|CalDAV|bk-1" "event link id"
             }
 
-            test "bookingIdOfEventPayload reads every scheduling payload" {
+            test "the payload readers read every scheduling payload" {
                 let options = Text.Json.JsonSerializerOptions(PropertyNamingPolicy = null)
 
                 let created: BookingCreatedPayload = {
@@ -231,12 +231,27 @@ let tests =
 
                 Expect.isNone (bookingIdOfEventPayload "not json at all") "garbage yields None, not an exception"
                 Expect.isNone (bookingIdOfEventPayload """{"Other":1}""") "a payload with no BookingId yields None"
+
+                // The same payloads name the actor, which is what the
+                // push handler mirrors under.
+                Expect.equal
+                    (userIdOfEventPayload (Text.Json.JsonSerializer.Serialize(created, options)))
+                    (Some "alice")
+                    "BookingCreated names its user"
+
+                Expect.equal
+                    (userIdOfEventPayload (Text.Json.JsonSerializer.Serialize(cancelled, options)))
+                    (Some "alice")
+                    "BookingCancelled names its user"
+
+                Expect.isNone (userIdOfEventPayload """{"BookingId":"bk-1"}""") "a payload with no UserId yields None"
             }
         ]
 
         testList "the event-driven push path" [
             testAsync "a BookingCreated event mirrors the booking outward" {
-                let entityStore = InMemoryEntityStore() :> IEntityStore
+                let store = InMemoryEntityStore()
+                let entityStore = store :> IEntityStore
                 let eventStore = InMemoryEventStore()
                 let scopeId = "team-push-path"
                 let actor = EntityPrincipal.ofPrincipal "calendar-sync-test"
@@ -324,6 +339,28 @@ let tests =
                         | Ok events ->
                             Expect.equal (List.length events) 1 "the booking was mirrored by the event-driven path"
                             Expect.equal events.Head.Booking.Id saved.Id "and it is the booking that was created"
+
+                            // The mirror is written under the user whose
+                            // booking triggered it. `EntityPrincipal.system`
+                            // is for a write no principal exists to name, and
+                            // a lifecycle event always names one (Phase 814);
+                            // a job that reaches for it records a write
+                            // nobody made.
+                            let eventLinkWriters =
+                                store.Writes
+                                |> List.filter (fun (entityType, _) -> entityType = CalendarEventLinkTypeName)
+                                |> List.map snd
+
+                            Expect.isNonEmpty eventLinkWriters "the push recorded an event link"
+
+                            Expect.allEqual
+                                eventLinkWriters
+                                "alice"
+                                "the mirror is attributed to the booking's own user"
+
+                            Expect.isFalse
+                                (store.Writes |> List.exists (fun (_, principal) -> principal = "system"))
+                                "no write on the path is attributed to the host"
             }
 
             testAsync "a dispatch that is not event-triggered mirrors nothing" {
