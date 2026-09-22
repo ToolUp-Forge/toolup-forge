@@ -1,0 +1,80 @@
+{
+  "id": "evt_1PgF4B2eZvKYlo2CwR7mNtQx",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721210460,
+  "data": {
+    "object": {
+      "id": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+      "object": "subscription",
+      "application": null,
+      "automatic_tax": { "enabled": false, "liability": null },
+      "billing_cycle_anchor": 1721210460,
+      "cancel_at": null,
+      "cancel_at_period_end": false,
+      "canceled_at": null,
+      "collection_method": "charge_automatically",
+      "created": 1721210460,
+      "currency": "usd",
+      "current_period_end": 1723888860,
+      "current_period_start": 1721210460,
+      "customer": "cus_QZ1sT4hLmN8pKd",
+      "days_until_due": null,
+      "default_payment_method": "pm_1PgF492eZvKYlo2CJ4sXqWmR",
+      "description": null,
+      "discount": null,
+      "ended_at": null,
+      "items": {
+        "object": "list",
+        "data": [
+          {
+            "id": "si_QZ1sVhK3pLmRtD",
+            "object": "subscription_item",
+            "created": 1721210461,
+            "metadata": {},
+            "price": {
+              "id": "price_1PgEz12eZvKYlo2CnW8qLdBv",
+              "object": "price",
+              "active": true,
+              "billing_scheme": "per_unit",
+              "currency": "usd",
+              "nickname": "Pro monthly",
+              "product": "prod_QZ1pRkTdHm4xLb",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1,
+                "usage_type": "licensed"
+              },
+              "type": "recurring",
+              "unit_amount": 2000,
+              "unit_amount_decimal": "2000"
+            },
+            "quantity": 1,
+            "subscription": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+            "tax_rates": []
+          }
+        ],
+        "has_more": false,
+        "total_count": 1,
+        "url": "/v1/subscription_items?subscription=sub_1PgF4A2eZvKYlo2CkHdVbTzp"
+      },
+      "latest_invoice": "in_1PgF4A2eZvKYlo2CqTzWdNmR",
+      "livemode": false,
+      "metadata": {},
+      "pause_collection": null,
+      "start_date": 1721210460,
+      "status": "active",
+      "test_clock": null,
+      "trial_end": null,
+      "trial_start": null
+    },
+    "previous_attributes": null
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_8kQ2mWvTzR0yBa",
+    "idempotency_key": null
+  },
+  "type": "customer.subscription.created"
+}
