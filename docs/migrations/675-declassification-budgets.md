@@ -32,7 +32,7 @@ that namespace would shadow the moved one for every file opening both, silently 
 
 ### Why
 
-Phase 675 needs the same cumulative accounting at the grounding tier. The alternatives were
+Phase 675 needs the same cumulative accounting at the grounding plane. The alternatives were
 a `ToolUp.Facts.Server → ToolUp.InterPlatform` package edge (a companion depending on
 another companion, against GP 1) or a second ledger mirrored Facts-side. The second is the
 worse of the two: two ledgers that drift are two different answers to "has this counterparty
@@ -102,7 +102,7 @@ shape a policy denial takes.
 ### The honesty framing — read this before you declare an ε
 
 **This is an accounting control, not a differential-privacy guarantee.** The four points
-carried from the federation tier's reading of the same mechanism, because they decide
+carried from the federation layer's reading of the same mechanism, because they decide
 whether the knob is the control you think it is:
 
 - **The accounting bounds *questions asked*, not information disclosed.** ε-differential

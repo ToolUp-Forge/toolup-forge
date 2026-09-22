@@ -2288,7 +2288,7 @@ module DeploymentVerificationReport =
                 Narrowing =
                     if isComposed RemotingDecoderSection then
                         Some
-                            "the section names every declared API record and which of them decode through the closed algebra over corpus-covered shapes, so the boundary is enumerated record by record rather than claimed for the deployment as a whole. What it does not narrow is any of the four clauses above."
+                            "the section names every API record this deployment SERVES (recorded at `Api.make`, not declared by a root) and which of them decode through the closed algebra over corpus-covered shapes, so the boundary is enumerated record by record and its coverage is a ratio over the served set rather than a claim for the deployment as a whole. What it does not narrow is any of the four clauses above."
                     else
                         None
             }

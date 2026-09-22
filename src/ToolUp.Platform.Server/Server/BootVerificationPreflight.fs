@@ -1377,18 +1377,113 @@ module RemotingDecoderFacet =
 
     /// The platform's own `_platform.*` API records, classified.
     ///
-    /// The one-liner a composition root that mounts the SDK's surfaces
-    /// and nothing else calls. A root with its own API records composes
-    /// its declarations with `PlatformDecoders.coveredApiRecords` and
-    /// passes the whole list to `inspect`; the two go through the same
-    /// function, so a consumer's record and a platform one are graded
-    /// identically.
+    /// The declared form: `PlatformDecoders.coveredApiRecords` is what the
+    /// generator declared for every platform record. A root with its own
+    /// API records composes its declarations with it and passes the whole
+    /// list to `inspect`; the two go through the same function, so a
+    /// consumer's record and a platform one are graded identically. Since
+    /// Phase 801 the form a root usually wants is `inspectServed`, which
+    /// reads what was MOUNTED rather than what was declared.
     ///
     /// It does NOT register anything. `PlatformDecoders.registerAll` is
     /// an explicit act the root performs; a facet that registered what
     /// it was about to report on would always report success.
     let inspectPlatform (profile: CompositionProfile) : RemotingDecoderFacet =
         inspect profile PlatformDecoders.coveredApiRecords
+
+    /// Phase 801 — the wire types an API record's methods return, by the
+    /// key the registry uses: each field's curried function chain walked
+    /// to its `Async<'r>` and `'r` taken. A field that does not end in an
+    /// `Async<_>` is not a remoting method and carries nothing to decode.
+    let private returnTypesOf (apiRecord: Type) : string list =
+        let rec returnOf (fieldType: Type) : Type option =
+            if Reflection.FSharpType.IsFunction fieldType then
+                let _, range = Reflection.FSharpType.GetFunctionElements fieldType
+                returnOf range
+            elif
+                fieldType.IsGenericType
+                && fieldType.GetGenericTypeDefinition() = typedefof<Async<_>>
+            then
+                Some(fieldType.GetGenericArguments()[0])
+            else
+                None
+
+        Reflection.FSharpType.GetRecordFields(
+            apiRecord,
+            Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic
+        )
+        |> Array.toList
+        |> List.choose (fun f -> returnOf f.PropertyType)
+        |> List.distinct
+        |> List.map RemotingDecoders.keyFor
+
+    /// A type's simple name without a generic-arity suffix — the name a
+    /// composition root calls the record by, and the key
+    /// `coveredApiRecords` declares corpus coverage under.
+    let private recordName (apiRecord: Type) : string =
+        let n = apiRecord.Name
+        let tick = n.IndexOf '`'
+        if tick >= 0 then n.Substring(0, tick) else n
+
+    /// Phase 801 — classify every API record this process has SERVED.
+    ///
+    /// The denominator is what `Api.make` mounted (`ServedApiRecords`),
+    /// not what a root declared, so a record a root forgot to declare is
+    /// a `Reflection` line rather than an absence. The wire types are
+    /// read off each record's own methods; corpus coverage is still
+    /// DECLARED — taken from `declared` by record name, `false` when the
+    /// record declares nothing — because a mounted record proves nothing
+    /// about whether the corpus draws its shapes. Only F# records with
+    /// function fields are API records; any other type handed to
+    /// `Api.make` is not a remoting contract and is skipped.
+    let inspectServed
+        (profile: CompositionProfile)
+        (declared: (string * string list * bool) list)
+        : RemotingDecoderFacet =
+        let corpusCovered =
+            declared |> List.map (fun (record, _, covered) -> record, covered) |> Map.ofList
+
+        ServedApiRecords.all ()
+        |> List.filter (fun t ->
+            Reflection.FSharpType.IsRecord(t, Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic))
+        |> List.map (fun t ->
+            let name = recordName t
+            name, returnTypesOf t, (Map.tryFind name corpusCovered |> Option.defaultValue false))
+        |> inspect profile
+
+    /// Phase 801 — the served set, with the platform's own declarations
+    /// supplying corpus coverage. The one-liner for a root that mounts
+    /// the SDK's surfaces and its own modules and declares nothing
+    /// further: every platform record reads `Algebra` and corpus-covered
+    /// (the generator verified each), a consumer's record reads whatever
+    /// it registered.
+    let inspectServedPlatform (profile: CompositionProfile) : RemotingDecoderFacet =
+        inspectServed profile PlatformDecoders.coveredApiRecords
+
+    /// Phase 801 — coverage: how many of the facet's records decode
+    /// through the algebra, over how many there are. The number Phase
+    /// 69k found the facet could not report — its `Reflection` count was
+    /// structurally zero because only declared records were classified —
+    /// and the facet's measure since.
+    let coverage (facet: RemotingDecoderFacet) : int * int =
+        let algebra =
+            facet.FacetBindings
+            |> List.filter (fun binding -> binding.DecoderClass = RemotingDecoderClass.Algebra)
+            |> List.length
+
+        algebra, List.length facet.FacetBindings
+
+    /// One line for the boot log: the coverage ratio, the profile, and
+    /// whether the algebra is mandatory under it.
+    let describe (facet: RemotingDecoderFacet) : string =
+        let algebra, total = coverage facet
+
+        sprintf
+            "remoting decoders: %d of %d served API record(s) decode through the closed algebra (profile %s, algebra decoders %s)"
+            algebra
+            total
+            (CompositionProfile.label facet.FacetProfile)
+            (if facet.FacetRequired then "mandatory" else "advisory")
 
     /// The records this facet classifies as `Reflection`, in declaration
     /// order.

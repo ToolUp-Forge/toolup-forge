@@ -2335,6 +2335,12 @@ let private registeredTests =
         // which the facet cannot report because an undeclared record is
         // absent from it rather than classified `Reflection`.
         GeneratorFidelityTests.tests
+        // Phase 801 — the platform's own decoders are the generator's
+        // emission over every API record, held to it byte for byte, and
+        // every registration verified against the reflection reader over
+        // deterministic draws (the recorded run the browser's registerAll
+        // relies on), with a swapped-field go-red decoder refused by name.
+        PlatformDecodersGenerationTests.tests
         // Phase 787 — the F* model of that algebra, extracted and run as a
         // differential oracle beside production over the same corpus, with
         // a committed go-red bridge that forgets the source width class so

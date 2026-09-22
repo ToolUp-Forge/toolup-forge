@@ -64,6 +64,7 @@ namespace ToolUp.Platform
 //     audited startup gate: role-gated methods without `[<Audit>]`
 //     refuse startup (compliance editions).
 
+open System
 open System.Threading
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Auth
@@ -330,6 +331,42 @@ module internal ApiSeams =
                  let v = v.Trim()
                  v.Equals("true", System.StringComparison.OrdinalIgnoreCase) || v = "1")
 
+/// Phase 801 — the API records this process has mounted, recorded at
+/// the one place every mount passes through.
+///
+/// The Phase 785 remoting-decoder facet classified the records a
+/// composition root DECLARED, because nothing in the tier kept a list of
+/// what was mounted and inventing a discovery walk would have put a
+/// second, differently-derived answer beside the dispatcher's. This is
+/// not that: `Api.make` is where the dispatcher itself receives the
+/// record type, for every mount in the tree (the guarded module path,
+/// the platform's own `_platform.*` surfaces, a consumer's bare call),
+/// so recording the type here is the dispatcher's own answer kept rather
+/// than a second one computed. The facet's denominator becomes "the
+/// records this deployment serves", which is the number an operator
+/// actually wants.
+///
+/// Module-level mutable state, justified the way `RemotingDecoders`'
+/// table is: written during composition, read afterwards; an immutable
+/// list behind one binding, so a read sees a whole list.
+[<RequireQualifiedAccess>]
+module ServedApiRecords =
+
+    let mutable private served: Type list = []
+
+    /// Record a mounted API record. Idempotent — the same type mounted
+    /// twice (two modules sharing a contract, a re-run of a composition
+    /// root) counts once, in first-mount order.
+    let record (apiRecord: Type) : unit =
+        if not (List.contains apiRecord served) then
+            served <- served @ [ apiRecord ]
+
+    /// Every API record mounted in this process, in first-mount order.
+    let all () : Type list = served
+
+    /// Test-only: forget every mount. Production code never calls this.
+    let resetForTests () : unit = served <- []
+
 /// Server-side Fable Remoting helper. Mirrors SAFE.Api.make so server
 /// call sites keep using `Api.make (builder, errorHandler = eh)`.
 type Api =
@@ -378,6 +415,11 @@ type Api =
         ) : HttpHandler =
         let routeBuilder = defaultArg routeBuilder (sprintf "/api/%s/%s")
         let customOptions = defaultArg customOptions id
+
+        // Phase 801 — every mount records its record type, so the
+        // remoting-decoder facet can enumerate what this deployment
+        // actually serves rather than what a root remembered to declare.
+        ServedApiRecords.record typeof<'T>
 
         // Phase 69b.tail — wrap the consumer's api builder so each
         // request stashes its `IServiceProvider` for the default

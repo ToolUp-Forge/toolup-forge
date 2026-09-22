@@ -280,8 +280,35 @@ RemotingDecoders.register<Result<Address, string>> (Decode.result address Decode
 own decoders are live wherever the binary wire is.
 
 **The applicative pipeline is the shape a generator emits** — one `apply` per field, read off the
-record's own shape — which is how Phase 69k's generated decoders will be covered by Phase 787's
-theorem by construction rather than by a second proof.
+record's own shape — which is how the generated decoders are covered by Phase 787's theorem by
+construction rather than by a second proof.
+
+### Registering a decoder you did not write by hand (Phase 801)
+
+A hand-written decoder is read before it is registered. A generated one is not, and the failure the
+algebra cannot see is the one where every combinator is total and correct and the DECODER is wrong —
+two same-typed fields swapped, a case index off by one — so it accepts the bytes and yields a
+well-typed value that is not the one the server wrote. `RemotingDecoders.verify` is the gate for
+that: it draws random values of the type by reflection (`DecoderShapes.draw`), writes each with the
+platform's own serializer, decodes the bytes through the candidate AND through the reflection
+reader, and refuses on the first divergence, naming the draw and rendering both values.
+
+```fsharp skip=fragment
+match RemotingDecoders.verify<Address> RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed address with
+| Ok verification -> RemotingDecoders.register<Address> address   // verification.Draws agreed
+| Error(DecoderDiverges v) -> failwithf "draw %d: %s" v.Divergence.Value.Draw v.Divergence.Value.Candidate
+| Error(DecoderUndrawable(t, why)) -> failwithf "%s cannot be drawn: %s" t why
+
+// or, in one call — refuses rather than registers on a divergence:
+RemotingDecoders.registerVerified<Address> address
+```
+
+The check is **differential, .NET-only, and seeded** — the Fable client has no reflection reader to
+compare against, so it registers what the .NET side verified, and a seed makes a refusal
+reproducible. A generated module carries the whole set as `verifyAll draws seed` and
+`registerAllVerified ()`; `PlatformDecoders` is such a module, and the SDK's test pack runs its
+`verifyAll` over every registration before the file is allowed to differ from the generator's
+emission.
 
 ---
 
@@ -299,35 +326,61 @@ theorem by construction rather than by a second proof.
   `GeneratedDispatchRegistry` is unchanged — it is keyed by API-record type and holds route
   handlers, which is a different key and a different payload on a different wire.
 
-### The named, bounded set the SDK ships
+### The set the SDK ships is generated, and it is the whole platform (Phase 801)
 
-`PlatformDecoders` covers two platform-owned API records and every wire type they carry:
-`IHealthMonitorApi` (ten records plus five `Result<_, string>` returns) and
-`IDeploymentVerificationApi` (five records plus one). A record outside that set keeps the reflection
-path **by design, not by omission**: the facet's `Reflection` count under the verified profile, once
-this set is exhausted, is the measured trigger for the source generator — and a further hand-written
-decoder makes that number smaller and the case for the generator weaker.
+`PlatformDecoders` is **the generator's own emission** over every API record the platform declares
+— 38 records, every wire type they carry and every method return — committed as source under
+`src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs` and pinned by a contract test that
+regenerates the file in memory and fails on the first differing byte. Nothing in it is hand-written
+and nothing in it is trusted on sight: the same test runs `PlatformDecoders.verifyAll` over every
+registration against the reflection reader before the committed file is allowed to stand. The rule
+for changing a platform wire type is therefore one line —
+`TOOLUP_REGEN_PLATFORM_DECODERS=1 dotnet <ToolUp.Platform.Tests.dll> --filter-test-list "Phase 801"`
+rewrites the file; commit it with the type.
 
-The set was chosen from the platform's own always-mounted surfaces rather than from a traffic
-ranking. There is no per-API-record call counter in this repository to read one from; the tier
-records per-request metrics and audit envelopes, and nothing counts calls per record.
+Until Phase 801 the module covered two hand-written records (`IHealthMonitorApi`,
+`IDeploymentVerificationApi`), and this section said the facet's `Reflection` count was the measured
+trigger for the generator. That trigger fired: Phases 800, 816 and 817 closed the last three
+expressibility gaps (tuples and several-field cases, recursive types, the one `obj` field), the
+census reached 38 of 38, and the generated set replaced the hand-written one. A platform record on
+the reflection path is now a **regression the contract test names**, not a design choice.
+
+A consumer's own records are unchanged by this: they decode through the reflection reader until the
+consumer registers a decoder — hand-written, or generated with `ToolUp.Remoting.Generator` and
+registered through `registerAllVerified`.
 
 ---
 
 ## 6. The composition-profile facet
 
-Under `CompositionProfile.Verified`, a registered API record with no algebra decoder is a **boot
+Under `CompositionProfile.Verified`, a served API record with no algebra decoder is a **boot
 preflight refusal naming the record**. Under every other profile the facet is informational and boot
-proceeds. It is never a build gate (GP 13 keeps the lightweight platform untouched), and a
-deployment that declares no API records declares nothing to check — so an existing verified
-deployment that upgrades boots exactly as it did.
+proceeds. It is never a build gate (GP 13 keeps the lightweight platform untouched).
+
+**The facet enumerates what the composition SERVES, not what a root declared (Phase 801).**
+`Api.make` is the one place every mount passes through, and it records the record type it is handed
+(`ServedApiRecords`); `RemotingDecoderFacet.inspectServed` classifies that set by reading each
+record's method return types off its own shape, so a record a root forgot to declare is a
+`Reflection` line rather than an absence. Corpus coverage stays a declaration — a mounted record
+proves nothing about whether the corpus draws its shapes — taken from `coveredApiRecords` by name and
+`false` otherwise. `RemotingDecoderFacet.coverage` is the ratio, and `ServerApp.run` logs it once at
+boot:
+
+```
+remoting decoders: 38 of 38 served API record(s) decode through the closed algebra (profile standard, algebra decoders advisory)
+```
+
+The declared form (`inspect` / `inspectPlatform`) is kept for a root that wants to grade a list it
+composed itself; the two go through the same classifier, so a served record and a declared one are
+graded identically. The deployment verification report derives its section from the served set when
+a root supplies none.
 
 The deployment verification report carries the facet per record with the `Verified` / `Observed`
 split it already uses: **`Verified` only where the record decodes through the algebra AND the wire
 corpus draws the shapes it carries**, `Observed` otherwise. A deployment's own assertion about
 itself never reads as a pass. A `Reflection` record is `Observed` and never `Failed`, whatever the
-profile — reflection decoding is the shipped default and every deployment's baseline, and a report
-that reddened on it would be reporting the platform's own posture as a defect.
+profile — reflection decoding is the shipped default for a consumer's own records, and a report
+that reddened on it would be reporting a consumer's posture as a defect.
 
 The facet binds the vertical built on this platform and nothing else: the coordination plane it is
 composed alongside takes no remoting from here at all, by the cross-pillar rule.
