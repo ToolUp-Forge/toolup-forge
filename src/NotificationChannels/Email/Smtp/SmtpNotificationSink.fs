@@ -179,7 +179,7 @@ let private toMailbox (addr: EmailAddress) : MailboxAddress =
 
 /// SMTP-backed transactional email sink. `addressBook` is the SDK's
 /// `INotificationAddressBook` (default `BlobBackedNotificationAddressBook`,
-/// or a directory-driven impl), used to resolve `RecipientUserIds` to
+/// or a directory-driven impl), used to resolve `Recipients` to
 /// concrete `EmailAddress`es at dispatch time. `settings` carries the
 /// SMTP connection details; `logger` is optional so tests can run
 /// silent.
@@ -190,14 +190,19 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
         | Some l -> l.Warn message
         | None -> ()
 
-    /// Resolve every recipient userId to an `EmailAddress`. Skips
-    /// userIds with no resolvable address — caller decides what to do
-    /// with an empty resolved list.
-    let resolveRecipients (scopeId: string) (userIds: string list) : Async<MailboxAddress list> = async {
+    /// Resolve every recipient to an address, dropping the ones with
+    /// none. Phase 6f.A widened the parameter from `userId list` to
+    /// `RecipientId list`: an `External` recipient resolves through the
+    /// address book's consent-gated arm, so a contact with no live
+    /// opt-in yields nothing here exactly as a user with no address
+    /// does. The REFUSAL that distinguishes the two is recorded
+    /// upstream by the consent filter, before the envelope reaches any
+    /// sink.
+    let resolveRecipients (scopeId: string) (recipients: RecipientId list) : Async<MailboxAddress list> = async {
         let resolutions =
-            userIds
-            |> List.map (fun userId -> async {
-                let! email = addressBook.ResolveEmail(userId, scopeId)
+            recipients
+            |> List.map (fun recipient -> async {
+                let! email = addressBook.ResolveEmail(recipient, scopeId)
                 return email |> Option.map toMailbox
             })
             |> Async.Parallel
@@ -213,7 +218,7 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
         member _.Send(scopeId, envelope) = async {
             match envelope.Notification with
             | TransactionalEmail email ->
-                let! recipients = resolveRecipients scopeId email.RecipientUserIds
+                let! recipients = resolveRecipients scopeId email.Recipients
 
                 if List.isEmpty recipients then
                     return SinkResult.Skipped "no_addressable_recipients"

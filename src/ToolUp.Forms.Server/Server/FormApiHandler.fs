@@ -745,7 +745,7 @@ let formApi
                                                 .Replace("{{displayName}}", displayName)
 
                                         let envelope: EmailEnvelope = {
-                                            RecipientUserIds = [ respondentUserId ]
+                                            Recipients = [ RecipientId.User respondentUserId ]
                                             Content = InlineEmail(req.Subject, body, None)
                                             CorrelationId = Some token.Claim.TokenId
                                         }

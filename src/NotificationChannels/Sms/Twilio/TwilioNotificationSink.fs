@@ -98,10 +98,18 @@ type TwilioNotificationSink
         | Some l -> l.Warn message
         | None -> ()
 
-    let resolveRecipients (scopeId: string) (userIds: string list) : Async<PhoneNumber list> = async {
+    /// Resolve every recipient to an address, dropping the ones with
+    /// none. Phase 6f.A widened the parameter from `userId list` to
+    /// `RecipientId list`: an `External` recipient resolves through the
+    /// address book's consent-gated arm, so a contact with no live
+    /// opt-in yields nothing here exactly as a user with no address
+    /// does. The REFUSAL that distinguishes the two is recorded
+    /// upstream by the consent filter, before the envelope reaches any
+    /// sink.
+    let resolveRecipients (scopeId: string) (recipients: RecipientId list) : Async<PhoneNumber list> = async {
         let lookups =
-            userIds
-            |> List.map (fun userId -> async { return! addressBook.ResolvePhone(userId, scopeId) })
+            recipients
+            |> List.map (fun recipient -> async { return! addressBook.ResolvePhone(recipient, scopeId) })
             |> Async.Parallel
 
         let! results = lookups
@@ -191,7 +199,7 @@ type TwilioNotificationSink
         member _.Send(scopeId, envelope) = async {
             match envelope.Notification with
             | TransactionalSms sms ->
-                let! recipients = resolveRecipients scopeId sms.RecipientUserIds
+                let! recipients = resolveRecipients scopeId sms.Recipients
 
                 if List.isEmpty recipients then
                     return SinkResult.Skipped "no_addressable_recipients"

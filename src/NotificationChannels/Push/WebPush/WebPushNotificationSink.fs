@@ -127,10 +127,14 @@ type WebPushNotificationSink
         | Some l -> l.Warn message
         | None -> ()
 
-    let resolveTokens (scopeId: string) (userIds: string list) : Async<PushToken list> = async {
+    /// Resolve every recipient's registered push tokens. Phase 6f.A
+    /// widened the parameter to `RecipientId list`; an `External`
+    /// recipient has no device registration in the shipped model and
+    /// resolves to no tokens.
+    let resolveTokens (scopeId: string) (recipients: RecipientId list) : Async<PushToken list> = async {
         let lookups =
-            userIds
-            |> List.map (fun userId -> async { return! addressBook.ResolvePushTokens(userId, scopeId) })
+            recipients
+            |> List.map (fun recipient -> async { return! addressBook.ResolvePushTokens(recipient, scopeId) })
             |> Async.Parallel
 
         let! results = lookups
@@ -211,7 +215,7 @@ type WebPushNotificationSink
         member _.Send(scopeId, envelope) = async {
             match envelope.Notification with
             | MobilePush push ->
-                let! tokens = resolveTokens scopeId push.RecipientUserIds
+                let! tokens = resolveTokens scopeId push.Recipients
 
                 if List.isEmpty tokens then
                     return SinkResult.Skipped "no_addressable_recipients"

@@ -223,7 +223,13 @@ module ReportSubscriptionJobHandler =
             let! resolved =
                 subscription.RecipientUserIds
                 |> List.map (fun userId -> async {
-                    let! address = deps.AddressBook.ResolveEmail(userId, subscription.ScopeId)
+                    // A report subscription addresses platform users
+                    // only — `ReportSubscription.RecipientUserIds` is a
+                    // separate record from the notification envelopes
+                    // and Phase 6f.A deliberately left it as `string
+                    // list`: a subscription names people who can open
+                    // the report, which an external contact cannot.
+                    let! address = deps.AddressBook.ResolveEmail(RecipientId.User userId, subscription.ScopeId)
                     return userId, Option.isSome address
                 })
                 |> Async.Sequential
@@ -244,7 +250,7 @@ module ReportSubscriptionJobHandler =
                     NotificationEnvelope.create
                         subscription.ScopeId
                         (TransactionalEmail {
-                            RecipientUserIds = reachable
+                            Recipients = RecipientId.ofUserIds reachable
                             Content = deliveryContent subscription name objectKey version
                             // Keyed on the artefact VERSION, so a
                             // scheduler retry of one run de-duplicates
@@ -528,7 +534,7 @@ module ReportSubscriptionJobHandler =
                                     NotificationEnvelope.create
                                         subscription.ScopeId
                                         (TransactionalEmail {
-                                            RecipientUserIds = subscription.RecipientUserIds
+                                            Recipients = RecipientId.ofUserIds subscription.RecipientUserIds
                                             Content = failureContent subscription failure.Reason
                                             CorrelationId =
                                                 Some $"report-subscription-failed:{subscription.Id}:{ctx.JobId}"
