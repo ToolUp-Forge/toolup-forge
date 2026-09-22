@@ -497,5 +497,12 @@
     <!-- ToolUp.DataSources.Snowflake — Snowflake's own ADO.NET
          provider; Apache-2.0. -->
     <PackageVersion Include="Snowflake.Data" Version="6.0.0" />
+    <!-- Phase 194 — TEST-ONLY. `ToolUp.Cli.Tests` parses the YAML that
+         `toolup k8s emit` writes and asserts over the document tree, so
+         the gate measures the emitted structure rather than its text. No
+         shipped package references it: the CLI writes YAML through the
+         embedded-template seam and reads none. MIT, which leaves this
+         Apache-2.0 repo's licence set unchanged. -->
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 </Project>
