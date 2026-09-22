@@ -461,7 +461,7 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>) =
     member _.Surfaces = List.rev surfaces
 
     interface IFactDisclosureGate with
-        member _.Check(_, _, surface, factIds) = async {
+        member _.Check(_: string, _: string, surface: FactEgressSurface, factIds: string list) = async {
             surfaces <- surface :: surfaces
 
             return
@@ -471,6 +471,12 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
+
+        // Phase 797 — the typed form delegates to the string form above.
+        member this.Check
+            (scope: ToolUp.Platform.ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list)
+            =
+            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 let private metricValues (document: NarrativeDocument) : string list =
     document.Sections

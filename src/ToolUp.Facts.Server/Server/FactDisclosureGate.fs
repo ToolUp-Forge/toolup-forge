@@ -188,25 +188,20 @@ type FactDisclosureGate
         // another tenant) ⇒ deny, conservatively — never fail open.
         | None -> FactNotDisclosable "unknown-fact", ""
 
-    // NOTE on the widened constructor (Phase 675). `?budgets` widens the
-    // SINGLE generated `.ctor`, so the five-argument token disappears
-    // from the public-API baseline — a recorded retype, regenerated
-    // surgically, under the 2026-08-04 record/contract widening
-    // dispensation. Every existing call site still compiles unchanged
-    // (F# optional arguments), and every source form remains valid.
-    //
-    // The obvious alternative — keeping the five-argument arity as an
-    // explicit secondary constructor so the baseline diff stayed purely
-    // additive — was implemented, measured and REJECTED: two overloads
-    // differing only in a trailing optional argument are ambiguous to
-    // overload resolution, so `FactDisclosureGate(store, events)` stopped
-    // compiling with FS0041 at three call sites in this very file. It
-    // traded a recorded, source-compatible baseline retype for a genuine
-    // consumer break, which is the wrong direction.
-
-    interface IFactDisclosureGate with
-
-        member _.Check(scopeId, principal, surface, factIds) = async {
+    // Phase 797 — one decision procedure, two ways of naming the shard.
+    // The body is written once over an accessor pair so the string form
+    // and the `ResolvedScope` form cannot drift: `getFact` / `queryAll`
+    // are the store's own members bound to the scope the caller holds,
+    // and `scopeId` is only ever the audit row's shard key.
+    let check
+        (getFact: string -> Async<Fact option>)
+        (queryAll: unit -> Async<Fact list>)
+        (scopeId: string)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (factIds: string list)
+        : Async<Map<string, FactDisclosureVerdict>> =
+        async {
             let ids = factIds |> List.distinct
 
             // Phase 592 — the purpose facet, evaluated once per check
@@ -250,22 +245,14 @@ type FactDisclosureGate
                     async.Return None
                 else
                     async {
-                        let! all =
-                            store.Query(
-                                scopeId,
-                                {
-                                    FactQuery.all with
-                                        IncludeSuperseded = true
-                                }
-                            )
-
+                        let! all = queryAll ()
                         return Some(DisclosureTaint.buildGraph all)
                     }
 
             let! verdicts =
                 ids
                 |> List.map (fun factId -> async {
-                    let! fact = store.Get(scopeId, factId)
+                    let! fact = getFact factId
                     let baseV, metric = baseVerdict surface fact
 
                     // Phase 592 — a purpose refusal denies every fact in
@@ -419,6 +406,59 @@ type FactDisclosureGate
 
             return Map.ofArray verdicts
         }
+
+    // NOTE on the widened constructor (Phase 675). `?budgets` widens the
+    // SINGLE generated `.ctor`, so the five-argument token disappears
+    // from the public-API baseline — a recorded retype, regenerated
+    // surgically, under the 2026-08-04 record/contract widening
+    // dispensation. Every existing call site still compiles unchanged
+    // (F# optional arguments), and every source form remains valid.
+    //
+    // The obvious alternative — keeping the five-argument arity as an
+    // explicit secondary constructor so the baseline diff stayed purely
+    // additive — was implemented, measured and REJECTED: two overloads
+    // differing only in a trailing optional argument are ambiguous to
+    // overload resolution, so `FactDisclosureGate(store, events)` stopped
+    // compiling with FS0041 at three call sites in this very file. It
+    // traded a recorded, source-compatible baseline retype for a genuine
+    // consumer break, which is the wrong direction.
+
+    interface IFactDisclosureGate with
+
+        member _.Check(scopeId: string, principal, surface, factIds) =
+            check
+                (fun factId -> store.Get(scopeId, factId))
+                (fun () ->
+                    store.Query(
+                        scopeId,
+                        {
+                            FactQuery.all with
+                                IncludeSuperseded = true
+                        }
+                    ))
+                scopeId
+                principal
+                surface
+                factIds
+
+        // Phase 797 — the request-path form. The store is asked through
+        // its typed members, so the scope the gate re-resolves ids in is
+        // the one the platform minted, by construction.
+        member _.Check(scope: ResolvedScope, principal, surface, factIds) =
+            check
+                (fun factId -> store.Get(scope, factId))
+                (fun () ->
+                    store.Query(
+                        scope,
+                        {
+                            FactQuery.all with
+                                IncludeSuperseded = true
+                        }
+                    ))
+                scope.ScopeId
+                principal
+                surface
+                factIds
 
 module FactDisclosureGate =
 

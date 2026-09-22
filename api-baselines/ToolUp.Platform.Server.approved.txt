@@ -9712,6 +9712,8 @@ ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor (class)
 ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ScopeResolutionRequest]
 ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.resolveForContext(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
 ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.userId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Platform.StorageScopeResolver+ScopeResolution (class)
+ToolUp.Platform.StorageScopeResolver+ScopeResolution.forRequest(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ResolvedScope
 ToolUp.Platform.StorageScopeResolver+TeamScopeResolver (class)
 ToolUp.Platform.StorageScopeResolver+TeamScopeResolver..ctor(ToolUp.Platform.TeamManagement+ITeamStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.StorageScopeResolver+TeamScopeResolver.InvalidateUser(System.String) : System.Void

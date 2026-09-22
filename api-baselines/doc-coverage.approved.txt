@@ -85,7 +85,7 @@ ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 97/144
 ToolUp.Facts.Core 275/511
-ToolUp.Facts.Server 439/804
+ToolUp.Facts.Server 446/811
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 150/533
@@ -123,8 +123,8 @@ ToolUp.OpenXml.Spreadsheet 43/141
 ToolUp.OpenXml.SvgRasterizer.Skia 2/3
 ToolUp.Platform.Build 254/505
 ToolUp.Platform.Client 2183/6359
-ToolUp.Platform.Core 5352/13608
-ToolUp.Platform.Server 5572/11232
+ToolUp.Platform.Core 5364/13617
+ToolUp.Platform.Server 5574/11234
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 581/1062

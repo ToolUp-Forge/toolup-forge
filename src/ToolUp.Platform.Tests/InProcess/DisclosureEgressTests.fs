@@ -65,7 +65,7 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     member _.LastCall = lastCall
 
     interface IFactDisclosureGate with
-        member _.Check(scopeId, principal, surface, factIds) = async {
+        member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
             lastCall <- Some(scopeId, principal, surface, factIds)
 
             return
@@ -75,6 +75,10 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
+
+        // Phase 797 — the typed form delegates to the string form above.
+        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
+            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Predicate (525.A) ─────────────────────────────────────────────
 

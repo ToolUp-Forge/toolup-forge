@@ -13,6 +13,7 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
@@ -185,6 +186,10 @@ let private contextFor (sp: IServiceProvider) (scopeId: string) : HttpContext =
     }
 
     ctx.Items["ToolUp.StorageScope"] <- box scope
+    // Phase 797 — the fact doors take their scope from the resolver's
+    // typed record, not from the `StorageScope` item; seed both, as the
+    // middleware does.
+    ScopeResolution.remember ctx scope |> ignore
     ctx.Items["ToolUp.UserId"] <- box "user-1"
     ctx :> HttpContext
 

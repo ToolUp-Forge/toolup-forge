@@ -39,9 +39,11 @@ that value to what a provider accepts introduces nothing the value does not alre
 the renderer reads only the assembled text blocks and the conversation turns and cannot see the
 fact list at all; and two stores that agree on the facts disclosable for that scope produce the
 same value and byte-for-byte the same rendering, whatever the facts they withhold differ in —
-identities, contents, counts, policies. **Three things it does not claim**, each because nothing
-here can see them: how the scope itself was resolved (a caller-supplied string, taken on trust and
-the subject of later work); anything on the *outbound* side — the transport, what a model answers,
+identities, contents, counts, policies. **Two things it does not claim**, each because nothing
+here can see them — and one it no longer needs to assume: since Phase 797 the scope a door
+compares against is a `ResolvedScope` only the platform's scope resolution can mint, so "which
+string is right" is settled by the type at every door rather than taken on trust (the
+residual, a caller assembling outside the doors, is stated on the ladder); anything on the *outbound* side — the transport, what a model answers,
 and what a tool it calls may fetch, the last of which is load-bearing for the plain-English
 sentence and so is carried as a stated assumption rather than quietly dropped; and, within the
 value, that retrieved passages
@@ -520,9 +522,23 @@ lemmas and their companions alone:**
   what was admitted, and why the theorem is stated over the assembly rather than over `render`
   alone.
 
+* **The scope is the resolver's — by type, not by lemma (Phase 797).** The model compares
+  `fact_scope` against the caller's scope and never derives either; what used to sit on Rung 3
+  was *which string the caller passes*. Since Phase 797 every fact door — the store's members, the
+  gate's `Check`, the three tools' executors — takes a `ResolvedScope` whose representation is
+  private and whose constructor is internal to the platform's server tier, minted at the one
+  point the scope-resolution middleware resolves the request. A door therefore cannot be handed
+  a scope the principal did not resolve to: the compiler refuses the construction. The prover
+  here is the F# type system, not F\*, so this bullet is on Rung 1 by a different instrument;
+  what keeps it honest is pinned in the test pack (`ScopeChokePointTests`): no public
+  constructor and no public union case on the type, the mint internal, a `StorageScope` planted
+  in the request items *not* reaching a door, and a source guard over the three doors that
+  refuses the pre-797 spellings, go-red pinned. What it does NOT cover is stated on Rung 3.
+
 Three things the model leaves *opaque*, each because a second implementation here would be free to
 disagree with the host's: substring containment (the leak differential asks the host `Contains`;
-every lemma holds for any containment test at all), scope resolution (compared, never derived — see
+every lemma holds for any containment test at all), scope resolution (compared, never derived — and
+since Phase 797 the string compared is the resolver's by type; see the last bullet of this rung and
 Rung 3), and the fact renderer just described. The turn type is *narrowed* rather than opaque — the
 model carries the three fields rendering reads and the host's bridge passes the production record
 through unchanged — which is stated here rather than left to be discovered.
@@ -563,11 +579,14 @@ Not proved. *Measured*, on every run of the gate.
 
 ### Rung 3 — Assumed, and stated
 
-* **Scope resolution is assumed correct.** The scope is a caller-supplied string. The model
-  compares it and never derives it, so everything above is conditional on that string being the
-  scope the caller is actually entitled to — and on the verdict having been resolved against the
-  same one. This is the load-bearing assumption of the whole input-side claim, and closing it is a
-  separate piece of work.
+* **Scope resolution — retired to Rung 1 by Phase 797, with this residual.** Until Phase 797
+  this bullet read: the scope is a caller-supplied string, compared and never derived, so
+  everything above was conditional on that string being the one the caller is entitled to. At
+  every fact door that is now settled by the type (Rung 1, last bullet). What remains assumed is
+  narrower and is the same shape as the assembly bullet below: a caller that assembles a
+  `ModelInput` *outside* the doors writes the `DisclosedFact.Scope` string itself, and nothing
+  here checks that it wrote the resolver's. The doors are where the theorem's fold runs in the
+  shipped code, so this is the residual, not the rule.
 * **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
   sentence a reader wants — that a model is isolated from knowledge except what is explicitly
   permitted — additionally needs that the tools a model may call cannot fetch what the input side

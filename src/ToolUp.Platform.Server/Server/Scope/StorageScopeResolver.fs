@@ -258,3 +258,50 @@ module ScopeRequestExtractor =
                 | true, values when values.Count > 0 -> string values[0]
                 | _ -> "anonymous"
     }
+
+/// Phase 797 — the one place a request's storage scope becomes a
+/// `ResolvedScope`. The scope-resolution middleware calls `remember` with
+/// the scope it derived for the request; a fact door calls `forRequest`
+/// and gets either that value or the explicit anonymous scope. Nothing
+/// else can mint one: `ResolvedScope`'s representation is private to
+/// `ToolUp.Platform.Core` and its constructor is internal, visible to this
+/// assembly and to no consumer. So a store or gate member that takes a
+/// `ResolvedScope` is, by type, asking about the scope the principal
+/// resolved to — never about a string a caller chose.
+///
+/// This module deliberately does NOT run a resolver of its own. Resolution
+/// happens once per request in the middleware; a second path here would
+/// be a second resolver with its own semantics. A request the middleware
+/// did not resolve a scope for (a resolver error, or a route the
+/// middleware does not cover) is the anonymous scope — a shard of its own
+/// that holds only what was asserted anonymously, never a widening.
+module ScopeResolution =
+    open Microsoft.AspNetCore.Http
+
+    /// The `HttpContext.Items` key the middleware records the request's
+    /// `ResolvedScope` under. Only a `ResolvedScope` value is honoured at
+    /// this key, and only this assembly can produce one.
+    [<Literal>]
+    let internal ItemsKey = "ToolUp.ResolvedScope"
+
+    /// Mint a `ResolvedScope` from the resolver's output. Internal: the
+    /// middleware and the test pack are its only callers.
+    let internal ofStorageScope (scope: StorageScope) : ResolvedScope = ResolvedScope.ofStorageScope scope
+
+    /// Mint the request's `ResolvedScope` from the scope the middleware
+    /// resolved and record it on the request for `forRequest` to find.
+    /// Internal: called once per request by the scope-resolution
+    /// middleware, and by the test pack to stand in for it.
+    let internal remember (ctx: HttpContext) (scope: StorageScope) : ResolvedScope =
+        let resolved = ofStorageScope scope
+        ctx.Items[ItemsKey] <- box resolved
+        resolved
+
+    /// The scope the platform resolved for this request, or the explicit
+    /// anonymous scope when it resolved none. This is how a fact door
+    /// obtains its scope — it never reads `StorageScope` from the request
+    /// items and never falls back to a user id or a literal.
+    let forRequest (ctx: HttpContext) : ResolvedScope =
+        match ctx.Items.TryGetValue ItemsKey with
+        | true, (:? ResolvedScope as scope) -> scope
+        | _ -> ResolvedScope.anonymous
