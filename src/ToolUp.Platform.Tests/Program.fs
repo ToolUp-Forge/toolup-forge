@@ -2021,6 +2021,12 @@ let private registeredTests =
         // generic unhandled 500; the MsgPack reader's TryRead/Read pair;
         // and the client-side recovery of the refusal from the wire.
         RemotingDecodeRefusalTests.tests
+        // Phase 69j — the `X-Remoting-Schema` negotiation half: header-driven
+        // routing to `_V<n>` handlers, the refusal envelope's byte pin, the
+        // per-method version vector on the docs export, the deprecation
+        // warning, and the compose-time refusals (clashing versions, bad
+        // retirement date, streaming, AspNetCore parity).
+        SchemaVersionTests.tests
         // Phase 786 — the same reader under hostile input: width-exact
         // integers, a length prefix checked against the bytes actually
         // present, and a bounded nesting depth — each a refusal, each
