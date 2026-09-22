@@ -792,6 +792,26 @@ type AuditEvent =
     /// Phase 445 — a restore drill did not pass; the health probe reports
     /// `Degraded` until one does.
     | RestoreDrillFailed of RestoreDrillFailedPayload
+    /// Phase 6f.A — an external (non-platform) contact was filed in a
+    /// scope's address book.
+    | ContactCreated of ContactCreatedPayload
+    /// Phase 6f.A — an external contact's reachable fields were edited.
+    /// Never means a consent moved; consent has its own two cases.
+    | ContactUpdated of ContactUpdatedPayload
+    /// Phase 6f.A — an external contact was deleted, discarding every
+    /// consent it carried.
+    | ContactDeleted of ContactDeletedPayload
+    /// Phase 6f.A — a per-channel consent was recorded, with the
+    /// evidence that demonstrates it (GDPR Article 7(1)).
+    | ContactOptInRecorded of ContactOptInRecordedPayload
+    /// Phase 6f.A — a per-channel consent was withdrawn. The stored
+    /// record is removed, so this row is the history.
+    | ContactOptInWithdrawn of ContactOptInWithdrawnPayload
+    /// Phase 6f.A — a transactional send was refused because the
+    /// deployment held no lawful basis for contacting the recipient.
+    /// Distinct from `NotificationSilentlySkipped`, which is a
+    /// deployment choosing not to send.
+    | NotificationDeliveryRefused of NotificationDeliveryRefusedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1002,3 +1022,9 @@ module AuditEvent =
         | BackupFailed _ -> "BackupFailed"
         | RestoreDrillPassed _ -> "RestoreDrillPassed"
         | RestoreDrillFailed _ -> "RestoreDrillFailed"
+        | ContactCreated _ -> "ContactCreated"
+        | ContactUpdated _ -> "ContactUpdated"
+        | ContactDeleted _ -> "ContactDeleted"
+        | ContactOptInRecorded _ -> "ContactOptInRecorded"
+        | ContactOptInWithdrawn _ -> "ContactOptInWithdrawn"
+        | NotificationDeliveryRefused _ -> "NotificationDeliveryRefused"

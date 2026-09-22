@@ -959,3 +959,31 @@ type MetricsHistoryMode =
     /// `ITimeSeriesStore`; the flusher names either one's absence once
     /// rather than sampling into nothing silently.
     | EnabledMetricsHistory of MetricsHistoryConfig
+
+/// Phase 6f.A — selects whether the external address book is composed:
+/// the `ExternalContact` entity registration, `IExternalContactStore` in
+/// DI, the consent filter wrapping the outbound notification channel, and
+/// `IExternalContactApi` on the router. Default
+/// `NoExternalContactStore` — a deployment that never addresses a
+/// non-platform recipient registers no entity, mounts no route, adds no
+/// channel decorator and pays nothing (GP 13); the shipped user-keyed
+/// `_platform/contacts/` address-book layout is byte-for-byte unchanged
+/// (GP 11).
+///
+/// Requires `EntityStore = EnabledEntityStore`: the contact store is
+/// `IEntityStore`-backed, for the versioning, the dedupe indexes and the
+/// per-scope container the substrate already provides. Enabling this
+/// without the entity store is named at compose time rather than left to
+/// dangle.
+type ExternalContactStoreMode =
+    /// No external address book (default). Transactional envelopes may
+    /// still carry `RecipientId.External _`, and every such recipient is
+    /// refused for want of a store to resolve it — the same refusal a
+    /// contact with no opt-in gets, for the same reason.
+    | NoExternalContactStore
+    /// Register the `ExternalContact` entity and the `IEntityStore`-backed
+    /// `IExternalContactStore`, wrap the outbound channel in
+    /// `ExternalContactConsentFilter`, and mount `IExternalContactApi`.
+    /// Pair with `ClientConfig.ExternalContactManager` to get the admin
+    /// module.
+    | EnabledExternalContactStore

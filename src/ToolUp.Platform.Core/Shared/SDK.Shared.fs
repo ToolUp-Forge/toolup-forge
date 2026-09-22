@@ -670,6 +670,18 @@ type ServerConfig = {
     /// talks to.
     NotificationPreferences: NotificationPreferenceMode
 
+    /// Phase 6f.A — the external address book: recipients with no account
+    /// on the platform, each reachable only on the channels they have
+    /// consented to. Default `NoExternalContactStore`: no
+    /// `ExternalContact` entity registration, no `IExternalContactStore`
+    /// in DI, no consent filter on the outbound channel, no
+    /// `IExternalContactApi` route (GP 11 + GP 13).
+    /// `EnabledExternalContactStore` composes all four, and requires
+    /// `EntityStore = EnabledEntityStore` — the contact store is
+    /// entity-backed, and the mismatch is named at compose time rather
+    /// than left to dangle.
+    ExternalContactStore: ExternalContactStoreMode
+
     /// Phase 441 — the notification categories this deployment's modules
     /// declare (GP 9: modules declare, the SDK never enumerates). Appended
     /// by `ServerModule.withNotificationCategories` through `addModule`

@@ -878,3 +878,123 @@ type OAuthRefreshDeadLetteredPayload = {
     /// or `PermanentError` payload.
     FinalReason: string
 }
+// ─── Phase 6f.A — the external-contact consent trail ─────────────────
+//
+// A consent is a legal artefact, so its whole lifecycle is audited: who
+// filed the contact, who asserted a per-channel consent and on what
+// evidence, who withdrew it and why, and every send refused for want of
+// one. Together these are the GDPR Article 7(1) demonstrability record.
+// None of them carries an email address or a phone number — a contact id
+// only, exactly as the Phase 6f notification rows carry a user id only.
+
+/// An external contact was filed in a scope's address book.
+type ContactCreatedPayload = {
+    /// The acting user.
+    UserId: string
+    /// The scope whose address book gained the contact.
+    ScopeId: string
+    /// The new contact's id. Never its email or phone (PII stays in the
+    /// contact record; the audit trail points at it).
+    ContactId: string
+    /// Whose address book — `ContactOwner.toWireString`.
+    Owner: string
+    /// The grouping labels the contact was filed under.
+    Tags: string list
+}
+
+/// An external contact's reachable fields were edited. Consent is not
+/// editable through this path, so this row never means a consent moved.
+type ContactUpdatedPayload = {
+    /// The acting user.
+    UserId: string
+    /// The scope the contact belongs to.
+    ScopeId: string
+    /// The contact edited.
+    ContactId: string
+    /// The field names that changed, so an operator can see whether an
+    /// address moved without the row carrying the address.
+    ChangedFields: string list
+}
+
+/// An external contact was deleted, taking every consent it carried
+/// with it.
+type ContactDeletedPayload = {
+    /// The acting user.
+    UserId: string
+    /// The scope the contact belonged to.
+    ScopeId: string
+    /// The contact deleted.
+    ContactId: string
+    /// The channels whose consent the deletion discarded, in
+    /// `NotificationKind.SinkKind` wire form.
+    WithdrawnChannels: string list
+}
+
+/// A per-channel consent was recorded for an external contact. **This
+/// is the Article 7(1) row** — `Source` is the evidence that the
+/// consent was given, and it is required for exactly that reason.
+type ContactOptInRecordedPayload = {
+    /// The user who asserted the consent (Owner/Admin, or the system
+    /// actor for an automated intake).
+    UserId: string
+    /// The scope the contact belongs to.
+    ScopeId: string
+    /// The contact consenting.
+    ContactId: string
+    /// The channel consented to, in `NotificationKind.SinkKind` wire
+    /// form (`"Email"` / `"Sms"` / `"Push.WebPush"`).
+    Channel: string
+    /// How the consent was obtained — `"form-submission:{id}"`,
+    /// `"signed-form:{id}"`, `"manual-admin-entry:{userId}"`. Stored
+    /// verbatim; the SDK does not parse it.
+    Source: string
+    /// The recorded hard expiry, when the consent was time-boxed.
+    ExpiresAt: DateTime option
+}
+
+/// A per-channel consent was withdrawn. The stored `OptInRecord` is
+/// removed by the withdrawal — this row is where the history lives.
+type ContactOptInWithdrawnPayload = {
+    /// The user who withdrew it.
+    UserId: string
+    /// The scope the contact belongs to.
+    ScopeId: string
+    /// The contact whose consent was withdrawn.
+    ContactId: string
+    /// The channel, in `NotificationKind.SinkKind` wire form.
+    Channel: string
+    /// Why — `"recipient-request"`, `"bounce"`, `"admin"`. Free-form;
+    /// the SDK stores what the caller supplied.
+    Reason: string
+}
+
+/// A transactional send was REFUSED for want of a consent.
+///
+/// Distinct from `NotificationSilentlySkipped`, and the distinction is
+/// the point: a silent skip means the deployment chose not to send on
+/// that kind, and nobody is owed an explanation. A refusal means the
+/// deployment had no lawful basis to contact this recipient, which is
+/// the fact a regulator, an operator and the recipient each have an
+/// interest in. It is recorded per refused recipient set, before any
+/// vendor is contacted.
+type NotificationDeliveryRefusedPayload = {
+    /// Sink kind the send was routed to, in `SinkKind` wire form.
+    NotificationKind: string
+    /// The scope the send was published in.
+    ScopeId: string
+    /// Why the send was refused. `"no_opt_in"` is the only reason the
+    /// SDK emits today; the field is a string so a channel arm can
+    /// name its own without a DU change reaching every consumer.
+    Reason: string
+    /// `SHA256(RecipientId.toWireString)[..8]` per refused recipient —
+    /// the same PII-free correlation token the dispatcher's skip rows
+    /// carry, so one recipient reads as one hash across both emitters.
+    RecipientHashes: string list
+    /// The refused recipients' contact ids, for the operator who needs
+    /// to act on the refusal (record the missing consent, or remove the
+    /// recipient from the send). A contact id is not PII on its own —
+    /// it is the pointer the address book resolves.
+    ContactIds: string list
+    /// The envelope's correlation id, when it carried one.
+    CorrelationId: string option
+}

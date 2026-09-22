@@ -341,6 +341,14 @@
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
+        <!-- Phase 6f.A — external contacts: the ExternalContact entity,
+             ContactOwner, OptInRecord, the typed store error and the
+             IExternalContactApi remoting contract. After NotificationTypes.fs,
+             whose NotificationKind.SinkKind keys the per-channel consent map
+             and whose RecipientId the entity is addressed by; before
+             SDK.Shared.fs, which carries the ServerConfig field. Fable-safe
+             (records, DUs and BCL primitives only). -->
+        <Compile Include="Shared\Types\ExternalContactTypes.fs" />
         <!-- Phase 441 — notification preference + digest value types
              (DigestFrequency / DeliveryPreference / PreferenceChannel /
              QuietHours / UserNotificationPreferences / NotificationCategory /

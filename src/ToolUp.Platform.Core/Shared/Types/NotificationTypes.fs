@@ -48,8 +48,9 @@ type MembershipChangedPayload = {
 /// is the human label sinks include in the rendered `To:` header
 /// (e.g. SMTP, SendGrid template variables).
 ///
-/// Resolved server-side from `userId` via `INotificationAddressBook`
-/// at sink dispatch time — `EmailEnvelope` carries `RecipientUserIds`
+/// Resolved server-side from a `RecipientId` via
+/// `INotificationAddressBook`
+/// at sink dispatch time — `EmailEnvelope` carries `Recipients`
 /// only, never the address itself, so PII never crosses the wire of
 /// a cross-process notification channel (team isolation;
 /// cloud-neutral surface).
@@ -69,6 +70,97 @@ type PhoneNumber = { E164: string }
 /// to. The token is opaque — typically the W3C Push API endpoint URL
 /// for `WebPush`, an APNs device token for `iOS`, etc.
 type PushToken = { Token: string; Platform: string }
+
+/// Who a transactional envelope is addressed to. Phase 6f.A widened
+/// the three envelope payloads from `RecipientUserIds: string list` to
+/// `Recipients: RecipientId list` so the same dispatch substrate can
+/// address a recipient who has no account on the platform — a client of
+/// a small business, a household member who never installed the app, a
+/// survey respondent.
+///
+/// **Why a DU and not a bare string.** A `userId` and a `contactId` are
+/// both opaque strings, and resolving one as the other is a
+/// team-isolation bug that no test would catch: `User "abc"` and
+/// `External "abc"` are different rows in different stores with
+/// different consent rules. The DU forces every resolution site to
+/// disambiguate at the type level — the same argument
+/// `FlagScope` makes for flag scopes.
+///
+/// **Consent asymmetry is the point.** A `User` recipient has an
+/// account, a preference record and a relationship with the
+/// deployment; an `External` recipient has none of those, so the only
+/// lawful basis for contacting them is a recorded per-channel opt-in.
+/// `INotificationAddressBook` therefore resolves an `External`
+/// recipient to `None` unless the contact carries a live opt-in for
+/// that `SinkKind`, and the consent filter refuses the send rather
+/// than dropping it silently.
+///
+/// Fable-safe: two string-carrying cases, no BCL beyond `string`.
+/// `[<RequireQualifiedAccess>]` because `User` and `External` are
+/// already taken unqualified in this namespace (`FlagScope.User`,
+/// `AICapabilityOrigin.External`).
+[<RequireQualifiedAccess>]
+type RecipientId =
+    /// An authenticated platform user, resolved through the address
+    /// book's `(userId, scopeId)` lookup exactly as before Phase 6f.A.
+    | User of userId: string
+    /// A non-platform recipient held as an `ExternalContact` in the
+    /// scope's external address book. Resolution is consent-gated.
+    | External of contactId: string
+
+/// Helpers for `RecipientId`. The wire strings are what audit payloads
+/// and log lines carry, so they are a stable format, not a debug
+/// rendering.
+module RecipientId =
+    /// Stable wire-format string — `"user:{id}"` / `"external:{id}"`.
+    /// Round-trips via `tryParse`. Audit payloads that record a
+    /// recipient list carry this form so one recipient reads the same
+    /// way whichever kind it is, and so a reader can tell the two
+    /// apart without consulting the envelope.
+    let toWireString (recipient: RecipientId) : string =
+        match recipient with
+        | RecipientId.User userId -> "user:" + userId
+        | RecipientId.External contactId -> "external:" + contactId
+
+    /// Inverse of `toWireString`. Returns `None` for an unrecognised
+    /// discriminator. A BARE string (no prefix) parses as
+    /// `RecipientId.User` — that is the pre-Phase-6f.A wire form, and a
+    /// persisted envelope written before the widening must still read
+    /// back as the user recipient it was.
+    let tryParse (wire: string) : RecipientId option =
+        if System.String.IsNullOrEmpty wire then
+            None
+        elif wire.StartsWith "user:" then
+            Some(RecipientId.User(wire.Substring 5))
+        elif wire.StartsWith "external:" then
+            Some(RecipientId.External(wire.Substring 9))
+        elif wire.Contains ":" then
+            None
+        else
+            Some(RecipientId.User wire)
+
+    /// Wrap a plain `userId` — the migration helper for every call site
+    /// that addressed an envelope before Phase 6f.A widened it.
+    let ofUserId (userId: string) : RecipientId = RecipientId.User userId
+
+    /// Wrap a list of plain `userId`s.
+    let ofUserIds (userIds: string list) : RecipientId list = userIds |> List.map RecipientId.User
+
+    /// The `userId`s among `recipients`, dropping external contacts.
+    /// Used by the per-user preference filter, which has no record to
+    /// read for a recipient with no account.
+    let userIds (recipients: RecipientId list) : string list =
+        recipients
+        |> List.choose (function
+            | RecipientId.User userId -> Some userId
+            | RecipientId.External _ -> None)
+
+    /// The `contactId`s among `recipients`, dropping platform users.
+    let contactIds (recipients: RecipientId list) : string list =
+        recipients
+        |> List.choose (function
+            | RecipientId.User _ -> None
+            | RecipientId.External contactId -> Some contactId)
 
 /// Persisted contact record consumed by the SDK-default
 /// `BlobBackedNotificationAddressBook`. Lives in the shared
@@ -109,14 +201,20 @@ type EmailContent =
     | InlineEmail of subject: string * bodyText: string * bodyHtml: string option
     | TemplatedEmail of templateId: string * variables: Map<string, string>
 
-/// Payload of a `TransactionalEmail` notification. `RecipientUserIds`
+/// Payload of a `TransactionalEmail` notification. `Recipients`
 /// resolve to `EmailAddress`es server-side via `INotificationAddressBook`
 /// — recipients with no resolvable address are silently dropped (no
-/// audit event), the remaining list is delivered. `CorrelationId`
+/// audit event), the remaining list is delivered. An `External`
+/// recipient with no email opt-in is REFUSED rather than dropped, and
+/// the refusal is audited. `CorrelationId`
 /// forwards to vendors that support idempotent send (SendGrid
 /// `X-Message-Id`, SMTP `Message-ID`) so retries don't double-send.
 type EmailEnvelope = {
-    RecipientUserIds: string list
+    /// Who to deliver to. Wrap a plain `userId` with
+    /// `RecipientId.User` (or the whole list with
+    /// `RecipientId.ofUserIds`) — the field carried `string list`
+    /// before Phase 6f.A.
+    Recipients: RecipientId list
     Content: EmailContent
     CorrelationId: string option
 }
@@ -127,7 +225,9 @@ type EmailEnvelope = {
 /// callers are responsible for honouring the 160-character GSM-7
 /// constraint or accepting multi-segment billing.
 type SmsEnvelope = {
-    RecipientUserIds: string list
+    /// Who to deliver to. See `EmailEnvelope.Recipients` for the
+    /// migration shape.
+    Recipients: RecipientId list
     Body: string
     CorrelationId: string option
 }
@@ -138,7 +238,9 @@ type SmsEnvelope = {
 /// action. `Title` and `Body` are inline strings — vendor templates
 /// are deferred to a follow-up if push providers warrant them.
 type PushEnvelope = {
-    RecipientUserIds: string list
+    /// Who to deliver to. See `EmailEnvelope.Recipients` for the
+    /// migration shape.
+    Recipients: RecipientId list
     Title: string
     Body: string
     DeepLink: string option

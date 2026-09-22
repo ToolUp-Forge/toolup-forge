@@ -108,6 +108,7 @@ module ServerConfig =
         HealthStateTracking = false
         AlertRules = AlertRule.none
         NotificationPreferences = NoNotificationPreferences
+        ExternalContactStore = NoExternalContactStore
         NotificationCategories = []
         LogLevel = LogLevel.Info
         TraceCategories = Set.empty
@@ -950,6 +951,13 @@ module ServerConfig =
                         NoColumnMapping
                         EnabledColumnMapping
                         defaults.ColumnMapping
+                ExternalContactStore =
+                    parseEnabledDisabled
+                        logger
+                        ConfigKeys.Names.externalContactStore
+                        NoExternalContactStore
+                        EnabledExternalContactStore
+                        defaults.ExternalContactStore
                 MappingDryRun =
                     parseEnabledDisabled
                         logger

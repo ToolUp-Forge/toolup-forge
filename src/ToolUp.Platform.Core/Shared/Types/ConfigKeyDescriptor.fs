@@ -416,6 +416,9 @@ module Names =
     let entityStore = "TOOLUP_ENTITY_STORE"
 
     [<Literal>]
+    let externalContactStore = "TOOLUP_EXTERNAL_CONTACT_STORE"
+
+    [<Literal>]
     let entityOutbox = "TOOLUP_ENTITY_OUTBOX"
 
     [<Literal>]
@@ -1579,6 +1582,15 @@ let all: ConfigKeyDescriptor list = [
         Default = Some "disabled"
         IsSecret = false
         Category = "Data, ingestion & compliance"
+    }
+    {
+        EnvVar = Names.externalContactStore
+        Description =
+            "Enables the external address book: recipients with no platform account, each reachable only on the channels they have consented to. Requires TOOLUP_ENTITY_STORE=enabled."
+        Type = EnumKey enabledDisabledChoices
+        Default = Some "disabled"
+        IsSecret = false
+        Category = "Notification channels"
     }
     {
         EnvVar = Names.consentAudit
@@ -2773,6 +2785,7 @@ let manifestBindable: Set<string> =
         Names.entityStore
         Names.eventStore
         Names.eventTriggerCatchUp
+        Names.externalContactStore
         Names.healthStateTracking
         Names.includePlatformDefaults
         Names.initialPlatformAdmin
