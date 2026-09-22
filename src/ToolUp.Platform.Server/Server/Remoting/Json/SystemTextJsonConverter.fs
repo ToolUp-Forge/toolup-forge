@@ -1566,15 +1566,30 @@ module FableConverters =
         Found = sprintf "%s (%s)" (string element.ValueKind) ex.Message
     }
 
+    /// Phase 799 — the algebra arm of the seam. A type with a registered
+    /// JSON decoder (`JsonDecoders`) decodes through it: the element is
+    /// built into the closed value model in one bounded pass and the
+    /// decoder — total, pure, reflection-free — accepts the declared
+    /// type or refuses by name. A miss is `None`, which means the STJ
+    /// path below, exactly as before; nothing about a type the algebra
+    /// has not been asked about changes.
+    let private tryDecodeThroughAlgebra (element: JsonElement) (targetType: Type) : Result<obj, DecodeError> option =
+        match ToolUp.Remoting.Json.JsonDecoders.tryGet targetType with
+        | None -> None
+        | Some decoder -> Some(ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder)
+
     let tryDeserialiseElement
         (element: JsonElement)
         (targetType: Type)
         (options: JsonSerializerOptions)
         : Result<obj, DecodeError> =
-        try
-            Ok(element.Deserialize(targetType, options))
-        with ex ->
-            Error(refusalOf element targetType ex)
+        match tryDecodeThroughAlgebra element targetType with
+        | Some decoded -> decoded
+        | None ->
+            try
+                Ok(element.Deserialize(targetType, options))
+            with ex ->
+                Error(refusalOf element targetType ex)
 
     /// Phase 783 — the statically-typed twin of `tryDeserialiseElement`,
     /// for the dispatcher's argument-parse stage where the target type is
@@ -1582,11 +1597,18 @@ module FableConverters =
     /// `Deserialize<'T>` overload is kept on the happy path so
     /// well-formed traffic is byte-identical to the pre-phase behaviour
     /// rather than routed through a boxing `unbox`.
+    ///
+    /// Phase 799 — consults the JSON algebra first (see
+    /// `tryDecodeThroughAlgebra`); the `unbox` on that arm is the same
+    /// erased-decoder cast `RemotingDecoders` makes on the binary wire.
     let tryDeserialise<'T> (element: JsonElement) (options: JsonSerializerOptions) : Result<'T, DecodeError> =
-        try
-            Ok(element.Deserialize<'T>(options))
-        with ex ->
-            Error(refusalOf element typeof<'T> ex)
+        match tryDecodeThroughAlgebra element typeof<'T> with
+        | Some decoded -> decoded |> Result.map unbox<'T>
+        | None ->
+            try
+                Ok(element.Deserialize<'T>(options))
+            with ex ->
+                Error(refusalOf element typeof<'T> ex)
 
     /// Lazily-initialised singleton for the canonical default-shape options.
     /// Hidden behind the `shared` accessor below — direct mutation is

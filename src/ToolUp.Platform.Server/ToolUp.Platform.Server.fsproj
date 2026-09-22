@@ -53,6 +53,9 @@
              Server/Proxy.fs) come in via ProjectReference to
              ToolUp.Platform.Core which carries the folded MsgPack
              source. -->
+        <!-- Phase 799 — the JsonElement-to-JsonValue pass, ahead of the
+             converter set whose decode seam consults the JSON algebra. -->
+        <Compile Include="Server\Remoting\Json\JsonRead.fs" />
         <Compile Include="Server\Remoting\Json\SystemTextJsonConverter.fs" />
         <Compile Include="Server\Remoting\Types.fs" />
         <Compile Include="Server\Remoting\CallContext.fs" />

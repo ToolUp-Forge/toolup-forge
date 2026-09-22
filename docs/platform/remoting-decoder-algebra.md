@@ -1,7 +1,8 @@
 # The remoting decoder algebra
 
 *Phase 785. Depends on Phase 783 (the `DecodeError` vocabulary), Phase 784 (the wire
-differential corpus) and Phase 786 (the reader's length, width and depth bounds).*
+differential corpus) and Phase 786 (the reader's length, width and depth bounds). Extended to the
+JSON wire by Phase 799 — §8.*
 
 The remoting readers are interpreters over `System.Type`: a mutable-position cursor plus
 `FSharp.Reflection` over whatever type the API record declares. That is generic, and it is what
@@ -12,7 +13,8 @@ the failure mode is a throw from somewhere inside 1,800 lines of type-shape walk
 An open-source F# wire decoder whose combinators were proved total has the opposite shape: a
 **closed value model**, **pure combinators** that return a named `Result`, **structural recursion**
 that only ever descends into a subterm, and per-type decoders written as closed matches composed
-from those combinators. This page documents that shape as it now exists for the MessagePack wire.
+from those combinators. This page documents that shape as it now exists for the MessagePack wire —
+and, since Phase 799 (§8), for the JSON wire the server decodes its arguments from.
 
 The algebra is **opt-in**. A type with a registered decoder decodes through it; a type without one
 decodes through the reflection reader exactly as it did before. Adopting the SDK version carrying
@@ -406,8 +408,9 @@ Claim:       no client bytes can drive the decode edge to divergence, unbounded
              envelope before any handler or pre-flight stage runs
 Not claimed: authorisation, tenancy or session integrity of a decoded value;
              the bytes-to-value pass (bounded, not proved); semantic validity
-             (Phase 69e's domain); the STJ path until 785.F; the reflection
-             fallback for any record not opted in
+             (Phase 69e's domain); the STJ path for any argument type not
+             registered (799); the reflection fallback for any record not
+             opted in
 ```
 
 Three things the statement's "Not claimed" list covers that are worth stating concretely, because
@@ -430,43 +433,112 @@ each is a measured finding rather than a caution:
 
 ---
 
-## 8. The JSON wire — a decision, not an implementation (785.F)
+## 8. The JSON wire — shipped (Phase 799, closing 785.F)
 
-**Decision: the same algebra should extend to the JSON wire in a follow-on phase, and NOT over
-`ToolUp.AI.Wire`'s `JsonValue` as that type stands.**
+Phase 785 decided that the algebra should extend to the JSON wire, and NOT over
+`ToolUp.AI.Wire.JsonValue` as it stood: its `JNumber of float` cannot carry `int64` past 2^53,
+exact decimals, or the token's source form — the class of loss Phase 784 pinned live on this wire
+(the STJ converter loses up to one `TimeSpan` tick). Phase 799 ships the extension.
 
-`ToolUp.AI.Wire.JsonValue` (`src/ToolUp.AI.Wire/JsonValue.fs`) is the obvious carrier and was
-assessed as such. It is already the right SHAPE: a six-case closed value model, FSharp.Core-only, no
-`System.Text.Json` dependency, compiling unchanged on both the .NET and Fable hosts, with
-insertion-ordered object members so serialisation is byte-stable — and `Platform.Core` already
-references the package it lives in, so adopting it would cost no new dependency. Its `JsonValue`
-companion module already carries total accessors in exactly the `option`-returning style the
-combinators want.
+### The model — `ToolUp.Remoting.Json.JsonValue`
 
-The blocker is one field: **`JNumber of float`**. A single IEEE double cannot carry what the
-MessagePack algebra's whole width discipline exists to preserve —
+A sibling model in the remoting namespace rather than a widened `AI.Wire` one: that type is
+matched exhaustively in forty-five files across the provider mappings, and a seventh case is a
+break in every one of them. Six closed cases, no null, insertion-ordered members, a `size`
+measure — and **`Number of lexical: string`**: the token text as written, never parsed to a
+`float` on the way in. `JsonValue.tryInt64` / `tryUInt64` / `tryDecimal` / `tryFloat` read the
+width a decoder needs from the text, exactly. The number grammar is RFC 8259's, checked by hand
+so both hosts run the same code.
 
-* `int64` beyond 2^53 loses precision silently, which is the class of failure Phase 786 was written
-  to end;
-* `decimal` is exact on the MessagePack wire (four 32-bit words) and would become approximate;
-* the SOURCE WIDTH is gone entirely, so `asInt32` could not distinguish the same-width
-  reinterpretation the format depends on from a genuine narrowing, and would have to fall back to a
-  range test — the rule the Phase 784 corpus proved wrong for this transport.
+### The pass — `JsonRead`
 
-Phase 784 also pinned a live defect on this wire that bears directly on the decision: the STJ
-converter set loses up to one tick on `TimeSpan` (142 of 2,000 drawn values), where MessagePack is
-exact. That is the same class of loss — a numeric carrier that cannot represent what the type
-declares — arriving through a different door.
+`JsonRead.tryRead` builds the model from a `JsonElement` System.Text.Json has already parsed (the
+dispatcher's outer-array parse hands each argument over as one), under the same bounds discipline
+the MessagePack pass has: **depth** (64, agreeing with the reader's `Format.DefaultMaxDepth` and
+STJ's own parse bound) and **width** (a million elements or members per container). Both are named
+refusals. `GetRawText()` on a number token is what keeps the digits verbatim. `JsonRead.tryParse`
+takes text, for a caller holding a string; the parse is STJ's, and a document that is not JSON is
+a refusal naming what the parser saw, never an exception.
 
-So the follow-on phase adopts the algebra over a JSON value model whose numeric case preserves the
-token's **lexical form** (the digits as written, plus a parsed convenience), and the choice between
-widening `JsonValue` with such a case and declaring a sibling model in `ToolUp.Remoting` is that
-phase's to make on the evidence of what else consumes `JsonValue` by then. What is decided here is
-that the JSON wire is in scope for the same treatment, and that a `float`-only numeric carrier
-disqualifies any model from carrying it.
+### The combinators — `JsonDecode`
 
-Until that phase ships, the JSON path is outside the trust-boundary claim above, and the statement
-says so.
+The §3 surface, transposed to what this wire is:
+
+* **Records are NAMED.** `field "Name" decoder` looks a member up by name; an absent member is a
+  refusal naming it. `optionalField` is the arm for a field declared `option` — the writer's
+  `None` is `null`, and an older client's omission reads the same way.
+* **Width is read from the text.** The integer arms require an integral token (`1`, not `1.0` or
+  `1e0` — the writer never emits an integer that way) and a range fit; `asDecimal` reads the
+  digits as written; `asInt64` / `asUInt64` also accept the STRING form the writer emits
+  (`"+42"`, signed so a JavaScript reader cannot take it for a float).
+* **`asTimeSpan` is exact.** The writer emits total milliseconds as a double; the STJ reader
+  multiplies back and TRUNCATES, which is the tick Phase 784 saw lost. The combinator parses the
+  token as a `decimal`, scales by ten thousand in decimal arithmetic and rounds to the nearest
+  tick — recovering the tick the writer started from for every span the double could carry.
+  `StjRoundTripTests.timeSpanTickLoss` now measures both paths over the same 2,000 draws: the
+  converter loses, the algebra does not.
+* **Unions dispatch on the CASE NAME**, in the writer's shape — a field-less case is its name as a
+  string, a case with fields is `{"Case": payload}` with the payload the single field or an array
+  of several (`fields n`). The three legacy READ shapes the STJ converter also tolerates
+  (`{tag,name,fields}`, `__typename`, `["Case", …]`) are not admitted; a decoder accepts what the
+  writer writes.
+* **`asMap` takes a key parser** (`JsonDecode.Key.string` / `int32` / `int64` / `guid` /
+  `parse`), because a non-string key arrives as the property NAME — the key's own JSON text.
+* `DateOnly` / `TimeOnly` ARE here (.NET only): this wire's decode seam is server-side, so the
+  cross-host argument that keeps them out of the MessagePack algebra does not apply.
+
+Every combinator is total, pure and reflection-free, and `JsonDecoderAlgebraTests` pins each the
+way `DecoderAlgebraTests` does — including the IL pin.
+
+### The seam — server ARGUMENT decoding
+
+This is the adoption that matters, and it is the other direction from §5's. The MessagePack algebra
+guards the CLIENT's decode of the server's response. The server's own decode edge is the argument
+side: client JSON arriving at the Phase 783 seam (`FableConverters.tryDeserialise` /
+`tryDeserialiseElement`), which until now went straight into STJ's typed `Deserialize`. **The seam
+now consults `JsonDecoders` first** — the JSON twin of `RemotingDecoders`, same key, same
+`register<'T>` / `tryGet` shape — and a registered type decodes through one bounded pass and its
+decoder; a miss is the STJ path, exactly as before. Nothing about a type nobody registered changes.
+
+What changes for a registered type is what the differential arm reports beside the STJ path
+(`JsonDecoderAlgebraTests`, "the algebra refuses strictly more"): a `null` for a record, a missing
+declared field, a quoted `"7"` at `int`, an array where a `Map` was declared, and malformed text
+are all named refusals routed to the `validation` envelope before the handler runs — where STJ
+accepted the first four (the null and the absent field as `null` references, the quoted number
+under `AllowReadingFromString`, the empty array as an empty map) and threw on the last.
+
+**The platform's own first set — `PlatformJsonDecoders`.** Hand-written, in the shape the generator
+will emit once it learns this wire (69k.B), registered by `ServerApp.run` beside the MessagePack
+set, and chosen so four platform records take every argument through the algebra: `IPresenceApi`,
+`IAuditViewApi`, `IProvenanceQueryApi`, `ITeamInviteApi`. Deliberately NOT in it: `string`,
+`Guid` and the primitive tuples, which are shared with every consumer's own records — a `string`
+decoder registered here would change how a consumer's string arguments read on upgrade (a `null`
+would refuse rather than arrive), and a platform-set registration is a statement about the
+platform's records (GP 11).
+
+### The facet, on this side
+
+`RemotingDecoderFacet.inspectServedArguments` classifies the served set (§6) by each record's
+ARGUMENT types against `JsonDecoders`, the same binding shape and the same classifier, and
+`ServerApp.run` logs a second line:
+
+```
+remoting argument decoders: 4 of 38 served API record(s) take every argument through the JSON algebra (profile standard, advisory)
+```
+
+It is **advisory under every profile** for now, deliberately: the first set is narrow, and a
+`Verified` deployment that refused on a served record with no JSON decoder would refuse nearly
+every deployment on the day it shipped. It becomes mandatory under `Verified` when the generator
+emits argument decoders and the platform's records are covered by construction — the road the
+response facet travelled between Phases 785 and 801.
+
+### What moved in the trust-boundary statement
+
+The §7 "Not claimed" list read "the STJ path until 785.F". It now reads "the STJ path for any
+argument type not registered" — the same opt-in boundary the reflection fallback has always had,
+stated for the second wire. A registered argument type is inside the claim: its bytes become a
+value of the declared type or a named refusal, with bounded depth and width, before any handler
+runs.
 
 ---
 
@@ -475,7 +547,11 @@ says so.
 * `src/ToolUp.Platform.Core/Shared/Remoting/MsgPack/Value.fs` — the value model and its measure.
 * `src/ToolUp.Platform.Core/Shared/Remoting/Decode.fs` — the combinators.
 * `src/ToolUp.Platform.Core/Shared/Remoting/DecoderRegistry.fs` — the opt-in seam.
-* `src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs` — the named, bounded set.
+* `src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs` — the generated platform set.
+* `src/ToolUp.Platform.Core/Shared/Remoting/Json/JsonValue.fs`, `JsonDecode.fs`,
+  `JsonDecoderRegistry.fs`, `PlatformJsonDecoders.fs` — the JSON wire (Phase 799); the pass is
+  `src/ToolUp.Platform.Server/Server/Remoting/Json/JsonRead.fs`.
+* `src/ToolUp.Platform.Tests/Remoting/JsonDecoderAlgebraTests.fs` — the JSON differential.
 * `src/ToolUp.Platform.Core/Shared/Remoting/MsgPack/Format.fs` — the reader's three bounds.
 * `src/ToolUp.Platform.Tests/Remoting/DecoderAlgebraTests.fs` — the differential, the round-trip
   law, the purity pins and the committed go-red case.
