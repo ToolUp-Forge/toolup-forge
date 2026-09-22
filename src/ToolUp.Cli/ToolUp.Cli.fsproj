@@ -8,8 +8,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>toolup</ToolCommandName>
     <PackageId>ToolUp.Cli</PackageId>
-    <Description>The `dotnet toolup` admin CLI for the ToolUp Platform SDK — a thin, dependency-free command host. Ships `version` and `docker emit`; further subcommands plug in additively.</Description>
-    <PackageTags>fsharp;cli;dotnet-tool;toolup;dockerfile</PackageTags>
+    <Description>The `dotnet toolup` admin CLI for the ToolUp Platform SDK — a thin, dependency-free command host. Ships `version`, `docker emit` and `k8s emit`; further subcommands plug in additively.</Description>
+    <PackageTags>fsharp;cli;dotnet-tool;toolup;dockerfile;kubernetes;helm</PackageTags>
     <!-- A globally-installed tool may run on any patch of the pinned
          major; roll forward so a 10.0.x host need not match exactly. -->
     <RollForward>latestMinor</RollForward>
@@ -32,6 +32,34 @@
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\platformsdk-docker\healthcheck.sh">
       <LogicalName>docker/healthcheck.sh</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- Phase 194 — the platformsdk-k8s template files, embedded so
+       `k8s emit` renders them with no on-disk template dependency. Same
+       single-source-of-truth rule as the docker set above: the tree at
+       templates/platformsdk-k8s/ is the only copy. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\deployment.yaml.template">
+      <LogicalName>k8s/deployment.yaml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\service.yaml.template">
+      <LogicalName>k8s/service.yaml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\ingress.yaml.template">
+      <LogicalName>k8s/ingress.yaml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\Chart.yaml.template">
+      <LogicalName>k8s/Chart.yaml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\values.yaml.template">
+      <LogicalName>k8s/values.yaml.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\NOTES.txt.template">
+      <LogicalName>k8s/NOTES.txt.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\platformsdk-k8s\helmignore.template">
+      <LogicalName>k8s/helmignore.template</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
@@ -63,6 +91,10 @@
     <Compile Include="Cli\Templating.fs" />
     <Compile Include="Cli\VersionCommand.fs" />
     <Compile Include="Cli\DockerEmitCommand.fs" />
+    <!-- Phase 194 — `k8s emit`. Reuses Templating + the Docker host's
+         image spec; compiles after DockerEmitCommand for that reading
+         order, though it takes no dependency on it. -->
+    <Compile Include="Cli\K8sEmitCommand.fs" />
     <Compile Include="Cli\StampCommand.fs" />
     <Compile Include="Cli\ModuleCommand.fs" />
     <Compile Include="Cli\MembershipsDoctorCommand.fs" />

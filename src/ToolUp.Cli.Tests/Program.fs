@@ -11,6 +11,7 @@ let private registeredTests =
     testList "ToolUp.Cli.Tests" [
         DispatchTests.tests
         DockerEmitTests.tests
+        K8sEmitTests.tests
         StampRoundTripTests.tests
         ModuleAddRemoveTests.tests
         MembershipsDoctorTests.tests

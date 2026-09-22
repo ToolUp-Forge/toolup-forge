@@ -8,6 +8,11 @@
   <ItemGroup>
     <Compile Include="DispatchTests.fs" />
     <Compile Include="DockerEmitTests.fs" />
+    <!-- Phase 194 — `k8s emit`: the emitted YAML parsed back and asserted
+         structurally for every ProcessProfile × both formats, plus the
+         parity cases that pin the CLI's pure-BCL DeployManifest mirror to
+         the substrate type it mirrors. -->
+    <Compile Include="K8sEmitTests.fs" />
     <Compile Include="StampRoundTripTests.fs" />
     <Compile Include="ModuleAddRemoveTests.fs" />
     <!-- Phase 546 — memberships-doctor ↔ MembershipDoctor parity: the CLI's
@@ -35,5 +40,9 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Expecto" />
+    <!-- Phase 194 — the k8s-emit structural assertions parse the emitted
+         YAML back into a document tree. Test-only, like the two project
+         references above: the `toolup` CLI itself stays pure-BCL. -->
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 </Project>
