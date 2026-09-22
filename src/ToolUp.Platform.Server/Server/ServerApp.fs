@@ -2096,10 +2096,29 @@ module ServerApp =
     /// test wants and a composition root does not. A deployment that
     /// composed no seal resolves nothing and the section reads
     /// `NotComposed`, with no action required of the root.
+    ///
+    /// **The remoting-decoder member is derived too (Phase 801), from the
+    /// records this process actually served.** `Api.make` records every
+    /// mount, so a root that supplies no facet gets the served set
+    /// classified against the registry under `CompositionProfile.Standard`
+    /// — coverage as a ratio, with the platform's own records declaring
+    /// corpus coverage. A root under the verified profile supplies its
+    /// own (`DeploymentVerificationEvidence.withRemotingDecoders`), as it
+    /// must: that profile's refusal is the root's act, and the report
+    /// should carry the facet the refusal was judged on.
     let withDeploymentVerificationEvidence (evidence: IDeploymentVerificationEvidence) (app: ServerApp) : ServerApp =
         let register (services: IServiceCollection) =
             services.AddSingleton<IDeploymentVerificationEvidence>(
                 Func<IServiceProvider, IDeploymentVerificationEvidence>(fun sp ->
+                    let evidence =
+                        match DeploymentVerificationEvidence.remotingDecodersOf evidence with
+                        | Some _ -> evidence
+                        | None ->
+                            RemotingDecoderFacet.inspectServedPlatform CompositionProfile.Standard
+                            |> RemotingDecoderFacet.toIntegrity
+                            |> Some
+                            |> fun derived -> DeploymentVerificationEvidence.withRemotingDecoders derived evidence
+
                     match evidence.GroundingContinuity with
                     | Some _ -> evidence
                     | None ->
@@ -3123,5 +3142,27 @@ module ServerApp =
                 app.ScheduledJobs
                 app.StorageResilience
                 app.SecretResilience
+
+        // Phase 801 — the remoting decode edge's coverage, one boot line:
+        // how many of the API records this process mounted (every
+        // `Api.make`, platform and module alike, has run by now) decode
+        // through the closed algebra in the client. Logged under the
+        // standard profile's stance; a verified root judges the facet
+        // itself, before this, and refuses on a served record with no
+        // decoder. Silent when nothing was mounted (GP 13).
+        // The platform's own decoders are registered here too, so the
+        // facet reads what the CLIENT decodes: `Remoting.withBinarySerialization`
+        // registers exactly this set in the browser, and the SDK's test
+        // pack verified every one against the reflection reader before
+        // it was committed. Idempotent, and a root that registered them
+        // itself (or through `registerAllVerified`) is unaffected.
+        ToolUp.Remoting.PlatformDecoders.registerAll ()
+
+        app.Logger
+        |> Option.iter (fun logger ->
+            let facet = RemotingDecoderFacet.inspectServedPlatform CompositionProfile.Standard
+
+            if not (List.isEmpty facet.FacetBindings) then
+                logger.Info(RemotingDecoderFacet.describe facet))
 
         host.RunBlocking()

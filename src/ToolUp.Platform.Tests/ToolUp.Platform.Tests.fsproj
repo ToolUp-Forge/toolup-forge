@@ -317,6 +317,10 @@
              784 corpus, and this proves the generator plans the same decode.
              Neither the corpus nor the reader is re-derived here. -->
         <Compile Include="Remoting\GeneratorFidelityTests.fs" />
+        <!-- Phase 801 — the platform's decoders are the generator's emission over every API
+             record, held to it by this pack, and every registration verified against the
+             reflection reader here (the recorded run the browser's registerAll relies on). -->
+        <Compile Include="Remoting\PlatformDecodersGenerationTests.fs" />
         <!-- Phase 787 — the F* model of the Phase 785 algebra, extracted to
              F# and run as a differential oracle beside production over the
              same corpus. AFTER DecoderAlgebraTests.fs: it reuses the corpus

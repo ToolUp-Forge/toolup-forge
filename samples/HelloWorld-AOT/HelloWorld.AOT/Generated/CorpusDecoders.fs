@@ -17,9 +17,14 @@ open System
 open ToolUp.Remoting
 open ToolUp.Platform.Tests.Remoting
 
+/// Generated algebra decoders: one per wire type the covered API records
+/// carry, registered by `registerAll` (or, verified against the reflection
+/// reader first, by `registerAllVerified`). Emitted by ToolUp.Remoting.Generator;
+/// do not edit.
 [<RequireQualifiedAccess>]
 module CorpusDecoders =
 
+    /// Generated decoder for `WireCorpus.Address` — one combinator per field or case, read off the type's own shape.
     let address: Decoder<WireCorpus.Address> =
         Decode.succeed (fun line1 postcode country -> ({
             Line1 = line1
@@ -30,6 +35,7 @@ module CorpusDecoders =
         |> Decode.apply (Decode.field "Postcode" 1 Decode.asString)
         |> Decode.apply (Decode.field "Country" 2 Decode.asString)
 
+    /// Generated decoder for `WireCorpus.Priority` — one combinator per field or case, read off the type's own shape.
     let priority: Decoder<WireCorpus.Priority> =
         Decode.union "WireCorpus.Priority" (function
             | 0 -> Some(Decode.case0 WireCorpus.Priority.Low)
@@ -37,6 +43,7 @@ module CorpusDecoders =
             | 2 -> Some(Decode.case0 WireCorpus.Priority.High)
             | _ -> None)
 
+    /// Generated decoder for `WireCorpus.Outcome` — one combinator per field or case, read off the type's own shape.
     let outcome: Decoder<WireCorpus.Outcome> =
         Decode.union "WireCorpus.Outcome" (function
             | 0 ->
@@ -51,6 +58,7 @@ module CorpusDecoders =
             | 2 -> Some(Decode.case0 WireCorpus.Outcome.Pending)
             | _ -> None)
 
+    /// Generated decoder for `WireCorpus.Consignment` — one combinator per field or case, read off the type's own shape.
     let consignment: Decoder<WireCorpus.Consignment> =
         Decode.succeed (fun reference origin destination priority outcome weights labels -> ({
             Reference = reference
@@ -69,6 +77,7 @@ module CorpusDecoders =
         |> Decode.apply (Decode.field "Weights" 5 (Decode.list Decode.asFloat))
         |> Decode.apply (Decode.field "Labels" 6 (Decode.asSet Decode.asString))
 
+    /// Generated decoder for `WireCorpus.Tree` — one combinator per field or case, read off the type's own shape.
     let rec tree: Decoder<WireCorpus.Tree> =
         fun value ->
             (Decode.union "WireCorpus.Tree" (function
@@ -164,4 +173,73 @@ module CorpusDecoders =
         RemotingDecoders.register<Set<int>> (Decode.asSet Decode.asInt32)
         RemotingDecoders.register<Tuple<int, string>> (Decode.tuple2 Decode.asInt32 Decode.asString)
         RemotingDecoders.register<Tuple<int, string, bool>> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+
+#if !FABLE_COMPILER
+    /// Phase 801 — every decoder above beside the reflection reader,
+    /// over `draws` draws of its own type from `seed`. One outcome per
+    /// registration, in registration order; a refusal names the type
+    /// and the first diverging draw.
+    let verifyAll (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = [
+        RemotingDecoders.verify<WireCorpus.Address> draws seed address
+        RemotingDecoders.verify<WireCorpus.Priority> draws seed priority
+        RemotingDecoders.verify<WireCorpus.Outcome> draws seed outcome
+        RemotingDecoders.verify<WireCorpus.Consignment> draws seed consignment
+        RemotingDecoders.verify<WireCorpus.Tree> draws seed tree
+        RemotingDecoders.verify<bool> draws seed Decode.asBool
+        RemotingDecoders.verify<int> draws seed Decode.asInt32
+        RemotingDecoders.verify<string> draws seed Decode.asString
+        RemotingDecoders.verify<char> draws seed Decode.asChar
+        RemotingDecoders.verify<byte> draws seed Decode.asByte
+        RemotingDecoders.verify<sbyte> draws seed Decode.asSByte
+        RemotingDecoders.verify<int16> draws seed Decode.asInt16
+        RemotingDecoders.verify<uint16> draws seed Decode.asUInt16
+        RemotingDecoders.verify<uint32> draws seed Decode.asUInt32
+        RemotingDecoders.verify<int64> draws seed Decode.asInt64
+        RemotingDecoders.verify<uint64> draws seed Decode.asUInt64
+        RemotingDecoders.verify<float> draws seed Decode.asFloat
+        RemotingDecoders.verify<float32> draws seed Decode.asFloat32
+        RemotingDecoders.verify<decimal> draws seed Decode.asDecimal
+        RemotingDecoders.verify<DateTime> draws seed Decode.asDateTime
+        RemotingDecoders.verify<DateTimeOffset> draws seed Decode.asDateTimeOffset
+        RemotingDecoders.verify<TimeSpan> draws seed Decode.asTimeSpan
+        RemotingDecoders.verify<Guid> draws seed Decode.asGuid
+        RemotingDecoders.verify<byte[]> draws seed Decode.asBytes
+        RemotingDecoders.verify<int option> draws seed (Decode.option Decode.asInt32)
+        RemotingDecoders.verify<string option> draws seed (Decode.option Decode.asString)
+        RemotingDecoders.verify<WireCorpus.Address option> draws seed (Decode.option address)
+        RemotingDecoders.verify<int list> draws seed (Decode.list Decode.asInt32)
+        RemotingDecoders.verify<WireCorpus.Address list> draws seed (Decode.list address)
+        RemotingDecoders.verify<string[]> draws seed (Decode.array Decode.asString)
+        RemotingDecoders.verify<Map<string, int>> draws seed (Decode.asMap Decode.asString Decode.asInt32)
+        RemotingDecoders.verify<Map<int, string>> draws seed (Decode.asMap Decode.asInt32 Decode.asString)
+        RemotingDecoders.verify<Set<string>> draws seed (Decode.asSet Decode.asString)
+        RemotingDecoders.verify<Set<int>> draws seed (Decode.asSet Decode.asInt32)
+        RemotingDecoders.verify<Tuple<int, string>> draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
+        RemotingDecoders.verify<Tuple<int, string, bool>> draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+    ]
+
+    /// Phase 801 — `registerAll`, gated: registers every decoder above
+    /// only when every one verifies, and registers NOTHING otherwise, so
+    /// a disagreement can never leave the table half-adopted.
+    let registerAllVerified (draws: int) (seed: int) : Result<DecoderVerification list, DecoderRefusal list> =
+        let outcomes = verifyAll draws seed
+
+        let refusals =
+            outcomes
+            |> List.choose (function
+                | Error refusal -> Some refusal
+                | Ok _ -> None)
+
+        if List.isEmpty refusals then
+            registerAll ()
+
+            Ok(
+                outcomes
+                |> List.choose (function
+                    | Ok verification -> Some verification
+                    | Error _ -> None)
+            )
+        else
+            Error refusals
+#endif
 
