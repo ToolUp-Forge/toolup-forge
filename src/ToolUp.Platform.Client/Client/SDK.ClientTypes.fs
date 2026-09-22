@@ -1550,6 +1550,32 @@ type ServiceAccountAdminMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalServiceAccountAdmin of ErasedModule
 
+/// Phase 6f.A — branding for the external-contact admin module.
+type ExternalContactManagerConfig = { Name: string; Icon: ReactElement }
+
+/// Phase 6f.A — controls the built-in external-contact admin (the
+/// address book of people with no account here, and the per-channel
+/// consent that is the only thing making them reachable). Default
+/// `NoExternalContactManager`: the module is not injected, so a
+/// deployment that has not opted in gains no sidebar entry and no
+/// client-side proxy (GP 11 / GP 13).
+///
+/// Pairs with the SERVER-side `ServerConfig.ExternalContactStore`.
+/// Setting only this one does not enable the substrate — the API it
+/// calls is not mounted unless the server side is opted in too, and the
+/// module then renders its error banner rather than a working screen.
+/// Both halves are deliberate acts, matching the `ServiceAccountAdmin`
+/// pairing above.
+type ExternalContactManagerMode =
+    /// No external-contact admin module in the sidebar (default).
+    | NoExternalContactManager
+    /// SDK built-in external-contact admin.
+    | DefaultExternalContactManager
+    /// SDK built-in with custom name/icon.
+    | ConfiguredExternalContactManager of ExternalContactManagerConfig
+    /// Deployment-provided custom module in place of the SDK default.
+    | ExternalExternalContactManager of ErasedModule
+
 /// Phase 441 — branding for the notification preference centre.
 type NotificationPreferencesConfig = { Name: string; Icon: ReactElement }
 
@@ -2074,6 +2100,13 @@ type ClientConfig = {
     /// this to `DefaultServiceAccountAdmin` (or one of the branded
     /// variants) to surface the admin UI.
     ServiceAccountAdmin: ServiceAccountAdminMode
+
+    /// Phase 6f.A — the built-in external-contact admin. Default
+    /// `NoExternalContactManager` — pair with
+    /// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`
+    /// on the server side; setting only one half gives a module with no
+    /// API behind it.
+    ExternalContactManager: ExternalContactManagerMode
     /// Phase 441 — controls the notification preference centre. Default:
     /// `NoNotificationPreferencesUI` — pair with
     /// `ServerConfig.NotificationPreferences = EnabledNotificationPreferences _`
@@ -2599,6 +2632,7 @@ module ClientConfig =
         TeamConfig = DefaultTeamConfig
         WebhookAdmin = NoWebhookAdmin
         ServiceAccountAdmin = NoServiceAccountAdmin
+        ExternalContactManager = NoExternalContactManager
         NotificationPreferences = NoNotificationPreferencesUI
         // Opt-in (GP 11/13) — the server-side substrate is itself opt-in,
         // and the editor's API 404s until it is enabled.

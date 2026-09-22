@@ -405,6 +405,11 @@
              scoped API tokens). Owner/Admin nav role; opt-in via
              ClientConfig.ServiceAccountAdmin. -->
         <Compile Include="Client\ServiceAccountUI.fs" />
+        <!-- Phase 6f.A — external-contact admin (the address book of
+             people with no account here, and the per-channel consent that is
+             the only thing making them reachable). Owner/Admin nav role;
+             opt-in via ClientConfig.ExternalContactManager. -->
+        <Compile Include="Client\ExternalContactManagerUI.fs" />
         <!-- Phase 441 — built-in notification preference centre over
              INotificationPreferenceApi; gated by ClientConfig.NotificationPreferences. -->
         <Compile Include="Client\NotificationPreferencesUI.fs" />

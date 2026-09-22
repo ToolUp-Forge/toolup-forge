@@ -3648,6 +3648,19 @@ module Client =
             | _, ConfiguredServiceAccountAdmin cfg -> [ ServiceAccountUI.create (Some cfg) ]
             | _, ExternalServiceAccountAdmin custom -> [ custom ]
 
+        // Phase 6f.A — external-contact admin. Same scope rule as the
+        // service-account admin above: an address book belongs to a
+        // persistent scope, and an Anonymous-only deployment has none,
+        // so every call would fail. Omitted whatever the setting says in
+        // that case.
+        let externalContactManager =
+            match ClientConfig.requiresAnyAuth config, config.ExternalContactManager with
+            | false, _
+            | _, NoExternalContactManager -> []
+            | _, DefaultExternalContactManager -> [ ExternalContactManagerUI.create None ]
+            | _, ConfiguredExternalContactManager cfg -> [ ExternalContactManagerUI.create (Some cfg) ]
+            | _, ExternalExternalContactManager custom -> [ custom ]
+
         // Phase 441 — notification preference centre. Same scope rule as
         // the service-account admin above: a preference record is stored
         // per persistent scope for a signed-in person, and an
@@ -3906,6 +3919,7 @@ module Client =
             @ teamConfig
             @ webhookAdmin
             @ serviceAccountAdmin
+            @ externalContactManager
             @ notificationPreferences
             @ moduleVisibilityAdmin
             @ sessionSecurity

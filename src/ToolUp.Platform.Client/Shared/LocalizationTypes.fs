@@ -1114,6 +1114,86 @@ type NotificationPreferencesMessages = {
     Saved: string
 }
 
+/// The built-in external-contact admin module
+/// (`ExternalContactManagerUI`, Phase 6f.A).
+type ExternalContactMessages = {
+    /// Page heading.
+    Heading: string
+    /// Sub-heading prose under the page heading.
+    Subheading: string
+    Loading: string
+    /// The error banner's dismiss action.
+    Dismiss: string
+    /// Heading of the panel listing the scope's contacts.
+    ContactsPanel: string
+    /// Empty state for the contact list.
+    NoContactsYet: string
+    /// Grid column headers.
+    ColumnName: string
+    ColumnEmail: string
+    ColumnPhone: string
+    ColumnTags: string
+    ColumnConsent: string
+    /// The per-row action opening a contact's detail.
+    Manage: string
+    /// The list view's add action.
+    AddContact: string
+    /// Heading of the add form.
+    NewContactHeading: string
+    /// Heading of the edit form.
+    EditContactHeading: string
+    /// Prose above the add/edit form.
+    ContactFormHelp: string
+    /// Add/edit field labels.
+    FieldDisplayName: string
+    FieldEmail: string
+    FieldPhone: string
+    FieldWhatsApp: string
+    FieldTags: string
+    FieldNotes: string
+    /// Add/edit field placeholders.
+    PlaceholderDisplayName: string
+    PlaceholderEmail: string
+    PlaceholderPhone: string
+    PlaceholderTags: string
+    PlaceholderNotes: string
+    /// Add/edit form actions.
+    SaveContact: string
+    Cancel: string
+    /// Detail-view panel heading and its read-only rows, each taking the
+    /// value to render.
+    DetailsPanel: string
+    DetailEmail: string -> string
+    DetailPhone: string -> string
+    DetailTags: string -> string
+    /// Detail-view actions.
+    EditContact: string
+    DeleteContact: string
+    BackToList: string
+    /// Shown when the open contact is no longer in the loaded list.
+    ContactGone: string
+    /// Heading of the consent panel.
+    ConsentHeading: string
+    /// Prose above the recorded consents.
+    ConsentHelp: string
+    /// The grid pill and the panel body for a contact with no consent
+    /// on any channel. Spelled out rather than left blank: it is the
+    /// single most important fact about a contact.
+    NoConsent: string
+    NoConsentBody: string
+    /// The stored Article 7 evidence, rendered beside a consent.
+    ConsentEvidence: string -> string
+    /// Prose above the record-a-consent form.
+    RecordConsentHelp: string
+    /// Record-a-consent field labels and placeholder.
+    FieldChannel: string
+    FieldConsentSource: string
+    PlaceholderConsentSource: string
+    /// The record and withdraw actions.
+    RecordConsent: string
+    WithdrawConsent: string
+}
+
 /// The built-in service-account admin module (`ServiceAccountUI`, Phase 527).
 type ServiceAccountMessages = {
     /// Page heading.
@@ -2775,6 +2855,7 @@ type MessageCatalog = {
     WebhookAdmin: WebhookAdminMessages
     NarrativeRenderer: NarrativeRendererMessages
     ServiceAccount: ServiceAccountMessages
+    ExternalContact: ExternalContactMessages
     NotificationPreferences: NotificationPreferencesMessages
     DataSubjectRequestAdmin: DataSubjectRequestAdminMessages
     TeamConfig: TeamConfigMessages
