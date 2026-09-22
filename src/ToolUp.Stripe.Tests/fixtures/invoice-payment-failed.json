@@ -1,0 +1,43 @@
+{
+  "id": "evt_1PgF9G2eZvKYlo2CpWdN6rLt",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721299900,
+  "data": {
+    "object": {
+      "id": "in_1PgF5B2eZvKYlo2CmXqRdTwN",
+      "object": "invoice",
+      "account_country": "GB",
+      "account_name": "Example Ltd",
+      "amount_due": 2000,
+      "amount_paid": 0,
+      "amount_remaining": 2000,
+      "attempt_count": 1,
+      "attempted": true,
+      "auto_advance": true,
+      "billing_reason": "subscription_cycle",
+      "charge": null,
+      "collection_method": "charge_automatically",
+      "created": 1721299890,
+      "currency": "usd",
+      "customer": "cus_QZ1sT4hLmN8pKd",
+      "customer_email": "ada@example.com",
+      "livemode": false,
+      "metadata": {},
+      "next_payment_attempt": 1721386290,
+      "number": "3F7A21C-0002",
+      "paid": false,
+      "payment_intent": "pi_3PgF5B2eZvKYlo2C0kTzWrNd",
+      "period_end": 1723888860,
+      "period_start": 1721210460,
+      "status": "open",
+      "subscription": "sub_1PgF4A2eZvKYlo2CkHdVbTzp",
+      "subtotal": 2000,
+      "total": 2000
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "invoice.payment_failed"
+}
