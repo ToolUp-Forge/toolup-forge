@@ -6007,6 +6007,7 @@ ToolUp.Remoting.Client.RemotingModule.withCredentials(System.Boolean, ToolUp.Rem
 ToolUp.Remoting.Client.RemotingModule.withCustomHeader(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 ToolUp.Remoting.Client.RemotingModule.withMultipartOptimization(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 ToolUp.Remoting.Client.RemotingModule.withRouteBuilder(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
+ToolUp.Remoting.Client.RemotingModule.withSchemaVersion(System.Int32, ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 ToolUp.Remoting.Client.RequestBody (class)
 ToolUp.Remoting.Client.RequestBody.Empty : ToolUp.Remoting.Client.RequestBody { get }
 ToolUp.Remoting.Client.RequestBody.IsEmpty : System.Boolean { get }

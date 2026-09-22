@@ -65,6 +65,13 @@
         <Compile Include="Server\Remoting\Streaming.fs" />
         <Compile Include="Server\Remoting\LongRunning.fs" />
         <Compile Include="Server\Remoting\SourceGenDispatch.fs" />
+        <!-- Phase 69j — the `X-Remoting-Schema` negotiation half: the
+             [<SupportsSchema>] / [<DeprecatedSchema>] attributes, the
+             per-method version table and the pure routing decision both
+             adapters read. After Types.fs (its only dependency) and before
+             Documentation.fs, which publishes the version vector, and before
+             the two adapters. -->
+        <Compile Include="Server\Remoting\SchemaVersion.fs" />
         <Compile Include="Server\Remoting\Errors.fs" />
         <Compile Include="Server\Remoting\Diagnostics.fs" />
         <Compile Include="Server\Remoting\Patterns.fs" />

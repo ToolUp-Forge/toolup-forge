@@ -103,14 +103,19 @@ module internal Middleware =
         match ctx.Request.Method.ToUpper(), options.Docs with
         | "GET", (Some docsUrl, Some docs) when docsUrl = ctx.Request.Path.Value ->
             let (Documentation(docsName, docsRoutes)) = docs
-            let schema = Docs.makeDocsSchema typeof<'impl> docs options.RouteBuilder
+
+            let schema =
+                Docs.makeDocsSchemaWithSchemaVersions typeof<'impl> docs options.RouteBuilder options.SchemaVersion
+
             let docsApp = DocsApp.embedded docsName docsUrl schema
             (text docsApp >=> setContentType "text/html") next ctx
         | "OPTIONS", (Some docsUrl, Some docs) when
             sprintf "/%s/$schema" docsUrl = ctx.Request.Path.Value
             || sprintf "%s/$schema" docsUrl = ctx.Request.Path.Value
             ->
-            let schema = Docs.makeDocsSchema typeof<'impl> docs options.RouteBuilder
+            let schema =
+                Docs.makeDocsSchemaWithSchemaVersions typeof<'impl> docs options.RouteBuilder options.SchemaVersion
+
             let serializedSchema = schema.ToJsonString()
             text serializedSchema next ctx
         | _ -> halt next ctx
@@ -141,6 +146,18 @@ module internal Middleware =
                 "withAudit"
             if options.SchemaVersion <> 1 then
                 (sprintf "withSchemaVersion(%d)" options.SchemaVersion)
+            // Phase 69j — the negotiation half of schema versioning is
+            // Giraffe-only for the same reason as the rest of the 69b–69k
+            // chain: this adapter reads no request header, runs no
+            // pre-flight, and would dispatch a `[<SupportsSchema>]` record
+            // by the addressed name whatever `X-Remoting-Schema` said. An
+            // annotation that silently does nothing is worse than no
+            // annotation, because the author stops looking for the
+            // negotiation they believe they composed. Named by the
+            // attribute rather than by an option, since versioning is
+            // declared on the API record and never on the options.
+            if not (Map.isEmpty (SchemaVersion.classify typeof<'impl>)) then
+                "[<SupportsSchema>] / [<DeprecatedSchema>] on the API record"
         ]
 
         if not (List.isEmpty composed) then
