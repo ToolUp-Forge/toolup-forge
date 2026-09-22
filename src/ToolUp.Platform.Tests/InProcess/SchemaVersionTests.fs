@@ -255,6 +255,29 @@ let tests =
             Expect.isFalse (text.Contains "plain:hi") "the handler did not run"
         }
 
+        testAsync "a header for ANOTHER API's version falls through, it is not refused" {
+            // Several dispatch handlers under one `choose`, tried in order.
+            // `PlainApi` is first and serves version 1 only; `VersionedApi`
+            // is second and serves 1 and 2. A caller pinning version 2 for
+            // `Shape` must reach the second handler — if the first refused
+            // on a miss, whichever API was composed first would 400 every
+            // other API's calls. This is the Phase 69d auth-pre-flight
+            // defect in a new family, and it is why `negotiate` takes the
+            // record's own addressable-name set.
+            let handler = choose [ plainHandler (); versionedHandler () ]
+            let! status, text = call handler "/VersionedApi/Shape" (Some "2") "[\"x\"]"
+
+            Expect.equal status 200 "the first handler fell through instead of refusing"
+            Expect.equal text "\"v2:x\"" "…and the second served the pinned version"
+        }
+
+        testAsync "a route belonging to no composed API is still a fall-through" {
+            let handler = choose [ plainHandler (); versionedHandler () ]
+            let! status, _ = call handler "/NoSuchApi/Nothing" (Some "99") "[]"
+
+            Expect.notEqual status 400 "an unknown route is not this dispatcher's schema refusal"
+        }
+
         // ── 69j.C — per-method versioned dispatch ─────────────────────
 
         testAsync "a multi-version method dispatches to the handler for the requested version" {

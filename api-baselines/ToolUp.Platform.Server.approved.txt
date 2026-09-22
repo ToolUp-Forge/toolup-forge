@@ -11228,11 +11228,12 @@ ToolUp.Remoting.Server.SchemaRouting+Tags.Refused : System.Int32 (literal)
 ToolUp.Remoting.Server.SchemaRouting+Tags.Serve : System.Int32 (literal)
 ToolUp.Remoting.Server.SchemaVersion (class)
 ToolUp.Remoting.Server.SchemaVersion.Header : System.String (literal)
+ToolUp.Remoting.Server.SchemaVersion.addressableMethods(System.Type) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Remoting.Server.SchemaVersion.applyRouting(ToolUp.Remoting.Server.SchemaRouting, System.String) : System.String
 ToolUp.Remoting.Server.SchemaVersion.classify(System.Type) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema]
 ToolUp.Remoting.Server.SchemaVersion.describe(System.Int32, System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]]]
 ToolUp.Remoting.Server.SchemaVersion.logDeprecation(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.String, System.Int32, System.DateTime) : System.Void
-ToolUp.Remoting.Server.SchemaVersion.negotiate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Remoting.Server.SchemaRouting
+ToolUp.Remoting.Server.SchemaVersion.negotiate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Remoting.Server.SchemaRouting
 ToolUp.Remoting.Server.SchemaVersion.refusalPayload(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : System.Object
 ToolUp.Remoting.Server.SchemaVersion.supportedVersions(System.Int32, ToolUp.Remoting.Server.MethodSchema) : Microsoft.FSharp.Collections.FSharpList`1[System.Int32]
 ToolUp.Remoting.Server.SerializationType (class)

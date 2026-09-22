@@ -325,6 +325,27 @@ module SchemaVersion =
 
         unversioned @ versioned |> List.sortBy fst
 
+    /// Every name a caller can address on this record: each unversioned
+    /// field under its own name, each versioned method under its LOGICAL
+    /// name, and each versioned handler under its own field name too (a
+    /// `_V<n>` field is an ordinary record field, so its own route
+    /// dispatches).
+    ///
+    /// This set is what makes a refusal safe in a multi-API composition.
+    /// Several dispatch handlers are commonly composed under one `choose`
+    /// and tried in order; a request for API B's method reaches API A's
+    /// handler first and must FALL THROUGH. Without the membership test a
+    /// caller pinning a version B serves would be refused by A — the exact
+    /// shape of the Phase 69d defect recorded on the auth pre-flight,
+    /// where failing closed on a classification miss let whichever API was
+    /// composed first deny every other API's methods.
+    let addressableMethods (apiType: Type) : Set<string> =
+        let fields = recordFields apiType |> Array.map _.Name
+
+        let logicalNames = classify apiType |> Map.toList |> List.map fst |> List.toArray
+
+        Set.ofArray (Array.append fields logicalNames)
+
     /// Read the requested version from the raw `X-Remoting-Schema` value.
     /// `None` for an absent or blank header. A present-but-unparseable
     /// value is `Some(raw, None)` — the caller asked for SOMETHING and got
@@ -342,30 +363,44 @@ module SchemaVersion =
 
     /// The routing decision for one request. Total: every combination of
     /// (header absent / present / malformed) × (method versioned /
-    /// unversioned) lands on exactly one case.
+    /// unversioned / not this API's) lands on exactly one case.
     ///
     /// Absent header ⇒ the server's configured default for an unversioned
     /// method, and the HIGHEST supported version for a versioned one. A
     /// method only becomes versioned when its author adds a `_V<n>` handler
     /// or the attribute, so no existing call site changes shape: before any
     /// second handler exists, highest is the only one there is.
+    ///
+    /// `addressable` is this API record's own method-name set
+    /// (`addressableMethods`). A name outside it is NOT this API's method
+    /// and is always `AsAddressed`, whatever the header says — see the note
+    /// on `addressableMethods` for why a refusal there would break every
+    /// multi-API composition.
     let negotiate
         (table: Map<string, MethodSchema>)
+        (addressable: Set<string>)
         (serverDefault: int)
         (rawHeader: string option)
         (addressedMethod: string)
         : SchemaRouting =
-        match Map.tryFind addressedMethod table with
-        | None ->
-            // Unversioned — which includes a request for some OTHER API's
-            // method in a multi-API `choose` composition. Serving is
-            // unchanged; only a header naming a version this server does not
-            // serve is a refusal.
+        // `None` = not this API's method at all; `Some None` = this API's,
+        // unversioned; `Some(Some schema)` = this API's, versioned.
+        let entry =
+            if addressable.Contains addressedMethod then
+                Some(Map.tryFind addressedMethod table)
+            else
+                None
+
+        match entry with
+        | None -> SchemaRouting.AsAddressed
+        | Some None ->
+            // This API's method, but unversioned. Serving is unchanged; only
+            // a header naming a version this server does not serve refuses.
             match parseRequested rawHeader with
             | Some(raw, Some n) when n <> serverDefault -> SchemaRouting.Refused(raw, [ serverDefault ])
             | Some(raw, None) -> SchemaRouting.Refused(raw, [ serverDefault ])
             | _ -> SchemaRouting.AsAddressed
-        | Some schema ->
+        | Some(Some schema) ->
             let supported = supportedVersions serverDefault schema
 
             let serve version =

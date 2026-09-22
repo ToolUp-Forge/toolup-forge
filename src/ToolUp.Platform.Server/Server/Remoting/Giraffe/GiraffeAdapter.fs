@@ -362,6 +362,16 @@ module internal GiraffeUtil =
         // a malformed annotation fails here rather than at the first call.
         let schemaVersions = SchemaVersion.classify typeof<'impl>
 
+        // Phase 69j — this API record's own addressable method names. The
+        // membership test is what keeps the refusal below safe in a
+        // multi-API `choose` composition: a request for ANOTHER API's
+        // method reaches this handler first and must fall through
+        // untouched, whatever `X-Remoting-Schema` says. Failing closed on a
+        // miss is the Phase 69d defect this dispatcher already records on
+        // the auth pre-flight — it let whichever API was composed first
+        // deny every other API's methods.
+        let schemaAddressable = SchemaVersion.addressableMethods typeof<'impl>
+
         // Phase 69j — the same refusal the streaming guard above makes, for
         // the same reason. Version routing rewrites the dispatched route's
         // trailing segment and then runs the non-streaming pre-flight chain
@@ -462,7 +472,12 @@ module internal GiraffeUtil =
                         None
 
                 let schemaRouting =
-                    SchemaVersion.negotiate schemaVersions options.SchemaVersion requestedSchema addressedMethod
+                    SchemaVersion.negotiate
+                        schemaVersions
+                        schemaAddressable
+                        options.SchemaVersion
+                        requestedSchema
+                        addressedMethod
 
                 let schemaRefusal =
                     match schemaRouting with
