@@ -358,6 +358,11 @@
              + Feliz view). After ConsentProvider.fs (reads current()). -->
         <Compile Include="Client\Consent\ConsentBanner.fs" />
         <Compile Include="Components\ConsentGate.fs" />
+        <!-- Phase 191 — the shared consent gate for side-effecting script
+             loads and emissions. After ConsentProvider.fs (the component
+             reads current()); BEFORE Telemetry.fs and AdSlot.fs, the two
+             call sites refactored onto it. -->
+        <Compile Include="Components\ConsentGatedScript.fs" />
         <Compile Include="Client\AdPanel\AdScriptLoader.fs" />
         <Compile Include="Client\AdPanel\IAdAnalyticsSink.fs" />
         <Compile Include="Client\AdPanel\ServerSinkAdAnalytics.fs" />

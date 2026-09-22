@@ -1333,6 +1333,9 @@ let private registeredTests =
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
         ConsentProviderTests.subscriptionFiringTests
+        // Phase 191 — the shared consent gate the ad and telemetry paths
+        // now run through, plus any consumer-registered script.
+        ConsentGatedScriptTests.tests
         // Phase 159 — durable per-subject consent state store.
         ConsentStateStoreTests.tests
         ConsentStateStoreTests.entityBackedTests
