@@ -1661,6 +1661,10 @@
              deployment reads a pre-v0.5.0 blob and crashes silently. -->
         <Compile Include="InProcess\StjBackwardCompatTests.fs" />
         <Compile Include="InProcess\ConsentProviderTests.fs" />
+        <!-- Phase 191 — the shared consent gate for side-effecting script
+             loads and emissions (Components\ConsentGatedScript.fs), plus
+             the pins that Phases 159 and 163 now run through it. -->
+        <Compile Include="InProcess\ConsentGatedScriptTests.fs" />
         <!-- Phase 159 — IConsentStateStore bindings (in-memory + entity-
              backed over BlobEntityStore) + restart-durability proof. -->
         <Compile Include="InProcess\ConsentStateStoreTests.fs" />
