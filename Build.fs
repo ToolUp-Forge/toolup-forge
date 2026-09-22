@@ -5277,7 +5277,7 @@ let main args =
     // scorecard. The scorecard is not in the workflow because its
     // adoption row reads private consumer facts the public workflow must
     // not reach (see `V1Readiness.matrixEnvVar`); the workflow therefore
-    // enforces the window, the unmoved surface and the lineage, and the
+    // enforces the window, the no-break surface rule and the lineage, and the
     // scorecard is enforced here, before the tag exists.
     //
     // Neither is in `verify.ps1`, for the reason VerifySemVerBump gives:
@@ -5363,6 +5363,46 @@ let main args =
                 ReleaseChannel.PromotionEvidence.Now = now
             }
 
+    // The mechanical half of the soak gate for one major, shared by both
+    // targets: the window in force (from release-channel.json, printed with
+    // where it came from, so an override's reason is in every run's log),
+    // the evidence, and the findings. Additive surface growth since the
+    // candidate is printed but does not block (operator decision
+    // 2026-09-22); a break does.
+    let soakFindings (root: string) (version: ReleaseChannel.ReleaseVersion) (tags: string list) =
+        let fileText =
+            let path = Path.Combine(root, ReleaseChannel.releaseChannelFileName)
+
+            if File.Exists path then
+                Some(File.ReadAllText path)
+            else
+                None
+
+        let window =
+            match ReleaseChannel.soakWindowFor fileText version.Core with
+            | Ok w -> w
+            | Error e -> failwithf "soak window: %s" e
+
+        Trace.tracefn
+            "▶ soak window for %s: %s days, from %s"
+            (ReleaseChannel.ReleaseVersion.render version)
+            (window.Window.TotalDays.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            window.Source
+
+        let evidence = promotionEvidence root version tags
+
+        match
+            evidence.SurfaceSinceCandidate
+            |> List.filter (fun c -> c.Class = SemVerBump.Additive)
+        with
+        | [] -> ()
+        | additive ->
+            Trace.tracefn
+                "▶ additive surface since the candidate (does not block promotion): %s"
+                (additive |> List.map _.Package |> String.concat ", ")
+
+        ReleaseChannel.promotionFindings window.Window tags evidence
+
     Target.create "VerifyReleaseChannel" (fun _ ->
         let root = Path.getFullName "."
 
@@ -5398,13 +5438,11 @@ let main args =
         | findings ->
             failwith (ReleaseChannel.findingsReport "VerifyReleaseChannel: this candidate may not publish" findings)
 
-        if ReleaseChannel.promotionRequired version tags then
-            match
-                ReleaseChannel.promotionFindings ReleaseChannel.soakWindow tags (promotionEvidence root version tags)
-            with
+        if ReleaseChannel.promotionRequired version then
+            match soakFindings root version tags with
             | [] ->
                 Trace.tracefn
-                    "▶ VerifyReleaseChannel: promotion of %s — the candidate soaked its window, the surface has not moved since it, and this commit descends from it. (The Phase 257 scorecard is enforced before the tag, by VerifyRcPromotion.)"
+                    "▶ VerifyReleaseChannel: promotion of %s — the candidate soaked its window, no breaking surface change landed since it, and this commit descends from it. (The Phase 257 scorecard is enforced before the tag, by VerifyRcPromotion.)"
                     (ReleaseChannel.ReleaseVersion.render version)
             | findings ->
                 failwith (
@@ -5471,14 +5509,12 @@ let main args =
             failwithf "VerifyRcPromotion: %s is already released (`%s`) — there is nothing to promote." rendered stable
         | None -> ()
 
-        if not (ReleaseChannel.promotionRequired version tags) then
+        if not (ReleaseChannel.promotionRequired version) then
             Trace.tracefn
-                "▶ VerifyRcPromotion: %s has no release candidate and is not a new major, so it releases as an ordinary stable tag — there is no soak to check. To validate it first anyway, tag `%s`."
+                "▶ VerifyRcPromotion: %s is not a major release, so it has no release candidate and publishes stable directly — there is no soak to check. (Candidates exist only for majors from 1.0 on.)"
                 rendered
-                (ReleaseChannel.nextCandidateTag version.Core tags)
         else
-            let mechanical =
-                ReleaseChannel.promotionFindings ReleaseChannel.soakWindow tags (promotionEvidence root version tags)
+            let mechanical = soakFindings root version tags
 
             let rows, _, _, _, _ = scoreV1Readiness root
 
@@ -5488,7 +5524,7 @@ let main args =
             match mechanical @ ReleaseChannel.scorecardFindings (V1Readiness.ready rows) failing with
             | [] ->
                 Trace.tracefn
-                    "▶ VerifyRcPromotion: %s is ELIGIBLE — the candidate soaked, the surface has not moved since it, this commit descends from it, and the Phase 257 scorecard is all-green. Promote with `git tag -a v%s -m v%s` on this commit and push the tag."
+                    "▶ VerifyRcPromotion: %s is ELIGIBLE — the candidate soaked, no breaking surface change landed since it, this commit descends from it, and the Phase 257 scorecard is all-green. Promote with `git tag -a v%s -m v%s` on this commit and push the tag."
                     rendered
                     rendered
                     rendered

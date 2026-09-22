@@ -17,11 +17,17 @@
 /// of the soaked candidate — never a version edit, so there is no commit
 /// in which the tree claims to be a candidate.
 ///
-/// **The soak gate.** A candidate is promotion-eligible only when it has
-/// been served by nuget.org for at least `soakWindow`, the public surface
-/// has not moved since it (any movement — not only a break — means what
-/// would be promoted is not what soaked), the commit being promoted
-/// descends from it, and the Phase 257 scorecard is all-green.
+/// **Majors only (operator decision 2026-09-22).** Release candidates exist
+/// for major releases from 1.0 on and for nothing else: `vX.0.0-rc.N` with
+/// X >= 1. There is nothing to soak before 1.0, and a minor or patch
+/// publishes stable directly.
+///
+/// **The soak gate.** A major's candidate is promotion-eligible only when
+/// it has been served by nuget.org for at least the soak window (14 days
+/// unless `release-channel.json` records a per-release override with its
+/// reason), no BREAKING surface change has landed since it (additive
+/// growth does not block), the commit being promoted descends from it, and
+/// the Phase 257 scorecard is all-green.
 ///
 /// **Pure and BCL-only**, for the reason `PublishedSmoke.fs` gives: the
 /// targets do the reading (git, HTTP, files) and hand data in, so every
@@ -62,7 +68,8 @@ module ReleaseVersion =
         | Stable -> None
         | Candidate n -> Some(sprintf "rc.%d" n)
 
-/// The ONLY two tag shapes the channel accepts. Strict on purpose: the
+/// The ONLY two tag shapes the channel accepts (a candidate is further
+/// restricted to a major, below). Strict on purpose: the
 /// `v*.*.*` workflow trigger also matches `v1.0.0-beta`, `v1.0.0-rc1` and
 /// `v1.0.0-rc.01`, and a tag this cannot classify must refuse to publish
 /// rather than publish as whatever the tree happens to declare — which is
@@ -79,7 +86,13 @@ let private bareVersionPattern =
 let private int' (s: string) =
     Int32.Parse(s, NumberStyles.None, CultureInfo.InvariantCulture)
 
-/// `v1.0.0` → stable, `v1.0.0-rc.3` → candidate 3. A leading
+/// A major release from 1.0 on — `X.0.0`, X >= 1 — the only kind that has
+/// release candidates and the only kind promoted through the soak gate.
+let isMajorRelease (core: Version) =
+    core.Major >= 1 && core.Minor = 0 && core.Patch = 0
+
+/// `v1.0.0` → stable, `v1.0.0-rc.3` → candidate 3; `v0.23.0-rc.1` and
+/// `v1.1.0-rc.1` are refused (candidates are majors only). A leading
 /// `refs/tags/` is stripped, so `GITHUB_REF` can be passed as-is.
 let parseTag (name: string) : Result<ReleaseVersion, string> =
     let trimmed = if isNull name then "" else name.Trim()
@@ -95,7 +108,7 @@ let parseTag (name: string) : Result<ReleaseVersion, string> =
     if not m.Success then
         Error(
             sprintf
-                "`%s` is neither a stable release tag (`vX.Y.Z`) nor a release-candidate tag (`vX.Y.Z-rc.N`, N ≥ 1, no leading zero). Nothing publishes from it: delete the tag (`git push --delete origin %s`) and tag one of those two shapes."
+                "`%s` is neither a stable release tag (`vX.Y.Z`) nor a release-candidate tag of a major (`vX.0.0-rc.N`, X ≥ 1, N ≥ 1, no leading zero). Nothing publishes from it: delete the tag (`git push --delete origin %s`) and tag one of those two shapes."
                 bare
                 bare
         )
@@ -106,13 +119,22 @@ let parseTag (name: string) : Result<ReleaseVersion, string> =
             Patch = int' m.Groups[3].Value
         }
 
-        let channel =
-            if m.Groups[4].Success then
-                Candidate(int' m.Groups[4].Value)
-            else
-                Stable
-
-        Ok { Core = core; Channel = channel }
+        if m.Groups[4].Success && not (isMajorRelease core) then
+            Error(
+                sprintf
+                    "`%s` is a release candidate for %s, which is not a major release. Release candidates exist only for majors from 1.0 on (`vX.0.0-rc.N`, X >= 1): before 1.0 there is nothing to soak, and a minor or patch publishes stable directly. Nothing publishes from it: delete the tag (`git push --delete origin %s`) and tag `v%s`."
+                    bare
+                    (Version.render core)
+                    bare
+                    (Version.render core)
+            )
+        elif m.Groups[4].Success then
+            Ok {
+                Core = core
+                Channel = Candidate(int' m.Groups[4].Value)
+            }
+        else
+            Ok { Core = core; Channel = Stable }
 
 /// The version a publish run releases.
 ///
@@ -224,28 +246,177 @@ let candidateFindings (v: ReleaseVersion) (tags: string seq) : string list =
 
 // ─── The soak gate ───────────────────────────────────────────────────
 
-/// How long a candidate must have been served by nuget.org before it may
-/// be promoted. A committed constant rather than an environment knob: a
-/// release gate whose threshold a run can override is not a gate. It
-/// moves by a reviewed commit, like every other threshold here.
-let soakWindow = TimeSpan.FromDays 14.0
+/// The soak window when nothing overrides it.
+let defaultSoakDays = 14
 
-/// Whether a stable release must be promoted from a soaked candidate.
+/// The committed file that configures the soak window, at the repo root
+/// beside `v1-readiness.json`. Committed rather than an environment knob,
+/// because the release workflow — which re-checks the window on the stable
+/// tag — sees only what the tagged commit carries: a window a run could
+/// override from its environment would be one the tag push cannot see.
 ///
-/// Two cases. A version that HAS candidates is always promoted through
-/// the gate — once consumers were asked to validate a candidate, the
-/// stable release answers to what they validated. And a new major at or
-/// past 1.0 (`X.0.0`, X ≥ 1) must have one: that is the one-way
-/// commitment this channel exists for, and a major tagged without a
-/// candidate would skip the gate by the simple act of not opting in.
-/// Every other stable release (every 0.x, every 1.x minor or patch with
-/// no candidate) publishes exactly as it did before this phase.
-let promotionRequired (v: ReleaseVersion) (tags: string seq) : bool =
+///     { "soakDays": 14,
+///       "overrides": [ { "version": "1.0.0", "soakDays": 7,
+///                        "reason": "why this release soaks differently" } ] }
+///
+/// `soakDays` is the default (absent: 14). An override applies to one major
+/// and MUST carry a non-blank reason; the targets print the window in force
+/// and where it came from, so the reason is in every run's log as well as
+/// in the commit that introduced it.
+let releaseChannelFileName = "release-channel.json"
+
+/// The window in force for one release, and where it came from.
+type SoakWindow = { Window: TimeSpan; Source: string }
+
+let private soakDaysOf (where: string) (el: JsonElement) : Result<int, string> =
+    match el.ValueKind with
+    | JsonValueKind.Number ->
+        match el.TryGetInt32() with
+        | true, n when n >= 1 -> Ok n
+        | _ -> Error(sprintf "%s must be a whole number of days, at least 1" where)
+    | _ -> Error(sprintf "%s must be a whole number of days, at least 1" where)
+
+let private unknownKeysOf (allowed: string list) (el: JsonElement) =
+    el.EnumerateObject()
+    |> Seq.map _.Name
+    |> Seq.filter (fun k -> not (List.contains k allowed))
+    |> List.ofSeq
+
+/// One override entry: (version, days, reason).
+let private parseOverride (index: int) (o: JsonElement) : Result<Version * int * string, string> =
+    let at = sprintf "overrides[%d]" index
+
+    let str (name: string) =
+        match o.TryGetProperty name with
+        | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
+        | _ -> ""
+
+    if o.ValueKind <> JsonValueKind.Object then
+        Error(sprintf "%s must be an object" at)
+    else
+        match unknownKeysOf [ "version"; "soakDays"; "reason" ] o with
+        | _ :: _ as unknown -> Error(sprintf "%s carries unknown key(s) %s" at (String.Join(", ", unknown)))
+        | [] ->
+            let version = str "version"
+            let reason = str "reason"
+
+            let parsed =
+                if bareVersionPattern.IsMatch version then
+                    parseVersion version
+                else
+                    Error "not bare"
+
+            match parsed with
+            | Error _ -> Error(sprintf "%s.version must be a bare X.Y.Z version" at)
+            | Ok v when not (isMajorRelease v) ->
+                Error(
+                    sprintf
+                        "%s names %s, which is not a major release — only a major (X.0.0, X >= 1) has a candidate to soak"
+                        at
+                        version
+                )
+            | Ok _ when String.IsNullOrWhiteSpace reason ->
+                Error(sprintf "%s (%s) has no reason — an override of the soak window must say why" at version)
+            | Ok v ->
+                match o.TryGetProperty "soakDays" with
+                | true, d -> soakDaysOf (at + ".soakDays") d |> Result.map (fun n -> v, n, reason.Trim())
+                | _ -> Error(sprintf "%s.soakDays is missing" at)
+
+/// The soak window for `core`, from the committed file's text (`None` when
+/// the file is absent). Refuses what it cannot read rather than guessing:
+/// unknown keys, a non-positive or non-integer day count, an override
+/// without a reason, for a version that is not a major, or twice for one.
+let soakWindowFor (fileText: string option) (core: Version) : Result<SoakWindow, string> =
+    let fail (msg: string) =
+        Error(sprintf "%s: %s" releaseChannelFileName msg)
+
+    match fileText with
+    | None ->
+        Ok {
+            Window = TimeSpan.FromDays(float defaultSoakDays)
+            Source = sprintf "the default (%d days; %s is absent)" defaultSoakDays releaseChannelFileName
+        }
+    | Some text ->
+        try
+            use doc = JsonDocument.Parse text
+            let root = doc.RootElement
+
+            if root.ValueKind <> JsonValueKind.Object then
+                fail "must be a JSON object"
+            else
+                match unknownKeysOf [ "soakDays"; "overrides" ] root with
+                | _ :: _ as unknown ->
+                    fail (
+                        sprintf
+                            "unknown key(s) %s — the known keys are soakDays, overrides"
+                            (String.Join(", ", unknown))
+                    )
+                | [] ->
+                    let baseDays =
+                        match root.TryGetProperty "soakDays" with
+                        | true, el ->
+                            soakDaysOf "soakDays" el
+                            |> Result.map (fun n -> n, sprintf "%s soakDays (%d days)" releaseChannelFileName n)
+                        | _ -> Ok(defaultSoakDays, sprintf "the default (%d days)" defaultSoakDays)
+
+                    let overrides =
+                        match root.TryGetProperty "overrides" with
+                        | true, el when el.ValueKind = JsonValueKind.Array ->
+                            let results = el.EnumerateArray() |> Seq.mapi parseOverride |> List.ofSeq
+
+                            match
+                                results
+                                |> List.tryPick (function
+                                    | Error e -> Some e
+                                    | Ok _ -> None)
+                            with
+                            | Some e -> Error e
+                            | None ->
+                                results
+                                |> List.choose (function
+                                    | Ok x -> Some x
+                                    | Error _ -> None)
+                                |> Ok
+                        | true, _ -> Error "overrides must be an array"
+                        | _ -> Ok []
+
+                    match baseDays, overrides with
+                    | Error e, _
+                    | _, Error e -> fail e
+                    | Ok(n, source), Ok os ->
+                        match os |> List.filter (fun (v, _, _) -> v = core) with
+                        | [] ->
+                            Ok {
+                                Window = TimeSpan.FromDays(float n)
+                                Source = source
+                            }
+                        | [ (_, d, reason) ] ->
+                            Ok {
+                                Window = TimeSpan.FromDays(float d)
+                                Source =
+                                    sprintf
+                                        "the %s override for %s (%d days) — reason: %s"
+                                        releaseChannelFileName
+                                        (Version.render core)
+                                        d
+                                        reason
+                            }
+                        | _ -> fail (sprintf "more than one override names %s" (Version.render core))
+        with :? JsonException as e ->
+            fail (sprintf "is not JSON (%s)" e.Message)
+
+/// Whether a stable release must be promoted from a soaked candidate: a
+/// major release from 1.0 on (`X.0.0`, X >= 1), and nothing else. A major
+/// cannot be tagged without a soaked candidate — that is the one-way
+/// commitment this channel exists for, and one tagged directly would skip
+/// the gate by the simple act of not opting in. Every 0.x release and every
+/// minor or patch publishes stable with no soak check: candidates exist
+/// only for majors (operator decision 2026-09-22), so there is nothing else
+/// that could have soaked.
+let promotionRequired (v: ReleaseVersion) : bool =
     match v.Channel with
     | Candidate _ -> false
-    | Stable ->
-        not (List.isEmpty (candidatesOf v.Core tags))
-        || (v.Core.Major >= 1 && v.Core.Minor = 0 && v.Core.Patch = 0)
+    | Stable -> isMajorRelease v.Core
 
 /// What nuget.org says about a candidate.
 type Publication =
@@ -396,15 +567,17 @@ let promotionFindings (window: TimeSpan) (tags: string seq) (e: PromotionEvidenc
                 candidate
                 why
 
-        match e.SurfaceSinceCandidate |> List.filter (fun c -> c.Class <> Unchanged) with
+        // Additive growth does not block (operator decision 2026-09-22):
+        // a consumer who validated the candidate loses nothing to it. Only
+        // a break re-rolls, by SemVerBump's classification, the same one
+        // the release bump check applies.
+        match e.SurfaceSinceCandidate |> List.filter (fun c -> c.Class = Breaking) with
         | [] -> ()
-        | moved ->
+        | broken ->
             sprintf
-                "the public surface moved since `%s` (%s) — what would be promoted is not what soaked. Re-roll: tag `%s` from this commit and restart the soak."
+                "a BREAKING public-surface change landed since `%s` (%s) — consumers validated a surface this release no longer has. Re-roll: tag `%s` from this commit and restart the soak."
                 candidate
-                (moved
-                 |> List.map (fun c -> sprintf "%s: %s" c.Package (SurfaceClass.name c.Class))
-                 |> String.concat ", ")
+                (broken |> List.map _.Package |> String.concat ", ")
                 (nextCandidateTag e.Version.Core tags)
       ]
 

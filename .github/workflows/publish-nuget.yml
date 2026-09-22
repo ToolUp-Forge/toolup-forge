@@ -24,11 +24,12 @@
 #   time. Per-package independent bumps remain possible via a per-fsproj
 #   <Version> override; the tag scheme `v{Package}/{Version}` is reserved
 #   for that future shape but not yet wired here.
-# - `v*.*.*-rc.N` tag push — a RELEASE CANDIDATE (Phase 263). The same
-#   `v*.*.*` filter matches it (a filter `*` spans `-rc.N`), so no second
+# - `vX.0.0-rc.N` tag push (X >= 1) — a RELEASE CANDIDATE of a major (Phase 263;
+#   candidates exist only for majors from 1.0 on). The same `v*.*.*` filter
+#   matches it (a filter `*` spans `-rc.N`), so no second
 #   trigger exists to drift from the first. The `VerifyReleaseChannel`
 #   step reads the tag, refuses any shape other than `vX.Y.Z` /
-#   `vX.Y.Z-rc.N` and any tag that does not name the tree's <Version>,
+#   `vX.0.0-rc.N` (X >= 1) and any tag that does not name the tree's <Version>,
 #   and exports the candidate label so the pack emits `X.Y.Z-rc.N`
 #   (Directory.Build.targets). Before that step existed, EVERY tag
 #   published the tree's <Version> whatever the tag said — an `-rc.1`
@@ -135,10 +136,10 @@ jobs:
       # Phase 263 — what does this run release, and on which channel?
       #
       # FIRST, and before the login step: a tag the channel refuses — a
-      # shape other than `vX.Y.Z` / `vX.Y.Z-rc.N`, a version the tree does
+      # shape other than `vX.Y.Z` / `vX.0.0-rc.N` (X >= 1), a version the tree does
       # not declare, a candidate of an already-released version, or a
       # stable release that must be promoted from a candidate that has not
-      # soaked (window, unmoved surface, lineage) — fails without a
+      # soaked (window, no breaking surface change, lineage) — fails without a
       # credential ever being minted. For a candidate it appends
       # TOOLUP_RELEASE_CORE / TOOLUP_RELEASE_PRERELEASE to $GITHUB_ENV, so
       # every later step in THIS job sees them and the Publish pack stamps
