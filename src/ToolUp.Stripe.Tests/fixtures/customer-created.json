@@ -1,0 +1,44 @@
+{
+  "id": "evt_1PgF3a2eZvKYlo2CqLcAzUeR",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1721210400,
+  "data": {
+    "object": {
+      "id": "cus_QZ1sT4hLmN8pKd",
+      "object": "customer",
+      "address": null,
+      "balance": 0,
+      "created": 1721210399,
+      "currency": null,
+      "default_source": null,
+      "delinquent": false,
+      "description": null,
+      "discount": null,
+      "email": "ada@example.com",
+      "invoice_prefix": "3F7A21C",
+      "invoice_settings": {
+        "custom_fields": null,
+        "default_payment_method": null,
+        "footer": null,
+        "rendering_options": null
+      },
+      "livemode": false,
+      "metadata": {},
+      "name": null,
+      "next_invoice_sequence": 1,
+      "phone": null,
+      "preferred_locales": [],
+      "shipping": null,
+      "tax_exempt": "none",
+      "test_clock": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_8kQ2mWvTzR0yBa",
+    "idempotency_key": "b3c6a1f0-7d2e-4c19-9f55-0a8e2d4b6c31"
+  },
+  "type": "customer.created"
+}
