@@ -867,6 +867,19 @@ module Names =
     [<Literal>]
     let perfMeasurements = "TOOLUP_PERF_MEASUREMENTS"
 
+    // Phase 20a — the CalDAV calendar-bridge companion's settings. The
+    // password / app-password is NOT here: it resolves per call through
+    // ISecretStore, so rotation flows through without a restart.
+
+    [<Literal>]
+    let calDavUrl = "TOOLUP_CALDAV_URL"
+
+    [<Literal>]
+    let calDavUsername = "TOOLUP_CALDAV_USERNAME"
+
+    [<Literal>]
+    let calDavEndpoint = "TOOLUP_CALDAV_ENDPOINT"
+
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader
 /// gains a new env var; the coverage test fails if a reader consults a
 /// var with no descriptor, and the golden-file test fails until the
@@ -2639,6 +2652,33 @@ let all: ConfigKeyDescriptor list = [
         Default = None
         IsSecret = false
         Category = ToolingCategory
+    }
+    // --- Phase 20a: the CalDAV calendar bridge ---
+    {
+        EnvVar = Names.calDavUrl
+        Description =
+            "Base URL of the CalDAV server the calendar bridge talks to. Relative external calendar ids resolve against it."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
+    }
+    {
+        EnvVar = Names.calDavUsername
+        Description =
+            "Username the CalDAV bridge authenticates as. The matching password or app-password comes from ISecretStore, never from the environment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
+    }
+    {
+        EnvVar = Names.calDavEndpoint
+        Description = "CalDAV endpoint override, replacing the base URL for every request."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
     }
 ]
 
