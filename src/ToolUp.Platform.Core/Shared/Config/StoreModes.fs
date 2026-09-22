@@ -980,7 +980,7 @@ type DatadogReadbackMode =
     | NoDatadogReadback
     /// Mount the readback endpoints under the supplied configuration.
     /// Requires an `IDatadogReadbackApi` in DI (the companion's
-    /// `DatadogReadbackClient.create`) and both `DD-API-KEY` and
+    /// `Datadog.create`) and both `DD-API-KEY` and
     /// `DD-APPLICATION-KEY` in `ISecretStore` under `_platform`; each
     /// endpoint reports a typed, audited soft failure for whichever is
     /// absent rather than blanking the admin surface.
