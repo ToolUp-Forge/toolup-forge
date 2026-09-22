@@ -242,9 +242,13 @@ let private fixturePin =
 ///      converter is a red run rather than a quietly-tolerated one;
 ///   3. every one of the same values is exact through MsgPack — the
 ///      control, without which "JSON loses ticks" could equally be "our
-///      corpus mis-declares TimeSpans".
+///      corpus mis-declares TimeSpans";
+///   4. (Phase 799) every one is exact through the JSON ALGEBRA, which
+///      reads the same millisecond text as a decimal — so the loss is
+///      now a property of the converter, not of the wire, and a served
+///      record with a registered decoder does not see it.
 let private timeSpanTickLoss =
-    testCase "TimeSpan: the JSON wire loses up to one tick, the MsgPack wire does not"
+    testCase "TimeSpan: the STJ converter loses up to one tick; the MsgPack wire and the JSON algebra do not"
     <| fun () ->
         // Deterministic tick values at full resolution, spread across a
         // day. Derived from the corpus seed so the population is the same
@@ -262,7 +266,31 @@ let private timeSpanTickLoss =
 
         Expect.isNonEmpty
             lossy
-            "no drawn TimeSpan lost precision through the STJ wire. Either the converter has been fixed — in which case delete this test and widen the whole-millisecond restriction on the generated draws in `WireCorpus.randomEnvelope` — or this probe has stopped measuring the wire."
+            "no drawn TimeSpan lost precision through the STJ CONVERTER. Either the converter has been fixed — in which case retire this measurement and widen the whole-millisecond restriction on the generated draws in `WireCorpus.randomEnvelope` — or this probe has stopped measuring the wire."
+
+        // Phase 799 — CLOSED on the served path. The same 2,000 texts,
+        // through the JSON algebra's `asTimeSpan` (the token as a decimal,
+        // scaled to ticks in decimal arithmetic, nearest tick): every one
+        // comes back exact. The converter's loss above is now a fact about
+        // a path a registered decoder no longer takes, measured here so the
+        // two are read side by side.
+        let algebraLossy =
+            ticks
+            |> List.filter (fun t ->
+                let c = both WireClass.DateFamily "timespan-probe" (TimeSpan.FromTicks t)
+
+                match
+                    ToolUp.Remoting.Json.JsonRead.tryParse (c.WriteJson())
+                    |> Result.bind ToolUp.Remoting.Json.JsonDecode.asTimeSpan
+                with
+                | Ok decoded -> decoded.Ticks <> t
+                | Error _ -> true)
+
+        Expect.isEmpty
+            algebraLossy
+            (sprintf
+                "%d drawn TimeSpan value(s) lose precision through the JSON ALGEBRA, which reads the millisecond text as a decimal and must be exact over this population (Phase 799)"
+                (List.length algebraLossy))
 
         let worst = lossy |> List.map snd |> List.max
 
