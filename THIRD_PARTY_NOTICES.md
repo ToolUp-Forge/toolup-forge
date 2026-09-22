@@ -230,6 +230,7 @@ metadata omits a licence — check the package's repository or README directly.
 | `PdfPig` | `0.1.14` | `Apache-2.0` | [link](https://github.com/UglyToad/PdfPig) |
 | `Pipelines.Sockets.Unofficial` | `2.2.16` | `MIT` | [link](https://github.com/mgravell/Pipelines.Sockets.Unofficial) |
 | `Portable.BouncyCastle` | `1.9.0` | [link](https://www.bouncycastle.org/csharp/licence.html) | [link](https://www.bouncycastle.org/csharp/) |
+| `Quartz` | `4.1.1` | `Apache-2.0` | [link](https://www.quartz-scheduler.net/) |
 | `SkiaSharp` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.Linux.NoDependencies` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |
 | `SkiaSharp.NativeAssets.macOS` | `3.119.2` | `MIT` | [link](https://go.microsoft.com/fwlink/?linkid=868515) |

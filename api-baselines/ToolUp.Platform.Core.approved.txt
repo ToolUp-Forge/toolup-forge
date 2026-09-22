@@ -7337,11 +7337,15 @@ ToolUp.Platform.JobSchedulerMode (class)
 ToolUp.Platform.JobSchedulerMode.InProcessJobScheduler : ToolUp.Platform.JobSchedulerMode { get }
 ToolUp.Platform.JobSchedulerMode.IsInProcessJobScheduler : System.Boolean { get }
 ToolUp.Platform.JobSchedulerMode.IsNoJobScheduler : System.Boolean { get }
+ToolUp.Platform.JobSchedulerMode.IsQuartzJobScheduler : System.Boolean { get }
 ToolUp.Platform.JobSchedulerMode.NoJobScheduler : ToolUp.Platform.JobSchedulerMode { get }
 ToolUp.Platform.JobSchedulerMode.Tag : System.Int32 { get }
+ToolUp.Platform.JobSchedulerMode+QuartzJobScheduler (class)
+ToolUp.Platform.JobSchedulerMode+QuartzJobScheduler.Item : ToolUp.Platform.QuartzConfig { get }
 ToolUp.Platform.JobSchedulerMode+Tags (class)
 ToolUp.Platform.JobSchedulerMode+Tags.InProcessJobScheduler : System.Int32 (literal)
 ToolUp.Platform.JobSchedulerMode+Tags.NoJobScheduler : System.Int32 (literal)
+ToolUp.Platform.JobSchedulerMode+Tags.QuartzJobScheduler : System.Int32 (literal)
 ToolUp.Platform.JobSchedulerTelemetrySnapshot (class)
 ToolUp.Platform.JobSchedulerTelemetrySnapshot..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.DateTime)
 ToolUp.Platform.JobSchedulerTelemetrySnapshot.GeneratedAt : System.DateTime { get }
@@ -10146,6 +10150,14 @@ ToolUp.Platform.PushToken (class)
 ToolUp.Platform.PushToken..ctor(System.String, System.String)
 ToolUp.Platform.PushToken.Platform : System.String { get }
 ToolUp.Platform.PushToken.Token : System.String { get }
+ToolUp.Platform.QuartzConfig (class)
+ToolUp.Platform.QuartzConfig..ctor(System.String, System.Int32, System.TimeSpan, System.Boolean)
+ToolUp.Platform.QuartzConfig.MaxConcurrency : System.Int32 { get }
+ToolUp.Platform.QuartzConfig.MisfireThreshold : System.TimeSpan { get }
+ToolUp.Platform.QuartzConfig.SchedulerName : System.String { get }
+ToolUp.Platform.QuartzConfig.StartScheduler : System.Boolean { get }
+ToolUp.Platform.QuartzConfigModule (class)
+ToolUp.Platform.QuartzConfigModule.defaults : ToolUp.Platform.QuartzConfig { get }
 ToolUp.Platform.QuietHours (class)
 ToolUp.Platform.QuietHours..ctor(System.Int32, System.Int32, System.String)
 ToolUp.Platform.QuietHours.EndMinute : System.Int32 { get }

@@ -217,6 +217,7 @@
     <PackageVersion Include="ToolUp.Hosts.GoogleCloudFunctions" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.IngestionQueues.Redis" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.InterPlatform" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.JobSchedulers.Quartz" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Client" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />

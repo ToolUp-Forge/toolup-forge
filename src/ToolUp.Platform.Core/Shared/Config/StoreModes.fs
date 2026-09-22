@@ -113,6 +113,45 @@ type ServiceAccountStoreMode =
     /// registration is skipped, so the consumer's singleton stands.
     | CustomServiceAccountStore
 
+/// Phase 9c.E — deployment settings for the Quartz.NET job-scheduler
+/// companion (`ToolUp.JobSchedulers.Quartz`). Lives here rather than in
+/// the companion because `JobSchedulerMode.QuartzJobScheduler` carries
+/// it and the mode is a `ServerConfig` field, which the Fable-packed
+/// shared layer must be able to construct. Nothing in this record names
+/// a Quartz *type* — it is four primitives (GP 1: the vendor dependency
+/// stays inside the companion package).
+type QuartzConfig = {
+    /// Scheduler instance name. Quartz keys its in-process scheduler
+    /// registry on this, so two schedulers in one process must not share
+    /// a name. Default `"toolup"`.
+    SchedulerName: string
+    /// Maximum jobs the scheduler's thread pool runs concurrently.
+    /// Default 10, which is Quartz's own default. Must be >= 1 — the
+    /// companion's `IConfigValidator` refuses anything lower rather than
+    /// letting a zero-sized pool silently never dispatch.
+    MaxConcurrency: int
+    /// How late a fire may be before Quartz treats it as a misfire.
+    /// Default 60 seconds, matching the minute-precision contract
+    /// `JobPrecision.Minute` declares.
+    MisfireThreshold: TimeSpan
+    /// Whether the companion's hosted service starts the scheduler.
+    /// `false` leaves it in standby — composed, queryable and writable,
+    /// but firing nothing — which is what a `WebOnly` replica of a
+    /// multi-process deployment wants. Default `true`.
+    StartScheduler: bool
+}
+
+[<RequireQualifiedAccess>]
+module QuartzConfig =
+    /// The documented defaults — scheduler name `"toolup"`, 10 concurrent
+    /// jobs, a 60-second misfire threshold, started on compose.
+    let defaults: QuartzConfig = {
+        SchedulerName = "toolup"
+        MaxConcurrency = 10
+        MisfireThreshold = TimeSpan.FromSeconds 60.0
+        StartScheduler = true
+    }
+
 /// Selects which `IJobScheduler` implementation `compose` registers.
 /// Default: `NoJobScheduler` — background jobs are opt-in. Apps that
 /// don't enable a mode get nothing — no `IJobScheduler` in DI, no
@@ -129,6 +168,17 @@ type JobSchedulerMode =
     /// instance deployments. Multi-silo deployments need a
     /// distributed companion to avoid double-dispatch.
     | InProcessJobScheduler
+
+    /// Phase 9c.E — the Quartz.NET companion
+    /// (`ToolUp.JobSchedulers.Quartz`). Quartz owns trigger evaluation and
+    /// dispatch; the deployment's `IJobStore` stays the canonical record
+    /// of job definitions and run history. The companion constructs the
+    /// scheduler and registers it as an instance BEFORE `ServerApp.run`;
+    /// `ComposeJobs.registerJobScheduler` adopts that instance (the SDK
+    /// core carries no Quartz reference — GP 1). Appended, never inserted:
+    /// this DU is a `ServerConfig` field written through `FableConverters`,
+    /// so a case inserted mid-union would shift every later case's tag.
+    | QuartzJobScheduler of QuartzConfig
 
 /// Phase 321 — selects whether the job scheduler fans progress
 /// checkpoints out to `INotificationChannel` + `IEventStore`.

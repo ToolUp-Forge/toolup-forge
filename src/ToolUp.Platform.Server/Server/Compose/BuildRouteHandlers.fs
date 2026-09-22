@@ -299,7 +299,11 @@ let buildRouteHandlers
     let jobApiHandler: HttpHandler list =
         match config.JobScheduler with
         | NoJobScheduler -> []
-        | InProcessJobScheduler -> [ makeApi JobApiHandler.jobApi ]
+        // Phase 9c.E — the Job API is written against `IJobScheduler` /
+        // `IJobStore`, never against an implementation, so every mode
+        // that registers those two mounts the same route.
+        | InProcessJobScheduler
+        | QuartzJobScheduler _ -> [ makeApi JobApiHandler.jobApi ]
 
     // MaintenanceApi always registered. Each method reads the
     // typed-store cells at request time via the thunk arguments and

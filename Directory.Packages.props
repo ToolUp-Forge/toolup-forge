@@ -504,5 +504,14 @@
          embedded-template seam and reads none. MIT, which leaves this
          Apache-2.0 repo's licence set unchanged. -->
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
+    <!-- Phase 9c.E — Quartz.NET, the second IJobScheduler / IJobStore
+         backend (src/JobSchedulers/Quartz). Apache-2.0 with no commercial
+         tier, so it carries no GP 2 exposure; the 4.x line is the current
+         major and ships a single net10.0 target whose only dependencies are
+         Microsoft.Extensions.* 10.0.0. The scheduling extras
+         (Quartz.Extensions.*) are deliberately NOT referenced — the
+         companion composes its own scheduler and hosted-service lifecycle,
+         so the core package is the whole dependency. -->
+    <PackageVersion Include="Quartz" Version="4.1.1" />
   </ItemGroup>
 </Project>

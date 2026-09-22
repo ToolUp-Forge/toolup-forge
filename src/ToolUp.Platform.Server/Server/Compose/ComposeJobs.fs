@@ -198,7 +198,12 @@ let applyEventStoreDecorators
 
     match config.JobScheduler with
     | NoJobScheduler -> eventStoreAfterWebhooks
-    | InProcessJobScheduler ->
+    // Phase 9c.E — event-triggered jobs need the notify wrapper under
+    // every scheduler mode: it is what turns an `IEventStore` write into
+    // `IJobScheduler.NotifyEventWritten`, and both implementations
+    // consume that call.
+    | InProcessJobScheduler
+    | QuartzJobScheduler _ ->
         // Phase 598 — the same watermark instance the scheduler scans
         // against; the notify-wrapper advances it after each live
         // dispatch. `None` when `EventTriggerCatchUp` is off.
@@ -356,6 +361,32 @@ let private tryResolveExternalHandleStore
 
             None
 
+/// Phase 9c.E — find an INSTANCE-registered singleton of `'T` in the
+/// service collection, before anything is built.
+///
+/// This is the seam a scheduler companion arrives through. The SDK core
+/// takes no dependency on any companion package (GP 1), so
+/// `ComposeJobs` cannot construct a Quartz scheduler; the deployment
+/// constructs it and registers the instance, and compose ADOPTS it. Same
+/// shape, and the same one caveat, as `tryResolveExternalDispatcher`
+/// above: a FACTORY registration is invisible here, because a factory
+/// cannot be invoked without building the provider. A companion
+/// registers an instance.
+let private tryResolveRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
+    services
+    |> Seq.tryPick (fun descriptor ->
+        if
+            not (isNull descriptor.ServiceType)
+            && descriptor.ServiceType = typeof<'T>
+            // Reading ImplementationInstance on a keyed descriptor throws.
+            && not descriptor.IsKeyedService
+        then
+            match descriptor.ImplementationInstance with
+            | :? 'T as instance -> Some instance
+            | _ -> None
+        else
+            None)
+
 let registerJobScheduler
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -500,6 +531,57 @@ let registerJobScheduler
             |> ignore
 
         Some(scheduler :> IJobScheduler)
+
+    // Phase 9c.E — the Quartz.NET companion. Appended, never inserted:
+    // this is a new arm of an existing match, and the arms above are
+    // untouched.
+    //
+    // **Compose ADOPTS, it does not construct.** GP 1 keeps every vendor
+    // dependency inside its companion package, so `ToolUp.Platform.Server`
+    // has no way to build a Quartz scheduler and never will. The
+    // deployment builds one (`QuartzJobScheduler.create`) and registers
+    // the two instances before `ServerApp.run`; this arm finds them,
+    // wires the lifecycle, and reports honestly when they are absent —
+    // which is the failure worth naming, because the alternative is a
+    // deployment that asked for Quartz, got `None`, and discovers at the
+    // first missed cron boundary that nothing was scheduled.
+    | QuartzJobScheduler quartzConfig ->
+        match tryResolveRegisteredInstance<IJobScheduler> services with
+        | None ->
+            resolvedLogger.Warn(
+                sprintf
+                    "[ComposeJobs] event=quartz_scheduler_not_registered ServerConfig.JobScheduler = QuartzJobScheduler(%s) but no instance-registered IJobScheduler was found in the service collection, so NO scheduler is composed and no background job will run. Build the companion before ServerApp.run (QuartzJobScheduler.create inner channel config quartzConfig logger) and register both instances: services.AddSingleton<IJobScheduler>(scheduler) and services.AddSingleton<IJobStore>(scheduler.JobStore)."
+                    quartzConfig.SchedulerName
+            )
+
+            None
+        | Some scheduler ->
+            jobSchedulerCell.Value <- Some scheduler
+
+            // The store is the companion's projecting decorator, and the
+            // Job API, the status board and the maintenance surface all
+            // read it. Its absence is recoverable (the scheduler still
+            // dispatches) but silently narrows the admin surface, so it
+            // is named rather than inferred.
+            if (tryResolveRegisteredInstance<IJobStore> services).IsNone then
+                resolvedLogger.Warn
+                    "[ComposeJobs] event=quartz_job_store_not_registered ServerConfig.JobScheduler = QuartzJobScheduler and an IJobScheduler instance was found, but no IJobStore instance was. The scheduler dispatches, but the Job API, the service status board and the maintenance surface have no store to read. Register it: services.AddSingleton<IJobStore>(scheduler.JobStore)."
+
+            // Phase 16 + 16a — the same profile gate the in-process
+            // default goes through. A companion scheduler that is also an
+            // `IHostedService` (the shipped one is — that is how the
+            // Quartz scheduler starts and shuts down) is registered here
+            // so a `WebOnly` replica composes the scheduler surface
+            // without starting a dispatcher.
+            match scheduler with
+            | :? Microsoft.Extensions.Hosting.IHostedService as hosted when
+                ProcessProfileGate.shouldRegisterBackgroundService config JobSchedulerSubsystem
+                ->
+                services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(hosted)
+                |> ignore
+            | _ -> ()
+
+            Some scheduler
 
 /// Phase 10 — opt-in data ingestion. `NoDataIngestion` (default) skips
 /// registration entirely — no `IDataIngestor`, no

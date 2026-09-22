@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Quartz.NET IJobScheduler / IJobStore for ToolUp.Platform — cron and manual job dispatch over a Quartz IScheduler, with the deployment's own IJobStore as the canonical record. Activated via ServerConfig.JobScheduler = QuartzJobScheduler.</Description>
+    <PackageTags>fsharp;sdk;jobs;scheduling;cron;quartz;background-jobs</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Order is dependency order: the Quartz-side projection (key
+         mapping, the handler registry and the fired-instance adapter)
+         before the store that writes it, before the scheduler that
+         drives both, before the probes that observe the result. -->
+    <Compile Include="QuartzJobStore.fs" />
+    <Compile Include="QuartzJobScheduler.fs" />
+    <Compile Include="QuartzJobSchedulerHealth.fs" />
+    <Compile Include="QuartzJobSchedulerValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. Quartz is unique to
+         this companion, and it is the WHOLE vendor dependency: the
+         Quartz.Extensions.* packages exist to host a scheduler out of
+         Microsoft.Extensions.Hosting, which this companion does itself
+         through the SDK's own compose + IHostedService seams. -->
+    <PackageReference Include="Quartz" />
+  </ItemGroup>
+</Project>

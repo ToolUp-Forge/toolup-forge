@@ -307,7 +307,11 @@ let private buildRateLimit (ctx: HttpContext) (mode: RateLimiterMode) : Async<Ra
 let private buildJobQueue (ctx: HttpContext) (mode: JobSchedulerMode) : Async<JobQueueSummary> = async {
     match mode with
     | NoJobScheduler -> return SectionSummary.disabled "Job scheduler disabled (ServerConfig.JobScheduler)."
-    | InProcessJobScheduler ->
+    // Phase 9c.E — the board reads the composed `IJobStore`, which every
+    // scheduler mode registers, so the Quartz companion answers here
+    // exactly as the in-process default does.
+    | InProcessJobScheduler
+    | QuartzJobScheduler _ ->
         match ctx.RequestServices.GetService(typeof<IJobStore>) with
         | :? IJobStore as store ->
             let! scopes = store.ListScopesWithJobs()

@@ -107,6 +107,10 @@ let buildDevDiagnosticsCapture
             match config.JobScheduler with
             | NoJobScheduler -> "NoJobScheduler"
             | InProcessJobScheduler -> "InProcessJobScheduler"
+            // Phase 9c.E — the Quartz companion. The scheduler NAME is
+            // part of the panel's answer: two deployments on this mode
+            // differ by which Quartz instance they drive.
+            | QuartzJobScheduler quartz -> $"QuartzJobScheduler({quartz.SchedulerName})"
 
         let resultMode =
             match config.ResultStore with

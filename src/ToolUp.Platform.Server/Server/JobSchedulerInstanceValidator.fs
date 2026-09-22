@@ -47,6 +47,15 @@ type JobSchedulerInstanceValidator(config: ServerConfig, ?timeout: TimeSpan) =
                 match config.JobScheduler with
                 | InProcessJobScheduler -> true
                 | NoJobScheduler -> false
+                // Phase 9c.E — the Quartz companion is NOT this
+                // validator's question. Whether a Quartz deployment
+                // double-dispatches depends on whether its job store is
+                // clustered, which is Quartz configuration this mode
+                // does not carry — so the companion's own
+                // `IConfigValidator` asks the scheduler
+                // (`SchedulerMetadata.JobStoreClustered`) and answers
+                // from the real state rather than from the mode.
+                | QuartzJobScheduler _ -> false
 
             let multiInstance = config.ReplicaCount > 1
             let escapeHatch = config.AcceptInProcessSchedulerInMultiInstance
