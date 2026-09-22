@@ -21,6 +21,9 @@
         <Compile Include="Shared\SchedulingTypes.fs" />
         <Compile Include="Shared\RecurrenceExpander.fs" />
         <Compile Include="Shared\iCalendar.fs" />
+        <!-- Phase 20a — the calendar-bridge seam. After iCalendar.fs
+             (the bridges' payload format), before the API contract. -->
+        <Compile Include="Shared\ICalendarBridge.fs" />
         <Compile Include="Shared\SchedulingApi.fs" />
         <Compile Include="Shared\SchedulingEvents.fs" />
     </ItemGroup>
