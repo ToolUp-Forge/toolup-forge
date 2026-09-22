@@ -673,6 +673,26 @@ module DocCoverageFixture =
         // measurement. Do not add a doc comment to this member.
         member _.Beta(n: int) : string = string n
 
+    /// Phase 811 — the module-level `let` literal shape, the one public
+    /// literal F# can express. The compiler keys its doc under `P:`.
+    module Literals =
+        /// A documented literal.
+        [<Literal>]
+        let Documented = "documented"
+
+        // Deliberately undocumented. Do not add a doc comment to this member.
+        [<Literal>]
+        let Undocumented = "undocumented"
+
+    /// Phase 811 — an enum case is an IL literal too, but carries no
+    /// `LiteralAttribute` and the compiler keys its doc under `F:`. Pinned
+    /// so the literal rule cannot widen into `FieldInfo.IsLiteral`.
+    type Shade =
+        /// A documented enum case.
+        | Light = 0
+        // Deliberately undocumented. Do not add a doc comment to this case.
+        | Dark = 1
+
 let private docCoverageFixtures =
     // A minimal documentation file of exactly the shape the compiler
     // emits, with one entry of each id kind plus prose that must NOT be
@@ -1026,6 +1046,53 @@ let private docCoverageFixtures =
                 | _ ->
                     failtest
                         "the DocCoverageFixture members were not found on the rendered surface of the test assembly — the fixture was renamed or made non-public, and with it the only proof that the doc-id computation matches real compiler output."
+        }
+
+        // Phase 811 — the go-red arm for literals. Under the pre-811
+        // keying (`F:` for every field) the documented literal's id matches
+        // no <member name=…> entry, and the first expectation fails.
+        test "a documented [<Literal>] counts as documented; an enum case keeps F:" {
+            let selfDll = Assembly.GetExecutingAssembly().Location
+
+            match docFileFor selfDll with
+            | None ->
+                failtestf
+                    "no XML documentation file beside %s — GenerateDocumentationFile is not in effect for the test assembly."
+                    (Path.GetFileName selfDll)
+            | Some xmlPath ->
+                let documented = documentedIdsIn (File.ReadAllText xmlPath)
+                let subjects = (renderSurfaceDetail selfDll pool.Value).DocSubjects
+
+                let find needle =
+                    subjects
+                    |> List.tryFind (fun s -> s.DocId.EndsWith("DocCoverageFixture." + needle))
+
+                match
+                    find "Literals.Documented", find "Literals.Undocumented", find "Shade.Light", find "Shade.Dark"
+                with
+                | Some lit, Some undocLit, Some light, Some dark ->
+                    Expect.isTrue
+                        (documented.Contains lit.DocId)
+                        (sprintf
+                            "the fixture's DOCUMENTED literal reads as undocumented — the computed id %s appears in no <member name=…> entry. The compiler writes a literal's doc under P:, so an F: key can never match."
+                            lit.DocId)
+
+                    Expect.isFalse
+                        (documented.Contains undocLit.DocId)
+                        "the fixture's deliberately-undocumented literal reads as documented — the match is too loose to measure anything"
+
+                    Expect.isTrue
+                        (documented.Contains light.DocId)
+                        (sprintf
+                            "the fixture's DOCUMENTED enum case reads as undocumented under %s — an enum case is an IL literal but the compiler keys it F:, so the literal rule must key on LiteralAttribute, not FieldInfo.IsLiteral"
+                            light.DocId)
+
+                    Expect.isFalse
+                        (documented.Contains dark.DocId)
+                        "the fixture's deliberately-undocumented enum case reads as documented"
+                | _ ->
+                    failtest
+                        "the DocCoverageFixture literal / enum members were not found on the rendered surface of the test assembly — the fixture was renamed or made non-public."
         }
     ]
 
