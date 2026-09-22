@@ -144,7 +144,7 @@ ToolUp.Reporting.Server 90/176
 ToolUp.Reporting.Xlsx 6/11
 ToolUp.Rerankers.Local 9/19
 ToolUp.Scheduling.Core 94/322
-ToolUp.Scheduling.Server 78/153
+ToolUp.Scheduling.Server 79/154
 ToolUp.Sdk 0/0
 ToolUp.Secrets.AwsSecretsManager 6/11
 ToolUp.Secrets.AzureKeyVault 5/10

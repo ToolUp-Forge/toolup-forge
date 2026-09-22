@@ -31,6 +31,7 @@ ToolUp.Scheduling.CalendarSync.calendarLinkRegistration : ToolUp.Platform.Entity
 ToolUp.Scheduling.CalendarSync.eventLinkId(System.String, System.String, System.String) : System.String
 ToolUp.Scheduling.CalendarSync.linkId(System.String, System.String) : System.String
 ToolUp.Scheduling.CalendarSync.resolveConflict(ToolUp.Scheduling.ICalendarBridge+ConflictPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Scheduling.CalendarSync+CalendarEventLink], ToolUp.Scheduling.ICalendarBridge+ExternalEvent) : System.Boolean
+ToolUp.Scheduling.CalendarSync.userIdOfEventPayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Scheduling.CalendarSync+CalendarEventLink (class)
 ToolUp.Scheduling.CalendarSync+CalendarEventLink..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.Int32)
 ToolUp.Scheduling.CalendarSync+CalendarEventLink.BookingId : System.String { get }
@@ -80,11 +81,11 @@ ToolUp.Scheduling.CalendarSync+CalendarSyncError+UnknownBridge.kind : System.Str
 ToolUp.Scheduling.CalendarSync+CalendarSyncErrorModule (class)
 ToolUp.Scheduling.CalendarSync+CalendarSyncErrorModule.message(ToolUp.Scheduling.CalendarSync+CalendarSyncError) : System.String
 ToolUp.Scheduling.CalendarSync+ICalendarSync (interface)
-ToolUp.Scheduling.CalendarSync+ICalendarSync.HandleWebhook(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[], ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.HandleWebhook(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
 ToolUp.Scheduling.CalendarSync+ICalendarSync.Kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Scheduling.CalendarSync+ICalendarSync.LinkResource(System.String, System.String, System.String, System.String, System.String, ToolUp.Scheduling.ICalendarBridge+ConflictPolicy, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+CalendarLink, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
 ToolUp.Scheduling.CalendarSync+ICalendarSync.ListLinks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.CalendarSync+CalendarLink]]
-ToolUp.Scheduling.CalendarSync+ICalendarSync.PullResource(System.String, System.String, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
+ToolUp.Scheduling.CalendarSync+ICalendarSync.PullResource(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PullOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
 ToolUp.Scheduling.CalendarSync+ICalendarSync.PushBooking(System.String, ToolUp.Scheduling.SchedulingTypes+Booking, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.CalendarSync+PushOutcome, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
 ToolUp.Scheduling.CalendarSync+ICalendarSync.UnlinkResource(System.String, System.String, System.String, ToolUp.Platform.EntityTypes+EntityPrincipal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Scheduling.CalendarSync+CalendarSyncError]]
 ToolUp.Scheduling.CalendarSync+PullOutcome (class)
