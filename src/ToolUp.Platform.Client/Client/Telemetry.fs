@@ -48,7 +48,14 @@ module Telemetry =
     /// so the opt-in semantics are assertable off the browser — the
     /// difference between `Denied` and `NotYetDecided` is invisible here on
     /// purpose, since neither is consent.
-    let isPermitted (decision: ConsentDecision) : bool = decision = Granted
+    ///
+    /// Phase 191 — the predicate itself now lives on the shared seam
+    /// (`ConsentGated.isPermitted`), which the ad path and any
+    /// consumer-registered script are gated by too. This binding stays,
+    /// unchanged in signature and meaning: it is Phase 163's public
+    /// surface and the name its tests assert through.
+    let isPermitted (decision: ConsentDecision) : bool =
+        Components.ConsentGatedScript.ConsentGated.isPermitted decision
 
     /// Ship the event to the server fan-out endpoint. Swallows every
     /// transport failure — an unmounted endpoint (the `NoTelemetrySink`
@@ -73,23 +80,19 @@ module Telemetry =
     /// when analytics consent is granted. The seam `track` composes, and
     /// the one tests drive — a suppressed event is observable as `send`
     /// never being reached, which is the whole claim.
+    ///
+    /// Phase 191 — the gate is `ConsentGated.run`, shared with the ad
+    /// path and available to any consumer-registered script.
+    /// Behaviour is unchanged and Phase 163's tests pin it: exactly one
+    /// `HasConsented Analytics` is asked, only `Granted` dispatches, and
+    /// a provider that throws — or a `send` that throws — resolves to
+    /// `unit` rather than propagating.
     let trackVia
         (provider: IConsentProvider)
         (send: TelemetryEvent -> Async<unit>)
         (event: TelemetryEvent)
         : Async<unit> =
-        async {
-            try
-                let! decision = provider.HasConsented Analytics
-
-                if isPermitted decision then
-                    do! send event
-            with _ ->
-                // A provider that throws is treated as "no consent" —
-                // fail-closed, matching `IConsentProvider`'s own rule that
-                // unknown / errored states fold into `NotYetDecided`.
-                return ()
-        }
+        Components.ConsentGatedScript.ConsentGated.run provider [ Analytics ] (fun () -> send event)
 
     /// Track a product-analytics event: consent-gated, then POSTed to the
     /// server fan-out endpoint. Awaitable for callers that want to sequence

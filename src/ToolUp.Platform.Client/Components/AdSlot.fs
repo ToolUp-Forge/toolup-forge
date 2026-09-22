@@ -74,27 +74,23 @@ let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
         // stays `NotYetDecided`), so a deployment that requires an
         // ad-consent category never loads the script until a real
         // provider grants it.
+        //
+        // Phase 191 — the tracking itself is now `ConsentGated.watch`,
+        // the seam this tier's other gated effect (`Telemetry.trackVia`)
+        // and any consumer-registered script share. Behaviour is
+        // unchanged: the same initial read, the same subscription, the
+        // same `ConsentState.hasAll` over the same categories, the same
+        // teardown — what moved is that it is no longer written here.
         let consentGranted, setConsentGranted = React.useState false
 
         React.useEffectOnce (fun () ->
-            let provider = ToolUp.Platform.Consent.ConsentProvider.current ()
-            let mutable cancelled = false
+            let subscription =
+                Components.ConsentGatedScript.ConsentGated.watch
+                    (ToolUp.Platform.Consent.ConsentProvider.current ())
+                    panelConfig.ConsentCategoriesRequired
+                    setConsentGranted
 
-            let evaluate (state: ConsentState) =
-                if not cancelled then
-                    setConsentGranted (ConsentState.hasAll panelConfig.ConsentCategoriesRequired state)
-
-            async {
-                let! initial = provider.GetCurrentState()
-                evaluate initial
-            }
-            |> Async.StartImmediate
-
-            let subscription = provider.OnStateChanged evaluate
-
-            FsReact.createDisposable (fun () ->
-                cancelled <- true
-                subscription.Dispose()))
+            FsReact.createDisposable subscription.Dispose)
 
         React.useEffect (
             (fun () ->
