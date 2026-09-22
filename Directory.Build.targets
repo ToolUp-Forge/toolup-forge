@@ -1,0 +1,45 @@
+<Project>
+  <!--
+    Phase 263 — the release-candidate channel's version stamp.
+
+    A release candidate is the lockstep <Version> from Directory.Build.props
+    with a SemVer-2 prerelease label appended: `1.0.0` packs as
+    `1.0.0-rc.1`. The label lives ONLY on the release tag (`v1.0.0-rc.1`);
+    the tree keeps declaring the bare `1.0.0` it is a candidate for, so
+    promotion is a new tag on a descendant commit, never a version edit.
+
+    The `VerifyReleaseChannel` target (Build.fs) reads the tag, refuses one
+    that does not name the declared version, and hands the two halves to
+    every later step of the publish job as the environment variables
+    TOOLUP_RELEASE_CORE (`1.0.0`) and TOOLUP_RELEASE_PRERELEASE (`rc.1`).
+    MSBuild exposes an environment variable as a property of the same name,
+    which is how they arrive here. Unset (every build that is not an RC
+    publish), both conditions below are false and nothing changes.
+
+    WHY A .targets FILE, NOT Directory.Build.props. A project's own
+    <Version> override (the independently versioned `-alpha` packages, the
+    Stripe line) is set in the .fsproj, which evaluates AFTER the props and
+    BEFORE this file. Only here can the rule tell a lockstep project (its
+    <Version> equals the core the tag names) from one that versions on its
+    own.
+
+    WHAT AN RC RUN PUBLISHES. Exactly the lockstep line, at the candidate
+    version. A project on its own version line is made non-packable for the
+    run: an RC must never be the run that first publishes a STABLE version
+    of anything, and an independently versioned package has no candidate
+    of its own to publish. No lockstep project references one of those
+    projects, so no candidate package can declare a dependency on a
+    package this run skipped.
+
+    PackageVersion is set beside Version because the NuGet pack targets may
+    already have defaulted it from the un-suffixed Version by the time this
+    file is evaluated.
+  -->
+  <PropertyGroup Condition="'$(TOOLUP_RELEASE_PRERELEASE)' != '' and '$(TOOLUP_RELEASE_CORE)' != '' and '$(Version)' == '$(TOOLUP_RELEASE_CORE)'">
+    <Version>$(TOOLUP_RELEASE_CORE)-$(TOOLUP_RELEASE_PRERELEASE)</Version>
+    <PackageVersion>$(TOOLUP_RELEASE_CORE)-$(TOOLUP_RELEASE_PRERELEASE)</PackageVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TOOLUP_RELEASE_PRERELEASE)' != '' and '$(TOOLUP_RELEASE_CORE)' != '' and '$(Version)' != '$(TOOLUP_RELEASE_CORE)' and '$(Version)' != '$(TOOLUP_RELEASE_CORE)-$(TOOLUP_RELEASE_PRERELEASE)'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

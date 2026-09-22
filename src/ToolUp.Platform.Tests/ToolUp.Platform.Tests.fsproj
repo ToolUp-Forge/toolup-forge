@@ -1396,6 +1396,11 @@
              ceiling, and the population-scale disclosure posture. -->
         <Compile Include="InProcess\PopulationQueryToolTests.fs" />
         <Compile Include="InProcess\CoverageToolTests.fs" />
+        <!-- Phase 797 — scope as a choke point: the resolver-minted
+             ResolvedScope is unconstructible elsewhere, a planted
+             StorageScope never reaches a fact door, and a source guard
+             over the three doors refuses the pre-797 spellings. -->
+        <Compile Include="InProcess\ScopeChokePointTests.fs" />
         <!-- Phase 707 — the coverage narrative: one knowledge chunk per
              populated metric, superseded on a material coverage change,
              committed through the ordinary narrative-ingestion path. -->

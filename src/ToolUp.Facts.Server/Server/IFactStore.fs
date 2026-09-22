@@ -390,6 +390,18 @@ type FactWithCompetition = {
 /// The bitemporal, append-only, content-addressed fact base. Team-scoped
 /// throughout (GP 4): `scopeId` is a resolved storage scope, and a fact
 /// asserted in one scope is structurally unreachable from another.
+///
+/// **Two forms of every member (Phase 797).** The `ResolvedScope` overloads
+/// are the request-path form: the scope is the value the platform's scope
+/// resolution minted for the request, which is the only way to obtain
+/// one, so a door that calls them cannot be handed a scope the principal
+/// did not resolve to. The `string` overloads are the platform-carried
+/// form — a job's persisted scope, an import, a coherence sweep, a
+/// knowledge-base dependency record — and the one-release compatibility
+/// path for consumers on the old shape; their semantics are unchanged. An
+/// implementation keys both on the same shard: the typed form is exactly
+/// the string form over `scope.ScopeId`, and the anonymous scope keys the
+/// `"anonymous"` shard like any other id — never a wildcard.
 type IFactStore =
     /// Assert a fact (law L1/L2/L3). Content-addressed: asserting an
     /// identical (subject, metric, period, method, inputHashes) returns
@@ -401,6 +413,9 @@ type IFactStore =
     /// Returns the stored fact with `FactId` / `AsOf` / `Supersedes`
     /// populated. Every assert (and supersession) is audited (GP 6).
     abstract Assert: scopeId: string * draft: FactDraft -> Async<Result<Fact, string>>
+
+    /// `Assert` over the request's resolved scope (Phase 797).
+    abstract Assert: scope: ToolUp.Platform.ResolvedScope * draft: FactDraft -> Async<Result<Fact, string>>
 
     /// Assert many drafts as one operation (Phase 704) — the write-side
     /// twin of `QueryPopulation`. **Per-fact semantics are exactly
@@ -439,8 +454,15 @@ type IFactStore =
     /// write and no audit row — "nothing to do" is an answer.
     abstract AssertBatch: scopeId: string * drafts: FactDraft list -> Async<Result<BatchAssertReceipt, string>>
 
+    /// `AssertBatch` over the request's resolved scope (Phase 797).
+    abstract AssertBatch:
+        scope: ToolUp.Platform.ResolvedScope * drafts: FactDraft list -> Async<Result<BatchAssertReceipt, string>>
+
     /// A fact by its content-addressed id, or `None`.
     abstract Get: scopeId: string * factId: string -> Async<Fact option>
+
+    /// `Get` over the request's resolved scope (Phase 797).
+    abstract Get: scope: ToolUp.Platform.ResolvedScope * factId: string -> Async<Fact option>
 
     /// Query the fact base under `query` (see `FactQuery`). Honours L4
     /// `AsOf` visibility and the competing-fact / supersession rules.
@@ -451,6 +473,9 @@ type IFactStore =
     /// declaration behaves exactly as before (GP 11).
     abstract Query: scopeId: string * query: FactQuery -> Async<Fact list>
 
+    /// `Query` over the request's resolved scope (Phase 797).
+    abstract Query: scope: ToolUp.Platform.ResolvedScope * query: FactQuery -> Async<Fact list>
+
     /// `Query` with a derived competition annotation per returned fact:
     /// the method identities of the *other* current heads for the same
     /// (subject, metric, period), so an answer surface can disclose that
@@ -460,11 +485,18 @@ type IFactStore =
     /// `IncludeSuperseded` listing untouched).
     abstract QueryWithCompetition: scopeId: string * query: FactQuery -> Async<FactWithCompetition list>
 
+    /// `QueryWithCompetition` over the request's resolved scope (Phase 797).
+    abstract QueryWithCompetition:
+        scope: ToolUp.Platform.ResolvedScope * query: FactQuery -> Async<FactWithCompetition list>
+
     /// The supersession chain a fact belongs to — every fact in its
     /// lineage from the earliest to the latest, ordered by `AsOf`
     /// ascending. A single-fact lineage returns just that fact; an unknown
     /// id returns the empty list.
     abstract QuerySupersessionChain: scopeId: string * factId: string -> Async<Fact list>
+
+    /// `QuerySupersessionChain` over the request's resolved scope (Phase 797).
+    abstract QuerySupersessionChain: scope: ToolUp.Platform.ResolvedScope * factId: string -> Async<Fact list>
 
     /// The **cross-subject** read (Phase 701): rank one metric across a
     /// subject population and summarise what was ranked over. Resolves
@@ -481,3 +513,7 @@ type IFactStore =
     /// empty ranking and the empty summary; "nothing matched" is an
     /// answer.
     abstract QueryPopulation: scopeId: string * query: PopulationQuery -> Async<Result<PopulationResult, string>>
+
+    /// `QueryPopulation` over the request's resolved scope (Phase 797).
+    abstract QueryPopulation:
+        scope: ToolUp.Platform.ResolvedScope * query: PopulationQuery -> Async<Result<PopulationResult, string>>

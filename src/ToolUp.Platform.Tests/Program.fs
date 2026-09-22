@@ -1048,6 +1048,12 @@ let private registeredTests =
         // grouped count, true rank gaps, gated magnitudes), the two typed
         // ordering refusals, and the end-to-end demo.
         PopulationQueryToolTests.tests
+        // Phase 797 — scope as a choke point: `ResolvedScope` has no
+        // public constructor (pinned by reflection), a `StorageScope`
+        // planted in the request items never reaches a fact door (the
+        // leaky-store test inverted), and a source guard over the three
+        // doors refuses the pre-797 spellings, go-red pinned.
+        ScopeChokePointTests.tests
         // Phase 791 — the closed model-input value: the source scan
         // asserting every provider entry constructs a `ModelInput` (with
         // the planted-violation go-red that proves it fires), and the

@@ -213,7 +213,7 @@ module CoverageTool =
 
     let private probe
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (ranked: Fact list)
         : Async<ProbeOutcome> =
@@ -223,7 +223,7 @@ module CoverageTool =
             | _ ->
                 let ids = ranked |> List.map _.FactId
 
-                let! verdicts = gate.Check(scopeId, principal, FactToolResult, ids)
+                let! verdicts = gate.Check(scope, principal, FactToolResult, ids)
 
                 // An id the gate returned no verdict for is denied,
                 // conservatively — the door never fails open. Same rule
@@ -317,13 +317,13 @@ module CoverageTool =
     let private coverageFor
         (store: IFactStore)
         (gate: IFactDisclosureGate)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (metricId: string)
         (subject: Grounding.SubjectDefinition)
         =
         async {
-            let! outcome = store.QueryPopulation(scopeId, coverageQuery metricId subject.Id)
+            let! outcome = store.QueryPopulation(scope, coverageQuery metricId subject.Id)
 
             match outcome with
             // A refusal here is not this tool's to relay: the ordering is
@@ -338,7 +338,7 @@ module CoverageTool =
                 // listing every empty pair buries the populated ones.
                 return None
             | Ok result ->
-                let! probed = probe gate scopeId principal result.Ranked
+                let! probed = probe gate scope principal result.Ranked
 
                 match probed with
                 | WhollyRestricted policies ->
@@ -389,7 +389,7 @@ module CoverageTool =
         (store: IFactStore)
         (gate: IFactDisclosureGate)
         (registry: Grounding.IMetricRegistry option)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
         : Async<string> =
@@ -446,7 +446,7 @@ module CoverageTool =
                         |> List.map (fun def -> async {
                             let! populations =
                                 subjects
-                                |> List.map (fun subject -> coverageFor store gate scopeId principal def.Id subject)
+                                |> List.map (fun subject -> coverageFor store gate scope principal def.Id subject)
                                 |> Async.Sequential
 
                             let populations = populations |> Array.choose id |> Array.toList
@@ -494,15 +494,13 @@ module CoverageTool =
 
     // ── HttpContext adapter (the registered executor) ─────────────
 
-    /// The caller's resolved storage-scope id — the same tenant boundary
-    /// the store shards by and the gate resolves fact ids within (GP 4).
-    let private scopeIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> scope.ScopeId
-        | _ ->
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
+    // Phase 797 — the scope is not read from the request items here. The
+    // door asks `ScopeResolution.forRequest`, which returns the
+    // `ResolvedScope` the scope-resolution middleware minted for this
+    // request or the explicit anonymous scope, and nothing a caller can
+    // fabricate. There is no user-id rung and no literal fallback: an
+    // unresolved request reads the anonymous shard, which holds only what
+    // was asserted anonymously.
 
     let private userIdOf (ctx: HttpContext) : string =
         match ctx.Items.TryGetValue "ToolUp.UserId" with
@@ -523,7 +521,13 @@ module CoverageTool =
         | Some store, Some gate ->
             let registry = serviceOf<Grounding.IMetricRegistry> ctx
 
-            executeWith store gate registry (scopeIdOf ctx) (userIdOf ctx) argsJson
+            executeWith
+                store
+                gate
+                registry
+                (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                (userIdOf ctx)
+                argsJson
         | _ -> async {
             return
                 serialize {|

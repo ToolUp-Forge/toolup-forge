@@ -600,8 +600,23 @@ module FactDisclosureVerdict =
 /// boundary; no callbacks; stateless between calls; scope is the shard key
 /// with no cross-scope ordering promise; no timing primitives.
 type IFactDisclosureGate =
+    /// The string-keyed form. Kept for callers whose scope is carried by
+    /// the platform rather than resolved from a request principal — a
+    /// job's persisted scope, an import, a health sweep — and for one
+    /// release as the compatibility path for consumers on the old shape.
+    /// A request-path door (an AI tool, a handler) takes the
+    /// `ResolvedScope` overload below instead, so it cannot be handed a
+    /// scope the principal did not resolve to (Phase 797).
     abstract Check:
         scopeId: string * principal: string * surface: FactEgressSurface * factIds: string list ->
+            Async<Map<string, FactDisclosureVerdict>>
+
+    /// The request-path form (Phase 797): the scope is the one the
+    /// platform's scope resolution minted for this request, which is the
+    /// only way to obtain a `ResolvedScope`. Semantics are otherwise
+    /// exactly the string form's over `scope.ScopeId`.
+    abstract Check:
+        scope: ResolvedScope * principal: string * surface: FactEgressSurface * factIds: string list ->
             Async<Map<string, FactDisclosureVerdict>>
 
 // ─── Webhook egress contract (Phase 564.C) ───────────────────────────

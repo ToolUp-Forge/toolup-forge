@@ -88,6 +88,13 @@
              per-package classification it pairs into signature changes. -->
         <Compile Include="..\..\Changelog.fs" Link="Changelog.fs" />
         <Compile Include="ChangelogTests.fs" />
+        <!-- Phase 263 - the release-candidate channel and its soak gate.
+             Source-linked from the repo root for the same reason
+             SemVerBump.fs above is: the VerifyReleaseChannel /
+             VerifyRcPromotion targets and these go-red proofs run one
+             implementation. -->
+        <Compile Include="..\..\ReleaseChannel.fs" Link="ReleaseChannel.fs" />
+        <Compile Include="ReleaseChannelTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

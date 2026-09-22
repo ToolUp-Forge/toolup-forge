@@ -97,6 +97,15 @@
          reads SemVerBump's per-package classification, so it compiles
          after it. -->
     <Compile Include="Changelog.fs" />
+    <!-- Phase 263 - the release-candidate channel and its soak gate, behind
+         the VerifyReleaseChannel and VerifyRcPromotion targets Build.fs
+         registers. Same shape and same reason as SemVerBump.fs above:
+         release hygiene rather than SDK surface, FAKE-free, and
+         source-linked (not copied) into ToolUp.Platform.Build.Tests so the
+         targets and their go-red proofs run one implementation. It reads
+         SemVerBump's versions and classifications and PublishedSmoke's
+         workflow job reader, so it compiles after both. -->
+    <Compile Include="ReleaseChannel.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

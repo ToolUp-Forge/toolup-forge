@@ -10352,6 +10352,14 @@ ToolUp.Platform.RequiresClaimAttribute.Value : System.String { get; set }
 ToolUp.Platform.RequiresRoleAttribute (class)
 ToolUp.Platform.RequiresRoleAttribute..ctor(System.String)
 ToolUp.Platform.RequiresRoleAttribute.Role : System.String { get }
+ToolUp.Platform.ResolvedScope (class)
+ToolUp.Platform.ResolvedScope.IsAnonymous : System.Boolean { get }
+ToolUp.Platform.ResolvedScope.ScopeId : System.String { get }
+ToolUp.Platform.ResolvedScope.Storage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope] { get }
+ToolUp.Platform.ResolvedScopeModule (class)
+ToolUp.Platform.ResolvedScopeModule.AnonymousScopeId : System.String (literal)
+ToolUp.Platform.ResolvedScopeModule.anonymous : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.ResolvedScopeModule.scopeId(ToolUp.Platform.ResolvedScope) : System.String
 ToolUp.Platform.ResourceEnvelope (class)
 ToolUp.Platform.ResourceEnvelope..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ResourceEnvelope.MaxJobConcurrency : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -12568,6 +12576,7 @@ ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactClausePlanner.PlanClauses(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.VectorKnowledgeTypes+PlannedFactClauses]
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
+ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate.Check(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver (interface)
 ToolUp.Platform.VectorKnowledgeTypes+IFactResolver.Resolve(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactClause) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ResolvedFact]]
 ToolUp.Platform.VectorKnowledgeTypes+MergeStrategy (class)

@@ -55,7 +55,13 @@
     "combinators it added - tuples and the several-field union case - as `proved` characterisation",
     "entries, the round trip widened over them as a `proved` entry, and the differential host's two new",
     "cases as a `tested` entry. Nothing 787 recorded moved: the combinators are additive, and the",
-    "pre-phase differential pack passes unchanged."
+    "pre-phase differential pack passes unchanged.",
+    "",
+    "Phase 797 MOVED one entry rather than appending: `model-input-scope-resolution` goes from `assumed` to",
+    "`proved` on a second prover, `fsharp-typed` - the F# type system, whose claim is only that a construction",
+    "the compiler refuses cannot happen. The entry names the type, the mint, the read, and the host cases that",
+    "pin the visibility; its `residual` names what is still assumed (a caller assembling outside the doors),",
+    "which is the assembly entry's shape and is stated there. Nothing the F* model proves moved."
   ],
   "kind": "proofs",
   "version": 1,
@@ -68,6 +74,12 @@
       "solver": "z3 4.13.3",
       "leg": "proofs/check.ps1",
       "reproducibility": "proof hints no longer exist in this prover, so the pin, a margin on --z3rlimit, and --quake 3 over three cold runs are what stand in for them"
+    },
+    "fsharp-typed": {
+      "tool": "fsc",
+      "pin": "global.json",
+      "leg": "verify.ps1 (the solution build) + the named host cases",
+      "what-it-proves": "a construction the compiler refuses cannot happen at runtime. A claim on this prover names the type whose representation carries the invariant, the one mint, and the test cases that pin the visibility so a later public constructor cannot arrive silently. It is a weaker instrument than the F* prover - it says nothing about behaviour, only about who can build a value - and a claim resting on it says so"
     }
   },
   "claims": [
@@ -610,10 +622,25 @@
     },
     {
       "id": "model-input-scope-resolution",
-      "level": "assumed",
-      "statement": "Scope resolution is assumed correct. The scope is a caller-supplied string; the model compares it and never derives it, so every claim above is conditional on that string being the scope the caller is entitled to, and on the verdict having been resolved against the same one. This is the load-bearing assumption of the whole input-side claim.",
-      "retired_by": "the phase that makes scope resolution a single choke point",
-      "mitigation": "the scope is compared rather than ignored, so an affirmative verdict resolved for a DIFFERENT scope is refused by `admissible_by_construction` - the assumption is about which string is right, not about whether the string is consulted"
+      "level": "proved",
+      "statement": "The scope a fact door compares against is the one the platform's scope resolution minted for the request. Since Phase 797 every fact door - the store's members, the gate's Check, the three fact tools' executors - takes a ResolvedScope whose representation is private and whose constructor is internal to the platform's server tier, minted at the one point the scope-resolution middleware resolves the request; a door cannot be handed a scope the principal did not resolve to, because the construction does not compile. Until Phase 797 this entry was ASSUMED: the scope was a caller-supplied string, compared and never derived.",
+      "evidence": {
+        "prover": "fsharp-typed",
+        "type": "ToolUp.Platform.ResolvedScope",
+        "mint": "ToolUp.Platform.StorageScopeResolver.ScopeResolution.remember (internal; called by the scope-resolution middleware)",
+        "read": "ToolUp.Platform.StorageScopeResolver.ScopeResolution.forRequest",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ScopeChokePointTests.fs",
+        "list": "Phase 797 - scope as a choke point",
+        "cases": [
+          "ResolvedScope exposes no public constructor",
+          "ResolvedScope exposes no public union case - FSharpType does not even see it as a union",
+          "the mint on the core module is internal, and the anonymous scope is the only public entry",
+          "a StorageScope planted in the request items is NOT a resolved scope",
+          "end to end: a fact under a resolved scope is invisible to a request that planted that scope",
+          "every door reads its scope through ScopeResolution.forRequest and carries none of the old spellings"
+        ]
+      },
+      "residual": "a caller assembling a ModelInput OUTSIDE the doors writes DisclosedFact.Scope itself and nothing checks it wrote the resolver's - the same shape as model-input-assembly-is-callers-code, and stated there"
     },
     {
       "id": "model-input-tool-effect-side",

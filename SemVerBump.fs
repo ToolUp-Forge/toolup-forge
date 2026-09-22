@@ -126,14 +126,20 @@ let parseVersion (text: string) : Result<Version, string> =
 /// XML comments are blanked first. The file's own prose mentions
 /// `<Version>` while explaining per-package overrides, and a check that
 /// read a version out of a comment would be reporting on documentation.
-let declaredVersionIn (propsText: string) : Result<Version, string> =
+///
+/// This is the raw declared TEXT, suffix and all; `declaredVersionIn`
+/// below parses it. Phase 263's release-channel check needs the text
+/// itself, because the one thing it must refuse — a prerelease label
+/// written into the tree rather than onto the tag — is exactly what
+/// `parseVersion` discards.
+let declaredVersionTextIn (propsText: string) : Result<string, string> =
     let uncommented =
         Regex.Replace(propsText, @"<!--.*?-->", "", RegexOptions.Singleline)
 
     let matches = Regex.Matches(uncommented, @"<Version>\s*([^<]+?)\s*</Version>")
 
     match matches |> Seq.map (fun m -> m.Groups[1].Value) |> List.ofSeq with
-    | [ one ] -> parseVersion one
+    | [ one ] -> Ok one
     | [] -> Error "Directory.Build.props declares no <Version> element outside a comment"
     | many ->
         Error(
@@ -142,6 +148,10 @@ let declaredVersionIn (propsText: string) : Result<Version, string> =
                 many.Length
                 (String.concat ", " many)
         )
+
+/// The `<Version>` declared in `Directory.Build.props`, parsed.
+let declaredVersionIn (propsText: string) : Result<Version, string> =
+    declaredVersionTextIn propsText |> Result.bind parseVersion
 
 // ─── Bumps ───────────────────────────────────────────────────────────
 
@@ -324,14 +334,44 @@ let releaseTags (tags: string seq) : (string * Version) list =
         | Error _ -> None)
     |> List.ofSeq
 
+/// True when a tag or version text carries a SemVer pre-release label
+/// (`v1.0.0-rc.1`), as opposed to build metadata alone (`v1.0.0+abc`).
+///
+/// `parseVersion` discards the label on purpose — a candidate makes the
+/// same promise about the compatibility slots as its release — so the
+/// three places that must still tell the two apart ask here: the release
+/// point below (a stable release outranks its own candidates), the
+/// CHANGELOG (a candidate is not a release), and Phase 263's release
+/// channel.
+let isPrerelease (text: string) =
+    if String.IsNullOrWhiteSpace text then
+        false
+    else
+        let trimmed = text.Trim()
+
+        let beforeBuild =
+            match trimmed.IndexOf '+' with
+            | -1 -> trimmed
+            | i -> trimmed.Substring(0, i)
+
+        beforeBuild.Contains '-'
+
 /// The newest release STRICTLY BELOW `declared` — the version a consumer
 /// could already be holding, and therefore the one this release's
 /// compatibility promise is made against. See the header for why the
 /// newest tag outright is the wrong choice on the publish workflow.
+///
+/// A stable release outranks its own release candidates (Phase 263): once
+/// `v1.0.0` exists beside `v1.0.0-rc.1..N`, all of them parse to `1.0.0`,
+/// and the release a consumer holds — the one a compatibility promise is
+/// made against — is the stable one.
 let releasePoint (declared: Version) (tags: string seq) : (string * Version) option =
     releaseTags tags
     |> List.filter (fun (_, v) -> Version.compare v declared < 0)
-    |> List.sortWith (fun (_, a) (_, b) -> Version.compare a b)
+    |> List.sortWith (fun (ta, a) (tb, b) ->
+        match Version.compare a b with
+        | 0 -> compare (not (isPrerelease ta)) (not (isPrerelease tb))
+        | c -> c)
     |> List.tryLast
 
 /// Release tags AHEAD of the declared version. Non-empty means the
