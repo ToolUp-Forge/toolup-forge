@@ -8,7 +8,11 @@ is the operator's flow for the two channels that workflow serves.
 | Channel | Tag | Packs as | Who resolves it |
 |---|---|---|---|
 | **Stable** | `vX.Y.Z` | `X.Y.Z` | every consumer |
-| **Release candidate** | `vX.Y.Z-rc.N` (N ≥ 1) | `X.Y.Z-rc.N` (SemVer-2 prerelease) | only a consumer that names the prerelease or opts into prereleases |
+| **Release candidate** — majors only | `vX.0.0-rc.N` (X ≥ 1, N ≥ 1) | `X.0.0-rc.N` (SemVer-2 prerelease) | only a consumer that names the prerelease or opts into prereleases |
+
+**Release candidates exist only for major releases from 1.0 on** (operator decision 2026-09-22). The
+first one is `1.0.0-rc.1`. Before 1.0 there is nothing to soak, and a minor or patch (`1.1.0`, `1.0.1`)
+publishes stable directly — `v0.23.0-rc.1`, `v1.1.0-rc.1` and `v1.0.1-rc.1` are all refused.
 
 **The tree always declares the bare version it is heading for** (`<Version>1.0.0</Version>` in
 `Directory.Build.props`). The `-rc.N` label lives only on the tag. So there is never a commit in which
@@ -21,12 +25,13 @@ and it is standard NuGet behaviour, not something this repository enforces.
 ## What the workflow checks, in order, before any key exists
 
 1. **`VerifyReleaseChannel`** (Phase 263) — reads the tag and refuses:
-   - any tag shape other than `vX.Y.Z` / `vX.Y.Z-rc.N` (`-rc1`, `-rc.0`, `-beta.1`, `+meta` are all
-     refused — the `v*.*.*` trigger matches them, and before this check every such tag published the
-     tree's `<Version>` as a *stable* release);
+   - any tag shape other than `vX.Y.Z` / `vX.0.0-rc.N` with X ≥ 1 (`-rc1`, `-rc.0`, `-beta.1`, `+meta`,
+     and a candidate of a 0.x, minor or patch version are all refused — the `v*.*.*` trigger matches
+     them, and before this check every such tag published the tree's `<Version>` as a *stable*
+     release);
    - a tag whose `X.Y.Z` is not the tree's `<Version>`, and a `<Version>` carrying any suffix;
    - a candidate of a version already released stable, or numbered behind an existing candidate;
-   - a stable release that must be **promoted** (below) when the candidate has not soaked.
+   - a stable **major** that must be promoted (below) when its candidate has not soaked.
 
    For a candidate it exports `TOOLUP_RELEASE_CORE` / `TOOLUP_RELEASE_PRERELEASE` to the rest of the
    job, and [`Directory.Build.targets`](../../Directory.Build.targets) stamps `-rc.N` onto every
@@ -37,7 +42,7 @@ and it is standard NuGet behaviour, not something this repository enforces.
 3. Login, pack, push, provenance attestation — unchanged.
 4. **`published-package-smoke`** (Phase 184) — restores the just-published version from nuget.org
    **anonymously**, outside the checkout, and compiles against it. On a candidate tag it probes
-   `X.Y.Z-rc.N`, so every candidate publish carries its own restore proof.
+   `X.0.0-rc.N`, so every candidate publish carries its own restore proof.
 
 The trigger block is tag-only plus manual dispatch, and the Build test pack lints that on every push
 (`ReleaseChannel.publishWorkflowFindings`): a branch, pull-request, schedule, `workflow_run` or
@@ -80,29 +85,44 @@ keeps resolving the stable line.
 Packages on their own version line are not re-published under a candidate: keep their existing pins
 (`VersionOverride` where the meta-manifest is in use).
 
-Report what you find against the candidate before the soak window closes — a defect that needs a
-public-surface change re-rolls the candidate (below), and the window restarts.
+Report what you find against the candidate before the soak window closes — a defect whose fix
+BREAKS the public surface re-rolls the candidate (below), and the window restarts.
 
-## The soak gate — when a candidate may be promoted
+## The soak gate — when a major may be promoted
 
-A candidate is **promotion-eligible** only when all of these hold:
+A major's candidate is **promotion-eligible** only when all of these hold:
 
 | Rule | Measured by |
 |---|---|
-| nuget.org has served it for **≥ 14 days** | the registration leaf's `published` time for every package the smoke job probes — the latest of them starts the clock; unlisted or unreadable is *not* soaked |
-| **no public-surface movement** since it | the api-baselines at the candidate tag vs. the promoting tree, classified by the same comparer `VerifySemVerBump` uses (the doc-coverage sidecar excluded) — *any* movement, additive included, because what would be promoted must be what soaked |
+| nuget.org has served it for **≥ the soak window** (14 days by default) | the registration leaf's `published` time for every package the smoke job probes — the latest of them starts the clock; unlisted or unreadable is *not* soaked |
+| **no BREAKING public-surface change** since it | the api-baselines at the candidate tag vs. the promoting tree, classified by the same comparer `VerifySemVerBump` uses (the doc-coverage sidecar excluded). Additive growth does not block — a consumer who validated the candidate loses nothing to it — and is printed in the run log; a break forces a new candidate |
 | the promoting commit **descends** from it | `git merge-base --is-ancestor` |
 | the Phase 257 **scorecard is all-green** | `V1Readiness`, every row `pass` |
 
-The window is the `soakWindow` constant in `ReleaseChannel.fs` — a reviewed commit changes it, not a
-run.
+**The soak window** is configured in [`release-channel.json`](../../release-channel.json) at the repo
+root — committed, because the workflow re-checks the window on the stable tag and sees only what the
+tagged commit carries:
 
-**Which stable releases the gate applies to.** Every new major at or past 1.0 (`X.0.0`, X ≥ 1) — it
-cannot be tagged without a soaked candidate — and any version that has a candidate at all. Every other
-stable release (the 0.x line, 1.x minors and patches cut without a candidate) publishes exactly as
-before.
+```json
+{
+  "soakDays": 14,
+  "overrides": [
+    { "version": "2.0.0", "soakDays": 28, "reason": "the storage-seam redesign needs a longer field test" }
+  ]
+}
+```
 
-**Where each rule is enforced.** The workflow enforces the window, the surface and the lineage on the
+`soakDays` is the default (absent file or key: 14). An override applies to one major and **must carry
+a non-blank reason**; the file is refused otherwise, as it is for an unknown key, a day count below 1,
+an override for a version that is not a major, or two overrides for one version. Both targets print the
+window in force and where it came from — the override's reason included — so the reason is in every
+run's log as well as in the commit that introduced it.
+
+**Which stable releases the gate applies to.** Only majors from 1.0 on (`X.0.0`, X ≥ 1) — and a major
+cannot be tagged without a soaked candidate. Every 0.x release, and every minor and patch, publishes
+stable with no soak check.
+
+**Where each rule is enforced.** The workflow enforces the window, the no-break rule and the lineage on the
 stable tag itself, before a key exists. The scorecard is enforced by the operator before tagging,
 because its adoption row reads consumer facts the public workflow has no business reaching.
 
@@ -114,7 +134,7 @@ candidate's own commit where you can; re-roll for any substantive fix.
 
 ```powershell
 git fetch --tags
-git checkout v1.0.0-rc.3                          # or a descendant with no surface movement since it
+git checkout v1.0.0-rc.3                          # or a descendant with no breaking change since it
 $env:TOOLUP_ADOPTION_MATRIX = '<path to the generated adoption matrix>'   # the scorecard's adoption row
 $env:TOOLUP_ADOPTION_CONSUMERS = '<consumer names, comma-separated>'
 dotnet run --project Build.fsproj -- VerifyRcPromotion   # exit 0 and "ELIGIBLE", or the list of what is missing
@@ -130,10 +150,10 @@ writes `docs/reference/v1-readiness.md`, which names every row's input.
 
 ## What re-rolls a candidate
 
-Tag the next candidate (`vX.Y.Z-rc.N+1`) from the commit you now want to promote, and the soak
+Tag the next candidate (`vX.0.0-rc.N+1`) from the commit you now want to promote, and the soak
 restarts, when:
 
-- the public surface moved since the candidate (any package, additive or breaking);
+- a breaking public-surface change landed since the candidate (additive changes do not re-roll);
 - the commit you want to promote does not descend from the candidate;
 - a defect found during the soak needs a fix you are not willing to ship un-soaked.
 
@@ -156,19 +176,18 @@ ahead of a tag. `--skip-duplicate` makes a re-run skip what already landed.
 ## Smoke-testing the channel end to end
 
 The offline rules are proven on every push; the one thing only a real publish shows is that a
-candidate lands on nuget.org and restores anonymously while the stable channel stays put. After the
-first candidate publish:
+candidate lands on nuget.org and restores anonymously while the stable channel stays put. Because
+candidates exist only for majors, **the end-to-end smoke test IS the `1.0.0-rc.1` publish** — there is
+no smaller candidate to rehearse on. Cut it as above (`<Version>1.0.0</Version>` on `main`, tag
+`v1.0.0-rc.1`); the workflow's `published-package-smoke` job is the first half of the proof. Then, for
+the consumer-side half:
 
 ```powershell
 $probe = Join-Path ([IO.Path]::GetTempPath()) "rc-probe-$(Get-Random)"   # OUTSIDE any repository
 dotnet new console -lang F# -o $probe
 Push-Location $probe
 dotnet add package ToolUp.Platform.Core --version 1.0.0-rc.1    # the candidate restores, no credential
-dotnet add package ToolUp.Platform.Core                          # no version: resolves the latest STABLE
+dotnet add package ToolUp.Platform.Core                          # no version: resolves the latest STABLE (the 0.x line)
 Select-String -Path *.fsproj -Pattern 'ToolUp.Platform.Core'    # shows the stable version, not the candidate
 Pop-Location; Remove-Item -Recurse -Force $probe
 ```
-
-**Tagging a candidate commits the version it names to the gate.** A `vX.Y.Z-rc.1` tag makes `X.Y.Z`'s
-stable release answer to the soak gate — 14 days, and no surface movement from that point until
-promotion. Choose the version for a first smoke test with that in mind.

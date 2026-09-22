@@ -75,6 +75,10 @@ let private eligible = {
     Now = now
 }
 
+/// The default window, as the fixtures' measure. `soakWindowFor` is what
+/// supplies the real one; its tests are below.
+let private window = TimeSpan.FromDays 14.0
+
 let private rcTags = [ "v0.23.0"; "v1.0.0-rc.1"; "v1.0.0-rc.2" ]
 
 let private leaf (listed: string) (published: string) =
@@ -110,7 +114,22 @@ let tests =
             testCase "a stable tag and a candidate tag parse, refs/tags/ stripped" (fun _ ->
                 Expect.equal (parseTag "v1.0.0") (Ok(stable (1, 0, 0))) "stable"
                 Expect.equal (parseTag "refs/tags/v1.0.0-rc.3") (Ok(candidate (1, 0, 0) 3)) "candidate from GITHUB_REF"
-                Expect.equal (parseTag "v0.23.0-rc.12") (Ok(candidate (0, 23, 0) 12)) "multi-digit candidate")
+                Expect.equal (parseTag "v2.0.0-rc.12") (Ok(candidate (2, 0, 0) 12)) "multi-digit candidate")
+
+            testCase "a candidate of anything but a major from 1.0 on is refused, naming the rule" (fun _ ->
+                // Operator decision 2026-09-22: candidates exist only for
+                // majors. Before 1.0 there is nothing to soak; a minor or
+                // patch publishes stable directly.
+                for bad in [ "v0.23.0-rc.1"; "v0.1.0-rc.1"; "v1.1.0-rc.1"; "v1.0.1-rc.1"; "v2.3.4-rc.2" ] do
+                    match parseTag bad with
+                    | Error e ->
+                        Expect.stringContains e "exist only for majors from 1.0 on" (sprintf "`%s` names the rule" bad)
+                        Expect.stringContains e "git push --delete origin" "and the remedy"
+                    | Ok v -> failtestf "`%s` must be refused, got %A" bad v
+
+                // ...while the STABLE tag of the same versions is fine.
+                for good in [ "v0.23.0"; "v1.1.0"; "v1.0.1" ] do
+                    Expect.isOk (parseTag good) (sprintf "`%s` is an ordinary stable release" good))
 
             testCase "every other shape the v*.*.* trigger admits is refused" (fun _ ->
                 for bad in
@@ -170,6 +189,14 @@ let tests =
 
             testCase "a malformed tag is refused even when its core matches" (fun _ ->
                 Expect.isError (resolve (props "1.0.0") (Some "v1.0.0-rc1")) "rc1 is not rc.1")
+
+            testCase "a 0.x or minor candidate is refused even when it names the tree's version" (fun _ ->
+                for declared, tag in [ "0.23.0", "refs/tags/v0.23.0-rc.1"; "1.1.0", "refs/tags/v1.1.0-rc.1" ] do
+                    match resolve (props declared) (Some tag) with
+                    | Error e -> Expect.stringContains e "not a major release" (sprintf "%s names the rule" tag)
+                    | Ok v -> failtestf "`%s` must be refused, got %A" tag v
+
+                Expect.equal (resolve (props "0.23.0") (Some "refs/tags/v0.23.0")) (Ok(stable (0, 23, 0))) "stable 0.x")
         ]
 
         // ── the tag namespace ──
@@ -190,7 +217,7 @@ let tests =
                 Expect.isEmpty (candidateFindings (stable (1, 0, 0)) rcTags) "stable runs have none")
 
             testCase "a candidate of an already-released version is refused" (fun _ ->
-                expectFinding (candidateFindings (candidate (0, 23, 0) 1) rcTags) "already released")
+                expectFinding (candidateFindings (candidate (1, 0, 0) 3) ("v1.0.0" :: rcTags)) "already released")
 
             testCase "a candidate behind an existing candidate is refused" (fun _ ->
                 expectFinding (candidateFindings (candidate (1, 0, 0) 1) rcTags) "v1.0.0-rc.2")
@@ -198,30 +225,22 @@ let tests =
 
         // ── when the gate applies ──
         testList "promotionRequired" [
-            testCase "the cases" (fun _ ->
-                Expect.isTrue (promotionRequired (stable (1, 0, 0)) []) "1.0.0 must come through a candidate"
-                Expect.isTrue (promotionRequired (stable (2, 0, 0)) []) "so must every later major"
-
-                Expect.isTrue
-                    (promotionRequired (stable (0, 23, 0)) [ "v0.23.0-rc.1" ])
-                    "a version with a candidate answers to it"
-
-                Expect.isFalse (promotionRequired (stable (0, 23, 0)) rcTags) "a 0.x with no candidate is unchanged"
-
-                Expect.isFalse
-                    (promotionRequired (stable (1, 1, 0)) rcTags)
-                    "a 1.x minor with no candidate is unchanged"
-
-                Expect.isFalse (promotionRequired (candidate (1, 0, 0) 3) rcTags) "a candidate is not a promotion")
+            testCase "only a stable major from 1.0 on is promoted through the gate" (fun _ ->
+                Expect.isTrue (promotionRequired (stable (1, 0, 0))) "1.0.0 must come through a candidate"
+                Expect.isTrue (promotionRequired (stable (2, 0, 0))) "so must every later major"
+                Expect.isFalse (promotionRequired (stable (0, 23, 0))) "a 0.x publishes stable, nothing to soak"
+                Expect.isFalse (promotionRequired (stable (1, 1, 0))) "a minor publishes stable, no soak check"
+                Expect.isFalse (promotionRequired (stable (1, 0, 1))) "a patch publishes stable, no soak check"
+                Expect.isFalse (promotionRequired (candidate (1, 0, 0) 3)) "a candidate is not a promotion")
         ]
 
         // ── the soak gate ──
         testList "promotionFindings" [
             testCase "the eligible fixture passes" (fun _ ->
-                Expect.isEmpty (promotionFindings soakWindow rcTags eligible) "every rule met")
+                Expect.isEmpty (promotionFindings window rcTags eligible) "every rule met")
 
             testCase "no candidate: refused, naming the first candidate tag" (fun _ ->
-                expectFinding (promotionFindings soakWindow [] { eligible with Candidate = None }) "v1.0.0-rc.1")
+                expectFinding (promotionFindings window [] { eligible with Candidate = None }) "v1.0.0-rc.1")
 
             testCase "inside the window: refused, naming when it becomes eligible" (fun _ ->
                 let young = {
@@ -229,17 +248,17 @@ let tests =
                         Publication = Published(now - TimeSpan.FromDays 13.0)
                 }
 
-                let findings = promotionFindings soakWindow rcTags young
+                let findings = promotionFindings window rcTags young
                 expectFinding findings "promotion-eligible from"
                 expectFinding findings "v1.0.0-rc.2")
 
             testCase "exactly at the window: eligible" (fun _ ->
                 let boundary = {
                     eligible with
-                        Publication = Published(now - soakWindow)
+                        Publication = Published(now - window)
                 }
 
-                Expect.isEmpty (promotionFindings soakWindow rcTags boundary) "≥ the window, not >")
+                Expect.isEmpty (promotionFindings window rcTags boundary) "≥ the window, not >")
 
             testCase "an unlisted, unpublished or unreadable candidate has not soaked" (fun _ ->
                 for publication, needle in
@@ -249,7 +268,7 @@ let tests =
                         Unreadable "timeout", "cannot be established"
                     ] do
                     expectFinding
-                        (promotionFindings soakWindow rcTags {
+                        (promotionFindings window rcTags {
                             eligible with
                                 Publication = publication
                         })
@@ -257,34 +276,96 @@ let tests =
 
             testCase "a commit that does not descend from the candidate is refused" (fun _ ->
                 expectFinding
-                    (promotionFindings soakWindow rcTags {
+                    (promotionFindings window rcTags {
                         eligible with
                             CandidateIsAncestor = false
                     })
                     "does not descend")
 
-            testCase "ANY surface movement since the candidate re-rolls it, not only a break" (fun _ ->
-                for cls in [ Additive; Breaking ] do
-                    let moved = {
-                        eligible with
-                            SurfaceSinceCandidate = [
-                                change "ToolUp.Platform.Core" Unchanged
-                                change "ToolUp.AI.Core" cls
-                            ]
-                    }
+            testCase "a BREAKING change since the candidate re-rolls it" (fun _ ->
+                let broken = {
+                    eligible with
+                        SurfaceSinceCandidate = [
+                            change "ToolUp.Platform.Core" Additive
+                            change "ToolUp.AI.Core" Breaking
+                        ]
+                }
 
-                    let findings = promotionFindings soakWindow rcTags moved
-                    expectFinding findings "ToolUp.AI.Core"
-                    expectFinding findings "v1.0.0-rc.3")
+                let findings = promotionFindings window rcTags broken
+                expectFinding findings "BREAKING"
+                expectFinding findings "ToolUp.AI.Core"
+                expectFinding findings "v1.0.0-rc.3"
 
-            testCase "the soak window is two weeks" (fun _ ->
-                // A threshold is a reviewed decision; a change to it should
-                // be a deliberate edit to this line as well.
-                Expect.equal soakWindow (TimeSpan.FromDays 14.0) "14 days")
+                Expect.isFalse
+                    (findings |> List.exists (fun f -> f.Contains "ToolUp.Platform.Core"))
+                    "the additive package is not named as a cause")
+
+            testCase "ADDITIVE growth since the candidate does not block promotion" (fun _ ->
+                // Operator decision 2026-09-22: a consumer who validated the
+                // candidate loses nothing to an addition.
+                let grown = {
+                    eligible with
+                        SurfaceSinceCandidate = [
+                            change "ToolUp.Platform.Core" Additive
+                            change "ToolUp.AI.Core" Additive
+                        ]
+                }
+
+                Expect.isEmpty (promotionFindings window rcTags grown) "additive only: eligible")
 
             testCase "the scorecard half: all-green passes, anything else is refused" (fun _ ->
                 Expect.isEmpty (scorecardFindings true []) "ready"
                 expectFinding (scorecardFindings false [ "adoption-pending" ]) "adoption-pending")
+        ]
+
+        // ── the soak window's configuration ──
+        testList "soakWindowFor" [
+            let major = v (1, 0, 0)
+
+            let windowOf text =
+                match soakWindowFor text major with
+                | Ok w -> w
+                | Error e -> failtestf "expected a window, got: %s" e
+
+            testCase "absent file: 14 days, and says so" (fun _ ->
+                let w = windowOf None
+                Expect.equal w.Window (TimeSpan.FromDays 14.0) "the default"
+                Expect.stringContains w.Source "default" "the source is named")
+
+            testCase "soakDays sets the default; an override replaces it for its major only, with its reason" (fun _ ->
+                let text =
+                    Some
+                        """{ "soakDays": 21, "overrides": [ { "version": "2.0.0", "soakDays": 7, "reason": "hotfix major" } ] }"""
+
+                Expect.equal (windowOf text).Window (TimeSpan.FromDays 21.0) "1.0.0 takes the default"
+
+                match soakWindowFor text (v (2, 0, 0)) with
+                | Ok w ->
+                    Expect.equal w.Window (TimeSpan.FromDays 7.0) "2.0.0 takes its override"
+                    Expect.stringContains w.Source "hotfix major" "the reason is carried into the log line"
+                | Error e -> failtestf "expected the override, got: %s" e)
+
+            testCase "every unreadable configuration is refused, not guessed" (fun _ ->
+                for text, needle in
+                    [
+                        """{ "overrides": [ { "version": "1.0.0", "soakDays": 7 } ] }""", "no reason"
+                        """{ "overrides": [ { "version": "1.0.0", "soakDays": 7, "reason": "  " } ] }""", "no reason"
+                        """{ "overrides": [ { "version": "1.1.0", "soakDays": 7, "reason": "x" } ] }""", "not a major"
+                        """{ "overrides": [ { "version": "1.0.0", "reason": "x" } ] }""", "soakDays is missing"
+                        """{ "soakDays": 0 }""", "at least 1"
+                        """{ "soakDays": 1.5 }""", "at least 1"
+                        """{ "soakDayz": 14 }""", "unknown key"
+                        """{ "overrides": [ { "version": "1.0.0", "soakDays": 7, "reason": "a" }, { "version": "1.0.0", "soakDays": 9, "reason": "b" } ] }""",
+                        "more than one"
+                        "not json", "not JSON"
+                    ] do
+                    match soakWindowFor (Some text) major with
+                    | Error e -> Expect.stringContains e needle (sprintf "%s -> names %s" text needle)
+                    | Ok w -> failtestf "must refuse %s, got %A" text w)
+
+            testCase "the shipped release-channel.json parses, at 14 days for 1.0.0" (fun _ ->
+                let w = windowOf (Some(readRepoFile releaseChannelFileName))
+                Expect.equal w.Window (TimeSpan.FromDays 14.0) "the committed default")
         ]
 
         // ── nuget.org's record ──
