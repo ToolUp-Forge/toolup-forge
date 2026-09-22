@@ -913,3 +913,49 @@ type LogStoreMode =
     /// config, decorate the resolved `ILogger` so writes reach the console
     /// **and** the store, and run the hourly retention sweep.
     | SqliteLogStore of LogStoreConfig
+
+/// Phase 829 — the metrics-history flusher's tuning knobs: how often the
+/// live metric registry is sampled into `ITimeSeriesStore`, and how long
+/// the resulting points are kept. Carried by
+/// `MetricsHistoryMode.EnabledMetricsHistory`, so a deployment that never
+/// opts in never constructs one.
+type MetricsHistoryConfig = {
+    /// Seconds between flushes. Each flush appends one point per
+    /// `(metric, tag set)` series. Default 60 — one sample a minute, the
+    /// cadence a Prometheus scrape would use. Values below 1 are clamped
+    /// to 1 by the flusher so a mis-set config cannot spin the tick loop.
+    FlushSeconds: int
+    /// Retention bound by age — points older than this many days are
+    /// dropped by the daily sweep. Default 30. Zero or negative disables
+    /// the sweep entirely, which makes the series grow without bound.
+    RetentionDays: int
+}
+
+[<RequireQualifiedAccess>]
+module MetricsHistoryConfig =
+    /// The documented defaults — a 60-second flush cadence and 30 days of
+    /// retention.
+    let defaults: MetricsHistoryConfig = {
+        FlushSeconds = 60
+        RetentionDays = 30
+    }
+
+/// Phase 829 — selects whether the live metric registry is sampled into
+/// `ITimeSeriesStore` on a cadence, giving the standard SDK metrics a
+/// queryable history without a new store. Default: `NoMetricsHistory` —
+/// no `BackgroundService`, no reads of the sink, not a single point
+/// appended, zero cost (GP 13) and a boot path byte-for-byte unchanged
+/// (GP 11).
+type MetricsHistoryMode =
+    /// No metrics history (default). The live registry is still rendered
+    /// by `/metrics` exactly as before; nothing is retained across a
+    /// process restart. A deployment scraping into an external
+    /// time-series system wants this.
+    | NoMetricsHistory
+    /// Sample the live registry into the composed `ITimeSeriesStore`
+    /// every `FlushSeconds` and run the daily retention sweep. Requires
+    /// `MetricsEndpoint = EnabledMetricsEndpoint` (the concrete
+    /// `PrometheusMetricsSink` is the read tap) and a composed
+    /// `ITimeSeriesStore`; the flusher names either one's absence once
+    /// rather than sampling into nothing silently.
+    | EnabledMetricsHistory of MetricsHistoryConfig

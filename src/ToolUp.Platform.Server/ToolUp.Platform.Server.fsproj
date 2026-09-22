@@ -1172,6 +1172,12 @@
              INotificationSink; before Compose/ (ComposeRuntimeServices
              hosts it). -->
         <Compile Include="Server\AlertRuleEngine.fs" />
+        <!-- Phase 829 — metrics history: the BackgroundService that samples the
+             live metric registry into ITimeSeriesStore on a cadence. After
+             PrometheusMetricsSink (the Snapshot read tap it reads through) and
+             AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
+             Compose/ComposeObservability.fs, which registers it. -->
+        <Compile Include="Server\MetricsHistoryFlusher.fs" />
         <!-- Phase 9n credential-suffix allowlist, extracted at the third
              consumer (ConfigDriftDetector, DiagnosticBundleHandler,
              ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL

@@ -185,6 +185,9 @@ module ServerConfig =
         // Phase 828 — no self-hosted log store: nothing registered, the
         // logger undecorated, no database file, no sweep (GP 11 / GP 13).
         LogStore = NoLogStore
+        // Phase 829 — no metrics history: the live registry is never
+        // sampled, no flusher runs, no point is appended (GP 11 / GP 13).
+        MetricsHistory = NoMetricsHistory
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

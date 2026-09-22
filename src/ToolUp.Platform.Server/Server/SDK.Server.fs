@@ -727,6 +727,11 @@ let compose
     // belongs with the other store registrations. A no-op on `NoLogStore`.
     ComposeObservability.registerLogStore services config composedLogStore resolvedLogger
 
+    // Phase 829 — the metrics-history flusher. Registered after the
+    // time-series substrate above (it samples into whatever store that
+    // registered) and a no-op on `NoMetricsHistory`.
+    ComposeObservability.registerMetricsHistory services config resolvedLogger
+
     // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
     // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
     // registers the blob-backed default lazily; `CustomDatasetStore` leaves
