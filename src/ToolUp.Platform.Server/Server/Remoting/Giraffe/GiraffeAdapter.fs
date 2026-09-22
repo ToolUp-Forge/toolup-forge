@@ -74,14 +74,19 @@ module internal GiraffeUtil =
         match ctx.Request.Method.ToUpper(), options.Docs with
         | "GET", (Some docsUrl, Some docs) when docsUrl = ctx.Request.Path.Value ->
             let (Documentation(docsName, docsRoutes)) = docs
-            let schema = Docs.makeDocsSchema typeof<'impl> docs options.RouteBuilder
+
+            let schema =
+                Docs.makeDocsSchemaWithSchemaVersions typeof<'impl> docs options.RouteBuilder options.SchemaVersion
+
             let docsApp = DocsApp.embedded docsName docsUrl schema
             htmlString docsApp next ctx
         | "OPTIONS", (Some docsUrl, Some docs) when
             sprintf "/%s/$schema" docsUrl = ctx.Request.Path.Value
             || sprintf "%s/$schema" docsUrl = ctx.Request.Path.Value
             ->
-            let schema = Docs.makeDocsSchema typeof<'impl> docs options.RouteBuilder
+            let schema =
+                Docs.makeDocsSchemaWithSchemaVersions typeof<'impl> docs options.RouteBuilder options.SchemaVersion
+
             let serializedSchema = schema.ToJsonString()
             text serializedSchema next ctx
         | _ -> Task.FromResult halt
@@ -348,6 +353,52 @@ module internal GiraffeUtil =
                     System.Environment.NewLine
             )
 
+        // Phase 69j — cache the per-method wire-schema table at startup.
+        // Empty for every API record that has not opted into versioning,
+        // which is all of them today, so the per-request lookup is a fast
+        // `Map.tryFind` miss (GP 13). `classify` is also where the
+        // compose-time refusals live (duplicate version for one method,
+        // non-positive version, unparseable retirement date), so composing
+        // a malformed annotation fails here rather than at the first call.
+        let schemaVersions = SchemaVersion.classify typeof<'impl>
+
+        // Phase 69j — this API record's own addressable method names. The
+        // membership test is what keeps the refusal below safe in a
+        // multi-API `choose` composition: a request for ANOTHER API's
+        // method reaches this handler first and must fall through
+        // untouched, whatever `X-Remoting-Schema` says. Failing closed on a
+        // miss is the Phase 69d defect this dispatcher already records on
+        // the auth pre-flight — it let whichever API was composed first
+        // deny every other API's methods.
+        let schemaAddressable = SchemaVersion.addressableMethods typeof<'impl>
+
+        // Phase 69j — the same refusal the streaming guard above makes, for
+        // the same reason. Version routing rewrites the dispatched route's
+        // trailing segment and then runs the non-streaming pre-flight chain
+        // against the rewritten name; the SSE short-circuit resolves its
+        // handler from `streamingShapes` BEFORE that chain and would ignore
+        // the negotiated version entirely. A streaming method that declares
+        // versions it does not actually serve differently is worse than one
+        // that declares none, so refuse rather than accept an annotation
+        // that cannot take effect.
+        let versionedStreamingMethods =
+            let streaming = Streaming.classify typeof<'impl>
+
+            schemaVersions
+            |> Map.toList
+            |> List.filter (fun (logical, schema) ->
+                streaming.ContainsKey logical
+                || (schema.Handlers |> Map.exists (fun _ field -> streaming.ContainsKey field)))
+            |> List.map fst
+
+        if not (List.isEmpty versionedStreamingMethods) then
+            invalidOp (
+                sprintf
+                    "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying wire-schema versioning the SSE dispatch path does not honour: [%s]. The SSE short-circuit resolves its handler before the negotiated version is applied, so the declared versions would be silently ignored. Fix: drop the [<SupportsSchema>] / [<DeprecatedSchema>] annotation, or move the method off the IAsyncEnumerable<'T> return shape."
+                    typeof<'impl>.Name
+                    (String.concat "; " versionedStreamingMethods)
+            )
+
         // Phase 69n — returned closure-of-closures: `dispatch implBuilder`
         // produces an `HttpHandler` that dispatches one request. The outer
         // `buildDispatcherTable` evaluation above (proxy + classifiers +
@@ -401,6 +452,37 @@ module internal GiraffeUtil =
                         path
 
                 let streamingShape = streamingShapes |> Map.tryFind streamingPath
+
+                // Phase 69j — wire-schema negotiation.
+                //
+                // The trailing path segment IS the addressed method name;
+                // `streamingPath` above computes exactly that, so it is
+                // aliased here rather than recomputed — under the name the
+                // negotiation reads, so neither use reads as the other's
+                // concern.
+                let addressedMethod = streamingPath
+
+                let requestedSchema =
+                    let mutable values: Microsoft.Extensions.Primitives.StringValues =
+                        Microsoft.Extensions.Primitives.StringValues.Empty
+
+                    if ctx.Request.Headers.TryGetValue(SchemaVersion.Header, &values) then
+                        Some(values.ToString())
+                    else
+                        None
+
+                let schemaRouting =
+                    SchemaVersion.negotiate
+                        schemaVersions
+                        schemaAddressable
+                        options.SchemaVersion
+                        requestedSchema
+                        addressedMethod
+
+                let schemaRefusal =
+                    match schemaRouting with
+                    | SchemaRouting.Refused(requested, supported) -> Some(requested, supported)
+                    | _ -> None
 
                 // Phase 69i — companion-route resolution. `<method>/status`,
                 // `<method>/progress` and `<method>/cancel` for a classified
@@ -479,7 +561,29 @@ module internal GiraffeUtil =
                             )
                         | _ -> None
 
-                if sseSource.IsSome then
+                if schemaRefusal.IsSome then
+                    // Phase 69j — the caller pinned a wire schema this
+                    // method does not serve. Refused BEFORE the streaming
+                    // split and before the pre-flight chain: serving the
+                    // wrong shape to a client that said which shape it
+                    // wanted is the single failure this header exists to
+                    // prevent, and it applies to streaming methods too
+                    // (whose supported vector is the composed default).
+                    //
+                    // 400 + `ErrorCategory.User` — a caller-side mistake,
+                    // carrying the discriminating detail in the payload
+                    // rather than in a new closed-DU case no consumer has
+                    // recompiled against (see SchemaVersion.fs).
+                    let requested, supported = schemaRefusal.Value
+                    ctx.Response.StatusCode <- 400
+
+                    let payload = SchemaVersion.refusalPayload addressedMethod requested supported
+
+                    let envelope =
+                        Errors.categorisedWithSchema options.SchemaVersion ErrorCategory.User payload
+
+                    return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
+                elif sseSource.IsSome then
                     let sseLabel, sseElementType, produce = sseSource.Value
                     // 0.1.16 — streaming-method telemetry stopwatch.
                     // Started at SSE entry; stopped at terminal frame
@@ -849,7 +953,28 @@ module internal GiraffeUtil =
                     // 69b.C path). Computed once, up here, because the body
                     // cache below names it on a fault (Phase 461.D) and
                     // every pre-flight stage after it keys on it.
-                    let endpointName = SubRouting.getNextPartOfPath ctx
+                    // Phase 69j — the negotiated version's handler, when it
+                    // differs from the addressed name. `applyRouting`
+                    // rewrites ONLY the trailing segment, so everything
+                    // downstream — the proxy's endpoint map, the auth /
+                    // validation / rate-limit / audit / idempotency
+                    // classification keys, the telemetry method name —
+                    // keys on the handler that actually runs. That is the
+                    // point: `GetThing_V2` carries its own attributes, and
+                    // a version that dispatched to one handler while being
+                    // authorised as another would be a hole rather than a
+                    // feature. Returns the route unchanged for every
+                    // unversioned method, which is all of them today.
+                    let endpointName =
+                        SubRouting.getNextPartOfPath ctx |> SchemaVersion.applyRouting schemaRouting
+
+                    // Phase 69j — one line per call when the served version
+                    // is scheduled for retirement. After the route rewrite
+                    // so the message names the version, not the handler.
+                    match schemaRouting with
+                    | SchemaRouting.Serve(_, version, Some retireAfter) ->
+                        SchemaVersion.logDeprecation options.DiagnosticsLogger addressedMethod version retireAfter
+                    | _ -> ()
 
                     let methodNameForAuth =
                         let lastSlash = endpointName.LastIndexOf '/'

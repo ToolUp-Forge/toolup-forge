@@ -43,6 +43,30 @@ module Remoting =
     /// guard doesn't own.
     let withCustomHeader headers (options: RemoteBuilderOptions) = { options with CustomHeaders = headers }
 
+    /// Phase 69j — pin the wire-schema version this proxy expects, sending
+    /// it as `X-Remoting-Schema: <version>` on every request.
+    ///
+    /// **Opt-in, and deliberately not a default.** Sending the header on
+    /// every proxy would change the request bytes of every existing
+    /// deployment on upgrade, which GP 11 forbids — and it would do so to
+    /// assert a version the caller never chose. A proxy that sends nothing
+    /// is served the server's configured default exactly as before; a
+    /// proxy that sends a version the server does not serve is REFUSED with
+    /// the supported vector rather than served a shape it cannot read,
+    /// which is the whole reason to opt in.
+    ///
+    /// APPENDS rather than replacing, so it composes in any order with
+    /// `withCustomHeader`. `withSchemaVersion` twice is the caller
+    /// contradicting themselves; the last one applied wins, matching how
+    /// the send path reads duplicate header pairs.
+    let withSchemaVersion (version: int) (options: RemoteBuilderOptions) = {
+        options with
+            CustomHeaders =
+                (options.CustomHeaders
+                 |> List.filter (fun (name, _) -> name <> "X-Remoting-Schema"))
+                @ [ "X-Remoting-Schema", string version ]
+    }
+
     /// Sets the authorization header of every request from the proxy.
     ///
     /// **ToolUp deployments: avoid this.** The SDK's request guard

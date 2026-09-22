@@ -2245,6 +2245,14 @@
              client-side recovery. Placed beside the other Remoting packs;
              no ordering constraint (it references only shipped surface). -->
         <Compile Include="InProcess\RemotingDecodeRefusalTests.fs" />
+        <!-- Phase 69j — wire-schema negotiation. Drives the real dispatcher
+             on a TestServer (header-driven routing, per-method version
+             vectors, the refusal envelope's byte pin, the deprecation
+             warning), plus the classifier's compose-time refusals, the
+             docs-schema export and the client knob's source pin. Placed
+             beside the other Remoting packs; no ordering constraint (it
+             references only shipped surface). -->
+        <Compile Include="InProcess\SchemaVersionTests.fs" />
         <!-- Phase 786 — the MsgPack reader under hostile input: a narrowed
              integer, an over-claimed length prefix, a 10,000-deep nesting
              and a str running past the buffer, each refusing with its
