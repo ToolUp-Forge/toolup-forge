@@ -728,7 +728,15 @@
              above, so it must see all of them. -->
         <Compile Include="Shared\Remoting\Decode.fs" />
         <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
+        <!-- Phase 799 — the JSON wire joins the algebra: the lexical value
+             model, the combinators over it, the argument-seam registry,
+             and (after PlatformDecoders, beside it) the platform's own
+             hand-written argument decoders. -->
+        <Compile Include="Shared\Remoting\Json\JsonValue.fs" />
+        <Compile Include="Shared\Remoting\Json\JsonDecode.fs" />
+        <Compile Include="Shared\Remoting\Json\JsonDecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
+        <Compile Include="Shared\Remoting\Json\PlatformJsonDecoders.fs" />
     </ItemGroup>
     <!-- Phase 250 — the connector contract value types (AIProviderMessage,
          AIProviderError, AIContentPart, …) relocated to the Fable-safe

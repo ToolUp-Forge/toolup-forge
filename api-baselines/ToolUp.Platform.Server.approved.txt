@@ -8557,9 +8557,11 @@ ToolUp.Platform.RemotingDecoderFacet.FacetRequired : System.Boolean { get }
 ToolUp.Platform.RemotingDecoderFacetModule (class)
 ToolUp.Platform.RemotingDecoderFacetModule.coverage(ToolUp.Platform.RemotingDecoderFacet) : System.Tuple`2[System.Int32, System.Int32]
 ToolUp.Platform.RemotingDecoderFacetModule.describe(ToolUp.Platform.RemotingDecoderFacet) : System.String
+ToolUp.Platform.RemotingDecoderFacetModule.describeArguments(ToolUp.Platform.RemotingDecoderFacet) : System.String
 ToolUp.Platform.RemotingDecoderFacetModule.inspect(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]]) : ToolUp.Platform.RemotingDecoderFacet
 ToolUp.Platform.RemotingDecoderFacetModule.inspectPlatform(ToolUp.Platform.CompositionProfile) : ToolUp.Platform.RemotingDecoderFacet
 ToolUp.Platform.RemotingDecoderFacetModule.inspectServed(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]]) : ToolUp.Platform.RemotingDecoderFacet
+ToolUp.Platform.RemotingDecoderFacetModule.inspectServedArguments(ToolUp.Platform.CompositionProfile) : ToolUp.Platform.RemotingDecoderFacet
 ToolUp.Platform.RemotingDecoderFacetModule.inspectServedPlatform(ToolUp.Platform.CompositionProfile) : ToolUp.Platform.RemotingDecoderFacet
 ToolUp.Platform.RemotingDecoderFacetModule.reflectionRecords(ToolUp.Platform.RemotingDecoderFacet) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.RemotingDecoderFacetModule.requiresAlgebraDecoders(ToolUp.Platform.CompositionProfile) : System.Boolean
@@ -10558,6 +10560,12 @@ ToolUp.Remoting.AspNetCore.RemotingMiddleware`1..ctor(Microsoft.AspNetCore.Http.
 ToolUp.Remoting.AspNetCore.RemotingMiddleware`1.Invoke(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Giraffe.Remoting (class)
 ToolUp.Remoting.Giraffe.Remoting.buildHttpHandler`1(ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Remoting.Json.JsonRead (class)
+ToolUp.Remoting.Json.JsonRead.DefaultMaxDepth : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonRead.DefaultMaxMembers : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonRead.tryParse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonRead.tryRead(System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonRead.tryReadWith(System.Int32, System.Int32, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.BigIntConverter (class)
 ToolUp.Remoting.Json.SystemTextJson.BigIntConverter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.BigIntConverter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.Numerics.BigInteger

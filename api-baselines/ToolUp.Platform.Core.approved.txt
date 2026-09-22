@@ -13427,6 +13427,118 @@ ToolUp.Remoting.DecoderVerification.Divergence : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Remoting.DecoderVerification.Draws : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.Seed : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.WireType : System.String { get }
+ToolUp.Remoting.Json.JsonDecode (class)
+ToolUp.Remoting.Json.JsonDecode.apply`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[A, B], ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.array`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T[], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.asBool(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asByte : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Byte, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asBytes(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asChar(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Char, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asDateOnly(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.DateOnly, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asDateTime(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.DateTime, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asDateTimeOffset(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.DateTimeOffset, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asDecimal(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Decimal, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asFloat(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Double, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asFloat32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Single, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asGuid(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asInt16 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Int16, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asInt32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asInt64(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asMap`2(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[K, V], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.asSByte : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.SByte, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asSet`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpSet`1[T], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.asString(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asTimeOnly : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.TimeOnly, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asTimeSpan(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.TimeSpan, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asUInt16 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.UInt16, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asUInt32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.UInt32, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecode.asUInt64(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.UInt64, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asUnit(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.bind`2(Microsoft.FSharp.Core.FSharpFunc`2[A, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.case0`1(T, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.entries`2(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[K, V]], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.exactly(System.Int32, ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.fail`1(System.String, ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.field`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.fields`1(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.index`1(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.items(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.list`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[T], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.map`2(Microsoft.FSharp.Core.FSharpFunc`2[A, B], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.option`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.optionalField`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.payload`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue]) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.result`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[E, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[T, E], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.run`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.stringEnum`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, T]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.succeed`1(T, ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.tuple2`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[A, B], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.tuple3`3(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[C, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[A, B, C], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.tuple4`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[C, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[D, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`4[A, B, C, D], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Json.JsonDecode.union`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode+Key (class)
+ToolUp.Remoting.Json.JsonDecode+Key.guid(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode+Key.int32(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode+Key.int64(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode+Key.parse`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[K]], System.String) : Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode+Key.string(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecoders (class)
+ToolUp.Remoting.Json.JsonDecoders.count() : System.Int32
+ToolUp.Remoting.Json.JsonDecoders.isRegistered(System.Type) : System.Boolean
+ToolUp.Remoting.Json.JsonDecoders.registerByKey(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : System.Void
+ToolUp.Remoting.Json.JsonDecoders.register`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : System.Void
+ToolUp.Remoting.Json.JsonDecoders.registered() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
+ToolUp.Remoting.Json.JsonDecoders.tryGet(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Json.JsonValue (class)
+ToolUp.Remoting.Json.JsonValue.IsArray : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.IsBool : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.IsNull : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.IsNumber : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.IsObject : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.IsString : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue.Null : ToolUp.Remoting.Json.JsonValue { get }
+ToolUp.Remoting.Json.JsonValue.Tag : System.Int32 { get }
+ToolUp.Remoting.Json.JsonValue+Array (class)
+ToolUp.Remoting.Json.JsonValue+Array.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue] { get }
+ToolUp.Remoting.Json.JsonValue+Bool (class)
+ToolUp.Remoting.Json.JsonValue+Bool.Item : System.Boolean { get }
+ToolUp.Remoting.Json.JsonValue+Number (class)
+ToolUp.Remoting.Json.JsonValue+Number.lexical : System.String { get }
+ToolUp.Remoting.Json.JsonValue+Object (class)
+ToolUp.Remoting.Json.JsonValue+Object.members : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Json.JsonValue]] { get }
+ToolUp.Remoting.Json.JsonValue+String (class)
+ToolUp.Remoting.Json.JsonValue+String.Item : System.String { get }
+ToolUp.Remoting.Json.JsonValue+Tags (class)
+ToolUp.Remoting.Json.JsonValue+Tags.Array : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValue+Tags.Bool : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValue+Tags.Null : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValue+Tags.Number : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValue+Tags.Object : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValue+Tags.String : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonValueModule (class)
+ToolUp.Remoting.Json.JsonValueModule.describe(ToolUp.Remoting.Json.JsonValue) : System.String
+ToolUp.Remoting.Json.JsonValueModule.isIntegralToken(System.String) : System.Boolean
+ToolUp.Remoting.Json.JsonValueModule.isNumberToken(System.String) : System.Boolean
+ToolUp.Remoting.Json.JsonValueModule.size(ToolUp.Remoting.Json.JsonValue) : System.Int32
+ToolUp.Remoting.Json.JsonValueModule.tryDecimal(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.Remoting.Json.JsonValueModule.tryFloat(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Double]
+ToolUp.Remoting.Json.JsonValueModule.tryInt64(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int64]
+ToolUp.Remoting.Json.JsonValueModule.tryMember(System.String, ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue]
+ToolUp.Remoting.Json.JsonValueModule.tryUInt64(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.UInt64]
+ToolUp.Remoting.Json.PlatformJsonDecoders (class)
+ToolUp.Remoting.Json.PlatformJsonDecoders.auditTrailQuery : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditTrailQuery, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.covered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.createTeamRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CreateTeamRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.entityLockRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EntityLockRef, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.pinRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PinRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.presenceLocation : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PresenceLocation, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.registerAll() : System.Void
+ToolUp.Remoting.Json.PlatformJsonDecoders.teamInviteIssueRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteIssueRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.teamRole : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamRole, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceChainRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceChainRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceDirection : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceDirection, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceRef, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.MsgPack.FloatWidth (class)
 ToolUp.Remoting.MsgPack.FloatWidth.Double : ToolUp.Remoting.MsgPack.FloatWidth { get }
 ToolUp.Remoting.MsgPack.FloatWidth.IsDouble : System.Boolean { get }

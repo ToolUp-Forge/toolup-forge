@@ -1485,6 +1485,95 @@ module RemotingDecoderFacet =
             (CompositionProfile.label facet.FacetProfile)
             (if facet.FacetRequired then "mandatory" else "advisory")
 
+    // ─── Phase 799 — the ARGUMENT side, on the JSON wire ─────────────
+    //
+    // The facet above is about what the CLIENT decodes: a record's method
+    // RETURN types, on the binary wire, against `RemotingDecoders`. The
+    // server's own decode edge is the other direction — the ARGUMENT
+    // types its methods take, arriving as JSON and decoded at the Phase
+    // 783 seam, which since Phase 799 consults `JsonDecoders` first. This
+    // is that facet: the same served set, the same classifier, the same
+    // binding shape, over argument types against the JSON registry.
+    //
+    // It is ADVISORY under every profile for now (`FacetRequired = false`
+    // whatever the profile says), and deliberately: the JSON algebra's
+    // first set is hand-written and narrow, and a `Verified` deployment
+    // that refused on a served record with no JSON decoder would refuse
+    // nearly every deployment on the day the facet shipped. It becomes
+    // mandatory under `Verified` when the generator emits argument
+    // decoders (69k.B) and the platform's own records are covered by
+    // construction — the same road the response facet travelled between
+    // Phases 785 and 801.
+
+    /// The wire types an API record's methods TAKE, by the registry key:
+    /// each field's curried function chain walked to its `Async<_>`,
+    /// every domain collected. `unit` is dropped — a `unit -> Async<_>`
+    /// method decodes no argument at all.
+    let private argumentTypesOf (apiRecord: Type) : string list =
+        let rec argumentsOf (fieldType: Type) (acc: Type list) : Type list option =
+            if Reflection.FSharpType.IsFunction fieldType then
+                let domain, range = Reflection.FSharpType.GetFunctionElements fieldType
+                argumentsOf range (domain :: acc)
+            elif
+                fieldType.IsGenericType
+                && fieldType.GetGenericTypeDefinition() = typedefof<Async<_>>
+            then
+                Some(List.rev acc)
+            else
+                None
+
+        Reflection.FSharpType.GetRecordFields(
+            apiRecord,
+            Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic
+        )
+        |> Array.toList
+        |> List.collect (fun f -> argumentsOf f.PropertyType [] |> Option.defaultValue [])
+        |> List.filter (fun t -> t <> typeof<unit>)
+        |> List.distinct
+        |> List.map RemotingDecoders.keyFor
+
+    /// Phase 799 — classify every SERVED API record by its argument
+    /// types against the JSON algebra registry. Corpus coverage is
+    /// `false` throughout: the wire corpus draws the corpus's own types,
+    /// and no platform argument type is among them yet.
+    let inspectServedArguments (profile: CompositionProfile) : RemotingDecoderFacet =
+        let registered = ToolUp.Remoting.Json.JsonDecoders.registered () |> Set.ofList
+
+        let bindings =
+            ServedApiRecords.all ()
+            |> List.filter (fun t ->
+                Reflection.FSharpType.IsRecord(t, Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic))
+            |> List.map (fun t ->
+                let uncovered =
+                    argumentTypesOf t |> List.filter (fun name -> not (registered.Contains name))
+
+                {
+                    DecoderApiRecord = recordName t
+                    DecoderClass =
+                        if List.isEmpty uncovered then
+                            RemotingDecoderClass.Algebra
+                        else
+                            RemotingDecoderClass.Reflection
+                    DecoderUncovered = uncovered
+                    DecoderCorpusCovered = false
+                })
+
+        {
+            FacetProfile = profile
+            FacetRequired = false
+            FacetBindings = bindings
+        }
+
+    /// One line for the boot log: argument-side coverage on the JSON wire.
+    let describeArguments (facet: RemotingDecoderFacet) : string =
+        let algebra, total = coverage facet
+
+        sprintf
+            "remoting argument decoders: %d of %d served API record(s) take every argument through the JSON algebra (profile %s, advisory)"
+            algebra
+            total
+            (CompositionProfile.label facet.FacetProfile)
+
     /// The records this facet classifies as `Reflection`, in declaration
     /// order.
     let reflectionRecords (facet: RemotingDecoderFacet) : string list =
