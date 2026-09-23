@@ -478,6 +478,120 @@ DataSubjectRequestAdminUI+Tab.Tag : System.Int32 { get }
 DataSubjectRequestAdminUI+Tab+Tags (class)
 DataSubjectRequestAdminUI+Tab+Tags.EraseTab : System.Int32 (literal)
 DataSubjectRequestAdminUI+Tab+Tags.ExportTab : System.Int32 (literal)
+ExternalContactManagerUI (class)
+ExternalContactManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalContactManagerConfig]) : ToolUp.Platform.ErasedModule
+ExternalContactManagerUI.init() : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ExternalContactManagerUI.update(ExternalContactManagerUI+Msg, ExternalContactManagerUI+Model) : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ExternalContactManagerUI+ContactForm (class)
+ExternalContactManagerUI+ContactForm..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, System.String, System.String, System.String)
+ExternalContactManagerUI+ContactForm.DisplayName : System.String { get }
+ExternalContactManagerUI+ContactForm.EditingId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ExternalContactManagerUI+ContactForm.Email : System.String { get }
+ExternalContactManagerUI+ContactForm.Notes : System.String { get }
+ExternalContactManagerUI+ContactForm.Phone : System.String { get }
+ExternalContactManagerUI+ContactForm.Tags : System.String { get }
+ExternalContactManagerUI+ContactForm.WhatsApp : System.String { get }
+ExternalContactManagerUI+ContactFormModule (class)
+ExternalContactManagerUI+ContactFormModule.empty : ExternalContactManagerUI+ContactForm { get }
+ExternalContactManagerUI+ContactFormModule.ofContact(ToolUp.Platform.ExternalContact) : ExternalContactManagerUI+ContactForm
+ExternalContactManagerUI+ContactFormModule.parseTags(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ExternalContactManagerUI+ContactFormModule.toCreate(ToolUp.Platform.ContactOwner, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.CreateExternalContactRequest
+ExternalContactManagerUI+ContactFormModule.toUpdate(System.String, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.UpdateExternalContactRequest
+ExternalContactManagerUI+Model (class)
+ExternalContactManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact], ExternalContactManagerUI+View, Microsoft.FSharp.Core.FSharpOption`1[ExternalContactManagerUI+ContactForm], ExternalContactManagerUI+OptInDraft, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ExternalContactManagerUI+Model.Busy : System.Boolean { get }
+ExternalContactManagerUI+Model.Contacts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact] { get }
+ExternalContactManagerUI+Model.CurrentView : ExternalContactManagerUI+View { get }
+ExternalContactManagerUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ExternalContactManagerUI+Model.Form : Microsoft.FSharp.Core.FSharpOption`1[ExternalContactManagerUI+ContactForm] { get }
+ExternalContactManagerUI+Model.Loaded : System.Boolean { get }
+ExternalContactManagerUI+Model.OptIn : ExternalContactManagerUI+OptInDraft { get }
+ExternalContactManagerUI+Msg (class)
+ExternalContactManagerUI+Msg.BackToList : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.CancelForm : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.DismissError : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.IsBackToList : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsCancelForm : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsContactDeleted : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsContactSaved : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsContactsLoaded : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsDeleteContact : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsDismissError : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsLoadContacts : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsOpenContact : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsOptInChanged : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsRecordOptIn : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsSetFormField : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsSetOptInChannel : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsSetOptInSource : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsStartAdd : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsStartEdit : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsSubmitForm : System.Boolean { get }
+ExternalContactManagerUI+Msg.IsWithdrawOptIn : System.Boolean { get }
+ExternalContactManagerUI+Msg.LoadContacts : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.StartAdd : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.SubmitForm : ExternalContactManagerUI+Msg { get }
+ExternalContactManagerUI+Msg.Tag : System.Int32 { get }
+ExternalContactManagerUI+Msg+ContactDeleted (class)
+ExternalContactManagerUI+Msg+ContactDeleted.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+ExternalContactManagerUI+Msg+ContactSaved (class)
+ExternalContactManagerUI+Msg+ContactSaved.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String] { get }
+ExternalContactManagerUI+Msg+ContactsLoaded (class)
+ExternalContactManagerUI+Msg+ContactsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact], System.String] { get }
+ExternalContactManagerUI+Msg+DeleteContact (class)
+ExternalContactManagerUI+Msg+DeleteContact.Item : System.String { get }
+ExternalContactManagerUI+Msg+OpenContact (class)
+ExternalContactManagerUI+Msg+OpenContact.Item : System.String { get }
+ExternalContactManagerUI+Msg+OptInChanged (class)
+ExternalContactManagerUI+Msg+OptInChanged.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String] { get }
+ExternalContactManagerUI+Msg+RecordOptIn (class)
+ExternalContactManagerUI+Msg+RecordOptIn.Item : System.String { get }
+ExternalContactManagerUI+Msg+SetFormField (class)
+ExternalContactManagerUI+Msg+SetFormField.Item : Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+ContactForm, ExternalContactManagerUI+ContactForm] { get }
+ExternalContactManagerUI+Msg+SetOptInChannel (class)
+ExternalContactManagerUI+Msg+SetOptInChannel.Item : System.String { get }
+ExternalContactManagerUI+Msg+SetOptInSource (class)
+ExternalContactManagerUI+Msg+SetOptInSource.Item : System.String { get }
+ExternalContactManagerUI+Msg+StartEdit (class)
+ExternalContactManagerUI+Msg+StartEdit.Item : System.String { get }
+ExternalContactManagerUI+Msg+Tags (class)
+ExternalContactManagerUI+Msg+Tags.BackToList : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.CancelForm : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.ContactDeleted : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.ContactSaved : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.ContactsLoaded : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.DeleteContact : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.DismissError : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.LoadContacts : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.OpenContact : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.OptInChanged : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.RecordOptIn : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.SetFormField : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.SetOptInChannel : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.SetOptInSource : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.StartAdd : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.StartEdit : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.SubmitForm : System.Int32 (literal)
+ExternalContactManagerUI+Msg+Tags.WithdrawOptIn : System.Int32 (literal)
+ExternalContactManagerUI+Msg+WithdrawOptIn (class)
+ExternalContactManagerUI+Msg+WithdrawOptIn.channel : System.String { get }
+ExternalContactManagerUI+Msg+WithdrawOptIn.contactId : System.String { get }
+ExternalContactManagerUI+OptInDraft (class)
+ExternalContactManagerUI+OptInDraft..ctor(System.String, System.String)
+ExternalContactManagerUI+OptInDraft.Channel : System.String { get }
+ExternalContactManagerUI+OptInDraft.Source : System.String { get }
+ExternalContactManagerUI+OptInDraftModule (class)
+ExternalContactManagerUI+OptInDraftModule.empty : ExternalContactManagerUI+OptInDraft { get }
+ExternalContactManagerUI+View (class)
+ExternalContactManagerUI+View.ContactList : ExternalContactManagerUI+View { get }
+ExternalContactManagerUI+View.IsContactDetail : System.Boolean { get }
+ExternalContactManagerUI+View.IsContactList : System.Boolean { get }
+ExternalContactManagerUI+View.Tag : System.Int32 { get }
+ExternalContactManagerUI+View+ContactDetail (class)
+ExternalContactManagerUI+View+ContactDetail.contactId : System.String { get }
+ExternalContactManagerUI+View+Tags (class)
+ExternalContactManagerUI+View+Tags.ContactDetail : System.Int32 (literal)
+ExternalContactManagerUI+View+Tags.ContactList : System.Int32 (literal)
 FileManagerUI (class)
 FileManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 FileManagerUI.init() : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -3066,7 +3180,7 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ExternalContactManagerMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
@@ -3085,6 +3199,7 @@ ToolUp.Platform.ClientConfig.DataSubjectRequestAdmin : ToolUp.Platform.DataSubje
 ToolUp.Platform.ClientConfig.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.EnableElmishConsoleTrace : System.Boolean { get }
 ToolUp.Platform.ClientConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Platform.ClientConfig.ExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
 ToolUp.Platform.ClientConfig.GlobalOverlays : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]] { get }
 ToolUp.Platform.ClientConfig.GridModules : Feliz.AgGrid+AgGridModuleConfig { get }
 ToolUp.Platform.ClientConfig.Handlers : ToolUp.Platform.ClientHandlerRegistry { get }
@@ -3725,6 +3840,77 @@ ToolUp.Platform.ErrorCategory+Unknown (class)
 ToolUp.Platform.ErrorCategory+Unknown.raw : System.String { get }
 ToolUp.Platform.ErrorCategoryModule (class)
 ToolUp.Platform.ErrorCategoryModule.ofWire(System.String) : ToolUp.Platform.ErrorCategory
+ToolUp.Platform.ExternalContactManagerConfig (class)
+ToolUp.Platform.ExternalContactManagerConfig..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.ExternalContactManagerConfig.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.ExternalContactManagerConfig.Name : System.String { get }
+ToolUp.Platform.ExternalContactManagerMode (class)
+ToolUp.Platform.ExternalContactManagerMode.DefaultExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
+ToolUp.Platform.ExternalContactManagerMode.IsConfiguredExternalContactManager : System.Boolean { get }
+ToolUp.Platform.ExternalContactManagerMode.IsDefaultExternalContactManager : System.Boolean { get }
+ToolUp.Platform.ExternalContactManagerMode.IsExternalExternalContactManager : System.Boolean { get }
+ToolUp.Platform.ExternalContactManagerMode.IsNoExternalContactManager : System.Boolean { get }
+ToolUp.Platform.ExternalContactManagerMode.NoExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
+ToolUp.Platform.ExternalContactManagerMode.Tag : System.Int32 { get }
+ToolUp.Platform.ExternalContactManagerMode+ConfiguredExternalContactManager (class)
+ToolUp.Platform.ExternalContactManagerMode+ConfiguredExternalContactManager.Item : ToolUp.Platform.ExternalContactManagerConfig { get }
+ToolUp.Platform.ExternalContactManagerMode+ExternalExternalContactManager (class)
+ToolUp.Platform.ExternalContactManagerMode+ExternalExternalContactManager.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.ExternalContactManagerMode+Tags (class)
+ToolUp.Platform.ExternalContactManagerMode+Tags.ConfiguredExternalContactManager : System.Int32 (literal)
+ToolUp.Platform.ExternalContactManagerMode+Tags.DefaultExternalContactManager : System.Int32 (literal)
+ToolUp.Platform.ExternalContactManagerMode+Tags.ExternalExternalContactManager : System.Int32 (literal)
+ToolUp.Platform.ExternalContactManagerMode+Tags.NoExternalContactManager : System.Int32 (literal)
+ToolUp.Platform.ExternalContactMessages (class)
+ToolUp.Platform.ExternalContactMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ExternalContactMessages.AddContact : System.String { get }
+ToolUp.Platform.ExternalContactMessages.BackToList : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Cancel : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ColumnConsent : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ColumnEmail : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ColumnName : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ColumnPhone : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ColumnTags : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ConsentEvidence : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ExternalContactMessages.ConsentHeading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ConsentHelp : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ContactFormHelp : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ContactGone : System.String { get }
+ToolUp.Platform.ExternalContactMessages.ContactsPanel : System.String { get }
+ToolUp.Platform.ExternalContactMessages.DeleteContact : System.String { get }
+ToolUp.Platform.ExternalContactMessages.DetailEmail : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ExternalContactMessages.DetailPhone : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ExternalContactMessages.DetailTags : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.ExternalContactMessages.DetailsPanel : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Dismiss : System.String { get }
+ToolUp.Platform.ExternalContactMessages.EditContact : System.String { get }
+ToolUp.Platform.ExternalContactMessages.EditContactHeading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldChannel : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldConsentSource : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldDisplayName : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldEmail : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldNotes : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldPhone : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldTags : System.String { get }
+ToolUp.Platform.ExternalContactMessages.FieldWhatsApp : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Heading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Loading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Manage : System.String { get }
+ToolUp.Platform.ExternalContactMessages.NewContactHeading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.NoConsent : System.String { get }
+ToolUp.Platform.ExternalContactMessages.NoConsentBody : System.String { get }
+ToolUp.Platform.ExternalContactMessages.NoContactsYet : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderConsentSource : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderDisplayName : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderEmail : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderNotes : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderPhone : System.String { get }
+ToolUp.Platform.ExternalContactMessages.PlaceholderTags : System.String { get }
+ToolUp.Platform.ExternalContactMessages.RecordConsent : System.String { get }
+ToolUp.Platform.ExternalContactMessages.RecordConsentHelp : System.String { get }
+ToolUp.Platform.ExternalContactMessages.SaveContact : System.String { get }
+ToolUp.Platform.ExternalContactMessages.Subheading : System.String { get }
+ToolUp.Platform.ExternalContactMessages.WithdrawConsent : System.String { get }
 ToolUp.Platform.FeatureFlags (class)
 ToolUp.Platform.FeatureFlags.flag(System.String) : System.Boolean
 ToolUp.Platform.FeatureFlags.provider(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], Fable.React.ReactElement) : Fable.React.ReactElement
@@ -4394,7 +4580,7 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
@@ -4404,6 +4590,7 @@ ToolUp.Platform.MessageCatalog.CompositionInspector : ToolUp.Platform.Compositio
 ToolUp.Platform.MessageCatalog.Consent : ToolUp.Platform.ConsentMessages { get }
 ToolUp.Platform.MessageCatalog.DataIngestion : ToolUp.Platform.DataIngestionMessages { get }
 ToolUp.Platform.MessageCatalog.DataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMessages { get }
+ToolUp.Platform.MessageCatalog.ExternalContact : ToolUp.Platform.ExternalContactMessages { get }
 ToolUp.Platform.MessageCatalog.FileManager : ToolUp.Platform.FileManagerMessages { get }
 ToolUp.Platform.MessageCatalog.HealthMonitor : ToolUp.Platform.HealthMonitorMessages { get }
 ToolUp.Platform.MessageCatalog.Home : ToolUp.Platform.HomeMessages { get }

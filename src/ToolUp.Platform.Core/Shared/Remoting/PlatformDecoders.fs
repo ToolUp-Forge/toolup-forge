@@ -1050,6 +1050,72 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Outcome" 5 deploymentVerificationOutcome)
         |> Decode.apply (Decode.field "VerdictDigest" 6 Decode.asString)
 
+    /// Generated decoder for `ContactOwner` — one combinator per field or case, read off the type's own shape.
+    let contactOwner: Decoder<ContactOwner> =
+        Decode.union "ContactOwner" (function
+            | 0 -> Some(Decode.payload (Decode.asString |> Decode.map ContactOwner.User))
+            | 1 -> Some(Decode.payload (Decode.asString |> Decode.map ContactOwner.Team))
+            | _ -> None)
+
+    /// Generated decoder for `NotificationKind.PushVariant` — one combinator per field or case, read off the type's own shape.
+    let pushVariant: Decoder<NotificationKind.PushVariant> =
+        Decode.union "NotificationKind.PushVariant" (function
+            | 0 -> Some(Decode.case0 NotificationKind.PushVariant.WebPush)
+            | 1 -> Some(Decode.case0 NotificationKind.PushVariant.Fcm)
+            | 2 -> Some(Decode.case0 NotificationKind.PushVariant.Apns)
+            | 3 -> Some(Decode.payload (Decode.asString |> Decode.map NotificationKind.PushVariant.Other))
+            | _ -> None)
+
+    /// Generated decoder for `NotificationKind.SinkKind` — one combinator per field or case, read off the type's own shape.
+    let sinkKind: Decoder<NotificationKind.SinkKind> =
+        Decode.union "NotificationKind.SinkKind" (function
+            | 0 -> Some(Decode.case0 NotificationKind.SinkKind.Email)
+            | 1 -> Some(Decode.case0 NotificationKind.SinkKind.Sms)
+            | 2 -> Some(Decode.payload (pushVariant |> Decode.map NotificationKind.SinkKind.Push))
+            | _ -> None)
+
+    /// Generated decoder for `OptInRecord` — one combinator per field or case, read off the type's own shape.
+    let optInRecord: Decoder<OptInRecord> =
+        Decode.succeed (fun grantedAt source expiresAt -> ({
+            GrantedAt = grantedAt
+            Source = source
+            ExpiresAt = expiresAt
+        }: OptInRecord))
+        |> Decode.apply (Decode.field "GrantedAt" 0 Decode.asDateTime)
+        |> Decode.apply (Decode.field "Source" 1 Decode.asString)
+        |> Decode.apply (Decode.field "ExpiresAt" 2 (Decode.option Decode.asDateTime))
+
+    /// Generated decoder for `ExternalContact` — one combinator per field or case, read off the type's own shape.
+    let externalContact: Decoder<ExternalContact> =
+        Decode.succeed (fun id type' version displayName optionalEmailAddress optionalPhoneNumber optionalWhatsAppNumber owner optIns tags createdAt lastInboundUtc notes -> ({
+            Id = id
+            Type = type'
+            Version = version
+            DisplayName = displayName
+            OptionalEmailAddress = optionalEmailAddress
+            OptionalPhoneNumber = optionalPhoneNumber
+            OptionalWhatsAppNumber = optionalWhatsAppNumber
+            Owner = owner
+            OptIns = optIns
+            Tags = tags
+            CreatedAt = createdAt
+            LastInboundUtc = lastInboundUtc
+            Notes = notes
+        }: ExternalContact))
+        |> Decode.apply (Decode.field "Id" 0 Decode.asString)
+        |> Decode.apply (Decode.field "Type" 1 Decode.asString)
+        |> Decode.apply (Decode.field "Version" 2 Decode.asInt32)
+        |> Decode.apply (Decode.field "DisplayName" 3 Decode.asString)
+        |> Decode.apply (Decode.field "OptionalEmailAddress" 4 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "OptionalPhoneNumber" 5 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "OptionalWhatsAppNumber" 6 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "Owner" 7 contactOwner)
+        |> Decode.apply (Decode.field "OptIns" 8 (Decode.asMap sinkKind optInRecord))
+        |> Decode.apply (Decode.field "Tags" 9 (Decode.list Decode.asString))
+        |> Decode.apply (Decode.field "CreatedAt" 10 Decode.asDateTime)
+        |> Decode.apply (Decode.field "LastInboundUtc" 11 (Decode.option Decode.asDateTime))
+        |> Decode.apply (Decode.field "Notes" 12 (Decode.option Decode.asString))
+
     /// Generated decoder for `FlagValue` — one combinator per field or case, read off the type's own shape.
     let flagValue: Decoder<FlagValue> =
         Decode.union "FlagValue" (function
@@ -2888,6 +2954,11 @@ module PlatformDecoders =
         typeof<DeploymentVerification.NotProvedStatement>.FullName
         typeof<DeploymentVerificationOutcome>.FullName
         typeof<DeploymentVerification.DeploymentVerificationReport>.FullName
+        typeof<ContactOwner>.FullName
+        typeof<NotificationKind.PushVariant>.FullName
+        typeof<NotificationKind.SinkKind>.FullName
+        typeof<OptInRecord>.FullName
+        typeof<ExternalContact>.FullName
         typeof<FlagValue>.FullName
         typeof<FeatureFlag>.FullName
         typeof<HealthProbeView>.FullName
@@ -3055,6 +3126,8 @@ module PlatformDecoders =
         typeof<Result<MigrationStatus, string>>.FullName
         typeof<Result<DeploymentReadiness.DeploymentReadinessReport, string>>.FullName
         typeof<Result<DeploymentVerification.DeploymentVerificationReport, string>>.FullName
+        typeof<Result<ExternalContact list, string>>.FullName
+        typeof<Result<ExternalContact, string>>.FullName
         typeof<Map<string, FlagValue>>.FullName
         typeof<FeatureFlag list>.FullName
         typeof<Result<Map<string, FlagValue>, string>>.FullName
@@ -3207,6 +3280,11 @@ module PlatformDecoders =
         RemotingDecoders.register<DeploymentVerification.NotProvedStatement> notProvedStatement
         RemotingDecoders.register<DeploymentVerificationOutcome> deploymentVerificationOutcome
         RemotingDecoders.register<DeploymentVerification.DeploymentVerificationReport> deploymentVerificationReport
+        RemotingDecoders.register<ContactOwner> contactOwner
+        RemotingDecoders.register<NotificationKind.PushVariant> pushVariant
+        RemotingDecoders.register<NotificationKind.SinkKind> sinkKind
+        RemotingDecoders.register<OptInRecord> optInRecord
+        RemotingDecoders.register<ExternalContact> externalContact
         RemotingDecoders.register<FlagValue> flagValue
         RemotingDecoders.register<FeatureFlag> featureFlag
         RemotingDecoders.register<HealthProbeView> healthProbeView
@@ -3374,6 +3452,8 @@ module PlatformDecoders =
         RemotingDecoders.register<Result<MigrationStatus, string>> (Decode.result migrationStatus Decode.asString)
         RemotingDecoders.register<Result<DeploymentReadiness.DeploymentReadinessReport, string>> (Decode.result deploymentReadinessReport Decode.asString)
         RemotingDecoders.register<Result<DeploymentVerification.DeploymentVerificationReport, string>> (Decode.result deploymentVerificationReport Decode.asString)
+        RemotingDecoders.register<Result<ExternalContact list, string>> (Decode.result (Decode.list externalContact) Decode.asString)
+        RemotingDecoders.register<Result<ExternalContact, string>> (Decode.result externalContact Decode.asString)
         RemotingDecoders.register<Map<string, FlagValue>> (Decode.asMap Decode.asString flagValue)
         RemotingDecoders.register<FeatureFlag list> (Decode.list featureFlag)
         RemotingDecoders.register<Result<Map<string, FlagValue>, string>> (Decode.result (Decode.asMap Decode.asString flagValue) Decode.asString)
@@ -3527,6 +3607,11 @@ module PlatformDecoders =
         RemotingDecoders.verify<DeploymentVerification.NotProvedStatement> draws seed notProvedStatement
         RemotingDecoders.verify<DeploymentVerificationOutcome> draws seed deploymentVerificationOutcome
         RemotingDecoders.verify<DeploymentVerification.DeploymentVerificationReport> draws seed deploymentVerificationReport
+        RemotingDecoders.verify<ContactOwner> draws seed contactOwner
+        RemotingDecoders.verify<NotificationKind.PushVariant> draws seed pushVariant
+        RemotingDecoders.verify<NotificationKind.SinkKind> draws seed sinkKind
+        RemotingDecoders.verify<OptInRecord> draws seed optInRecord
+        RemotingDecoders.verify<ExternalContact> draws seed externalContact
         RemotingDecoders.verify<FlagValue> draws seed flagValue
         RemotingDecoders.verify<FeatureFlag> draws seed featureFlag
         RemotingDecoders.verify<HealthProbeView> draws seed healthProbeView
@@ -3694,6 +3779,8 @@ module PlatformDecoders =
         RemotingDecoders.verify<Result<MigrationStatus, string>> draws seed (Decode.result migrationStatus Decode.asString)
         RemotingDecoders.verify<Result<DeploymentReadiness.DeploymentReadinessReport, string>> draws seed (Decode.result deploymentReadinessReport Decode.asString)
         RemotingDecoders.verify<Result<DeploymentVerification.DeploymentVerificationReport, string>> draws seed (Decode.result deploymentVerificationReport Decode.asString)
+        RemotingDecoders.verify<Result<ExternalContact list, string>> draws seed (Decode.result (Decode.list externalContact) Decode.asString)
+        RemotingDecoders.verify<Result<ExternalContact, string>> draws seed (Decode.result externalContact Decode.asString)
         RemotingDecoders.verify<Map<string, FlagValue>> draws seed (Decode.asMap Decode.asString flagValue)
         RemotingDecoders.verify<FeatureFlag list> draws seed (Decode.list featureFlag)
         RemotingDecoders.verify<Result<Map<string, FlagValue>, string>> draws seed (Decode.result (Decode.asMap Decode.asString flagValue) Decode.asString)
@@ -3805,6 +3892,7 @@ module PlatformDecoders =
         "IDataMigrationApi", [ typeof<MigrationDataTypeInfo list>.FullName; typeof<MigrationStatus list>.FullName; typeof<Result<MigrationStatus, string>>.FullName ], true
         "IDeploymentReadinessApi", [ typeof<Result<DeploymentReadiness.DeploymentReadinessReport, string>>.FullName ], true
         "IDeploymentVerificationApi", [ typeof<Result<DeploymentVerification.DeploymentVerificationReport, string>>.FullName ], true
+        "IExternalContactApi", [ typeof<Result<ExternalContact list, string>>.FullName; typeof<Result<ExternalContact, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IFeatureFlagApi", [ typeof<Map<string, FlagValue>>.FullName; typeof<FeatureFlag list>.FullName; typeof<Result<Map<string, FlagValue>, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IHealthMonitorApi", [ typeof<Result<HealthSnapshot, string>>.FullName; typeof<Result<PreflightSnapshotView, string>>.FullName; typeof<Result<JobSchedulerTelemetryView, string>>.FullName; typeof<Result<DegradedCapability list, string>>.FullName; typeof<Result<AIDenialRollup option, string>>.FullName ], true
         "IHomeOverviewApi", [ typeof<HomeOverview>.FullName; typeof<HomePinningState>.FullName ], true

@@ -1612,6 +1612,7 @@ ToolUp.Platform.ComposeStores.registerDeployPlane(Microsoft.Extensions.Dependenc
 ToolUp.Platform.ComposeStores.registerEntityOutbox(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeStores.registerEntityStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.EntityStore+EntityRegistry, Microsoft.FSharp.Core.Unit]]) : System.Void
 ToolUp.Platform.ComposeStores.registerExternalCompute(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
+ToolUp.Platform.ComposeStores.registerExternalContactStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGrantConsentStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerGraphStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerOptionalStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IResultStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IConversationStore]) : System.Void
@@ -4193,6 +4194,18 @@ ToolUp.Platform.ExternalComputeCallback.handler : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Platform.ExternalComputeCallback.refusalCount(System.String) : System.Int32
 ToolUp.Platform.ExternalComputeCallback.resetThrottleState() : System.Void
 ToolUp.Platform.ExternalComputeCallback.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.ExternalContactApiHandler (class)
+ToolUp.Platform.ExternalContactApiHandler.externalContactApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IExternalContactApi
+ToolUp.Platform.ExternalContactConsent (class)
+ToolUp.Platform.ExternalContactConsent.NoOptInReason : System.String (literal)
+ToolUp.Platform.ExternalContactConsentFilter (class)
+ToolUp.Platform.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.ExternalContactStore (class)
+ToolUp.Platform.ExternalContactStore.entityBacked(ToolUp.Platform.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.IExternalContactStore
+ToolUp.Platform.ExternalContactStore.registration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Platform.ExternalContact] { get }
+ToolUp.Platform.ExternalContactStore+EntityBackedExternalContactStore (class)
+ToolUp.Platform.ExternalContactStore+EntityBackedExternalContactStore..ctor(ToolUp.Platform.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.ExternalFitCompletionRegistry (class)
 ToolUp.Platform.ExternalFitCompletionRegistry..ctor()
 ToolUp.Platform.ExternalFitCompletionRegistry..ctor(System.TimeSpan)
@@ -5478,6 +5491,16 @@ ToolUp.Platform.IExternalComputeDispatcher.Backend : System.String { get }
 ToolUp.Platform.IExternalComputeDispatcher.Cancel(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IExternalComputeDispatcher.Poll(ToolUp.Platform.ExternalHandle) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExternalOutcome]
 ToolUp.Platform.IExternalComputeDispatcher.Submit(System.String, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Platform.ExternalComputeError]]
+ToolUp.Platform.IExternalContactStore (interface)
+ToolUp.Platform.IExternalContactStore.Create(System.String, System.String, ToolUp.Platform.ContactOwner, ToolUp.Platform.CreateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.Delete(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationKind+SinkKind], ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact]]
+ToolUp.Platform.IExternalContactStore.ListByOwner(System.String, ToolUp.Platform.ContactOwner) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact]]
+ToolUp.Platform.IExternalContactStore.RecordInbound(System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.RecordOptIn(System.String, System.String, System.String, ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.Update(System.String, System.String, ToolUp.Platform.UpdateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.IExternalContactStore.WithdrawOptIn(System.String, System.String, System.String, ToolUp.Platform.NotificationKind+SinkKind, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
 ToolUp.Platform.IExternalHandleStore (interface)
 ToolUp.Platform.IExternalHandleStore.IsDistributed : System.Boolean { get }
 ToolUp.Platform.IExternalHandleStore.MarkTerminal(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
@@ -5678,9 +5701,9 @@ ToolUp.Platform.INarrativeStore.PublishTagged(System.String, System.String, Micr
 ToolUp.Platform.INarrativeStore.ReplaceLatest(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[System.Guid]
 ToolUp.Platform.INarrativeStore.ReplaceLatestTagged(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Guid]
 ToolUp.Platform.INotificationAddressBook (interface)
-ToolUp.Platform.INotificationAddressBook.ResolveEmail(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress]]
-ToolUp.Platform.INotificationAddressBook.ResolvePhone(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber]]
-ToolUp.Platform.INotificationAddressBook.ResolvePushTokens(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken]]
+ToolUp.Platform.INotificationAddressBook.ResolveEmail(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress]]
+ToolUp.Platform.INotificationAddressBook.ResolvePhone(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber]]
+ToolUp.Platform.INotificationAddressBook.ResolvePushTokens(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken]]
 ToolUp.Platform.INotificationPreferenceStore (interface)
 ToolUp.Platform.INotificationPreferenceStore.Enqueue(System.String, ToolUp.Platform.PendingNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.INotificationPreferenceStore.GetDigestWatermarks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.DateTime]]
@@ -7486,6 +7509,7 @@ ToolUp.Platform.NotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook.saveContact(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.Platform.UserContact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.NotificationAddressBook+BlobBackedNotificationAddressBook..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalContactStore])
 ToolUp.Platform.NotificationAddressBook+NoOpNotificationAddressBook (class)
 ToolUp.Platform.NotificationAddressBook+NoOpNotificationAddressBook..ctor()
 ToolUp.Platform.NotificationCategoryScope (class)
@@ -7521,9 +7545,11 @@ ToolUp.Platform.NotificationPreferenceFilterModule (class)
 ToolUp.Platform.NotificationPreferenceFilterModule.DigestQueuedReason : System.String (literal)
 ToolUp.Platform.NotificationPreferenceFilterModule.MutedReason : System.String (literal)
 ToolUp.Platform.NotificationPreferenceFilterModule.QuietHoursDeferredReason : System.String (literal)
+ToolUp.Platform.NotificationPreferenceFilterModule.externalRecipientsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]
 ToolUp.Platform.NotificationPreferenceFilterModule.hashRecipient(System.String) : System.String
-ToolUp.Platform.NotificationPreferenceFilterModule.narrowTo(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Notification) : ToolUp.Platform.Notification
-ToolUp.Platform.NotificationPreferenceFilterModule.recipientsOf(ToolUp.Platform.Notification) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.Platform.NotificationPreferenceFilterModule.narrowTo(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], ToolUp.Platform.Notification) : ToolUp.Platform.Notification
+ToolUp.Platform.NotificationPreferenceFilterModule.platformUserIdsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.NotificationPreferenceFilterModule.recipientsOf(ToolUp.Platform.Notification) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.NotifyingCrdtDocumentStore (class)
 ToolUp.Platform.NotifyingCrdtDocumentStore..ctor(ToolUp.Platform.ICrdtDocumentStore, ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.NotifyingNarrativeStore (class)

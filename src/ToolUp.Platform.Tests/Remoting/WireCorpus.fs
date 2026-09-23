@@ -559,6 +559,16 @@ let pinnedCases: WireCase list = [
     both WireClass.MapSet "map-string-key" (Map [ "a", 1; "b", 2 ])
     both WireClass.MapSet "map-empty" (Map.empty<string, int>)
     both WireClass.MapSet "map-int-key" (Map [ 1, "one"; 2, "two" ])
+    // Phase 6f.A — a map whose KEY is a payload-bearing union, with a
+    // record for a value. `map-int-key` covers the non-string-key
+    // converter for a primitive; this covers the shape that converter
+    // actually writes as a nested JSON document in the property-name
+    // position, and it is the one shape a round-trip can quietly lose.
+    // The platform now stores consent as `Map<SinkKind, OptInRecord>`,
+    // where `SinkKind.Push` carries a variant — the same shape as
+    // `Outcome.Accepted` here. Local types, so neither host's compile
+    // surface changes.
+    both WireClass.MapSet "map-union-key" (Map [ Pending, sampleAddress; Rejected "no opt-in", sampleAddress ])
     both WireClass.MapSet "set-string" (set [ "alpha"; "beta" ])
     both WireClass.MapSet "set-int" (set [ 3; 1; 2 ])
 

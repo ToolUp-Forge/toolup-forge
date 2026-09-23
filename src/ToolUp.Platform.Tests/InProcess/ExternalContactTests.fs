@@ -110,6 +110,140 @@ let private freshStore (auditLog: IAuditLog option) : IExternalContactStore =
 
     ExternalContactStore.entityBacked entities auditLog
 
+/// A second, INDEPENDENT `IExternalContactStore` over a dictionary.
+///
+/// The contract pack is bound to both this and the shipped
+/// entity-backed store, for the reason `ILogStoreContract` gives: a rule
+/// only the entity store satisfies, or only the fold satisfies, is a
+/// rule the next backend will get wrong. Nothing here shares code with
+/// the shipped implementation — the duplicate check, the scope rule and
+/// the removal-on-withdrawal rule are each re-derived, so a pack that
+/// passes against both is pinning the contract and not one store's
+/// habits.
+type private InMemoryExternalContactStore() =
+    let rows = ConcurrentDictionary<string * string, ExternalContact>()
+
+    let inScope (scopeId: string) =
+        rows
+        |> Seq.filter (fun kv -> fst kv.Key = scopeId)
+        |> Seq.map _.Value
+        |> Seq.toList
+
+    let duplicateOf (scopeId: string) (owner: ContactOwner) (exceptId: string option) (candidate: ExternalContact) =
+        let ownerWire = ContactOwner.toWireString owner
+
+        let clashes (a: string option) (b: string option) =
+            match a, b with
+            | Some x, Some y when not (String.IsNullOrWhiteSpace x) -> x = y
+            | _ -> false
+
+        inScope scopeId
+        |> List.filter (fun existing ->
+            ContactOwner.toWireString existing.Owner = ownerWire
+            && Some existing.Id <> exceptId
+            && (clashes existing.OptionalEmailAddress candidate.OptionalEmailAddress
+                || clashes existing.OptionalPhoneNumber candidate.OptionalPhoneNumber))
+        |> List.tryHead
+        |> Option.map _.Id
+
+    let write (scopeId: string) (contact: ExternalContact) =
+        let stored = {
+            contact with
+                Version = contact.Version + 1
+        }
+
+        rows[(scopeId, contact.Id)] <- stored
+        stored
+
+    let read (scopeId: string) (contactId: string) =
+        match rows.TryGetValue((scopeId, contactId)) with
+        | true, contact -> Ok contact
+        | _ -> Error ExternalContactError.NotFound
+
+    let mutate scopeId contactId (change: ExternalContact -> ExternalContact) = async {
+        match read scopeId contactId with
+        | Error e -> return Error e
+        | Ok existing -> return Ok(write scopeId (change existing))
+    }
+
+    interface IExternalContactStore with
+        member _.Create(scopeId, _, owner, request) = async {
+            let candidate: ExternalContact = {
+                Id = Guid.NewGuid().ToString "N"
+                Type = ExternalContact.EntityType
+                Version = 0
+                DisplayName = request.DisplayName
+                OptionalEmailAddress = request.EmailAddress
+                OptionalPhoneNumber = request.PhoneNumber
+                OptionalWhatsAppNumber = request.WhatsAppNumber
+                Owner = owner
+                OptIns = Map.empty
+                Tags = (if isNull (box request.Tags) then [] else request.Tags)
+                CreatedAt = DateTime.UtcNow
+                LastInboundUtc = None
+                Notes = request.Notes
+            }
+
+            match ExternalContact.validate candidate with
+            | Error reason -> return Error(ExternalContactError.InvalidShape reason)
+            | Ok validated ->
+                match duplicateOf scopeId owner None validated with
+                | Some existingId -> return Error(ExternalContactError.Duplicate existingId)
+                | None -> return Ok(write scopeId validated)
+        }
+
+        member _.Get(scopeId, contactId) = async { return read scopeId contactId }
+        member _.List scopeId = async { return inScope scopeId }
+
+        member _.ListByOwner(scopeId, owner) = async {
+            let ownerWire = ContactOwner.toWireString owner
+
+            return
+                inScope scopeId
+                |> List.filter (fun c -> ContactOwner.toWireString c.Owner = ownerWire)
+        }
+
+        member _.Update(scopeId, _, request) = async {
+            match read scopeId request.ContactId with
+            | Error e -> return Error e
+            | Ok existing ->
+                let candidate = {
+                    existing with
+                        DisplayName = request.DisplayName
+                        OptionalEmailAddress = request.EmailAddress
+                        OptionalPhoneNumber = request.PhoneNumber
+                        OptionalWhatsAppNumber = request.WhatsAppNumber
+                        Tags = (if isNull (box request.Tags) then [] else request.Tags)
+                        Notes = request.Notes
+                }
+
+                match ExternalContact.validate candidate with
+                | Error reason -> return Error(ExternalContactError.InvalidShape reason)
+                | Ok validated ->
+                    match duplicateOf scopeId validated.Owner (Some validated.Id) validated with
+                    | Some existingId -> return Error(ExternalContactError.Duplicate existingId)
+                    | None -> return Ok(write scopeId validated)
+        }
+
+        member _.Delete(scopeId, _, contactId) = async {
+            match read scopeId contactId with
+            | Error ExternalContactError.NotFound -> return Ok []
+            | Error e -> return Error e
+            | Ok existing ->
+                let discarded = existing.OptIns |> Map.toList |> List.map fst
+                rows.TryRemove((scopeId, contactId)) |> ignore
+                return Ok discarded
+        }
+
+        member _.RecordOptIn(scopeId, _, contactId, channel, record) =
+            mutate scopeId contactId (ExternalContact.withOptIn channel record)
+
+        member _.WithdrawOptIn(scopeId, _, contactId, channel, _) =
+            mutate scopeId contactId (ExternalContact.withoutOptIn channel)
+
+        member _.RecordInbound(scopeId, contactId, atUtc) =
+            mutate scopeId contactId (fun c -> { c with LastInboundUtc = Some atUtc })
+
 let private contactRequest (name: string) (email: string option) (phone: string option) = {
     DisplayName = name
     EmailAddress = email
@@ -184,6 +318,11 @@ let tests =
     testList "Phase 6f.A — external contacts" [
 
         IExternalContactStoreContract.tests "EntityBackedExternalContactStore" contractBinding
+
+        IExternalContactStoreContract.tests "InMemoryExternalContactStore (fake)" {
+            contractBinding with
+                Factory = fun () -> InMemoryExternalContactStore() :> IExternalContactStore
+        }
 
         testList "audit trail" [
             testCaseAsync "the store, not the handler, emits the contact lifecycle rows"

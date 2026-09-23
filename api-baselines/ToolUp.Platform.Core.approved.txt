@@ -968,6 +968,11 @@ ToolUp.Platform.AuditEvent.IsComputeBudgetDenied : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsComputeBudgetWarning : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConfigDrift : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConsentRecorded : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContactCreated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContactDeleted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContactOptInRecorded : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContactOptInWithdrawn : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsContactUpdated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsContentScanned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationCompleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationErased : System.Boolean { get }
@@ -1048,6 +1053,7 @@ ToolUp.Platform.AuditEvent.IsModuleArtefactRejected : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModuleArtefactSigned : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsModuleArtefactVerified : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationDeliveryFailed : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsNotificationDeliveryRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSent : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsNotificationSilentlySkipped : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsOAuth1aConnected : System.Boolean { get }
@@ -1203,6 +1209,16 @@ ToolUp.Platform.AuditEvent+ConfigDrift (class)
 ToolUp.Platform.AuditEvent+ConfigDrift.Item : ToolUp.Platform.ConfigDriftPayload { get }
 ToolUp.Platform.AuditEvent+ConsentRecorded (class)
 ToolUp.Platform.AuditEvent+ConsentRecorded.Item : ToolUp.Platform.ConsentEvent { get }
+ToolUp.Platform.AuditEvent+ContactCreated (class)
+ToolUp.Platform.AuditEvent+ContactCreated.Item : ToolUp.Platform.ContactCreatedPayload { get }
+ToolUp.Platform.AuditEvent+ContactDeleted (class)
+ToolUp.Platform.AuditEvent+ContactDeleted.Item : ToolUp.Platform.ContactDeletedPayload { get }
+ToolUp.Platform.AuditEvent+ContactOptInRecorded (class)
+ToolUp.Platform.AuditEvent+ContactOptInRecorded.Item : ToolUp.Platform.ContactOptInRecordedPayload { get }
+ToolUp.Platform.AuditEvent+ContactOptInWithdrawn (class)
+ToolUp.Platform.AuditEvent+ContactOptInWithdrawn.Item : ToolUp.Platform.ContactOptInWithdrawnPayload { get }
+ToolUp.Platform.AuditEvent+ContactUpdated (class)
+ToolUp.Platform.AuditEvent+ContactUpdated.Item : ToolUp.Platform.ContactUpdatedPayload { get }
 ToolUp.Platform.AuditEvent+ContentScanned (class)
 ToolUp.Platform.AuditEvent+ContentScanned.Item : ToolUp.Platform.ContentScannedPayload { get }
 ToolUp.Platform.AuditEvent+ConversationCompleted (class)
@@ -1363,6 +1379,8 @@ ToolUp.Platform.AuditEvent+ModuleArtefactVerified (class)
 ToolUp.Platform.AuditEvent+ModuleArtefactVerified.Item : ToolUp.Platform.ModuleArtefactVerifiedPayload { get }
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed (class)
 ToolUp.Platform.AuditEvent+NotificationDeliveryFailed.Item : ToolUp.Platform.NotificationDeliveryFailedPayload { get }
+ToolUp.Platform.AuditEvent+NotificationDeliveryRefused (class)
+ToolUp.Platform.AuditEvent+NotificationDeliveryRefused.Item : ToolUp.Platform.NotificationDeliveryRefusedPayload { get }
 ToolUp.Platform.AuditEvent+NotificationSent (class)
 ToolUp.Platform.AuditEvent+NotificationSent.Item : ToolUp.Platform.NotificationSentPayload { get }
 ToolUp.Platform.AuditEvent+NotificationSilentlySkipped (class)
@@ -1503,6 +1521,11 @@ ToolUp.Platform.AuditEvent+Tags.ComputeBudgetDenied : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ComputeBudgetWarning : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConfigDrift : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConsentRecorded : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContactCreated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContactDeleted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContactOptInRecorded : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContactOptInWithdrawn : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ContactUpdated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ContentScanned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationCompleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationErased : System.Int32 (literal)
@@ -1583,6 +1606,7 @@ ToolUp.Platform.AuditEvent+Tags.ModuleArtefactRejected : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModuleArtefactSigned : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ModuleArtefactVerified : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationDeliveryFailed : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.NotificationDeliveryRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSent : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.NotificationSilentlySkipped : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.OAuth1aConnected : System.Int32 (literal)
@@ -3044,6 +3068,7 @@ ToolUp.Platform.ConfigKeys+Names.eventStore : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.eventTriggerCatchUp : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.externalCompute : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.externalComputeHttpPrefix : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.externalContactStore : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.gcpProjectId : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.gcsBucket : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.gcsCredentialsJson : System.String (literal)
@@ -3515,6 +3540,54 @@ ToolUp.Platform.ConsentSubject.TeamId : System.String { get }
 ToolUp.Platform.ConsentSubjectModule (class)
 ToolUp.Platform.ConsentSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.ConsentSubject
 ToolUp.Platform.ConsentSubjectModule.isIncomplete(ToolUp.Platform.ConsentSubject) : System.Boolean
+ToolUp.Platform.ContactCreatedPayload (class)
+ToolUp.Platform.ContactCreatedPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactCreatedPayload.ContactId : System.String { get }
+ToolUp.Platform.ContactCreatedPayload.Owner : System.String { get }
+ToolUp.Platform.ContactCreatedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContactCreatedPayload.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ContactCreatedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactDeletedPayload (class)
+ToolUp.Platform.ContactDeletedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactDeletedPayload.ContactId : System.String { get }
+ToolUp.Platform.ContactDeletedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContactDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactDeletedPayload.WithdrawnChannels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ContactOptInRecordedPayload (class)
+ToolUp.Platform.ContactOptInRecordedPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.ContactOptInRecordedPayload.Channel : System.String { get }
+ToolUp.Platform.ContactOptInRecordedPayload.ContactId : System.String { get }
+ToolUp.Platform.ContactOptInRecordedPayload.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.ContactOptInRecordedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContactOptInRecordedPayload.Source : System.String { get }
+ToolUp.Platform.ContactOptInRecordedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload (class)
+ToolUp.Platform.ContactOptInWithdrawnPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ContactOptInWithdrawnPayload.Channel : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload.ContactId : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload.Reason : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload.UserId : System.String { get }
+ToolUp.Platform.ContactOwner (class)
+ToolUp.Platform.ContactOwner.IsTeam : System.Boolean { get }
+ToolUp.Platform.ContactOwner.IsUser : System.Boolean { get }
+ToolUp.Platform.ContactOwner.Tag : System.Int32 { get }
+ToolUp.Platform.ContactOwner+Tags (class)
+ToolUp.Platform.ContactOwner+Tags.Team : System.Int32 (literal)
+ToolUp.Platform.ContactOwner+Tags.User : System.Int32 (literal)
+ToolUp.Platform.ContactOwner+Team (class)
+ToolUp.Platform.ContactOwner+Team.teamId : System.String { get }
+ToolUp.Platform.ContactOwner+User (class)
+ToolUp.Platform.ContactOwner+User.userId : System.String { get }
+ToolUp.Platform.ContactOwnerModule (class)
+ToolUp.Platform.ContactOwnerModule.toWireString(ToolUp.Platform.ContactOwner) : System.String
+ToolUp.Platform.ContactOwnerModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ContactOwner]
+ToolUp.Platform.ContactUpdatedPayload (class)
+ToolUp.Platform.ContactUpdatedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactUpdatedPayload.ChangedFields : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ContactUpdatedPayload.ContactId : System.String { get }
+ToolUp.Platform.ContactUpdatedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ContactUpdatedPayload.UserId : System.String { get }
 ToolUp.Platform.ContainerInfo (class)
 ToolUp.Platform.ContainerInfo..ctor(System.String, System.String, System.String, ToolUp.Platform.ContainerStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ContainerInfo.ContainerId : System.String { get }
@@ -3831,6 +3904,15 @@ ToolUp.Platform.CrdtUpdateEvent (class)
 ToolUp.Platform.CrdtUpdateEvent..ctor(ToolUp.Platform.CrdtChange, ToolUp.Platform.CrdtUpdate)
 ToolUp.Platform.CrdtUpdateEvent.Change : ToolUp.Platform.CrdtChange { get }
 ToolUp.Platform.CrdtUpdateEvent.Update : ToolUp.Platform.CrdtUpdate { get }
+ToolUp.Platform.CreateExternalContactRequest (class)
+ToolUp.Platform.CreateExternalContactRequest..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ContactOwner, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.CreateExternalContactRequest.DisplayName : System.String { get }
+ToolUp.Platform.CreateExternalContactRequest.EmailAddress : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CreateExternalContactRequest.Notes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CreateExternalContactRequest.Owner : ToolUp.Platform.ContactOwner { get }
+ToolUp.Platform.CreateExternalContactRequest.PhoneNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CreateExternalContactRequest.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CreateExternalContactRequest.WhatsAppNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.CreateServiceAccountRequest (class)
 ToolUp.Platform.CreateServiceAccountRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]])
 ToolUp.Platform.CreateServiceAccountRequest.DisplayName : System.String { get }
@@ -5103,10 +5185,10 @@ ToolUp.Platform.EmailContent+TemplatedEmail (class)
 ToolUp.Platform.EmailContent+TemplatedEmail.templateId : System.String { get }
 ToolUp.Platform.EmailContent+TemplatedEmail.variables : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.EmailEnvelope (class)
-ToolUp.Platform.EmailEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EmailContent, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.EmailEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], ToolUp.Platform.EmailContent, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.EmailEnvelope.Content : ToolUp.Platform.EmailContent { get }
 ToolUp.Platform.EmailEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.EmailEnvelope.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EmailEnvelope.Recipients : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId] { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload (class)
 ToolUp.Platform.EncryptionKeyDestroyAckPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.AcknowledgedAt : System.DateTimeOffset { get }
@@ -5954,6 +6036,76 @@ ToolUp.Platform.ExternalComputeMode.Tag : System.Int32 { get }
 ToolUp.Platform.ExternalComputeMode+Tags (class)
 ToolUp.Platform.ExternalComputeMode+Tags.CustomExternalCompute : System.Int32 (literal)
 ToolUp.Platform.ExternalComputeMode+Tags.NoExternalCompute : System.Int32 (literal)
+ToolUp.Platform.ExternalContact (class)
+ToolUp.Platform.ExternalContact..ctor(System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ContactOwner, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ExternalContact.CreatedAt : System.DateTime { get }
+ToolUp.Platform.ExternalContact.DisplayName : System.String { get }
+ToolUp.Platform.ExternalContact.Id : System.String { get }
+ToolUp.Platform.ExternalContact.LastInboundUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.ExternalContact.Notes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalContact.OptIns : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord] { get }
+ToolUp.Platform.ExternalContact.OptionalEmailAddress : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalContact.OptionalPhoneNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalContact.OptionalWhatsAppNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ExternalContact.Owner : ToolUp.Platform.ContactOwner { get }
+ToolUp.Platform.ExternalContact.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ExternalContact.Type : System.String { get }
+ToolUp.Platform.ExternalContact.Version : System.Int32 { get }
+ToolUp.Platform.ExternalContactApi (class)
+ToolUp.Platform.ExternalContactApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.ExternalContactError (class)
+ToolUp.Platform.ExternalContactError.IsDuplicate : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.IsInvalidShape : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.IsNotFound : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.IsScopeMismatch : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.IsStorageFailed : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.IsUnknownChannel : System.Boolean { get }
+ToolUp.Platform.ExternalContactError.NotFound : ToolUp.Platform.ExternalContactError { get }
+ToolUp.Platform.ExternalContactError.ScopeMismatch : ToolUp.Platform.ExternalContactError { get }
+ToolUp.Platform.ExternalContactError.Tag : System.Int32 { get }
+ToolUp.Platform.ExternalContactError+Duplicate (class)
+ToolUp.Platform.ExternalContactError+Duplicate.existingContactId : System.String { get }
+ToolUp.Platform.ExternalContactError+InvalidShape (class)
+ToolUp.Platform.ExternalContactError+InvalidShape.reason : System.String { get }
+ToolUp.Platform.ExternalContactError+StorageFailed (class)
+ToolUp.Platform.ExternalContactError+StorageFailed.message : System.String { get }
+ToolUp.Platform.ExternalContactError+Tags (class)
+ToolUp.Platform.ExternalContactError+Tags.Duplicate : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+Tags.InvalidShape : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+Tags.NotFound : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+Tags.ScopeMismatch : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+Tags.StorageFailed : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+Tags.UnknownChannel : System.Int32 (literal)
+ToolUp.Platform.ExternalContactError+UnknownChannel (class)
+ToolUp.Platform.ExternalContactError+UnknownChannel.wire : System.String { get }
+ToolUp.Platform.ExternalContactErrorModule (class)
+ToolUp.Platform.ExternalContactErrorModule.describe(ToolUp.Platform.ExternalContactError) : System.String
+ToolUp.Platform.ExternalContactModule (class)
+ToolUp.Platform.ExternalContactModule.EntityType : System.String (literal)
+ToolUp.Platform.ExternalContactModule.IndexEmail : System.String (literal)
+ToolUp.Platform.ExternalContactModule.IndexOwner : System.String (literal)
+ToolUp.Platform.ExternalContactModule.IndexPhone : System.String (literal)
+ToolUp.Platform.ExternalContactModule.UnsetIndexValue : System.String (literal)
+ToolUp.Platform.ExternalContactModule.coerce(ToolUp.Platform.ExternalContact) : ToolUp.Platform.ExternalContact
+ToolUp.Platform.ExternalContactModule.emailIndexValue(ToolUp.Platform.ExternalContact) : System.String
+ToolUp.Platform.ExternalContactModule.hasLiveOptIn(System.DateTime, ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.ExternalContact) : System.Boolean
+ToolUp.Platform.ExternalContactModule.normaliseEmail(System.String) : System.String
+ToolUp.Platform.ExternalContactModule.normalisePhone(System.String) : System.String
+ToolUp.Platform.ExternalContactModule.optInFor(ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.ExternalContact) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OptInRecord]
+ToolUp.Platform.ExternalContactModule.ownerIndexValue(ToolUp.Platform.ExternalContact) : System.String
+ToolUp.Platform.ExternalContactModule.phoneIndexValue(ToolUp.Platform.ExternalContact) : System.String
+ToolUp.Platform.ExternalContactModule.validate(ToolUp.Platform.ExternalContact) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]
+ToolUp.Platform.ExternalContactModule.withOptIn(ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord, ToolUp.Platform.ExternalContact) : ToolUp.Platform.ExternalContact
+ToolUp.Platform.ExternalContactModule.withoutOptIn(ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.ExternalContact) : ToolUp.Platform.ExternalContact
+ToolUp.Platform.ExternalContactStoreMode (class)
+ToolUp.Platform.ExternalContactStoreMode.EnabledExternalContactStore : ToolUp.Platform.ExternalContactStoreMode { get }
+ToolUp.Platform.ExternalContactStoreMode.IsEnabledExternalContactStore : System.Boolean { get }
+ToolUp.Platform.ExternalContactStoreMode.IsNoExternalContactStore : System.Boolean { get }
+ToolUp.Platform.ExternalContactStoreMode.NoExternalContactStore : ToolUp.Platform.ExternalContactStoreMode { get }
+ToolUp.Platform.ExternalContactStoreMode.Tag : System.Int32 { get }
+ToolUp.Platform.ExternalContactStoreMode+Tags (class)
+ToolUp.Platform.ExternalContactStoreMode+Tags.EnabledExternalContactStore : System.Int32 (literal)
+ToolUp.Platform.ExternalContactStoreMode+Tags.NoExternalContactStore : System.Int32 (literal)
 ToolUp.Platform.ExternalHandle (class)
 ToolUp.Platform.ExternalHandle..ctor(System.Guid, System.String, System.String, System.String, System.DateTime)
 ToolUp.Platform.ExternalHandle.Backend : System.String { get }
@@ -6812,6 +6964,16 @@ ToolUp.Platform.IEventStoreDecorator.DecoratorPurpose : System.String { get }
 ToolUp.Platform.IEventStoreDecorator.InnerStore : ToolUp.Platform.IEventStore { get }
 ToolUp.Platform.IEvidencePackGenerator (interface)
 ToolUp.Platform.IEvidencePackGenerator.Generate(ToolUp.Platform.EvidencePackRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidencePackResult, ToolUp.Platform.EvidencePackError]]
+ToolUp.Platform.IExternalContactApi (class)
+ToolUp.Platform.IExternalContactApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateExternalContactRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.UpdateExternalContactRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RecordOptInRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WithdrawOptInRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]])
+ToolUp.Platform.IExternalContactApi.CreateContact : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateExternalContactRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.DeleteContact : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.GetContact : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.ListContacts : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact], System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.RecordInbound : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.RecordOptIn : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RecordOptInRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.UpdateContact : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.UpdateExternalContactRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
+ToolUp.Platform.IExternalContactApi.WithdrawOptIn : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.WithdrawOptInRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, System.String]]] { get }
 ToolUp.Platform.IFeatureFlagApi (class)
 ToolUp.Platform.IFeatureFlagApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.FlagValue], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.IFeatureFlagApi.ClearOverride : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
@@ -9132,6 +9294,14 @@ ToolUp.Platform.NotificationDeliveryFailedPayload.Provider : System.String { get
 ToolUp.Platform.NotificationDeliveryFailedPayload.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.ScopeId : System.String { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.UserId : System.String { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload (class)
+ToolUp.Platform.NotificationDeliveryRefusedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.NotificationDeliveryRefusedPayload.ContactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload.NotificationKind : System.String { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload.Reason : System.String { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload.RecipientHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.NotificationDeliveryRefusedPayload.ScopeId : System.String { get }
 ToolUp.Platform.NotificationEnvelope (class)
 ToolUp.Platform.NotificationEnvelope..ctor(System.Guid, System.DateTime, System.String, ToolUp.Platform.Notification, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.NotificationEnvelope.Id : System.Guid { get }
@@ -9482,6 +9652,14 @@ ToolUp.Platform.OffboardConfirmationMode+Tags.TokenConfirmation : System.Int32 (
 ToolUp.Platform.OffboardConfirmationMode+Tags.TwoPersonRule : System.Int32 (literal)
 ToolUp.Platform.OffboardConfirmationModeModule (class)
 ToolUp.Platform.OffboardConfirmationModeModule.requiresToken(ToolUp.Platform.OffboardConfirmationMode) : System.Boolean
+ToolUp.Platform.OptInRecord (class)
+ToolUp.Platform.OptInRecord..ctor(System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.OptInRecord.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.OptInRecord.GrantedAt : System.DateTime { get }
+ToolUp.Platform.OptInRecord.Source : System.String { get }
+ToolUp.Platform.OptInRecordModule (class)
+ToolUp.Platform.OptInRecordModule.granted(System.String, System.DateTime) : ToolUp.Platform.OptInRecord
+ToolUp.Platform.OptInRecordModule.isLiveAt(System.DateTime, ToolUp.Platform.OptInRecord) : System.Boolean
 ToolUp.Platform.OrphanSweepCompletedPayload (class)
 ToolUp.Platform.OrphanSweepCompletedPayload..ctor(System.String, System.Int32, System.Int32, System.Int64, System.Int32, System.Int64, System.Int32)
 ToolUp.Platform.OrphanSweepCompletedPayload.DeferredCount : System.Int32 { get }
@@ -10156,11 +10334,11 @@ ToolUp.Platform.PublisherKeyId.id : System.String { get }
 ToolUp.Platform.PublisherKeyIdModule (class)
 ToolUp.Platform.PublisherKeyIdModule.value(ToolUp.Platform.PublisherKeyId) : System.String
 ToolUp.Platform.PushEnvelope (class)
-ToolUp.Platform.PushEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.PushEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.PushEnvelope.Body : System.String { get }
 ToolUp.Platform.PushEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.PushEnvelope.DeepLink : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.PushEnvelope.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PushEnvelope.Recipients : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId] { get }
 ToolUp.Platform.PushEnvelope.Title : System.String { get }
 ToolUp.Platform.PushToken (class)
 ToolUp.Platform.PushToken..ctor(System.String, System.String)
@@ -10370,6 +10548,31 @@ ToolUp.Platform.RecentAIDenial.ActiveModule : System.String { get }
 ToolUp.Platform.RecentAIDenial.OccurredAt : System.DateTime { get }
 ToolUp.Platform.RecentAIDenial.Reason : System.String { get }
 ToolUp.Platform.RecentAIDenial.ToolName : System.String { get }
+ToolUp.Platform.RecipientId (class)
+ToolUp.Platform.RecipientId.IsExternal : System.Boolean { get }
+ToolUp.Platform.RecipientId.IsUser : System.Boolean { get }
+ToolUp.Platform.RecipientId.Tag : System.Int32 { get }
+ToolUp.Platform.RecipientId+External (class)
+ToolUp.Platform.RecipientId+External.contactId : System.String { get }
+ToolUp.Platform.RecipientId+Tags (class)
+ToolUp.Platform.RecipientId+Tags.External : System.Int32 (literal)
+ToolUp.Platform.RecipientId+Tags.User : System.Int32 (literal)
+ToolUp.Platform.RecipientId+User (class)
+ToolUp.Platform.RecipientId+User.userId : System.String { get }
+ToolUp.Platform.RecipientIdModule (class)
+ToolUp.Platform.RecipientIdModule.contactIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.RecipientIdModule.ofUserId(System.String) : ToolUp.Platform.RecipientId
+ToolUp.Platform.RecipientIdModule.ofUserIds(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]
+ToolUp.Platform.RecipientIdModule.toAuditString(ToolUp.Platform.RecipientId) : System.String
+ToolUp.Platform.RecipientIdModule.toWireString(ToolUp.Platform.RecipientId) : System.String
+ToolUp.Platform.RecipientIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RecipientId]
+ToolUp.Platform.RecipientIdModule.userIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.RecordOptInRequest (class)
+ToolUp.Platform.RecordOptInRequest..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.RecordOptInRequest.Channel : System.String { get }
+ToolUp.Platform.RecordOptInRequest.ContactId : System.String { get }
+ToolUp.Platform.RecordOptInRequest.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.RecordOptInRequest.Source : System.String { get }
 ToolUp.Platform.RegexAttribute (class)
 ToolUp.Platform.RegexAttribute..ctor(System.String)
 ToolUp.Platform.RegexAttribute.Pattern : System.String { get }
@@ -10828,7 +11031,7 @@ ToolUp.Platform.SeedDataMode+Tags.EnabledSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.ForcedSeedData : System.Int32 (literal)
 ToolUp.Platform.SeedDataMode+Tags.NoSeedData : System.Int32 (literal)
 ToolUp.Platform.ServerConfig (class)
-ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.NotificationPreferenceMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, System.Boolean, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.CrdtDocumentMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, ToolUp.Platform.BackupMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.Boolean, ToolUp.Platform.LogStoreMode, ToolUp.Platform.MetricsHistoryMode)
+ToolUp.Platform.ServerConfig..ctor(System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EventStoreMode, ToolUp.Platform.PlatformKnowledgeBaseMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleConfigEntry], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ModuleBindingTrustConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, ToolUp.Platform.StaticPathBehaviour, System.TimeSpan, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.RateLimitConfig, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.LineageStoreMode, ToolUp.Platform.JobSchedulerMode, ToolUp.Platform.JobProgressMode, System.Boolean, System.Boolean, ToolUp.Platform.ShareTokenStoreMode, ToolUp.Platform.ServiceAccountStoreMode, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataIngestionMode, ToolUp.Platform.ColumnMappingMode, ToolUp.Platform.MappingDryRunPolicy, ToolUp.Platform.OAuthRefresherMode, ToolUp.Platform.OAuth1aMode, ToolUp.Platform.EntityStoreMode, ToolUp.Platform.EntityOutboxMode, ToolUp.Platform.SeedDataMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.EntityGraphProjectionMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DataMigrationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.ModelFittingMode, ToolUp.Platform.ModelExecutionApiMode, ToolUp.Platform.ExternalComputeMode, ToolUp.Platform.ComputeBudgetMode, ToolUp.Platform.TelemetrySinkMode, ToolUp.Platform.UsageMeteringMode, ToolUp.Platform.MetricsEndpointMode, ToolUp.Platform.MetricsSinkConfig, ToolUp.Platform.WebhookMode, ToolUp.Platform.AuditLogMode, ToolUp.Platform.AuditSamplingPolicy, ToolUp.Platform.AuditFailurePolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.NotificationMode, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.SecurityHardeningMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CorsConfig], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.NotificationPreferenceMode, ToolUp.Platform.ExternalContactStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.LogLevel, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.SseAuthMode, ToolUp.Platform.AuthCookieIssuanceMode, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Double, System.Boolean, ToolUp.Platform.DataSubjectRequestMode, ToolUp.Platform.ConfigDriftDetectionMode, ToolUp.Platform.RateLimiterMode, System.TimeSpan, ToolUp.Platform.SmokeTestMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.PublicRenderingMode, ToolUp.Platform.AssetStoreMode, ToolUp.Platform.MediaLibraryMode, ToolUp.Platform.DeployPlaneMode, ToolUp.Platform.ServerlessHostMode, ToolUp.Platform.ProcessProfile, ToolUp.Platform.RateLimitStoreMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RouteLimit], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.ResourceEnvelope], ToolUp.Platform.ConsentAuditMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.AdAnalyticsMode, ToolUp.Platform.TeamCreationPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.DirectAddIdentityProof, ToolUp.Platform.Narrative.NarrativeRetentionPolicy, ToolUp.Platform.PeerSubstrateMode, ToolUp.Platform.UserSchemaAuthoringMode, ToolUp.Platform.FactStoreMode, ToolUp.Platform.TenantLifecycleMode, ToolUp.Platform.OffboardConfirmationMode, ToolUp.Platform.DeploymentReadinessMode, ToolUp.Platform.DeploymentVerificationMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LocaleCode], ToolUp.Platform.I18nCoverageMode, ToolUp.Platform.PresenceMode, ToolUp.Platform.CrdtDocumentMode, ToolUp.Platform.ModuleVisibilityMode, ToolUp.Platform.AdminMutationPolicy, ToolUp.Platform.GrantConsentMode, ToolUp.Platform.BackupMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataVocabularyPack], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VocabularyEntry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.Boolean, ToolUp.Platform.LogStoreMode, ToolUp.Platform.MetricsHistoryMode)
 ToolUp.Platform.ServerConfig.AcceptAnonymousModeWithAI : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralRagIndex : System.Boolean { get }
 ToolUp.Platform.ServerConfig.AcceptEphemeralShareTokenKey : System.Boolean { get }
@@ -10890,6 +11093,7 @@ ToolUp.Platform.ServerConfig.EventStore : ToolUp.Platform.EventStoreMode { get }
 ToolUp.Platform.ServerConfig.EventTriggerCatchUp : System.Boolean { get }
 ToolUp.Platform.ServerConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.ServerConfig.ExternalCompute : ToolUp.Platform.ExternalComputeMode { get }
+ToolUp.Platform.ServerConfig.ExternalContactStore : ToolUp.Platform.ExternalContactStoreMode { get }
 ToolUp.Platform.ServerConfig.FactStore : ToolUp.Platform.FactStoreMode { get }
 ToolUp.Platform.ServerConfig.FeatureFlags : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag] { get }
 ToolUp.Platform.ServerConfig.GrantConsent : ToolUp.Platform.GrantConsentMode { get }
@@ -11437,10 +11641,10 @@ ToolUp.Platform.SmokeTests+SmokeTest.AuditSourceModule : System.String (literal)
 ToolUp.Platform.SmokeTests+SmokeTest.SentinelScope : System.String (literal)
 ToolUp.Platform.SmokeTests+SmokeTest.defaultTimeout : System.TimeSpan { get }
 ToolUp.Platform.SmsEnvelope (class)
-ToolUp.Platform.SmsEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.SmsEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.SmsEnvelope.Body : System.String { get }
 ToolUp.Platform.SmsEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.SmsEnvelope.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SmsEnvelope.Recipients : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId] { get }
 ToolUp.Platform.SnapshotFidelity (class)
 ToolUp.Platform.SnapshotFidelity.Approximate : ToolUp.Platform.SnapshotFidelity { get }
 ToolUp.Platform.SnapshotFidelity.Exact : ToolUp.Platform.SnapshotFidelity { get }
@@ -12356,6 +12560,15 @@ ToolUp.Platform.UnconsentedGrantRefusedPayload.DeclaredPolicy : System.String { 
 ToolUp.Platform.UnconsentedGrantRefusedPayload.InertReason : System.String { get }
 ToolUp.Platform.UnconsentedGrantRefusedPayload.ModuleName : System.String { get }
 ToolUp.Platform.UnconsentedGrantRefusedPayload.UserId : System.String { get }
+ToolUp.Platform.UpdateExternalContactRequest (class)
+ToolUp.Platform.UpdateExternalContactRequest..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.UpdateExternalContactRequest.ContactId : System.String { get }
+ToolUp.Platform.UpdateExternalContactRequest.DisplayName : System.String { get }
+ToolUp.Platform.UpdateExternalContactRequest.EmailAddress : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.UpdateExternalContactRequest.Notes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.UpdateExternalContactRequest.PhoneNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.UpdateExternalContactRequest.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.UpdateExternalContactRequest.WhatsAppNumber : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.UpstreamReleaseCoverage (class)
 ToolUp.Platform.UpstreamReleaseCoverage.IsCovered : System.Boolean { get }
 ToolUp.Platform.UpstreamReleaseCoverage.IsNotCovered : System.Boolean { get }
@@ -13165,6 +13378,11 @@ ToolUp.Platform.WireWithheldNode..ctor(System.String, ToolUp.Platform.WireProven
 ToolUp.Platform.WireWithheldNode.Id : System.String { get }
 ToolUp.Platform.WireWithheldNode.Kind : ToolUp.Platform.WireProvenanceNodeKind { get }
 ToolUp.Platform.WireWithheldNode.PolicyRef : System.String { get }
+ToolUp.Platform.WithdrawOptInRequest (class)
+ToolUp.Platform.WithdrawOptInRequest..ctor(System.String, System.String, System.String)
+ToolUp.Platform.WithdrawOptInRequest.Channel : System.String { get }
+ToolUp.Platform.WithdrawOptInRequest.ContactId : System.String { get }
+ToolUp.Platform.WithdrawOptInRequest.Reason : System.String { get }
 ToolUp.Platform.WithheldWorkRecord (class)
 ToolUp.Platform.WithheldWorkRecord..ctor(ToolUp.Platform.WorkRecordRef, ToolUp.Platform.WorkRecordKind, System.String)
 ToolUp.Platform.WithheldWorkRecord.Kind : ToolUp.Platform.WorkRecordKind { get }
@@ -13794,6 +14012,7 @@ ToolUp.Remoting.PlatformDecoders.compositionView : Microsoft.FSharp.Core.FSharpF
 ToolUp.Remoting.PlatformDecoders.computeBudgetDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBudgetDenial, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.configFieldKind : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldKind, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.configFieldSchema : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldSchema, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.contactOwner : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ContactOwner, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.conversion : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+Conversion, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.conversionRecord : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+ConversionRecord, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.covered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -13833,6 +14052,7 @@ ToolUp.Remoting.PlatformDecoders.erasureSummary : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Remoting.PlatformDecoders.exportSignature : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportSignature, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.exportStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.exportThenDeprovisionResult : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.externalContact : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.externalHandle : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.fallbackChain : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FallbackChain, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.featureFlag : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FeatureFlag, ToolUp.Remoting.DecodeError]] { get }
@@ -13909,6 +14129,7 @@ ToolUp.Remoting.PlatformDecoders.notificationCategory : Microsoft.FSharp.Core.FS
 ToolUp.Remoting.PlatformDecoders.notificationPreferenceView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationPreferenceView, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.oAuthRefreshOutcome : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OAuthRefreshOutcome, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.offboardConfirmation : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.optInRecord : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OptInRecord, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.overallStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OverallStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.partyRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PartyRef, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.pendingInviteByEmail : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PendingInviteByEmail, ToolUp.Remoting.DecodeError]] { get }
@@ -13930,6 +14151,7 @@ ToolUp.Remoting.PlatformDecoders.providerHealth : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Remoting.PlatformDecoders.providerHealthStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealthStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.providerOrigin : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Usage.ProviderOrigin, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.providerProfileView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.pushVariant : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+PushVariant, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.quietHours : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.QuietHours, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.readinessVerdict : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReadinessVerdict, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.recentAIDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RecentAIDenial, ToolUp.Remoting.DecodeError]] { get }
@@ -13950,6 +14172,7 @@ ToolUp.Remoting.PlatformDecoders.sessionRecord : Microsoft.FSharp.Core.FSharpFun
 ToolUp.Remoting.PlatformDecoders.sessionStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SessionStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.sessionStoreInfo : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+SessionStoreInfo, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.signedExportEnvelope : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SignedExportEnvelope, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.sinkKind : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.smokeSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.sourceStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SourceStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.statusSeverity : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StatusSeverity, ToolUp.Remoting.DecodeError]] { get }

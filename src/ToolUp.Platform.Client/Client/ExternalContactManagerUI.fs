@@ -47,12 +47,19 @@ type View =
 /// The add/edit form's fields, shared by both because they edit the
 /// same shape. `EditingId` distinguishes them: `None` is a new contact.
 type ContactForm = {
+    /// `None` while adding; the contact being edited otherwise.
     EditingId: string option
+    /// The human label. Required.
     DisplayName: string
+    /// RFC 5321 email, blank when none.
     Email: string
+    /// E.164 phone, blank when none.
     Phone: string
+    /// E.164 WhatsApp number, blank when none.
     WhatsApp: string
+    /// Comma-separated grouping labels, split on submit.
     Tags: string
+    /// Operator notes; never sent anywhere.
     Notes: string
 }
 
@@ -114,41 +121,73 @@ module ContactForm =
 
 /// The consent the operator is about to assert. `Source` is required —
 /// see the module preamble.
-type OptInDraft = { Channel: string; Source: string }
+type OptInDraft = {
+    /// The channel in `NotificationKind.SinkKind` wire form.
+    Channel: string
+    /// The Article 7(1) evidence. Blank keeps the record action disabled.
+    Source: string
+}
 
 module OptInDraft =
     let empty: OptInDraft = { Channel = "Email"; Source = "" }
 
 type Model = {
+    /// Every contact in the caller's scope, as last loaded.
     Contacts: ExternalContact list
+    /// Which screen is showing.
     CurrentView: View
     /// Open when the operator is adding or editing; `None` otherwise.
     Form: ContactForm option
     /// The consent being drafted on the open contact.
     OptIn: OptInDraft
+    /// `false` until the first load settles, so the empty state is not
+    /// shown while the list is still in flight.
     Loaded: bool
+    /// A call is outstanding.
     Busy: bool
+    /// The last failure, shown in the banner until dismissed.
     Error: string option
 }
 
+/// Everything the module can be asked to do. Every remoting call is a
+/// request / response pair, and every response carries a `Result` so a
+/// failure lands in the banner rather than in an exception.
 type Msg =
+    /// Re-read the contact list.
     | LoadContacts
+    /// The list came back.
     | ContactsLoaded of Result<ExternalContact list, string>
+    /// Show one contact's detail.
     | OpenContact of string
+    /// Return to the list.
     | BackToList
+    /// Open a blank add form.
     | StartAdd
+    /// Open the edit form over an existing contact.
     | StartEdit of string
+    /// Close the form without saving.
     | CancelForm
+    /// Apply one edit to the open form.
     | SetFormField of (ContactForm -> ContactForm)
+    /// Create or update, depending on `ContactForm.EditingId`.
     | SubmitForm
+    /// The create or update came back.
     | ContactSaved of Result<ExternalContact, string>
+    /// Delete a contact and every consent it carried.
     | DeleteContact of string
+    /// The delete came back.
     | ContactDeleted of Result<unit, string>
+    /// Pick the channel the drafted consent is for.
     | SetOptInChannel of string
+    /// Type the drafted consent's evidence.
     | SetOptInSource of string
+    /// Record the drafted consent. Ignored while the source is blank.
     | RecordOptIn of string
+    /// Withdraw one channel's consent.
     | WithdrawOptIn of contactId: string * channel: string
+    /// A consent record or withdrawal came back.
     | OptInChanged of Result<ExternalContact, string>
+    /// Clear the error banner.
     | DismissError
 
 // ─── API proxy ───────────────────────────────────────────────────────
