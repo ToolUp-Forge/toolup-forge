@@ -61,6 +61,10 @@
         <Compile Include="Contracts\IFeatureFlagStoreContract.fs" />
         <Compile Include="Contracts\INotificationChannelContract.fs" />
         <Compile Include="Contracts\INotificationSinkContract.fs" />
+        <!-- Phase 827 - the IWhatsAppTemplateRegistry contract pack. Bound by
+             the blob-backed default and by an independent in-memory double
+             in InProcess\WhatsAppChannelTests.fs. -->
+        <Compile Include="Contracts\IWhatsAppTemplateRegistryContract.fs" />
         <Compile Include="Contracts\INotificationAddressBookContract.fs" />
         <Compile Include="Contracts\IExternalContactStoreContract.fs" />
         <Compile Include="Contracts\IHealthCheckContract.fs" />

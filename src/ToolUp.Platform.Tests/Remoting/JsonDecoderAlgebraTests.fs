@@ -119,6 +119,33 @@ let private envelope: JsonDecoder<ApiEnvelope> =
     |> JsonDecode.apply (JsonDecode.field "Flags" (JsonDecode.asSet JsonDecode.asString))
     |> JsonDecode.apply (JsonDecode.field "Payload" JsonDecode.asBytes)
 
+/// Phase 827 — the two-case union a `TemplatedMessage` carries a list
+/// of; each case one string, written `{"PlatformMember": "…"}`.
+let private addressee: JsonDecoder<Addressee> =
+    JsonDecode.union "Addressee" (function
+        | "PlatformMember" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map PlatformMember))
+        | "ExternalAddressee" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ExternalAddressee))
+        | _ -> None)
+
+/// Phase 827 — the corpus's local mirror of the WhatsApp envelope.
+let private templatedMessage: JsonDecoder<TemplatedMessage> =
+    JsonDecode.succeed (fun recipients templateName templateLanguage parameters body metadata correlationId -> {
+        Recipients = recipients
+        TemplateName = templateName
+        TemplateLanguage = templateLanguage
+        TemplateParameters = parameters
+        Body = body
+        Metadata = metadata
+        CorrelationId = correlationId
+    })
+    |> JsonDecode.apply (JsonDecode.field "Recipients" (JsonDecode.list addressee))
+    |> JsonDecode.apply (JsonDecode.optionalField "TemplateName" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.optionalField "TemplateLanguage" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.field "TemplateParameters" (JsonDecode.list JsonDecode.asString))
+    |> JsonDecode.apply (JsonDecode.optionalField "Body" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.field "Metadata" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
+    |> JsonDecode.apply (JsonDecode.optionalField "CorrelationId" JsonDecode.asString)
+
 /// The recursive union, eta-expanded as the generator emits it.
 let rec private tree: JsonDecoder<Tree> =
     fun value ->
@@ -203,6 +230,7 @@ let private covered: (Type * RegisteredJsonDecoder) list = [
     entry consignment
     entry envelope
     entry tree
+    entry templatedMessage
 ]
 
 let private tryAlgebra (target: Type) =

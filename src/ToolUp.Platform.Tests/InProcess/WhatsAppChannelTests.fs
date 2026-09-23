@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.InProcess.WhatsAppChannelTests
 open System
 open System.Collections.Concurrent
 open System.Text
+open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
 open Expecto
@@ -14,6 +15,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.EntityStore
 open ToolUp.Platform.Tracing
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
@@ -245,6 +247,8 @@ let private withReminder () =
 let private whatsAppWire =
     NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.WhatsApp
 
+let private templateJson = FableConverters.create ()
+
 let private seedBlob (storage: IBlobStorage) (name: string) (json: string) = async {
     match! storage.Upload("_platform", WhatsAppTemplateRegistry.blobName name, Encoding.UTF8.GetBytes json) with
     | Ok _ -> ()
@@ -322,6 +326,23 @@ let tests =
                 (RecipientId.User "u-1")
                 INotificationSinkContract.FreeFormOnly
         ]
+
+        // The registry contract pack, bound by the shipped blob-backed
+        // default and by an independent in-memory double, so a law only
+        // one of them happens to satisfy is a law the next backend gets
+        // wrong.
+        IWhatsAppTemplateRegistryContract.tests "BlobWhatsAppTemplateRegistry" (fun templates -> async {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+
+            for template in templates do
+                do! seedBlob storage template.Name (JsonSerializer.Serialize(template, templateJson))
+
+            return WhatsAppTemplateRegistry.blobBacked storage None
+        })
+
+        IWhatsAppTemplateRegistryContract.tests "InMemoryTemplateRegistry" (fun templates -> async {
+            return InMemoryTemplateRegistry templates :> IWhatsAppTemplateRegistry
+        })
 
         testList "IWhatsAppTemplateRegistry defaults" [
             testCaseAsync "the no-op registry knows no template"
