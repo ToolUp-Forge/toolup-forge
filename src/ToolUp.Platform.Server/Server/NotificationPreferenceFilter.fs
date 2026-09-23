@@ -167,6 +167,7 @@ module NotificationPreferenceFilter =
         | TransactionalEmail e -> e.Recipients, e.CorrelationId
         | TransactionalSms s -> s.Recipients, s.CorrelationId
         | MobilePush p -> p.Recipients, p.CorrelationId
+        | TransactionalWhatsApp w -> w.Recipients, w.CorrelationId
         | _ -> [], None
 
     /// The recipients this filter has anything to say about: platform
@@ -199,6 +200,7 @@ module NotificationPreferenceFilter =
         | TransactionalEmail e -> TransactionalEmail { e with Recipients = recipients }
         | TransactionalSms s -> TransactionalSms { s with Recipients = recipients }
         | MobilePush p -> MobilePush { p with Recipients = recipients }
+        | TransactionalWhatsApp w -> TransactionalWhatsApp { w with Recipients = recipients }
         | other -> other
 
     /// `SHA256(userId)[..8]` — the same PII-free correlation token the

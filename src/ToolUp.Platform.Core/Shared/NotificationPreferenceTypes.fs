@@ -107,6 +107,11 @@ module PreferenceChannel =
         | TransactionalEmail _ -> Some PreferenceChannel.Email
         | TransactionalSms _ -> Some PreferenceChannel.Sms
         | MobilePush _ -> Some PreferenceChannel.Push
+        // Phase 827 — WhatsApp has no preference family yet, so it is
+        // not governed (and never digest-held: a held free-form send
+        // could be released after the 24-hour window it was admitted
+        // in had closed).
+        | TransactionalWhatsApp _ -> None
         | _ -> None
 
 /// A daily window during which `Immediate` sends are deferred to the

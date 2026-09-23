@@ -206,6 +206,20 @@ let buildNotifications (rule: AlertRule) : (string * Notification) list =
                         DeepLink = None
                         CorrelationId = correlationId
                     }
+                // Phase 827 — a free-form body, like the SMS arm. An
+                // alert has no approved template to name, so once
+                // recipient targeting lands every recipient outside the
+                // 24-hour window is refused server-side, audited.
+                | NotificationKind.SinkKind.WhatsApp ->
+                    TransactionalWhatsApp {
+                        Recipients = []
+                        TemplateName = None
+                        TemplateLanguage = None
+                        TemplateParameters = []
+                        Body = Some body
+                        Metadata = Map.empty
+                        CorrelationId = correlationId
+                    }
 
             NotificationKind.PlatformReservedScope, notification)
 

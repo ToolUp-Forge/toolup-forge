@@ -530,6 +530,30 @@ let registerTransactionalDispatcher
         for sink in transactionalSinks do
             services.AddSingleton<INotificationSink>(sink) |> ignore
 
+        // Phase 827 — a WhatsApp sink brings the blob-backed template
+        // registry the send policy consults. `TryAdd`, so a registry the
+        // composition root registered first wins; one registered after
+        // `compose` overrides it the usual way. No WhatsApp sink, no
+        // registration (GP 13).
+        if
+            transactionalSinks
+            |> List.exists (fun sink -> sink.Kind = NotificationKind.SinkKind.WhatsApp)
+        then
+            Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<
+                IWhatsAppTemplateRegistry
+             >(
+                services,
+                (fun (sp: System.IServiceProvider) ->
+                    let storage = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+
+                    let logger =
+                        match sp.GetService(typeof<ILogger>) with
+                        | :? ILogger as l -> Some l
+                        | _ -> None
+
+                    WhatsAppTemplateRegistry.blobBacked storage logger)
+            )
+
 /// Phase 9t — the `DegradeToFile` audit-spill replay drain. Registered
 /// only when the deployment opted into the policy (and audit is on) —
 /// every other policy pays nothing (GP 13). Gated by

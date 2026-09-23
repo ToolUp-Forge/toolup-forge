@@ -84,6 +84,7 @@ type ExternalContactConsentFilter
         | TransactionalEmail _, NotificationKind.SinkKind.Email -> true
         | TransactionalSms _, NotificationKind.SinkKind.Sms -> true
         | MobilePush _, NotificationKind.SinkKind.Push _ -> true
+        | TransactionalWhatsApp _, NotificationKind.SinkKind.WhatsApp -> true
         | _ -> false
 
     /// The sink-kind label the refusal row carries. A push envelope has
@@ -94,6 +95,7 @@ type ExternalContactConsentFilter
         | TransactionalEmail _ -> NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.Email
         | TransactionalSms _ -> NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.Sms
         | MobilePush _ -> "Push"
+        | TransactionalWhatsApp _ -> NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.WhatsApp
         | other -> NotificationKind.ofNotification other
 
     /// `true` when `contactId` holds a live consent covering

@@ -982,9 +982,10 @@ type NotificationDeliveryRefusedPayload = {
     NotificationKind: string
     /// The scope the send was published in.
     ScopeId: string
-    /// Why the send was refused. `"no_opt_in"` is the only reason the
-    /// SDK emits today; the field is a string so a channel arm can
-    /// name its own without a DU change reaching every consumer.
+    /// Why the send was refused. `"no_opt_in"` for a missing consent;
+    /// the WhatsApp arm (Phase 827) adds its own — the 24-hour window
+    /// and the template checks. The field is a string so a channel arm
+    /// can name its own without a DU change reaching every consumer.
     Reason: string
     /// `SHA256(RecipientId.toWireString)[..8]` per refused recipient —
     /// the same PII-free correlation token the dispatcher's skip rows

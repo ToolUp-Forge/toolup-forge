@@ -32,11 +32,14 @@ let private deliverableChannels (ctx: HttpContext) : PreferenceChannel list =
 
     let family (kind: NotificationKind.SinkKind) =
         match kind with
-        | NotificationKind.SinkKind.Email -> PreferenceChannel.Email
-        | NotificationKind.SinkKind.Sms -> PreferenceChannel.Sms
-        | NotificationKind.SinkKind.Push _ -> PreferenceChannel.Push
+        | NotificationKind.SinkKind.Email -> Some PreferenceChannel.Email
+        | NotificationKind.SinkKind.Sms -> Some PreferenceChannel.Sms
+        | NotificationKind.SinkKind.Push _ -> Some PreferenceChannel.Push
+        // Phase 827 — WhatsApp has no preference family, so a WhatsApp
+        // sink adds no matrix column.
+        | NotificationKind.SinkKind.WhatsApp -> None
 
-    let present = registered |> List.map family |> Set.ofList
+    let present = registered |> List.choose family |> Set.ofList
     PreferenceChannel.all |> List.filter present.Contains
 
 /// Build the per-request `INotificationPreferenceApi` over the

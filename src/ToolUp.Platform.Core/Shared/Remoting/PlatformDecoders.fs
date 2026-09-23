@@ -1072,6 +1072,7 @@ module PlatformDecoders =
             | 0 -> Some(Decode.case0 NotificationKind.SinkKind.Email)
             | 1 -> Some(Decode.case0 NotificationKind.SinkKind.Sms)
             | 2 -> Some(Decode.payload (pushVariant |> Decode.map NotificationKind.SinkKind.Push))
+            | 3 -> Some(Decode.case0 NotificationKind.SinkKind.WhatsApp)
             | _ -> None)
 
     /// Generated decoder for `OptInRecord` — one combinator per field or case, read off the type's own shape.

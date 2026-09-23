@@ -270,6 +270,18 @@ let internal sdkNotificationPrefsSchema: ModuleConfigEntry = {
                 Required = true
                 DefaultJson = "false"
             }
+            // Phase 827 — the WhatsApp kill switch, default off like
+            // every other channel's.
+            {
+                Key = ConfigKeys.NotificationPrefsKeys.WhatsAppEnabled
+                DisplayName = "WhatsApp messages enabled"
+                Description =
+                    Some
+                        "Team-wide kill switch for transactional WhatsApp. WhatsApp is billed per conversation by the upstream vendor, and business-initiated messages must use an approved template; leaving off avoids surprise charges."
+                Kind = ConfigFieldKind.Bool
+                Required = true
+                DefaultJson = "false"
+            }
             // Phase 30d — Schema-only sandbox row cap. Clamps
             // `IDataCatalog.GetSyntheticSample`'s `count` parameter
             // for `ModulePermission.SchemaOnly` callers. Sits on this

@@ -111,6 +111,35 @@ let registerEventStoreChainDevDiagnosticsContributor
         services.AddSingleton<IDevDiagnosticsContributor>(EventStoreChainValidator.contributor eventStore)
         |> ignore
 
+/// Phase 827 — wrap `channel` in `WhatsAppSendPolicyFilter` when the
+/// composed `TransactionalDispatcher` routes `SinkKind.WhatsApp`, over the
+/// registered `IWhatsAppTemplateRegistry` (the no-op, which refuses every
+/// template, when none is registered). With no WhatsApp sink the channel
+/// is returned as-is: no decorator, no allocation (GP 13).
+let internal composeWhatsAppSendPolicy
+    (sp: System.IServiceProvider)
+    (channel: INotificationChannel)
+    (auditLog: IAuditLog)
+    (logger: ILogger)
+    : INotificationChannel =
+    let whatsAppKind =
+        NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.WhatsApp
+
+    match sp.GetService(typeof<TransactionalDispatcher.TransactionalDispatcher>) with
+    | :? TransactionalDispatcher.TransactionalDispatcher as dispatcher when dispatcher.HasSinkForKind whatsAppKind ->
+        let templates =
+            match sp.GetService(typeof<IWhatsAppTemplateRegistry>) with
+            | :? IWhatsAppTemplateRegistry as registry -> registry
+            | _ -> WhatsAppTemplateRegistry.NoOpWhatsAppTemplateRegistry() :> IWhatsAppTemplateRegistry
+
+        let contacts =
+            match sp.GetService(typeof<IExternalContactStore>) with
+            | :? IExternalContactStore as store -> Some store
+            | _ -> None
+
+        WhatsAppSendPolicyFilter(channel, templates, contacts, Some auditLog, logger) :> INotificationChannel
+    | _ -> channel
+
 /// Register the core SDK singletons that every consumer resolves
 /// from DI: logger, dataTypes, blob storage, data-object store, data
 /// catalog, event store, audit log, auth provider, secret store, SSE
@@ -162,11 +191,19 @@ let registerCoreSdkSingletons
         // EXACTLY as before: same instance, no decorator, no allocation
         // (GP 11 + GP 13).
         .AddSingleton<INotificationChannel>(fun (sp: System.IServiceProvider) ->
+            // Phase 827 — the WhatsApp send policy, composed directly
+            // INSIDE the consent gate: consent is answered first, and
+            // only a consented recipient is asked the 24-hour-window
+            // question. Present only when a WhatsApp sink is registered;
+            // otherwise `beneathConsent` IS `resolvedNotificationChannel`.
+            let beneathConsent =
+                composeWhatsAppSendPolicy sp resolvedNotificationChannel auditLog resolvedLogger
+
             match sp.GetService(typeof<IExternalContactStore>) with
             | :? IExternalContactStore as contacts ->
-                ExternalContactConsentFilter(resolvedNotificationChannel, Some contacts, Some auditLog, resolvedLogger)
+                ExternalContactConsentFilter(beneathConsent, Some contacts, Some auditLog, resolvedLogger)
                 :> INotificationChannel
-            | _ -> resolvedNotificationChannel)
+            | _ -> beneathConsent)
         .AddSingleton<INarrativeStore>(narrativeStore)
         // Phase 6f.A — the address book resolves the `External` recipient
         // arm through the same optionally-composed contact store, and

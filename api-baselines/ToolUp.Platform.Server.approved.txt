@@ -6051,6 +6051,8 @@ ToolUp.Platform.IWebhookRegistry.ListSubscriptions(System.String) : Microsoft.FS
 ToolUp.Platform.IWebhookRegistry.RotateSecret(System.String, System.Guid, System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookSubscription, System.String]]
 ToolUp.Platform.IWebhookRegistry.SetConsecutiveFailures(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IWebhookRegistry.UpdateStatus(System.String, System.Guid, ToolUp.Platform.WebhookStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IWhatsAppTemplateRegistry (interface)
+ToolUp.Platform.IWhatsAppTemplateRegistry.GetTemplate(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WhatsAppTemplateDescriptor]]
 ToolUp.Platform.IWorkProvenanceSource (interface)
 ToolUp.Platform.IWorkProvenanceSource.Covering(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkCoverage, System.String]]
 ToolUp.Platform.IWorkProvenanceSource.GetAncestors(ToolUp.Platform.WorkAncestorRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WorkAncestorPage, ToolUp.Platform.WorkProvenanceError]]
@@ -10532,6 +10534,38 @@ ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy..ctor(Microsoft.FSharp.Coll
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy.AllowedHosts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule (class)
 ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicyModule.empty : ToolUp.Platform.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.WhatsAppSendPolicy (class)
+ToolUp.Platform.WhatsAppSendPolicy.CustomerCareWindow : System.TimeSpan { get }
+ToolUp.Platform.WhatsAppSendPolicy.NoContentReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.OutsideWindowReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.TemplateAndBodyReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.TemplateArityReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.TemplateLanguageReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.TemplateUnknownReason : System.String (literal)
+ToolUp.Platform.WhatsAppSendPolicy.checkTemplate(ToolUp.Platform.WhatsAppEnvelope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WhatsAppTemplateDescriptor]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.WhatsAppSendPolicy.isInsideWindow(System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]) : System.Boolean
+ToolUp.Platform.WhatsAppSendPolicyFilter (class)
+ToolUp.Platform.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.WhatsAppTemplateDescriptor (class)
+ToolUp.Platform.WhatsAppTemplateDescriptor..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int32, System.Int32)
+ToolUp.Platform.WhatsAppTemplateDescriptor.BodyParameterCount : System.Int32 { get }
+ToolUp.Platform.WhatsAppTemplateDescriptor.ButtonParameterCount : System.Int32 { get }
+ToolUp.Platform.WhatsAppTemplateDescriptor.HeaderParameterCount : System.Int32 { get }
+ToolUp.Platform.WhatsAppTemplateDescriptor.Languages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.WhatsAppTemplateDescriptor.Name : System.String { get }
+ToolUp.Platform.WhatsAppTemplateDescriptorModule (class)
+ToolUp.Platform.WhatsAppTemplateDescriptorModule.isWellFormed(ToolUp.Platform.WhatsAppTemplateDescriptor) : System.Boolean
+ToolUp.Platform.WhatsAppTemplateDescriptorModule.supportsLanguage(System.String, ToolUp.Platform.WhatsAppTemplateDescriptor) : System.Boolean
+ToolUp.Platform.WhatsAppTemplateDescriptorModule.totalParameterCount(ToolUp.Platform.WhatsAppTemplateDescriptor) : System.Int32
+ToolUp.Platform.WhatsAppTemplateRegistry (class)
+ToolUp.Platform.WhatsAppTemplateRegistry.blobBacked(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IWhatsAppTemplateRegistry
+ToolUp.Platform.WhatsAppTemplateRegistry.blobName(System.String) : System.String
+ToolUp.Platform.WhatsAppTemplateRegistry.isValidTemplateName(System.String) : System.Boolean
+ToolUp.Platform.WhatsAppTemplateRegistry+BlobWhatsAppTemplateRegistry (class)
+ToolUp.Platform.WhatsAppTemplateRegistry+BlobWhatsAppTemplateRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.WhatsAppTemplateRegistry+NoOpWhatsAppTemplateRegistry (class)
+ToolUp.Platform.WhatsAppTemplateRegistry+NoOpWhatsAppTemplateRegistry..ctor()
 ToolUp.Platform.WithholdCharge (class)
 ToolUp.Platform.WithholdCharge.IsWithholdCharged : System.Boolean { get }
 ToolUp.Platform.WithholdCharge.IsWithholdFree : System.Boolean { get }

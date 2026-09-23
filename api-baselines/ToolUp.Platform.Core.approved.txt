@@ -3190,6 +3190,7 @@ ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.EmailFromAddress : System.Strin
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.PushEnabled : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SchemaOnlyMaxSampleRows : System.String (literal)
 ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.SmsEnabled : System.String (literal)
+ToolUp.Platform.ConfigKeys+NotificationPrefsKeys.WhatsAppEnabled : System.String (literal)
 ToolUp.Platform.ConfigKeys+OperationsDoc (class)
 ToolUp.Platform.ConfigKeys+OperationsDoc.DescriptionHeader : System.String (literal)
 ToolUp.Platform.ConfigKeys+OperationsDoc.DocPath : System.String (literal)
@@ -9358,6 +9359,7 @@ ToolUp.Platform.Notification.IsSystemMessage : System.Boolean { get }
 ToolUp.Platform.Notification.IsTeamActivity : System.Boolean { get }
 ToolUp.Platform.Notification.IsTransactionalEmail : System.Boolean { get }
 ToolUp.Platform.Notification.IsTransactionalSms : System.Boolean { get }
+ToolUp.Platform.Notification.IsTransactionalWhatsApp : System.Boolean { get }
 ToolUp.Platform.Notification.Tag : System.Int32 { get }
 ToolUp.Platform.Notification+CustomNotification (class)
 ToolUp.Platform.Notification+CustomNotification.key : System.String { get }
@@ -9391,6 +9393,7 @@ ToolUp.Platform.Notification+Tags.SystemMessage : System.Int32 (literal)
 ToolUp.Platform.Notification+Tags.TeamActivity : System.Int32 (literal)
 ToolUp.Platform.Notification+Tags.TransactionalEmail : System.Int32 (literal)
 ToolUp.Platform.Notification+Tags.TransactionalSms : System.Int32 (literal)
+ToolUp.Platform.Notification+Tags.TransactionalWhatsApp : System.Int32 (literal)
 ToolUp.Platform.Notification+TeamActivity (class)
 ToolUp.Platform.Notification+TeamActivity.kind : System.String { get }
 ToolUp.Platform.Notification+TeamActivity.summary : System.String { get }
@@ -9398,6 +9401,8 @@ ToolUp.Platform.Notification+TransactionalEmail (class)
 ToolUp.Platform.Notification+TransactionalEmail.Item : ToolUp.Platform.EmailEnvelope { get }
 ToolUp.Platform.Notification+TransactionalSms (class)
 ToolUp.Platform.Notification+TransactionalSms.Item : ToolUp.Platform.SmsEnvelope { get }
+ToolUp.Platform.Notification+TransactionalWhatsApp (class)
+ToolUp.Platform.Notification+TransactionalWhatsApp.Item : ToolUp.Platform.WhatsAppEnvelope { get }
 ToolUp.Platform.NotificationCategory (class)
 ToolUp.Platform.NotificationCategory..ctor(System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.NotificationCategory.Description : System.String { get }
@@ -9449,6 +9454,7 @@ ToolUp.Platform.NotificationKind.SystemMessage : System.String (literal)
 ToolUp.Platform.NotificationKind.TeamActivity : System.String (literal)
 ToolUp.Platform.NotificationKind.TransactionalEmail : System.String (literal)
 ToolUp.Platform.NotificationKind.TransactionalSms : System.String (literal)
+ToolUp.Platform.NotificationKind.TransactionalWhatsApp : System.String (literal)
 ToolUp.Platform.NotificationKind.isTransactional(ToolUp.Platform.Notification) : System.Boolean
 ToolUp.Platform.NotificationKind.ofNotification(ToolUp.Platform.Notification) : System.String
 ToolUp.Platform.NotificationKind+PushVariant (class)
@@ -9472,14 +9478,17 @@ ToolUp.Platform.NotificationKind+SinkKind.Email : ToolUp.Platform.NotificationKi
 ToolUp.Platform.NotificationKind+SinkKind.IsEmail : System.Boolean { get }
 ToolUp.Platform.NotificationKind+SinkKind.IsPush : System.Boolean { get }
 ToolUp.Platform.NotificationKind+SinkKind.IsSms : System.Boolean { get }
+ToolUp.Platform.NotificationKind+SinkKind.IsWhatsApp : System.Boolean { get }
 ToolUp.Platform.NotificationKind+SinkKind.Sms : ToolUp.Platform.NotificationKind+SinkKind { get }
 ToolUp.Platform.NotificationKind+SinkKind.Tag : System.Int32 { get }
+ToolUp.Platform.NotificationKind+SinkKind.WhatsApp : ToolUp.Platform.NotificationKind+SinkKind { get }
 ToolUp.Platform.NotificationKind+SinkKind+Push (class)
 ToolUp.Platform.NotificationKind+SinkKind+Push.Item : ToolUp.Platform.NotificationKind+PushVariant { get }
 ToolUp.Platform.NotificationKind+SinkKind+Tags (class)
 ToolUp.Platform.NotificationKind+SinkKind+Tags.Email : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+SinkKind+Tags.Push : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+SinkKind+Tags.Sms : System.Int32 (literal)
+ToolUp.Platform.NotificationKind+SinkKind+Tags.WhatsApp : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+SinkKindModule (class)
 ToolUp.Platform.NotificationKind+SinkKindModule.toWireString(ToolUp.Platform.NotificationKind+SinkKind) : System.String
 ToolUp.Platform.NotificationKind+SinkKindModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationKind+SinkKind]
@@ -13369,6 +13378,15 @@ ToolUp.Platform.WebhookTestResult.DeliveryId : System.Guid { get }
 ToolUp.Platform.WebhookTestResult.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.WebhookTestResult.LatencyMs : System.Int64 { get }
 ToolUp.Platform.WebhookTestResult.StatusCode : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.WhatsAppEnvelope (class)
+ToolUp.Platform.WhatsAppEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.WhatsAppEnvelope.Body : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WhatsAppEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WhatsAppEnvelope.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.WhatsAppEnvelope.Recipients : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId] { get }
+ToolUp.Platform.WhatsAppEnvelope.TemplateLanguage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WhatsAppEnvelope.TemplateName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.WhatsAppEnvelope.TemplateParameters : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.WireProvenanceCaps (class)
 ToolUp.Platform.WireProvenanceCaps..ctor(System.Int32, System.Int32)
 ToolUp.Platform.WireProvenanceCaps.MaxDepth : System.Int32 { get }

@@ -260,6 +260,52 @@ type PushEnvelope = {
     CorrelationId: string option
 }
 
+/// Payload of a `TransactionalWhatsApp` notification (Phase 827). The
+/// vendor-neutral half of WhatsApp: a sink (one per vendor) reads it,
+/// resolves the recipients' numbers and sends.
+///
+/// **Two message shapes, one envelope.** WhatsApp distinguishes a
+/// business-initiated message — which MUST be a pre-approved template —
+/// from a free-form reply, which is permitted only inside the 24-hour
+/// customer-care window that the recipient's own last inbound message
+/// opens. `TemplateName = Some _` is a template send (`TemplateLanguage`
+/// and `TemplateParameters` qualify it, `Body` must be `None`);
+/// `TemplateName = None` is a free-form send carried by `Body`. The
+/// server refuses, before any sink runs, a free-form send to a recipient
+/// outside the window, a template the deployment's template registry
+/// does not know, and a parameter count the registry disagrees with.
+///
+/// **`TemplateParameters` is flat and ordered** — header parameters
+/// first, then body, then buttons — so the envelope stays a plain list
+/// across every transport; the registry's per-component arity says
+/// where one component ends and the next begins.
+type WhatsAppEnvelope = {
+    /// Who to deliver to. See `EmailEnvelope.Recipients` for the
+    /// migration shape.
+    Recipients: RecipientId list
+    /// Name of the approved template, for a business-initiated send.
+    /// `None` makes this a free-form send, allowed only inside the
+    /// recipient's 24-hour customer-care window.
+    TemplateName: string option
+    /// Language code the template is sent in (e.g. `"en_GB"`). `None`
+    /// leaves the choice to the sink (the template's first registered
+    /// language). Ignored on a free-form send.
+    TemplateLanguage: string option
+    /// Template parameter values, header then body then buttons. Must
+    /// match the registered template's total arity exactly.
+    TemplateParameters: string list
+    /// Free-form text. Only for a send inside the 24-hour window; must
+    /// be `None` when `TemplateName` is set.
+    Body: string option
+    /// Vendor-neutral key/value hints a sink may forward (a tag, a
+    /// campaign label). Never PII: the envelope crosses the channel
+    /// wire, and resolved addresses must not.
+    Metadata: Map<string, string>
+    /// Forwarded to vendors that support idempotent send, and carried on
+    /// every audit row the send produces.
+    CorrelationId: string option
+}
+
 /// Real-time notification delivered from server to client.
 ///
 /// Kinds are deliberately small and infrastructure-flavoured — the
@@ -311,6 +357,12 @@ type Notification =
     /// (WebPush / future FCM / APNs). One envelope fan-outs across
     /// every registered `PushToken` for each recipient.
     | MobilePush of PushEnvelope
+    /// Out-of-band WhatsApp message (Phase 827). Same dispatch model as
+    /// `TransactionalSms` — SSE-filtered, sink-routed by
+    /// `Kind = SinkKind.WhatsApp` — with the WhatsApp Business rules
+    /// (template for business-initiated sends, the 24-hour window for
+    /// free-form ones) enforced server-side before any sink runs.
+    | TransactionalWhatsApp of WhatsAppEnvelope
 
 /// Envelope wrapping a `Notification` with delivery metadata. The
 /// server stamps `Id` and `OccurredAt` at publish time; subscribers
@@ -421,6 +473,10 @@ module NotificationKind =
     [<Literal>]
     let MobilePush = "MobilePush"
 
+    /// Kind string for `Notification.TransactionalWhatsApp` (Phase 827).
+    [<Literal>]
+    let TransactionalWhatsApp = "TransactionalWhatsApp"
+
     /// Per-platform variant for `SinkKind.Push`. The compose-time
     /// uniqueness check keys on `SinkKind.toWireString`, so
     /// `Push WebPush` and `Push Fcm` register concurrently without
@@ -447,6 +503,10 @@ module NotificationKind =
         | Email
         | Sms
         | Push of PushVariant
+        /// WhatsApp, vendor-neutral (Phase 827): every WhatsApp vendor
+        /// companion registers under this one kind, so a deployment
+        /// composes at most one WhatsApp sink.
+        | WhatsApp
 
     module SinkKind =
         /// Stable wire-format string used by `INotificationSink.Kind`
@@ -463,6 +523,7 @@ module NotificationKind =
             | SinkKind.Push PushVariant.Fcm -> "Push.Fcm"
             | SinkKind.Push PushVariant.Apns -> "Push.Apns"
             | SinkKind.Push(PushVariant.Other name) -> sprintf "Push.%s" name
+            | SinkKind.WhatsApp -> "WhatsApp"
 
         /// Inverse of `toWireString`. Returns `None` for unknown
         /// discriminators (a sink registering a wire-format the
@@ -474,6 +535,7 @@ module NotificationKind =
             | "Push.WebPush" -> Some(SinkKind.Push PushVariant.WebPush)
             | "Push.Fcm" -> Some(SinkKind.Push PushVariant.Fcm)
             | "Push.Apns" -> Some(SinkKind.Push PushVariant.Apns)
+            | "WhatsApp" -> Some SinkKind.WhatsApp
             | s when s.StartsWith "Push." && s.Length > 5 -> Some(SinkKind.Push(PushVariant.Other(s.Substring 5)))
             | _ -> None
 
@@ -505,14 +567,16 @@ module NotificationKind =
         | Notification.TransactionalEmail _ -> TransactionalEmail
         | Notification.TransactionalSms _ -> TransactionalSms
         | Notification.MobilePush _ -> MobilePush
+        | Notification.TransactionalWhatsApp _ -> TransactionalWhatsApp
 
     /// `true` when a notification represents an out-of-band transactional
-    /// delivery (email / SMS / push) that must NOT be written to the
+    /// delivery (email / SMS / push / WhatsApp) that must NOT be written to the
     /// SSE stream — those kinds are routed to `INotificationSink`
     /// implementations only.
     let isTransactional (n: Notification) : bool =
         match n with
         | Notification.TransactionalEmail _
         | Notification.TransactionalSms _
-        | Notification.MobilePush _ -> true
+        | Notification.MobilePush _
+        | Notification.TransactionalWhatsApp _ -> true
         | _ -> false

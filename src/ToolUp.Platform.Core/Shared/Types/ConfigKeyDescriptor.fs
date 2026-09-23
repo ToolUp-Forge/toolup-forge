@@ -81,6 +81,10 @@ module NotificationPrefsKeys =
     [<Literal>]
     let PushEnabled = "push.enabled"
 
+    /// Phase 827 — team-wide kill switch for transactional WhatsApp.
+    [<Literal>]
+    let WhatsAppEnabled = "whatsapp.enabled"
+
     /// Phase 30d — per-scope upper bound on
     /// `IDataCatalog.GetSyntheticSample`'s row `count`.
     /// `ModulePermission.SchemaOnly` partner-sandbox callers cannot

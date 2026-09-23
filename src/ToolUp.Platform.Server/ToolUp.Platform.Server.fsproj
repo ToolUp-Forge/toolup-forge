@@ -176,6 +176,11 @@
         <Compile Include="Server\IExternalContactStore.fs" />
         <Compile Include="Server\INotificationAddressBook.fs" />
         <Compile Include="Server\NotificationAddressBook.fs" />
+        <!-- Phase 827 - the WhatsApp template registry seam + its blob-backed
+             and no-op defaults. Needs only Core types and IBlobStorage;
+             before WhatsAppSendPolicyFilter.fs, which consults it. -->
+        <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
+        <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
         <!-- Phase 117 — shared SSE scope resolution. One resolution path
              (principal-wins + SseAuthMode-gated fallback + mismatch audit)
              consumed by both NotificationHandler below and
@@ -1053,6 +1058,12 @@
              than duplicating; before ComposeNotifications.fs wraps it
              onto the channel. -->
         <Compile Include="Server\ExternalContactConsentFilter.fs" />
+        <!-- Phase 827 - the WhatsApp send policy (24-hour window + template
+             checks), composed directly INSIDE the consent gate and outside
+             the preference filter. After ExternalContactConsentFilter.fs and
+             NotificationPreferenceFilter.fs (reuses narrowTo /
+             hashRecipient); before the Compose/ family that wires it. -->
+        <Compile Include="Server\WhatsAppSendPolicyFilter.fs" />
         <Compile Include="Server\DigestJobHandler.fs" />
         <Compile Include="Server\Config\ConfigHandler.fs" />
         <Compile Include="Server\IWebhookRegistry.fs" />

@@ -110,6 +110,7 @@ let private isKindEnabledForScope
                 | NotificationKind.SinkKind.Email -> ConfigKeys.NotificationPrefsKeys.EmailEnabled
                 | NotificationKind.SinkKind.Sms -> ConfigKeys.NotificationPrefsKeys.SmsEnabled
                 | NotificationKind.SinkKind.Push _ -> ConfigKeys.NotificationPrefsKeys.PushEnabled
+                | NotificationKind.SinkKind.WhatsApp -> ConfigKeys.NotificationPrefsKeys.WhatsAppEnabled
 
             match Map.tryFind key values with
             | Some "true" -> return true
@@ -136,6 +137,7 @@ let private sinkKindOf (n: Notification) : NotificationKind.SinkKind option =
     | TransactionalEmail _ -> Some NotificationKind.SinkKind.Email
     | TransactionalSms _ -> Some NotificationKind.SinkKind.Sms
     | MobilePush _ -> Some(NotificationKind.SinkKind.Push NotificationKind.PushVariant.WebPush)
+    | TransactionalWhatsApp _ -> Some NotificationKind.SinkKind.WhatsApp
     | _ -> None
 
 /// Extract recipient userIds + correlation id from a transactional
@@ -148,6 +150,7 @@ let private auditFieldsOf (n: Notification) : string list * string option =
         | TransactionalEmail e -> e.Recipients, e.CorrelationId
         | TransactionalSms s -> s.Recipients, s.CorrelationId
         | MobilePush p -> p.Recipients, p.CorrelationId
+        | TransactionalWhatsApp w -> w.Recipients, w.CorrelationId
         | _ -> [], None
 
     // `toAuditString` renders a platform user as its BARE id, so every
