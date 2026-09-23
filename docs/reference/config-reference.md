@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (200 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (204 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -239,6 +239,10 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_EXTERNAL_COMPUTE_HTTP_` | string | — | no | pending | Prefix for the HTTP external-compute companion settings; the suffix names the setting. Not read as a variable in its own right. |
 | `TOOLUP_JOB_SCHEDULER` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Selects the in-process IJobScheduler. Dev-shaped: a multi-instance deployment needs a distributed scheduler companion. |
 | `TOOLUP_MIGRATE_WEBHOOK_SECRETS` | bool | false | no | yes | Migrates inline webhook secrets into the secret store on boot. |
+| `TOOLUP_MSGRAPH_CALENDAR_CLIENT_ID` | string | — | no | pending | Entra application (client) id the Microsoft Graph calendar bridge signs users in with. The client secret comes from ISecretStore, never from the environment. |
+| `TOOLUP_MSGRAPH_CALENDAR_ENDPOINT` | string | — | no | pending | Microsoft Graph calendar bridge endpoint override, replacing both the Graph and the sign-in base URL for every request. |
+| `TOOLUP_MSGRAPH_CALENDAR_NOTIFICATION_URL` | string | — | no | pending | Public HTTPS URL of the notification route Microsoft Graph delivers calendar change notifications to. Unset, the bridge declares itself polling-only and opens no subscriptions. |
+| `TOOLUP_MSGRAPH_CALENDAR_TENANT` | string | common | no | pending | Entra tenant segment of the Microsoft Graph calendar bridge's sign-in authority: common, organizations, consumers, a tenant id or a verified domain. |
 | `TOOLUP_OAUTH_REFRESHER` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the background OAuth token refresher for stored data-source credentials. |
 | `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the platform-level knowledge base, the SDK-shipped document KB surface. |
 | `TOOLUP_RESULT_STORE` | enum: no, inmemory, in-memory, persistent | no | no | yes | Selects the result store backing long-running job output retrieval. |
