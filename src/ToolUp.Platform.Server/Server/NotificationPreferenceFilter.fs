@@ -203,9 +203,15 @@ module NotificationPreferenceFilter =
         | TransactionalWhatsApp w -> TransactionalWhatsApp { w with Recipients = recipients }
         | other -> other
 
-    /// `SHA256(userId)[..8]` — the same PII-free correlation token the
-    /// Phase 6f dispatcher records on its own skip audits, so one
-    /// recipient reads as one hash across both emitters.
+    /// `SHA256(RecipientId.toAuditString)[..8]` — the first 4 bytes, as
+    /// 8 lowercase hex chars, of the SHA-256 of the UTF-8 AUDIT string:
+    /// the bare user id for a platform user, `"external:{contactId}"`
+    /// for an external contact (NOT the `"user:"`-prefixed wire string).
+    /// Callers pass the audit string — this filter's own platform-user
+    /// ids already are one; the consent and WhatsApp filters map
+    /// `RecipientId.toAuditString` first. The same PII-free correlation
+    /// token the Phase 6f dispatcher records on its own skip audits, so
+    /// one recipient reads as one hash across every emitter.
     let hashRecipient (userId: string) : string =
         if String.IsNullOrEmpty userId then
             ""

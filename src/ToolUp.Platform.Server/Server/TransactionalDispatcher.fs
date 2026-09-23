@@ -12,12 +12,16 @@ open ToolUp.Platform.Tracing
 
 // ─── Phase 6l.C — recipient hashing for audit emission ──────────────
 
-/// `SHA256(userId)[..8]` — 8 hex chars (4 bytes) of entropy is enough
-/// to correlate the same recipient across multiple drop events while
-/// keeping the audit trail PII-free. Pure function — no salt; the
-/// goal is correlation, not unguessability (a determined adversary
-/// who already knows a userId can verify whether they were dropped,
-/// which is fine).
+/// `SHA256(RecipientId.toAuditString)[..8]` — the first 4 bytes, as 8
+/// lowercase hex chars, of the SHA-256 of the UTF-8 AUDIT string: the
+/// bare user id for a platform user, `"external:{contactId}"` for an
+/// external contact (NOT the `"user:"`-prefixed wire string). Callers
+/// pass the audit string (see `auditFieldsOf`). 8 hex chars (4 bytes)
+/// of entropy is enough to correlate the same recipient across
+/// multiple drop events while keeping the audit trail PII-free. Pure
+/// function — no salt; the goal is correlation, not unguessability (a
+/// determined adversary who already knows a recipient id can verify
+/// whether they were dropped, which is fine).
 let private hashRecipient (userId: string) : string =
     if String.IsNullOrEmpty userId then
         ""

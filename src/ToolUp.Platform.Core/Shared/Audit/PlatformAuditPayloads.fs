@@ -315,16 +315,26 @@ type NotificationDeliveryFailedPayload = {
 /// trail PII-free while remaining correlatable across events for
 /// the same recipient.
 type NotificationSilentlySkippedPayload = {
-    /// Notification kind discriminator (`Email` / `Sms` / `Push`),
-    /// matching the `INotificationSink.Kind` shape used elsewhere
-    /// in audit / replicator events.
+    /// Notification kind discriminator (`Email` / `Sms` / `Push` /
+    /// `WhatsApp`), matching the `INotificationSink.Kind` shape used
+    /// elsewhere in audit / replicator events. The dispatcher writes
+    /// `SinkKind.toWireString` (so a push row carries its variant, e.g.
+    /// `Push.WebPush`); the preference filter writes the preference
+    /// channel family (`Email` / `Sms` / `Push` — WhatsApp has no
+    /// preference family, so that filter never skips it).
     NotificationKind: string
     /// Scope whose notification prefs caused the drop. Mirrors the
     /// envelope's `ScopeId`.
     ScopeId: string
-    /// Why the dispatcher skipped delivery. Currently always
-    /// `"team_opted_out"` — the only silent-drop path. Future
-    /// reasons (rate-limited, sink-disabled-globally) extend this.
+    /// Why delivery was skipped. Two emitters write this payload:
+    /// the dispatcher writes `"team_opted_out"` (the scope's
+    /// `_platform.notification_prefs` kill switch for the kind is off);
+    /// `NotificationPreferenceFilter` writes `"user_muted"` (the
+    /// recipient muted the category on that channel), `"digest_queued"`
+    /// (the copy was held for a digest) or `"quiet_hours_deferred"`
+    /// (the copy was held until the recipient's quiet hours end). A
+    /// consent refusal is NOT a skip — it is
+    /// `NotificationDeliveryRefused`, with its own reasons.
     Reason: string
     /// `SHA256(RecipientId.toAuditString)[..8]` per dropped recipient —
     /// the first 4 bytes, as 8 lowercase hex chars, of the SHA-256 of the
