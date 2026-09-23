@@ -186,7 +186,9 @@ because a calendar outage must not restart the process.
   subscription dropped by Graph, which the renewal job re-creates.
 - **The Phase 10h refresher's refresh request carries no `scope`.** The Microsoft identity
   platform accepts a v2.0 refresh without one and issues a token for the originally consented
-  scopes; the probe below is where that is confirmed against a real tenant.
+  scopes — confirmed against a real tenant on 2026-09-23 (`common` endpoint, delegated
+  `Calendars.ReadWrite offline_access`, the token echoed back as `Calendars.ReadWrite profile
+  openid email`); the probe below is the recipe that confirmed it.
 
 ## The probe recipe (out of suite)
 
@@ -195,9 +197,15 @@ canned Graph and token-endpoint responses. Against a real tenant:
 
 1. Register the application as above, connect a test user through the data-ingestion admin, and
    note the user's calendar id (`GET /me/calendars` in Graph Explorer).
-2. Set `TOOLUP_MSGRAPH_CALENDAR_TEST_CLIENT_ID`, `_CLIENT_SECRET`, `_REFRESH_TOKEN` (the stored
-   refresh token), `_CALENDAR_ID` and optionally `_TENANT`, then run the scheduling pack: the
-   live case links, pushes an event, pulls it back and cancels it. Unset, it reports pending.
+2. Set `TOOLUP_MSGRAPH_CALENDAR_TEST_CLIENT_ID`, `_CLIENT_SECRET` (the secret's *value*, not its
+   id), `_REFRESH_TOKEN` (the stored refresh token), `_CALENDAR_ID` and optionally `_TENANT`, then
+   run the scheduling pack — it is an Expecto executable, so `dotnet run --project
+   src/ToolUp.Scheduling.Tests -- --filter-test-list "Microsoft Graph (live)"`, never `dotnet test`
+   (which runs nothing and exits 0). The live case links, pushes an event, pulls it back and
+   cancels it. Unset, it reports pending. A refusal reading "Microsoft refused the stored refresh
+   token" is the substrate folding every `invalid_grant` into one message; a wrong `client_id`
+   (the first run of this recipe had a calendar record in that variable) fails the same way, so
+   check the four values' lengths before suspecting the token.
 3. For the two-way half, run a deployment with `NotificationUrl` behind a tunnel, link a
    resource with `LatestModifiedWins`, book it, confirm the event appears in Outlook, edit it
    there, and confirm the notification route answers `202` and the local booking takes the edit.
