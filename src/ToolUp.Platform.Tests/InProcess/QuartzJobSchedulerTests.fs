@@ -56,14 +56,38 @@ let private silentChannel =
 let private uniqueSuffix () =
     Guid.NewGuid().ToString("N").Substring(0, 8)
 
-let private tempJobStore () =
+let private tempRoot () =
     let root =
         Path.Combine(Path.GetTempPath(), "toolup-quartz-tests-" + Guid.NewGuid().ToString("N"))
 
     Directory.CreateDirectory root |> ignore
+    root
+
+/// A canonical store over `root`. A second call with the same root
+/// reaches the same persisted definitions through a brand-new
+/// `LocalFileStorage` — which is what the Phase 9c.F restart arms use
+/// to simulate a process that died and came back.
+let private jobStoreAt (root: string) =
     let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     JobStore.create storage eventStore
+
+let private tempJobStore () = jobStoreAt (tempRoot ())
+
+/// Phase 9c.F — every companion this file composes, so the teardown
+/// case at the bottom of `tests` can shut them all down.
+///
+/// Spillover from Phase 9c.E: the two contract-pack factories compose
+/// one companion per case (~35 over a run) and nothing ever shut one
+/// down. An unstarted Quartz scheduler is not free — it registers in
+/// Quartz's process-wide `SchedulerRepository` under its name and keeps
+/// its scheduler thread parked — so the pack was leaking one per case
+/// for the life of the test process. There is no per-case teardown hook
+/// in Expecto to hang this on, so the bag is drained once at the end;
+/// `tests` is `testSequenced` so nothing can still be using one when it
+/// is drained.
+let private composed =
+    System.Collections.Concurrent.ConcurrentBag<QuartzJobScheduler>()
 
 /// Compose the companion over a fresh temp-rooted `BlobJobStore`. Each
 /// call gets its own filesystem subtree AND its own Quartz scheduler
@@ -74,15 +98,21 @@ let private tempJobStore () =
 /// state operation the two packs exercise works there, and nothing
 /// fires, which is what a pack asserting over `Schedule` / `Cancel` /
 /// `Get` wants. The dispatch cases below start theirs explicitly.
-let private compose (started: bool) =
+let private composeOver (store: IJobStore) (started: bool) =
     let quartzConfig = {
         QuartzConfig.defaults with
             SchedulerName = "toolup-test-" + uniqueSuffix ()
             StartScheduler = started
     }
 
-    QuartzJobScheduler.create (tempJobStore ()) silentChannel ServerConfig.defaults quartzConfig silentLogger
-    |> Async.RunSynchronously
+    let companion =
+        QuartzJobScheduler.create store silentChannel ServerConfig.defaults quartzConfig silentLogger
+        |> Async.RunSynchronously
+
+    composed.Add companion
+    companion
+
+let private compose (started: bool) = composeOver (tempJobStore ()) started
 
 /// Poll `predicate` until it holds or `timeoutMs` elapses. The timeout
 /// is a FAILURE PATH, never a schedule: a green run never spends it, so
@@ -126,6 +156,63 @@ let storeContractTests =
         store, "team-a-" + suffix, "team-b-" + suffix
 
     IJobStoreContract.tests "QuartzJobStore" factory
+
+// ─── Phase 9c.F — the restart arms, bound the second way ─────────────
+//
+// The Quartz side of a restart is the interesting one, and it is not
+// the same question the in-process binding asks. Quartz's own store
+// here is IN-MEMORY: a restart loses every job detail and trigger it
+// held. What survives is the canonical `IJobStore` underneath, and the
+// companion's answer is to re-project from it — so these two arms are
+// where that design either holds or does not, over the same pack cases
+// the durable-by-construction binding runs.
+
+let storeRestartTests =
+    let factory () =
+        let root = tempRoot ()
+
+        let binding: IJobStoreContract.ReopenableStore = {
+            // The companion's own projecting store over a brand-new
+            // canonical store rooted at the same place — not the inner
+            // store directly, which would ask the question of
+            // `BlobJobStore` a second time instead of asking it of the
+            // companion.
+            Open = fun () -> (composeOver (jobStoreAt root) false).JobStore :> IJobStore
+            ScopeId = "team-restart-" + uniqueSuffix ()
+        }
+
+        binding
+
+    IJobStoreContract.restartTests "QuartzJobStore" factory
+
+let schedulerRestartTests =
+    let factory () =
+        let root = tempRoot ()
+
+        let binding: IJobSchedulerContract.RestartableScheduler = {
+            Open =
+                fun () ->
+                    let companion = composeOver (jobStoreAt root) true
+
+                    (companion :> Microsoft.Extensions.Hosting.IHostedService).StartAsync CancellationToken.None
+                    |> Async.AwaitTask
+                    |> Async.RunSynchronously
+
+                    companion :> IJobScheduler
+            Close =
+                fun scheduler ->
+                    match box scheduler with
+                    | :? Microsoft.Extensions.Hosting.IHostedService as host ->
+                        host.StopAsync CancellationToken.None
+                        |> Async.AwaitTask
+                        |> Async.RunSynchronously
+                    | _ -> ()
+            ScopeId = "team-restart-" + uniqueSuffix ()
+        }
+
+        binding
+
+    IJobSchedulerContract.restartTests "QuartzJobScheduler" factory
 
 // ─── The Quartz side of the seam ─────────────────────────────────────
 
@@ -541,11 +628,52 @@ let probeTests =
         }
     ]
 
+/// Phase 9c.F — the pack-level teardown the Phase 9c.E spillover asked
+/// for. It is a test case rather than a silent `finally` so that the
+/// shutdown is ASSERTED: a companion that refused to stop is a leak
+/// this file is responsible for, and a leak nothing reports is the
+/// state the pack was already in.
+let private teardownTests =
+    testList "QuartzJobScheduler — teardown" [
+        testCaseAsync "every companion this file composed is shut down"
+        <| async {
+            let all = composed.ToArray()
+
+            Expect.isNonEmpty
+                all
+                "nothing was composed, so this case proved nothing — the registry or the factories have drifted apart"
+
+            for companion in all do
+                do!
+                    (companion :> Microsoft.Extensions.Hosting.IHostedService).StopAsync CancellationToken.None
+                    |> Async.AwaitTask
+
+            let mutable stillLive = 0
+
+            for companion in all do
+                let! status = companion.QuartzScheduler.GetStatus().AsTask() |> Async.AwaitTask
+
+                if status <> SchedulerStatus.Shutdown then
+                    stillLive <- stillLive + 1
+
+            Expect.equal stillLive 0 $"%d{stillLive} of %d{all.Length} Quartz schedulers refused to shut down"
+        }
+    ]
+
+// `testSequenced` is load-bearing, not decoration: the teardown case
+// above shuts down every companion in the bag, so it must not overlap a
+// case still using one. The pack's runner passes `Sequenced` by default
+// (see `Program.fs`), but a run with `--parallel` would otherwise
+// reintroduce exactly the race this file is meant to close.
 let tests =
-    testList "QuartzJobScheduler — all" [
+    testSequenced
+    <| testList "QuartzJobScheduler — all" [
         schedulerContractTests
         storeContractTests
+        storeRestartTests
+        schedulerRestartTests
         projectionTests
         dispatchTests
         probeTests
+        teardownTests
     ]

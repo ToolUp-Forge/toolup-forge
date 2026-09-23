@@ -57,6 +57,33 @@ let contractTests =
 
     IJobStoreContract.tests "BlobJobStore" factory
 
+/// Phase 9c.F — the restart-survival arm, the half of the retired
+/// Phase 9c.A' that outlived it. One temp directory is the durable
+/// substrate; every `Open` builds a brand-new `BlobJobStore` over a
+/// brand-new `LocalFileStorage` rooted there, sharing nothing in memory
+/// with the instance before it. That is as close to a process restart
+/// as one process gets, and it is the shape the claim is about: the
+/// default store's durability is `IBlobStorage`'s, not its own.
+let restartContractTests =
+    let factory () =
+        let root =
+            Path.Combine(Path.GetTempPath(), "toolup-jobstore-restart-" + Guid.NewGuid().ToString("N"))
+
+        Directory.CreateDirectory root |> ignore
+
+        let binding: IJobStoreContract.ReopenableStore = {
+            Open =
+                fun () ->
+                    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+                    let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                    JobStore.create storage eventStore
+            ScopeId = uniqueScope ()
+        }
+
+        binding
+
+    IJobStoreContract.restartTests "BlobJobStore" factory
+
 /// Phase 9f index-consistency + Rebuild round-trip tests. The
 /// store maintains an idempotency-key index and a next-run bucket
 /// index; both must survive drift, recover via Rebuild, and shed
@@ -234,4 +261,5 @@ let indexTests =
         }
     ]
 
-let tests = testList "BlobJobStore — all" [ contractTests; indexTests ]
+let tests =
+    testList "BlobJobStore — all" [ contractTests; restartContractTests; indexTests ]

@@ -1283,6 +1283,49 @@ let private handoffTests =
         }
     ]
 
+/// Phase 9c.F — the rule-4 restart arm. One temp directory is the
+/// durable substrate; every `Open` builds a brand-new scheduler over a
+/// brand-new `BlobJobStore` over a brand-new `LocalFileStorage` rooted
+/// there, sharing no handler registry, no dispatch state and no run
+/// history in memory with the instance before it.
+///
+/// `Close` disposes: `InProcessJobScheduler` is a `BackgroundService`,
+/// and this binding never starts the hosted service — `TriggerOnce`
+/// dispatches directly — so disposal is the whole of the teardown.
+let private restartContractTests =
+    let factory () =
+        let root =
+            Path.Combine(Path.GetTempPath(), "toolup-jobsched-restart-" + Guid.NewGuid().ToString("N"))
+
+        Directory.CreateDirectory root |> ignore
+
+        let binding: IJobSchedulerContract.RestartableScheduler = {
+            Open =
+                fun () ->
+                    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+                    let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                    let jobStore = JobStore.create storage eventStore
+
+                    JobScheduler.create
+                        jobStore
+                        eventStore
+                        silentChannel
+                        ServerConfig.defaults
+                        silentLogger
+                        (NoOpActivitySink() :> IActivitySink)
+                    :> IJobScheduler
+            Close =
+                fun scheduler ->
+                    match box scheduler with
+                    | :? IDisposable as disposable -> disposable.Dispose()
+                    | _ -> ()
+            ScopeId = "team-restart-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+        }
+
+        binding
+
+    IJobSchedulerContract.restartTests "InProcessJobScheduler" factory
+
 let tests =
     let factory () =
         let scheduler = buildScheduler () :> IJobScheduler
@@ -1291,6 +1334,7 @@ let tests =
 
     testList "InProcessJobScheduler" [
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
+        restartContractTests
         telemetryTests
         catchUpTests
         handoffTests
