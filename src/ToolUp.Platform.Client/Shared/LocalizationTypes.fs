@@ -2816,6 +2816,44 @@ type ProviderProfileMessages = {
     FallbackSaved: string
 }
 
+/// The built-in Datadog readback module (`DatadogReadbackUI`, Phase 9w).
+type DatadogReadbackMessages = {
+    MonitorsTab: string
+    RecentErrorsTab: string
+    KeyMetricsTab: string
+    Refresh: string
+    Refreshing: string
+    Loading: string
+    /// Shown above the panel whenever the last read soft-failed. The
+    /// argument is the reason the server reported.
+    DegradedWarning: string -> string
+    ColumnMonitor: string
+    ColumnStatus: string
+    ColumnLastTransition: string
+    ColumnTags: string
+    ColumnTime: string
+    ColumnService: string
+    ColumnHost: string
+    ColumnLevel: string
+    ColumnMessage: string
+    StatusOk: string
+    StatusWarn: string
+    StatusAlert: string
+    StatusNoData: string
+    StatusUnknown: string
+    NeverTransitioned: string
+    NoMonitors: string
+    NoErrors: string
+    NoPoints: string
+    MonitorsFootnote: string
+    ErrorsFootnote: string
+    MetricsFootnote: string
+    /// The window the log and metric tabs read over. The argument is the
+    /// window in minutes.
+    WindowLabel: int -> string
+}
+
+
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
@@ -2874,4 +2912,5 @@ type MessageCatalog = {
     MappingDataManager: MappingDataManagerMessages
     KnowledgeBase: KnowledgeBaseMessages
     ProviderProfile: ProviderProfileMessages
+    DatadogReadback: DatadogReadbackMessages
 }

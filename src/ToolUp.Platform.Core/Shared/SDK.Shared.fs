@@ -1566,4 +1566,16 @@ type ServerConfig = {
     /// `(metric, tag set)` into the composed `ITimeSeriesStore` on the
     /// configured cadence and sweeps points past `RetentionDays` daily.
     MetricsHistory: MetricsHistoryMode
+
+    /// Phase 9w — Datadog readback selection. Default:
+    /// `NoDatadogReadback` — the three `/api/observability/datadog/*`
+    /// endpoints are not mounted and nothing resolves
+    /// `IDatadogReadbackApi`, so a deployment that does not read from
+    /// Datadog pays nothing (GP 13) and boots byte-for-byte as it did
+    /// before this substrate existed (GP 11).
+    /// `EnabledDatadogReadback cfg` mounts the Platform-Admin-gated
+    /// monitors / logs / metric endpoints over a DI-registered
+    /// `IDatadogReadbackApi` — the read half of the Datadog pairing
+    /// whose write half is the independent audit-sink companion.
+    DatadogReadback: DatadogReadbackMode
 }

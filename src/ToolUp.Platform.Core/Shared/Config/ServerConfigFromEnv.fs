@@ -189,6 +189,9 @@ module ServerConfig =
         // Phase 829 — no metrics history: the live registry is never
         // sampled, no flusher runs, no point is appended (GP 11 / GP 13).
         MetricsHistory = NoMetricsHistory
+        // Phase 9w — no Datadog readback: no route mounted, no
+        // IDatadogReadbackApi resolved, no credential read (GP 11 / GP 13).
+        DatadogReadback = NoDatadogReadback
     }
 
 // ─── Phase 11.G — env-var-driven config construction ──────────

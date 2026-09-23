@@ -960,6 +960,32 @@ type MetricsHistoryMode =
     /// rather than sampling into nothing silently.
     | EnabledMetricsHistory of MetricsHistoryConfig
 
+/// Phase 9w — selects whether `compose` mounts the Datadog readback
+/// surface: three Owner/Platform-Admin-gated endpoints under
+/// `/api/observability/datadog/*` over a DI-registered
+/// `IDatadogReadbackApi` (implemented by the
+/// `ToolUp.Observability.Datadog` companion). Default:
+/// `NoDatadogReadback` — no route is mounted, nothing resolves the
+/// interface, and a deployment that does not use Datadog pays nothing
+/// (GP 13) and boots byte-for-byte as it did before this substrate
+/// existed (GP 11).
+///
+/// The read side of the Datadog pairing — the WRITE side is the
+/// independent `IAuditSink` companion, which this mode neither requires
+/// nor enables. A deployment may run either alone.
+type DatadogReadbackMode =
+    /// No readback surface (default). The three endpoints are not
+    /// mounted, so a client proxy against such a deployment 404s — the
+    /// established absence shape for an unmounted SDK route.
+    | NoDatadogReadback
+    /// Mount the readback endpoints under the supplied configuration.
+    /// Requires an `IDatadogReadbackApi` in DI (the companion's
+    /// `Datadog.create`) and both `DD-API-KEY` and
+    /// `DD-APPLICATION-KEY` in `ISecretStore` under `_platform`; each
+    /// endpoint reports a typed, audited soft failure for whichever is
+    /// absent rather than blanking the admin surface.
+    | EnabledDatadogReadback of DatadogReadbackConfig
+
 /// Phase 6f.A — selects whether the external address book is composed:
 /// the `ExternalContact` entity registration, `IExternalContactStore` in
 /// DI, the consent filter wrapping the outbound notification channel, and

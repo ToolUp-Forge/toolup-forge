@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Datadog API readback for ToolUp.Platform — IDatadogReadbackApi over the monitor, log-search and timeseries REST endpoints, with keys from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;observability;datadog;monitoring</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 9w Datadog READBACK companion. Read-only: monitors, log
+       search, metric timeseries. No Datadog SDK dependency — BCL
+       HttpClient directly. The write side (the Datadog Logs audit sink)
+       is an independent companion; neither requires the other. -->
+  <ItemGroup>
+    <Compile Include="DatadogReadbackClient.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+  </ItemGroup>
+  <!-- Core alone: the contract (IDatadogReadbackApi, the readback record
+       types, DatadogReadbackConfig) lives there so the Fable client tier
+       can share the same records. Nothing here needs Platform.Server —
+       the Giraffe endpoints that call this interface are SDK-side, and a
+       reference to them would be a cycle. FSharp.Core is implicit via
+       the .NET SDK. -->
+</Project>

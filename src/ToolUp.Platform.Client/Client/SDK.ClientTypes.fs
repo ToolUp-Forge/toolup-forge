@@ -2150,6 +2150,18 @@ type ClientConfig = {
     /// the SDK composes — a deployment that ships only a custom client
     /// can still query the API directly.
     HealthMonitor: HealthMonitorMode
+    /// Controls the built-in Datadog readback module (Phase 9w).
+    /// **Opt-in** — default `NoDatadogReadback`, so an existing
+    /// deployment's sidebar is unchanged until it sets
+    /// `EnabledDatadogReadback cfg` (GP 11 / GP 13).
+    ///
+    /// The SAME `DatadogReadbackMode` the server side takes: pass the
+    /// one config value to both, and the window and page-size defaults
+    /// the panel shows cannot drift from the ones the endpoints apply.
+    /// Pair it with `ServerConfig.DatadogReadback` — with the endpoints
+    /// unmounted the module renders its degraded state on every tab,
+    /// which is honest but not useful.
+    DatadogReadback: DatadogReadbackMode
     /// Controls the platform-users admin (Phase 544). **Opt-in** — default
     /// `NoPlatformUsers`, so an existing deployment's sidebar is unchanged
     /// until it sets `DefaultPlatformUsers` (GP 11/13). When enabled, the
@@ -2644,6 +2656,9 @@ module ClientConfig =
         PlatformAdmin = DefaultPlatformAdmin
         PermissionsAdmin = DefaultPermissionsAdmin
         HealthMonitor = DefaultHealthMonitor
+        // Phase 9w — opt-in (GP 11/13): no Datadog readback module until
+        // a deployment names a region and a tag filter.
+        DatadogReadback = NoDatadogReadback
         // Phase 544 — opt-in (GP 11/13); existing deployments keep no
         // platform-users module until they set DefaultPlatformUsers.
         PlatformUsers = NoPlatformUsers

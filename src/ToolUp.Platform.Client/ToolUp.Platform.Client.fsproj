@@ -418,6 +418,7 @@
         <Compile Include="Client\ModuleVisibilityAdminUI.fs" />
         <Compile Include="Client\SessionSecurityUI.fs" />
         <Compile Include="Client\HealthMonitorUI.fs" />
+        <Compile Include="Client\DatadogReadbackUI.fs" />
         <Compile Include="Client\ServiceStatusBoardUI.fs" />
         <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />
         <Compile Include="Client\PlatformAdminUI.fs" />

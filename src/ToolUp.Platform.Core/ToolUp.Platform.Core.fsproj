@@ -496,6 +496,10 @@
              Fable-safe exactly as the monolith was and ships under fable/ via
              the **\*.fs glob. -->
         <Compile Include="Shared\ModuleEvents.fs" />
+        <!-- Phase 9w — the Datadog readback contract (Fable-safe records +
+             IDatadogReadbackApi). Ahead of StoreModes.fs because
+             DatadogReadbackMode carries DatadogReadbackConfig. -->
+        <Compile Include="Shared\DatadogReadbackTypes.fs" />
         <Compile Include="Shared\Config\StoreModes.fs" />
         <Compile Include="Shared\Config\RuntimeModes.fs" />
         <Compile Include="Shared\Config\InboundRateLimitTypes.fs" />
