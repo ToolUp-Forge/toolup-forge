@@ -268,6 +268,36 @@ ServerApp.empty
 The sandbox setup, content-template creation and an out-of-suite probe recipe are in the companion's
 [`README.md`](../../src/NotificationChannels/WhatsApp/Twilio/README.md).
 
+### WhatsApp — `ToolUp.NotificationChannels.WhatsApp.MetaCloud`
+
+The Meta WhatsApp Business Cloud API (Phase 6f.C) — the Graph API's `/{phone-number-id}/messages`
+over BCL `HttpClient`, no vendor SDK — plus an inbound webhook handler (kind `whatsapp-meta`, mounted
+at `/webhooks/whatsapp-meta` on the `ToolUp.Webhooks` substrate) for customer messages and delivery
+statuses. It consumes the same `TransactionalWhatsApp` envelope as the Twilio companion, so the two
+are interchangeable; a deployment registers at most one. Template sends build Meta's `components`
+array from the arity registered in the deployment's `IWhatsAppTemplateRegistry`; free-form sends are
+`type: "text"`. Recipients resolve through `INotificationAddressBook.ResolveWhatsApp`, under the same
+live `SinkKind.WhatsApp` opt-in.
+
+The inbound handler is what opens the 24-hour window: a customer message stamps
+`ExternalContact.LastInboundUtc` on every contact whose WhatsApp number matches the sender, and a
+`failed` delivery status is audited as `NotificationDeliveryFailed`. Signatures are verified
+(`X-Hub-Signature-256`) before the handler runs.
+
+Setup:
+
+```bash
+TOOLUP_META_WHATSAPP_PHONE_NUMBER_ID=123456789012345
+# optional: TOOLUP_META_WHATSAPP_GRAPH_API_VERSION, TOOLUP_META_WHATSAPP_ENDPOINT
+```
+
+The System User access token lives in `ISecretStore` (scope `_platform`, key
+`meta_whatsapp_access_token`) and is read on every send, so rotation needs no restart; the inbound
+handler additionally needs `meta_whatsapp_app_secret` and `meta_whatsapp_verify_token`. Composition,
+the health probe (`MetaCloudHealth`), the preflight validator (`MetaCloudValidator`), webhook
+subscription and an out-of-suite probe recipe are in the companion's
+[`README.md`](../../src/NotificationChannels/WhatsApp/MetaCloud/README.md).
+
 ## How the dispatcher works
 
 `TransactionalDispatcher` is a `BackgroundService` that drains a bounded `Channel<NotificationEnvelope>`. Per envelope:
@@ -275,11 +305,20 @@ The sandbox setup, content-template creation and an out-of-suite probe recipe ar
 1. Looks up the user's contact details via `INotificationAddressBook` (default: blob-backed `BlobBackedNotificationAddressBook` reads from `_platform/contacts/{scopeId}/{userId}.json`).
 2. Resolves the vendor-neutral address (`EmailAddress` / `PhoneNumber` / `PushToken`).
 3. Checks the per-team `_platform.notification_prefs` kill switches.
-4. Routes by `Kind` (`SinkKind.Email` / `SinkKind.Sms` / `SinkKind.Push of PushVariant`) to the matching registered `INotificationSink`.
+4. Routes by `Kind` (`SinkKind.Email` / `SinkKind.Sms` / `SinkKind.Push of PushVariant` / `SinkKind.WhatsApp`) to the matching registered `INotificationSink`. WhatsApp is transactional-only — a `TransactionalWhatsApp` envelope never rides pub/sub — and it arrives here already past the WhatsApp send policy (Phase 827): a free-form message is admitted only inside the 24-hour customer-care window opened by the recipient's last inbound message, and anything else must be a registered template of matching arity. See [WhatsApp — the shared arm](#whatsapp--the-shared-arm-phase-827).
 5. Calls `sink.Send(scopeId, envelope)` and reads the returned `SinkResult` — `Delivered` / `Skipped` / `TransientFailure` / `PermanentFailure`.
 6. Emits `NotificationSent` or `NotificationDeliveryFailed` audit event under `_platform.notifications`.
 
-PII (email addresses, phone numbers, push tokens) NEVER crosses pub/sub topics — only `userId`s flow through the channel; addresses resolve at dispatch time via the address book.
+PII (email addresses, phone numbers, push tokens, WhatsApp numbers) NEVER crosses pub/sub topics — only recipient ids flow through the channel; addresses resolve at dispatch time via the address book.
+
+**Obtain the channel through its composed registration when addressing external contacts.** The
+`INotificationChannel` registered in DI is the wrapped one: the external-contact consent gate outside
+the WhatsApp send policy outside the preference filter. A few in-process publishers — presence, the
+digest job and the alert engine — are handed the compose-resolved channel directly instead, and so
+publish beneath the consent gate and the WhatsApp policy. That is safe for what they send today —
+none of them addresses an external contact — but it is a rule, not a seal: any caller that addresses a
+`RecipientId.External` recipient must resolve `INotificationChannel` from DI (or otherwise take the
+wrapped registration), never a channel captured before the wrapping, or its sends skip consent.
 
 Duplicate-`Kind` sink registration is rejected at compose time. If you want fallback (Postmark primary, SES secondary), wrap them in a `ChainedSink` composition you write yourself.
 
@@ -345,7 +384,7 @@ Payloads are JSON **strings**, not a parsed `JsonValue` — the wire shape stays
 
 `DispatchingNotificationChannel` decorator routes by case:
 - `SystemMessage` / `JobCompleted` / `DataRefreshed` / `TeamActivity` / `ModuleAction` / `CustomNotification` / `MembershipChanged` → publish over `INotificationChannel` (pub/sub).
-- `TransactionalEmail` / `TransactionalSms` / `MobilePush` → enqueue to `TransactionalDispatcher` (out-of-band).
+- `TransactionalEmail` / `TransactionalSms` / `MobilePush` / `TransactionalWhatsApp` → enqueue to `TransactionalDispatcher` (out-of-band).
 
 The decorator is auto-wired by `ServerApp.run` when transactional sinks are registered. Apps without sinks skip the dispatcher entirely.
 

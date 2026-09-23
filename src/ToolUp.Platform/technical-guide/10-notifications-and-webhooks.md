@@ -185,18 +185,21 @@ Sinks **do NOT emit audit events themselves** — the dispatcher reads the `Sink
 
 ### `INotificationAddressBook`
 
-Phase 6f is built on the principle that **PII never crosses the channel wire**. Envelopes carry `RecipientUserIds: string list` only — sinks resolve userIds to vendor-neutral `EmailAddress` / `PhoneNumber` / `PushToken` at dispatch time, hand them straight to the upstream vendor, and never persist the resolved values anywhere (audit trail records userIds only).
+Phase 6f is built on the principle that **PII never crosses the channel wire**. Envelopes carry `Recipients: RecipientId list` only — sinks resolve each recipient to a vendor-neutral `EmailAddress` / `PhoneNumber` / `PushToken` (or, for WhatsApp, a bare E.164 number) at dispatch time, hand it straight to the upstream vendor, and never persist the resolved value anywhere (audit trail records recipient ids or their hashes only). Phase 6f.A widened every member from `userId: string` to `recipient: RecipientId`, a DU of `RecipientId.User userId` (an authenticated platform user) and `RecipientId.External contactId` (a non-platform contact in the scope's external address book); Phase 6f.B added `ResolveWhatsApp`.
 
 ```fsharp
 type INotificationAddressBook =
-    abstract ResolveEmail: userId: string * scopeId: string -> Async<EmailAddress option>
-    abstract ResolvePhone: userId: string * scopeId: string -> Async<PhoneNumber option>
-    abstract ResolvePushTokens: userId: string * scopeId: string -> Async<PushToken list>
+    abstract ResolveEmail: recipient: RecipientId * scopeId: string -> Async<EmailAddress option>
+    abstract ResolvePhone: recipient: RecipientId * scopeId: string -> Async<PhoneNumber option>
+    abstract ResolvePushTokens: recipient: RecipientId * scopeId: string -> Async<PushToken list>
+    abstract ResolveWhatsApp: recipient: RecipientId * scopeId: string -> Async<string option>
 ```
 
-Two SDK defaults ship: `NoOpNotificationAddressBook` (returns None / [] always — safe for deployments without a directory; sinks `Skipped`-per-recipient) and `BlobBackedNotificationAddressBook` (reads `_platform/contacts/{scopeId}/{userId}.json` JSON via `IBlobStorage`). The `UserContact` record is in the shared layer so future Fable admin UIs read / write the same shape. The blob-backed default registers in DI by default; deployments substitute LDAP / Okta / Azure AD impls by overriding the singleton post-`compose`.
+Two SDK defaults ship: `NoOpNotificationAddressBook` (returns None / [] always — safe for deployments without a directory; sinks `Skipped`-per-recipient) and `BlobBackedNotificationAddressBook` (reads `_platform/contacts/{scopeId}/{userId}.json` JSON via `IBlobStorage` for a `User` recipient; resolves an `External` recipient through the optional external-contact store). The `UserContact` record is in the shared layer so future Fable admin UIs read / write the same shape. The blob-backed default registers in DI by default; deployments substitute LDAP / Okta / Azure AD impls by overriding the singleton post-`compose`.
 
-**Scope-isolated lookups.** `(userId, scopeId)` is the lookup key, not just `userId`. A user belonging to two teams may have different push tokens registered per team; cross-team resolution returning a different team's data is a team-isolation breach (GP 4). The blob layout enforces this structurally (one folder per scope).
+**An `External` recipient is consent-gated.** The address book returns `None` / `[]` for an external contact that carries no live opt-in for the channel being resolved — an SMS opt-in does not unlock the WhatsApp number, even when the two numbers are equal. `ExternalContactConsentFilter` refuses such a send and audits `NotificationDeliveryRefused` before the envelope reaches a sink, so a missing consent is never a silent drop. External contacts have no device registration, so `ResolvePushTokens` returns `[]` for them; the persisted `UserContact` carries no WhatsApp number yet, so `ResolveWhatsApp` returns `None` for a `User` recipient in the shipped defaults.
+
+**Scope-isolated lookups.** `(recipient, scopeId)` is the lookup key, not just the recipient. A user belonging to two teams may have different push tokens registered per team; cross-team resolution returning a different team's data is a team-isolation breach (GP 4). The blob layout enforces this structurally (one folder per scope).
 
 ### Per-team prefs (`_platform.notification_prefs`)
 

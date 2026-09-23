@@ -326,9 +326,14 @@ type NotificationSilentlySkippedPayload = {
     /// `"team_opted_out"` — the only silent-drop path. Future
     /// reasons (rate-limited, sink-disabled-globally) extend this.
     Reason: string
-    /// `SHA256(userId)[..8]` for each recipient on the dropped
-    /// envelope. Empty for system-published envelopes with no
-    /// resolvable recipients.
+    /// `SHA256(RecipientId.toAuditString)[..8]` per dropped recipient —
+    /// the first 4 bytes, as 8 lowercase hex chars, of the SHA-256 of the
+    /// UTF-8 AUDIT string: the bare user id for a platform user,
+    /// `"external:{contactId}"` for an external contact (NOT the
+    /// `"user:"`-prefixed wire string). That is the same PII-free
+    /// correlation token the consent filter's refusal rows carry, so one
+    /// recipient reads as one hash across both emitters. Empty for
+    /// system-published envelopes with no resolvable recipients.
     RecipientHashes: string list
     /// Optional correlation id from the envelope, preserved
     /// verbatim so the drop event can be tied back to the publish
