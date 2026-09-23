@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Meta WhatsApp Business Cloud API INotificationSink for ToolUp.Platform — Graph API over BCL HttpClient, System User token from ISecretStore, and an inbound-webhook handler (messages + delivery statuses) on the ToolUp.Webhooks substrate.</Description>
+    <PackageTags>fsharp;sdk;notifications;whatsapp;meta;cloud-api;sink;webhooks</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 6f.C Meta WhatsApp Business Cloud companion. ProjectReferences
+       only: the transport is BCL HttpClient behind the platform's egress
+       policy handler, and inbound verification + dedup + routing are the
+       ToolUp.Webhooks substrate. No vendor SDK, no paid dependency. -->
+  <ItemGroup>
+    <Compile Include="MetaWhatsAppCloudNotificationSink.fs" />
+    <Compile Include="MetaWhatsAppCloudNotificationSinkHealth.fs" />
+    <Compile Include="MetaWhatsAppCloudValidator.fs" />
+    <Compile Include="MetaWhatsAppInboundWebhookHandler.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\..\Webhooks\ToolUp.Webhooks.Core\ToolUp.Webhooks.Core.fsproj" />
+    <ProjectReference Include="..\..\..\Webhooks\ToolUp.Webhooks.Server\ToolUp.Webhooks.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK; Giraffe arrives through
+       ToolUp.Webhooks.Server. -->
+</Project>

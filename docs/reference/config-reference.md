@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (200 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (203 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -265,6 +265,9 @@ A serverless host with no long-lived background services: nothing in-process sur
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
 | `TOOLUP_EXTERNAL_CONTACT_STORE` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the external address book: recipients with no platform account, each reachable only on the channels they have consented to. Requires TOOLUP_ENTITY_STORE=enabled. |
+| `TOOLUP_META_WHATSAPP_ENDPOINT` | string | — | no | pending | Meta Graph API base-URL override for the WhatsApp Cloud sink. |
+| `TOOLUP_META_WHATSAPP_GRAPH_API_VERSION` | string | v26.0 | no | pending | Graph API version the Meta WhatsApp Cloud sink calls (overrides the pinned default). |
+| `TOOLUP_META_WHATSAPP_PHONE_NUMBER_ID` | string | — | no | pending | WhatsApp Business phone number id for the Meta WhatsApp Cloud notification sink. |
 | `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` | bool | false | no | yes | Opt in to emailing the inviter when a pending-by-email team invite expires unconsumed (needs an Email transactional sink). |
 | `TOOLUP_SENDGRID_ENDPOINT` | string | — | no | pending | SendGrid API endpoint override. |
 | `TOOLUP_SENDGRID_FROM` | string | — | no | pending | Default From address for SendGrid-delivered notifications. |

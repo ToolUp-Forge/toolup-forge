@@ -803,6 +803,18 @@ module Names =
     [<Literal>]
     let sendGridEndpoint = "TOOLUP_SENDGRID_ENDPOINT"
 
+    /// Phase 6f.C — the Meta WhatsApp Business Cloud sink's phone number id.
+    [<Literal>]
+    let metaWhatsAppPhoneNumberId = "TOOLUP_META_WHATSAPP_PHONE_NUMBER_ID"
+
+    /// Phase 6f.C — Graph API version override for the Meta WhatsApp sink.
+    [<Literal>]
+    let metaWhatsAppGraphApiVersion = "TOOLUP_META_WHATSAPP_GRAPH_API_VERSION"
+
+    /// Phase 6f.C — Graph API base-URL override for the Meta WhatsApp sink.
+    [<Literal>]
+    let metaWhatsAppEndpoint = "TOOLUP_META_WHATSAPP_ENDPOINT"
+
     [<Literal>]
     let twilioAccountSid = "TOOLUP_TWILIO_ACCOUNT_SID"
 
@@ -2523,6 +2535,30 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.sendGridEndpoint
         Description = "SendGrid API endpoint override."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
+        EnvVar = Names.metaWhatsAppPhoneNumberId
+        Description = "WhatsApp Business phone number id for the Meta WhatsApp Cloud notification sink."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
+        EnvVar = Names.metaWhatsAppGraphApiVersion
+        Description = "Graph API version the Meta WhatsApp Cloud sink calls (overrides the pinned default)."
+        Type = StringKey
+        Default = Some "v26.0"
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
+        EnvVar = Names.metaWhatsAppEndpoint
+        Description = "Meta Graph API base-URL override for the WhatsApp Cloud sink."
         Type = StringKey
         Default = None
         IsSecret = false
