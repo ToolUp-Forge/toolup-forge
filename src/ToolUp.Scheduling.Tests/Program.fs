@@ -18,6 +18,9 @@ let private registeredTests =
         InMemoryCalendarBridgeTests.tests
         CalDAVCalendarBridgeTests.tests
         CalendarSyncTests.tests
+        // Phase 830 — the Google Calendar bridge: the contract pack bound
+        // over a stub Calendar v3, plus its OAuth, channel and route cases.
+        GoogleCalendarBridgeTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
