@@ -3738,9 +3738,9 @@ module Client =
             | _, ExternalPermissionsAdmin custom -> [ custom ]
 
         // Health monitor admin (Phase 9p): role re-gated to
-        // `canModifyPlatformConfig` in commit 4f.1 + 4f.3; today it
-        // declares the "Platform Management" group, which the sidebar
-        // role filter hides from non-admins. Mode-agnostic post-Phase-4b — same
+        // `canModifyPlatformConfig` in commit 4f.1 + 4f.3; it declares
+        // `NavRole.PlatformAdminOnly` and, since Phase 9x, the
+        // "Observability" group. Mode-agnostic post-Phase-4b — same
         // reasoning as the Platform Admin module above. Bootstrapped
         // admin in any mode (including Anonymous dev) reaches the
         // panels; non-admins are hidden by the sidebar role filter.
@@ -3759,15 +3759,25 @@ module Client =
         // same reason as the built-ins above — a bootstrapped admin in
         // any mode reaches it, and non-admins never see the entry.
         //
-        // It coins the "Observability" sidebar group. `HealthMonitorUI`
-        // deliberately stays in "Platform Management": its group name is
-        // still read by the Phase 567 area derivation and the no-active-
-        // team admin escape, so moving it is a behaviour change rather
-        // than a relabel, and this phase does not need it.
+        // It coined the "Observability" sidebar group, which Phase 9x
+        // added to the platform-admin allow-list and moved
+        // `HealthMonitorUI` into.
         let datadogReadback =
             match config.DatadogReadback with
             | NoDatadogReadback -> []
             | EnabledDatadogReadback readbackConfig -> [ DatadogReadbackUI.create readbackConfig ]
+
+        // Phase 9x — the self-hosted observability admin (Logs / Metrics /
+        // Alerts over the log store, the metrics history and the alert
+        // engine). Opt-in (`NoObservabilityModule` is the default), gated
+        // like the two observability modules above, and in their group.
+        // The module reads `/api/observability/sources` first and shows
+        // only the tabs whose source the server composed, so one client
+        // setting serves every server-side combination.
+        let observability =
+            match config.Observability with
+            | NoObservabilityModule -> []
+            | DefaultObservabilityModule -> [ ObservabilityUI.create () ]
 
         // Phase 9p.A — service-status-board admin. Same Platform-Admin
         // gating as HealthMonitor: composes deployment-wide observability
@@ -3950,6 +3960,7 @@ module Client =
             @ platformAdmin
             @ healthMonitor
             @ datadogReadback
+            @ observability
             @ serviceStatusBoard
             @ dataSubjectRequestAdmin
             @ migrationAdmin

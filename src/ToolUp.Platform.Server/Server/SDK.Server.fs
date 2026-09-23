@@ -732,6 +732,10 @@ let compose
     // registered) and a no-op on `NoMetricsHistory`.
     ComposeObservability.registerMetricsHistory services config resolvedLogger
 
+    // Phase 9x — the alert-rule status board behind
+    // `/api/observability/alerts`. A no-op when no rule is declared.
+    ComposeObservability.registerObservabilityReadback services config
+
     // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
     // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
     // registers the blob-backed default lazily; `CustomDatasetStore` leaves

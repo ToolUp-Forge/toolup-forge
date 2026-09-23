@@ -110,10 +110,13 @@ let private platformAdmin =
         NavRole.PlatformAdminOnly
         Visibility.visibleToAuthenticated
 
+// Phase 9x — regrouped under "Observability" (operator decision
+// 2026-09-23). The no-active-team matrix case below is what pins that a
+// team-less platform admin still sees it after the move.
 let private healthMonitor =
     gatedFacts
         "_sdk.HealthMonitor"
-        (Some "Platform Management")
+        (Some SidebarVisibility.ObservabilitySidebarGroup)
         NavRole.PlatformAdminOnly
         Visibility.visibleToAuthenticated
 
@@ -845,7 +848,7 @@ let orderingTests =
 let groupSetTests =
     testList "Phase 570 — admin sidebar group sets" [
 
-        test "platform-scoped groups are exactly the two role-gated labels" {
+        test "platform-scoped groups are exactly the three role-gated labels" {
             Expect.isTrue
                 (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Platform Admin"))
                 "the consumer `withGroup` convention keeps its role gate"
@@ -853,6 +856,10 @@ let groupSetTests =
             Expect.isTrue
                 (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Platform Management"))
                 "the SDK admin built-ins' declared group must be role-gated — the 4f.2 regression"
+
+            Expect.isTrue
+                (SidebarVisibility.isPlatformAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
+                "Phase 9x — the observability modules' group is platform-scoped (health monitor, Datadog readback, self-hosted observability)"
 
             Expect.isFalse
                 (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Team Management"))
@@ -866,7 +873,13 @@ let groupSetTests =
         }
 
         test "the no-team admin escape spans the union of platform- and team-scoped groups" {
-            for g in [ "Platform Admin"; "Platform Management"; "Team Management" ] do
+            for g in
+                [
+                    "Platform Admin"
+                    "Platform Management"
+                    SidebarVisibility.ObservabilitySidebarGroup
+                    "Team Management"
+                ] do
                 Expect.isTrue
                     (SidebarVisibility.isAdminSidebarGroup (Some g))
                     (sprintf "\"%s\" must stay visible to a team-less platform admin under the collapse" g)

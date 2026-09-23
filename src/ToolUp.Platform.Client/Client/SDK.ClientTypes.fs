@@ -1141,6 +1141,24 @@ type HealthMonitorMode =
     /// Deployment-provided custom module in place of the SDK default.
     | ExternalHealthMonitor of ErasedModule
 
+/// Controls the built-in self-hosted observability admin (Phase 9x):
+/// Logs / Metrics / Alerts tabs over the Phase 828 log store, the Phase
+/// 829 metrics history and the Phase 178 alert engine. **Opt-in** —
+/// default `NoObservabilityModule`, so an existing deployment's sidebar
+/// is unchanged until it asks for the module (GP 11 / GP 13).
+///
+/// The client cannot see which of the three sources the server composed,
+/// so the module asks: it reads `/api/observability/sources` on open and
+/// renders only the tabs that answered. Pair it with at least one of
+/// `ServerConfig.LogStore`, `ServerConfig.MetricsHistory` or
+/// `ServerConfig.AlertRules` — with none of them on, the endpoints are
+/// not mounted and the module says so rather than rendering empty tabs.
+type ObservabilityModuleMode =
+    /// No observability module in the sidebar (default — opt-in).
+    | NoObservabilityModule
+    /// SDK built-in observability module.
+    | DefaultObservabilityModule
+
 /// Branding for the platform-users admin module (Phase 544). Unlike the
 /// other Platform-Management built-ins this is **opt-in** — a deployment
 /// enables it explicitly (GP 11/13).
@@ -2162,6 +2180,10 @@ type ClientConfig = {
     /// unmounted the module renders its degraded state on every tab,
     /// which is honest but not useful.
     DatadogReadback: DatadogReadbackMode
+    /// Controls the built-in self-hosted observability module (Phase 9x).
+    /// **Opt-in** — default `NoObservabilityModule`. See
+    /// `ObservabilityModuleMode`.
+    Observability: ObservabilityModuleMode
     /// Controls the platform-users admin (Phase 544). **Opt-in** — default
     /// `NoPlatformUsers`, so an existing deployment's sidebar is unchanged
     /// until it sets `DefaultPlatformUsers` (GP 11/13). When enabled, the
@@ -2659,6 +2681,9 @@ module ClientConfig =
         // Phase 9w — opt-in (GP 11/13): no Datadog readback module until
         // a deployment names a region and a tag filter.
         DatadogReadback = NoDatadogReadback
+        // Phase 9x — opt-in (GP 11/13): no self-hosted observability
+        // module until a deployment asks for it.
+        Observability = NoObservabilityModule
         // Phase 544 — opt-in (GP 11/13); existing deployments keep no
         // platform-users module until they set DefaultPlatformUsers.
         PlatformUsers = NoPlatformUsers

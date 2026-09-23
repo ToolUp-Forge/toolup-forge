@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1398 (206 parameterised).
+// Leaves: 1455 (213 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -3207,5 +3207,129 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 // en (int -> string): "Last 1 minutes"
                 // translate as `fun (a: int) -> $"…"`; left as the English message until you do
                 WindowLabel = c.DatadogReadback.WindowLabel
+        }
+        Observability = {
+            c.Observability with
+                // en: "Logs"
+                LogsTab = "Logs"
+                // en: "Metrics"
+                MetricsTab = "Metrics"
+                // en: "Alerts"
+                AlertsTab = "Alerts"
+                // en: "Refresh"
+                Refresh = "Refresh"
+                // en: "Refreshing…"
+                Refreshing = "Refreshing…"
+                // en: "Loading…"
+                Loading = "Loading…"
+                // en: "No self-hosted observability source is enabled in this deployment — enable the log store, the metrics history or an alert rule on the server."
+                NoSources = "No self-hosted observability source is enabled in this deployment — enable the log store, the metrics history or an alert rule on the server."
+                // en: "This view is limited to platform administrators."
+                ErrorForbidden = "This view is limited to platform administrators."
+                // en: "This source is not available in this deployment — its server-side substrate is not composed."
+                ErrorNotComposed = "This source is not available in this deployment — its server-side substrate is not composed."
+                // en (int -> string): "The request failed (HTTP 1)."
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                ErrorStatus = c.Observability.ErrorStatus
+                // en (string -> string): "The response could not be read: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                ErrorUnreadable = c.Observability.ErrorUnreadable
+                // en (string -> string): "The request could not be sent: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                ErrorUnreachable = c.Observability.ErrorUnreachable
+                // en: "Search messages (whole words)"
+                SearchPlaceholder = "Search messages (whole words)"
+                // en: "Search"
+                Search = "Search"
+                // en: "Scope id"
+                ScopePlaceholder = "Scope id"
+                // en: "Correlation id"
+                CorrelationPlaceholder = "Correlation id"
+                // en: "Levels"
+                LevelsLabel = "Levels"
+                // en: "Window"
+                WindowPickerLabel = "Window"
+                // en: "Trace"
+                LevelTrace = "Trace"
+                // en: "Debug"
+                LevelDebug = "Debug"
+                // en: "Info"
+                LevelInfo = "Info"
+                // en: "Warn"
+                LevelWarn = "Warn"
+                // en: "Error"
+                LevelError = "Error"
+                // en (int -> string): "Last 1 minutes"
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                WindowLabel = c.Observability.WindowLabel
+                // en: "Time"
+                ColumnTime = "Time"
+                // en: "Level"
+                ColumnLevel = "Level"
+                // en: "Logger"
+                ColumnLogger = "Logger"
+                // en: "Message"
+                ColumnMessage = "Message"
+                // en: "Scope"
+                ColumnScope = "Scope"
+                // en: "Correlation"
+                ColumnCorrelation = "Correlation"
+                // en: "Error"
+                ColumnError = "Error"
+                // en: "No log lines match this search in this window."
+                NoLogs = "No log lines match this search in this window."
+                // en: "Newest first. Text search matches whole words, case-insensitively. Select a line to see its full record."
+                LogsFootnote = "Newest first. Text search matches whole words, case-insensitively. Select a line to see its full record."
+                // en: "Selected line"
+                DetailHeading = "Selected line"
+                // en: "Show every line of this request"
+                ShowCorrelated = "Show every line of this request"
+                // en: "No points in this window."
+                NoPoints = "No points in this window."
+                // en (int -> string): "1 series combined"
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                SeriesCount = c.Observability.SeriesCount
+                // en (string -> string): "Some series could not be read: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                PartialRead = c.Observability.PartialRead
+                // en: "From the metrics history. Counters are per-flush increments; percentile lines are the slowest tag set's, an upper bound rather than a fleet-wide percentile."
+                MetricsFootnote = "From the metrics history. Counters are per-flush increments; percentile lines are the slowest tag set's, an upper bound rather than a fleet-wide percentile."
+                // en: "Rule"
+                ColumnRule = "Rule"
+                // en: "Signal"
+                ColumnSignal = "Signal"
+                // en: "Condition"
+                ColumnCondition = "Condition"
+                // en: "State"
+                ColumnState = "State"
+                // en: "Breaching since"
+                ColumnBreachingSince = "Breaching since"
+                // en: "Last fired"
+                ColumnLastFired = "Last fired"
+                // en: "Last cleared"
+                ColumnLastCleared = "Last cleared"
+                // en: "Last evaluated"
+                ColumnLastEvaluated = "Last evaluated"
+                // en (int -> string): "for 1 min"
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                Minutes = c.Observability.Minutes
+                // en: "Not evaluated"
+                StateNotEvaluated = "Not evaluated"
+                // en: "No data"
+                StateNoData = "No data"
+                // en: "Clear"
+                StateClear = "Clear"
+                // en: "Pending"
+                StatePending = "Pending"
+                // en: "Firing"
+                StateFiring = "Firing"
+                // en: "Never"
+                Never = "Never"
+                // en: "View chart"
+                ViewChart = "View chart"
+                // en: "No alert rules are declared."
+                NoRules = "No alert rules are declared."
+                // en: "As this process's alert engine last evaluated each rule. A process that does not run the engine reports every rule as not evaluated."
+                AlertsFootnote = "As this process's alert engine last evaluated each rule. A process that does not run the engine reports every rule as not evaluated."
         }
 }

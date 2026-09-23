@@ -43,6 +43,15 @@ let tests =
                     (ClientConfig.isPlatformAdminSidebarGroup (Some "Platform Management"))
                     "the SDK admin built-ins' declared group must be role-gated")
 
+            testCase "the observability group is platform-scoped and in the no-team union (Phase 9x)" (fun () ->
+                Expect.isTrue
+                    (ClientConfig.isPlatformAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
+                    "the health monitor, Datadog readback and self-hosted observability modules' group is role-gated"
+
+                Expect.isTrue
+                    (ClientConfig.isAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
+                    "a team-less platform admin still reaches the health monitor after its regroup")
+
             testCase "\"Team Management\" is NOT platform-scoped — team Owners/Admins keep their tools" (fun () ->
                 Expect.isFalse
                     (ClientConfig.isPlatformAdminSidebarGroup (Some "Team Management"))

@@ -2853,6 +2853,77 @@ type DatadogReadbackMessages = {
     WindowLabel: int -> string
 }
 
+/// The built-in self-hosted observability module (`ObservabilityUI`,
+/// Phase 9x).
+type ObservabilityMessages = {
+    LogsTab: string
+    MetricsTab: string
+    AlertsTab: string
+    Refresh: string
+    Refreshing: string
+    Loading: string
+    /// Shown when the server answers but enables none of the three sources.
+    NoSources: string
+    ErrorForbidden: string
+    /// The endpoint is unmounted (404) or its store is absent (503).
+    ErrorNotComposed: string
+    /// Any other non-200 answer. The argument is the HTTP status.
+    ErrorStatus: int -> string
+    /// A 200 whose body did not parse. The argument is the parser's reason.
+    ErrorUnreadable: string -> string
+    /// The request never got an answer. The argument is the transport's reason.
+    ErrorUnreachable: string -> string
+    SearchPlaceholder: string
+    Search: string
+    ScopePlaceholder: string
+    CorrelationPlaceholder: string
+    LevelsLabel: string
+    WindowPickerLabel: string
+    LevelTrace: string
+    LevelDebug: string
+    LevelInfo: string
+    LevelWarn: string
+    LevelError: string
+    /// A look-back window option. The argument is the window in minutes.
+    WindowLabel: int -> string
+    ColumnTime: string
+    ColumnLevel: string
+    ColumnLogger: string
+    ColumnMessage: string
+    ColumnScope: string
+    ColumnCorrelation: string
+    ColumnError: string
+    NoLogs: string
+    LogsFootnote: string
+    DetailHeading: string
+    ShowCorrelated: string
+    NoPoints: string
+    /// Under a chart that folds several tag sets into one line. The argument is the series count.
+    SeriesCount: int -> string
+    /// Shown above a chart when the store failed on part of the read. The argument is the store's reason.
+    PartialRead: string -> string
+    MetricsFootnote: string
+    ColumnRule: string
+    ColumnSignal: string
+    ColumnCondition: string
+    ColumnState: string
+    ColumnBreachingSince: string
+    ColumnLastFired: string
+    ColumnLastCleared: string
+    ColumnLastEvaluated: string
+    /// A rule's debounce window beside its condition. The argument is the window in whole minutes.
+    Minutes: int -> string
+    StateNotEvaluated: string
+    StateNoData: string
+    StateClear: string
+    StatePending: string
+    StateFiring: string
+    Never: string
+    ViewChart: string
+    NoRules: string
+    AlertsFootnote: string
+}
+
 
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
@@ -2913,4 +2984,5 @@ type MessageCatalog = {
     KnowledgeBase: KnowledgeBaseMessages
     ProviderProfile: ProviderProfileMessages
     DatadogReadback: DatadogReadbackMessages
+    Observability: ObservabilityMessages
 }

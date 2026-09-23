@@ -139,31 +139,42 @@ let advance (rule: AlertRule) (state: RuleState) (breaching: bool option) (now: 
             },
             false
 
+/// The watched signal rendered as one token — `name`, `name{k=v,…}`
+/// (tags in key order) or `probe:<name>`. The notification body and the
+/// Phase 9x Alerts tab both render a rule's signal through this, so the
+/// two never disagree about what a rule watches.
+let describeSignal (source: AlertSource) : string =
+    match source with
+    | Metric(name, tags) when Map.isEmpty tags -> name
+    | Metric(name, tags) ->
+        let rendered =
+            tags
+            |> Map.toList
+            |> List.map (fun (k, v) -> sprintf "%s=%s" k v)
+            |> String.concat ","
+
+        sprintf "%s{%s}" name rendered
+    | HealthProbe probe -> sprintf "probe:%s" probe
+
+/// The breach condition rendered as one token — `> 5`, `unhealthy`, …
+/// Shared by the notification body and the Phase 9x Alerts tab.
+let describeCondition (condition: ThresholdCondition) : string =
+    match condition with
+    | GreaterThan t -> sprintf "> %g" t
+    | LessThan t -> sprintf "< %g" t
+    | Equals t -> sprintf "= %g" t
+    | ProbeUnhealthy -> "unhealthy"
+    | ProbeDegraded -> "degraded"
+
 /// Human-readable one-line description of a firing rule, used as the
 /// notification body / SMS text / push body and email body.
 let describeBreach (rule: AlertRule) : string =
-    let signal =
-        match rule.Source with
-        | Metric(name, tags) when Map.isEmpty tags -> name
-        | Metric(name, tags) ->
-            let rendered =
-                tags
-                |> Map.toList
-                |> List.map (fun (k, v) -> sprintf "%s=%s" k v)
-                |> String.concat ","
-
-            sprintf "%s{%s}" name rendered
-        | HealthProbe probe -> sprintf "probe:%s" probe
-
-    let cond =
-        match rule.Condition with
-        | GreaterThan t -> sprintf "> %g" t
-        | LessThan t -> sprintf "< %g" t
-        | Equals t -> sprintf "= %g" t
-        | ProbeUnhealthy -> "unhealthy"
-        | ProbeDegraded -> "degraded"
-
-    sprintf "[alert:%s] %s %s (sustained %g min)" rule.Name signal cond rule.ForDuration.TotalMinutes
+    sprintf
+        "[alert:%s] %s %s (sustained %g min)"
+        rule.Name
+        (describeSignal rule.Source)
+        (describeCondition rule.Condition)
+        rule.ForDuration.TotalMinutes
 
 /// Build the `(scopeId, Notification)` pairs a firing rule publishes —
 /// one per `DeliverVia` target. `ViaChannel` publishes a `SystemMessage`
@@ -267,6 +278,127 @@ let runTick
                     do! publish scopeId notification
     }
 
+// ─── Phase 9x — the rule-state read surface ───────────────────────────
+//
+// The engine's per-rule `RuleState` map is private to the running
+// service, so nothing could answer "which rules are firing" short of
+// waiting for a notification. The Observability admin module's Alerts
+// tab needs exactly that, so each tick now also records an
+// `AlertRuleObservation` per rule on a DI singleton the handler reads.
+// The evaluation itself is untouched: `runTickObserved` wraps `runTick`
+// rather than changing it, so the fire / re-arm semantics (and every
+// Phase 178 test of them) stay what they were.
+//
+// Like the breach window it mirrors, the board is in-memory and
+// per-process — a silo that does not host the engine reports every rule
+// as `NotEvaluated`, which is the honest answer from that process.
+
+/// The latest `AlertRuleObservation` per rule name, written by the
+/// engine after every tick and read by the Phase 9x alerts endpoint.
+/// Registered as a singleton only when the deployment declares at least
+/// one rule (GP 13).
+type AlertRuleStatusBoard() =
+    let observations = ConcurrentDictionary<string, AlertRuleObservation>()
+
+    /// Record the observation for `ruleName`, replacing the previous one.
+    member _.Record(ruleName: string, observation: AlertRuleObservation) : unit = observations[ruleName] <- observation
+
+    /// The latest observation for `ruleName`, or `None` when no tick has
+    /// recorded one.
+    member _.TryGet(ruleName: string) : AlertRuleObservation option =
+        match observations.TryGetValue ruleName with
+        | true, observation -> Some observation
+        | false, _ -> None
+
+    /// The latest observation for `ruleName`, or
+    /// `AlertRuleObservation.notEvaluated` when no tick has recorded one.
+    member this.Get(ruleName: string) : AlertRuleObservation =
+        this.TryGet ruleName |> Option.defaultValue AlertRuleObservation.notEvaluated
+
+/// Derive a rule's observation from one tick. `hadData` is whether the
+/// tick could read the rule's signal; `before` / `after` are the rule's
+/// `RuleState` either side of `advance`. Pure — the whole decision
+/// surface of the board, tested without a tick.
+///
+/// A fire is `Fired` going `false → true`; a clear is `Fired` going
+/// `true → false` (a recovery re-arms the rule). A tick with no data
+/// reports `NoData` — the engine holds the rule's state unchanged then,
+/// so the last fire / clear instants carry over untouched.
+let observe
+    (previous: AlertRuleObservation)
+    (hadData: bool)
+    (before: RuleState)
+    (after: RuleState)
+    (now: DateTime)
+    : AlertRuleObservation =
+    let state =
+        if not hadData then AlertRuleState.NoData
+        elif after.Fired then AlertRuleState.Firing
+        elif after.BreachingSince.IsSome then AlertRuleState.Pending
+        else AlertRuleState.Clear
+
+    {
+        State = state
+        BreachingSinceUtc = after.BreachingSince
+        LastFiredUtc =
+            if after.Fired && not before.Fired then
+                Some now
+            else
+                previous.LastFiredUtc
+        LastClearedUtc =
+            if before.Fired && not after.Fired then
+                Some now
+            else
+                previous.LastClearedUtc
+        LastEvaluatedUtc = Some now
+    }
+
+/// `runTick`, then record every rule's observation on `board`. The two
+/// readers are wrapped only to note whether each signal answered —
+/// `runTick` itself, and so the evaluation, is unchanged. Signals are
+/// keyed by `describeSignal`, so two rules watching one series share
+/// one read outcome.
+let runTickObserved
+    (readMetric: string -> Map<string, string> -> float option)
+    (readProbe: string -> Async<HealthResult option>)
+    (publish: string -> Notification -> Async<unit>)
+    (rules: AlertRule list)
+    (states: ConcurrentDictionary<string, RuleState>)
+    (board: AlertRuleStatusBoard)
+    (now: DateTime)
+    : Async<unit> =
+    async {
+        let answered = ConcurrentDictionary<string, bool>()
+
+        let observedMetric (name: string) (tags: Map<string, string>) =
+            let value = readMetric name tags
+            answered[describeSignal (Metric(name, tags))] <- value.IsSome
+            value
+
+        let observedProbe (probeName: string) = async {
+            let! result = readProbe probeName
+            answered[describeSignal (HealthProbe probeName)] <- result.IsSome
+            return result
+        }
+
+        let stateOf (ruleName: string) =
+            match states.TryGetValue ruleName with
+            | true, s -> s
+            | false, _ -> initialState
+
+        let before = rules |> List.map (fun rule -> stateOf rule.Name)
+
+        do! runTick observedMetric observedProbe publish rules states now
+
+        for rule, prior in List.zip rules before do
+            let hadData =
+                match answered.TryGetValue(describeSignal rule.Source) with
+                | true, value -> value
+                | false, _ -> false
+
+            board.Record(rule.Name, observe (board.Get rule.Name) hadData prior (stateOf rule.Name) now)
+    }
+
 /// `BackgroundService` host for the periodic engine. Resolves the
 /// metric-read tap (`PrometheusMetricsSink`, nullable when metrics are
 /// disabled) and the `IHealthCheck` set per tick from the captured
@@ -328,10 +460,16 @@ type AlertRuleEngineService
 
                     let publish scopeId notification = channel.Publish(scopeId, notification)
 
-                    do!
-                        runTick readMetric readProbe publish rules states DateTime.UtcNow
-                        |> Async.StartAsTask
-                        :> Task
+                    // Phase 9x — record per-rule observations when the
+                    // status board is composed (it is whenever rules are
+                    // declared); resolved per tick like the readers.
+                    let tick =
+                        match serviceProvider.GetService typeof<AlertRuleStatusBoard> with
+                        | :? AlertRuleStatusBoard as board ->
+                            runTickObserved readMetric readProbe publish rules states board DateTime.UtcNow
+                        | _ -> runTick readMetric readProbe publish rules states DateTime.UtcNow
+
+                    do! tick |> Async.StartAsTask :> Task
                 with
                 | :? OperationCanceledException -> ()
                 | ex -> logger.Error($"[AlertRuleEngine] event=tick_wrapper_error nextTick={nextTick:o}", Some ex)

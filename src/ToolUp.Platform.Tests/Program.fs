@@ -701,6 +701,8 @@ let private registeredTests =
         SplunkHecAuditSinkTests.tests
         DatadogLogsAuditSinkTests.tests
         DatadogReadbackClientTests.tests
+        ObservabilityHandlersTests.tests
+        ObservabilityHandlersTests.datadogReadbackTests
         CefAuditSinkTests.tests
         ChainedAuditLedgerTests.tests
         AuditReplicatorTests.tests
