@@ -18,6 +18,9 @@ let private registeredTests =
         InMemoryCalendarBridgeTests.tests
         CalDAVCalendarBridgeTests.tests
         CalendarSyncTests.tests
+        // Phase 831 — the Microsoft Graph bridge: the pack's third binding,
+        // plus tokens, delta paging and the subscription route.
+        MicrosoftGraphCalendarBridgeTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
