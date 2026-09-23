@@ -987,9 +987,13 @@ type NotificationDeliveryRefusedPayload = {
     /// and the template checks. The field is a string so a channel arm
     /// can name its own without a DU change reaching every consumer.
     Reason: string
-    /// `SHA256(RecipientId.toWireString)[..8]` per refused recipient —
-    /// the same PII-free correlation token the dispatcher's skip rows
-    /// carry, so one recipient reads as one hash across both emitters.
+    /// `SHA256(RecipientId.toAuditString)[..8]` per refused recipient —
+    /// the first 4 bytes, as 8 lowercase hex chars, of the SHA-256 of the
+    /// UTF-8 AUDIT string: the bare user id for a platform user,
+    /// `"external:{contactId}"` for an external contact (NOT the
+    /// `"user:"`-prefixed wire string). That is the same PII-free
+    /// correlation token the dispatcher's skip rows carry, so one
+    /// recipient reads as one hash across both emitters.
     RecipientHashes: string list
     /// The refused recipients' contact ids, for the operator who needs
     /// to act on the refusal (record the missing consent, or remove the
