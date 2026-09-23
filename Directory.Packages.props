@@ -438,6 +438,7 @@
     <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.Twilio" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.MetaCloud" Version="$(ToolUpSdkVersion)" />
 
     <!-- Metrics + UI -->
     <PackageVersion Include="ToolUp.Metrics.OpenTelemetry" Version="$(ToolUpSdkVersion)" />

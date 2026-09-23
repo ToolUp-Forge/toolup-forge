@@ -588,6 +588,11 @@
              unroutable endpoint and a StubHandler, the pinned form body. -->
         <Compile Include="InProcess\TwilioWhatsAppNotificationSinkTests.fs" />
         <Compile Include="InProcess\WebPushNotificationSinkTests.fs" />
+        <!-- Phase 6f.C - the Meta WhatsApp Business Cloud companion: the sink contract +
+             827's WhatsApp cases over a stub transport, the pinned request JSON, and
+             signed inbound deliveries through the Phase 238 route. After
+             TransactionalDispatcherTests.fs (reuses its CapturingAuditLog). -->
+        <Compile Include="InProcess\MetaWhatsAppCloudNotificationSinkTests.fs" />
         <Compile Include="InProcess\HnswVectorStoreTests.fs" />
         <Compile Include="InProcess\KnowledgeUserScopeIsolationTests.fs" />
         <Compile Include="InProcess\HealthyHealthCheckTests.fs" />
@@ -2778,6 +2783,7 @@
         <ProjectReference Include="..\NotificationChannels\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
         <ProjectReference Include="..\NotificationChannels\WhatsApp\Twilio\ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Push\WebPush\ToolUp.NotificationChannels.Push.WebPush.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\WhatsApp\MetaCloud\ToolUp.NotificationChannels.WhatsApp.MetaCloud.fsproj" />
         <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
         <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
         <ProjectReference Include="..\AuditSinks\S3Archive\ToolUp.AuditSinks.S3Archive.fsproj" />
