@@ -308,20 +308,64 @@ let tests (label: string) (factory: BridgeFactory) =
             Expect.equal matching.Head.Booking.Title "Renamed" "the update was applied, not appended"
         }
 
+        // `since` means two different things, and the seam says which by
+        // capability (`ICalendarBridge.Pull`): a lower bound on event TIME
+        // for a bridge without a modification cursor, the cursor itself
+        // for one declaring `SupportsIncrementalPull`. Each law binds only
+        // the bridges it is true of (Phase 830 — the first incremental
+        // bridge — split what had been one time-bound law).
         testAsync "pull honours the since bound" {
             let h = factory ()
-            let early = makeBooking "bk-early" h.Link.ResourceId (utc 2026 10 3 9)
-            let late = makeBooking "bk-late" h.Link.ResourceId (utc 2026 11 20 9)
-            let! _ = h.Bridge.LinkResource h.Link
-            let! _ = h.Bridge.Push(h.Link, early, None)
-            let! _ = h.Bridge.Push(h.Link, late, None)
 
-            let! pulled = h.Bridge.Pull(h.Link, Some(utc 2026 11 1 0), defaultsFor h.Link)
-            let events = expectOk "bounded pull" pulled
-            let ids = events |> List.map _.Booking.Id |> Set.ofList
+            if h.Bridge.Capabilities.SupportsIncrementalPull then
+                skiptest "bridge declares a modification cursor; see the incremental since law"
+            else
+                let early = makeBooking "bk-early" h.Link.ResourceId (utc 2026 10 3 9)
+                let late = makeBooking "bk-late" h.Link.ResourceId (utc 2026 11 20 9)
+                let! _ = h.Bridge.LinkResource h.Link
+                let! _ = h.Bridge.Push(h.Link, early, None)
+                let! _ = h.Bridge.Push(h.Link, late, None)
 
-            Expect.isTrue (Set.contains "bk-late" ids) "an event after the bound is returned"
-            Expect.isFalse (Set.contains "bk-early" ids) "an event before the bound is not"
+                let! pulled = h.Bridge.Pull(h.Link, Some(utc 2026 11 1 0), defaultsFor h.Link)
+                let events = expectOk "bounded pull" pulled
+                let ids = events |> List.map _.Booking.Id |> Set.ofList
+
+                Expect.isTrue (Set.contains "bk-late" ids) "an event after the bound is returned"
+                Expect.isFalse (Set.contains "bk-early" ids) "an event before the bound is not"
+        }
+
+        testAsync "an incremental pull's since is a modification cursor" {
+            let h = factory ()
+
+            if not h.Bridge.Capabilities.SupportsIncrementalPull then
+                skiptest "bridge declares no modification cursor; see the time-bound since law"
+            else
+                // Relative to the wall clock rather than pinned: the
+                // provider stamps a push with ITS clock, so the cursor has
+                // to sit after any plausible push stamp and before the
+                // simulated edit, whenever the pack runs.
+                let cursor = DateTimeOffset.UtcNow.AddYears 50
+                let untouched = makeBooking "bk-untouched" h.Link.ResourceId (utc 2026 10 3 9)
+                let edited = makeBooking "bk-edited" h.Link.ResourceId (utc 2026 10 3 11)
+                let! _ = h.Bridge.LinkResource h.Link
+                let! _ = h.Bridge.Push(h.Link, untouched, None)
+                let! pushed = h.Bridge.Push(h.Link, edited, None)
+                let editedId = expectOk "push" pushed
+
+                h.ExternalEdit
+                    editedId
+                    (fun b -> {
+                        b with
+                            Title = "Edited after the cursor"
+                    })
+                    (cursor.AddHours 1.0)
+
+                let! pulled = h.Bridge.Pull(h.Link, Some cursor, defaultsFor h.Link)
+                let events = expectOk "incremental pull" pulled
+                let ids = events |> List.map _.Booking.Id |> Set.ofList
+
+                Expect.isTrue (Set.contains "bk-edited" ids) "an event modified after the cursor is returned"
+                Expect.isFalse (Set.contains "bk-untouched" ids) "an event not modified since the cursor is not"
         }
 
         testAsync "cancelling a booking removes the external event" {

@@ -30,6 +30,9 @@
         <Compile Include="InProcess\InMemoryCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalDAVCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalendarSyncTests.fs" />
+        <!-- Phase 830 — the Google Calendar bridge, the third binding of the
+             ICalendarBridge contract pack. -->
+        <Compile Include="InProcess\GoogleCalendarBridgeTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -43,6 +46,8 @@
         <!-- Phase 20a — the CalDAV bridge is the second binding of the
              ICalendarBridge contract pack. -->
         <ProjectReference Include="..\Calendar\CalDAV\ToolUp.Calendar.CalDAV.fsproj" />
+        <!-- Phase 830 — the Google Calendar bridge is the third binding. -->
+        <ProjectReference Include="..\Calendar\Google\ToolUp.Calendar.Google.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

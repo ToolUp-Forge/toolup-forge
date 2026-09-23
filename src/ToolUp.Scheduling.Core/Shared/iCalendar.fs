@@ -365,7 +365,12 @@ let private dayOfWeekFromIcal (token: string) : DayOfWeek option =
 
 // ─── RRULE parsing ──────────────────────────────────────────────────
 
-let private parseRRule (value: string) : Result<RecurrenceRule, string> =
+/// Parse an RFC 5545 `RRULE` value (the part after `RRULE:`) into the
+/// supported `RecurrenceRule` subset. Public since Phase 830 so a
+/// provider that carries recurrence as bare RRULE strings (Google
+/// Calendar's `recurrence` array) reads it with the same parser the
+/// `VEVENT` path uses rather than a second one that could drift.
+let parseRRule (value: string) : Result<RecurrenceRule, string> =
     let parts =
         value.Split(';')
         |> Array.choose (fun p ->
@@ -601,7 +606,10 @@ let private frequencyToIcal (f: RecurrenceFrequency) : string =
 let private formatUtcDateTime (dt: DateTimeOffset) : string =
     dt.UtcDateTime.ToString("yyyyMMddTHHmmssZ")
 
-let private emitRRule (r: RecurrenceRule) : string =
+/// Emit a `RecurrenceRule` as an RFC 5545 `RRULE` value (without the
+/// `RRULE:` prefix). Public since Phase 830 for the same reason as
+/// `parseRRule`: one emitter for every carrier of the rule.
+let emitRRule (r: RecurrenceRule) : string =
     let parts = ResizeArray<string>()
     parts.Add(sprintf "FREQ=%s" (frequencyToIcal r.Frequency))
 

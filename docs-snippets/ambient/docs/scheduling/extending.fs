@@ -4,8 +4,8 @@
 // almost every block is an excerpt from a program it never shows in
 // full: the deployment's `services` / `config`, the `ISchedulingApi`
 // proxy a module holds, and the module-side helpers the page names in
-// passing (the wait-list store, the external-calendar query, the RRULE
-// library a custom expander wraps). None of these is SDK surface —
+// passing (the wait-list store, the RRULE library a custom expander
+// wraps). None of these is SDK surface —
 // they are what the page tells a module author to have beside them.
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.IEntityStore
@@ -41,19 +41,6 @@ module PageAmbient =
     /// examples vary one field of it rather than re-spelling all
     /// thirteen at every call site.
     let seedBooking: Booking = failwith "ambient"
-
-    // ─── Two-way calendar sync (the module-side layer) ────────────
-
-    /// The external-calendar query a deployment writes itself while
-    /// `ICalendarSyncProvider` remains a deferred extension.
-    module googleCalendarApi =
-        let fetchEvents (resourceId: ResourceId) (window: DateRange) : Async<AvailabilityException list> =
-            failwith "ambient"
-
-    /// Subtracts externally-busy windows from the free slots the
-    /// scheduler emitted. Module-side, pure.
-    let subtractExternal (slots: TimeSlot list) (externalEvents: AvailabilityException list) : TimeSlot list =
-        failwith "ambient"
 
     // ─── Custom recurrence ────────────────────────────────────────
 
