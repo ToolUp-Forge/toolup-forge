@@ -91,3 +91,23 @@ type INotificationAddressBook =
     /// model, so the default implementation returns `[]` for every
     /// `External` recipient regardless of consent.
     abstract ResolvePushTokens: recipient: RecipientId * scopeId: string -> Async<PushToken list>
+
+    /// Look up `recipient`'s WhatsApp number (E.164, no `whatsapp:`
+    /// prefix — the vendor sink adds whatever addressing scheme its API
+    /// wants). Phase 6f.B. `None` means "no WhatsApp number known", or
+    /// no live WhatsApp consent for an external recipient — the sink
+    /// skips this recipient.
+    ///
+    /// For an `External` recipient the number is the contact's
+    /// `OptionalWhatsAppNumber`, released ONLY under a live
+    /// `SinkKind.WhatsApp` opt-in — the same consent read the other
+    /// three members perform for their channels. An SMS opt-in does not
+    /// unlock the WhatsApp number even when the two numbers are equal:
+    /// WhatsApp consent is its own lawful basis.
+    ///
+    /// A `User` recipient resolves `None` in the default
+    /// implementations: the persisted user contact carries no WhatsApp
+    /// number yet, so there is nothing to return until a user profile
+    /// grows one. An implementation backed by a directory that does
+    /// hold one may return it.
+    abstract ResolveWhatsApp: recipient: RecipientId * scopeId: string -> Async<string option>

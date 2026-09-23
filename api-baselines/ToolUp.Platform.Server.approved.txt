@@ -5720,6 +5720,7 @@ ToolUp.Platform.INotificationAddressBook (interface)
 ToolUp.Platform.INotificationAddressBook.ResolveEmail(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress]]
 ToolUp.Platform.INotificationAddressBook.ResolvePhone(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber]]
 ToolUp.Platform.INotificationAddressBook.ResolvePushTokens(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken]]
+ToolUp.Platform.INotificationAddressBook.ResolveWhatsApp(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.INotificationPreferenceStore (interface)
 ToolUp.Platform.INotificationPreferenceStore.Enqueue(System.String, ToolUp.Platform.PendingNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.INotificationPreferenceStore.GetDigestWatermarks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.DateTime]]

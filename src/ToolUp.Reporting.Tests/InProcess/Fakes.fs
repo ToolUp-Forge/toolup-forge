@@ -86,6 +86,7 @@ type StubAddressBook(known: (string * string) list) =
 
         member _.ResolvePhone(_, _) = async { return None }
         member _.ResolvePushTokens(_, _) = async { return [] }
+        member _.ResolveWhatsApp(_, _) = async { return None }
 
 /// In-memory `IReportTemplateStore`, scope-keyed.
 type InMemoryTemplateStore() =

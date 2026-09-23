@@ -66,6 +66,7 @@ type NoOpNotificationAddressBook() =
         member _.ResolveEmail(_, _) = async { return None }
         member _.ResolvePhone(_, _) = async { return None }
         member _.ResolvePushTokens(_, _) = async { return [] }
+        member _.ResolveWhatsApp(_, _) = async { return None }
 
 /// `INotificationAddressBook` backed by `IBlobStorage`. Reads
 /// `_platform/contacts/{scopeId}/{userId}.json` per lookup. Missing
@@ -220,6 +221,23 @@ type BlobBackedNotificationAddressBook
                 // than a raise keeps the sink's existing skip path the
                 // one that handles it.
                 return []
+        }
+
+        member _.ResolveWhatsApp(recipient, scopeId) = async {
+            match recipient with
+            | RecipientId.User _ ->
+                // The persisted `UserContact` carries no WhatsApp
+                // number (Phase 6f.B): a user recipient has nothing to
+                // resolve until a user profile grows one. `None` is the
+                // same skip every other no-address recipient takes.
+                return None
+            | RecipientId.External contactId ->
+                let! contact = readConsented scopeId contactId NotificationKind.SinkKind.WhatsApp
+
+                return
+                    contact
+                    |> Option.bind _.OptionalWhatsAppNumber
+                    |> Option.filter (String.IsNullOrWhiteSpace >> not)
         }
 
 /// Persist a `UserContact` for `(userId, scopeId)` so the blob-backed
