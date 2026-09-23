@@ -352,6 +352,7 @@ let private registeredTests =
         // ORDER of the two send-path filters by recording what passes
         // BETWEEN them.
         ExternalContactTests.tests
+        WhatsAppChannelTests.tests
         SmtpNotificationSinkTests.tests
         SendGridNotificationSinkTests.tests
         TwilioNotificationSinkTests.tests

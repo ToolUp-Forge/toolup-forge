@@ -571,6 +571,12 @@
         <Compile Include="InProcess\TransactionalDispatcherTests.fs" />
         <Compile Include="InProcess\NotificationAddressBookTests.fs" />
         <Compile Include="InProcess\ExternalContactTests.fs" />
+        <!-- Phase 827 - WhatsApp as a channel: SinkKind.WhatsApp, the template
+             registry defaults, the send policy (24-hour window + template
+             checks) and its order against the 6f.A consent gate, dispatch
+             and composition. After TransactionalDispatcherTests.fs (reuses
+             its FakeSink / FakeConfigStore / CapturingAuditLog). -->
+        <Compile Include="InProcess\WhatsAppChannelTests.fs" />
         <Compile Include="InProcess\SmtpNotificationSinkTests.fs" />
         <Compile Include="InProcess\SendGridNotificationSinkTests.fs" />
         <Compile Include="InProcess\TwilioNotificationSinkTests.fs" />

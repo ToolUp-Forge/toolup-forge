@@ -241,6 +241,29 @@ type ApiEnvelope = {
     Payload: byte[]
 }
 
+/// Phase 827 — a two-case union whose cases each carry one string: the
+/// shape of the platform's `RecipientId`, which every transactional
+/// envelope now carries a LIST of. Local, like every type above, so
+/// neither host's compile surface changes.
+type Addressee =
+    | PlatformMember of userId: string
+    | ExternalAddressee of contactId: string
+
+/// Phase 827 — shaped field-for-field like the platform's
+/// `WhatsAppEnvelope`: a list of payload-bearing union cases, three
+/// optional strings (one `Some`, two `None` in the pinned value), a
+/// string list and a string-keyed map in one record. The list of union
+/// cases is the shape no earlier case pins.
+type TemplatedMessage = {
+    Recipients: Addressee list
+    TemplateName: string option
+    TemplateLanguage: string option
+    TemplateParameters: string list
+    Body: string option
+    Metadata: Map<string, string>
+    CorrelationId: string option
+}
+
 // ─── A case ──────────────────────────────────────────────────────────
 
 /// Whether a case is in the CROSS-HOST set — the fixtures the Fable leg
@@ -434,6 +457,16 @@ let private sampleEnvelope = {
 /// Three levels deep, with a leaf beside a branch at every level — so a
 /// decoder that recursed only through the first child, or only through
 /// the last, would decode a different tree.
+let private sampleTemplatedMessage = {
+    Recipients = [ PlatformMember "user-1"; ExternalAddressee "contact-7" ]
+    TemplateName = Some "appointment_reminder"
+    TemplateLanguage = None
+    TemplateParameters = [ "Dr Evans"; "Alex"; "10:00" ]
+    Body = None
+    Metadata = Map [ "campaign", "autumn" ]
+    CorrelationId = Some "corr-827"
+}
+
 let private sampleTree =
     Branch(
         "root",
@@ -594,6 +627,8 @@ let pinnedCases: WireCase list = [
     // (`Customer.Since`), which the Fable reader refused until then.
     both WireClass.NestedRecord "record-nested" sampleCustomer
     both WireClass.NestedRecord "record-envelope" sampleEnvelope
+    // Phase 827 — the WhatsApp envelope's shape (see `TemplatedMessage`).
+    both WireClass.NestedRecord "record-templated-message" sampleTemplatedMessage
 ]
 
 /// The cross-host subset — what the Fable leg reads.

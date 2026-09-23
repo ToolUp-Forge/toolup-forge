@@ -66,3 +66,104 @@ let tests (name: string) (factory: unit -> INotificationSink) (sampleEnvelope: s
             | SinkResult.PermanentFailure _ -> ()
         }
     ]
+
+/// Whether a WhatsApp sink sends approved templates. A sink that cannot
+/// must refuse a template message as `PermanentFailure` — the same rule
+/// the email sinks follow for `TemplatedEmail` — so a deployment that
+/// swaps adapters fails fast rather than silently sending nothing.
+type WhatsAppTemplateSupport =
+    /// The sink sends template messages.
+    | SupportsTemplates
+    /// The sink sends free-form messages only.
+    | FreeFormOnly
+
+/// Phase 827 — the cases every `SinkKind.WhatsApp` sink must satisfy, on
+/// top of `tests`. Bound by each vendor companion with a factory whose
+/// sink talks to a FAKE transport, and `recipient` a recipient that
+/// sink's address book resolves. The 24-hour-window refusal is not a
+/// sink concern — the server refuses a free-form send outside the window
+/// before any sink runs — so a free-form send reaching a sink is one the
+/// server already admitted, and the sink must accept it.
+let whatsAppTests
+    (name: string)
+    (factory: unit -> INotificationSink)
+    (recipient: RecipientId)
+    (support: WhatsAppTemplateSupport)
+    =
+    let envelopeOf (whatsApp: WhatsAppEnvelope) =
+        NotificationEnvelope.create "scope-test" (TransactionalWhatsApp whatsApp)
+
+    let template = {
+        Recipients = [ recipient ]
+        TemplateName = Some "appointment_reminder"
+        TemplateLanguage = Some "en_GB"
+        TemplateParameters = [ "Alex"; "10:00" ]
+        Body = None
+        Metadata = Map.empty
+        CorrelationId = Some "corr-827-template"
+    }
+
+    let freeForm = {
+        template with
+            TemplateName = None
+            TemplateLanguage = None
+            TemplateParameters = []
+            Body = Some "Thanks — see you tomorrow."
+            CorrelationId = Some "corr-827-free-form"
+    }
+
+    let templateCase =
+        match support with
+        | SupportsTemplates ->
+            testCaseAsync "a template message round-trips to Delivered against the fake transport"
+            <| async {
+                let sink = factory ()
+                let envelope = envelopeOf template
+                let! result = sink.Send(envelope.ScopeId, envelope)
+
+                match result with
+                | SinkResult.Delivered _ -> ()
+                | other -> failtestf "a template-capable WhatsApp sink must deliver a template message; got %A" other
+            }
+        | FreeFormOnly ->
+            testCaseAsync "a sink without template support refuses a template message as PermanentFailure"
+            <| async {
+                let sink = factory ()
+                let envelope = envelopeOf template
+                let! result = sink.Send(envelope.ScopeId, envelope)
+
+                match result with
+                | SinkResult.PermanentFailure _ -> ()
+                | other ->
+                    failtestf
+                        "a WhatsApp sink that cannot send templates must say so with PermanentFailure (as the email sinks do for TemplatedEmail); got %A"
+                        other
+            }
+
+    testList $"{name} — INotificationSink WhatsApp contract" [
+        testCaseAsync "Kind is SinkKind.WhatsApp"
+        <| async {
+            let sink = factory ()
+
+            Expect.equal
+                sink.Kind
+                NotificationKind.SinkKind.WhatsApp
+                "a WhatsApp sink registers under SinkKind.WhatsApp"
+        }
+
+        templateCase
+
+        testCaseAsync "a free-form Body inside the window is accepted by the sink"
+        <| async {
+            let sink = factory ()
+            let envelope = envelopeOf freeForm
+            let! result = sink.Send(envelope.ScopeId, envelope)
+
+            match result with
+            | SinkResult.Delivered _ -> ()
+            | other ->
+                failtestf
+                    "a free-form WhatsApp message reaching the sink was admitted by the server's window rule; the sink must deliver it, got %A"
+                    other
+        }
+    ]
