@@ -60,8 +60,9 @@ let DefaultFlowName = "google-calendar"
 [<Literal>]
 let EventsScope = "https://www.googleapis.com/auth/calendar.events"
 
-/// Read the user's calendar list — the health probe's call, and nothing
-/// the bridge itself needs.
+/// Read the user's calendar list — the health probe's call, and the
+/// bridge's own link check (`calendarList.get`; `calendars.get` is not
+/// authorised under `calendar.events`).
 [<Literal>]
 let CalendarListReadonlyScope =
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly"

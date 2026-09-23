@@ -1025,7 +1025,15 @@ type GoogleCalendarBridge
         }
 
         member _.LinkResource(link) = async {
-            match! authorized link (jsonRequest HttpMethod.Get (calendarUrl link.ExternalCalendarId) None) with
+            // `calendarList.get`, not `calendars.get`: the latter is not
+            // authorised under `calendar.events`, and the former is covered by
+            // the `calendar.calendarlist.readonly` scope the flow already
+            // requests for the health probe. Both answer 404 for a calendar
+            // the user cannot reach. (Found by the live probe, 2026-09-23.)
+            let url =
+                sprintf "%s/users/me/calendarList/%s" apiBase (Uri.EscapeDataString link.ExternalCalendarId)
+
+            match! authorized link (jsonRequest HttpMethod.Get url None) with
             | Error e -> return Error e
             | Ok reply when int reply.Status = 404 -> return Error(CalendarNotFound link.ExternalCalendarId)
             | Ok reply when not (isSuccess reply) ->

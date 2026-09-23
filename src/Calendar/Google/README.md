@@ -10,7 +10,7 @@ a Google watch channel, renewed on a schedule with a polling fallback.
 This repository's Google Analytics connector uses Google's client libraries; the observability and
 notification companions use BCL `HttpClient`. This bridge is BCL-only, for three reasons:
 
-- It needs six REST calls (`calendars.get`, `events.list` / `insert` / `get` / `update` /
+- It needs six REST calls (`calendarList.get`, `events.list` / `insert` / `get` / `update` /
   `delete`, `events.watch`, `channels.stop`). The client library would replace a few lines of
   URL composition with its own request objects and save nothing else.
 - The watch channel is where the SDK might have paid for itself, and it does not: a channel is
@@ -26,7 +26,7 @@ dependency tree it did not already have.
 
 | `ICalendarBridge` member | Google Calendar v3 |
 |---|---|
-| `LinkResource` | `calendars.get` — does it exist, can we see it? — then, when watch channels are configured, `events.watch` (unless the recorded channel still has more than `ChannelRenewalLead` to run) |
+| `LinkResource` | `calendarList.get` — does it exist, can we see it? (not `calendars.get`, which `calendar.events` does not authorise) — then, when watch channels are configured, `events.watch` (unless the recorded channel still has more than `ChannelRenewalLead` to run) |
 | `UnlinkResource` | `channels.stop` on the recorded channel, then forgets the channel and the sync token |
 | `Push` | `events.insert` under a **deterministic event id**; an update is `events.get` + `events.update` (read-merge-write); a `Cancelled` booking is `events.delete` |
 | `Pull` | `events.list` — the stored sync token when there is one, `updatedMin` otherwise, a time window when no `since` is given; paged |
@@ -92,7 +92,9 @@ way a rotated refresh token or client secret is picked up on the next call — n
 ### Scopes
 
 `https://www.googleapis.com/auth/calendar.events` (read/write events, watch channels) and
-`https://www.googleapis.com/auth/calendar.calendarlist.readonly` (the health probe). Both are
+`https://www.googleapis.com/auth/calendar.calendarlist.readonly` (the link check and the health
+probe — `calendarList.get` / `list` are authorised under it where `calendars.get` is not, which the
+first live probe found as a 403 `ACCESS_TOKEN_SCOPE_INSUFFICIENT` on 2026-09-23). Both are
 **sensitive** scopes.
 
 ## Google Cloud setup

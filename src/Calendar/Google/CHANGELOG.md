@@ -9,6 +9,16 @@ patch bump stays non-breaking.
 
 ## [Unreleased]
 
+### Fixed
+
+- `LinkResource` read the calendar through `calendars.get`, which Google does
+  not authorise under the `calendar.events` scope the flow requests, so a real
+  link failed with a 403 `ACCESS_TOKEN_SCOPE_INSUFFICIENT` (found by the first
+  live probe, 2026-09-23). It now reads the user's `calendarList` entry, which
+  the `calendar.calendarlist.readonly` scope the flow already requests for the
+  health probe covers; an unreachable calendar still answers 404 and is still
+  reported as `CalendarNotFound`. No scope was added.
+
 ### Added
 
 - Initial release. `GoogleCalendarBridge` implements the Phase 20a

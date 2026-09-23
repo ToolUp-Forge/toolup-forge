@@ -174,7 +174,13 @@ type StubGoogleHandler(server: StubGoogleCalendar) =
                 return respond HttpStatusCode.NoContent ""
             | _, "calendars" :: calendar :: _ when calendar <> CalendarId ->
                 return respond HttpStatusCode.NotFound """{"error":{"code":404}}"""
-            | "GET", [ "calendars"; _ ] -> return respond HttpStatusCode.OK (sprintf """{"id":"%s"}""" CalendarId)
+            // The link check reads the user's calendarList entry (covered by the
+            // calendarlist.readonly scope), never `calendars.get` (which is not
+            // authorised under `calendar.events` — the live probe's 403).
+            | "GET", [ "users"; "me"; "calendarList"; calendar ] when calendar <> CalendarId ->
+                return respond HttpStatusCode.NotFound """{"error":{"code":404}}"""
+            | "GET", [ "users"; "me"; "calendarList"; _ ] ->
+                return respond HttpStatusCode.OK (sprintf """{"id":"%s","accessRole":"owner"}""" CalendarId)
             | "POST", [ "calendars"; _; "events"; "watch" ] ->
                 if server.FailWatch then
                     return respond HttpStatusCode.ServiceUnavailable """{"error":{"code":503}}"""
