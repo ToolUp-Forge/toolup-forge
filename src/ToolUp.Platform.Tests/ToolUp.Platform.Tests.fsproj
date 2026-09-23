@@ -584,6 +584,9 @@
         <Compile Include="InProcess\SmtpNotificationSinkTests.fs" />
         <Compile Include="InProcess\SendGridNotificationSinkTests.fs" />
         <Compile Include="InProcess\TwilioNotificationSinkTests.fs" />
+        <!-- Phase 6f.B - the Twilio WhatsApp companion: contract packs over an
+             unroutable endpoint and a StubHandler, the pinned form body. -->
+        <Compile Include="InProcess\TwilioWhatsAppNotificationSinkTests.fs" />
         <Compile Include="InProcess\WebPushNotificationSinkTests.fs" />
         <Compile Include="InProcess\HnswVectorStoreTests.fs" />
         <Compile Include="InProcess\KnowledgeUserScopeIsolationTests.fs" />
@@ -2770,6 +2773,7 @@
         <ProjectReference Include="..\NotificationChannels\Email\Smtp\ToolUp.NotificationChannels.Email.Smtp.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Email\SendGrid\ToolUp.NotificationChannels.Email.SendGrid.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Sms\Twilio\ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
+        <ProjectReference Include="..\NotificationChannels\WhatsApp\Twilio\ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj" />
         <ProjectReference Include="..\NotificationChannels\Push\WebPush\ToolUp.NotificationChannels.Push.WebPush.fsproj" />
         <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
         <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />

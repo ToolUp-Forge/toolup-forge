@@ -436,6 +436,7 @@
     <PackageVersion Include="ToolUp.NotificationChannels.Email.Smtp" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Email.SendGrid" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Sms.Twilio" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.NotificationChannels.WhatsApp.Twilio" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.NotificationChannels.Push.WebPush" Version="$(ToolUpSdkVersion)" />
 
     <!-- Metrics + UI -->
