@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Microsoft Graph ICalendarBridge for ToolUp.Scheduling — Outlook / Microsoft 365 calendars over the Graph REST surface with BCL HttpClient: delegated OAuth through the platform substrate, calendarView delta pulls, change-notification subscriptions with their own notification route. No Graph SDK.</Description>
+    <PackageTags>fsharp;sdk;calendar;microsoft-graph;outlook;microsoft-365;scheduling;bridge</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 831 Microsoft Graph calendar-bridge companion. ProjectReferences
+       only: the booking model and the sync engine come from the
+       ToolUp.Scheduling tiers, OAuth / refresh / egress / jobs from
+       ToolUp.Platform.Server (which also brings Giraffe for the
+       notification route). Zero paid dependencies; the external gate (an Entra application registration, a public
+       HTTPS endpoint for subscriptions) is the deployment's, not the
+       build's. -->
+  <ItemGroup>
+    <Compile Include="MicrosoftGraphCalendarOAuth.fs" />
+    <Compile Include="MicrosoftGraphCalendarBridge.fs" />
+    <Compile Include="MicrosoftGraphCalendarSubscriptions.fs" />
+    <Compile Include="MicrosoftGraphCalendarBridgeHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Scheduling.Core\ToolUp.Scheduling.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Scheduling.Server\ToolUp.Scheduling.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK; System.Text.Json ships in
+       the BCL. -->
+</Project>

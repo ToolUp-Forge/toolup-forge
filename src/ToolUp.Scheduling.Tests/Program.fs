@@ -21,6 +21,9 @@ let private registeredTests =
         // Phase 830 — the Google Calendar bridge: the contract pack bound
         // over a stub Calendar v3, plus its OAuth, channel and route cases.
         GoogleCalendarBridgeTests.tests
+        // Phase 831 — the Microsoft Graph bridge: the pack's fourth binding,
+        // plus tokens, delta paging and the subscription route.
+        MicrosoftGraphCalendarBridgeTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
