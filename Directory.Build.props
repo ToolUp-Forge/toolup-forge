@@ -251,7 +251,7 @@
       already past `v0.22.0` and unpublished. Migration recipe:
       `docs/migrations/797-scope-choke-point.md`.
     -->
-    <Version>0.23.0</Version>
+    <Version>0.24.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
