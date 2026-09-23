@@ -576,12 +576,14 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Datadog
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// The sidebar group this module coins. Free strings are what
-/// `ClientModule.withGroup` takes, and nothing declared this one before
-/// Phase 9w; a sibling observability module reuses this same literal
-/// rather than minting a near-miss.
+/// The sidebar group this module coined at Phase 9w. Since Phase 9x
+/// the string itself lives in `SidebarVisibility.ObservabilitySidebarGroup`
+/// — the platform-admin group allow-list names it, and that file compiles
+/// ahead of every module — and this alias keeps the published name. A
+/// sibling observability module reuses it rather than minting a
+/// near-miss.
 [<Literal>]
-let ObservabilityGroup = "Observability"
+let ObservabilityGroup = ToolUp.Platform.SidebarVisibility.ObservabilitySidebarGroup
 
 /// Create the Datadog readback admin as an `ErasedModule`. The shell's
 /// `prepareModules` injects it when
@@ -593,9 +595,10 @@ let ObservabilityGroup = "Observability"
 /// the same predicate server-side regardless of what the client renders.
 /// `withArea Administration` is declared EXPLICITLY rather than derived:
 /// the Phase 567 area derivation reads the GROUP name against a closed
-/// set, and a newly-coined group is not in it, so an admin module in a
-/// new group would otherwise land in the product area under
-/// `AdminSurface = SeparateArea`.
+/// set, and when this module coined its group that set did not name it.
+/// Phase 9x added the group to the set, so the declaration is now
+/// belt-and-braces rather than load-bearing; it stays, because the area
+/// is this module's decision and should not hinge on a set elsewhere.
 let create (config: DatadogReadbackConfig) : ErasedModule =
     ToolUp.Platform.ClientModule.create {
         Init = init config

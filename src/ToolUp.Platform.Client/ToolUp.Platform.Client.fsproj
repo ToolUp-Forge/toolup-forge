@@ -419,6 +419,9 @@
         <Compile Include="Client\SessionSecurityUI.fs" />
         <Compile Include="Client\HealthMonitorUI.fs" />
         <Compile Include="Client\DatadogReadbackUI.fs" />
+        <!-- Phase 9x - the self-hosted observability admin module. After
+             DatadogReadbackUI.fs, whose ObservabilityGroup it reuses. -->
+        <Compile Include="Client\ObservabilityUI.fs" />
         <Compile Include="Client\ServiceStatusBoardUI.fs" />
         <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />
         <Compile Include="Client\PlatformAdminUI.fs" />

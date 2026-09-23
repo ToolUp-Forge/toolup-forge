@@ -820,6 +820,13 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = HealthM
 /// role-gated sidebar filter (commit 4f.2) hides the entry from
 /// non-admin callers. Existing Team Admins relying on HealthMonitor lose access
 /// until they're also assigned `PlatformRole.PlatformAdmin`.
+///
+/// **Phase 9x — regrouped under "Observability"** (operator decision
+/// 2026-09-23), beside the Datadog readback and self-hosted
+/// observability modules: three observability modules, one group. The
+/// group joined the platform-admin allow-list in the same change, so
+/// the entry keeps its administration area and a team-less platform
+/// admin still reaches it; the gate itself is the typed `NavRole`.
 let create (config: HealthMonitorConfig option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Health Monitor"
 
@@ -836,7 +843,7 @@ let create (config: HealthMonitorConfig option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.HealthMonitor"
     |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
+    |> ToolUp.Platform.ClientModule.withGroup ToolUp.Platform.SidebarVisibility.ObservabilitySidebarGroup
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

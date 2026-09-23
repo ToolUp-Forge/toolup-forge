@@ -45,15 +45,26 @@ module ToolUp.Platform.SidebarVisibility
 // against `withGroup "Platform Admin"` before the typed field existed.
 // Removal is deferred to the next major (GP 11) — see `effectiveNavRole`.
 
+/// The sidebar group the SDK's observability admin modules share —
+/// `HealthMonitorUI`, `DatadogReadbackUI` and `ObservabilityUI`. The ONE
+/// place the string is spelled: it is declared here, ahead of every
+/// module that uses it, because it is also a member of the
+/// platform-admin allow-list below (Phase 9x), and a near-miss spelling
+/// at a registration site would silently drop that module out of the
+/// admin area and the no-team admin escape.
+[<Literal>]
+let ObservabilitySidebarGroup = "Observability"
+
 /// Platform-scoped admin sidebar groups — visible ONLY to callers
 /// holding `PlatformRole.PlatformAdmin`. Mirrors the SDK built-ins'
-/// `withGroup` labels (PlatformAdminUI / HealthMonitorUI /
-/// ServiceStatusBoardUI / DataSubjectRequestAdminUI /
-/// TenantLifecycleAdminUI / PlatformUsersUI → "Platform Management")
-/// plus the consumer-convention "Platform Admin" group that the
-/// Phase 4b role-gate has recognised since commit 4f.2.
+/// `withGroup` labels (PlatformAdminUI / ServiceStatusBoardUI /
+/// DataSubjectRequestAdminUI / TenantLifecycleAdminUI / PlatformUsersUI
+/// → "Platform Management"; HealthMonitorUI / DatadogReadbackUI /
+/// ObservabilityUI → `ObservabilitySidebarGroup`) plus the
+/// consumer-convention "Platform Admin" group that the Phase 4b
+/// role-gate has recognised since commit 4f.2.
 let private platformAdminSidebarGroups: Set<string> =
-    Set.ofList [ "Platform Admin"; "Platform Management" ]
+    Set.ofList [ "Platform Admin"; "Platform Management"; ObservabilitySidebarGroup ]
 
 /// Team-scoped admin sidebar group(s) — the management surfaces a
 /// team Owner/Admin legitimately uses (TeamManagerUI /
