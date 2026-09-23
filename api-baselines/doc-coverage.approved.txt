@@ -157,7 +157,7 @@ ToolUp.SparseIndices.Snowball 21/63
 ToolUp.Storage.AwsS3 8/19
 ToolUp.Storage.AzureBlob 9/19
 ToolUp.Storage.GoogleCloud 9/20
-ToolUp.Stripe.Server 42/76
+ToolUp.Stripe.Server 69/128
 ToolUp.Stripe.TierToken 25/94
 ToolUp.Stripe.Webhook 30/88
 ToolUp.Tabular 95/256
