@@ -209,31 +209,53 @@ let calendarView (model: Model) (dispatch: Msg -> unit) =
 
 Pick what fits your aesthetic / UX requirements; the SDK doesn't lock you in.
 
-## Two-way calendar sync (deferred extension)
+## Two-way calendar sync
 
-A future `ICalendarSyncProvider` extension point would pull external availability:
+Shipped since Phase 20a: bookings on a linked resource mirror outward into an external calendar, and edits made there are pulled back under a per-link conflict policy. Two pieces, split so a provider is a small adapter:
+
+- **`ICalendarBridge`** (`ToolUp.Scheduling.Core`) — the portable surface one provider implements: `Kind`, `Capabilities` (webhooks? a modification cursor? the poll floor?), `LinkResource` / `UnlinkResource`, `Push`, `Pull`, `HandleWebhook`. A bridge holds no state and owns no store; credentials come from `ISecretStore` per call, keyed by the link's scope.
+- **`CalendarSync`** (`ToolUp.Scheduling.Server`) — everything provider-independent: the resource ↔ external-calendar link store, the push job fired on `BookingCreated` / `BookingRescheduled` / `BookingCancelled`, the pull (a cron poll for polling-only bridges, a provider notification for webhook-capable ones), and the conflict policy (`ExternalWins` / `LocalWins` / `LatestModifiedWins`).
+
+External events come back as **bookings** on the linked resource, so they block slots through the same conflict detector every booking does — nothing downstream of `IBookingScheduler` changes.
+
+Composition is one call per provider; a deployment that never makes it registers no link entities, builds no sync engine and schedules no job (GP 13):
 
 ```fsharp
-type ICalendarSyncProvider =
-    abstract FetchExternalEvents: resourceId: ResourceId * window: DateRange -> Async<AvailabilityException list>
+let withMirroring (app: SchedulingServerApp) (bridge: ToolUp.Scheduling.ICalendarBridge.ICalendarBridge) =
+    app
+    |> SchedulingServerApp.withConfig config
+    |> SchedulingServerApp.withCalendarBridge bridge
 ```
 
-A `GoogleCalendarSyncProvider` companion would query Google Calendar's API for the resource's owner and project what it found as dated `AvailabilityException`s — `Kind = PartialBlock` for a timed event, `FullDay` for an all-day one. `FindAvailableSlots` already subtracts those, so nothing downstream would need to change.
-
-Currently this is a deferred extension. Build it as a custom module-side layer for now:
+A resource is then linked through the sync engine, naming the provider by its `Kind`, the external calendar, the user whose credentials authorise the mirror, and the conflict policy:
 
 ```fsharp
-let slotsWithExternalSync resourceId window = async {
-    let! slots =
-        schedulingApi.FindAvailableSlots {
-            ResourceId = resourceId
-            Window = window
-            SlotDurationMinutes = 60
-        }
-    let! externalEvents = googleCalendarApi.fetchEvents resourceId window
-    return subtractExternal slots externalEvents
+let linkRoom (sync: ToolUp.Scheduling.CalendarSync.ICalendarSync) = async {
+    let! linked =
+        sync.LinkResource(
+            "team-a",
+            "room-101",
+            "Google",
+            "rooms@group.calendar.google.com",
+            "alice",
+            ToolUp.Scheduling.ICalendarBridge.LatestModifiedWins,
+            ToolUp.Platform.EntityTypes.EntityPrincipal.ofPrincipal "scheduling-admin"
+        )
+
+    return linked
 }
 ```
+
+Shipped providers:
+
+| Package | Provider | Shape |
+|---|---|---|
+| `ToolUp.Calendar.CalDAV` | any RFC 4791 server (Fastmail, Nextcloud, iCloud, Radicale) | polling; `since` bounds event time |
+| `ToolUp.Calendar.Google` | Google Calendar v3 | watch-channel notifications with scheduled renewal and a polling fallback; incremental pull on sync tokens |
+
+**Writing a bridge for another provider.** Implement the six members, declare `Capabilities` honestly (the sync engine wires polling, notifications and the pull cursor from them), classify failures into `BridgeError` without retrying (the engine's jobs own retry), and bind the `ICalendarBridgeContract` pack from `src/ToolUp.Scheduling.Tests/Contracts/` over a stub transport — the pack holds every provider to the same round-trip, idempotency and conflict-resolution laws, and it splits the `since` law by the capability you declare. The two companion READMEs are the worked examples.
+
+Two limits belong to the engine rather than to any bridge: an external deletion is not applied locally (cancel through the deployment, which pushes the deletion), and an external edit that changed more than the times records `BookingCreated`, because `IBookingScheduler` has no general update verb.
 
 ## Custom recurrence
 
@@ -369,7 +391,7 @@ This is the pattern for class bookings (10 students per class), shared-resource 
 
 ## Companion conventions
 
-Most scheduling extensions live in your own module code, not in companion packages. The shipped interface (`IBookingScheduler`) is stable and the `ISchedulingApi` wire format is committed; `ICalendarSyncProvider` is a sketch of a deferred extension, not a shipped seam. For deeper customisation:
+Most scheduling extensions live in your own module code, not in companion packages. The shipped interface (`IBookingScheduler`) is stable and the `ISchedulingApi` wire format is committed; calendar providers are the one extension that IS a companion package, behind the shipped `ICalendarBridge` seam. For deeper customisation:
 
 - Replace `IBookingScheduler` outright for distributed-lock / capacity / pool semantics.
 - Wrap with decorators for wait-list / sync / multi-resource composition.

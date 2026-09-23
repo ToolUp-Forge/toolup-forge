@@ -30,7 +30,10 @@
         <Compile Include="InProcess\InMemoryCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalDAVCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalendarSyncTests.fs" />
-        <!-- Phase 831 — the Microsoft Graph bridge: binding 3 of the pack. -->
+        <!-- Phase 830 — the Google Calendar bridge, the third binding of the
+             ICalendarBridge contract pack. -->
+        <Compile Include="InProcess\GoogleCalendarBridgeTests.fs" />
+        <!-- Phase 831 — the Microsoft Graph bridge: binding 4 of the pack. -->
         <Compile Include="InProcess\MicrosoftGraphCalendarBridgeTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
@@ -45,7 +48,9 @@
         <!-- Phase 20a — the CalDAV bridge is the second binding of the
              ICalendarBridge contract pack. -->
         <ProjectReference Include="..\Calendar\CalDAV\ToolUp.Calendar.CalDAV.fsproj" />
-        <!-- Phase 831 — the Microsoft Graph bridge is the third binding. -->
+        <!-- Phase 830 — the Google Calendar bridge is the third binding. -->
+        <ProjectReference Include="..\Calendar\Google\ToolUp.Calendar.Google.fsproj" />
+        <!-- Phase 831 — the Microsoft Graph bridge is the fourth binding. -->
         <ProjectReference Include="..\Calendar\Microsoft\ToolUp.Calendar.Microsoft.fsproj" />
     </ItemGroup>
     <ItemGroup>

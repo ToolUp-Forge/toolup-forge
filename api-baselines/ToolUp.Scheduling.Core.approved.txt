@@ -304,7 +304,9 @@ ToolUp.Scheduling.iCalendar.LocationKey : System.String (literal)
 ToolUp.Scheduling.iCalendar.OrganizerKey : System.String (literal)
 ToolUp.Scheduling.iCalendar.bookingToVEvent(ToolUp.Scheduling.SchedulingTypes+Booking) : ToolUp.Scheduling.iCalendar+VEvent
 ToolUp.Scheduling.iCalendar.emit(ToolUp.Scheduling.iCalendar+VCalendar) : System.String
+ToolUp.Scheduling.iCalendar.emitRRule(ToolUp.Scheduling.SchedulingTypes+RecurrenceRule) : System.String
 ToolUp.Scheduling.iCalendar.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.iCalendar+VCalendar, System.String]
+ToolUp.Scheduling.iCalendar.parseRRule(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.SchedulingTypes+RecurrenceRule, System.String]
 ToolUp.Scheduling.iCalendar.vEventToBooking(ToolUp.Scheduling.SchedulingTypes+Booking, ToolUp.Scheduling.iCalendar+VEvent) : ToolUp.Scheduling.SchedulingTypes+Booking
 ToolUp.Scheduling.iCalendar+VCalendar (class)
 ToolUp.Scheduling.iCalendar+VCalendar..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Scheduling.iCalendar+VEvent])
