@@ -184,6 +184,49 @@ ServerApp.empty
 
 Browser side: register a Service Worker (`examples/sw.js` template ships with the companion). The Service Worker handles `push` events and shows OS notifications.
 
+### WhatsApp — the shared arm (Phase 827)
+
+WhatsApp is one channel with two message shapes, and the platform — not a vendor companion —
+enforces the rules that tell them apart. Vendor sinks register under `SinkKind.WhatsApp` (at most
+one per deployment) and consume `Notification.TransactionalWhatsApp of WhatsAppEnvelope`.
+
+- **Template messages** (`TemplateName = Some name`, `Body = None`) are how a business starts a
+  conversation. The template must be registered in the deployment's `IWhatsAppTemplateRegistry`,
+  in the requested `TemplateLanguage` (when one is given), and `TemplateParameters` must match its
+  total arity exactly — header, then body, then button parameters, flat.
+- **Free-form messages** (`TemplateName = None`, `Body = Some text`) are allowed only inside the
+  24-hour customer-care window opened by the recipient's own last inbound message
+  (`ExternalContact.LastInboundUtc`, recorded by `IExternalContactApi.RecordInbound`). A platform
+  user has no inbound record, so a free-form send to one is always outside the window.
+
+Both rules run in `WhatsAppSendPolicyFilter`, a channel decorator composed directly inside the
+external-contact consent gate and outside the notification-preference filter — consent first,
+then the WhatsApp rules, then preferences, then the dispatcher. Every refused recipient is audited
+as `NotificationDeliveryRefused` with a reason naming the rule
+(`outside_24h_window_no_template`, `whatsapp_template_unknown`,
+`whatsapp_template_language_unsupported`, `whatsapp_template_arity_mismatch`,
+`whatsapp_no_content`, `whatsapp_template_and_body`); nothing refused reaches a sink. Every
+failure path — an unreadable contact, a registry that cannot answer — refuses.
+
+The default registry reads one JSON document per template from blob storage at
+`_platform/whatsapp-templates/{name}.json`, mirroring what the vendor approved:
+
+```json
+{
+  "Name": "appointment_reminder",
+  "Languages": ["en_GB", "cy"],
+  "HeaderParameterCount": 1,
+  "BodyParameterCount": 2,
+  "ButtonParameterCount": 0
+}
+```
+
+Register your own `IWhatsAppTemplateRegistry` to source templates elsewhere. The filter and the
+default registry are composed only when a WhatsApp sink is registered, so a deployment without one
+is unchanged; delivery is further gated per team by the `whatsapp.enabled` kill switch in
+`_platform.notification_prefs` (default off, like every channel's). WhatsApp has no
+notification-preference family yet, so the preference filter does not govern (or digest-hold) it.
+
 ## How the dispatcher works
 
 `TransactionalDispatcher` is a `BackgroundService` that drains a bounded `Channel<NotificationEnvelope>`. Per envelope:
