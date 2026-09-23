@@ -81,7 +81,7 @@ let private RoutePrefix = "/api/observability/datadog"
 /// and 503 are platform-side answers an operator can act on, and
 /// anything else — including a body that will not parse — is reported
 /// with its code rather than swallowed.
-let private fetchJson<'T> (url: string) : Async<Result<'T, string>> = async {
+let inline private fetchJson<'T> (url: string) : Async<Result<'T, string>> = async {
     try
         let! response = Http.request url |> Http.method GET |> Http.send
 
@@ -98,14 +98,29 @@ let private fetchJson<'T> (url: string) : Async<Result<'T, string>> = async {
         return Error(sprintf "The request could not be sent: %s" ex.Message)
 }
 
+// `fetchJson` is `inline` and the three call sites below are its only
+// ones, each resolving `'T` concretely. Both halves are load-bearing:
+// `Json.parseAs<'T>` needs the type at COMPILE time, and Fable erases
+// generics at runtime, so a non-inline generic fetcher is not a style
+// preference but a compile error — `Cannot get type info of generic
+// parameter T`. Passing the inline function itself to `Cmd.OfAsync`
+// would erase it again, which is why each command names a concrete
+// wrapper rather than `fetchJson<Something>`.
+
+let private fetchMonitors (url: string) : Async<Result<DatadogMonitorsResponse, string>> = fetchJson url
+
+let private fetchLogs (url: string) : Async<Result<DatadogLogsResponse, string>> = fetchJson url
+
+let private fetchMetric (url: string) : Async<Result<DatadogMetricResponse, string>> = fetchJson url
+
 let private loadMonitorsCmd () =
-    Cmd.OfAsync.perform fetchJson<DatadogMonitorsResponse> (RoutePrefix + "/monitors") MonitorsLoaded
+    Cmd.OfAsync.perform fetchMonitors (RoutePrefix + "/monitors") MonitorsLoaded
 
 let private loadLogsCmd (config: DatadogReadbackConfig) =
     let url =
         sprintf "%s/logs?minutes=%d&limit=%d" RoutePrefix config.DefaultWindowMinutes config.LogPageLimit
 
-    Cmd.OfAsync.perform fetchJson<DatadogLogsResponse> url LogsLoaded
+    Cmd.OfAsync.perform fetchLogs url LogsLoaded
 
 /// `encodeURIComponent` rather than `Uri.EscapeDataString`: the BCL
 /// call has no Fable implementation, and the browser's own is what this
@@ -117,7 +132,7 @@ let private loadMetricCmd (config: DatadogReadbackConfig) (metric: string) =
     let url =
         sprintf "%s/metric?metric=%s&minutes=%d" RoutePrefix (encodeUriComponent metric) config.DefaultWindowMinutes
 
-    Cmd.OfAsync.perform fetchJson<DatadogMetricResponse> url (fun result -> MetricLoaded(metric, result))
+    Cmd.OfAsync.perform fetchMetric url (fun result -> MetricLoaded(metric, result))
 
 let private loadMetricsCmd (config: DatadogReadbackConfig) =
     DatadogReadback.defaultChartedMetrics
