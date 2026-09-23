@@ -874,6 +874,30 @@ module Names =
     [<Literal>]
     let perfMeasurements = "TOOLUP_PERF_MEASUREMENTS"
 
+    // Phase 831 — the Microsoft Graph calendar-bridge companion's
+    // settings. The client secret and the webhook client-state secret are
+    // NOT here: both resolve per call through ISecretStore.
+
+    /// Entra application (client) id the Microsoft Graph calendar bridge
+    /// signs users in with.
+    [<Literal>]
+    let msGraphCalendarClientId = "TOOLUP_MSGRAPH_CALENDAR_CLIENT_ID"
+
+    /// Entra tenant segment of the Microsoft Graph calendar bridge's
+    /// authority (`common`, `organizations`, a tenant id or domain).
+    [<Literal>]
+    let msGraphCalendarTenant = "TOOLUP_MSGRAPH_CALENDAR_TENANT"
+
+    /// Public HTTPS URL Microsoft Graph delivers calendar change
+    /// notifications to. Unset means polling only.
+    [<Literal>]
+    let msGraphCalendarNotificationUrl = "TOOLUP_MSGRAPH_CALENDAR_NOTIFICATION_URL"
+
+    /// Endpoint override for the Microsoft Graph calendar bridge,
+    /// replacing both the Graph and the sign-in base URL per request.
+    [<Literal>]
+    let msGraphCalendarEndpoint = "TOOLUP_MSGRAPH_CALENDAR_ENDPOINT"
+
     // Phase 20a — the CalDAV calendar-bridge companion's settings. The
     // password / app-password is NOT here: it resolves per call through
     // ISecretStore, so rotation flows through without a restart.
@@ -2671,6 +2695,43 @@ let all: ConfigKeyDescriptor list = [
         Default = None
         IsSecret = false
         Category = ToolingCategory
+    }
+    // --- Phase 831: the Microsoft Graph calendar bridge ---
+    {
+        EnvVar = Names.msGraphCalendarClientId
+        Description =
+            "Entra application (client) id the Microsoft Graph calendar bridge signs users in with. The client secret comes from ISecretStore, never from the environment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
+    }
+    {
+        EnvVar = Names.msGraphCalendarTenant
+        Description =
+            "Entra tenant segment of the Microsoft Graph calendar bridge's sign-in authority: common, organizations, consumers, a tenant id or a verified domain."
+        Type = StringKey
+        Default = Some "common"
+        IsSecret = false
+        Category = "Platform subsystems"
+    }
+    {
+        EnvVar = Names.msGraphCalendarNotificationUrl
+        Description =
+            "Public HTTPS URL of the notification route Microsoft Graph delivers calendar change notifications to. Unset, the bridge declares itself polling-only and opens no subscriptions."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
+    }
+    {
+        EnvVar = Names.msGraphCalendarEndpoint
+        Description =
+            "Microsoft Graph calendar bridge endpoint override, replacing both the Graph and the sign-in base URL for every request."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Platform subsystems"
     }
     // --- Phase 20a: the CalDAV calendar bridge ---
     {
