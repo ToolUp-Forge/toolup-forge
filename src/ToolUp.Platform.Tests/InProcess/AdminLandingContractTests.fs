@@ -61,7 +61,7 @@ let private usageDashboard =
     moduleFacts "_sdk.UsageDashboard" (Some "Team Management") NavRole.TeamOwnerAdmin
 
 let private healthMonitor =
-    moduleFacts "_sdk.HealthMonitor" (Some "Platform Management") NavRole.PlatformAdminOnly
+    moduleFacts "_sdk.HealthMonitor" (Some SidebarVisibility.ObservabilitySidebarGroup) NavRole.PlatformAdminOnly
 
 let private serviceStatusBoard =
     moduleFacts "_sdk.ServiceStatusBoard" (Some "Platform Management") NavRole.PlatformAdminOnly

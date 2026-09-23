@@ -975,6 +975,9 @@
         <Compile Include="InProcess\SplunkHecAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogLogsAuditSinkTests.fs" />
         <Compile Include="InProcess\DatadogReadbackClientTests.fs" />
+        <!-- Phase 9x - the self-hosted observability endpoints, plus the
+             Phase 9w Datadog readback endpoint tests homed beside them. -->
+        <Compile Include="InProcess\ObservabilityHandlersTests.fs" />
         <Compile Include="InProcess\CefAuditSinkTests.fs" />
         <Compile Include="InProcess\ChainedAuditLedgerTests.fs" />
         <Compile Include="InProcess\AuditReplicatorTests.fs" />
