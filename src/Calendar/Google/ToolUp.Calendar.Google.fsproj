@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Google Calendar ICalendarBridge for ToolUp.Scheduling — the Calendar v3 REST surface over BCL HttpClient: push with deterministic event ids, incremental pull on sync tokens, watch-channel notifications with scheduled renewal and a polling fallback. OAuth through the platform's Authorization Code and token-refresh substrates. No Google client library.</Description>
+    <PackageTags>fsharp;sdk;calendar;google-calendar;scheduling;bridge;oauth;webhook</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 830 Google Calendar calendar-bridge companion. ProjectReferences
+       only (GP 1): the wire format is Calendar v3 JSON read with
+       System.Text.Json, the transport is BCL HttpClient behind the
+       platform's egress policy handler, and OAuth rides the platform's
+       own substrates. ToolUp.Scheduling.Server supplies the sync engine
+       the renewal job and the notification route drive. -->
+  <ItemGroup>
+    <Compile Include="GoogleCalendarOAuth.fs" />
+    <Compile Include="GoogleCalendarBridge.fs" />
+    <Compile Include="GoogleCalendarBridgeHealth.fs" />
+    <Compile Include="GoogleCalendarChannels.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Scheduling.Core\ToolUp.Scheduling.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Scheduling.Server\ToolUp.Scheduling.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK; Giraffe and the ASP.NET
+       Core framework reference flow from ToolUp.Platform.Server. -->
+</Project>
