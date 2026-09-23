@@ -356,6 +356,7 @@ let private registeredTests =
         SmtpNotificationSinkTests.tests
         SendGridNotificationSinkTests.tests
         TwilioNotificationSinkTests.tests
+        TwilioWhatsAppNotificationSinkTests.tests
         WebPushNotificationSinkTests.tests
         HnswVectorStoreTests.tests
         // Phase 507 — the external rung of the vector-store scale story.

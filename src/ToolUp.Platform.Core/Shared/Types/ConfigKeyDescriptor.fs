@@ -812,6 +812,14 @@ module Names =
     [<Literal>]
     let twilioEndpoint = "TOOLUP_TWILIO_ENDPOINT"
 
+    /// WhatsApp sender number (E.164) for the Twilio WhatsApp sink (Phase 6f.B).
+    [<Literal>]
+    let twilioWhatsAppFrom = "TOOLUP_TWILIO_WHATSAPP_FROM"
+
+    /// Template-name to Twilio content-SID map for the Twilio WhatsApp sink (Phase 6f.B).
+    [<Literal>]
+    let twilioWhatsAppContentSids = "TOOLUP_TWILIO_WHATSAPP_CONTENT_SIDS"
+
     [<Literal>]
     let oidcPreflightTimeoutMs = "TOOLUP_OIDC_PREFLIGHT_TIMEOUT_MS"
 
@@ -2547,6 +2555,24 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.twilioEndpoint
         Description = "Twilio API endpoint override."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
+        EnvVar = Names.twilioWhatsAppFrom
+        Description =
+            "WhatsApp-enabled sender number (E.164) for the Twilio WhatsApp notification sink; shares the Twilio account SID and auth token with the SMS sink."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = "Notification channels"
+    }
+    {
+        EnvVar = Names.twilioWhatsAppContentSids
+        Description =
+            "Template name to Twilio content SID map for the Twilio WhatsApp notification sink, as comma-separated name[@language]=HX... pairs."
         Type = StringKey
         Default = None
         IsSecret = false

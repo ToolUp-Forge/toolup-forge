@@ -466,6 +466,84 @@ let tests =
                     "push is a channel you opt into from inside an app you installed; a contact who never installed it has no token, consent or no consent"
             }
 
+            testCaseAsync "a WhatsApp number resolves ONLY behind a live WhatsApp consent"
+            <| async {
+                let store = freshStore None
+                let blob = InMemoryBlobStorage() :> IBlobStorage
+
+                let book =
+                    NotificationAddressBook.BlobBackedNotificationAddressBook(blob, None, Some store)
+                    :> INotificationAddressBook
+
+                // Each contact carries the SAME number on both channels, so the
+                // test proves consent is per channel and not per number.
+                let seedWhatsApp (name: string) (number: string) (channel: NotificationKind.SinkKind option) = async {
+                    let request = {
+                        (contactRequest name None (Some number)) with
+                            WhatsAppNumber = Some number
+                    }
+
+                    let! created = store.Create(scope, actor, ContactOwner.Team "team-1", request)
+
+                    let contact =
+                        match created with
+                        | Ok c -> c
+                        | Error e -> failtestf "could not seed a contact: %s" (ExternalContactError.describe e)
+
+                    match channel with
+                    | None -> return contact
+                    | Some channel ->
+                        let! updated =
+                            store.RecordOptIn(scope, actor, contact.Id, channel, consentNow "manual-admin-entry")
+
+                        return
+                            match updated with
+                            | Ok c -> c
+                            | Error e -> failtestf "could not seed a consent: %s" (ExternalContactError.describe e)
+                }
+
+                let! unconsented = seedWhatsApp "No consent" "+447700900501" None
+                let! resolved = book.ResolveWhatsApp(RecipientId.External unconsented.Id, scope)
+                Expect.isNone resolved "a WhatsApp number on file is not permission to message it"
+
+                let! smsOnly = seedWhatsApp "SMS only" "+447700900503" (Some NotificationKind.SinkKind.Sms)
+                let! resolved = book.ResolveWhatsApp(RecipientId.External smsOnly.Id, scope)
+
+                Expect.isNone resolved "an SMS opt-in does not unlock WhatsApp, even when the two numbers are the same"
+
+                let! consented = seedWhatsApp "Consented" "+447700900504" (Some NotificationKind.SinkKind.WhatsApp)
+                let! resolved = book.ResolveWhatsApp(RecipientId.External consented.Id, scope)
+                Expect.equal resolved (Some "+447700900504") "the consented WhatsApp number resolves"
+
+                let! phone = book.ResolvePhone(RecipientId.External consented.Id, scope)
+                Expect.isNone phone "and the WhatsApp consent does not unlock the SMS phone number either"
+            }
+
+            testCaseAsync "a User recipient has no WhatsApp number to resolve"
+            <| async {
+                let blob = InMemoryBlobStorage() :> IBlobStorage
+
+                let book =
+                    NotificationAddressBook.BlobBackedNotificationAddressBook(blob, None) :> INotificationAddressBook
+
+                let! _ =
+                    NotificationAddressBook.saveContact blob scope {
+                        UserId = "walter"
+                        Email = None
+                        Phone = Some { E164 = "+447700900502" }
+                        PushTokens = []
+                    }
+
+                let! resolved = book.ResolveWhatsApp(RecipientId.User "walter", scope)
+
+                Expect.isNone
+                    resolved
+                    "the persisted user contact carries no WhatsApp number; a phone number is not one"
+
+                let! external = book.ResolveWhatsApp(RecipientId.External "anything", scope)
+                Expect.isNone external "and with no external store composed, no external recipient resolves either"
+            }
+
             testCaseAsync "the User arm is untouched by the widening"
             <| async {
                 let blob = InMemoryBlobStorage() :> IBlobStorage

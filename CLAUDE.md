@@ -50,7 +50,7 @@ toolup-forge/
 │   ├── AuthProviders/{Oidc,OidcClient,ClerkUI,Entra*}/ # auth providers
 │   ├── Storage/{AwsS3,Azure,GoogleCloud}/            # IBlobStorage companions
 │   ├── AuditSinks/{S3Archive,GcsArchive,AzureBlobArchive,SplunkHec,DatadogLogs}/ # audit replication
-│   ├── NotificationChannels/{Redis,Email/...,Sms/Twilio,Push/WebPush}/
+│   ├── NotificationChannels/{Redis,Email/...,Sms/Twilio,Push/WebPush,WhatsApp/Twilio}/
 │   ├── VectorStores/Hnsw/                            # scalable IVectorStore
 │   ├── TimeSeriesStores/, Rerankers/, ContainerSchedulers/, TelemetrySinks/,
 │   │   FeatureFlagProviders/, RateLimiters/, DataSources/, Webhooks/,

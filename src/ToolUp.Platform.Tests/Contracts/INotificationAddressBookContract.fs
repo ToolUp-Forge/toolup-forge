@@ -49,6 +49,13 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
             Expect.isEmpty result "no contact = no tokens"
         }
 
+        testCaseAsync "ResolveWhatsApp returns None for an unknown user"
+        <| async {
+            let book = factory ()
+            let! result = book.ResolveWhatsApp(RecipientId.User "user-does-not-exist", uniqueScope ())
+            Expect.isNone result "no contact = no WhatsApp number"
+        }
+
         testCaseAsync "Populated email round-trips through ResolveEmail"
         <| async {
             let book = factory ()

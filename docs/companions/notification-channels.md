@@ -227,6 +227,47 @@ is unchanged; delivery is further gated per team by the `whatsapp.enabled` kill 
 `_platform.notification_prefs` (default off, like every channel's). WhatsApp has no
 notification-preference family yet, so the preference filter does not govern (or digest-hold) it.
 
+### WhatsApp — `ToolUp.NotificationChannels.WhatsApp.Twilio`
+
+Twilio's WhatsApp API (Phase 6f.B) — the same Messages endpoint, account and auth token as the SMS
+companion, with `whatsapp:`-prefixed addresses. Template sends carry Twilio's `ContentSid` +
+`ContentVariables`; free-form sends carry `Body`. Recipients resolve through
+`INotificationAddressBook.ResolveWhatsApp`, which releases an external contact's WhatsApp number only
+under a live `SinkKind.WhatsApp` opt-in.
+
+Setup:
+
+```bash
+TOOLUP_TWILIO_ACCOUNT_SID=AC...
+TOOLUP_TWILIO_WHATSAPP_FROM=+14155238886
+TOOLUP_TWILIO_WHATSAPP_CONTENT_SIDS=appointment_reminder@en_GB=HX...,appointment_reminder=HX...
+```
+
+Auth token in `ISecretStore`, key `TWILIO_AUTH_TOKEN`. `TOOLUP_TWILIO_WHATSAPP_CONTENT_SIDS` maps each
+registry template NAME (optionally `@language`) onto the Twilio content SID approved for it; a template
+with no entry fails permanently (`twilio_content_sid_not_configured`).
+
+```fsharp
+open ToolUp.Platform.NotificationChannels.WhatsApp
+open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
+
+let settings = TwilioWhatsAppSettings.fromEnv ()
+
+let sink =
+    TwilioWhatsAppNotificationSink.create addressBook secretStore settings logger
+
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withTransactionalSink sink
+|> ServerApp.withHealthCheck (TwilioHealth.create secretStore settings)
+|> ServerApp.withConfigValidator (TwilioValidator.create secretStore settings)
+// ... the deployment's other ServerApp.with* calls ...
+|> ServerApp.run
+```
+
+The sandbox setup, content-template creation and an out-of-suite probe recipe are in the companion's
+[`README.md`](../../src/NotificationChannels/WhatsApp/Twilio/README.md).
+
 ## How the dispatcher works
 
 `TransactionalDispatcher` is a `BackgroundService` that drains a bounded `Channel<NotificationEnvelope>`. Per envelope:
@@ -244,14 +285,19 @@ Duplicate-`Kind` sink registration is rejected at compose time. If you want fall
 
 ## Contact address book
 
-`INotificationAddressBook` resolves `userId` → vendor-neutral addresses:
+`INotificationAddressBook` resolves a `RecipientId` → vendor-neutral addresses:
 
 ```fsharp
 type INotificationAddressBook =
-    abstract ResolveEmail: userId: string * scopeId: string -> Async<EmailAddress option>
-    abstract ResolvePhone: userId: string * scopeId: string -> Async<PhoneNumber option>
-    abstract ResolvePushTokens: userId: string * scopeId: string -> Async<PushToken list>
+    abstract ResolveEmail: recipient: RecipientId * scopeId: string -> Async<EmailAddress option>
+    abstract ResolvePhone: recipient: RecipientId * scopeId: string -> Async<PhoneNumber option>
+    abstract ResolvePushTokens: recipient: RecipientId * scopeId: string -> Async<PushToken list>
+    abstract ResolveWhatsApp: recipient: RecipientId * scopeId: string -> Async<string option>
 ```
+
+An `External` recipient resolves only under a live opt-in for the channel asked about; a `User`
+recipient resolves no WhatsApp number in the default implementations (the persisted user contact
+carries none).
 
 One method per channel rather than one call returning a bundle: a dispatch only ever needs the
 address for the kind it is delivering, so a sink that sends SMS never causes an email lookup — and an

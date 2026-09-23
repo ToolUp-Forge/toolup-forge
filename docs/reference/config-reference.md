@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (200 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (202 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -279,6 +279,8 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_TWILIO_ACCOUNT_SID` | string | — | no | pending | Twilio account SID for the SMS notification sink. |
 | `TOOLUP_TWILIO_ENDPOINT` | string | — | no | pending | Twilio API endpoint override. |
 | `TOOLUP_TWILIO_FROM` | string | — | no | pending | Originating phone number for Twilio-delivered SMS. |
+| `TOOLUP_TWILIO_WHATSAPP_CONTENT_SIDS` | string | — | no | pending | Template name to Twilio content SID map for the Twilio WhatsApp notification sink, as comma-separated name[@language]=HX... pairs. |
+| `TOOLUP_TWILIO_WHATSAPP_FROM` | string | — | no | pending | WhatsApp-enabled sender number (E.164) for the Twilio WhatsApp notification sink; shares the Twilio account SID and auth token with the SMS sink. |
 
 ## Rate limiting
 

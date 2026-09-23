@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>Twilio WhatsApp INotificationSink for ToolUp.Platform — pure HTTP REST against api.twilio.com (content templates + free-form); auth token from ISecretStore.</Description>
+    <PackageTags>fsharp;sdk;notifications;whatsapp;twilio;sink</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 6f.B Twilio WhatsApp INotificationSink companion. No
+       PackageReference: BCL HttpClient only, like the SMS companion. -->
+  <ItemGroup>
+    <Compile Include="TwilioWhatsAppNotificationSink.fs" />
+    <Compile Include="TwilioWhatsAppNotificationSinkHealth.fs" />
+    <Compile Include="TwilioWhatsAppValidator.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+  </ItemGroup>
+  <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>

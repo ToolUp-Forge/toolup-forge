@@ -607,6 +607,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Google", "Google", "{5674FD
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Calendar.Google", "src\Calendar\Google\ToolUp.Calendar.Google.fsproj", "{83E266CE-554C-4E38-8B16-2242D234548B}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.NotificationChannels.WhatsApp.Twilio", "src\NotificationChannels\WhatsApp\Twilio\ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj", "{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3185,6 +3187,18 @@ Global
 		{83E266CE-554C-4E38-8B16-2242D234548B}.Release|x64.Build.0 = Release|Any CPU
 		{83E266CE-554C-4E38-8B16-2242D234548B}.Release|x86.ActiveCfg = Release|Any CPU
 		{83E266CE-554C-4E38-8B16-2242D234548B}.Release|x86.Build.0 = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|x64.Build.0 = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Debug|x86.Build.0 = Debug|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|x64.ActiveCfg = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|x64.Build.0 = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|x86.ActiveCfg = Release|Any CPU
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -3471,5 +3485,6 @@ Global
 		{C3D5E4F6-1A78-4D9A-AE3C-5F7A9B1D2E43} = {B2E4D3C5-0F67-4C89-9D2B-4E6F8A0C1D32}
 		{5674FD11-BBA3-FAB4-6ED4-03C9AA4BEE43} = {CBF265A9-5E62-252A-55CE-87736D10079E}
 		{83E266CE-554C-4E38-8B16-2242D234548B} = {5674FD11-BBA3-FAB4-6ED4-03C9AA4BEE43}
+		{ACAF3D16-2553-4F7B-9AE7-E6061C8FE739} = {D3A8F211-5E6C-47B4-8A3F-C4B1E7F2D891}
 	EndGlobalSection
 EndGlobal
