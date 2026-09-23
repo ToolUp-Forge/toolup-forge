@@ -56,7 +56,12 @@ ToolUp.Calendar.GoogleCalendar+WatchChannel.ChannelId : System.String { get }
 ToolUp.Calendar.GoogleCalendar+WatchChannel.ExpiresAtUtc : System.DateTimeOffset { get }
 ToolUp.Calendar.GoogleCalendar+WatchChannel.ResourceId : System.String { get }
 ToolUp.Calendar.GoogleCalendarChannels (class)
-ToolUp.Calendar.GoogleCalendarChannels  # <members unavailable: FileNotFoundException>
+ToolUp.Calendar.GoogleCalendarChannels.DefaultRenewalCron : System.String (literal)
+ToolUp.Calendar.GoogleCalendarChannels.RenewalHandlerName : System.String (literal)
+ToolUp.Calendar.GoogleCalendarChannels.handler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.Calendar.GoogleCalendarChannels.receive(ToolUp.Scheduling.CalendarSync+ICalendarSync, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Calendar.GoogleCalendarChannels+WebhookReceipt]
+ToolUp.Calendar.GoogleCalendarChannels.renewalDeclaration(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Trigger) : ToolUp.Platform.DeferredScheduledJobDeclaration
+ToolUp.Calendar.GoogleCalendarChannels.withChannelRenewal(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Trigger, ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp) : ToolUp.Scheduling.SchedulingCompose+SchedulingServerApp
 ToolUp.Calendar.GoogleCalendarChannels+GoogleCalendarChannelRenewalJobHandler (class)
 ToolUp.Calendar.GoogleCalendarChannels+GoogleCalendarChannelRenewalJobHandler..ctor(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Platform.IEntityStore+IEntityStore)
 ToolUp.Calendar.GoogleCalendarChannels+GoogleCalendarChannelRenewalJobHandler..ctor(ToolUp.Scheduling.ICalendarBridge+ICalendarBridge, ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Platform.IEntityStore+IEntityStore, System.Int32)
