@@ -129,8 +129,12 @@ everything here as rung 1 has been misled, and the way to prevent that is to say
 claim sits on rather than to claim less.
 
 The same four rungs are declared as data in [`../proofs.json`](../proofs.json) — `proved` /
-`tested` / `assumed` / `policy`, one entry per claim, each `proved` entry naming its lemma and the
-prover pin so an evidence check can resolve it in the module. That file is hand-authored and never
+`tested` / `assumed` / `policy`, one entry per claim. Each `proved` entry names ONE theorem, the
+model that declares it and the prover pin, with any further lemmas the claim rests on listed as
+`supporting`, so an evidence check can resolve every one of them in the model; each `tested` entry
+names its test list as `family`, the file it lives in as `host`, and its `cases`; each `assumed`
+entry states its premise as `evidence.assumption`; each `policy` entry names the document that
+states it. That file is hand-authored and never
 generated: what it records is which rung a human put a claim on, and a generator could only restate
 what the code already says. Every later proof phase in this repository appends to it rather than
 starting a second manifest. Prose and manifest are kept in step by hand; when they disagree, the

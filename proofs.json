@@ -10,8 +10,11 @@
     "A `policy` entry is an exclusion carrying its reason, because an unstated exclusion reads,",
     "to whoever finds it later, as a claim that failed.",
     "",
-    "A `proved` entry names its lemma and the prover pin so an evidence check can resolve the",
-    "lemma in the named module and the pin in the named file. Nothing here is checkable by",
+    "A `proved` entry names ONE theorem, its model and the prover pin, so an evidence check can",
+    "resolve the theorem in the named model and the pin in the named file; lemmas the claim also rests",
+    "on are its `supporting` list, checked the same way. The field names follow the shared",
+    "claims-ladder schema; the `$provers` block below is commentary on what each pin means and is not",
+    "read. Nothing here is checkable by",
     "reading this file alone, and that is the intended shape: the manifest says where to look,",
     "the proof leg (proofs/check.ps1) is what looks.",
     "",
@@ -65,8 +68,9 @@
   ],
   "kind": "proofs",
   "version": 1,
-  "subject": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788)",
-  "provers": {
+  "subject": "toolup-forge",
+  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788)",
+  "$provers": {
     "fstar-pinned": {
       "tool": "fstar",
       "pin": "proofs/fstar-pin.json",
@@ -86,22 +90,22 @@
     {
       "id": "decoder-totality",
       "level": "proved",
-      "statement": "Given a parsed value, no combinator and no decoder built from them can diverge, throw, or reach a state that is neither an accept nor a named refusal. Quantified over ALL decoders, not one lemma per combinator, so it covers anything a consumer or a generator composes out of the algebra.",
+      "claim": "Given a parsed value, no combinator and no decoder built from them can diverge, throw, or reach a state that is neither an accept nor a named refusal. Quantified over ALL decoders, not one lemma per combinator, so it covers anything a consumer or a generator composes out of the algebra.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": ["decode_total"]
+        "theorem": "decode_total",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "outcome-characterisation",
       "level": "proved",
-      "statement": "Which outcome, for which input, with the exact refusal - expected text, found text and path. The failure classification is exhaustive rather than merely non-empty.",
+      "claim": "Which outcome, for which input, with the exact refusal - expected text, found text and path. The failure classification is exhaustive rather than merely non-empty.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": [
-          "lemma_as_bool_characterised",
+        "theorem": "lemma_as_bool_characterised",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "lemma_as_string_characterised",
           "lemma_as_unit_characterised",
           "lemma_integer_characterised",
@@ -114,23 +118,26 @@
     {
       "id": "termination-by-structural-measure",
       "level": "proved",
-      "statement": "The element accessor that both the positional-field and the index combinator are built from returns a value strictly smaller than its input, by the value model's own size measure. A decoder descending through it cannot recur forever, and not because of a depth counter.",
+      "claim": "The element accessor that both the positional-field and the index combinator are built from returns a value strictly smaller than its input, by the value model's own size measure. A decoder descending through it cannot recur forever, and not because of a depth counter.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "definitions": ["element_at", "size", "lemma_try_item_smaller"],
+        "theorem": "element_at",
+        "model": "proofs/RemotingDecode.fst",
+        "supporting": [
+          "size",
+          "lemma_try_item_smaller"
+        ],
         "note": "carried in element_at's REFINED RETURN TYPE, so every descent consumes it at the call site"
       }
     },
     {
       "id": "width-information-rule",
       "level": "proved",
-      "statement": "The integer width rule is about INFORMATION, not signed range: a negative value never decodes into an unsigned target and fits a signed target exactly when it clears its minimum; a source no wider than its target always survives, sign reinterpretation included; a source wider than its target must fit its range; and the rule decides for every width class.",
+      "claim": "The integer width rule is about INFORMATION, not signed range: a negative value never decodes into an unsigned target and fits a signed target exactly when it clears its minimum; a source no wider than its target always survives, sign reinterpretation included; a source wider than its target must fit its range; and the rule decides for every width class.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": [
-          "lemma_negative_never_unsigned",
+        "theorem": "lemma_negative_never_unsigned",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "lemma_negative_fits_iff_clears_minimum",
           "lemma_no_wider_always_survives",
           "lemma_no_wider_always_survives_unsigned",
@@ -143,25 +150,25 @@
     {
       "id": "accept-licenses-the-cast",
       "level": "proved",
-      "statement": "On a reader-producible value, an Int32 accept implies the payload carries no more than thirty-two bits of information - the union of the signed and unsigned 32-bit ranges. It deliberately does NOT imply the payload sits in Int32's signed range, because a negative decimal word arrives unsigned and the host's cast reinterprets it. That union is exactly the set on which the cast is a bijection.",
+      "claim": "On a reader-producible value, an Int32 accept implies the payload carries no more than thirty-two bits of information - the union of the signed and unsigned 32-bit ranges. It deliberately does NOT imply the payload sits in Int32's signed range, because a negative decimal word arrives unsigned and the host's cast reinterprets it. That union is exactly the set on which the cast is a bijection.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": ["lemma_int32_accept_is_32_bit_information"],
+        "theorem": "lemma_int32_accept_is_32_bit_information",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
         "premise": "value_wf - the payload is within the width class its format byte declared. The one-pass reader produces only such values by construction; see the assumption `well-formedness-not-enforced-by-type`."
       }
     },
     {
       "id": "record-round-trip",
       "level": "proved",
-      "statement": "Over a reference API-record vocabulary - a nested record with a string, a bounded integer and a flag - the encoding of any value decodes, and decodes back to the value it started from. Not merely 'decodes to something': the decoder can never refuse traffic its own encoder produced.",
+      "claim": "Over a reference API-record vocabulary - a nested record with a string, a bounded integer and a flag - the encoding of any value decodes, and decodes back to the value it started from. Not merely 'decodes to something': the decoder can never refuse traffic its own encoder produced.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": [
+        "theorem": "decode_encode_roundtrip",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "decode_record_total",
           "decode_record_wf",
-          "decode_encode_roundtrip",
           "decode_encode_roundtrip_address"
         ]
       }
@@ -169,10 +176,10 @@
     {
       "id": "model-agrees-with-shipped-code",
       "level": "tested",
-      "statement": "The extracted model and the shipped algebra decode every covered wire-corpus case and every refuse-path mutation to the same outcome class, the same value, the same runtime type and the same refusal message. This is the only thing that says the proved model is about the code that runs.",
+      "claim": "The extracted model and the shipped algebra decode every covered wire-corpus case and every refuse-path mutation to the same outcome class, the same value, the same runtime type and the same refusal message. This is the only thing that says the proved model is about the code that runs.",
       "evidence": {
+        "family": "Phase 787 - the proved model as oracle",
         "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
-        "list": "Phase 787 - the proved model as oracle",
         "cases": [
           "the extracted model agrees with production over every covered corpus case",
           "the extracted model agrees with production over every refuse-path mutation",
@@ -185,8 +192,9 @@
     {
       "id": "committed-extraction-is-what-the-prover-produced",
       "level": "tested",
-      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module. Without this the committed file would be a claim; with it, a checked one.",
+      "claim": "The committed oracle is byte-identical to a fresh extraction from the checked module. Without this the committed file would be a claim; with it, a checked one.",
       "evidence": {
+        "family": "proofs/check.ps1",
         "runner": "proofs/check.ps1 step 4",
         "artifact": "proofs/oracle/RemotingDecode.fs"
       }
@@ -194,8 +202,9 @@
     {
       "id": "differential-is-known-to-fail",
       "level": "tested",
-      "statement": "A committed go-red case hands the model a bridge that has forgotten the source width class, and asserts the comparison catches it. It catches four cases and every one is the width rule losing. A differential never shown to fail agrees with whatever it is shown.",
+      "claim": "A committed go-red case hands the model a bridge that has forgotten the source width class, and asserts the comparison catches it. It catches four cases and every one is the width rule losing. A differential never shown to fail agrees with whatever it is shown.",
       "evidence": {
+        "family": "Phase 787 - the proved model as oracle",
         "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
         "cases": [
           "the differential CATCHES a bridge that forgets the source width - the go-red case",
@@ -206,109 +215,150 @@
     {
       "id": "toolchain-trusted",
       "level": "assumed",
-      "statement": "The extractor and the F# compiler are trusted. The theorem is about the model; the code that runs is the extraction, and nothing verifies that the extraction preserves semantics.",
+      "claim": "The extractor and the F# compiler are trusted. The theorem is about the model; the code that runs is the extraction, and nothing verifies that the extraction preserves semantics.",
+      "evidence": {
+        "assumption": "the F* extractor and the F# compiler are correct"
+      },
       "mitigation": "the differential host runs the EXTRACTION, not the model, so an extraction defect that changes behaviour on any corpus payload is caught there"
     },
     {
       "id": "bridge-hand-written",
       "level": "assumed",
-      "statement": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing.",
+      "claim": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the differential host's value-to-model bridge maps each production value to the model value it denotes"
+      },
       "mitigation": "short and case-for-case on purpose, and the committed go-red bridge beside it exercises the one field most likely to be got wrong"
     },
     {
       "id": "runtime-shim-hand-written",
       "level": "assumed",
-      "statement": "The extractor's F# backend ships no runtime, so the nine names it references are supplied by a hand-written shim.",
-      "evidence": { "artifact": "proofs/oracle/Prims.fs" },
+      "claim": "The extractor's F# backend ships no runtime, so the nine names it references are supplied by a hand-written shim.",
+      "evidence": {
+        "assumption": "the hand-written Prims shim implements the nine names the extraction references as the prover means them",
+        "artifact": "proofs/oracle/Prims.fs"
+      },
       "mitigation": "small enough to read in a minute; the byte-diff means a model change reaching for a tenth name fails the leg rather than compiling against a widened shim"
     },
     {
       "id": "host-measured-payload-facts",
       "level": "assumed",
-      "statement": "Three payload facts come from the host rather than the model: a string's length, a binary payload's length, and a float's rendered text. Recomputing any of them would introduce a second implementation free to disagree with the host's - and for string length it demonstrably would, the two runtimes counting different units.",
+      "claim": "Three payload facts come from the host rather than the model: a string's length, a binary payload's length, and a float's rendered text. Recomputing any of them would introduce a second implementation free to disagree with the host's - and for string length it demonstrably would, the two runtimes counting different units.",
+      "evidence": {
+        "assumption": "a string's length, a binary payload's length and a float's rendered text are what the host measures them to be"
+      },
       "mitigation": "carried as data on the value model, so the model's refusals quote the host's own numbers"
     },
     {
       "id": "well-formedness-not-enforced-by-type",
       "level": "assumed",
-      "statement": "The value model admits an integer whose payload exceeds its declared width class. The one-pass reader cannot produce one, but nothing here enforces it.",
+      "claim": "The value model admits an integer whose payload exceeds its declared width class. The one-pass reader cannot produce one, but nothing here enforces it.",
+      "evidence": {
+        "assumption": "every integer the one-pass reader produces has a payload within its declared width class"
+      },
       "mitigation": "the lemmas that need it carry it as an explicit premise rather than assuming it away"
     },
     {
       "id": "reproducibility-rests-on-pin-and-quake",
       "level": "assumed",
-      "statement": "Proof hints were removed from this prover, so the usual way to pin an SMT search is unavailable. The pinned release and its bundled solver, a margin on the resource limit, and three cold runs under --quake 3 are evidence of stability, not a guarantee of it.",
-      "evidence": { "artifact": "proofs/fstar-pin.json", "runner": ".github/workflows/proofs.yml" }
+      "claim": "Proof hints were removed from this prover, so the usual way to pin an SMT search is unavailable. The pinned release and its bundled solver, a margin on the resource limit, and three cold runs under --quake 3 are evidence of stability, not a guarantee of it.",
+      "evidence": {
+        "assumption": "the pinned prover and solver, the resource-limit margin and three cold --quake 3 runs make a green check reproducible",
+        "artifact": "proofs/fstar-pin.json",
+        "runner": ".github/workflows/proofs.yml"
+      }
     },
     {
       "id": "bytes-to-value-pass",
       "level": "policy",
-      "statement": "The bytes-to-value pass is OUT of the theorem.",
+      "claim": "The bytes-to-value pass is OUT of the theorem.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "it is bounded - length against remaining on every length-prefixed read, and a depth ceiling - but bounded is not proved. This is the one place a binary-format proof framework would apply if it is ever wanted. A payload the reader itself refuses never reaches either decoder, and the differential skips it rather than pretending otherwise."
     },
     {
       "id": "json-path",
       "level": "policy",
-      "statement": "The System.Text.Json decode path is OUT.",
+      "claim": "The System.Text.Json decode path is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "its value carrier is undecided - the current JSON value model's numeric case cannot carry a 64-bit integer past 2^53, an exact decimal, or the source width"
     },
     {
       "id": "reflection-fallback",
       "level": "policy",
-      "statement": "The reflection decode path is OUT, by construction rather than by omission.",
+      "claim": "The reflection decode path is OUT, by construction rather than by omission.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "it is an interpreter over an open, possibly recursive type graph walked with a mutable cursor, so 'total on every input' is not a well-formed statement about it - the input includes the type graph. That asymmetry is the whole argument for the closed value model."
     },
     {
       "id": "emitter-side-narrowing",
       "level": "policy",
-      "statement": "One narrowing is unrefusable at the decoder.",
+      "claim": "One narrowing is unrefusable at the decoder.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the writer compacts a 64-bit value into bytes that ARE a well-formed 32-bit one - the shape a decimal's sign word travels in. The value model faithfully carries a 32-bit source and the information rule admits it, correctly, since refusing it would refuse every negative decimal the corpus pins. Closing it needs a writer that never compacts across a sign boundary, which is a wire break."
     },
     {
       "id": "trailing-element-accepted",
       "level": "policy",
-      "statement": "A trailing element past a record's declared fields is accepted, not refused.",
+      "claim": "A trailing element past a record's declared fields is accepted, not refused.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "a record decoder reads the positions it declares and ignores what follows, in agreement with the reflection reader. That is what keeps an additive wire change non-breaking, and it is the one evolution property this wire has."
     },
     {
       "id": "semantics-authorisation-tenancy",
       "level": "policy",
-      "statement": "A decoded value is well-typed. It is not authorised, not tenant-scoped and not semantically valid.",
+      "claim": "A decoded value is well-typed. It is not authorised, not tenant-scoped and not semantically valid.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "those are other boundaries' obligations; a decode theorem that implied them would be claiming something it cannot see"
     },
     {
       "id": "date-only-time-only",
       "level": "policy",
-      "statement": "The date-only and time-only primitives have no combinator, so no model.",
+      "claim": "The date-only and time-only primitives have no combinator, so no model.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "one of the two hosts' readers refuses both types outright, so a primitive for them would decode on one host and not the other. This ships a cross-host algebra or it ships nothing."
     },
     {
       "id": "records-not-opted-in",
       "level": "policy",
-      "statement": "A record still decoding through the reflection path is outside every claim above.",
+      "claim": "A record still decoding through the reflection path is outside every claim above.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the algebra is an opt-in replacement for a decoder that already works; the shipped default is unchanged"
     },
     {
       "id": "disclosure-no-undisclosed-output",
       "level": "proved",
-      "statement": "For any ranking, any total verdict function and any policy assignment, no fact whose verdict is not-disclosable appears in the disclosed list.",
+      "claim": "For any ranking, any total verdict function and any policy assignment, no fact whose verdict is not-disclosable appears in the disclosed list.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "no_undisclosed_output"
-        ]
+        "theorem": "no_undisclosed_output",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "disclosure-withheld-is-count-only",
       "level": "proved",
-      "statement": "The withheld count and the withheld projection are functions of the verdict list alone - the count is the number of not-disclosable verdicts and the projection is countBy-then-sortBy over their policy refs. The relational corollary states it over two rankings whose facts may differ in every field and even in TYPE: pointwise-equal verdicts give an identical projection, so no withheld fact's identity, rank or value was consulted.",
+      "claim": "The withheld count and the withheld projection are functions of the verdict list alone - the count is the number of not-disclosable verdicts and the projection is countBy-then-sortBy over their policy refs. The relational corollary states it over two rankings whose facts may differ in every field and even in TYPE: pointwise-equal verdicts give an identical projection, so no withheld fact's identity, rank or value was consulted.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "withheld_is_count_only",
+        "theorem": "withheld_is_count_only",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "withheld_blind_to_values"
         ]
       }
@@ -316,24 +366,22 @@
     {
       "id": "disclosure-ranks-preserved",
       "level": "proved",
-      "statement": "Every disclosed (rank, fact) has fact at one-based position rank of the input ranking. A withheld member leaves a gap; a contiguous renumbering cannot satisfy this.",
+      "claim": "Every disclosed (rank, fact) has fact at one-based position rank of the input ranking. A withheld member leaves a gap; a contiguous renumbering cannot satisfy this.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "ranks_preserved"
-        ]
+        "theorem": "ranks_preserved",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "disclosure-magnitudes-absent-iff-withheld",
       "level": "proved",
-      "statement": "When anything was withheld, the gated summary's minimum, maximum and mean are absent; when nothing was, the summary is returned untouched; the existence-level fields ride through in both cases; and the gate fires exactly when some verdict denied. The biconditional is over the gate's ACTION - it does not say an absent magnitude implies a withheld member, since a summary over nothing comparable carries none to begin with.",
+      "claim": "When anything was withheld, the gated summary's minimum, maximum and mean are absent; when nothing was, the summary is returned untouched; the existence-level fields ride through in both cases; and the gate fires exactly when some verdict denied. The biconditional is over the gate's ACTION - it does not say an absent magnitude implies a withheld member, since a summary over nothing comparable carries none to begin with.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "magnitudes_absent_iff_withheld",
+        "theorem": "magnitudes_absent_iff_withheld",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "withheld_iff_any_denied"
         ]
       }
@@ -341,24 +389,22 @@
     {
       "id": "disclosure-verdict-noninterference",
       "level": "proved",
-      "statement": "Two rankings that agree on every disclosable fact and on every verdict yield IDENTICAL PopulationDisclosure records - the same disclosed list, the same withheld count, the same withheld projection - whatever the withheld facts' identities or values. No observation of the fold's output distinguishes one withheld population from another.",
+      "claim": "Two rankings that agree on every disclosable fact and on every verdict yield IDENTICAL PopulationDisclosure records - the same disclosed list, the same withheld count, the same withheld projection - whatever the withheld facts' identities or values. No observation of the fold's output distinguishes one withheld population from another.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "verdict_noninterference"
-        ]
+        "theorem": "verdict_noninterference",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "disclosure-egress-predicate-characterised",
       "level": "proved",
-      "statement": "Which verdict, for which classification: Surfaceable is always disclosable, Internal never (naming the classification as its policy ref), and Restricted exactly when the resolver answers Some true - Some false and None both deny, so an unknown policy ref can never fail open. The conservative default denies every Restricted fact at every surface.",
+      "claim": "Which verdict, for which classification: Surfaceable is always disclosable, Internal never (naming the classification as its policy ref), and Restricted exactly when the resolver answers Some true - Some false and None both deny, so an unknown policy ref can never fail open. The conservative default denies every Restricted fact at every surface.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/DisclosureFold.fst",
-        "lemmas": [
-          "evaluate_characterised",
+        "theorem": "evaluate_characterised",
+        "model": "proofs/DisclosureFold.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "unknown_policy_denies"
         ],
         "note": "supporting, not one of the five: it is what ties the verdicts the fold consumes to the predicate that produces them"
@@ -367,10 +413,10 @@
     {
       "id": "disclosure-model-agrees-with-shipped-code",
       "level": "tested",
-      "statement": "The extracted model and the shipped fold agree, on every ranking the three door packs pin (reproduced as data) and on 400 generated rankings with generated verdicts, on the disclosed list, the withheld projection and the gated summary AT ONCE; and the extracted predicate agrees with the shipped one over every classification, resolver and surface. This is the only thing that says the proved model is about the code that runs.",
+      "claim": "The extracted model and the shipped fold agree, on every ranking the three door packs pin (reproduced as data) and on 400 generated rankings with generated verdicts, on the disclosed list, the withheld projection and the gated summary AT ONCE; and the extracted predicate agrees with the shipped one over every classification, resolver and surface. This is the only thing that says the proved model is about the code that runs.",
       "evidence": {
+        "family": "Phase 790 - the proved fold as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/DisclosureProofOracleTests.fs",
-        "list": "Phase 790 - the proved fold as oracle",
         "cases": [
           "the extracted egress predicate agrees with production over every classification, resolver and surface",
           "the extracted fold agrees with production over every suite ranking",
@@ -383,8 +429,9 @@
     {
       "id": "disclosure-committed-extraction-is-what-the-prover-produced",
       "level": "tested",
-      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "claim": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
       "evidence": {
+        "family": "proofs/check.ps1",
         "runner": "proofs/check.ps1 step 4",
         "artifact": "proofs/oracle/DisclosureFold.fs"
       }
@@ -392,8 +439,9 @@
     {
       "id": "disclosure-differential-is-known-to-fail",
       "level": "tested",
-      "statement": "A committed go-red oracle renumbers the disclosed ranks contiguously - the tidy-looking mistake that reports the third-best as the second-best - and the comparison is asserted to catch it, with the mechanism pinned on a three-member ranking (true ranks 1 and 3 against the oracle's 1 and 2). A differential never shown to fail agrees with whatever it is shown.",
+      "claim": "A committed go-red oracle renumbers the disclosed ranks contiguously - the tidy-looking mistake that reports the third-best as the second-best - and the comparison is asserted to catch it, with the mechanism pinned on a three-member ranking (true ranks 1 and 3 against the oracle's 1 and 2). A differential never shown to fail agrees with whatever it is shown.",
       "evidence": {
+        "family": "Phase 790 - the proved fold as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/DisclosureProofOracleTests.fs",
         "cases": [
           "the differential CATCHES an oracle that renumbers ranks contiguously - the go-red case",
@@ -404,8 +452,9 @@
     {
       "id": "disclosure-mean-residual",
       "level": "assumed",
-      "statement": "The theorem is about the FOLD, and the fold gates a summary the store computed over the WHOLE matched population. A restricted member ranked below the ceiling still contributed to that summary's Mean, and under a highest-first ranking can BE its Minimum. What is proved is that the gate acts on the summary exactly when it acts on the members; what is NOT proved, or claimed, is that a magnitude the gate lets through carries no information about a member the caller was never returned. The shipped code calls this a floor, not a proof, and so does this entry.",
+      "claim": "The theorem is about the FOLD, and the fold gates a summary the store computed over the WHOLE matched population. A restricted member ranked below the ceiling still contributed to that summary's Mean, and under a highest-first ranking can BE its Minimum. What is proved is that the gate acts on the summary exactly when it acts on the members; what is NOT proved, or claimed, is that a magnitude the gate lets through carries no information about a member the caller was never returned. The shipped code calls this a floor, not a proof, and so does this entry.",
       "evidence": {
+        "assumption": "a summary statistic the store computes over the whole matched population discloses nothing the gate withheld",
         "source": "src/ToolUp.Facts.Core/Shared/PopulationQueryTypes.fs - PopulationDisclosure.disclosedStats"
       },
       "mitigation": "when ANY member of the ranking is withheld the whole magnitude block goes, so the residual is confined to members outside the ranking the caller asked for; a whole-population disclosure probe is a different capability"
@@ -413,36 +462,48 @@
     {
       "id": "disclosure-string-ordering-host-supplied",
       "level": "assumed",
-      "statement": "The ordering List.sortBy fst sorts the withheld projection by is host-supplied to the model as a before: string -> string -> bool, because F* has no string comparison that extracts to Prims alone. Every lemma holds for ANY ordering; what the model does not verify is that the host's ordinal comparison is the one the shipped code uses.",
+      "claim": "The ordering List.sortBy fst sorts the withheld projection by is host-supplied to the model as a before: string -> string -> bool, because F* has no string comparison that extracts to Prims alone. Every lemma holds for ANY ordering; what the model does not verify is that the host's ordinal comparison is the one the shipped code uses.",
+      "evidence": {
+        "assumption": "the ordering the host supplies for the withheld projection is the ordinal comparison production sorts by"
+      },
       "mitigation": "the differential compares the projection's ORDER as part of the withheld projection, so a host ordering that disagreed with List.sortBy would fail the leg on any ranking withheld under two policies"
     },
     {
       "id": "disclosure-bridge-hand-written",
       "level": "assumed",
-      "statement": "The Fact-to-model and PopulationStats-to-model bridges in the differential host are hand-written. A defect in either would make the comparison compare the wrong thing.",
+      "claim": "The Fact-to-model and PopulationStats-to-model bridges in the differential host are hand-written. A defect in either would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the differential host's Fact-to-model and PopulationStats-to-model bridges map each value to the model value it denotes"
+      },
       "mitigation": "short and case-for-case on purpose: a fact is its id plus itself as the opaque payload, a summary is its three magnitudes plus itself as the opaque existence-level rest, so the read-back is a structural comparison of production's own records"
     },
     {
       "id": "disclosure-doors-must-call-disclosed-stats",
       "level": "policy",
-      "statement": "That every door CALLS disclosedStats before reporting a summary is OUT of the theorem.",
+      "claim": "That every door CALLS disclosedStats before reporting a summary is OUT of the theorem.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the theorem is about what the fold computes, not about who calls it; a summary type does not force the call, and the obligation is stated on the not-claimed rung of proofs/README.md, where the door packs are named as the evidence that the two shipped doors do"
     },
     {
       "id": "disclosure-statistical-inference",
       "level": "policy",
-      "statement": "Statistical disclosure control is OUT. The theorem says nothing about what a determined reader could infer from a count, a period range or a freshness histogram, nor from the magnitudes of a ranking with nothing withheld.",
+      "claim": "Statistical disclosure control is OUT. The theorem says nothing about what a determined reader could infer from a count, a period range or a freshness histogram, nor from the magnitudes of a ranking with nothing withheld.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the disclosure vocabulary is a declared classification enforced at egress, not an inference-control regime, and the shipped code's honesty boundary says so in the same words"
     },
     {
       "id": "toolgate-list-sound-against-policy",
       "level": "proved",
-      "statement": "For any RBAC predicate, any grant-liveness predicate, any ToolPolicy and any registry, no tool whose declared effects exceed the policy's ceiling is listed: under a bounded ceiling every listed tool's every declared effect has a class the ceiling names, and an undeclared tool is listed only when the policy admits undeclared tools. The supporting equality says an admitting verdict is EXACTLY the two authority predicates answering yes and the declaration sitting within the ceiling.",
+      "claim": "For any RBAC predicate, any grant-liveness predicate, any ToolPolicy and any registry, no tool whose declared effects exceed the policy's ceiling is listed: under a bounded ceiling every listed tool's every declared effect has a class the ceiling names, and an undeclared tool is listed only when the policy admits undeclared tools. The supporting equality says an admitting verdict is EXACTLY the two authority predicates answering yes and the declaration sitting within the ceiling.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ToolGate.fst",
-        "lemmas": [
-          "list_sound_against_policy",
+        "theorem": "list_sound_against_policy",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "admitted_iff_within"
         ]
       }
@@ -450,46 +511,40 @@
     {
       "id": "toolgate-list-is-the-decision",
       "level": "proved",
-      "statement": "A tool is in the list exactly when it is in the registry and the decision admits it. Nothing the decision refused reaches the list, and nothing it admits is dropped - the list filter and the decision are one function, not two that happen to agree.",
+      "claim": "A tool is in the list exactly when it is in the registry and the decision admits it. Nothing the decision refused reaches the list, and nothing it admits is dropped - the list filter and the decision are one function, not two that happen to agree.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ToolGate.fst",
-        "lemmas": [
-          "listed_iff_admitted"
-        ]
+        "theorem": "listed_iff_admitted",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "toolgate-dispatch-never-wider-than-list",
       "level": "proved",
-      "statement": "If the dispatch-site re-check admits the name the model produced - looked up by authored name or provider alias, then decided - the list the model was offered carries a tool of that name. A forged, hallucinated or replayed name the list would have refused is refused at dispatch too. This is the 'two gates that must agree share their whole decision' comment on ListAccessible, as a lemma.",
+      "claim": "If the dispatch-site re-check admits the name the model produced - looked up by authored name or provider alias, then decided - the list the model was offered carries a tool of that name. A forged, hallucinated or replayed name the list would have refused is refused at dispatch too. This is the 'two gates that must agree share their whole decision' comment on ListAccessible, as a lemma.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ToolGate.fst",
-        "lemmas": [
-          "dispatch_never_wider_than_list"
-        ]
+        "theorem": "dispatch_never_wider_than_list",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "toolgate-egress-never-escapes",
       "level": "proved",
-      "statement": "A tool declaring Egress to any destination is refused under every bounded ceiling that does not name the egress class, whatever else it declares and whatever the two authority predicates answer. This is the go-red property in proof form: a gate that dropped Egress before deciding would violate it.",
+      "claim": "A tool declaring Egress to any destination is refused under every bounded ceiling that does not name the egress class, whatever else it declares and whatever the two authority predicates answer. This is the go-red property in proof form: a gate that dropped Egress before deciding would violate it.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ToolGate.fst",
-        "lemmas": [
-          "egress_never_escapes"
-        ]
+        "theorem": "egress_never_escapes",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "toolgate-model-agrees-with-shipped-code",
       "level": "tested",
-      "statement": "The extracted model and the shipped gate agree on the VERDICT for every in-tree tool the host can reach (the narrative and cross-module built-ins, the three fact tools, the sample client tool) and for 60 generated tools, under 28 generated policies including the external-principal view of each, 11 generated callers and their grant predicates; on the LISTED SET, in order, under every policy and caller; and on the DISPATCH answer by authored name, by provider alias and for an unknown name. This is the only thing that says the proved model is about the code that runs.",
+      "claim": "The extracted model and the shipped gate agree on the VERDICT for every in-tree tool the host can reach (the narrative and cross-module built-ins, the three fact tools, the sample client tool) and for 60 generated tools, under 28 generated policies including the external-principal view of each, 11 generated callers and their grant predicates; on the LISTED SET, in order, under every policy and caller; and on the DISPATCH answer by authored name, by provider alias and for an unknown name. This is the only thing that says the proved model is about the code that runs.",
       "evidence": {
+        "family": "Phase 793 - the proved gate as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ToolGateProofOracleTests.fs",
-        "list": "Phase 793 - the proved gate as oracle",
         "cases": [
           "the extracted decision agrees with production over every in-tree tool, policy, caller and grant predicate",
           "the extracted decision agrees with production over generated tools with generated declarations",
@@ -503,8 +558,9 @@
     {
       "id": "toolgate-committed-extraction-is-what-the-prover-produced",
       "level": "tested",
-      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "claim": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
       "evidence": {
+        "family": "proofs/check.ps1",
         "runner": "proofs/check.ps1 step 4",
         "artifact": "proofs/oracle/ToolGate.fs"
       }
@@ -512,8 +568,9 @@
     {
       "id": "toolgate-differential-is-known-to-fail",
       "level": "tested",
-      "statement": "A committed go-red gate drops Egress from a declaration before deciding - measuring a tool by what it reads rather than where it reaches - and the comparison is asserted to catch it, with the mechanism pinned on one tool declaring only Egress under the read-only policy: production and the honest oracle refuse naming the egress, the blind gate admits. A differential never shown to fail agrees with whatever it is shown.",
+      "claim": "A committed go-red gate drops Egress from a declaration before deciding - measuring a tool by what it reads rather than where it reaches - and the comparison is asserted to catch it, with the mechanism pinned on one tool declaring only Egress under the read-only policy: production and the honest oracle refuse naming the egress, the blind gate admits. A differential never shown to fail agrees with whatever it is shown.",
       "evidence": {
+        "family": "Phase 793 - the proved gate as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ToolGateProofOracleTests.fs",
         "cases": [
           "the differential CATCHES a gate that ignores Egress - the go-red case",
@@ -524,20 +581,27 @@
     {
       "id": "toolgate-authority-predicates-host-supplied",
       "level": "assumed",
-      "statement": "RBAC (isToolSourcePermittedFor over the caller's permission map, its Read/Write/Admin hierarchy and the SDK-reserved-namespace exemption) and grant liveness (moduleGrantGate over the request's consent stamps) are host-supplied predicates the model takes as total arrows. Every lemma holds for any pair; what the model does not verify is what either answers. They are earlier phases' decisions, and modelling them would introduce a second implementation free to disagree with the host's.",
+      "claim": "RBAC (isToolSourcePermittedFor over the caller's permission map, its Read/Write/Admin hierarchy and the SDK-reserved-namespace exemption) and grant liveness (moduleGrantGate over the request's consent stamps) are host-supplied predicates the model takes as total arrows. Every lemma holds for any pair; what the model does not verify is what either answers. They are earlier phases' decisions, and modelling them would introduce a second implementation free to disagree with the host's.",
+      "evidence": {
+        "assumption": "the RBAC and grant-liveness predicates the host supplies are total and are the ones production evaluates"
+      },
       "mitigation": "the differential host passes production's own isToolSourcePermittedFor and generated grant predicates to BOTH sides, so the verdicts compared include the two refusals those predicates produce"
     },
     {
       "id": "toolgate-bridge-hand-written",
       "level": "assumed",
-      "statement": "The bridge from the shipped types to the model's is hand-written: an effect case for case, a declared set as its sorted list, a policy's ceiling and undeclared flag, a registered tool's name, alias, source and folded declaration. A defect in it would make the comparison compare the wrong thing.",
+      "claim": "The bridge from the shipped types to the model's is hand-written: an effect case for case, a declared set as its sorted list, a policy's ceiling and undeclared flag, a registered tool's name, alias, source and folded declaration. A defect in it would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the differential host's bridge from the shipped gate types maps each value to the model value it denotes"
+      },
       "mitigation": "short and case-for-case on purpose; the go-red gate beside it is built from production's OWN decision over a perturbed declaration, so the comparison is known to see a declaration defect"
     },
     {
       "id": "toolgate-envelope-binds-only-the-seams",
       "level": "assumed",
-      "statement": "The effect envelope refuses what a DECLARED tool body reaches for through the SDK's seams - a host capability through ToolEffectEnvelope.guardInvoke, an outbound request through guardEgress, a scoped write through guardWrite. An executor that constructs its own HttpClient, opens a socket or writes a file directly is outside every check, exactly as it is outside the composition capability gate. Nothing short of process-level isolation closes that, and nothing here claims to.",
+      "claim": "The effect envelope refuses what a DECLARED tool body reaches for through the SDK's seams - a host capability through ToolEffectEnvelope.guardInvoke, an outbound request through guardEgress, a scoped write through guardWrite. An executor that constructs its own HttpClient, opens a socket or writes a file directly is outside every check, exactly as it is outside the composition capability gate. Nothing short of process-level isolation closes that, and nothing here claims to.",
       "evidence": {
+        "assumption": "a declared tool body reaches host capabilities, egress and scoped writes only through the SDK's guarded seams",
         "source": "src/ToolUp.AI.Server/Server/ToolEffectEnvelope.fs"
       },
       "mitigation": "the verified composition profile makes the declaration mandatory, so under it every in-tree tool is bound at the seams; a tool's own outbound call is the one place an author must route through guardEgress, and the envelope test pack pins that a ReadFacts tool cannot send through it"
@@ -545,30 +609,39 @@
     {
       "id": "toolgate-ceiling-is-by-class",
       "level": "policy",
-      "statement": "The policy ceiling is expressed over effect CLASSES, with payloads erased; a ceiling cannot say 'egress to api.example.com but nowhere else'.",
+      "claim": "The policy ceiling is expressed over effect CLASSES, with payloads erased; a ceiling cannot say 'egress to api.example.com but nowhere else'.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "a ceiling that could only name exact destinations or scopes could never say 'no egress at all', which is the sentence a policy most needs to say; the exact payload is checked at the moment of use by the envelope, which refuses Egress 'b' under a declaration of Egress 'a'"
     },
     {
       "id": "toolgate-approval-keyed-on-effect-class",
       "level": "policy",
-      "statement": "The human-in-the-loop approval hold is keyed on effect class through ToolPolicy.RequireApproval and ToolApprovalDispatch.requirementByClass, in FRONT of the deployment's own IToolApprovalPolicy: a tool declaring a held class is held whatever that policy says about it by name, and a tool declaring none falls through to it unchanged.",
+      "claim": "The human-in-the-loop approval hold is keyed on effect class through ToolPolicy.RequireApproval and ToolApprovalDispatch.requirementByClass, in FRONT of the deployment's own IToolApprovalPolicy: a tool declaring a held class is held whatever that policy says about it by name, and a tool declaring none falls through to it unchanged.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "a per-tool name list widens silently the moment a module registers a new tool; a class-keyed hold binds the new tool by what it declares. The composition and its rationale are in docs/migrations/793-tool-effect-class.md and docs/ai/extending.md; the external-principal ceiling (ToolPolicy.ExternalPrincipalCeiling) is the same keying applied to an agent's grants, default-deny by class"
     },
     {
       "id": "toolgate-client-resident-bodies",
       "level": "policy",
-      "statement": "A client-resident tool's body runs in the browser and is OUT of the envelope.",
+      "claim": "A client-resident tool's body runs in the browser and is OUT of the envelope.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the envelope is an ambient server-side value around Execute, and a client-resident dispatch never calls Execute; the browser-side body is bound by the client-tool allowlist seam instead, and the gate's list and dispatch decisions apply to both locations alike"
     },
     {
       "id": "model-input-admissible-by-construction",
       "level": "proved",
-      "statement": "For ANY candidate store - whatever verdicts it carries, whatever scopes those verdicts were resolved for, in any mixture - the assembled model input holds only facts whose disclosure verdict is affirmative AND whose scope is the caller's resolved one. An affirmative verdict for another scope is not permission and is refused by the same invariant. Nothing about the store has to be checked in advance: the arm that would break the invariant is the arm that refuses.",
+      "claim": "For ANY candidate store - whatever verdicts it carries, whatever scopes those verdicts were resolved for, in any mixture - the assembled model input holds only facts whose disclosure verdict is affirmative AND whose scope is the caller's resolved one. An affirmative verdict for another scope is not permission and is refused by the same invariant. Nothing about the store has to be checked in advance: the arm that would break the invariant is the arm that refuses.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ModelInput.fst",
-        "lemmas": [
-          "admissible_by_construction",
+        "theorem": "admissible_by_construction",
+        "model": "proofs/ModelInput.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "build_admissible",
           "add_fact_preserves_admissible",
           "blocks_and_turns_preserve_admissible"
@@ -578,12 +651,12 @@
     {
       "id": "model-input-render-faithful",
       "level": "proved",
-      "statement": "Rendering introduces nothing the value does not carry. The turns pass through untouched; the system prompt is exactly the blocks' text joined on the composer's separator, and absent when there are no blocks, so a call that sent no system prompt is byte-for-byte unchanged; every id the leak differential reports is genuinely present in the rendering and genuinely undeclared in the value; and every candidate id that is present and undeclared IS reported, so an empty report means what a reader takes it to mean. The relational companion is the stronger half: two values agreeing on their blocks and turns render identically whatever their facts, passages and tool results are, so the renderer cannot read the fact list at all.",
+      "claim": "Rendering introduces nothing the value does not carry. The turns pass through untouched; the system prompt is exactly the blocks' text joined on the composer's separator, and absent when there are no blocks, so a call that sent no system prompt is byte-for-byte unchanged; every id the leak differential reports is genuinely present in the rendering and genuinely undeclared in the value; and every candidate id that is present and undeclared IS reported, so an empty report means what a reader takes it to mean. The relational companion is the stronger half: two values agreeing on their blocks and turns render identically whatever their facts, passages and tool results are, so the renderer cannot read the fact list at all.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ModelInput.fst",
-        "lemmas": [
-          "render_faithful",
+        "theorem": "render_faithful",
+        "model": "proofs/ModelInput.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "render_blind_to_facts",
           "leaked_is_mentioned_and_undeclared",
           "mentioned_undeclared_is_leaked"
@@ -594,12 +667,12 @@
     {
       "id": "model-input-noninterference",
       "level": "proved",
-      "statement": "Two fact stores that agree on every fact disclosable for the resolved scope assemble to the SAME value, and therefore to the same rendering and the same bytes. The withheld facts are quantified away entirely - the stores may differ in count, identity, content and policy, and no observation of what the provider is shown distinguishes one from the other. The renderer that turns admitted facts into the block a reader sees is universally quantified, so this holds for every renderer a caller might write, including one that prints each admitted fact's content verbatim.",
+      "claim": "Two fact stores that agree on every fact disclosable for the resolved scope assemble to the SAME value, and therefore to the same rendering and the same bytes. The withheld facts are quantified away entirely - the stores may differ in count, identity, content and policy, and no observation of what the provider is shown distinguishes one from the other. The renderer that turns admitted facts into the block a reader sees is universally quantified, so this holds for every renderer a caller might write, including one that prints each admitted fact's content verbatim.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ModelInput.fst",
-        "lemmas": [
-          "input_noninterference",
+        "theorem": "input_noninterference",
+        "model": "proofs/ModelInput.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "admit_all_is_visible_only",
           "visible_skips_undisclosable"
         ],
@@ -609,8 +682,9 @@
     {
       "id": "model-input-chunk-gate-checked-not-enforced",
       "level": "assumed",
-      "statement": "The retrieved-passage half of admissibility is CHECKED, not enforced. The shipped constructor accepts a passage whatever its content-gate result, so that clause is proved as a premise on the add and as a total decision procedure a caller may run - never as the unconditional invariant the fact clause is. A caller that never asks can hold a value carrying a failed passage, and nothing in the type stops it. `NotGated` is recorded honestly: it says the gate did not run, never that it passed.",
+      "claim": "The retrieved-passage half of admissibility is CHECKED, not enforced. The shipped constructor accepts a passage whatever its content-gate result, so that clause is proved as a premise on the add and as a total decision procedure a caller may run - never as the unconditional invariant the fact clause is. A caller that never asks can hold a value carrying a failed passage, and nothing in the type stops it. `NotGated` is recorded honestly: it says the gate did not run, never that it passed.",
       "evidence": {
+        "assumption": "a caller adds a retrieved passage only after its content gate passed",
         "prover": "fstar-pinned",
         "module": "proofs/ModelInput.fst",
         "lemmas": [
@@ -623,9 +697,10 @@
     {
       "id": "model-input-scope-resolution",
       "level": "proved",
-      "statement": "The scope a fact door compares against is the one the platform's scope resolution minted for the request. Since Phase 797 every fact door - the store's members, the gate's Check, the three fact tools' executors - takes a ResolvedScope whose representation is private and whose constructor is internal to the platform's server tier, minted at the one point the scope-resolution middleware resolves the request; a door cannot be handed a scope the principal did not resolve to, because the construction does not compile. Until Phase 797 this entry was ASSUMED: the scope was a caller-supplied string, compared and never derived.",
+      "claim": "The scope a fact door compares against is the one the platform's scope resolution minted for the request. Since Phase 797 every fact door - the store's members, the gate's Check, the three fact tools' executors - takes a ResolvedScope whose representation is private and whose constructor is internal to the platform's server tier, minted at the one point the scope-resolution middleware resolves the request; a door cannot be handed a scope the principal did not resolve to, because the construction does not compile. Until Phase 797 this entry was ASSUMED: the scope was a caller-supplied string, compared and never derived.",
       "evidence": {
-        "prover": "fsharp-typed",
+        "theorem": "ResolvedScope",
+        "model": "src/ToolUp.Platform.Core/Shared/Types/ResolvedScope.fs",
         "type": "ToolUp.Platform.ResolvedScope",
         "mint": "ToolUp.Platform.StorageScopeResolver.ScopeResolution.remember (internal; called by the scope-resolution middleware)",
         "read": "ToolUp.Platform.StorageScopeResolver.ScopeResolution.forRequest",
@@ -645,34 +720,47 @@
     {
       "id": "model-input-tool-effect-side",
       "level": "assumed",
-      "statement": "The tool-effect side is assumed, not checked here. This theorem is about what goes in. The plain-English sentence a reader wants additionally needs that the tools a model may call cannot fetch what the input side refused, and nothing in this module can see that. It is recorded as an assumption rather than an exclusion because it is load-bearing for the claim rather than merely outside it: a tool that read freely would defeat everything proved above without contradicting any lemma in it.",
-      "retired_by": "the tool-effect theorem"
+      "claim": "The tool-effect side is assumed, not checked here. This theorem is about what goes in. The plain-English sentence a reader wants additionally needs that the tools a model may call cannot fetch what the input side refused, and nothing in this module can see that. It is recorded as an assumption rather than an exclusion because it is load-bearing for the claim rather than merely outside it: a tool that read freely would defeat everything proved above without contradicting any lemma in it.",
+      "closes": "unscheduled",
+      "evidence": {
+        "assumption": "the tools a model may call cannot fetch what the input side refused"
+      },
+      "note": "retired by the tool-effect theorem, when one is written"
     },
     {
       "id": "model-input-assembly-is-callers-code",
       "level": "assumed",
-      "statement": "The shipped module ships the constructors; the fold over a candidate set is what each caller writes around them. The model states the theorem over that fold, because a statement about one constructor call says nothing about a store - but a caller free to write a different fold is free to write one these lemmas do not describe.",
+      "claim": "The shipped module ships the constructors; the fold over a candidate set is what each caller writes around them. The model states the theorem over that fold, because a statement about one constructor call says nothing about a store - but a caller free to write a different fold is free to write one these lemmas do not describe.",
+      "evidence": {
+        "assumption": "a caller assembles model input with the fold the theorem is stated over, not a fold of its own"
+      },
       "mitigation": "the differential host runs PRODUCTION's constructors in the same sequence the model folds, so a divergence between the modelled assembly and the shipped constructors is caught; what it cannot catch is a caller elsewhere folding differently"
     },
     {
       "id": "model-input-containment-host-supplied",
       "level": "assumed",
-      "statement": "The substring containment the leak differential asks for is host-supplied, because F* has no substring test that extracts to Prims alone. Every clause holds for ANY containment test; what the model does not verify is that the host's test is the one the shipped code uses.",
+      "claim": "The substring containment the leak differential asks for is host-supplied, because F* has no substring test that extracts to Prims alone. Every clause holds for ANY containment test; what the model does not verify is that the host's test is the one the shipped code uses.",
+      "evidence": {
+        "assumption": "the substring containment the host supplies is the one the shipped code uses"
+      },
       "mitigation": "the differential compares the leak list itself on every case, so a host test that disagreed with the shipped `Contains` would fail the leg on any case whose rendering names an undeclared candidate"
     },
     {
       "id": "model-input-bridge-hand-written",
       "level": "assumed",
-      "statement": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing. The turn type is additionally NARROWED - the model carries the three fields rendering reads, and the bridge passes the production record through unchanged.",
+      "claim": "The value-to-model bridge in the differential host is hand-written. A defect in it would make the comparison compare the wrong thing. The turn type is additionally NARROWED - the model carries the three fields rendering reads, and the bridge passes the production record through unchanged.",
+      "evidence": {
+        "assumption": "the differential host's bridge, including the narrowed turn type, maps each value to the model value it denotes"
+      },
       "mitigation": "case-for-case on purpose, and the block renderer is SHARED between the two sides: the model's facts are mapped back to production records and handed to production's own renderer, so no second implementation can quietly disagree"
     },
     {
       "id": "model-input-model-agrees-with-shipped-code",
       "level": "tested",
-      "statement": "The extracted value, constructor, assembly and renderer agree with the shipped ones over a pinned corpus and 150 generated cases, on the assembled value, the constructor's refusal wording, the mirrored tool-result record, the rendering, every byte of the rendered text and the leak differential over it AT ONCE. The migration seam every provider entry lifts through is compared on its own first. A 250-subject population is offered as a store with three facts admissible and 247 denied three different ways, and exactly three enter the value, exactly three reach the rendering, and none of the other 247 appears in the bytes a provider would be handed. Noninterference is run as well as proved: every case with something withheld is replayed against a store that replaces the withheld facts wholesale, and nothing a provider boundary observes may move.",
+      "claim": "The extracted value, constructor, assembly and renderer agree with the shipped ones over a pinned corpus and 150 generated cases, on the assembled value, the constructor's refusal wording, the mirrored tool-result record, the rendering, every byte of the rendered text and the leak differential over it AT ONCE. The migration seam every provider entry lifts through is compared on its own first. A 250-subject population is offered as a store with three facts admissible and 247 denied three different ways, and exactly three enter the value, exactly three reach the rendering, and none of the other 247 appears in the bytes a provider would be handed. Noninterference is run as well as proved: every case with something withheld is replayed against a store that replaces the withheld facts wholesale, and nothing a provider boundary observes may move.",
       "evidence": {
+        "family": "Phase 792 - the proved model input as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ModelInputProofOracleTests.fs",
-        "list": "Phase 792 - the proved model input as oracle",
         "cases": [
           "the extracted lift agrees with production over the entry corpus",
           "the extracted constructor agrees with production on every verdict, refusal text included",
@@ -689,8 +777,9 @@
     {
       "id": "model-input-committed-extraction-is-what-the-prover-produced",
       "level": "tested",
-      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "claim": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
       "evidence": {
+        "family": "proofs/check.ps1",
         "runner": "proofs/check.ps1 step 4",
         "artifact": "proofs/oracle/ModelInput.fs"
       }
@@ -698,8 +787,9 @@
     {
       "id": "model-input-differential-is-known-to-fail",
       "level": "tested",
-      "statement": "A committed go-red oracle renders one fact the constructor refused - the mistake a plausible reimplementation reaches by rendering from the store rather than from what was admitted - and the comparison is asserted to catch it on EVERY case that has a withheld fact to leak, not merely on one. The mechanism is pinned separately on a three-fact case where the VALUE is identical under both oracles and only the rendering differs, which is exactly the failure a value-only comparison would have passed.",
+      "claim": "A committed go-red oracle renders one fact the constructor refused - the mistake a plausible reimplementation reaches by rendering from the store rather than from what was admitted - and the comparison is asserted to catch it on EVERY case that has a withheld fact to leak, not merely on one. The mechanism is pinned separately on a three-fact case where the VALUE is identical under both oracles and only the rendering differs, which is exactly the failure a value-only comparison would have passed.",
       "evidence": {
+        "family": "Phase 792 - the proved model input as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ModelInputProofOracleTests.fs",
         "cases": [
           "the differential CATCHES an oracle that renders one withheld fact - the go-red case",
@@ -710,89 +800,114 @@
     {
       "id": "model-input-transport",
       "level": "policy",
-      "statement": "The transport is OUT. That the rendered bytes reach a provider unaltered, and that the provider sends what it was given, are not claimed at any level.",
+      "claim": "The transport is OUT. That the rendered bytes reach a provider unaltered, and that the provider sends what it was given, are not claimed at any level.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "`render` is where this theorem stops - it produces the two arguments the provider interface takes, and everything past that boundary is another component's obligation"
     },
     {
       "id": "model-input-the-model-itself",
       "level": "policy",
-      "statement": "The language model is OUT, entirely. Nothing here says what it does with the bytes, what it answers, or what it may have learned elsewhere.",
+      "claim": "The language model is OUT, entirely. Nothing here says what it does with the bytes, what it answers, or what it may have learned elsewhere.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "keeping the model outside the trusted set is the whole point of stating the input side this precisely; a theorem that implied anything about its behaviour would be claiming something it cannot see"
     },
     {
       "id": "model-input-builder-io",
       "level": "policy",
-      "statement": "How a builder obtained a block's text is OUT. By the time the value holds it, it is data.",
+      "claim": "How a builder obtained a block's text is OUT. By the time the value holds it, it is data.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the split is deliberate - assembly keeps its IO, rendering is total and effect-free, and it is the second half a theorem can be stated about. Which store a builder read and whether it was entitled to is that builder's own obligation."
     },
     {
       "id": "model-input-inference-from-what-was-disclosed",
       "level": "policy",
-      "statement": "What a reader could deduce from the facts that WERE admitted, from their count, or from their absence is OUT.",
+      "claim": "What a reader could deduce from the facts that WERE admitted, from their count, or from their absence is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the disclosure vocabulary is a declared classification enforced at the boundary, not an inference-control regime - the same honesty boundary the disclosure fold's ladder states in the same words"
     },
     {
       "id": "taint-lattice-laws",
       "level": "proved",
-      "statement": "The taint-label join is associative and has bottom as a two-sided identity ON THE NOSE; it is commutative, idempotent and an upper bound of both its parts up to label equality, which is set equality and is what the shipped label's own equality computes. join_is_least adds the other half, so the join is the LEAST upper bound and the order is a lattice order rather than merely some order; below_is_sub proves the shipped definition of that order is the same relation the model reasons with.",
+      "claim": "The taint-label join is associative and has bottom as a two-sided identity ON THE NOSE; it is commutative, idempotent and an upper bound of both its parts up to label equality, which is set equality and is what the shipped label's own equality computes. join_is_least adds the other half, so the join is the LEAST upper bound and the order is a lattice order rather than merely some order; below_is_sub proves the shipped definition of that order is the same relation the model reasons with.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["join_laws", "join_is_least", "below_is_sub"]
+        "theorem": "join_laws",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "join_is_least",
+          "below_is_sub"
+        ]
       }
     },
     {
       "id": "taint-label-monotone",
       "level": "proved",
-      "statement": "Raise any source's declared label - one of them, all of them - and the label the pipeline's output carries can only rise. label_never_falls is the per-node companion: along the pipeline the label is non-decreasing at every node, because the fold only ever joins, so nothing in the transform algebra can lower a label.",
+      "claim": "Raise any source's declared label - one of them, all of them - and the label the pipeline's output carries can only rise. label_never_falls is the per-node companion: along the pipeline the label is non-decreasing at every node, because the fold only ever joins, so nothing in the transform algebra can lower a label.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["label_monotone", "label_never_falls"]
+        "theorem": "label_monotone",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "label_never_falls"
+        ]
       }
     },
     {
       "id": "taint-flow-noninterference",
       "level": "proved",
-      "statement": "For any pipeline in the transform algebra, any two input assignments differing ONLY in one contributor's data, and any output whose computed label does not carry that contributor - the outputs are IDENTICAL. Quantified over every semantics of the transform cases, so it is not a claim about what the transforms happen to compute but about what they are able to READ, which is the thing the label tracks.",
+      "claim": "For any pipeline in the transform algebra, any two input assignments differing ONLY in one contributor's data, and any output whose computed label does not carry that contributor - the outputs are IDENTICAL. Quantified over every semantics of the transform cases, so it is not a claim about what the transforms happen to compute but about what they are able to READ, which is the thing the label tracks.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["flow_noninterference"],
+        "theorem": "flow_noninterference",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
         "note": "the semantics is a parameter rather than a definition, which is why the model needs nothing from the production executor"
       }
     },
     {
       "id": "taint-declassify-only-lowers",
       "level": "proved",
-      "statement": "The exception stated as the exception. If a label carried a contributor and the narrowed label does not, the routine's entitlement predicate cleared it - and where that contributor's policy declares a contributor scope, the routine's accepting scopes name that scope. So one contributor's consent can never lower another's label, and nothing else lowers a label at all (label_never_falls, above, is that second half over the algebra).",
+      "claim": "The exception stated as the exception. If a label carried a contributor and the narrowed label does not, the routine's entitlement predicate cleared it - and where that contributor's policy declares a contributor scope, the routine's accepting scopes name that scope. So one contributor's consent can never lower another's label, and nothing else lowers a label at all (label_never_falls, above, is that second half over the algebra).",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["declassify_only_lowers"],
-        "definitions": ["narrows_to_characterised", "narrows_to_only_lowers"]
+        "theorem": "declassify_only_lowers",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
+        "definitions": [
+          "narrows_to_characterised",
+          "narrows_to_only_lowers"
+        ]
       }
     },
     {
       "id": "taint-conjunction-sound",
       "level": "proved",
-      "statement": "An empty inherited-policy set means every taint-propagating source that reached the target was DROPPED somewhere on its derivation, and every drop anywhere in that derivation was made by a routine entitled to make it. So the gate's single condition - this list is empty - is exactly 'a path satisfies every contributing scope's policy'.",
+      "claim": "An empty inherited-policy set means every taint-propagating source that reached the target was DROPPED somewhere on its derivation, and every drop anywhere in that derivation was made by a routine entitled to make it. So the gate's single condition - this list is empty - is exactly 'a path satisfies every contributing scope's policy'.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["conjunction_sound"],
-        "definitions": ["every_drop_is_entitled", "reached_but_absent_was_dropped"],
+        "theorem": "conjunction_sound",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
+        "definitions": [
+          "every_drop_is_entitled",
+          "reached_but_absent_was_dropped"
+        ],
         "note": "every_drop_is_entitled is UNCONDITIONAL - it holds at every node of every derivation, with no premise, because the only way a ref leaves a node is the narrowing"
       }
     },
     {
       "id": "taint-trace-noninterference",
       "level": "proved",
-      "statement": "The flow half over a SEQUENCE. A room emits an ordered trace of releases and slice_tr q is one contributor's view of it, with scoped segments that contributor is outside dropping out. Two runs whose assignments differ only in another contributor's data give the same slice - the same values, in the same order, and the same number of them. Ordering and count are covered because the conclusion is list equality, not equality of one output.",
+      "claim": "The flow half over a SEQUENCE. A room emits an ordered trace of releases and slice_tr q is one contributor's view of it, with scoped segments that contributor is outside dropping out. Two runs whose assignments differ only in another contributor's data give the same slice - the same values, in the same order, and the same number of them. Ordering and count are covered because the conclusion is list equality, not equality of one output.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["trace_noninterference"],
+        "theorem": "trace_noninterference",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
         "precedent": "Rastogi, Swamy and Hicks, 'Wys*: A DSL for Verified Secure Multi-party Computations' (2019) - the trace-and-slice statement and the delimited-release shape; none of its runtime",
         "premise": "q_free_of - every release the observer sees has an output label, taken BEFORE its own declassification, that does not carry the other contributor. A release whose computed label does carry it is a declassification and is outside this lemma by construction"
       }
@@ -800,21 +915,21 @@
     {
       "id": "taint-refinement-leaks-no-more",
       "level": "proved",
-      "statement": "An amended room whose contributor-q view can be exhibited as a function of the baseline's contributor-q view and public data inherits the baseline's noninterference. The obligation is on whoever supplies the rebuild function; the lemma is that supplying it SUFFICES, which is the whole content of the refinement pattern - the work is exhibiting the function, and this is what the work buys.",
+      "claim": "An amended room whose contributor-q view can be exhibited as a function of the baseline's contributor-q view and public data inherits the baseline's noninterference. The obligation is on whoever supplies the rebuild function; the lemma is that supplying it SUFFICES, which is the whole content of the refinement pattern - the work is exhibiting the function, and this is what the work buys.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/TaintFlow.fst",
-        "lemmas": ["refinement_leaks_no_more"],
+        "theorem": "refinement_leaks_no_more",
+        "model": "proofs/TaintFlow.fst",
+        "prover": "proofs/fstar-pin.json",
         "precedent": "the same paper's refinement pattern: an optimised or amended computation shown to leak nothing new by exhibiting its trace as a function of the baseline trace plus public data"
       }
     },
     {
       "id": "taint-model-agrees-with-shipped-code",
       "level": "tested",
-      "statement": "The extracted model and the shipped code agree over the two-contributor fixtures and the Phase 794 generated pipelines, on four things: the lattice over the power set of a three-ref vocabulary (join, the order, isBottom, narrowsTo under every clearing predicate); the entitlement predicate over every config and acceptance set, including an undeclared scope; the WHOLE labelled assembly - every node's label and what that node contributed, not merely the output, because the contribution is where a second contributor enters; and the derivation walk against production's own InheritedLabel. This is the only thing that says the proved model is about the code that runs.",
+      "claim": "The extracted model and the shipped code agree over the two-contributor fixtures and the Phase 794 generated pipelines, on four things: the lattice over the power set of a three-ref vocabulary (join, the order, isBottom, narrowsTo under every clearing predicate); the entitlement predicate over every config and acceptance set, including an undeclared scope; the WHOLE labelled assembly - every node's label and what that node contributed, not merely the output, because the contribution is where a second contributor enters; and the derivation walk against production's own InheritedLabel. This is the only thing that says the proved model is about the code that runs.",
       "evidence": {
+        "family": "Phase 795 - the proved taint flow as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/TaintFlowProofOracleTests.fs",
-        "list": "Phase 795 - the proved taint flow as oracle",
         "cases": [
           "the extracted lattice agrees with production over the declared vocabulary",
           "the extracted entitlement agrees with production over every policy and acceptance set",
@@ -828,8 +943,9 @@
     {
       "id": "taint-relational-laws-measured-directly",
       "level": "tested",
-      "statement": "The two relational laws are MEASURED, not restated. Comparing outputs cannot test a relational law, so these arms run the experiment: relabel one contributor's input rows and require the pipeline's output to be identical wherever production's own computed label says that contributor did not reach it; and the same over a room, comparing the other contributor's slice, so ordering and count are what is compared. The frame is a transcript - the free term over the two step functions - which is the most discriminating semantics available, so any dependence at all shows as a literal difference. conjunction_sound is run the same way, over the model's own drop predicates.",
+      "claim": "The two relational laws are MEASURED, not restated. Comparing outputs cannot test a relational law, so these arms run the experiment: relabel one contributor's input rows and require the pipeline's output to be identical wherever production's own computed label says that contributor did not reach it; and the same over a room, comparing the other contributor's slice, so ordering and count are what is compared. The frame is a transcript - the free term over the two step functions - which is the most discriminating semantics available, so any dependence at all shows as a literal difference. conjunction_sound is run the same way, over the model's own drop predicates.",
       "evidence": {
+        "family": "Phase 795 - the proved taint flow as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/TaintFlowProofOracleTests.fs",
         "cases": [
           "the relational law holds where the label says it must - measured directly",
@@ -843,8 +959,9 @@
     {
       "id": "taint-committed-extraction-is-what-the-prover-produced",
       "level": "tested",
-      "statement": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
+      "claim": "The committed oracle is byte-identical to a fresh extraction from the checked module.",
       "evidence": {
+        "family": "proofs/check.ps1",
         "runner": "proofs/check.ps1 step 4",
         "artifact": "proofs/oracle/TaintFlow.fs"
       }
@@ -852,8 +969,9 @@
     {
       "id": "taint-differential-is-known-to-fail",
       "level": "tested",
-      "statement": "A committed go-red oracle BLINDS THE JOIN - a fold that forgets a join brings a second source into the pipeline, which is the exact mistake the labelled algebra exists to make impossible. It is asserted to be caught twice: by the labelling comparison, and by the relational arm, where a blinded label reports a frame as free of a contributor whose output moves when that contributor's rows move. The mechanism is pinned on a one-join fixture - production and the honest oracle carry both contributors past the join, the blind oracle carries one. A differential never shown to fail agrees with whatever it is shown.",
+      "claim": "A committed go-red oracle BLINDS THE JOIN - a fold that forgets a join brings a second source into the pipeline, which is the exact mistake the labelled algebra exists to make impossible. It is asserted to be caught twice: by the labelling comparison, and by the relational arm, where a blinded label reports a frame as free of a contributor whose output moves when that contributor's rows move. The mechanism is pinned on a one-join fixture - production and the honest oracle carry both contributors past the join, the blind oracle carries one. A differential never shown to fail agrees with whatever it is shown.",
       "evidence": {
+        "family": "Phase 795 - the proved taint flow as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/TaintFlowProofOracleTests.fs",
         "cases": [
           "the differential CATCHES a blind Join label - the go-red case",
@@ -864,77 +982,110 @@
     {
       "id": "taint-honest-but-curious",
       "level": "assumed",
-      "statement": "The attacker is honest-but-curious. The theorem is about what a composed computation can carry to whom: it assumes the parties run the computation as composed and observe what they are given. It says nothing about an adversary who deviates from the protocol, and nothing about one who can read memory, modify a binary, or reach the data outside the computation at all.",
+      "claim": "The attacker is honest-but-curious. The theorem is about what a composed computation can carry to whom: it assumes the parties run the computation as composed and observe what they are given. It says nothing about an adversary who deviates from the protocol, and nothing about one who can read memory, modify a binary, or reach the data outside the computation at all.",
+      "evidence": {
+        "assumption": "every party runs the composed computation as composed and observes only what it is given"
+      },
       "mitigation": "it is the same attacker model the borrowed trace form was proved under, and it is named on the ladder's assumed rung rather than left to be inferred, because containment read as operator-proof is the one overclaim this ladder exists to prevent"
     },
     {
       "id": "taint-routines-not-verified",
       "level": "assumed",
-      "statement": "The declassification routines' own correctness is assumed, not proved. Whether an aggregation-over-k or a noise addition actually loses attribution is the routine's business. This is a proof about WALLS, not about routines: declassify_only_lowers says a label was lowered only by a routine the contributor accepted; it does not say the routine deserved to be accepted.",
+      "claim": "The declassification routines' own correctness is assumed, not proved. Whether an aggregation-over-k or a noise addition actually loses attribution is the routine's business. This is a proof about WALLS, not about routines: declassify_only_lowers says a label was lowered only by a routine the contributor accepted; it does not say the routine deserved to be accepted.",
+      "evidence": {
+        "assumption": "each declassification routine actually loses the attribution its label lowering claims"
+      },
       "mitigation": "the entitlement is per-contributor and fail-closed, so a routine nobody accepted clears nothing at all - which bounds the damage a bad routine can do to the contributors who accepted it"
     },
     {
       "id": "taint-inference-across-declassified-outputs",
       "level": "assumed",
-      "statement": "Inference across declassified outputs is out of the theorem. A release whose computed label carries a contributor is outside the trace lemma by construction: that release is a declassification, the contributor's data did influence it, and that is what a declassification means. What a determined reader could reconstruct across a SEQUENCE of such releases is a budget question, and a budget is a metered allowance, never a proof.",
+      "claim": "Inference across declassified outputs is out of the theorem. A release whose computed label carries a contributor is outside the trace lemma by construction: that release is a declassification, the contributor's data did influence it, and that is what a declassification means. What a determined reader could reconstruct across a SEQUENCE of such releases is a budget question, and a budget is a metered allowance, never a proof.",
+      "evidence": {
+        "assumption": "what a reader infers by combining declassified releases is bounded by the declassifications themselves"
+      },
       "mitigation": "the boundary is explicit rather than implicit - q_free_of is taken before each release's own declassification, so the lemma's premise names exactly the releases it does not cover"
     },
     {
       "id": "taint-storage-scope-assumed-resolved",
       "level": "assumed",
-      "statement": "The storage scope is assumed resolved. The theorem is about the computation's information flow; where the inputs and outputs are held, and under whose control, is a separate obligation it takes as discharged."
+      "claim": "The storage scope is assumed resolved. The theorem is about the computation's information flow; where the inputs and outputs are held, and under whose control, is a separate obligation it takes as discharged.",
+      "evidence": {
+        "assumption": "the storage scope that holds a computation's inputs and outputs is resolved and enforced"
+      }
     },
     {
       "id": "taint-derivation-modelled-as-tree",
       "level": "assumed",
-      "statement": "The derivation is modelled as a TREE. Production walks a graph with a memo table and a cycle guard. A memo cannot change a value; the content-addressed store is acyclic, and a tree is the acyclic case unfolded - where a graph shares an upstream the unfolding visits it twice and joins the same refs into the same label, which is immaterial under set equality.",
+      "claim": "The derivation is modelled as a TREE. Production walks a graph with a memo table and a cycle guard. A memo cannot change a value; the content-addressed store is acyclic, and a tree is the acyclic case unfolded - where a graph shares an upstream the unfolding visits it twice and joins the same refs into the same label, which is immaterial under set equality.",
+      "evidence": {
+        "assumption": "unfolding production's memoised acyclic derivation graph into a tree changes no computed label"
+      },
       "mitigation": "the differential checks the unfolding against the real walk on every fixture rather than leaving it asserted, and the host mirrors the cycle guard so a malformed graph cannot diverge there either"
     },
     {
       "id": "taint-label-not-ordered-list",
       "level": "assumed",
-      "statement": "The theorem is about the LABEL, not the ordered ref list. Production keeps the inherited refs in nearest-declared-first order so the single deny ref it reports is unchanged from Phase 562. Order is a presentation fact about a refusal message; the label is the set, and the set is what is reasoned about.",
+      "claim": "The theorem is about the LABEL, not the ordered ref list. Production keeps the inherited refs in nearest-declared-first order so the single deny ref it reports is unchanged from Phase 562. Order is a presentation fact about a refusal message; the label is the set, and the set is what is reasoned about.",
+      "evidence": {
+        "assumption": "the order production keeps inherited refs in is presentation only; the label is the set"
+      },
       "mitigation": "the differential compares against production's own InheritedLabel, which is the set, so the comparison and the theorem are about the same value"
     },
     {
       "id": "taint-bridges-hand-written",
       "level": "assumed",
-      "statement": "The bridges in the differential host are hand-written. A label crosses as its own contents and returns through the shipped constructor; a transform crosses as its case; a fact's derivation is unfolded from the graph, mirroring production's private source-policy test rather than reaching for it. A defect in any of them would make the comparison compare the wrong thing.",
+      "claim": "The bridges in the differential host are hand-written. A label crosses as its own contents and returns through the shipped constructor; a transform crosses as its case; a fact's derivation is unfolded from the graph, mirroring production's private source-policy test rather than reaching for it. A defect in any of them would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the differential host's label, transform and derivation bridges map each value to the model value it denotes"
+      },
       "mitigation": "short and case-for-case on purpose, and the committed go-red oracle beside them exercises the one field most likely to be got wrong; a bridge that mapped a join to a fold was shown to fail three arms before this landed"
     },
     {
       "id": "taint-inferred-lineage-fallback",
       "level": "policy",
-      "statement": "The inferred-lineage fallback is OUT of the theorem.",
+      "claim": "The inferred-lineage fallback is OUT of the theorem.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "where no transform tree has labelled a fact, the walk falls back to lineage inferred from evidence linkage, and that inference is sound only where a derivation was routed through a series output - a derivation that was not is invisible to it, and an invisible upstream carries no taint at all. The theorem covers the COMPUTED side. The shipped code raises a finding naming every fact it fell back on, precisely so a verdict resting on inference cannot pass for one resting on computation, and this exclusion exists so the ladder does not quietly promote it."
     },
     {
       "id": "taint-hostile-operator",
       "level": "policy",
-      "statement": "A hostile operator is OUT.",
+      "claim": "A hostile operator is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "root access, memory dumps, a modified binary and a compromised host are outside every sentence in the proved rung, and no amount of information-flow proof reaches them. Closing that gap is a hardware-attestation question, not a theorem. Stated rather than omitted because an unstated exclusion reads, to whoever finds it later, as a claim that failed."
     },
     {
       "id": "taint-source-declarations-trusted",
       "level": "policy",
-      "statement": "That every pipeline declares its sources honestly is OUT.",
+      "claim": "That every pipeline declares its sources honestly is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "a source nobody declared labels as clean. That is a POSITIVE statement the composition makes - which contributor a source belongs to is knowledge the composition has and the frame does not - and nothing here can detect a declaration that was simply wrong."
     },
     {
       "id": "taint-algebra-stays-closed",
       "level": "policy",
-      "statement": "That the transform algebra stays closed is OUT.",
+      "claim": "That the transform algebra stays closed is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the shipped contribution function is an exhaustive match, so a sixth transform case fails to compile until someone says what it reads. That is production's guard, not this theorem's, and the model would have to gain the case too."
     },
     {
       "id": "elmish-ring-is-queue",
       "level": "proved",
-      "statement": "Over ANY sequence of pushes and pops, a well-formed ring produces exactly the outputs a reference FIFO queue produces from its unread contents, and ends well-formed holding exactly what the queue holds. Every pushed item is popped exactly once, in push order, however many times the ring grows on the way - fifo, no lost slot and no double pop in one statement.",
+      "claim": "Over ANY sequence of pushes and pops, a well-formed ring produces exactly the outputs a reference FIFO queue produces from its unread contents, and ends well-formed holding exactly what the queue holds. Every pushed item is popped exactly once, in push order, however many times the ring grows on the way - fifo, no lost slot and no double pop in one statement.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "ring_is_queue",
+        "theorem": "ring_is_queue",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "push_spec",
           "pop_spec",
           "create_wf"
@@ -944,60 +1095,52 @@
     {
       "id": "elmish-ring-fifo",
       "level": "proved",
-      "statement": "Two items pushed in order are popped in that order, from the ring the constructor builds.",
+      "claim": "Two items pushed in order are popped in that order, from the ring the constructor builds.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "fifo"
-        ]
+        "theorem": "fifo",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-ring-no-lost-no-double",
       "level": "proved",
-      "statement": "After any operation sequence from a fresh ring, the outputs are the reference queue's: no push is dropped and no slot is returned twice.",
+      "claim": "After any operation sequence from a fresh ring, the outputs are the reference queue's: no push is dropped and no slot is returned twice.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "no_lost_slot_no_double_pop"
-        ]
+        "theorem": "no_lost_slot_no_double_pop",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-ring-placeholder-unobserved",
       "level": "proved",
-      "statement": "A pop on a well-formed ring never returns one of the placeholder slots the constructor and the grow step manufacture - `Unchecked.defaultof` is never observed as a value.",
+      "claim": "A pop on a well-formed ring never returns one of the placeholder slots the constructor and the grow step manufacture - `Unchecked.defaultof` is never observed as a value.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "placeholder_unobserved"
-        ]
+        "theorem": "placeholder_unobserved",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-ring-order-across-grow",
       "level": "proved",
-      "statement": "A push that triggers `doubleSize` leaves the unread contents in order with the pushed item last, in a ring of 2n + 1 slots whose read head is 0. The grow step is `2n + 1`, not `2n`: the inclusive `0 .. items.Length` range yields one placeholder more than the comment says, and the model reproduces it.",
+      "claim": "A push that triggers `doubleSize` leaves the unread contents in order with the pushed item last, in a ring of 2n + 1 slots whose read head is 0. The grow step is `2n + 1`, not `2n`: the inclusive `0 .. items.Length` range yields one placeholder more than the comment says, and the model reproduces it.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "order_across_grow"
-        ]
+        "theorem": "order_across_grow",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-ring-capacity-floor",
       "level": "proved",
-      "statement": "The precondition every ring theorem carries - at least two slots - is met by construction: `create` floors its capacity at `minimum_capacity` = 2, the ONE number `RingBuffer.MinimumCapacity` and `Program.withRingBufferCapacity` both read since 788.D. And it is necessary: at one slot the second push overwrites the first item before the grow step runs and the first pop returns the second item - `capacity_one_loses_an_item` is that execution, computed on the model with the floor bypassed.",
+      "claim": "The precondition every ring theorem carries - at least two slots - is met by construction: `create` floors its capacity at `minimum_capacity` = 2, the ONE number `RingBuffer.MinimumCapacity` and `Program.withRingBufferCapacity` both read since 788.D. And it is necessary: at one slot the second push overwrites the first item before the grow step runs and the first pop returns the second item - `capacity_one_loses_an_item` is that execution, computed on the model with the floor bypassed.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "create_wf",
+        "theorem": "create_wf",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "capacity_one_loses_an_item"
         ]
       }
@@ -1005,72 +1148,62 @@
     {
       "id": "elmish-ring-succ-is-mod",
       "level": "proved",
-      "statement": "The modelling step is faithful: the case-split index step the model uses IS `(i + 1) % n` on every index the code holds.",
+      "claim": "The modelling step is faithful: the case-split index step the model uses IS `(i + 1) % n` on every index the code holds.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishRing.fst",
-        "lemmas": [
-          "succ_is_mod"
-        ]
+        "theorem": "succ_is_mod",
+        "model": "proofs/ElmishRing.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-start-exactly-new",
       "level": "proved",
-      "statement": "`toStart` holds exactly the deduplicated requested subs whose key is not active - as pairs, so the start function that survives dedup is the one the caller will run.",
+      "claim": "`toStart` holds exactly the deduplicated requested subs whose key is not active - as pairs, so the start function that survives dedup is the one the caller will run.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "start_exactly_new"
-        ]
+        "theorem": "start_exactly_new",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-stop-exactly-removed",
       "level": "proved",
-      "statement": "`toStop` holds exactly the active subs whose key is no longer requested.",
+      "claim": "`toStop` holds exactly the active subs whose key is no longer requested.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "stop_exactly_removed"
-        ]
+        "theorem": "stop_exactly_removed",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-keep-exactly-common",
       "level": "proved",
-      "statement": "`toKeep` holds exactly the active subs whose key is still requested, and with `toStop` partitions the active list.",
+      "claim": "`toKeep` holds exactly the active subs whose key is still requested, and with `toStop` partitions the active list.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "keep_exactly_common"
-        ]
+        "theorem": "keep_exactly_common",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-never-both",
       "level": "proved",
-      "statement": "No key is both started and stopped, and no key is both kept and stopped.",
+      "claim": "No key is both started and stopped, and no key is both kept and stopped.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "never_both"
-        ]
+        "theorem": "never_both",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-dupes-exact",
       "level": "proved",
-      "statement": "A key is reported as a duplicate iff it occurs more than once in the requested subs; the survivor is the LAST occurrence, because `List.foldBack` folds the last entry first.",
+      "claim": "A key is reported as a duplicate iff it occurs more than once in the requested subs; the survivor is the LAST occurrence, because `List.foldBack` folds the last entry first.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "dupes_exact",
+        "theorem": "dupes_exact",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "calculate_characterised"
         ]
       }
@@ -1078,34 +1211,30 @@
     {
       "id": "elmish-sub-fast-path-agrees",
       "level": "proved",
-      "statement": "When `keys = newKeys` the shortcut returns `dupes, [], active, []` - and the general path, run on the same input, returns the same four lists. The shortcut is an optimisation, not a different answer; this is where a started-twice / never-stopped leak would have lived.",
+      "claim": "When `keys = newKeys` the shortcut returns `dupes, [], active, []` - and the general path, run on the same input, returns the same four lists. The shortcut is an optimisation, not a different answer; this is where a started-twice / never-stopped leak would have lived.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "fast_path_agrees"
-        ]
+        "theorem": "fast_path_agrees",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-sub-change-keys",
       "level": "proved",
-      "statement": "After `change`, every active key is a requested key and - when every start succeeds - every requested key is active.",
+      "claim": "After `change`, every active key is a requested key and - when every start succeeds - every requested key is active.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishSub.fst",
-        "lemmas": [
-          "change_keys"
-        ]
+        "theorem": "change_keys",
+        "model": "proofs/ElmishSub.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "statement": "The extracted models agree with the production `RingBuffer` and `Sub.Internal.diff` / `Fx.change` over generated operation sequences (pushes, pops, grows past several doublings, full drains) and generated subscription sets (duplicates, the shortcut's exact-key-set case), on .NET - keys AND the identity of every handle and start function carried through.",
+      "claim": "The extracted models agree with the production `RingBuffer` and `Sub.Internal.diff` / `Fx.change` over generated operation sequences (pushes, pops, grows past several doublings, full drains) and generated subscription sets (duplicates, the shortcut's exact-key-set case), on .NET - keys AND the identity of every handle and start function carried through.",
       "evidence": {
+        "family": "Phase 788 - the proved Elmish runtime as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs",
-        "list": "Phase 788 - the proved Elmish runtime as oracle",
         "cases": [
           "the extracted ring agrees with the production ring over generated push/pop sequences",
           "the campaign grew the ring past several doublings",
@@ -1122,40 +1251,49 @@
     {
       "id": "elmish-model-agrees-with-shipped-code-fable",
       "level": "tested",
-      "statement": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. The extraction itself is not compiled under Fable: its layout needs the strict-indentation opt-out, which Fable reads from no fsproj, and pinning LangVersion back is forbidden.",
+      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. The extraction itself is not compiled under Fable: its layout needs the strict-indentation opt-out, which Fable reads from no fsproj, and pinning LangVersion back is forbidden.",
       "evidence": {
+        "family": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
         "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
-        "list": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
         "runner": "dotnet run --project Build.fsproj -- VerifyFable (the fable-tier CI job)"
       }
     },
     {
       "id": "elmish-bridges-hand-written",
       "level": "assumed",
-      "statement": "The bridges in the differential host are hand-written: an op sequence crosses as its cases, a subscription list as key/handle pairs, and the model's popped slot comes back as an option with a popped placeholder kept distinguishable from None. A defect in any of them would make the comparison compare the wrong thing.",
+      "claim": "The bridges in the differential host are hand-written: an op sequence crosses as its cases, a subscription list as key/handle pairs, and the model's popped slot comes back as an option with a popped placeholder kept distinguishable from None. A defect in any of them would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the differential host's op, subscription and popped-slot bridges map each value to the model value it denotes"
+      },
       "mitigation": "short and case-for-case on purpose; the two committed go-red oracles beside them are each shown to be caught over the same generated inputs"
     },
     {
       "id": "elmish-ring-dispatch-loop-out",
       "level": "policy",
-      "statement": "The dispatch loop AROUND the ring is OUT of the RING's claim.",
+      "claim": "The dispatch loop AROUND the ring is OUT of the RING's claim.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "`Program.runWith`'s reentrancy flag, its termination predicate and the order in which `update`, `subscribe` and `setState` run are the loop's contract, not the ring's. The ring theorem says every deferred message comes out once and in order; what the loop does with it is a separate model - Phase 789's, whose claims are the `elmish-loop-*` rows below."
     },
     {
       "id": "elmish-sub-effects-out",
       "level": "policy",
-      "statement": "What a subscription DOES when started or stopped is OUT.",
+      "claim": "What a subscription DOES when started or stopped is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "`Fx.change` calls the host's start and dispose functions and reports their exceptions through `onError`; the theorem is about which keys survive the call, with the start function opaque and its failure modelled as `None`. Whether a start that threw left a resource behind is the subscription author's contract."
     },
     {
       "id": "elmish-loop-exactly-once",
       "level": "proved",
-      "statement": "In every idle, non-terminated state a program reaches - after the boot drain and any sequence of external dispatches and Terminate calls - the log of accepted messages IS the trace of messages handed to `update`: every message `dispatch` accepted, from outside or re-dispatched from inside, was processed exactly once, in the order it was accepted. The invariant underneath: while not terminated the log is exactly the trace followed by the ring's unread contents, and an idle machine has drained its ring.",
+      "claim": "In every idle, non-terminated state a program reaches - after the boot drain and any sequence of external dispatches and Terminate calls - the log of accepted messages IS the trace of messages handed to `update`: every message `dispatch` accepted, from outside or re-dispatched from inside, was processed exactly once, in the order it was accepted. The invariant underneath: while not terminated the log is exactly the trace followed by the ring's unread contents, and an idle machine has drained its ring.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "exactly_once",
+        "theorem": "exactly_once",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "program_inv",
           "dispatch_inv",
           "loop_spec",
@@ -1167,24 +1305,22 @@
     {
       "id": "elmish-loop-in-order",
       "level": "proved",
-      "statement": "In EVERY state a program reaches - mid-drain, stalled, or terminated - the trace is a prefix of the log. Nothing is handed to `update` out of the order in which it was accepted; termination can only truncate, never permute.",
+      "claim": "In EVERY state a program reaches - mid-drain, stalled, or terminated - the trace is a prefix of the log. Nothing is handed to `update` out of the order in which it was accepted; termination can only truncate, never permute.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "in_order"
-        ]
+        "theorem": "in_order",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "elmish-loop-reentrant-no-loss",
       "level": "proved",
-      "statement": "A `dispatch` made while the latch is set - from `update`'s command, from `setState`, from a subscription's start - queues its message at the BACK of what is pending, logs it, and processes nothing: the trace, the model and everything already waiting are untouched. Under the latch `dispatch` IS `enqueue`. With exactly-once and in-order, the message can be neither lost nor moved ahead.",
+      "claim": "A `dispatch` made while the latch is set - from `update`'s command, from `setState`, from a subscription's start - queues its message at the BACK of what is pending, logs it, and processes nothing: the trace, the model and everything already waiting are untouched. Under the latch `dispatch` IS `enqueue`. With exactly-once and in-order, the message can be neither lost nor moved ahead.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "reentrant_no_loss",
+        "theorem": "reentrant_no_loss",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "dispatch_latched"
         ]
       }
@@ -1192,12 +1328,12 @@
     {
       "id": "elmish-loop-terminated-absorbing",
       "level": "proved",
-      "statement": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the model, and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed; a boot drain on a machine terminated before it ran processes nothing.",
+      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the model, and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed; a boot drain on a machine terminated before it ran processes nothing.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "terminated_absorbing",
+        "theorem": "terminated_absorbing",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "terminated_absorbing_boot",
           "terminate_then_nothing",
           "terminated_stays_terminated"
@@ -1207,12 +1343,12 @@
     {
       "id": "elmish-loop-boot-drain-equiv",
       "level": "proved",
-      "statement": "The boot drain - the hand-duplicated `reentered <- true; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events those effects raised under the latch; for a single message it is `dispatch` itself. Proved equivalent; the source is not unified (no behaviour change to the loop).",
+      "claim": "The boot drain - the hand-duplicated `reentered <- true; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events those effects raised under the latch; for a single message it is `dispatch` itself. Proved equivalent; the source is not unified (no behaviour change to the loop).",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "boot_drain_equiv",
+        "theorem": "boot_drain_equiv",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "boot_single_is_dispatch",
           "boot_evs_are_apply_evs"
         ]
@@ -1221,12 +1357,12 @@
     {
       "id": "elmish-loop-active-iff-not-terminated",
       "level": "proved",
-      "statement": "In every state a program reaches, `DispatcherCore.active` is the loop's `terminated` negated. And the one production arm that drives the two apart - `Dispatcher.fs`'s fallback for a Terminate with no callback wired, which clears `active` alone - is modelled and its result computed: `active` false, `terminated` false, a state in which `IDispatcher.Dispatch` refuses while the loop would still process.",
+      "claim": "In every state a program reaches, `DispatcherCore.active` is the loop's `terminated` negated. And the one production arm that drives the two apart - `Dispatcher.fs`'s fallback for a Terminate with no callback wired, which clears `active` alone - is modelled and its result computed: `active` false, `terminated` false, a state in which `IDispatcher.Dispatch` refuses while the loop would still process.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/ElmishLoop.fst",
-        "lemmas": [
-          "active_iff_not_terminated",
+        "theorem": "active_iff_not_terminated",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "fallback_breaks_encoding"
         ]
       }
@@ -1234,10 +1370,10 @@
     {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "statement": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, and IsActive. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain is caught.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, and IsActive. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain is caught.",
       "evidence": {
+        "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
-        "list": "Phase 789 - the proved dispatch loop as oracle",
         "cases": [
           "the extracted machine agrees with the production loop over generated reentrancy scripts",
           "every drain in the campaign finished - the fuel bound never decided an agreement",
@@ -1254,70 +1390,91 @@
     {
       "id": "elmish-loop-two-flag-encoding-sites",
       "level": "assumed",
-      "statement": "The model sets `active` and `terminated` together because `MarkTerminated` accompanies both `terminated <- true` assignments in Program.fs and `Wire` precedes every dispatch. A third site added to either cell without the other would leave the theorem true of the model and false of the code; the fallback arm in Dispatcher.fs is the one known exception, stated in the proved row above.",
+      "claim": "The model sets `active` and `terminated` together because `MarkTerminated` accompanies both `terminated <- true` assignments in Program.fs and `Wire` precedes every dispatch. A third site added to either cell without the other would leave the theorem true of the model and false of the code; the fallback arm in Dispatcher.fs is the one known exception, stated in the proved row above.",
+      "evidence": {
+        "assumption": "every site that sets `terminated` or wires dispatch also moves `active`, as the model's single step does"
+      },
       "mitigation": "the differential records production's log through IDispatcher.IsActive and the model's through its terminated cell, so a state in which the two disagree logs differently on the next dispatch and fails the comparison"
     },
     {
       "id": "elmish-loop-oracle-abstracts-callees",
       "level": "assumed",
-      "statement": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. The teardown callbacks on the terminating path are assumed not to dispatch.",
+      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. The teardown callbacks on the terminating path are assumed not to dispatch.",
+      "evidence": {
+        "assumption": "update, setState, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns"
+      },
       "mitigation": "a dispatch a teardown callback made would land in the ring and never be processed, which terminated_absorbing covers; the exception shape is expressible as an oracle reply and could be scripted"
     },
     {
       "id": "elmish-loop-bridges-hand-written",
       "level": "assumed",
-      "statement": "A script's events cross as the model's Msg / Term and XDispatch / XTerminate cases, and production's log is recorded by the driver rather than by the loop. A defect in either would make the comparison compare the wrong thing.",
+      "claim": "A script's events cross as the model's Msg / Term and XDispatch / XTerminate cases, and production's log is recorded by the driver rather than by the loop. A defect in either would make the comparison compare the wrong thing.",
+      "evidence": {
+        "assumption": "the driver's script-to-model and log-recording bridges map each event to the model event it denotes"
+      },
       "mitigation": "short and case-for-case on purpose; the faithful skeleton is a third implementation of the same abstraction that must agree with both, and the go-red skeleton is shown caught over the same scripts"
     },
     {
       "id": "elmish-loop-liveness-out",
       "level": "policy",
-      "statement": "Liveness of the drain is OUT.",
+      "claim": "Liveness of the drain is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "that `processMsgs` returns at all depends on `update` eventually re-dispatching nothing. The model bounds the drain with fuel and REPORTS a drain that did not finish (its latch stays set and `run` feeds it nothing further); it does not prove that any drain does, and production does not either. Every proved row above is partial correctness."
     },
     {
       "id": "elmish-loop-host-delivery-out",
       "level": "policy",
-      "statement": "That React, timers and HMR deliver their dispatches BETWEEN drains is OUT.",
+      "claim": "That React, timers and HMR deliver their dispatches BETWEEN drains is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the outside world is modelled as a sequence of IDispatcher calls between drains; that no external dispatch arrives while a synchronous drain has not returned is the single-threaded host's contract, assumed by the model's `run` and proved by nothing here."
     },
     {
       "id": "elmish-loop-fable-out",
       "level": "policy",
-      "statement": "The transpiled loop under Fable is OUT.",
+      "claim": "The transpiled loop under Fable is OUT.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
       "reason": "the extraction compiles on .NET only, and the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken. The browser's copy of the loop is not differentially tested by this phase."
     },
     {
       "id": "decoder-tuple-characterisation",
       "level": "proved",
-      "statement": "A tuple combinator (Phase 800) accepts a positional array of exactly its arity and refuses every other value naming both arities - never a slice - and on an array of the wrong width the refusal is the arity check's refusal verbatim, so an element decoder is never reached. The element path is `[n]`, because a tuple element has no name to carry.",
+      "claim": "A tuple combinator (Phase 800) accepts a positional array of exactly its arity and refuses every other value naming both arities - never a slice - and on an array of the wrong width the refusal is the arity check's refusal verbatim, so an element decoder is never reached. The element path is `[n]`, because a tuple element has no name to carry.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": ["lemma_tuple_of_characterised", "lemma_tuple2_refuses_wrong_arity"]
+        "theorem": "lemma_tuple_of_characterised",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "lemma_tuple2_refuses_wrong_arity"
+        ]
       }
     },
     {
       "id": "decoder-fields-characterisation",
       "level": "proved",
-      "statement": "The several-field union-case form (Phase 800) hands the inner array to its field pipeline exactly when the array has the case's arity, and refuses a wrong-width array, a bare payload and a missing payload slot each by name with an empty path. The arity is at least 2 as a refinement on the model, because the writer emits a one-field case directly with no inner array.",
+      "claim": "The several-field union-case form (Phase 800) hands the inner array to its field pipeline exactly when the array has the case's arity, and refuses a wrong-width array, a bare payload and a missing payload slot each by name with an empty path. The arity is at least 2 as a refinement on the model, because the writer emits a one-field case directly with no inner array.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": ["lemma_fields_characterised"]
+        "theorem": "lemma_fields_characterised",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json"
       }
     },
     {
       "id": "decoder-widened-round-trip",
       "level": "proved",
-      "statement": "Over the reference vocabulary widened by a leg - a pair and a union with a several-field case - the encoding of any value decodes, and decodes back to the value it started from, for every string-length function the host might supply. The union is also proved on its own so a failure localises to the several-field case rather than to the pair beside it.",
+      "claim": "Over the reference vocabulary widened by a leg - a pair and a union with a several-field case - the encoding of any value decodes, and decodes back to the value it started from, for every string-length function the host might supply. The union is also proved on its own so a failure localises to the several-field case rather than to the pair beside it.",
       "evidence": {
-        "prover": "fstar-pinned",
-        "module": "proofs/RemotingDecode.fst",
-        "lemmas": [
+        "theorem": "decode_encode_roundtrip_leg",
+        "model": "proofs/RemotingDecode.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
           "decode_leg_total",
           "decode_leg_wf",
-          "decode_encode_roundtrip_leg",
           "decode_encode_roundtrip_status"
         ]
       }
@@ -1325,10 +1482,10 @@
     {
       "id": "decoder-phase-800-shapes-agree",
       "level": "tested",
-      "statement": "The extracted model and the shipped algebra agree, outcome class, value, runtime type and message at once, over the corpus's tuple fixtures through tuple2 / tuple3, over Outcome paired both through payload and through fields, and over hand-built refusal shapes for both new combinators - including the one pinned contrast, an inner array with a trailing element that payload accepts and fields refuses. The widened vocabulary's round trip runs through the extraction, one instance per union case.",
+      "claim": "The extracted model and the shipped algebra agree, outcome class, value, runtime type and message at once, over the corpus's tuple fixtures through tuple2 / tuple3, over Outcome paired both through payload and through fields, and over hand-built refusal shapes for both new combinators - including the one pinned contrast, an inner array with a trailing element that payload accepts and fields refuses. The widened vocabulary's round trip runs through the extraction, one instance per union case.",
       "evidence": {
+        "family": "Phase 787 - the proved model as oracle",
         "host": "src/ToolUp.Platform.Tests/Remoting/ProofOracleTests.fs",
-        "list": "Phase 787 - the proved model as oracle",
         "cases": [
           "the extracted model agrees with production over every Phase 800 refusal shape",
           "the widened reference vocabulary round-trips through the extracted encoder and decoder"
