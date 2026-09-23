@@ -357,6 +357,8 @@ let private registeredTests =
         SendGridNotificationSinkTests.tests
         TwilioNotificationSinkTests.tests
         WebPushNotificationSinkTests.tests
+        // Phase 6f.C - the Meta WhatsApp Business Cloud companion.
+        MetaWhatsAppCloudNotificationSinkTests.tests
         HnswVectorStoreTests.tests
         // Phase 507 — the external rung of the vector-store scale story.
         // Structural arm always on (scope isolation read off the SQL,
