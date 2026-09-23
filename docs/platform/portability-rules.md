@@ -139,6 +139,62 @@ Three findings from the exercise are worth more than the green tick, because eac
 - **Rule 3's "retry as data" paid off literally.** Because `JobRetryPolicy` is a record rather than a callback, it mapped onto Quartz's own `RetryPolicy` and the backoff arithmetic stayed in the backend. A callback-shaped retry contract — the shape rule 3 forbids — would have forced the companion to re-implement the retry loop around a framework that already has one. The map is not free of traps (both ends count differently, and both offsets are off-by-one hazards), but it is a map, not a reimplementation.
 - **Rule 1's identity-by-value is what let the two stores separate cleanly.** Quartz models *schedules*; `IJobStore` additionally models scope isolation, an idempotency index, per-attempt run history and the awaiting-external index. Because every lookup is by `(ScopeId, JobId)` and never by a live handle, the companion could keep the canonical record in the shipped store and *project* schedules onto Quartz, rather than choosing between two incompatible persistence models. A handle-based interface would have forced the choice.
 
+### The portability verdict, rule by rule (Phase 9c.F)
+
+Phase 9c wrote four assertions into a comment rather than into a test — the `JobRetryPolicy`
+round-trip, `ShardKey` affinity, restart statelessness, and the serialiser round-trip of a
+`JobDefinition` — on the reasoning that there was nothing to disagree with them until a second
+implementation existed. The comment outlived the reasoning: the packs constructed
+`JobRetryPolicy.defaults` and `ShardKey = None` for years and asserted nothing about either, so two
+of the six rules had no executable statement anywhere over the job substrate. Phase 9c.F wrote them,
+and bound each **two ways** — the in-process default and the Quartz companion — so a cell below is a
+claim two independent implementations have to satisfy, not one implementation's self-description.
+
+| Rule | `IJobScheduler` | `IJobStore` | `INotificationChannel` | `IDistributedLock` |
+|---|---|---|---|---|
+| **1 — identity by value** | ✅ every method keyed by `(ScopeId, JobId)`; the whole pack is the standing evidence, and it is what let the companion project onto Quartz rather than replace the store | ✅ same, plus the `RunId` / `HandleId` read paths | ✅ subscription identity is a `Guid` the subscriber hands back | ✅ a lease is a value, re-checked by id |
+| **2 — async at every boundary** | ✅ modulo the documented compose-time `RegisterHandler` carve-out above | ✅ | ✅ | ✅ |
+| **3 — retry / supervision as data** | ✅ a policy whose four fields ALL differ from `JobRetryPolicy.defaults` survives `Schedule` → `Get` → `ListJobs` | ✅ same through `Save` → `Get` → `ListJobs`, and through `Update`, including clearing `DeadLetterDestination` | n/a — delivery retry is the sink's, not the channel's | n/a |
+| **4 — stateless handlers** | ✅ **asserted across a restart**: a second scheduler over the same store, with a different handler object registered under the same name, runs the job again; the context arrives with the payload re-read from the store and `Attempt = 1`, and the pre-restart handler object is never consulted again | ✅ the durability half — definitions, run history, the idempotency index and the next-run index all survive a re-open over the same substrate | ✅ subscribers receive the payload per publish | ✅ |
+| **5 — no cross-shard ordering** | ⚠️ **partial, and honestly so** — see below | ⚠️ same | n/a — per-scope topic, not a post-hoc filter | n/a |
+| **6 — precision at the lower bound** | ✅ `Second` rejected at registration by both, for the reason in the previous section (the trigger vocabulary, not the backend) | n/a — the store persists the declared precision, which the wire round-trip pins | n/a | n/a |
+
+Cited bindings: the job rows are `InProcessJobScheduler` / `BlobJobStore` and the Quartz companion,
+both in `src/ToolUp.Platform.Tests/InProcess/`. `INotificationChannel` is `InMemoryNotificationChannel`
+plus the Redis channel; `IDistributedLock` is `InProcessDistributedLock` plus the Redis lock — both
+Redis arms are env-gated and report `pending` without a server, which is a weaker standing gate than
+the job rows and is stated here rather than left to be discovered.
+
+Two further facts the matrix asserts on behalf of every row: a `JobDefinition` read back from the
+store survives a round-trip through the shipped wire writer and the **generated** decoder — the one a
+client actually reads a definition with, so a store that persisted a shape the wire format cannot
+carry fails there and nowhere else — and the restart arms open a genuinely second instance over the
+same substrate rather than re-asking a live object, which was confirmed by breaking the substrate and
+watching the arms go red before they were trusted.
+
+**Why rule 5 is ⚠️ and not ✅, which is the one cell worth reading twice.** The assertion Phase 9c
+deferred was written down as "two registrations with the same key run on the same worker identity",
+and it is not expressible against anything that ships. Neither implementation shards — both run every
+job in one process — so there is no second worker for the two registrations to land on or avoid, and
+no SDK interface exposes a worker identity to ask the question with. Asserting it would mean
+asserting about a topology that does not exist, which is the failure mode this whole document is
+against. What IS pinned, both ways and on both interfaces, is the property a sharded implementation
+would actually partition on: the key arrives from the caller's registration through every read path
+**intact and by value** (rule 1 doing the work for rule 5), two registrations under one key still
+share it afterwards, a different key stays different, and no key stays no key rather than becoming
+the empty string or a default. That is the whole of what a non-sharding implementation can be held
+to. The cell turns ✅ when a sharding companion lands and can be asked the routing question; until
+then the ⚠️ is the honest reading, and a green tick there would have been the more expensive mistake.
+
+**One documented gap, recorded rather than closed.** The Quartz companion does not participate in the
+external-compute hand-off: a handler returning `JobResult.HandedOff` has its `ExternalHandle`
+persisted — the store is the canonical record and loses nothing — but the companion runs no
+reconciliation pass, so such a run stays `AwaitingExternal` until something else drives it. The
+adapter warns, naming the remedy, rather than leaving a never-finishing run to be inferred. This is a
+companion-capability gap, not a portability-rule violation: the contract packs pass unmodified
+because the hand-off index is store-side, and both implementations satisfy it. Deployments using
+external compute want the in-process scheduler.
+
 **There is no list of current packs here, deliberately.** This section carried one until Phase 259, and it named five packs against the 97 the tree was by then shipping — a prose registry of a growing set is wrong by the time it is read, and a reader who trusted it would have concluded that ninety-two seams were unproven when they were not. `src/ToolUp.Platform.Tests/Contracts/` is the list, and the paragraph below is what keeps it honest.
 
 ## The pack ships with the interface (Phase 259)

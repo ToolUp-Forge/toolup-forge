@@ -1,7 +1,14 @@
 module ToolUp.Platform.Tests.Contracts.IJobStoreContract
 
 open System
+open System.IO
 open Expecto
+// The shipped wire codec + the generated `JobDefinition` decoder, for
+// the Phase 9c.F serialiser round-trip below. Opened BEFORE
+// `ToolUp.Platform` so the platform's own type names win the
+// last-declaration-wins resolution.
+open ToolUp.Remoting
+open ToolUp.Remoting.MsgPack
 open ToolUp.Platform
 
 // ─── IJobStore contract pack ─────────────────────────────────────
@@ -16,6 +23,32 @@ open ToolUp.Platform
 // isolation (GP 4), idempotency lookup, run-history newest-first
 // ordering, due-job filtering. Cron-parser correctness is exercised
 // separately in `CronExpressionTests` since that module is pure.
+//
+// Phase 9c.F added the assertions Phase 9c deferred "until a second
+// implementation exists" — the `JobRetryPolicy` and `ShardKey`
+// round-trips, and the wire round-trip of a stored `JobDefinition`.
+// The RESTART arm lives in `restartTests` below rather than here,
+// because it needs something `factory` cannot express: a second store
+// instance over the SAME durable substrate.
+
+/// What `restartTests` needs that the plain `factory` cannot give it:
+/// the ability to open a SECOND store over the same durable substrate,
+/// which is the only way a pack can ask whether a write survived the
+/// process that made it.
+///
+/// An implementation whose substrate is genuinely per-instance (a
+/// purely in-memory store) has no honest binding for this arm and
+/// should not bind it — a re-open that returns the same object proves
+/// nothing, and a pack that accepts one would report durability it did
+/// not observe.
+type ReopenableStore = {
+    /// Open a store over this binding's substrate. Called more than
+    /// once; every call must reach the same durable state.
+    Open: unit -> IJobStore
+    /// A scope id unique to this binding, so a shared substrate (local
+    /// disk, a shared emulator) cannot leak between runs.
+    ScopeId: string
+}
 
 let tests (name: string) (factory: unit -> IJobStore * string * string) =
 
@@ -505,5 +538,352 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
             Expect.equal (awaiting |> List.map _.RunId) [ malformed.RunId ] "the malformed run is visible"
             Expect.isNone awaiting.Head.ExternalHandle "and it is honestly reported as handle-less"
+        }
+
+        // ─── Phase 9c.F — the deferred portability assertions ─────
+        //
+        // Phase 9c wrote `JobRetryPolicy.defaults` and `ShardKey = None`
+        // into `mkRegistration` above and asserted nothing about either,
+        // deferring the assertions "until a second implementation
+        // exists". One does (Phase 9c.E), so these are what that
+        // deferral owed. Each is about a field the SDK itself never
+        // reads — which is exactly why a store can drop one and stay
+        // green on every other case in this pack.
+
+        testCaseAsync "Phase 9c.F — rule 3: a non-default JobRetryPolicy round-trips through the store"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            // Every field differs from `JobRetryPolicy.defaults`
+            // (3 / 30s / 30min / None), so a store that reconstructed
+            // the policy from defaults rather than from what it
+            // persisted fails on all four rather than passing by
+            // coincidence.
+            let policy: JobRetryPolicy = {
+                MaxAttempts = 7
+                InitialBackoff = TimeSpan.FromSeconds 45.0
+                MaxBackoff = TimeSpan.FromMinutes 17.0
+                DeadLetterDestination = Some "dead-letters/contract-pack"
+            }
+
+            let job = {
+                mkRegistration scopeA "retry" with
+                    RetryPolicy = policy
+            }
+
+            do! store.Save job
+
+            let expectPolicy (label: string) (actual: JobRetryPolicy) =
+                Expect.equal actual.MaxAttempts policy.MaxAttempts $"%s{label}: MaxAttempts"
+                Expect.equal actual.InitialBackoff policy.InitialBackoff $"%s{label}: InitialBackoff"
+                Expect.equal actual.MaxBackoff policy.MaxBackoff $"%s{label}: MaxBackoff"
+
+                Expect.equal
+                    actual.DeadLetterDestination
+                    policy.DeadLetterDestination
+                    $"%s{label}: DeadLetterDestination"
+
+            match! store.Get(scopeA, job.JobId) with
+            | Some retrieved -> expectPolicy "Get" retrieved.RetryPolicy
+            | None -> failtest "expected the saved job"
+
+            // The list read path is a separate projection in several
+            // stores, so it is asserted separately rather than assumed.
+            let! listed = store.ListJobs scopeA
+
+            match listed |> List.tryFind (fun j -> j.JobId = job.JobId) with
+            | Some retrieved -> expectPolicy "ListJobs" retrieved.RetryPolicy
+            | None -> failtest "expected the saved job in ListJobs"
+
+            // And the write path that is not `Save`.
+            let widened = {
+                policy with
+                    MaxAttempts = 2
+                    DeadLetterDestination = None
+            }
+
+            do! store.Update { job with RetryPolicy = widened }
+
+            match! store.Get(scopeA, job.JobId) with
+            | Some retrieved ->
+                Expect.equal retrieved.RetryPolicy.MaxAttempts 2 "Update: MaxAttempts"
+                Expect.isNone retrieved.RetryPolicy.DeadLetterDestination "Update: DeadLetterDestination cleared"
+                Expect.equal retrieved.RetryPolicy.MaxBackoff policy.MaxBackoff "Update: MaxBackoff untouched"
+            | None -> failtest "expected the updated job"
+        }
+
+        testCaseAsync "Phase 9c.F — rule 5: ShardKey survives by value, and two jobs sharing one still share it"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            // What rule 5 makes assertable HERE is the affinity INPUT,
+            // not the routing outcome: neither shipped implementation
+            // shards (both run every job in one process), so "the same
+            // key runs on the same worker" is a claim about a node
+            // topology that does not exist to observe. What a router
+            // WOULD need is that the key it partitions on arrives
+            // intact, by value (rule 1) — and that is a property a
+            // store can lose, which is why it is pinned here.
+            let shared = "tenant-ledger"
+
+            let a = {
+                mkRegistration scopeA "shard-a" with
+                    ShardKey = Some shared
+            }
+
+            let b = {
+                mkRegistration scopeA "shard-b" with
+                    ShardKey = Some shared
+            }
+
+            let other = {
+                mkRegistration scopeA "shard-c" with
+                    ShardKey = Some "tenant-reports"
+            }
+
+            let unkeyed = mkRegistration scopeA "shard-none"
+
+            for job in [ a; b; other; unkeyed ] do
+                do! store.Save job
+
+            let! listed = store.ListJobs scopeA
+
+            let keyOf (job: JobDefinition) =
+                match listed |> List.tryFind (fun j -> j.JobId = job.JobId) with
+                | Some found -> found.ShardKey
+                | None -> failtestf "job %A missing from ListJobs" job.JobId
+
+            Expect.equal (keyOf a) (Some shared) "the key round-trips verbatim"
+            Expect.equal (keyOf b) (keyOf a) "two jobs registered under one key still share it after the round-trip"
+            Expect.equal (keyOf other) (Some "tenant-reports") "a different key stays different"
+            Expect.isNone (keyOf unkeyed) "no key means no key — not the empty string, not a default"
+
+            // Single-read path too: a store that keys its own index on
+            // the shard key could serve the list from the index and the
+            // record from the blob, and only one of them be right.
+            match! store.Get(scopeA, a.JobId) with
+            | Some retrieved -> Expect.equal retrieved.ShardKey (Some shared) "Get agrees with ListJobs"
+            | None -> failtest "expected the saved job"
+        }
+
+        testCaseAsync "Phase 9c.F — a definition read back from the store survives the platform wire round-trip"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            // Fixed, whole-second timestamps: the assertion is about
+            // the wire codec's fidelity over what the STORE returned,
+            // and `DateTime.UtcNow`'s sub-tick tail would make it about
+            // clock precision instead.
+            let job = {
+                mkRegistration scopeA "wire" with
+                    CreatedAt = DateTime(2026, 9, 22, 10, 11, 12, DateTimeKind.Utc)
+                    NextRunAt = Some(DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc))
+                    Idempotency = Some { Key = "wire-key"; TtlSeconds = 600 }
+                    ShardKey = Some "tenant-ledger"
+                    RetryPolicy = {
+                        MaxAttempts = 5
+                        InitialBackoff = TimeSpan.FromSeconds 15.0
+                        MaxBackoff = TimeSpan.FromMinutes 5.0
+                        DeadLetterDestination = Some "dlq"
+                    }
+                    Tags = Map [ "origin", "contract-pack"; "replay-of", "none" ]
+            }
+
+            do! store.Save job
+
+            let! stored = async {
+                match! store.Get(scopeA, job.JobId) with
+                | Some retrieved -> return retrieved
+                | None -> return failtest "expected the saved job"
+            }
+
+            // Out through the shipped writer, back through the GENERATED
+            // decoder — the one a Fable admin UI actually reads a
+            // definition with. A store that persisted a shape the wire
+            // format cannot carry passes every other case in this pack
+            // and fails here.
+            let bytes =
+                let serializer = Write.makeSerializer<JobDefinition> ()
+                use buffer = new MemoryStream()
+                serializer.Invoke(stored, buffer)
+                buffer.ToArray()
+
+            match Read.Reader(bytes).TryReadValue() |> Result.bind PlatformDecoders.jobDefinition with
+            | Error e -> failtestf "`JobDefinition` refused its own record: %s" (DecodeError.render e)
+            | Ok decoded ->
+                Expect.equal decoded.JobId stored.JobId "JobId"
+                Expect.equal decoded.ScopeId stored.ScopeId "ScopeId"
+                Expect.equal decoded.Handler stored.Handler "Handler"
+                Expect.equal decoded.Payload stored.Payload "Payload"
+                Expect.equal decoded.Trigger stored.Trigger "Trigger"
+                Expect.equal decoded.Idempotency stored.Idempotency "Idempotency"
+                Expect.equal decoded.RetryPolicy stored.RetryPolicy "RetryPolicy — rule 3 crosses the wire"
+                Expect.equal decoded.ShardKey stored.ShardKey "ShardKey — rule 5's routing input crosses the wire"
+                Expect.equal decoded.Precision stored.Precision "Precision — rule 6 crosses the wire"
+                Expect.equal decoded.Status stored.Status "Status"
+                Expect.equal decoded.Tags stored.Tags "Tags"
+
+                Expect.equal
+                    (sprintf "%A" decoded)
+                    (sprintf "%A" stored)
+                    "the whole record, not only the fields named above"
+        }
+    ]
+
+/// The restart-survival arm. Separate from `tests` because it needs a
+/// `ReopenableStore` rather than a single instance: the question is
+/// whether a write survives the process that made it, and no amount of
+/// asking one live object can answer it.
+///
+/// This is the half of Phase 9c.A' that outlived its own phase. 9c.A'
+/// proposed a journal on the premise that the shipped default was not
+/// durable; the premise was wrong — `BlobJobStore` writes through
+/// `IBlobStorage` — but the assertion it was going to make was never
+/// written down anywhere, and an unasserted durability claim is the
+/// kind that stays true until it quietly does not.
+let restartTests (name: string) (factory: unit -> ReopenableStore) =
+
+    let mkDefinition (scopeId: string) (handler: string) : JobDefinition = {
+        JobId = Guid.NewGuid()
+        ScopeId = scopeId
+        Handler = handler
+        Payload = """{"x":1}"""
+        Trigger = CronTrigger "0 9 * * *"
+        Idempotency = None
+        RetryPolicy = JobRetryPolicy.defaults
+        ShardKey = None
+        Precision = Minute
+        Status = Active
+        CreatedAt = DateTime(2026, 9, 22, 8, 0, 0, DateTimeKind.Utc)
+        CreatedBy = "alice"
+        NextRunAt = Some(DateTime(2026, 9, 22, 9, 0, 0, DateTimeKind.Utc))
+        LastRunAt = None
+        LastRunStatus = None
+        LastRunError = None
+        ConsecutiveFailures = 0
+        Tags = Map.empty
+    }
+
+    testList $"{name} — IJobStore restart survival (Phase 9c.F)" [
+
+        testCaseAsync "a job saved before the re-open is still listed afterwards"
+        <| async {
+            let binding = factory ()
+            let scope = binding.ScopeId
+            let job = mkDefinition scope "survivor"
+
+            let first = binding.Open()
+            do! first.Save job
+
+            // The simulated process death: everything after this line
+            // runs against an instance that was never told about the
+            // write above.
+            let second = binding.Open()
+
+            let! listed = second.ListJobs scope
+
+            Expect.isTrue
+                (listed |> List.exists (fun j -> j.JobId = job.JobId))
+                "the definition outlived the instance that wrote it"
+
+            match! second.Get(scope, job.JobId) with
+            | Some retrieved ->
+                Expect.equal retrieved.Handler "survivor" "the handler name survived"
+                Expect.equal retrieved.Payload job.Payload "the payload survived"
+                Expect.equal retrieved.Status Active "and it is still schedulable"
+            | None -> failtest "expected the definition after the re-open"
+        }
+
+        testCaseAsync "run history survives the re-open"
+        <| async {
+            let binding = factory ()
+            let scope = binding.ScopeId
+            let job = mkDefinition scope "historic"
+
+            let first = binding.Open()
+            do! first.Save job
+
+            do!
+                first.RecordRun {
+                    RunId = Guid.NewGuid()
+                    JobId = job.JobId
+                    ScopeId = scope
+                    Attempt = 1
+                    StartedAt = DateTime(2026, 9, 22, 9, 0, 0, DateTimeKind.Utc)
+                    CompletedAt = Some(DateTime(2026, 9, 22, 9, 0, 5, DateTimeKind.Utc))
+                    Status = Succeeded
+                    Error = None
+                    DurationMs = Some 5000L
+                    ExternalHandle = None
+                }
+
+            let second = binding.Open()
+            let! runs = second.GetRecentRuns(scope, job.JobId, 10)
+
+            Expect.hasLength runs 1 "the attempt row outlived the instance that recorded it"
+            Expect.equal runs.Head.Status Succeeded "with its outcome intact"
+            Expect.equal runs.Head.Attempt 1 "and its attempt number"
+        }
+
+        testCaseAsync "the idempotency index survives the re-open"
+        <| async {
+            let binding = factory ()
+            let scope = binding.ScopeId
+
+            let job = {
+                mkDefinition scope "idempotent" with
+                    Idempotency =
+                        Some {
+                            Key = "nightly-rollup"
+                            TtlSeconds = 3600
+                        }
+            }
+
+            let first = binding.Open()
+            do! first.Save job
+
+            let second = binding.Open()
+
+            let! found = second.FindByIdempotencyKey(scope, "nightly-rollup", 3600, job.CreatedAt.AddMinutes 1.0)
+
+            Expect.equal
+                found
+                (Some job.JobId)
+                "a restart that lost the index would re-run a job the caller asked to run once"
+        }
+
+        testCaseAsync "the due-job index survives the re-open"
+        <| async {
+            let binding = factory ()
+            let scope = binding.ScopeId
+            let job = mkDefinition scope "due"
+
+            let first = binding.Open()
+            do! first.Save job
+
+            let second = binding.Open()
+            let! due = second.DueJobs(scope, DateTime(2026, 9, 22, 9, 30, 0, DateTimeKind.Utc))
+
+            Expect.isTrue
+                (due |> List.exists (fun j -> j.JobId = job.JobId))
+                "a restart that lost the next-run index would silently stop firing every job it held"
+        }
+
+        testCaseAsync "scope isolation survives the re-open"
+        <| async {
+            let binding = factory ()
+            let scope = binding.ScopeId
+            let other = scope + "-neighbour"
+            let job = mkDefinition scope "isolated"
+
+            let first = binding.Open()
+            do! first.Save job
+
+            let second = binding.Open()
+            let! neighbours = second.ListJobs other
+
+            Expect.isEmpty
+                neighbours
+                "GP 4 is not a property of a live instance's filtering — it has to hold over what was persisted"
         }
     ]
