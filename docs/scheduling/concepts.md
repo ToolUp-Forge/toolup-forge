@@ -244,9 +244,10 @@ For high-frequency booking (real-time bidding, ticketing platforms), the per-res
 - **Notifications** — sending email confirmations, SMS reminders. Use `INotificationSink` — wire a workflow action via `ToolUp.Forms` if you want the form-driven shape, or call the sink directly from your module.
 - **Payment** — collecting deposits, processing refunds on cancel. Out of scope; integrate Stripe / payment provider at the module layer.
 - **Customer notes** — bookings have `Notes: string option`, not a full CRM record. For customer history, use a custom entity store via `IEntityStore` directly.
-- **Two-way calendar sync** — pulling availability from Google Calendar / Outlook in real-time so external events block slots. Out of scope; future companion work (`ICalendarSyncProvider`).
 - **Group bookings** — N customers in one slot. Express via N parallel `Resource`s of the same kind ("Class A1", "Class A2", ...).
 - **Wait lists** — when a booked customer cancels, auto-promote from a wait list. Out of scope; build as a custom module emitting a `Cancellation` event that subscribers handle.
+
+**Two-way calendar sync is covered** (since Phase 20a): an `ICalendarBridge` per provider plus the `CalendarSync` engine mirror bookings into an external calendar and pull edits made there back, so external events block slots as ordinary bookings. See [Two-way calendar sync](extending.md#two-way-calendar-sync) for the seam, the shipped CalDAV and Google Calendar providers, and how to write another.
 
 For any of these, the right shape is a custom module on top of `IBookingScheduler`. The scheduler covers the low-level concurrency-safe booking primitive; richer flows compose on top.
 
