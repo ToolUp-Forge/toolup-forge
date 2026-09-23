@@ -774,6 +774,42 @@ ToolUp.Platform.AlertRule.Severity : ToolUp.Platform.SystemMessageLevel { get }
 ToolUp.Platform.AlertRule.Source : ToolUp.Platform.AlertSource { get }
 ToolUp.Platform.AlertRuleModule (class)
 ToolUp.Platform.AlertRuleModule.none : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule] { get }
+ToolUp.Platform.AlertRuleObservation (class)
+ToolUp.Platform.AlertRuleObservation..ctor(ToolUp.Platform.AlertRuleState, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.AlertRuleObservation.BreachingSinceUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AlertRuleObservation.LastClearedUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AlertRuleObservation.LastEvaluatedUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AlertRuleObservation.LastFiredUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.Platform.AlertRuleObservation.State : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleObservationModule (class)
+ToolUp.Platform.AlertRuleObservationModule.notEvaluated : ToolUp.Platform.AlertRuleObservation { get }
+ToolUp.Platform.AlertRuleState (class)
+ToolUp.Platform.AlertRuleState.Clear : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleState.Firing : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleState.IsClear : System.Boolean { get }
+ToolUp.Platform.AlertRuleState.IsFiring : System.Boolean { get }
+ToolUp.Platform.AlertRuleState.IsNoData : System.Boolean { get }
+ToolUp.Platform.AlertRuleState.IsNotEvaluated : System.Boolean { get }
+ToolUp.Platform.AlertRuleState.IsPending : System.Boolean { get }
+ToolUp.Platform.AlertRuleState.NoData : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleState.NotEvaluated : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleState.Pending : ToolUp.Platform.AlertRuleState { get }
+ToolUp.Platform.AlertRuleState.Tag : System.Int32 { get }
+ToolUp.Platform.AlertRuleState+Tags (class)
+ToolUp.Platform.AlertRuleState+Tags.Clear : System.Int32 (literal)
+ToolUp.Platform.AlertRuleState+Tags.Firing : System.Int32 (literal)
+ToolUp.Platform.AlertRuleState+Tags.NoData : System.Int32 (literal)
+ToolUp.Platform.AlertRuleState+Tags.NotEvaluated : System.Int32 (literal)
+ToolUp.Platform.AlertRuleState+Tags.Pending : System.Int32 (literal)
+ToolUp.Platform.AlertRuleStatus (class)
+ToolUp.Platform.AlertRuleStatus..ctor(System.String, System.String, System.String, System.Double, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AlertRuleObservation)
+ToolUp.Platform.AlertRuleStatus.Condition : System.String { get }
+ToolUp.Platform.AlertRuleStatus.ForMinutes : System.Double { get }
+ToolUp.Platform.AlertRuleStatus.MetricName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AlertRuleStatus.Name : System.String { get }
+ToolUp.Platform.AlertRuleStatus.Observation : ToolUp.Platform.AlertRuleObservation { get }
+ToolUp.Platform.AlertRuleStatus.Severity : System.String { get }
+ToolUp.Platform.AlertRuleStatus.Signal : System.String { get }
 ToolUp.Platform.AlertSource (class)
 ToolUp.Platform.AlertSource.IsHealthProbe : System.Boolean { get }
 ToolUp.Platform.AlertSource.IsMetric : System.Boolean { get }
@@ -9765,6 +9801,41 @@ ToolUp.Platform.OAuthTokenRefreshedPayload.ElapsedMs : System.Int64 { get }
 ToolUp.Platform.OAuthTokenRefreshedPayload.NewExpiry : System.DateTime { get }
 ToolUp.Platform.OAuthTokenRefreshedPayload.Provider : System.String { get }
 ToolUp.Platform.OAuthTokenRefreshedPayload.ScopeId : System.String { get }
+ToolUp.Platform.ObservabilityAlertsResponse (class)
+ToolUp.Platform.ObservabilityAlertsResponse..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRuleStatus])
+ToolUp.Platform.ObservabilityAlertsResponse.Rules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRuleStatus] { get }
+ToolUp.Platform.ObservabilityLogsResponse (class)
+ToolUp.Platform.ObservabilityLogsResponse..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LogRecord], System.Int32, System.Int32)
+ToolUp.Platform.ObservabilityLogsResponse.Limit : System.Int32 { get }
+ToolUp.Platform.ObservabilityLogsResponse.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LogRecord] { get }
+ToolUp.Platform.ObservabilityLogsResponse.WindowMinutes : System.Int32 { get }
+ToolUp.Platform.ObservabilityMetricResponse (class)
+ToolUp.Platform.ObservabilityMetricResponse..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ObservabilityMetricSeries], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ObservabilityMetricResponse.Metric : System.String { get }
+ToolUp.Platform.ObservabilityMetricResponse.Series : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ObservabilityMetricSeries] { get }
+ToolUp.Platform.ObservabilityMetricResponse.Warning : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ObservabilityMetricResponse.WindowMinutes : System.Int32 { get }
+ToolUp.Platform.ObservabilityMetricSeries (class)
+ToolUp.Platform.ObservabilityMetricSeries..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.DateTime, System.Double]])
+ToolUp.Platform.ObservabilityMetricSeries.Points : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.DateTime, System.Double]] { get }
+ToolUp.Platform.ObservabilityMetricSeries.SeriesId : System.String { get }
+ToolUp.Platform.ObservabilityReadback (class)
+ToolUp.Platform.ObservabilityReadback.DefaultLogLimit : System.Int32 (literal)
+ToolUp.Platform.ObservabilityReadback.DefaultWindowMinutes : System.Int32 (literal)
+ToolUp.Platform.ObservabilityReadback.MaxLogLimit : System.Int32 (literal)
+ToolUp.Platform.ObservabilityReadback.MaxWindowMinutes : System.Int32 (literal)
+ToolUp.Platform.ObservabilityReadback.RoutePrefix : System.String (literal)
+ToolUp.Platform.ObservabilityReadback.clampLogLimit(System.Int32) : System.Int32
+ToolUp.Platform.ObservabilityReadback.clampWindowMinutes(System.Int32) : System.Int32
+ToolUp.Platform.ObservabilityReadback.combine(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Double]) : System.Double
+ToolUp.Platform.ObservabilityReadback.combineSeries(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ObservabilityMetricSeries]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.DateTime, System.Double]]
+ToolUp.Platform.ObservabilityReadback.defaultChartedMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ObservabilityReadback.isSeriesOf(System.String, System.String) : System.Boolean
+ToolUp.Platform.ObservabilitySources (class)
+ToolUp.Platform.ObservabilitySources..ctor(System.Boolean, System.Boolean, System.Boolean)
+ToolUp.Platform.ObservabilitySources.Alerts : System.Boolean { get }
+ToolUp.Platform.ObservabilitySources.Logs : System.Boolean { get }
+ToolUp.Platform.ObservabilitySources.Metrics : System.Boolean { get }
 ToolUp.Platform.OffboardConfirmation (class)
 ToolUp.Platform.OffboardConfirmation..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.OffboardConfirmation.ExpiresAt : System.DateTimeOffset { get }

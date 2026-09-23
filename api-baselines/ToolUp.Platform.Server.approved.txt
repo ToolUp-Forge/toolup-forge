@@ -245,13 +245,22 @@ ToolUp.Platform.AlertRuleEngine (class)
 ToolUp.Platform.AlertRuleEngine.advance(ToolUp.Platform.AlertRule, ToolUp.Platform.AlertRuleEngine+RuleState, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], System.DateTime) : System.Tuple`2[ToolUp.Platform.AlertRuleEngine+RuleState, System.Boolean]
 ToolUp.Platform.AlertRuleEngine.buildNotifications(ToolUp.Platform.AlertRule) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Notification]]
 ToolUp.Platform.AlertRuleEngine.describeBreach(ToolUp.Platform.AlertRule) : System.String
+ToolUp.Platform.AlertRuleEngine.describeCondition(ToolUp.Platform.ThresholdCondition) : System.String
+ToolUp.Platform.AlertRuleEngine.describeSignal(ToolUp.Platform.AlertSource) : System.String
 ToolUp.Platform.AlertRuleEngine.initialState : ToolUp.Platform.AlertRuleEngine+RuleState { get }
+ToolUp.Platform.AlertRuleEngine.observe(ToolUp.Platform.AlertRuleObservation, System.Boolean, ToolUp.Platform.AlertRuleEngine+RuleState, ToolUp.Platform.AlertRuleEngine+RuleState, System.DateTime) : ToolUp.Platform.AlertRuleObservation
 ToolUp.Platform.AlertRuleEngine.probeBreached(ToolUp.Platform.ThresholdCondition, ToolUp.Platform.HealthChecks+HealthResult) : System.Boolean
 ToolUp.Platform.AlertRuleEngine.runTick(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Double]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthChecks+HealthResult]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Notification, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], System.Collections.Concurrent.ConcurrentDictionary`2[System.String, ToolUp.Platform.AlertRuleEngine+RuleState], System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.AlertRuleEngine.runTickObserved(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Double]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthChecks+HealthResult]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Notification, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], System.Collections.Concurrent.ConcurrentDictionary`2[System.String, ToolUp.Platform.AlertRuleEngine+RuleState], ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.AlertRuleEngine.scalarBreached(ToolUp.Platform.ThresholdCondition, System.Double) : System.Boolean
 ToolUp.Platform.AlertRuleEngine+AlertRuleEngineService (class)
 ToolUp.Platform.AlertRuleEngine+AlertRuleEngineService..ctor(System.IServiceProvider, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AlertRule], ToolUp.Platform.ILogger)
 ToolUp.Platform.AlertRuleEngine+AlertRuleEngineService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard (class)
+ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard..ctor()
+ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.Get(System.String) : ToolUp.Platform.AlertRuleObservation
+ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.Record(System.String, ToolUp.Platform.AlertRuleObservation) : System.Void
+ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.TryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AlertRuleObservation]
 ToolUp.Platform.AlertRuleEngine+RuleState (class)
 ToolUp.Platform.AlertRuleEngine+RuleState..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)
 ToolUp.Platform.AlertRuleEngine+RuleState.BreachingSince : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
@@ -1580,6 +1589,7 @@ ToolUp.Platform.ComposeObservability.createLogStore(ToolUp.Platform.ServerConfig
 ToolUp.Platform.ComposeObservability.decorateLogger(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : ToolUp.Platform.ILogger
 ToolUp.Platform.ComposeObservability.registerLogStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.ILogStore, ToolUp.Platform.LogStoreConfig]], ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeObservability.registerMetricsHistory(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
+ToolUp.Platform.ComposeObservability.registerObservabilityReadback(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeRuntimeServices (class)
 ToolUp.Platform.ComposeRuntimeServices.assertCorsCredentialsCompatible(ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
 ToolUp.Platform.ComposeRuntimeServices.registerAlertRuleEngine(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger) : System.Void
@@ -7697,6 +7707,13 @@ ToolUp.Platform.OAuthStateCleanupService.ExecuteAsync(System.Threading.Cancellat
 ToolUp.Platform.OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.IOAuthStateStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.ObservabilityHandlers (class)
+ToolUp.Platform.ObservabilityHandlers.anyEnabled(ToolUp.Platform.ObservabilitySources) : System.Boolean
+ToolUp.Platform.ObservabilityHandlers.logQuery(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LogLevel], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.DateTime) : ToolUp.Platform.LogSearchQuery
+ToolUp.Platform.ObservabilityHandlers.readMetric(ToolUp.Platform.ITimeSeriesStore, System.String, System.Int32, System.DateTimeOffset, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ObservabilityMetricResponse]
+ToolUp.Platform.ObservabilityHandlers.routes(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
+ToolUp.Platform.ObservabilityHandlers.ruleStatus(ToolUp.Platform.AlertRule, ToolUp.Platform.AlertRuleObservation) : ToolUp.Platform.AlertRuleStatus
+ToolUp.Platform.ObservabilityHandlers.sourcesOf(ToolUp.Platform.ServerConfig) : ToolUp.Platform.ObservabilitySources
 ToolUp.Platform.ObservedModelRegistry (class)
 ToolUp.Platform.ObservedModelRegistry..ctor(ToolUp.Platform.IModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelRegistrationObserver], ToolUp.Platform.ModelRegistrationObserverDeps)
 ToolUp.Platform.ObservingEventStore (class)

@@ -110,3 +110,16 @@ let registerMetricsHistory (services: IServiceCollection) (config: ServerConfig)
                     :> Microsoft.Extensions.Hosting.IHostedService)
             )
             |> ignore
+
+/// Phase 9x — register the alert-rule status board the alerts endpoint
+/// reads and the engine writes after every tick. Only when at least one
+/// rule is declared — the same condition that mounts the endpoint and
+/// hosts the engine — so a deployment with no rules resolves nothing
+/// (GP 13). `TryAddSingleton`, so a consumer's own board survives.
+///
+/// Deliberately NOT gated on the `ProcessProfile` matrix the engine is:
+/// a `WebOnly` silo still serves the endpoint, and an empty board there
+/// is what makes it answer `NotEvaluated` honestly rather than 500.
+let registerObservabilityReadback (services: IServiceCollection) (config: ServerConfig) : unit =
+    if not (List.isEmpty config.AlertRules) then
+        services.TryAddSingleton<AlertRuleEngine.AlertRuleStatusBoard>(AlertRuleEngine.AlertRuleStatusBoard())

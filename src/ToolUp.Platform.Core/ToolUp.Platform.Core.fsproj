@@ -500,6 +500,11 @@
              IDatadogReadbackApi). Ahead of StoreModes.fs because
              DatadogReadbackMode carries DatadogReadbackConfig. -->
         <Compile Include="Shared\DatadogReadbackTypes.fs" />
+        <!-- Phase 9x - the self-hosted observability readback shapes
+             (sources, log / metric / alert responses) the Observability
+             admin module renders. After ILogStore.fs (LogRecord) and
+             AlertRule.fs; Fable-safe. -->
+        <Compile Include="Shared\ObservabilityReadbackTypes.fs" />
         <Compile Include="Shared\Config\StoreModes.fs" />
         <Compile Include="Shared\Config\RuntimeModes.fs" />
         <Compile Include="Shared\Config\InboundRateLimitTypes.fs" />

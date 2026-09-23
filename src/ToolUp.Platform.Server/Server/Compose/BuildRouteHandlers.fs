@@ -610,6 +610,12 @@ let buildRouteHandlers
         | NoDatadogReadback -> []
         | EnabledDatadogReadback readbackConfig -> DatadogReadbackHandlers.routes readbackConfig
 
+    // Phase 9x — self-hosted observability endpoints (sources / logs /
+    // metrics / alerts). Each data route is mounted only when its own
+    // source is enabled, and nothing at all when none is (GP 13) — see
+    // `ObservabilityHandlers.routes`.
+    let observabilityRoutes: HttpHandler list = ObservabilityHandlers.routes config
+
     // Phase 9h — IDataSubjectRequestApi mount. Gated on
     // `ServerConfig.DataSubjectRequests = Enabled <policy>`; the
     // default `Disabled` skips the route entirely so the proxy
@@ -842,6 +848,7 @@ let buildRouteHandlers
             @ rateLimitEventApiRoutes
             @ premiumUserApiRoutes
             @ datadogReadbackRoutes
+            @ observabilityRoutes
             @ dataSubjectRequestApiHandler
             @ platformTenantApiHandler
             @ serviceAccountApiHandler

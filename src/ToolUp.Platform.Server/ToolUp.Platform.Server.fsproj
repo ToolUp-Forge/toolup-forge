@@ -1216,6 +1216,11 @@
              AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
              Compose/ComposeObservability.fs, which registers it. -->
         <Compile Include="Server\MetricsHistoryFlusher.fs" />
+        <!-- Phase 9x - the self-hosted observability endpoints (sources / logs
+             / metrics / alerts). After AlertRuleEngine (the status board it
+             reads) and MetricsHistoryFlusher (the series scope); before
+             Compose/BuildRouteHandlers.fs, which mounts it. -->
+        <Compile Include="Server\ObservabilityHandlers.fs" />
         <!-- Phase 9n credential-suffix allowlist, extracted at the third
              consumer (ConfigDriftDetector, DiagnosticBundleHandler,
              ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
