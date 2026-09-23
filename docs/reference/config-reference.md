@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (199 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (200 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -260,6 +260,26 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_LINEAGE` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the lineage store recording dataset and derivation provenance. |
 | `TOOLUP_MAPPING_DRYRUN_BLOCK` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | When enabled, a failed column-mapping dry run blocks the import instead of only warning. |
 
+## Notification channels
+
+| Env var | Type | Default | Secret | Manifest | Description |
+|---|---|---|---|---|---|
+| `TOOLUP_EXTERNAL_CONTACT_STORE` | enum: enabled, on, yes, disabled, no, off | disabled | no | yes | Enables the external address book: recipients with no platform account, each reachable only on the channels they have consented to. Requires TOOLUP_ENTITY_STORE=enabled. |
+| `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` | bool | false | no | yes | Opt in to emailing the inviter when a pending-by-email team invite expires unconsumed (needs an Email transactional sink). |
+| `TOOLUP_SENDGRID_ENDPOINT` | string | — | no | pending | SendGrid API endpoint override. |
+| `TOOLUP_SENDGRID_FROM` | string | — | no | pending | Default From address for SendGrid-delivered notifications. |
+| `TOOLUP_SENDGRID_FROM_NAME` | string | — | no | pending | Default From display name for SendGrid-delivered notifications. |
+| `TOOLUP_SMTP_FROM` | string | — | no | pending | Default From address for SMTP-delivered notifications. |
+| `TOOLUP_SMTP_FROM_NAME` | string | — | no | pending | Default From display name for SMTP-delivered notifications. |
+| `TOOLUP_SMTP_HOST` | string | — | no | pending | SMTP server hostname for the email notification sink. |
+| `TOOLUP_SMTP_PASSWORD` | string | — | yes | never | SMTP password. |
+| `TOOLUP_SMTP_PORT` | int | — | no | pending | SMTP server port. |
+| `TOOLUP_SMTP_TLS` | string | — | no | pending | TLS mode used for the SMTP connection. |
+| `TOOLUP_SMTP_USERNAME` | string | — | no | pending | SMTP username. |
+| `TOOLUP_TWILIO_ACCOUNT_SID` | string | — | no | pending | Twilio account SID for the SMS notification sink. |
+| `TOOLUP_TWILIO_ENDPOINT` | string | — | no | pending | Twilio API endpoint override. |
+| `TOOLUP_TWILIO_FROM` | string | — | no | pending | Originating phone number for Twilio-delivered SMS. |
+
 ## Rate limiting
 
 | Env var | Type | Default | Secret | Manifest | Description |
@@ -292,25 +312,6 @@ A serverless host with no long-lived background services: nothing in-process sur
 | `TOOLUP_PUBLIC_BASE_URL` | string | — | no | yes | Absolute base URL the deployment is reachable at. Used to build links in emails, share tokens and OAuth redirects. |
 | `TOOLUP_PUBLIC_PATH` | string | deploy/public | no | yes | Filesystem path served as static public content. |
 | `TOOLUP_PUBLIC_RENDERING` | enum: no, off, disabled | no | no | yes | Disables server-side public page rendering. Enabling it requires a ContentRoot path, so it must be set in ServerConfig rather than here. |
-
-## Notification channels
-
-| Env var | Type | Default | Secret | Manifest | Description |
-|---|---|---|---|---|---|
-| `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` | bool | false | no | yes | Opt in to emailing the inviter when a pending-by-email team invite expires unconsumed (needs an Email transactional sink). |
-| `TOOLUP_SENDGRID_ENDPOINT` | string | — | no | pending | SendGrid API endpoint override. |
-| `TOOLUP_SENDGRID_FROM` | string | — | no | pending | Default From address for SendGrid-delivered notifications. |
-| `TOOLUP_SENDGRID_FROM_NAME` | string | — | no | pending | Default From display name for SendGrid-delivered notifications. |
-| `TOOLUP_SMTP_FROM` | string | — | no | pending | Default From address for SMTP-delivered notifications. |
-| `TOOLUP_SMTP_FROM_NAME` | string | — | no | pending | Default From display name for SMTP-delivered notifications. |
-| `TOOLUP_SMTP_HOST` | string | — | no | pending | SMTP server hostname for the email notification sink. |
-| `TOOLUP_SMTP_PASSWORD` | string | — | yes | never | SMTP password. |
-| `TOOLUP_SMTP_PORT` | int | — | no | pending | SMTP server port. |
-| `TOOLUP_SMTP_TLS` | string | — | no | pending | TLS mode used for the SMTP connection. |
-| `TOOLUP_SMTP_USERNAME` | string | — | no | pending | SMTP username. |
-| `TOOLUP_TWILIO_ACCOUNT_SID` | string | — | no | pending | Twilio account SID for the SMS notification sink. |
-| `TOOLUP_TWILIO_ENDPOINT` | string | — | no | pending | Twilio API endpoint override. |
-| `TOOLUP_TWILIO_FROM` | string | — | no | pending | Originating phone number for Twilio-delivered SMS. |
 
 ## Build & tooling
 

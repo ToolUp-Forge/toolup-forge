@@ -141,6 +141,15 @@ let rec private tree: JsonDecoder<Tree> =
 let private throughFloat: JsonDecoder<int64> =
     JsonDecode.asFloat |> JsonDecode.map int64
 
+/// A union-typed map KEY (Phase 6f.A, corpus case `map-union-key`). The
+/// writer emits a non-string key as its own JSON text used as the member
+/// name, so a payload-bearing case arrives as `{"Rejected":"no opt-in"}`
+/// in the property-name position. The key is therefore parsed as JSON and
+/// read with the same `outcome` decoder a value would be — one reading
+/// of the union, whichever position it occupies on the wire.
+let private outcomeKey: JsonDecode.KeyDecoder<Outcome> =
+    fun name -> JsonRead.tryParse name |> Result.bind outcome
+
 // ─── The covered set ─────────────────────────────────────────────────
 
 let private erase (decoder: JsonDecoder<'T>) : RegisteredJsonDecoder =
@@ -182,6 +191,7 @@ let private covered: (Type * RegisteredJsonDecoder) list = [
     entry (JsonDecode.array JsonDecode.asString)
     entry (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asInt32)
     entry (JsonDecode.asMap JsonDecode.Key.int32 JsonDecode.asString)
+    entry (JsonDecode.asMap outcomeKey address)
     entry (JsonDecode.asSet JsonDecode.asString)
     entry (JsonDecode.asSet JsonDecode.asInt32)
     entry (JsonDecode.tuple2 JsonDecode.asInt32 JsonDecode.asString)

@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1321 (200 parameterised).
+// Leaves: 1369 (204 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -1227,6 +1227,109 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 // en (string -> string): "Tokens — {a}"
                 // translate as `fun (a: string) -> $"…"`; left as the English message until you do
                 TokensForAccount = c.ServiceAccount.TokensForAccount
+        }
+        ExternalContact = {
+            c.ExternalContact with
+                // en: "Contacts"
+                Heading = "Contacts"
+                // en: "People this team reaches who have no account here — clients, group members, family. Each is reachable only on the channels they have consented to."
+                Subheading = "People this team reaches who have no account here — clients, group members, family. Each is reachable only on the channels they have consented to."
+                // en: "Loading…"
+                Loading = "Loading…"
+                // en: "dismiss"
+                Dismiss = "dismiss"
+                // en: "Address book"
+                ContactsPanel = "Address book"
+                // en: "No contacts yet. Add one to start reaching people who are not on the platform."
+                NoContactsYet = "No contacts yet. Add one to start reaching people who are not on the platform."
+                // en: "Name"
+                ColumnName = "Name"
+                // en: "Email"
+                ColumnEmail = "Email"
+                // en: "Phone"
+                ColumnPhone = "Phone"
+                // en: "Tags"
+                ColumnTags = "Tags"
+                // en: "Consented channels"
+                ColumnConsent = "Consented channels"
+                // en: "Manage"
+                Manage = "Manage"
+                // en: "Add a contact"
+                AddContact = "Add a contact"
+                // en: "New contact"
+                NewContactHeading = "New contact"
+                // en: "Edit contact"
+                EditContactHeading = "Edit contact"
+                // en: "An address on file is not permission to use it. Filing a contact records how to reach them; consent is recorded separately, per channel."
+                ContactFormHelp = "An address on file is not permission to use it. Filing a contact records how to reach them; consent is recorded separately, per channel."
+                // en: "Name"
+                FieldDisplayName = "Name"
+                // en: "Email"
+                FieldEmail = "Email"
+                // en: "Phone"
+                FieldPhone = "Phone"
+                // en: "WhatsApp"
+                FieldWhatsApp = "WhatsApp"
+                // en: "Tags"
+                FieldTags = "Tags"
+                // en: "Notes"
+                FieldNotes = "Notes"
+                // en: "Their name"
+                PlaceholderDisplayName = "Their name"
+                // en: "name@example.com"
+                PlaceholderEmail = "name@example.com"
+                // en: "+44 7700 900000"
+                PlaceholderPhone = "+44 7700 900000"
+                // en: "clients, family"
+                PlaceholderTags = "clients, family"
+                // en: "Anything worth remembering"
+                PlaceholderNotes = "Anything worth remembering"
+                // en: "Save"
+                SaveContact = "Save"
+                // en: "Cancel"
+                Cancel = "Cancel"
+                // en: "Details"
+                DetailsPanel = "Details"
+                // en (string -> string): "Email: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                DetailEmail = c.ExternalContact.DetailEmail
+                // en (string -> string): "Phone: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                DetailPhone = c.ExternalContact.DetailPhone
+                // en (string -> string): "Tags: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                DetailTags = c.ExternalContact.DetailTags
+                // en: "Edit"
+                EditContact = "Edit"
+                // en: "Delete"
+                DeleteContact = "Delete"
+                // en: "Back to contacts"
+                BackToList = "Back to contacts"
+                // en: "That contact is no longer in the address book."
+                ContactGone = "That contact is no longer in the address book."
+                // en: "Consent"
+                ConsentHeading = "Consent"
+                // en: "What this person has agreed to, and how that agreement was obtained. A channel not listed here cannot be used to reach them."
+                ConsentHelp = "What this person has agreed to, and how that agreement was obtained. A channel not listed here cannot be used to reach them."
+                // en: "No consent"
+                NoConsent = "No consent"
+                // en: "No consent has been recorded, so this contact cannot be reached on any channel."
+                NoConsentBody = "No consent has been recorded, so this contact cannot be reached on any channel."
+                // en (string -> string): "Obtained: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                ConsentEvidence = c.ExternalContact.ConsentEvidence
+                // en: "Recording a consent asserts, on the record, that this person agreed to be contacted on this channel. Say how it was obtained — a form submission id, a signed form, or that an admin entered it by hand."
+                RecordConsentHelp = "Recording a consent asserts, on the record, that this person agreed to be contacted on this channel. Say how it was obtained — a form submission id, a signed form, or that an admin entered it by hand."
+                // en: "Channel"
+                FieldChannel = "Channel"
+                // en: "How it was obtained"
+                FieldConsentSource = "How it was obtained"
+                // en: "form-submission:abc123"
+                PlaceholderConsentSource = "form-submission:abc123"
+                // en: "Record consent"
+                RecordConsent = "Record consent"
+                // en: "Withdraw"
+                WithdrawConsent = "Withdraw"
         }
         NotificationPreferences = {
             c.NotificationPreferences with

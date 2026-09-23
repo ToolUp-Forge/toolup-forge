@@ -47,7 +47,12 @@ open ToolUp.Platform.TeamManagement
 let private ownerFor (accessContext: AccessContext) : ContactOwner =
     match accessContext.Subject with
     | TeamMember(_, teamId) -> ContactOwner.Team teamId
-    | _ -> ContactOwner.User accessContext.UserId
+    | AuthenticatedUser userId -> ContactOwner.User userId
+    // Unreachable for a write — `writable` refuses both before any
+    // owner is derived — but named rather than wildcarded, so a new
+    // Subject shape is a compile error here and not a silent owner.
+    | AnonymousSession _
+    | ClaimBearer _ -> ContactOwner.User accessContext.UserId
 
 /// Parse a channel string from the wire into the shipped routing key.
 let private parseChannel (wire: string) : Result<NotificationKind.SinkKind, ExternalContactError> =
@@ -80,7 +85,9 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
         | Some s ->
             match accessContext.Subject with
             | AnonymousSession _ -> return Error "Sign in to use the address book."
-            | _ ->
+            | AuthenticatedUser _
+            | TeamMember _
+            | ClaimBearer _ ->
                 match AccessContext.configScope accessContext with
                 | None -> return Error "The address book needs a persistent scope. Sign in or join a team."
                 | Some scope -> return! f s scope.ScopeId
@@ -95,7 +102,9 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
             | ClaimBearer _ -> async {
                 return Error "The address book cannot be read with a token credential. Sign in as a team member."
               }
-            | _ -> f s scopeId)
+            | AnonymousSession _
+            | AuthenticatedUser _
+            | TeamMember _ -> f s scopeId)
 
     /// Writes: gate 3. Owner/Admin in a team scope; the scope owner in a
     /// personal one; never a machine credential.
@@ -117,10 +126,14 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
                                 $"Only team owners and admins can manage contacts. Your role: {TeamRoles.displayName r}."
                     | None -> return Error "You are not a member of this team."
                 | _ -> return Error "Team management is not available in this deployment."
-            | _ ->
+            | AuthenticatedUser _ ->
                 // Personal / non-team scope: the caller owns the scope
                 // outright, so there is no role to check.
                 return! f s scopeId
+            | AnonymousSession _ ->
+                // Already refused by `scoped`; restated so no Subject
+                // shape reaches a write through a fall-through arm.
+                return Error "Sign in to use the address book."
         })
 
     let toResult (r: Result<'a, ExternalContactError>) : Result<'a, string> =
