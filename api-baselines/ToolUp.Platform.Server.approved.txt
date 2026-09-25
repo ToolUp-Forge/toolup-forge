@@ -6181,6 +6181,19 @@ ToolUp.Platform.InTotoSubject (class)
 ToolUp.Platform.InTotoSubject..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.InTotoSubject.Digest : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.InTotoSubject.Name : System.String { get }
+ToolUp.Platform.IngestedPayload (class)
+ToolUp.Platform.IngestedPayload.CurrentPayloadFormat : System.String (literal)
+ToolUp.Platform.IngestedPayload.PayloadFormatKey : System.String (literal)
+ToolUp.Platform.IngestedPayload.SchemaDataType : System.String (literal)
+ToolUp.Platform.IngestedPayload.SchemaDriftKey : System.String (literal)
+ToolUp.Platform.IngestedPayload.SchemaRefKey : System.String (literal)
+ToolUp.Platform.IngestedPayload.payloadFormat(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.IngestedPayload.readSchema(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.DataObject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]]
+ToolUp.Platform.IngestedPayload.schemaDrift(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
+ToolUp.Platform.IngestedPayload.schemaObjectId(System.String, System.String) : System.String
+ToolUp.Platform.IngestedPayload.schemaRef(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.IngestedPayload.serializeSchema(ToolUp.Platform.TableSchema) : System.Byte[]
+ToolUp.Platform.IngestedPayload.tryParseSchema(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]
 ToolUp.Platform.IngestionRecoverySweep (class)
 ToolUp.Platform.IngestionRecoverySweep.InterruptedReason : System.String (literal)
 ToolUp.Platform.IngestionRecoverySweep.hostedService(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IIngestionRecoverySurface]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : Microsoft.Extensions.Hosting.IHostedService

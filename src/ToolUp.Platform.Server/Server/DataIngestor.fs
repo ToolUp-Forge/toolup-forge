@@ -84,7 +84,8 @@ let private resultObjectId (sourceId: DataSourceId) (table: string) = $"_dataing
 //
 // Default `IDataIngestor` implementation. Resolves the config + the
 // matching connector + the credential (via `ISecretStore` thunk
-// pattern), runs `Connect → Query`, writes the resulting bytes
+// pattern), runs `Connect → GetSchema → Query`, persists the schema as its own
+// content-addressed object (Phase 832), writes the resulting bytes
 // through `IDataObjectStore.Save` with `Versioned` policy so each
 // refresh creates a new version while preserving history (Phase 7's
 // immutability guarantee).
@@ -146,6 +147,73 @@ type DataIngestor
         JobId = jobId
     }
 
+    // Phase 832 — fetch the connector's schema. Never fails the run: an
+    // `Error`, a throw, or a "schema not available" answer (`Columns = []`)
+    // all read as "no schema", and the payload then saves exactly as it did
+    // before Phase 832 (no `schema-ref`).
+    let fetchSchema (connector: IDataSource) (ctx: DataSourceCallContext) (table: string) = async {
+        try
+            match! connector.GetSchema(ctx, table) with
+            | Ok schema when not (List.isEmpty schema.Columns) -> return Some schema
+            | Ok _ -> return None
+            | Error err ->
+                logger.Info
+                    $"[DataIngestor] GetSchema failed for '{ctx.Config.Id}'/{table}; ingesting without a schema-ref: {err}"
+
+                return None
+        with ex ->
+            logger.Warn
+                $"[DataIngestor] GetSchema threw for '{ctx.Config.Id}'/{table}; ingesting without a schema-ref: {ex.Message}"
+
+            return None
+    }
+
+    // Phase 832 — persist the schema as its own content-addressed object,
+    // BEFORE the payload that references it (so a dangling `schema-ref`
+    // cannot occur; the worst case is an unreferenced schema version). The
+    // schema object for `(sourceId, table)` gains a version only when the
+    // schema changed, so an unchanged schema costs a read and no write.
+    // Answers `(schemaRef, drift)`; `drift` is `None` when there is no
+    // earlier recorded schema to compare with. `None` overall when the
+    // schema could not be persisted — the payload then carries no ref.
+    let persistSchema scopeId (sourceId: DataSourceId) (table: string) (schema: TableSchema) = async {
+        let schemaId = IngestedPayload.schemaObjectId sourceId table
+        let bytes = IngestedPayload.serializeSchema schema
+
+        let! previous = objectStore.Get(scopeId, schemaId)
+
+        let save () =
+            objectStore.Save(
+                scopeId,
+                schemaId,
+                bytes,
+                IngestedPayload.SchemaDataType,
+                "_system",
+                Map.ofList [ "source-id", sourceId; "table", table ],
+                Versioned
+            )
+
+        let saved drift = async {
+            match! save () with
+            | Ok schemaObject -> return Some(schemaObject.ContentHash, drift)
+            | Error e ->
+                logger.Warn
+                    $"[DataIngestor] failed to persist schema for '{sourceId}'/{table}; ingesting without a schema-ref: {e}"
+
+                return None
+        }
+
+        match previous with
+        | Ok(prior, priorBytes) when priorBytes = bytes -> return Some(prior.ContentHash, Some false)
+        | Ok _ -> return! saved (Some true)
+        | Error DataObjectError.NotFound -> return! saved None
+        | Error e ->
+            // The earlier schema is unreadable: still record this one, but
+            // do not claim to know whether it drifted.
+            logger.Warn $"[DataIngestor] could not read the recorded schema for '{sourceId}'/{table}: {e}"
+            return! saved None
+    }
+
     interface IDataIngestor with
         member _.RunIngestion(scopeId, sourceId, table) = async {
             let runId = Guid.NewGuid()
@@ -194,7 +262,12 @@ type DataIngestor
                         return Ok run
                     | Ok() ->
 
-                        // 5. Run the query. Connector dialect varies — for
+                        // 5. Fetch the schema (Phase 832) — between the probe
+                        // and the query; persisted only once the query has
+                        // produced a payload to attach it to.
+                        let! observedSchema = fetchSchema connector ctx table
+
+                        // 6. Run the query. Connector dialect varies — for
                         // in-memory the SQL string is the table name; for
                         // BigQuery / Redshift it is real SQL.
                         match! connector.Query(ctx, table) with
@@ -205,13 +278,41 @@ type DataIngestor
                             return Ok run
                         | Ok bytes ->
 
-                            // 6. Persist through `IDataObjectStore` with `Versioned`
+                            // 7. Persist the schema first (Phase 832), then the
+                            // payload through `IDataObjectStore` with `Versioned`
                             // policy — each refresh creates a new version,
                             // preserving history per Phase 7's contract.
                             let objectId = resultObjectId sourceId table
 
+                            let! schemaRecord =
+                                match observedSchema with
+                                | Some schema -> persistSchema scopeId sourceId table schema
+                                | None -> async { return None }
+
+                            let schemaKeys =
+                                match schemaRecord with
+                                | None -> []
+                                | Some(schemaRef, None) -> [ IngestedPayload.SchemaRefKey, schemaRef ]
+                                | Some(schemaRef, Some changed) ->
+                                    if changed then
+                                        logger.Info
+                                            $"[DataIngestor] schema drift on '{sourceId}'/{table}: schema-ref is now {schemaRef}"
+
+                                    [
+                                        IngestedPayload.SchemaRefKey, schemaRef
+                                        IngestedPayload.SchemaDriftKey, (if changed then "true" else "false")
+                                    ]
+
                             let metadata =
-                                Map.ofList [ "source-id", sourceId; "table", table; "connector-kind", config.Kind ]
+                                Map.ofList (
+                                    [
+                                        "source-id", sourceId
+                                        "table", table
+                                        "connector-kind", config.Kind
+                                        IngestedPayload.PayloadFormatKey, IngestedPayload.CurrentPayloadFormat
+                                    ]
+                                    @ schemaKeys
+                                )
 
                             let! saveResult =
                                 objectStore.Save(

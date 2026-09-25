@@ -410,6 +410,7 @@
         <Compile Include="InProcess\QuartzJobSchedulerTests.fs" />
         <Compile Include="InProcess\ModuleQueryBusTests.fs" />
         <Compile Include="InProcess\InMemoryDataSourceTests.fs" />
+        <Compile Include="InProcess\DataIngestorTests.fs" />
         <Compile Include="InProcess\OAuthSubstrateTests.fs" />
         <!-- Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store). -->
         <Compile Include="InProcess\OAuth1aSubstrateTests.fs" />

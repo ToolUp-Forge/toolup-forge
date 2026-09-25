@@ -87,3 +87,146 @@ type IDataSource =
     /// string, in-memory fakes may treat it as a table name lookup.
     /// Connectors document their dialect.
     abstract Query: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
+
+// ─── IngestedPayload — the schema an ingested payload carries (Phase 832) ───
+//
+// `DataIngestor` persists the connector's `GetSchema` answer as its own
+// data object and stamps the payload's metadata with a `schema-ref` (the
+// schema object's content hash) and a `payload-format` version token. This
+// module is the ONE place both sides of that convention live: the writer's
+// canonical serialisation and reserved object id, and the reader-side
+// accessor a module calls with a `DataObject` it already holds — so no
+// consumer re-derives the lookup or re-infers column types from text.
+//
+// A payload written before Phase 832 carries neither key, and every
+// accessor answers `None` for it — the honest answer, and the one a
+// reader's fallback (re-inference) keys on.
+
+/// Phase 832 — reading and writing the schema an ingested payload carries.
+module IngestedPayload =
+
+    open System.IO
+    open System.Text.Json
+
+    /// Payload metadata key naming the content hash of the payload's
+    /// schema object. Absent when the connector could not answer
+    /// `GetSchema` (or answered `Columns = []`, "schema not available").
+    [<Literal>]
+    let SchemaRefKey = "schema-ref"
+
+    /// Payload metadata key carrying the payload-format version token.
+    /// Present on every payload written from Phase 832 on, so a later
+    /// convention change has a version to condition on and payloads
+    /// written before it stay readable under their own rules.
+    [<Literal>]
+    let PayloadFormatKey = "payload-format"
+
+    /// Payload metadata key recording whether this run's schema differs
+    /// from the schema last recorded for the same `(source, table)` —
+    /// `"true"` / `"false"`. Absent when there is no schema this run or
+    /// no earlier recorded schema to compare with.
+    [<Literal>]
+    let SchemaDriftKey = "schema-drift"
+
+    /// The payload-format token this SDK version writes.
+    [<Literal>]
+    let CurrentPayloadFormat = "1"
+
+    /// `DataType` recorded on schema objects, distinct from the payload's
+    /// `"data-ingestion"` so catalog sweeps can tell them apart.
+    [<Literal>]
+    let SchemaDataType = "data-ingestion-schema"
+
+    /// Reserved object id holding the recorded schema history for one
+    /// `(sourceId, table)`. One version per DISTINCT consecutive schema:
+    /// the ingestor saves a new version only when the schema changed, so
+    /// the object's version list is the table's schema-change log, and
+    /// the store's content dedup keeps one blob per distinct schema. The
+    /// `_dataingestion_schema__` prefix cannot collide with a payload id
+    /// (`_dataingestion__{sourceId}__{table}`).
+    let schemaObjectId (sourceId: DataSourceId) (table: string) =
+        $"_dataingestion_schema__{sourceId}__{table}"
+
+    /// Canonical serialisation of a `TableSchema`: a fixed member order
+    /// (`tableName`, `columns[]` of `name` / `dataType` / `nullable`),
+    /// no insignificant whitespace, columns in the connector's order. Two
+    /// identical schemas serialise to identical bytes and therefore to one
+    /// content hash — the dedup the schema object relies on.
+    let serializeSchema (schema: TableSchema) : byte[] =
+        use stream = new MemoryStream()
+
+        do
+            use writer = new Utf8JsonWriter(stream)
+            writer.WriteStartObject()
+            writer.WriteString("tableName", schema.TableName)
+            writer.WriteStartArray("columns")
+
+            for column in schema.Columns do
+                writer.WriteStartObject()
+                writer.WriteString("name", column.Name)
+                writer.WriteString("dataType", column.DataType)
+                writer.WriteBoolean("nullable", column.Nullable)
+                writer.WriteEndObject()
+
+            writer.WriteEndArray()
+            writer.WriteEndObject()
+            writer.Flush()
+
+        stream.ToArray()
+
+    /// Parse bytes written by `serializeSchema`. `None` for anything that
+    /// is not that shape — a reader never throws on a malformed blob.
+    let tryParseSchema (bytes: byte[]) : TableSchema option =
+        try
+            use doc = JsonDocument.Parse(bytes: byte[])
+            let root = doc.RootElement
+
+            let columns =
+                root.GetProperty("columns").EnumerateArray()
+                |> Seq.map (fun c -> {
+                    Name = c.GetProperty("name").GetString()
+                    DataType = c.GetProperty("dataType").GetString()
+                    Nullable = c.GetProperty("nullable").GetBoolean()
+                })
+                |> List.ofSeq
+
+            Some {
+                TableName = root.GetProperty("tableName").GetString()
+                Columns = columns
+            }
+        with _ ->
+            None
+
+    /// The payload's `schema-ref`, when it carries one.
+    let schemaRef (payload: DataObject) : string option =
+        Map.tryFind SchemaRefKey payload.Metadata
+
+    /// The payload's `payload-format` token. `None` for a payload written
+    /// before Phase 832.
+    let payloadFormat (payload: DataObject) : string option =
+        Map.tryFind PayloadFormatKey payload.Metadata
+
+    /// Whether the run that wrote this payload observed a schema different
+    /// from the one last recorded for the same `(source, table)`. `None`
+    /// when unknown (no schema this run, no earlier schema, or a payload
+    /// written before Phase 832).
+    let schemaDrift (payload: DataObject) : bool option =
+        match Map.tryFind SchemaDriftKey payload.Metadata with
+        | Some "true" -> Some true
+        | Some "false" -> Some false
+        | _ -> None
+
+    /// The reader-side accessor: the column names, types and nullability
+    /// the connector reported for this payload, read from the store by the
+    /// payload's `schema-ref` — no re-inference, no live connection to the
+    /// source. `None` for a payload with no `schema-ref` (written before
+    /// Phase 832, or by a connector that could not answer `GetSchema`),
+    /// and for a ref whose blob is gone or unreadable.
+    let readSchema (store: IDataObjectStore) (payload: DataObject) : Async<TableSchema option> = async {
+        match schemaRef payload with
+        | None -> return None
+        | Some hash ->
+            match! store.GetContent(payload.ScopeId, hash) with
+            | Ok bytes -> return tryParseSchema bytes
+            | Error _ -> return None
+    }
