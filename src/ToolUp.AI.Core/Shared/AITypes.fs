@@ -633,3 +633,95 @@ module AIProviderFailoverRecord =
     /// Reserved `IEventStore` event-type for one recorded failover.
     [<Literal>]
     let EventType = "AIProviderFailover"
+
+// ─── Phase 504 — conversation retention / TTL policy ─────────────
+
+/// Per-scope retention policy for AI conversations (Phase 504.A).
+///
+/// A conversation is **expired** when EITHER limit selects it: its last
+/// activity is older than `MaxAge`, or it is not among the `MaxCount`
+/// most-recently-active conversations of its scope. Both `None` is the
+/// default and means retain forever — the pre-504 behaviour, byte for
+/// byte (GP 11): `withConversationRetention` registers no sweep for an
+/// inert policy, and `ConversationRetention.sweepContainer` has no code
+/// path from an inert policy to a delete.
+///
+/// "Last activity" is the newest `ConversationMessage.Timestamp` in the
+/// UI blob, falling back to the blob's own `LastModified` for an empty
+/// conversation. A conversation whose activity cannot be dated at all
+/// (unreadable blob AND no metadata) is never purged — an undated row
+/// is a repair job, not an expired one.
+type ConversationRetentionPolicy = {
+    /// Conversations whose last activity is older than this are purged
+    /// on the next sweep. `None` = no age limit.
+    MaxAge: TimeSpan option
+    /// Keep at most this many conversations per scope, newest-activity
+    /// first; the rest are purged. `None` = no count limit. A value of
+    /// zero or less is read as "keep none" — every conversation in the
+    /// scope expires — which is what the literal says, so the policy is
+    /// never silently widened; compose validation is where a deployment
+    /// that did not mean that is told so.
+    MaxCount: int option
+    /// Five-field cron expression for the sweep, in the subset
+    /// `IJobScheduler` validates (`*`, integers, comma lists, `*/N`).
+    /// Defaults to 04:00 daily — off the chat peak, an hour after the
+    /// Knowledge Base sweep, and `Minute` precision so the in-process
+    /// scheduler accepts it.
+    SweepSchedule: string
+}
+
+module ConversationRetentionPolicy =
+    /// The default: nothing ever expires; daily 04:00 cadence if a limit
+    /// is later set.
+    let retainForever: ConversationRetentionPolicy = {
+        MaxAge = None
+        MaxCount = None
+        SweepSchedule = "0 4 * * *"
+    }
+
+    /// `true` when the policy can never expire anything — neither limit
+    /// set. The compose helper reads this to decide whether to register
+    /// the sweep job at all, and the sweep reads it to skip the scan.
+    let isInert (policy: ConversationRetentionPolicy) : bool =
+        policy.MaxAge.IsNone && policy.MaxCount.IsNone
+
+    /// Select the conversations `policy` expires at `now`, given each
+    /// conversation's id and last-activity instant. Pure — the sweep
+    /// and its tests share this exact selection.
+    ///
+    /// Age: `now - lastActivity > MaxAge` (strictly older; a conversation
+    /// exactly at the limit is kept). Count: everything past the first
+    /// `MaxCount` when ordered newest-activity first, ties broken by id
+    /// so two runs over the same data expire the same rows. The result
+    /// is the union, oldest first, each id once.
+    let selectExpired
+        (now: DateTime)
+        (policy: ConversationRetentionPolicy)
+        (conversations: (Guid * DateTime) list)
+        : Guid list =
+        if isInert policy then
+            []
+        else
+            let byAge =
+                match policy.MaxAge with
+                | None -> []
+                | Some maxAge ->
+                    conversations
+                    |> List.filter (fun (_, lastActivity) -> now - lastActivity > maxAge)
+                    |> List.map fst
+
+            let byCount =
+                match policy.MaxCount with
+                | None -> []
+                | Some maxCount ->
+                    conversations
+                    |> List.sortBy (fun (id, lastActivity) -> (-lastActivity.Ticks, id))
+                    |> List.skip (min (max maxCount 0) conversations.Length)
+                    |> List.map fst
+
+            let expired = Set.ofList (byAge @ byCount)
+
+            conversations
+            |> List.filter (fun (id, _) -> expired.Contains id)
+            |> List.sortBy (fun (id, lastActivity) -> (lastActivity.Ticks, id))
+            |> List.map fst

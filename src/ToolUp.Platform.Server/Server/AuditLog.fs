@@ -1964,6 +1964,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> NotificationDeliveryRefused(fromAuditJson<NotificationDeliveryRefusedPayload> j)
     }
+    // Phase 504 — AI conversation retention-sweep purge audit row (append-only registration).
+    {
+        EventType = "ConversationsPurged"
+        TryEncode =
+            (function
+            | ConversationsPurged p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> ConversationsPurged(fromAuditJson<ConversationsPurgedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

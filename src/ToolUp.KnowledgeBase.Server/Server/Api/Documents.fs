@@ -181,7 +181,19 @@ let private readOriginalBytes (deps: KnowledgeApiDeps) (docId: string) (fileName
 /// cleared the composed one would leave the other's bytes at rest after
 /// the document was reported deleted. `Delete` is idempotent on both
 /// sides, so sweeping the location that holds nothing costs a no-op.
-let private deleteOriginal (deps: KnowledgeApiDeps) (docId: string) (fileName: string) : Async<unit> = async {
+///
+/// Phase 504.C — the raw-blob delete branches on `doc.Source`. A
+/// `Note`'s body does not live at the convention path: `addNote`
+/// records `FileName = "{title}.md"` but persists the markdown at
+/// `knowledge/{docId}/note.md` (`noteBodyBlobName`), so the
+/// unconditional convention-path delete removed nothing for a note and
+/// its body persisted indefinitely after the index entry and vectors
+/// were gone — the orphan-erasure gap. Both paths are swept for a
+/// note (a note whose sanitised title happens to be `note` has them
+/// coincide, and `Delete` is idempotent).
+let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : Async<unit> = async {
+    let docId = doc.Id
+
     match deps.DataObjectStore with
     | None -> ()
     | Some store ->
@@ -195,8 +207,14 @@ let private deleteOriginal (deps: KnowledgeApiDeps) (docId: string) (fileName: s
                     err
             )
 
-    let! _ = deps.Storage.Delete(deps.Scope.Container, conventionOriginalBlobName docId fileName)
-    ()
+    let! _ = deps.Storage.Delete(deps.Scope.Container, conventionOriginalBlobName docId doc.FileName)
+
+    match doc.Source with
+    | Note _ ->
+        let! _ = deps.Storage.Delete(deps.Scope.Container, noteBodyBlobName docId)
+        ()
+    | UploadedFile
+    | FromNarrative _ -> ()
 }
 
 /// `true` when the object store is composed AND actually holds an
@@ -1462,7 +1480,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     // Phase 105 — removes the object-store object AND the
                     // convention blob, so a scope holding documents from
                     // both eras is fully swept.
-                    do! deleteOriginal deps docId doc.FileName
+                    do! deleteOriginal deps doc
 
                     // Phase 510 — a deleted document takes its whole
                     // lineage with it: every preserved prior-version
@@ -1546,7 +1564,7 @@ let private rederiveChunks
 
                     return Some(stampOriginalRefs doc.Id doc.FileName ext (int64 bytes.Length) extracted)
             | Note note ->
-                match! deps.Storage.Download(deps.Scope.Container, sprintf "knowledge/%s/note.md" doc.Id) with
+                match! deps.Storage.Download(deps.Scope.Container, noteBodyBlobName doc.Id) with
                 | Error _ -> return None
                 | Ok bodyBytes ->
                     let body = System.Text.Encoding.UTF8.GetString bodyBytes

@@ -2433,6 +2433,10 @@ let private registeredTests =
         // its bucket-interpolated percentiles, the retention sweep's
         // delete-and-re-append, and the GP 13 default-off registration.
         MetricsHistoryFlusherTests.tests
+        // Phase 504 - conversation retention / TTL policy: age + count selection,
+        // the sibling-blob sweep with its ConversationsPurged audit row, the
+        // DI-resolving job handler, and the KB note-erasure fix.
+        ConversationRetentionTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

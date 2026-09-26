@@ -812,6 +812,11 @@ type AuditEvent =
     /// Distinct from `NotificationSilentlySkipped`, which is a
     /// deployment choosing not to send.
     | NotificationDeliveryRefused of NotificationDeliveryRefusedPayload
+    /// Phase 504 — the AI conversation retention sweep purged one or
+    /// more conversations from a scope (age and/or count expiry). Every
+    /// sibling blob of each purged conversation is gone when this row
+    /// is written. Recorded under the swept scope.
+    | ConversationsPurged of ConversationsPurgedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1028,3 +1033,4 @@ module AuditEvent =
         | ContactOptInRecorded _ -> "ContactOptInRecorded"
         | ContactOptInWithdrawn _ -> "ContactOptInWithdrawn"
         | NotificationDeliveryRefused _ -> "NotificationDeliveryRefused"
+        | ConversationsPurged _ -> "ConversationsPurged"

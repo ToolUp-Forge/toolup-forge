@@ -1034,6 +1034,7 @@ ToolUp.Platform.AuditEvent.IsConversationExported : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationReplayed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationStarted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsConversationTurnAppended : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsConversationsPurged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsCrossModuleRead : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataStoreReset : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsDataSubjectRequest : System.Boolean { get }
@@ -1287,6 +1288,8 @@ ToolUp.Platform.AuditEvent+ConversationStarted (class)
 ToolUp.Platform.AuditEvent+ConversationStarted.Item : ToolUp.Platform.ConversationStartedPayload { get }
 ToolUp.Platform.AuditEvent+ConversationTurnAppended (class)
 ToolUp.Platform.AuditEvent+ConversationTurnAppended.Item : ToolUp.Platform.ConversationTurnAppendedPayload { get }
+ToolUp.Platform.AuditEvent+ConversationsPurged (class)
+ToolUp.Platform.AuditEvent+ConversationsPurged.Item : ToolUp.Platform.ConversationsPurgedPayload { get }
 ToolUp.Platform.AuditEvent+CrossModuleRead (class)
 ToolUp.Platform.AuditEvent+CrossModuleRead.Item : ToolUp.Platform.CrossModuleReadPayload { get }
 ToolUp.Platform.AuditEvent+DataStoreReset (class)
@@ -1587,6 +1590,7 @@ ToolUp.Platform.AuditEvent+Tags.ConversationExported : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationReplayed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationStarted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.ConversationTurnAppended : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.ConversationsPurged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.CrossModuleRead : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataStoreReset : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.DataSubjectRequest : System.Int32 (literal)
@@ -3902,6 +3906,14 @@ ToolUp.Platform.ConversationTurnAppendedPayload.Role : System.String { get }
 ToolUp.Platform.ConversationTurnAppendedPayload.TokensIn : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.ConversationTurnAppendedPayload.TokensOut : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.ConversationTurnAppendedPayload.TurnId : System.String { get }
+ToolUp.Platform.ConversationsPurgedPayload (class)
+ToolUp.Platform.ConversationsPurgedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32)
+ToolUp.Platform.ConversationsPurgedPayload.ConversationIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ConversationsPurgedPayload.FailedCount : System.Int32 { get }
+ToolUp.Platform.ConversationsPurgedPayload.MaxAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.ConversationsPurgedPayload.MaxCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.ConversationsPurgedPayload.PurgedCount : System.Int32 { get }
+ToolUp.Platform.ConversationsPurgedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ConversationsSourceModule (class)
 ToolUp.Platform.ConversationsSourceModule.value : System.String (literal)
 ToolUp.Platform.CorsConfig (class)

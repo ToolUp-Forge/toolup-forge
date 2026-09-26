@@ -2671,6 +2671,10 @@
              seeded population and a deliberately leaky store, with a
              committed go-red oracle that renders one withheld fact. -->
         <Compile Include="InProcess\ModelInputProofOracleTests.fs" />
+        <!-- Phase 504 — conversation retention / TTL policy: selectExpired, the
+             sibling-blob sweep + ConversationsPurged audit row, the DI-resolving
+             job handler, and the KB note-erasure fix (deleteDocument + sweep). -->
+        <Compile Include="InProcess\ConversationRetentionTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

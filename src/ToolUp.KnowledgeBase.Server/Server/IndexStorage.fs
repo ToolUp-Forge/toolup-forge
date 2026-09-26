@@ -13,6 +13,15 @@ open KnowledgeBase.ServerJsonHelpers
 
 let indexBlobName = "knowledge/index.json"
 
+/// Where a `Note` document persists its markdown body — `addNote` /
+/// `updateNote` write it here, `IOriginalSourceResolver` serves it from
+/// here, and (Phase 504.C) `deleteDocument` and the retention sweep
+/// remove it from here. NOT the convention original path
+/// (`knowledge/{docId}/{FileName}`): a note's `FileName` is
+/// `"{title}.md"`, which never coincides with this blob unless the
+/// sanitised title happens to be `note`.
+let noteBodyBlobName (docId: string) = sprintf "knowledge/%s/note.md" docId
+
 /// Phase 510 — normalise a document read off the wire. A pre-510
 /// `index.json` record carries no `Version` property, and a missing
 /// JSON *number* deserialises to `0`, not to anything we could detect

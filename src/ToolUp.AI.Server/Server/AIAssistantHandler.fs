@@ -190,6 +190,327 @@ let private loadConversationMeta (logger: ILogger) (storage: IBlobStorage) (cont
     | Error _ -> return ConversationMeta.empty
 }
 
+// ─── Phase 504 — conversation retention sweep ────────────────────
+//
+// The scope-level purge behind `ConversationRetentionPolicy`. Lives
+// here rather than in its own file because the sibling-blob layout
+// (`{id}.json` / `.history.json` / `.meta.json` / `.consent.json`) is
+// this file's private convention, and a purge that enumerated it from
+// outside would drift from `DeleteConversation` the first time a
+// sibling was added. `DeleteConversation` and the sweep now share ONE
+// deletion (`ConversationRetention.deleteSiblings`), so an erasure and
+// a retention purge remove exactly the same set (504.D).
+
+/// Outcome of one retention sweep over one scope.
+type ConversationPurgeReport = {
+    /// Scope id the sweep was asked to visit.
+    ScopeId: string
+    /// Container it resolved to.
+    Container: string
+    /// Conversations enumerated (every `{id}.json` under the prefix).
+    Examined: int
+    /// Conversations whose every sibling blob was removed.
+    Purged: Guid list
+    /// Conversations the policy selected but a sibling delete failed
+    /// for — left in place, retried by the next sweep. Each entry is
+    /// `"{id}: {reason}"`.
+    Failures: string list
+}
+
+module ConversationPurgeReport =
+    let noOp (scopeId: string) (container: string) (examined: int) : ConversationPurgeReport = {
+        ScopeId = scopeId
+        Container = container
+        Examined = examined
+        Purged = []
+        Failures = []
+    }
+
+    /// `true` when nothing selected was left behind.
+    let isClean (report: ConversationPurgeReport) : bool = report.Failures.IsEmpty
+
+    let summarise (report: ConversationPurgeReport) : string =
+        sprintf
+            "scope %s (%s): examined %d, purged %d, failed %d%s"
+            report.ScopeId
+            report.Container
+            report.Examined
+            report.Purged.Length
+            report.Failures.Length
+            (if report.Failures.IsEmpty then
+                 ""
+             else
+                 " — " + String.concat "; " report.Failures)
+
+module ConversationRetention =
+    /// Every blob a conversation owns, in the order they are deleted.
+    /// The consent sidecar (`AIConsentDispatch.consentBlobName`) is a
+    /// sibling too: a per-conversation record of what the user agreed
+    /// to is that user's data and goes with the conversation.
+    let siblingBlobNames (conversationId: Guid) : string list = [
+        conversationBlobName conversationId
+        providerHistoryBlobName conversationId
+        conversationMetaBlobName conversationId
+        AIConsentDispatch.consentBlobName conversationId
+    ]
+
+    /// Delete EVERY sibling blob of a conversation. `IBlobStorage.Delete`
+    /// is idempotent (missing blob ⇒ `Ok`), so deleting all of them
+    /// unconditionally is safe; the FIRST failure is surfaced so an
+    /// incomplete erasure is retryable rather than silently partial.
+    /// Shared by `DeleteConversation` (right-to-erasure) and the
+    /// retention sweep — one deletion, one sibling set.
+    let deleteSiblings
+        (storage: IBlobStorage)
+        (container: string)
+        (conversationId: Guid)
+        : Async<Result<unit, string>> =
+        async {
+            let! results =
+                siblingBlobNames conversationId
+                |> List.map (fun name -> storage.Delete(container, name))
+                |> Async.Sequential
+
+            return
+                results
+                |> Array.tryPick (function
+                    | Error e -> Some(Error e)
+                    | Ok() -> None)
+                |> Option.defaultValue (Ok())
+        }
+
+    /// Resolve the blob container for a scope id, mirroring the
+    /// `team-{id}` / `user-{id}` convention the storage scope resolver
+    /// uses: an already-prefixed id is taken verbatim; a bare id is a
+    /// team id (the tenant unit). The job scheduler hands the sweep a
+    /// scope id, not a container, so this is the same translation the
+    /// Knowledge Base sweep performs.
+    let containerOf (scopeId: string) : string =
+        if
+            scopeId.StartsWith("user-", StringComparison.Ordinal)
+            || scopeId.StartsWith("team-", StringComparison.Ordinal)
+        then
+            scopeId
+        else
+            "team-" + scopeId
+
+    /// Enumerate the conversation ids in a container — every
+    /// `ai-conversations/{guid}.json`. Sibling blobs strip to
+    /// `"{id}.history"` / `"{id}.meta"` / `"{id}.consent"`, which
+    /// `Guid.TryParse` rejects, so they fall through (the same rule
+    /// `ListConversations` applies).
+    let listConversationIds (storage: IBlobStorage) (container: string) : Async<Guid list> = async {
+        let! blobs = storage.List(container, "ai-conversations/")
+
+        return
+            blobs
+            |> List.choose (fun blobName ->
+                let fileName = blobName.Replace("ai-conversations/", "").Replace(".json", "")
+
+                match Guid.TryParse(fileName) with
+                | true, id -> Some id
+                | _ -> None)
+    }
+
+    /// When a conversation was last active: the newest message
+    /// timestamp in its UI blob, else the blob's own `LastModified`
+    /// (an empty or unparseable conversation still has a write time).
+    /// `None` when neither can be read — such a conversation is never
+    /// selected for purge, because an undated row is a repair job, not
+    /// an expired one.
+    let lastActivity
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (conversationId: Guid)
+        : Async<DateTime option> =
+        async {
+            let blobName = conversationBlobName conversationId
+
+            let fromMetadata () = async {
+                match! storage.GetMetadata(container, blobName) with
+                | Ok meta -> return Some meta.LastModified
+                | Error _ -> return None
+            }
+
+            match! storage.Download(container, blobName) with
+            | Ok bytes ->
+                let parsed =
+                    try
+                        Some(fromJson<ConversationMessage list> bytes)
+                    with ex ->
+                        logger.Warn
+                            $"AI conversation {conversationId} blob is unparseable ({ex.Message}); dating it by its write time for retention."
+
+                        None
+
+                match parsed with
+                | Some(_ :: _ as messages) -> return Some(messages |> List.map _.Timestamp |> List.max)
+                | _ -> return! fromMetadata ()
+            | Error _ -> return! fromMetadata ()
+        }
+
+    /// Sweep one container under `policy` at `now`: enumerate, date,
+    /// select, delete every sibling of each expired conversation, and
+    /// write ONE `ConversationsPurged` audit row when anything went.
+    ///
+    /// GP 11 / GP 13 — an inert policy reads nothing: there is no code
+    /// path from `retainForever` to a delete. A run that expires
+    /// nothing writes no audit row. A conversation whose sibling delete
+    /// fails is reported in `Failures` and left for the next sweep.
+    let sweepContainer
+        (storage: IBlobStorage)
+        (auditLog: IAuditLog option)
+        (logger: ILogger)
+        (now: DateTime)
+        (policy: ConversationRetentionPolicy)
+        (scopeId: string)
+        (container: string)
+        : Async<ConversationPurgeReport> =
+        async {
+            if ConversationRetentionPolicy.isInert policy then
+                return ConversationPurgeReport.noOp scopeId container 0
+            else
+                let! ids = listConversationIds storage container
+
+                let! dated =
+                    ids
+                    |> List.map (fun id -> async {
+                        let! at = lastActivity logger storage container id
+                        return at |> Option.map (fun at -> id, at)
+                    })
+                    |> Async.Sequential
+
+                let conversations = dated |> Array.toList |> List.choose id
+                let expired = ConversationRetentionPolicy.selectExpired now policy conversations
+
+                if expired.IsEmpty then
+                    return ConversationPurgeReport.noOp scopeId container ids.Length
+                else
+                    let! outcomes =
+                        expired
+                        |> List.map (fun id -> async {
+                            match! deleteSiblings storage container id with
+                            | Ok() -> return Ok id
+                            | Error e -> return Error(sprintf "%O: %s" id e)
+                        })
+                        |> Async.Sequential
+
+                    let purged = outcomes |> Array.toList |> List.choose Result.toOption
+
+                    let failures =
+                        outcomes
+                        |> Array.toList
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
+
+                    if not purged.IsEmpty then
+                        match auditLog with
+                        | Some audit ->
+                            do!
+                                audit.Record(
+                                    scopeId,
+                                    ConversationsPurged {
+                                        ScopeId = scopeId
+                                        ConversationIds = purged |> List.map string
+                                        PurgedCount = purged.Length
+                                        MaxAgeSeconds = policy.MaxAge |> Option.map (fun a -> int64 a.TotalSeconds)
+                                        MaxCount = policy.MaxCount
+                                        FailedCount = failures.Length
+                                    }
+                                )
+                        | None -> ()
+
+                        logger.Info(
+                            sprintf
+                                "[AI] Conversation retention sweep purged %d conversation(s) from scope %s (%d failed)."
+                                purged.Length
+                                scopeId
+                                failures.Length
+                        )
+
+                    for failure in failures do
+                        logger.Warn(
+                            sprintf
+                                "[AI] Conversation retention sweep left %s in scope %s; the next sweep retries it."
+                                failure
+                                scopeId
+                        )
+
+                    return {
+                        ScopeId = scopeId
+                        Container = container
+                        Examined = ids.Length
+                        Purged = purged
+                        Failures = failures
+                    }
+        }
+
+    /// Handler name the sweep job registers under. Namespaced against
+    /// the AI module so it cannot clash with a consumer's own handlers.
+    [<Literal>]
+    let SweepHandlerName = "ai.conversation-retention-sweep"
+
+/// The `IJobHandler` `withConversationRetention` registers. Resolves
+/// its substrate from the provider on every `Execute` — nothing is
+/// cached between invocations (GP 12 rule 4), so a distributed
+/// scheduler may deactivate and rehydrate it freely. Sweeps
+/// `ctx.ScopeId` only.
+///
+/// A sweep that left a selected conversation behind returns
+/// `TransientFailure`: the shape is retryable by construction (the
+/// next attempt re-selects the same rows), which is what
+/// `JobRetryPolicy` backoff exists for.
+type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: ConversationRetentionPolicy) =
+    interface IJobHandler with
+        member _.Execute(ctx: JobContext) = async {
+            let logger =
+                match services.GetService typeof<ILogger> with
+                | :? ILogger as l -> l
+                | _ ->
+                    { new ILogger with
+                        member _.Debug _ = ()
+                        member _.Info _ = ()
+                        member _.Warn _ = ()
+                        member _.Error(_, _) = ()
+                    }
+
+            match services.GetService typeof<IBlobStorage> with
+            | :? IBlobStorage as storage ->
+                let auditLog =
+                    match services.GetService typeof<IAuditLog> with
+                    | :? IAuditLog as a -> Some a
+                    | _ -> None
+
+                try
+                    let! report =
+                        ConversationRetention.sweepContainer
+                            storage
+                            auditLog
+                            logger
+                            DateTime.UtcNow
+                            policy
+                            ctx.ScopeId
+                            (ConversationRetention.containerOf ctx.ScopeId)
+
+                    if ConversationPurgeReport.isClean report then
+                        return Success
+                    else
+                        return TransientFailure(ConversationPurgeReport.summarise report)
+                with ex ->
+                    logger.Error(sprintf "[AI] Conversation retention sweep failed for scope %s" ctx.ScopeId, Some ex)
+
+                    return TransientFailure ex.Message
+            | _ ->
+                // No blob storage composed — conversations are written
+                // through `IBlobStorage`, so there is nothing to sweep.
+                // Permanent: a retry cannot conjure a store.
+                return
+                    PermanentFailure
+                        "No IBlobStorage is registered; the AI conversation retention sweep has nothing to sweep."
+        }
+
 // ─── Provider message conversion ─────────────────────────────────
 
 let private toProviderMessage (msg: ConversationMessage) : AIProviderMessage = {
@@ -1501,21 +1822,15 @@ let aiAssistantApi
                 // Delete EVERY sibling blob. Deleting only `.json` left
                 // `.history.json` (the full provider round-trip incl.
                 // tool inputs/outputs) and `.meta.json` behind — a
-                // right-to-erasure / privacy gap. `IBlobStorage.Delete`
-                // is idempotent (missing blob ⇒ Ok), so deleting all
-                // three unconditionally is safe; surface the first
-                // failure so an incomplete erasure is retryable rather
-                // than silently partial.
-                let! r1 = storage.Delete(scope.Container, conversationBlobName conversationId)
-                let! r2 = storage.Delete(scope.Container, providerHistoryBlobName conversationId)
-                let! r3 = storage.Delete(scope.Container, conversationMetaBlobName conversationId)
-
-                return
-                    [ r1; r2; r3 ]
-                    |> List.tryPick (function
-                        | Error e -> Some(Error e)
-                        | Ok() -> None)
-                    |> Option.defaultValue (Ok())
+                // right-to-erasure / privacy gap. Phase 504.D — the
+                // sibling set now lives in ONE place
+                // (`ConversationRetention.siblingBlobNames`, which also
+                // names the consent sidecar) and is shared with the
+                // retention sweep, so an erasure and a purge remove
+                // exactly the same blobs. The first failure is surfaced
+                // so an incomplete erasure is retryable rather than
+                // silently partial.
+                return! ConversationRetention.deleteSiblings storage scope.Container conversationId
             }
 
         SetConversationOverride =
