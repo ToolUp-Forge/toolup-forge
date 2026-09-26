@@ -194,10 +194,24 @@ let private typeAcceptable (expected: ColumnType) (cells: string list) : bool =
 
 let private currencySymbols = [ "$"; "£"; "€"; "¥"; "₹"; "₩"; "₪" ]
 
+/// The INFERENCE path's null-marker vocabulary — consulted only when no
+/// schema was declared for the column (Phase 835). A heuristic for
+/// user-uploaded text, where it is all there is.
 let private defaultNullMarkers = [ "n/a"; "na"; "null"; "none"; "nil"; "-"; "--"; "#n/a" ]
 
-let private isNullMarker (s: string) =
-    defaultNullMarkers |> List.contains (s.Trim().ToLower())
+/// Phase 835 (835.C) — a bare `-` is the one marker too short to carry
+/// its own evidence: it is equally a hyphen, a minus sign, a ticker or an
+/// account code. It counts as a null marker only in a column whose OTHER
+/// values show it cannot be a value there (predominantly numbers, dates
+/// or booleans); in a text column it is text.
+[<Literal>]
+let private BareHyphen = "-"
+
+let private unconditionalNullMarkers =
+    defaultNullMarkers |> List.filter (fun m -> m <> BareHyphen)
+
+let private isUnconditionalNullMarker (s: string) =
+    unconditionalNullMarkers |> List.contains (s.Trim().ToLower())
 
 let private tryInt (s: string) : int option =
     match System.Int32.TryParse(s.Trim()) with
@@ -366,11 +380,176 @@ let private DqThreshold = 0.8
 
 let private examplesOf (xs: string list) = xs |> List.distinct |> List.truncate 3
 
+/// The symbol / separator clean-up that would expose `values` as numbers:
+/// the currency symbol found (if any), whether a percent sign was seen,
+/// and the transforms, in order.
+let private numericCleanupFor (values: string list) : string option * bool * CellTransform list =
+    let sym =
+        currencySymbols
+        |> List.tryFind (fun s -> values |> List.exists (fun v -> v.Contains s))
+
+    let anyPercent = values |> List.exists (fun v -> v.Contains "%")
+    let anyApostrophe = values |> List.exists (fun v -> v.StartsWith "'")
+
+    let cleanup = [
+        Trim
+        if anyApostrophe then
+            StripLeadingApostrophe
+        match sym with
+        | Some s -> StripCurrency s
+        | None -> ()
+        if anyPercent then
+            StripPercent
+        StripThousandsSeparators
+    ]
+
+    sym, anyPercent, cleanup
+
+/// Phase 835 (835.C) — whether a bare `-` reads as absent in a column whose
+/// other (non-blank, non-marker, non-hyphen) values are `others`: only when
+/// they are predominantly numbers, dates or booleans, where a lone hyphen
+/// cannot be a value. With no other values there is no evidence that the
+/// hyphen is a placeholder, and it is kept as text.
+let private hyphenIsNullAmong (others: string list) : bool =
+    match others with
+    | [] -> false
+    | _ ->
+        let _, _, cleanup = numericCleanupFor others
+
+        let valueShaped (v: string) =
+            isNumeric (applyTransforms cleanup v)
+            || boolTokens.Contains(v.ToLower())
+            || (toIsoDate DayFirst v).IsSome
+            || (toIsoDate MonthFirst v).IsSome
+            || (toIsoDate YearFirst v).IsSome
+
+        let shaped = others |> List.filter valueShaped |> List.length
+        float shaped / float (List.length others) >= DqThreshold
+
+/// Phase 835 — map a source's declared native type name onto the coarse
+/// `ColumnType`. Case-insensitive; a length / precision suffix
+/// (`varchar(255)`, `decimal(10,2)`) is ignored. `None` for a name this
+/// table does not recognise — the profiler then INFERS the type, and says
+/// so, rather than guessing a mapping.
+let columnTypeOfDeclared (dataType: string) : ColumnType option =
+    let t =
+        let lowered = (if isNull dataType then "" else dataType).Trim().ToLower()
+
+        match lowered.IndexOf '(' with
+        | -1 -> lowered
+        | i -> lowered.Substring(0, i).Trim()
+
+    match t with
+    | "bool"
+    | "boolean"
+    | "bit" -> Some BooleanColumn
+    | "int"
+    | "integer"
+    | "int2"
+    | "int4"
+    | "int8"
+    | "int16"
+    | "int32"
+    | "int64"
+    | "uint8"
+    | "uint16"
+    | "uint32"
+    | "uint64"
+    | "tinyint"
+    | "smallint"
+    | "mediumint"
+    | "bigint"
+    | "float"
+    | "float4"
+    | "float8"
+    | "float32"
+    | "float64"
+    | "double"
+    | "double precision"
+    | "real"
+    | "decimal"
+    | "numeric"
+    | "bignumeric"
+    | "number"
+    | "money"
+    | "smallmoney" -> Some NumberColumn
+    | "date"
+    | "datetime"
+    | "datetime2"
+    | "smalldatetime"
+    | "datetimeoffset" -> Some DateColumn
+    | _ when t.StartsWith "timestamp" -> Some DateColumn
+    | "char"
+    | "nchar"
+    | "varchar"
+    | "nvarchar"
+    | "character"
+    | "character varying"
+    | "text"
+    | "ntext"
+    | "string"
+    | "utf8"
+    | "uuid"
+    | "uniqueidentifier" -> Some StringColumn
+    | _ -> None
+
 /// Scan one source column's sample values for data-quality problems and
 /// propose remediation. Pure — the wizard's "Review data" step renders
 /// the result; the chosen transforms ride into the saved `ColumnMapping`.
-let profileColumn (header: string) (cells: string list) : ColumnProfile =
+///
+/// Phase 835 — `declaration` is the column as its source declared it (an
+/// ingested payload's recorded schema, Phase 832). When present, the
+/// declared nullability is used and the null-marker vocabulary is never
+/// consulted (a cell reading `n/a` is a value), and a recognised declared
+/// type is the column's type, admitting only the remediation consistent
+/// with it. The profile says which answers were `Declared` and which
+/// `Inferred`. With `None` the heuristic profiler runs — the fallback, for
+/// text nothing declared.
+let profileColumnWith (declaration: ColumnDeclaration option) (header: string) (cells: string list) : ColumnProfile =
     let nonBlank = cells |> List.map _.Trim() |> List.filter (fun c -> c <> "")
+
+    let declaredType =
+        declaration |> Option.bind (fun d -> columnTypeOfDeclared d.DeclaredType)
+
+    let typeSource = if declaredType.IsSome then Declared else Inferred
+
+    // The marker vocabulary is the INFERENCE path: a declared schema is
+    // never second-guessed by string sentinels (835.A).
+    let nullMarkersInForce =
+        match declaration with
+        | Some _ -> []
+        | None ->
+            let others =
+                nonBlank
+                |> List.filter (fun v -> not (isUnconditionalNullMarker v) && v <> BareHyphen)
+
+            if hyphenIsNullAmong others then
+                defaultNullMarkers
+            else
+                unconditionalNullMarkers
+
+    let isNullMarker (s: string) =
+        nullMarkersInForce |> List.contains (s.Trim().ToLower())
+
+    let nullable, nullabilitySource =
+        match declaration with
+        | Some d -> d.DeclaredNullable, Declared
+        | None ->
+            let sawAbsent = cells |> List.exists (fun c -> c.Trim() = "" || isNullMarker c)
+
+            (cells.IsEmpty || sawAbsent), Inferred
+
+    let admitsNumbers =
+        match declaredType with
+        | None
+        | Some NumberColumn -> true
+        | Some _ -> false
+
+    let admitsDates =
+        match declaredType with
+        | None
+        | Some DateColumn -> true
+        | Some _ -> false
 
     let realValues = nonBlank |> List.filter (isNullMarker >> not)
     let n = List.length realValues
@@ -378,9 +557,12 @@ let profileColumn (header: string) (cells: string list) : ColumnProfile =
     if n = 0 then
         {
             Column = header
-            InferredType = StringColumn
+            InferredType = declaredType |> Option.defaultValue StringColumn
             DetectedUnit = None
             Issues = []
+            TypeSource = typeSource
+            Nullable = nullable
+            NullabilitySource = nullabilitySource
         }
     else
         let fractionWhere pred =
@@ -395,7 +577,7 @@ let profileColumn (header: string) (cells: string list) : ColumnProfile =
                     Kind = NullMarkersPresent
                     Detail = "Null-marker tokens present — blank them so they don't parse as text."
                     Examples = examplesOf seenNulls
-                    Suggested = [ BlankNullMarkers defaultNullMarkers ]
+                    Suggested = [ BlankNullMarkers nullMarkersInForce ]
                     Safe = true
                     NeedsChoice = false
                 }
@@ -403,30 +585,13 @@ let profileColumn (header: string) (cells: string list) : ColumnProfile =
                 None
 
         // ── numbers formatted as text ──
-        let sym =
-            currencySymbols
-            |> List.tryFind (fun s -> realValues |> List.exists (fun v -> v.Contains s))
-
-        let anyPercent = realValues |> List.exists (fun v -> v.Contains "%")
-        let anyApostrophe = realValues |> List.exists (fun v -> v.StartsWith "'")
-
-        let numericCleanup = [
-            Trim
-            if anyApostrophe then
-                StripLeadingApostrophe
-            match sym with
-            | Some s -> StripCurrency s
-            | None -> ()
-            if anyPercent then
-                StripPercent
-            StripThousandsSeparators
-        ]
+        let sym, anyPercent, numericCleanup = numericCleanupFor realValues
 
         let cleanedNumericFraction =
             fractionWhere (fun v -> isNumeric (applyTransforms numericCleanup v))
 
         let rawNumericFraction = fractionWhere isNumeric
-        let isNumberColumn = cleanedNumericFraction >= DqThreshold
+        let isNumberColumn = admitsNumbers && cleanedNumericFraction >= DqThreshold
 
         let detectedUnit =
             if isNumberColumn && sym.IsSome then sym
@@ -448,7 +613,7 @@ let profileColumn (header: string) (cells: string list) : ColumnProfile =
 
         // ── dates (only when not already a clean number column) ──
         let dateIssue =
-            if isNumberColumn then
+            if isNumberColumn || not admitsDates then
                 None
             else
                 let dayF = fractionWhere (fun v -> (toIsoDate DayFirst v).IsSome)
@@ -525,14 +690,24 @@ let profileColumn (header: string) (cells: string list) : ColumnProfile =
         let safeTransforms = issues |> List.filter _.Safe |> List.collect _.Suggested
 
         let inferred =
-            realValues |> List.map (applyTransforms safeTransforms) |> inferColumnType
+            match declaredType with
+            | Some t -> t
+            | None -> realValues |> List.map (applyTransforms safeTransforms) |> inferColumnType
 
         {
             Column = header
             InferredType = inferred
             DetectedUnit = detectedUnit
             Issues = issues
+            TypeSource = typeSource
+            Nullable = nullable
+            NullabilitySource = nullabilitySource
         }
+
+/// Profile one source column with nothing declared — the heuristic,
+/// inference-only path (a user-uploaded CSV). Equivalent to
+/// `profileColumnWith None`.
+let profileColumn (header: string) (cells: string list) : ColumnProfile = profileColumnWith None header cells
 
 // ─── Fingerprint ──────────────────────────────────────────────────
 

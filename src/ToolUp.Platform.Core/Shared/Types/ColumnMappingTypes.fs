@@ -133,16 +133,45 @@ type ColumnIssue = {
     NeedsChoice: bool
 }
 
+/// Phase 835 — where a column profile's answer came from. A mapping UI
+/// shows the difference; a dry-run validator weighs a `Declared` answer
+/// above an `Inferred` (guessed) one.
+type ProfileSource =
+    /// Read from the schema the source declared — an ingested payload's
+    /// recorded schema (Phase 832's `schema-ref`).
+    | Declared
+    /// Guessed from sample cell text — the fallback when nothing was
+    /// declared (a user-uploaded CSV).
+    | Inferred
+
+/// Phase 835 — one column as its source declared it. Field-for-field the
+/// `DataType` / `Nullable` of the ingestion substrate's `ColumnInfo` (the
+/// shape `IngestedPayload.readSchema` returns), restated here because the
+/// Fable-safe profiler compiles before that type.
+type ColumnDeclaration = {
+    /// The source's native type name (`INT64`, `varchar(255)`, `timestamp`, …).
+    DeclaredType: string
+    /// Whether the source declared the column nullable (`IS_NULLABLE`).
+    DeclaredNullable: bool
+}
+
 /// The data-quality profile of one source column.
 type ColumnProfile = {
     Column: string
-    /// Type inferred *after* applying the suggested safe transforms.
+    /// The column's type: the declared type when `TypeSource = Declared`,
+    /// otherwise inferred *after* applying the suggested safe transforms.
     InferredType: ColumnType
     /// A currency/percent symbol stripped from the values, retained so
     /// the mapping UI can label the column (`Price ($)`) and keep `$` vs
     /// `£` columns distinguishable.
     DetectedUnit: string option
     Issues: ColumnIssue list
+    /// Phase 835 — whether `InferredType` was declared or inferred.
+    TypeSource: ProfileSource
+    /// Phase 835 — whether the column admits absent values.
+    Nullable: bool
+    /// Phase 835 — whether `Nullable` was declared or inferred.
+    NullabilitySource: ProfileSource
 }
 
 // ─── Derived / computed columns (Phase 219) ───────────────────────
