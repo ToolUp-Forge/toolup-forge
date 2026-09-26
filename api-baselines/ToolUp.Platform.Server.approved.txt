@@ -6191,7 +6191,10 @@ ToolUp.Platform.IngestedPayload.SchemaDataType : System.String (literal)
 ToolUp.Platform.IngestedPayload.SchemaDriftKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.SchemaRefKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.contentFormat(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PayloadFormat]
+ToolUp.Platform.IngestedPayload.isAbsentSentinel(ToolUp.Platform.ColumnInfo, System.String) : System.Boolean
 ToolUp.Platform.IngestedPayload.payloadFormat(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.IngestedPayload.readCell(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema], System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.IngestedPayload.readRow(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema], System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.IngestedPayload.readSchema(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.DataObject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]]
 ToolUp.Platform.IngestedPayload.schemaDrift(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Platform.IngestedPayload.schemaObjectId(System.String, System.String) : System.String

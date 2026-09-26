@@ -272,6 +272,7 @@ module TypeProbe =
                     Name = name
                     DataType = nativeName inferred
                     Nullable = nullable
+                    AbsentSentinels = None
                 })
 
         { TableName = table; Columns = columns }

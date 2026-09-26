@@ -143,6 +143,7 @@ let schemaOf (table: string) (fields: DataField seq) : TableSchema = {
             Name = fieldPath field
             DataType = nativeName field
             Nullable = field.IsNullable
+            AbsentSentinels = None
         })
         |> List.ofSeq
 }

@@ -2631,7 +2631,8 @@ ToolUp.Platform.CollaborationTopics (class)
 ToolUp.Platform.CollaborationTopics.Lock : System.String (literal)
 ToolUp.Platform.CollaborationTopics.Presence : System.String (literal)
 ToolUp.Platform.ColumnInfo (class)
-ToolUp.Platform.ColumnInfo..ctor(System.String, System.String, System.Boolean)
+ToolUp.Platform.ColumnInfo..ctor(System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])
+ToolUp.Platform.ColumnInfo.AbsentSentinels : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
 ToolUp.Platform.ColumnInfo.DataType : System.String { get }
 ToolUp.Platform.ColumnInfo.Name : System.String { get }
 ToolUp.Platform.ColumnInfo.Nullable : System.Boolean { get }
