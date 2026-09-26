@@ -231,7 +231,8 @@ module IngestedPayload =
         $"_dataingestion_schema__{sourceId}__{table}"
 
     /// Canonical serialisation of a `TableSchema`: a fixed member order
-    /// (`tableName`, `columns[]` of `name` / `dataType` / `nullable`),
+    /// (`tableName`, `columns[]` of `name` / `dataType` / `nullable`, plus
+    /// `absentSentinels` — sorted — only on a column that declares any),
     /// no insignificant whitespace, columns in the connector's order. Two
     /// identical schemas serialise to identical bytes and therefore to one
     /// content hash — the dedup the schema object relies on.
@@ -249,6 +250,22 @@ module IngestedPayload =
                 writer.WriteString("name", column.Name)
                 writer.WriteString("dataType", column.DataType)
                 writer.WriteBoolean("nullable", column.Nullable)
+
+                // Phase 838 — written only when declared, so a connector
+                // that declares no sentinels serialises to exactly the
+                // bytes it did before (same content hash, no spurious
+                // schema drift). `Set` iterates in sorted order, so the
+                // member is canonical too.
+                match column.AbsentSentinels with
+                | Some sentinels when not sentinels.IsEmpty ->
+                    writer.WriteStartArray("absentSentinels")
+
+                    for sentinel in sentinels do
+                        writer.WriteStringValue sentinel
+
+                    writer.WriteEndArray()
+                | _ -> ()
+
                 writer.WriteEndObject()
 
             writer.WriteEndArray()
@@ -270,6 +287,14 @@ module IngestedPayload =
                     Name = c.GetProperty("name").GetString()
                     DataType = c.GetProperty("dataType").GetString()
                     Nullable = c.GetProperty("nullable").GetBoolean()
+                    AbsentSentinels =
+                        match c.TryGetProperty("absentSentinels") with
+                        | true, sentinels ->
+                            sentinels.EnumerateArray()
+                            |> Seq.map (fun t -> t.GetString())
+                            |> Set.ofSeq
+                            |> Some
+                        | _ -> None
                 })
                 |> List.ofSeq
 
@@ -320,3 +345,35 @@ module IngestedPayload =
             | Ok bytes -> return tryParseSchema bytes
             | Error _ -> return None
     }
+
+    /// Phase 838 — whether `text` is one of the sentinels `column`
+    /// declares as meaning "absent". A column declaring none (`None`, the
+    /// default for every connector without such a vocabulary) has no
+    /// sentinels, so this is `false` for every text.
+    let isAbsentSentinel (column: ColumnInfo) (text: string) : bool =
+        match column.AbsentSentinels with
+        | Some sentinels -> sentinels.Contains text
+        | None -> false
+
+    /// Phase 838 — THE boundary where a declared sentinel becomes absence:
+    /// read one payload cell of column `columnName` under the payload's
+    /// schema (`readSchema`'s answer). `None` when the column declares
+    /// `text` as a sentinel; `Some text` otherwise — including when there
+    /// is no schema, the schema does not name the column, or the column
+    /// declares nothing, so identical text from a source that did not
+    /// declare it reads as itself. A reader calls this as it reads each
+    /// cell; no consumer downstream re-tests the vocabulary.
+    let readCell (schema: TableSchema option) (columnName: string) (text: string) : string option =
+        let declared =
+            schema
+            |> Option.bind (fun s -> s.Columns |> List.tryFind (fun c -> c.Name = columnName))
+
+        match declared with
+        | Some column when isAbsentSentinel column text -> None
+        | _ -> Some text
+
+    /// Phase 838 — `readCell` over one row's `(column, text)` cells.
+    let readRow (schema: TableSchema option) (cells: (string * string) seq) : Map<string, string option> =
+        cells
+        |> Seq.map (fun (columnName, text) -> columnName, readCell schema columnName text)
+        |> Map.ofSeq

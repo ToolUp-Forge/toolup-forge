@@ -37,11 +37,13 @@ ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsTransport.RunReport 
 ToolUp.DataSources.GoogleAnalyticsLiveTransport (class)
 ToolUp.DataSources.GoogleAnalyticsLiveTransport.create(System.String) : ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsTransport
 ToolUp.DataSources.GoogleAnalyticsSchema (class)
+ToolUp.DataSources.GoogleAnalyticsSchema.absentSentinelsFor(ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]]
 ToolUp.DataSources.GoogleAnalyticsSchema.allFields : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field] { get }
 ToolUp.DataSources.GoogleAnalyticsSchema.categories : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.DataSources.GoogleAnalyticsSchema.columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ColumnInfo] { get }
 ToolUp.DataSources.GoogleAnalyticsSchema.dimensions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field] { get }
 ToolUp.DataSources.GoogleAnalyticsSchema.metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field] { get }
+ToolUp.DataSources.GoogleAnalyticsSchema.sentinelVocabulary : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel] { get }
 ToolUp.DataSources.GoogleAnalyticsSchema.tableSchema(System.String) : ToolUp.Platform.TableSchema
 ToolUp.DataSources.GoogleAnalyticsSchema.tryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field]
 ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Field (class)
@@ -60,6 +62,23 @@ ToolUp.DataSources.GoogleAnalyticsSchema+Ga4FieldKind.Tag : System.Int32 { get }
 ToolUp.DataSources.GoogleAnalyticsSchema+Ga4FieldKind+Tags (class)
 ToolUp.DataSources.GoogleAnalyticsSchema+Ga4FieldKind+Tags.Dimension : System.Int32 (literal)
 ToolUp.DataSources.GoogleAnalyticsSchema+Ga4FieldKind+Tags.Metric : System.Int32 (literal)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel (class)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel..ctor(System.String, ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning, System.String)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel.Meaning : ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel.Note : System.String { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel.Token : System.String { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning (class)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.Absent : ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.CardinalityBucket : ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.Classification : ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.IsAbsent : System.Boolean { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.IsCardinalityBucket : System.Boolean { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.IsClassification : System.Boolean { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning.Tag : System.Int32 { get }
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning+Tags (class)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning+Tags.Absent : System.Int32 (literal)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning+Tags.CardinalityBucket : System.Int32 (literal)
+ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning+Tags.Classification : System.Int32 (literal)
 ToolUp.DataSources.GoogleOAuthFlow (class)
 ToolUp.DataSources.GoogleOAuthFlow.clientIdKey(System.String, System.String) : System.String
 ToolUp.DataSources.GoogleOAuthFlow.clientSecretKey(System.String, System.String) : System.String

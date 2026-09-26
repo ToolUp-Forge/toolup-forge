@@ -133,6 +133,7 @@ let private schemaOf (columns: (string * string * bool) list) : TableSchema = {
             Name = n
             DataType = t
             Nullable = nullable
+            AbsentSentinels = None
         })
 }
 

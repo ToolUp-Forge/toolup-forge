@@ -22,6 +22,7 @@ let private registeredTests =
         ParquetDataSourceTests.tests
         PayloadFormatDeclarationTests.tests
         FidelityContractTests.tests
+        GoogleAnalyticsTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

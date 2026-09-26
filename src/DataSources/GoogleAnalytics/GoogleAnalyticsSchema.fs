@@ -204,16 +204,123 @@ let categories: string list =
 let tryFind (apiName: string) : Ga4Field option =
     allFields |> List.tryFind (fun f -> f.ApiName = apiName)
 
+// ─── GA4 sentinel vocabulary (Phase 838) ─────────────────────────────
+//
+// The Data API never returns a JSON null for a dimension. A value GA4
+// could not determine comes back as a literal parenthesised string, and
+// that string is also perfectly legal dimension text — so nothing at a
+// parse boundary can tell "absent" from "a value that happens to read
+// `(not set)`". Only per-source knowledge decides it, and this connector
+// is where that knowledge lives. So the vocabulary is DECLARED here, per
+// column, and rides the schema (`ColumnInfo.AbsentSentinels`) to the
+// reader, which turns a declared sentinel into absence once
+// (`IngestedPayload.readCell`). A platform-wide list of magic strings is
+// exactly the mistake this avoids: `(not set)` in a SQL `varchar` means
+// nothing in particular.
+//
+// Not every GA4 parenthesised token is an absence, and the vocabulary
+// below says which is which rather than leaving it to a consumer:
+//
+// - `(other)` is a CARDINALITY bucket — GA4 folding low-volume values
+//   together when a report exceeds its row limit. The rows it stands for
+//   HAVE values; they were merely aggregated. Reading it as absent would
+//   silently relabel real traffic as "unknown", so it is deliberately NOT
+//   declared as a sentinel and reads as its own text.
+// - `(direct)` is a CLASSIFICATION — the source of traffic that arrived
+//   with no referrer. "Direct" is a known answer, not a missing one, so
+//   it too is deliberately not declared.
+
+/// What a GA4 parenthesised token means. Only `Absent` tokens are
+/// declared as sentinels.
+type Ga4SentinelMeaning =
+    /// The value is missing — reads as absent.
+    | Absent
+    /// A real value GA4 spells in parentheses — reads as its own text.
+    | Classification
+    /// An aggregate of low-volume values (a row-limit bucket) — reads as
+    /// its own text, since the rows it stands for do have values.
+    | CardinalityBucket
+
+/// One GA4 token, its meaning, and why.
+type Ga4Sentinel = {
+    Token: string
+    Meaning: Ga4SentinelMeaning
+    Note: string
+}
+
+/// The GA4 parenthesised vocabulary, each token's meaning recorded beside
+/// it.
+let sentinelVocabulary: Ga4Sentinel list = [
+    {
+        Token = "(not set)"
+        Meaning = Absent
+        Note = "GA4 received no value for this dimension (no campaign tag, unknown city, unset page title)."
+    }
+    {
+        Token = "(none)"
+        Meaning = Absent
+        Note = "No medium was attached to the session (direct traffic's medium)."
+    }
+    {
+        Token = "(not provided)"
+        Meaning = Absent
+        Note = "The referrer withheld the value (search keywords hidden for privacy)."
+    }
+    {
+        Token = "(direct)"
+        Meaning = Classification
+        Note = "Traffic that arrived with no referrer — a known source, not a missing one."
+    }
+    {
+        Token = "(other)"
+        Meaning = CardinalityBucket
+        Note = "Low-volume values aggregated past a report's row limit — the rows have values; they were grouped."
+    }
+]
+
+let private absentToken (token: string) =
+    sentinelVocabulary
+    |> List.exists (fun s -> s.Token = token && s.Meaning = Absent)
+
+// Which dimensions emit which absence tokens. `(not set)` can appear on
+// any dimension; `(none)` only on the medium dimensions (a session with
+// no medium). A sentinel matches a WHOLE cell, so the composite
+// source / medium dimensions — whose cells read `(direct) / (none)` —
+// declare only `(not set)`: half a cell is data, not absence. Metrics
+// are numbers and declare nothing. `(not provided)` is emitted by the
+// search-term dimensions (`sessionManualTerm`, the Google Ads keyword
+// family), none of which this property-independent catalogue carries, so
+// no catalogued column declares it — it stays in the vocabulary, with its
+// meaning, for the day a term dimension joins `dimensions`.
+let private mediumDimensions = set [ "medium"; "sessionMedium" ]
+
+/// The sentinels `field` declares as absent — the per-column declaration
+/// `columns` carries on `ColumnInfo.AbsentSentinels`. `None` for a metric.
+let absentSentinelsFor (field: Ga4Field) : Set<string> option =
+    match field.Kind with
+    | Metric -> None
+    | Dimension ->
+        [
+            yield "(not set)"
+            if mediumDimensions.Contains field.ApiName then
+                yield "(none)"
+        ]
+        |> List.filter absentToken
+        |> Set.ofList
+        |> Some
+
 /// Render the catalogue as the SDK's shared `ColumnInfo` shape — the
 /// value `IDataSource.GetSchema` returns. Every column is nullable: GA4
 /// omits absent rows rather than reporting nulls, so any field can fail
-/// to appear in a response that asked for it.
+/// to appear in a response that asked for it. Each dimension carries the
+/// absence tokens it can emit (`absentSentinelsFor`).
 let columns: ColumnInfo list =
     allFields
     |> List.map (fun f -> {
         Name = f.ApiName
         DataType = f.DataType
         Nullable = true
+        AbsentSentinels = absentSentinelsFor f
     })
 
 /// Build the `TableSchema` for one GA4 property. The property resource

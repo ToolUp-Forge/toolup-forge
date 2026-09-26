@@ -56,6 +56,8 @@
              ToolUp.Platform.Tests, bound to every connector in this pack. -->
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\DataSourceFidelityContract.fs" Link="Contracts\DataSourceFidelityContract.fs" />
         <Compile Include="Tests\FidelityContractTests.fs" />
+        <!-- Phase 838 - GA4's declared absence sentinels, read at the payload boundary. -->
+        <Compile Include="Tests\GoogleAnalyticsTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -76,6 +78,7 @@
         <ProjectReference Include="..\DataSources\Csv\ToolUp.DataSources.Csv.fsproj" />
         <ProjectReference Include="..\DataSources\Excel\ToolUp.DataSources.Excel.fsproj" />
         <ProjectReference Include="..\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj" />
+        <ProjectReference Include="..\DataSources\GoogleAnalytics\ToolUp.DataSources.GoogleAnalytics.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

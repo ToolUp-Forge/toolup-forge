@@ -36,6 +36,16 @@ type ColumnInfo = {
     Name: string
     DataType: string
     Nullable: bool
+    /// Phase 838 — cell texts that mean "absent" for THIS column, as the
+    /// connector knows them (GA4 answers a missing dimension value with
+    /// the literal `(not set)` rather than a null). Per column and per
+    /// source by design: the same text in a column that declares nothing
+    /// is ordinary data. `None` — what every connector without such a
+    /// vocabulary supplies — means no sentinels. The declaration travels
+    /// with the stored schema (`IngestedPayload.serializeSchema`) and is
+    /// applied once, where a payload cell is read
+    /// (`IngestedPayload.readCell`).
+    AbsentSentinels: Set<string> option
 }
 
 /// Schema for one source-side table — what `IDataSource.GetSchema`

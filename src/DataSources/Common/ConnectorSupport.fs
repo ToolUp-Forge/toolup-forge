@@ -562,6 +562,7 @@ module TypeMap =
         Name = name
         DataType = nativeType
         Nullable = nullable
+        AbsentSentinels = None
     }
 
     /// Assemble a `TableSchema` for `table` from a column sequence.
