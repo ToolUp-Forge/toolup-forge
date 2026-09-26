@@ -730,6 +730,9 @@ ToolUp.AI.FastPathTriageResolver.TriageAttemptsMetric : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.TriageDurationMsMetric : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.TriageEventType : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.TriageOutcomesMetric : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageRouteOverride : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageRouteTriageProvider : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.TriageRouteTurnProvider : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.actionPayloadJson(ToolUp.AI.AIFieldDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
 ToolUp.AI.FastPathTriageResolver.buildTriagePrompt(ToolUp.AI.AIFieldSnapshot) : System.String
 ToolUp.AI.FastPathTriageResolver.fallThroughOutcomes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -759,6 +762,7 @@ ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.effectiveMaxInstruct
 ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.effectiveTimeoutMs(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : System.Int32
 ToolUp.AI.FastPathTriageResolver+FastPathTriageConfigModule.withTriageProvider(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig) : ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload (class)
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload..ctor(System.Guid, System.Guid, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Double, System.Int32)
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ConversationId : System.Guid { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.FieldId : System.String { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.InstructionChars : System.Int32 { get }
@@ -767,8 +771,12 @@ ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ModuleId : System.String { g
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.Outcome : System.String { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ProviderModel : System.String { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ProviderName : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.Route : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ServedModel : System.String { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.TaskId : System.Guid { get }
 ToolUp.AI.FastPathTriageResolver+TriageEventPayload.TriageModelId : System.String { get }
+ToolUp.AI.FastPathTriageResolver+TriageEventPayloadModule (class)
+ToolUp.AI.FastPathTriageResolver+TriageEventPayloadModule.coerceLegacy(ToolUp.AI.FastPathTriageResolver+TriageEventPayload) : ToolUp.AI.FastPathTriageResolver+TriageEventPayload
 ToolUp.AI.FastPathTriageResolver+TriageModelDecision (class)
 ToolUp.AI.FastPathTriageResolver+TriageModelDecision..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.String)
 ToolUp.AI.FastPathTriageResolver+TriageModelDecision.Confidence : System.Double { get }
@@ -972,11 +980,3 @@ ToolUp.AI.UIDecodeErrorHandler+UIDecodeErrorReport.RawPayload : System.String { 
 ToolUp.Platform.AI.HttpClientTransport (class)
 ToolUp.Platform.AI.HttpClientTransport..ctor(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.AI.HttpClientTransport.SendForStreaming(ToolUp.Platform.AI.HttpRequest, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[System.Net.Http.HttpResponseMessage]
-ToolUp.AI.FastPathTriageResolver.TriageRouteOverride : System.String (literal)
-ToolUp.AI.FastPathTriageResolver.TriageRouteTriageProvider : System.String (literal)
-ToolUp.AI.FastPathTriageResolver.TriageRouteTurnProvider : System.String (literal)
-ToolUp.AI.FastPathTriageResolver+TriageEventPayload..ctor(System.Guid, System.Guid, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.Double, System.Int32)
-ToolUp.AI.FastPathTriageResolver+TriageEventPayload.Route : System.String { get }
-ToolUp.AI.FastPathTriageResolver+TriageEventPayload.ServedModel : System.String { get }
-ToolUp.AI.FastPathTriageResolver+TriageEventPayloadModule (class)
-ToolUp.AI.FastPathTriageResolver+TriageEventPayloadModule.coerceLegacy(ToolUp.AI.FastPathTriageResolver+TriageEventPayload) : ToolUp.AI.FastPathTriageResolver+TriageEventPayload
