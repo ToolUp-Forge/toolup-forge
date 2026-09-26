@@ -331,6 +331,11 @@
              seam. AFTER DecoderAlgebraTests.fs for the same reason it sits
              after WireCorpus.fs. -->
         <Compile Include="Remoting\JsonDecoderAlgebraTests.fs" />
+        <!-- Phase 843 - the client's JSON reader (JsonText) held to the
+             server's (JsonRead) over the corpus, its prefixes and the pinned
+             agreement cases. The fixture is compiled into the Fable pack too. -->
+        <Compile Include="Remoting\JsonClientDecodeFixture.fs" />
+        <Compile Include="Remoting\JsonTextTests.fs" />
         <!-- Phase 69k — the source generator's contract pack. AFTER
              DecoderAlgebraTests.fs, because its fidelity claim is a link in
              that pack's chain rather than a claim of its own: 785 proved the

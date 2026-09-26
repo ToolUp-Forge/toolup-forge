@@ -241,3 +241,446 @@ module JsonValue =
 #endif
         else
             None
+
+// ─── Phase 843 — text to `JsonValue`, on both hosts ──────────────────
+//
+// The browser twin of `JsonRead` (the server's `JsonElement` pass), and
+// the parse the client's JSON response decode stands on. It reads the
+// response TEXT directly into the value model, so a number token is
+// carried as written from the first character the parse sees of it.
+//
+// **Why the text and not `JSON.parse` — 843.A's recorded answer.** The
+// shard asked whether the token can be recovered from `SimpleJson`'s
+// tree (`parseNative` is `JSON.parse`), and its 2026-09-26 amendment
+// proposed the `JSON.parse` source-text-access reviver: the reviver's
+// third argument carries each primitive's lexical source, so numbers
+// could be built as text inside the one native parse. Settled by
+// measurement on Node 25 (V8), over a 760 KB response-shaped array of
+// 5,000 records, each figure the mean of 100 parses after 20 warm-up
+// parses, both run orders:
+//
+//   * `JSON.parse`, no reviver ...................... 5-16 ms
+//   * `JSON.parse`, an IDENTITY reviver ............. 79-89 ms
+//   * `JSON.parse`, a reviver building THIS model ... 134-137 ms
+//   * `JsonText.tryParse` below, as Fable emits it .. 18-21 ms
+//
+// So the reviver DOES carry the token, and still loses on three counts,
+// any one of which would decide it:
+//
+//   1. **It is the slow path of `JSON.parse`.** A reviver that does
+//      nothing costs seven to nine times a plain parse, because the
+//      spec's internalize walk re-reads and re-defines every property
+//      through it; building this model in one costs six to seven times
+//      what this module's transpiled scan costs to build the same model.
+//   2. **It cannot carry two facts the model promises.** A reviver sees
+//      the object `JSON.parse` has already built, so an array-index key
+//      (`"10"`, `"2"`) has already been moved ahead of the others and a
+//      duplicate key has already collapsed to its LAST value. The model's
+//      members are wire order with duplicates visible, which is what
+//      `JsonRead` (System.Text.Json) delivers — so through a reviver
+//      `{"Ok":1,"Ok":2}` would decode as `Ok 2` in the browser while the
+//      server refuses it as a two-member object.
+//   3. **It is not on every engine the platform runs on.** V8 has it
+//      (Chrome and Edge 114+, Node 21+), but the Fable test tier's
+//      declared floor is Node 20, which does not, and a fallback path
+//      would then decide what the client reads on some engines.
+//
+// The tree walk the amendment names as the fallback is no answer at all:
+// once `JSON.parse` has read `0.10000000000000000555` as the double
+// `0.1`, no walk can tell that token from `0.1`, so it can neither
+// recover the digits nor refuse the ones it lost.
+//
+// One implementation, then: FSharp.Core-only and compiled on BOTH hosts.
+// The browser decodes through it, and the .NET pack holds it to
+// `JsonRead` over the same texts, which is what makes "the two hosts
+// read one text identically" a red run rather than a hope. The grammar
+// is RFC 8259 exactly as System.Text.Json's defaults read it — no
+// comments, no trailing commas, no leading `+`, no byte-order mark, the
+// four whitespace characters only — and an unpaired surrogate ESCAPE is
+// refused, as `JsonElement.GetString` refuses it. (An unpaired surrogate
+// written RAW cannot reach the browser: the response text is decoded
+// from UTF-8, which has no encoding for one. It passes through here as
+// written.)
+//
+// The bounds are `JsonRead`'s, restated here because a bound is this
+// pass's own contract: containers nest at most `DefaultMaxDepth` deep
+// and carry at most `DefaultMaxMembers` entries, each checked BEFORE the
+// value that would breach it is built. A bound refusal carries the path
+// to the container that breached it, as `JsonRead`'s does; a syntax
+// refusal carries the offset instead, which is where a reader looks.
+
+/// Phase 843 — parse JSON text into the value model, numbers as their
+/// lexical tokens, under explicit bounds. Total: every input is a value
+/// or a named refusal, never an exception.
+[<RequireQualifiedAccess>]
+module JsonText =
+
+    /// How deeply containers may nest — `JsonRead.DefaultMaxDepth`'s
+    /// value, and System.Text.Json's own default.
+    [<Literal>]
+    let DefaultMaxDepth = 64
+
+    /// How many elements or members one container may carry —
+    /// `JsonRead.DefaultMaxMembers`'s value.
+    [<Literal>]
+    let DefaultMaxMembers = 1_000_000
+
+    let private hexDigit (c: char) : int =
+        if c >= '0' && c <= '9' then int c - int '0'
+        elif c >= 'a' && c <= 'f' then int c - int 'a' + 10
+        elif c >= 'A' && c <= 'F' then int c - int 'A' + 10
+        else -1
+
+    let private hex4 (code: int) : string =
+        let digits = "0123456789ABCDEF"
+
+        String [|
+            digits.[(code >>> 12) &&& 0xF]
+            digits.[(code >>> 8) &&& 0xF]
+            digits.[(code >>> 4) &&& 0xF]
+            digits.[code &&& 0xF]
+        |]
+
+    /// One scan over one text. Mutable by design: the position and the
+    /// first refusal are the scan's whole state, and threading either
+    /// through a `Result` per value would allocate on every value of
+    /// every response. A refusal is recorded ONCE, every frame unwinds on
+    /// seeing it, and a bound refusal gains each frame's segment on the
+    /// way out.
+    type private Scanner(text: string, maxDepth: int, maxMembers: int) =
+        let n = text.Length
+        let mutable i = 0
+        let mutable failure: ToolUp.Remoting.DecodeError option = None
+        let mutable boundFailure = false
+
+        let describeAt (position: int) : string =
+            if position >= n then
+                sprintf "the end of the text at offset %d" position
+            else
+                let c = text.[position]
+
+                if c < ' ' then
+                    sprintf "control character U+%s at offset %d" (hex4 (int c)) position
+                else
+                    sprintf "`%c` at offset %d" c position
+
+        let syntax (expected: string) : unit =
+            if failure.IsNone then
+                failure <-
+                    Some(
+                        ToolUp.Remoting.DecodeError.create
+                            "a JSON document"
+                            (sprintf "%s, where %s was expected" (describeAt i) expected)
+                    )
+
+        let bound (expected: string) (found: string) : unit =
+            if failure.IsNone then
+                boundFailure <- true
+                failure <- Some(ToolUp.Remoting.DecodeError.create expected found)
+
+        /// Annotate a bound refusal raised beneath this frame; a syntax
+        /// refusal keeps its offset and gains no path.
+        let under (segment: string) : unit =
+            match failure with
+            | Some error when boundFailure -> failure <- Some(ToolUp.Remoting.DecodeError.under segment error)
+            | _ -> ()
+
+        let skipWhitespace () =
+            let mutable scanning = true
+
+            while scanning && i < n do
+                let c = text.[i]
+
+                if c = ' ' || c = '\t' || c = '\n' || c = '\r' then
+                    i <- i + 1
+                else
+                    scanning <- false
+
+        let literal (word: string) (value: JsonValue) : JsonValue =
+            let mutable k = 0
+
+            while k < word.Length && i + k < n && text.[i + k] = word.[k] do
+                k <- k + 1
+
+            i <- i + k
+
+            if k = word.Length then
+                value
+            else
+                syntax (sprintf "the rest of the literal `%s`" word)
+                JsonValue.Null
+
+        let number () : JsonValue =
+            let start = i
+            let mutable scanning = true
+
+            while scanning && i < n do
+                let c = text.[i]
+
+                if (c >= '0' && c <= '9') || c = '-' || c = '+' || c = '.' || c = 'e' || c = 'E' then
+                    i <- i + 1
+                else
+                    scanning <- false
+
+            let token = text.Substring(start, i - start)
+
+            if JsonValue.isNumberToken token then
+                JsonValue.Number token
+            else
+                i <- start
+                syntax "a number token (RFC 8259 section 6)"
+                JsonValue.Null
+
+        /// The code unit of the `\uXXXX` escape whose `u` is at `at`, or -1.
+        let escapeUnit (at: int) : int =
+            if at + 4 >= n then
+                -1
+            else
+                let a = hexDigit text.[at + 1]
+                let b = hexDigit text.[at + 2]
+                let c = hexDigit text.[at + 3]
+                let d = hexDigit text.[at + 4]
+
+                if a < 0 || b < 0 || c < 0 || d < 0 then
+                    -1
+                else
+                    (a <<< 12) ||| (b <<< 8) ||| (c <<< 4) ||| d
+
+        /// The escape at `i` (a backslash), appended to `built`; `i` moves
+        /// past it.
+        let escape (built: System.Text.StringBuilder) : unit =
+            if i + 1 >= n then
+                i <- i + 1
+                syntax "an escape character"
+            else
+                let simple =
+                    match text.[i + 1] with
+                    | '"' -> '"'
+                    | '\\' -> '\\'
+                    | '/' -> '/'
+                    | 'b' -> '\b'
+                    | 'f' -> '\f'
+                    | 'n' -> '\n'
+                    | 'r' -> '\r'
+                    | 't' -> '\t'
+                    | _ -> '\000'
+
+                if simple <> '\000' then
+                    built.Append(simple) |> ignore
+                    i <- i + 2
+                elif text.[i + 1] = 'u' then
+                    let code = escapeUnit (i + 1)
+
+                    if code < 0 then
+                        i <- i + 2
+                        syntax "four hexadecimal digits after the \\u"
+                    elif code >= 0xD800 && code <= 0xDBFF then
+                        // A high surrogate is admitted only with the low
+                        // one that completes it. Alone it is refused, as
+                        // `JsonElement.GetString` refuses it: a string
+                        // that is not valid UTF-16 is not a value.
+                        let low =
+                            if i + 7 < n && text.[i + 6] = '\\' && text.[i + 7] = 'u' then
+                                escapeUnit (i + 7)
+                            else
+                                -1
+
+                        if low >= 0xDC00 && low <= 0xDFFF then
+                            built.Append(char code).Append(char low) |> ignore
+                            i <- i + 12
+                        else
+                            syntax "a low-surrogate escape completing the high surrogate here"
+                    elif code >= 0xDC00 && code <= 0xDFFF then
+                        syntax "an escape that is not an unpaired low surrogate"
+                    else
+                        built.Append(char code) |> ignore
+                        i <- i + 6
+                else
+                    i <- i + 1
+                    syntax "an escape character (one of \" \\ / b f n r t u)"
+
+        /// The string literal whose opening quote is at `i`, unescaped.
+        let stringLiteral () : string =
+            i <- i + 1
+            let mutable start = i
+            let mutable built: System.Text.StringBuilder = null
+            let mutable result: string = null
+
+            while isNull result && failure.IsNone do
+                if i >= n then
+                    syntax "a closing quote"
+                else
+                    let c = text.[i]
+
+                    if c = '"' then
+                        let tail = text.Substring(start, i - start)
+                        result <- if isNull built then tail else built.Append(tail).ToString()
+                        i <- i + 1
+                    elif c = '\\' then
+                        if isNull built then
+                            built <- System.Text.StringBuilder()
+
+                        built.Append(text.Substring(start, i - start)) |> ignore
+                        escape built
+                        start <- i
+                    elif c < ' ' then
+                        syntax "an escaped control character"
+                    else
+                        i <- i + 1
+
+            if isNull result then "" else result
+
+        member this.Value(depth: int) : JsonValue =
+            skipWhitespace ()
+
+            if i >= n then
+                syntax "a JSON value"
+                JsonValue.Null
+            else
+                let c = text.[i]
+
+                if c = '{' then
+                    this.Object depth
+                elif c = '[' then
+                    this.Array depth
+                elif c = '"' then
+                    JsonValue.String(stringLiteral ())
+                elif c = 't' then
+                    literal "true" (JsonValue.Bool true)
+                elif c = 'f' then
+                    literal "false" (JsonValue.Bool false)
+                elif c = 'n' then
+                    literal "null" JsonValue.Null
+                elif c = '-' || (c >= '0' && c <= '9') then
+                    number ()
+                else
+                    syntax "a JSON value"
+                    JsonValue.Null
+
+        member this.Array(depth: int) : JsonValue =
+            if depth >= maxDepth then
+                bound (sprintf "nesting at most %d container(s) deep" maxDepth) "an array nested deeper"
+                JsonValue.Null
+            else
+                i <- i + 1
+                skipWhitespace ()
+
+                if i < n && text.[i] = ']' then
+                    i <- i + 1
+                    JsonValue.Array []
+                else
+                    let mutable acc = []
+                    let mutable count = 0
+                    let mutable closed = false
+
+                    while not closed && failure.IsNone do
+                        if count >= maxMembers then
+                            bound (sprintf "an array of at most %d element(s)" maxMembers) "an array with more"
+                        else
+                            let item = this.Value(depth + 1)
+
+                            if failure.IsSome then
+                                under (sprintf "[%d]" count)
+                            else
+                                acc <- item :: acc
+                                count <- count + 1
+                                skipWhitespace ()
+
+                                if i < n && text.[i] = ',' then
+                                    i <- i + 1
+                                elif i < n && text.[i] = ']' then
+                                    i <- i + 1
+                                    closed <- true
+                                else
+                                    syntax "`,` or `]`"
+
+                    if failure.IsSome then
+                        JsonValue.Null
+                    else
+                        JsonValue.Array(List.rev acc)
+
+        member this.Object(depth: int) : JsonValue =
+            if depth >= maxDepth then
+                bound (sprintf "nesting at most %d container(s) deep" maxDepth) "an object nested deeper"
+                JsonValue.Null
+            else
+                i <- i + 1
+                skipWhitespace ()
+
+                if i < n && text.[i] = '}' then
+                    i <- i + 1
+                    JsonValue.Object []
+                else
+                    let mutable acc = []
+                    let mutable count = 0
+                    let mutable closed = false
+
+                    while not closed && failure.IsNone do
+                        skipWhitespace ()
+
+                        if count >= maxMembers then
+                            bound (sprintf "an object of at most %d member(s)" maxMembers) "an object with more"
+                        elif i >= n || text.[i] <> '"' then
+                            syntax "a member name"
+                        else
+                            let name = stringLiteral ()
+                            skipWhitespace ()
+
+                            if failure.IsNone then
+                                if i < n && text.[i] = ':' then
+                                    i <- i + 1
+                                    let item = this.Value(depth + 1)
+
+                                    if failure.IsSome then
+                                        under name
+                                    else
+                                        acc <- (name, item) :: acc
+                                        count <- count + 1
+                                        skipWhitespace ()
+
+                                        if i < n && text.[i] = ',' then
+                                            i <- i + 1
+                                        elif i < n && text.[i] = '}' then
+                                            i <- i + 1
+                                            closed <- true
+                                        else
+                                            syntax "`,` or `}`"
+                                else
+                                    syntax "`:`"
+
+                    if failure.IsSome then
+                        JsonValue.Null
+                    else
+                        JsonValue.Object(List.rev acc)
+
+        /// The whole text as ONE value: anything but whitespace after it
+        /// is a refusal.
+        member this.Document() : Result<JsonValue, ToolUp.Remoting.DecodeError> =
+            let value = this.Value 0
+
+            if failure.IsNone then
+                skipWhitespace ()
+
+                if i < n then
+                    syntax "the end of the document"
+
+            match failure with
+            | Some error -> Error error
+            | None -> Ok value
+
+    /// Parse `text` under explicit bounds.
+    let tryParseWith (maxDepth: int) (maxMembers: int) (text: string) : Result<JsonValue, ToolUp.Remoting.DecodeError> =
+        if isNull text then
+            Error(ToolUp.Remoting.DecodeError.create "a JSON document" "no text")
+        else
+            try
+                Scanner(text, maxDepth, maxMembers).Document()
+            with ex ->
+                // Unreachable by construction — the scan reads only below
+                // the text's length and recurses at most `maxDepth` deep —
+                // and kept so "total" does not rest on that argument alone.
+                Error(ToolUp.Remoting.DecodeError.create "a JSON document" ex.Message)
+
+    /// Parse `text` under the default bounds.
+    let tryParse (text: string) : Result<JsonValue, ToolUp.Remoting.DecodeError> =
+        tryParseWith DefaultMaxDepth DefaultMaxMembers text

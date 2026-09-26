@@ -21,6 +21,10 @@ let allTests =
         // Phase 817 — the ProcessedData summary envelope's browser half:
         // Fable.SimpleJson reads what the server's FableConverters wrote.
         ProcessedDataEnvelopeTests.tests
+        // Phase 843 - the client's JSON response decode joins the algebra:
+        // the pinned payload read in the browser, the proxy through the
+        // registry, and the 785.F losses closed on the client.
+        JsonClientDecodeTests.tests
         // Phase 217 — module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.

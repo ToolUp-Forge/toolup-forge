@@ -390,6 +390,12 @@ module Proxy =
                             failwithf "Expected field %s to have a return type of Async<'t> or Task<'t>" func.FieldName
                     | _ -> failwithf "Expected field %s to have a return type of Async<'t> or Task<'t>" func.FieldName
 
+                // Phase 843 — the key the JSON algebra's registry is read
+                // by: the same `System.Type` the binary branch above hands
+                // its serializer, so one registration identifies one type
+                // identically on both wires.
+                let returnClrType = getReturnType fieldType
+
                 fun requestBody -> async {
                     // make plain RPC request and let it go through the deserialization pipeline
                     let! response =
@@ -407,8 +413,43 @@ module Proxy =
 
                     match response.StatusCode with
                     | 200 ->
-                        let parsedJson = SimpleJson.parseNative response.ResponseBody
-                        return Convert.fromJsonAs parsedJson returnType
+                        // Phase 843 — the opt-in branch, the JSON twin of
+                        // `withBinarySerialization`'s. A return type with a
+                        // registered JSON algebra decoder is read ONCE from
+                        // the response text into the lexical value model
+                        // (`JsonText`, numbers kept as written) and decoded
+                        // by total combinators; a malformed body is a named
+                        // refusal on the same `ProxyRequestException` the
+                        // binary path raises, never an exception from
+                        // inside the parse. A MISS is the reflection path
+                        // below, unchanged, so a consumer that registers
+                        // nothing sees nothing different (GP 11). The
+                        // lookup is per call, as the binary branch's is:
+                        // registration happens at composition and need not
+                        // precede the proxy's construction.
+                        match ToolUp.Remoting.Json.JsonDecoders.tryGet returnClrType with
+                        | Some decoder ->
+                            match
+                                ToolUp.Remoting.Json.JsonText.tryParse response.ResponseBody
+                                |> Result.bind decoder
+                            with
+                            | Ok value -> return value
+                            | Error error ->
+                                return!
+                                    raise (
+                                        ProxyRequestException(
+                                            response,
+                                            sprintf
+                                                "The server's response to %s did not decode: %s"
+                                                url
+                                                (DecodeError.render error),
+                                            response.ResponseBody,
+                                            Some error
+                                        )
+                                    )
+                        | None ->
+                            let parsedJson = SimpleJson.parseNative response.ResponseBody
+                            return Convert.fromJsonAs parsedJson returnType
                     | 500 ->
                         return!
                             raise (
