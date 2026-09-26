@@ -52,6 +52,7 @@
         <Compile Include="Contracts\IJobSchedulerContract.fs" />
         <Compile Include="Contracts\IModuleQueryBusContract.fs" />
         <Compile Include="Contracts\IDataSourceContract.fs" />
+        <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
         <Compile Include="Contracts\IOAuthStateStoreContract.fs" />
         <Compile Include="Contracts\IOAuthCredentialFlowContract.fs" />
         <!-- Phase 10g — OAuth 1.0a flow conformance pack. -->

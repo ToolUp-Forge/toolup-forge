@@ -189,6 +189,7 @@ let private registeredTests =
         ScheduledJobDeclarationTests.tests
         ModuleQueryBusTests.tests
         InMemoryDataSourceTests.tests
+        InMemoryDataSourceTests.payloadFormatTests
         DataIngestorTests.tests
         // Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store +
         // IOAuth1aFlow conformance pack).
