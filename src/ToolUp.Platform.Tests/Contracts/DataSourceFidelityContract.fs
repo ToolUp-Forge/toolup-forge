@@ -875,6 +875,7 @@ type FixtureSource(defect: Defect) =
                     Name = column.Name
                     DataType = dataType
                     Nullable = nullable
+                    AbsentSentinels = None
                 })
     }
 
