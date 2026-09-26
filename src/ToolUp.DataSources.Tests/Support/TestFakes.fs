@@ -98,3 +98,12 @@ let env (name: string) : string option =
 /// variables instead of six.
 let envOr (name: string) (fallback: string) : string =
     env name |> Option.defaultValue fallback
+
+/// Phase 834 — the format a connector declares EXPLICITLY. Fails when the
+/// connector does not implement `IDeclaresPayloadFormat` at all, because
+/// `PayloadFormat.declaredBy` would answer `Csv` for it by default and a
+/// "declares Csv" assertion over the default would pass vacuously.
+let declaredFormat (source: IDataSource) : PayloadFormat =
+    match box source with
+    | :? IDeclaresPayloadFormat as declared -> declared.PayloadFormat
+    | _ -> failwith $"connector '{source.Kind}' does not implement IDeclaresPayloadFormat"

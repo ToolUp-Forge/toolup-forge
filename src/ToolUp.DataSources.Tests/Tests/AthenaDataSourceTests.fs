@@ -119,6 +119,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal AthenaDataSource.Kind "Athena" "Kind constant"
             Expect.equal (AthenaDataSource.createWithDefaultCredentials ()).Kind "Athena" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (AthenaDataSource.createWithDefaultCredentials ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
 
         testCaseAsync "a misconfigured ConnectionScope fails before any AWS call"

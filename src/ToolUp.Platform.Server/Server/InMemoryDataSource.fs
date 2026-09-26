@@ -78,4 +78,10 @@ type InMemoryDataSource() =
                 return Error(SchemaMismatch $"InMemoryDataSource: no content seeded for ({ctx.Config.Id}, {sql})")
         }
 
+    // Phase 834 — seeded bytes are returned verbatim and the family's
+    // convention is CSV, so this source declares `Csv` explicitly rather
+    // than by omission.
+    interface IDeclaresPayloadFormat with
+        member _.PayloadFormat = PayloadFormat.Csv
+
 let create () = InMemoryDataSource()

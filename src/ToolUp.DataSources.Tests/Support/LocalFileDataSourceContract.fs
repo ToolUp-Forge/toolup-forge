@@ -83,6 +83,11 @@ let tests (name: string) (factory: unit -> LocalFileTarget) =
             Expect.isNonEmpty target.Source.Kind "Kind discriminator must not be empty"
         }
 
+        test "declares its payload format as Csv explicitly (Phase 834)" {
+            let target = factory ()
+            Expect.equal (TestFakes.declaredFormat target.Source) PayloadFormat.Csv "declared format"
+        }
+
         testCaseAsync "Connect succeeds once a file is present"
         <| async {
             let target = factory ()

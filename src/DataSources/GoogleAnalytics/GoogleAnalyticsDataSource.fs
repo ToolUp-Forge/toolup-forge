@@ -464,4 +464,9 @@ let create
                 | Error e -> return Error e
                 | Ok accessToken -> return! transport.RunReport(accessToken, requestJson)
         }
+      // Phase 834 — `Query` emits the documented JSON report envelope
+      // (see `GoogleAnalyticsLiveTransport`), not CSV: declared so the
+      // stored payload says so.
+      interface IDeclaresPayloadFormat with
+          member _.PayloadFormat = PayloadFormat.Json
     }

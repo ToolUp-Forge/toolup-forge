@@ -108,6 +108,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal BigQueryDataSource.Kind "BigQuery" "Kind constant"
             Expect.equal (BigQueryDataSource.createWithDefaultCredentials ()).Kind "BigQuery" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (BigQueryDataSource.createWithDefaultCredentials ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
     ]
 

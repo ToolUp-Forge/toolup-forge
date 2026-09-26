@@ -351,6 +351,10 @@ type private CsvDataSourceImpl(storage: IBlobStorage) =
             | Ok settings -> return! body settings
         })
 
+    // Phase 834 — `Query` emits RFC 4180 CSV; declared, not implied.
+    interface IDeclaresPayloadFormat with
+        member _.PayloadFormat = PayloadFormat.Csv
+
     interface IDataSource with
         member _.Kind = Kind
 

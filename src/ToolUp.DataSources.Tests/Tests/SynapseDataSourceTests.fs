@@ -202,6 +202,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal SynapseDataSource.Kind "Synapse" "Kind constant"
             Expect.equal (SynapseDataSource.createWithDefaultCredentials ()).Kind "Synapse" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (SynapseDataSource.createWithDefaultCredentials ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
 
         testCaseAsync "SQL auth with no credential is CredentialMissing, not a connection attempt"

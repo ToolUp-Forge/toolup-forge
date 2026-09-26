@@ -235,6 +235,12 @@ let private connectorTests =
             Expect.equal source.Kind "GoogleAnalytics" "Kind routes DataSourceConfig.Kind = \"GoogleAnalytics\""
         }
 
+        test "declares its payload format as Json — the report envelope, not CSV (Phase 834)" {
+            let source, _ = mkConnector None
+            Expect.isTrue (box source :? IDeclaresPayloadFormat) "declared explicitly, not by default"
+            Expect.equal (PayloadFormat.declaredBy source) PayloadFormat.Json "declared format"
+        }
+
         testCaseAsync "Connect registers a Phase 10h refresh descriptor pointing at the substrate's own token key"
         <| async {
             let refresher = RecordingRefresher()

@@ -223,6 +223,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal SnowflakeDataSource.Kind "Snowflake" "Kind constant"
             Expect.equal (SnowflakeDataSource.createWithKeyFile ()).Kind "Snowflake" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (SnowflakeDataSource.createWithKeyFile ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
 
         testCaseAsync "password auth with no credential is CredentialMissing"

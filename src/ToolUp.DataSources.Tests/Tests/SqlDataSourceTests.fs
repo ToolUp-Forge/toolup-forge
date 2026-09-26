@@ -339,6 +339,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal SqlDataSource.Kind "Sql" "Kind constant"
             Expect.equal (SqlDataSource.createWithoutSecrets ()).Kind "Sql" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (SqlDataSource.createWithoutSecrets ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
 
         test "createWithKind lets a deployment route by backend name instead" {

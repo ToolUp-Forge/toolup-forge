@@ -129,6 +129,11 @@ let private kindTests =
         test "the connector answers to the documented Kind" {
             Expect.equal RedshiftDataSource.Kind "Redshift" "Kind constant"
             Expect.equal (RedshiftDataSource.createWithDefaultCredentials ()).Kind "Redshift" "instance Kind"
+
+            Expect.equal
+                (TestFakes.declaredFormat (RedshiftDataSource.createWithDefaultCredentials ()))
+                PayloadFormat.Csv
+                "declares Csv explicitly (Phase 834)"
         }
 
         testCaseAsync "a misconfigured ConnectionScope fails before any AWS call"

@@ -75,18 +75,89 @@ type IDataSource =
     abstract GetSchema: ctx: DataSourceCallContext * table: string -> Async<Result<TableSchema, IngestionError>>
 
     /// Run a query and return the raw bytes the source produced.
-    /// **The connector does not choose the format** — the ingestor
-    /// writes the bytes through `IDataObjectStore.Save` with
-    /// `Versioned` policy, opaque to the storage layer. Modules
-    /// that read those bytes back are responsible for parsing
-    /// (typically as CSV, JSON, or Parquet according to the
-    /// connector's documented output).
+    /// The ingestor writes the bytes through `IDataObjectStore.Save`
+    /// with `Versioned` policy, opaque to the storage layer. **The
+    /// format of those bytes is DECLARED, not documented** (Phase 834):
+    /// a connector states it by also implementing
+    /// `IDeclaresPayloadFormat`, `PayloadFormat.declaredBy` reads it
+    /// (a connector that declares nothing is `PayloadFormat.Csv`), and
+    /// the ingestor records it on the stored payload as
+    /// `IngestedPayload.ContentFormatKey` — so a module reading the
+    /// bytes back asks the payload, never the connector's docs.
     ///
     /// `sql` is connector-specific syntax. BigQuery uses standard
     /// SQL, REST connectors may interpret it as a query parameter
     /// string, in-memory fakes may treat it as a table name lookup.
     /// Connectors document their dialect.
     abstract Query: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
+
+// ─── PayloadFormat — what `IDataSource.Query` bytes ARE (Phase 834) ───
+//
+// "The bytes are CSV" used to live in a doc comment: nothing recorded it
+// and nothing enforced it, so a connector returning anything else failed
+// weeks later in whichever module parsed the payload. The format is now a
+// declared property of the connector contract.
+//
+// **Why a companion interface, not a member on `IDataSource`.** F# cannot
+// author a default interface member (`default` in a type makes it an
+// abstract class — FS0887 at the implementer), and a new ABSTRACT member
+// on `IDataSource` would break every implementation, including a
+// consumer's own, at compile time and at type load. So the declaration is
+// `IDeclaresPayloadFormat`, implemented alongside `IDataSource`, and the
+// default lives in ONE reader, `PayloadFormat.declaredBy`: a connector
+// that declares nothing is `Csv` — what the family emitted before the
+// type existed — so an existing implementation, recompiled or not, keeps
+// working with no edit (GP 11).
+
+/// Phase 834 — the format of the bytes a connector's `IDataSource.Query`
+/// returns. Names what the shipped connector family actually emits.
+[<RequireQualifiedAccess>]
+type PayloadFormat =
+    /// RFC 4180 CSV with a header row, UTF-8. The family default and the
+    /// answer for a connector that declares nothing.
+    | Csv
+    /// A JSON document whose shape the connector documents (the Google
+    /// Analytics connector's report envelope).
+    | Json
+    /// A format this SDK version does not name. The shipped ingestor
+    /// refuses it at ingestion — naming the connector — before anything is
+    /// persisted, rather than storing bytes no reader can parse.
+    | Other of name: string
+
+/// Phase 834 — implemented alongside `IDataSource` by a connector that
+/// declares the format of its `Query` bytes. Optional by design: a
+/// connector that does not implement it is read as `PayloadFormat.Csv`
+/// (see `PayloadFormat.declaredBy`).
+type IDeclaresPayloadFormat =
+    /// The format every `Query` result of this connector is in. A constant
+    /// of the connector, not a per-call answer.
+    abstract PayloadFormat: PayloadFormat
+
+/// Phase 834 — reading a connector's declared format and its stored token.
+module PayloadFormat =
+
+    /// The token recorded in payload metadata: `"csv"`, `"json"`, or the
+    /// `Other` case's own name.
+    let token (format: PayloadFormat) : string =
+        match format with
+        | PayloadFormat.Csv -> "csv"
+        | PayloadFormat.Json -> "json"
+        | PayloadFormat.Other name -> name
+
+    /// Inverse of `token`. Any token other than `"csv"` / `"json"` reads
+    /// as `Other` carrying that token.
+    let ofToken (value: string) : PayloadFormat =
+        match value with
+        | "csv" -> PayloadFormat.Csv
+        | "json" -> PayloadFormat.Json
+        | other -> PayloadFormat.Other other
+
+    /// The format a connector declares — its `IDeclaresPayloadFormat`
+    /// answer, or `Csv` for a connector that declares nothing.
+    let declaredBy (source: IDataSource) : PayloadFormat =
+        match box source with
+        | :? IDeclaresPayloadFormat as declared -> declared.PayloadFormat
+        | _ -> PayloadFormat.Csv
 
 // ─── IngestedPayload — the schema an ingested payload carries (Phase 832) ───
 //
@@ -127,6 +198,13 @@ module IngestedPayload =
     /// no earlier recorded schema to compare with.
     [<Literal>]
     let SchemaDriftKey = "schema-drift"
+
+    /// Payload metadata key naming the declared format of the payload's
+    /// bytes (Phase 834) — `PayloadFormat.token` of the connector's
+    /// `PayloadFormat.declaredBy`. Distinct from `PayloadFormatKey`, which
+    /// versions the metadata convention rather than naming the bytes.
+    [<Literal>]
+    let ContentFormatKey = "content-format"
 
     /// The payload-format token this SDK version writes.
     [<Literal>]
@@ -205,6 +283,13 @@ module IngestedPayload =
     /// before Phase 832.
     let payloadFormat (payload: DataObject) : string option =
         Map.tryFind PayloadFormatKey payload.Metadata
+
+    /// The declared format of the payload's bytes (Phase 834). `None` for a
+    /// payload written before Phase 834, whose bytes were CSV by convention
+    /// rather than by declaration.
+    let contentFormat (payload: DataObject) : PayloadFormat option =
+        Map.tryFind ContentFormatKey payload.Metadata
+        |> Option.map PayloadFormat.ofToken
 
     /// Whether the run that wrote this payload observed a schema different
     /// from the one last recorded for the same `(source, table)`. `None`

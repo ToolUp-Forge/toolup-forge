@@ -80,6 +80,15 @@ let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : A
 /// Mirrors the `ResultObjectId.make` pattern from Phase 8.
 let private resultObjectId (sourceId: DataSourceId) (table: string) = $"_dataingestion__{sourceId}__{table}"
 
+/// Phase 834 — the payload formats this ingestor stores. It holds payload
+/// bytes opaquely, so "handles" means "a format this SDK names and a
+/// reader can be told about": `Csv` and `Json`. `Other` is refused.
+let private handlesPayloadFormat (format: PayloadFormat) =
+    match format with
+    | PayloadFormat.Csv
+    | PayloadFormat.Json -> true
+    | PayloadFormat.Other _ -> false
+
 // ─── DataIngestor ─────────────────────────────────────────────────
 //
 // Default `IDataIngestor` implementation. Resolves the config + the
@@ -239,7 +248,22 @@ type DataIngestor
                     do! recordRun run
                     do! emitEvent scopeId RunFailedEventType run
                     return Error err
+                // 2b. The connector's declared payload format (Phase 834). A
+                // format this ingestor cannot handle is refused HERE, at the
+                // connector boundary and naming the connector, before any
+                // probe, query or persistence — not weeks later in whichever
+                // module parses the payload.
+                | Some connector when not (handlesPayloadFormat (PayloadFormat.declaredBy connector)) ->
+                    let err =
+                        SchemaMismatch
+                            $"Connector '{connector.Kind}' declares payload format '{PayloadFormat.token (PayloadFormat.declaredBy connector)}', which this ingestor does not handle; nothing was persisted"
+
+                    let run = runFailed scopeId sourceId table runId startedAt err None
+                    do! recordRun run
+                    do! emitEvent scopeId RunFailedEventType run
+                    return Error err
                 | Some connector ->
+                    let payloadFormat = PayloadFormat.declaredBy connector
 
                     // 3. Resolve credential. `None` is permitted at this
                     // stage — connectors that don't need a credential
@@ -310,6 +334,7 @@ type DataIngestor
                                         "table", table
                                         "connector-kind", config.Kind
                                         IngestedPayload.PayloadFormatKey, IngestedPayload.CurrentPayloadFormat
+                                        IngestedPayload.ContentFormatKey, PayloadFormat.token payloadFormat
                                     ]
                                     @ schemaKeys
                                 )

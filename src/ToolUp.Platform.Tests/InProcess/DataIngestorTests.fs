@@ -52,6 +52,33 @@ let private failingSchema (inner: IDataSource) (throws: bool) =
         member _.Query(ctx, sql) = inner.Query(ctx, sql)
     }
 
+/// A connector that delegates everything and declares NOTHING — the
+/// shape of every `IDataSource` written before Phase 834.
+let private undeclared (inner: IDataSource) =
+    { new IDataSource with
+        member _.Kind = inner.Kind
+        member _.Connect ctx = inner.Connect ctx
+        member _.ListTables ctx = inner.ListTables ctx
+        member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
+        member _.Query(ctx, sql) = inner.Query(ctx, sql)
+    }
+
+/// A delegating connector that declares `format`, recording whether its
+/// `Query` was ever called.
+let private declaring (format: PayloadFormat) (queried: bool ref) (inner: IDataSource) =
+    { new IDataSource with
+        member _.Kind = inner.Kind
+        member _.Connect ctx = inner.Connect ctx
+        member _.ListTables ctx = inner.ListTables ctx
+        member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
+
+        member _.Query(ctx, sql) =
+            queried.Value <- true
+            inner.Query(ctx, sql)
+      interface IDeclaresPayloadFormat with
+          member _.PayloadFormat = format
+    }
+
 type private Rig = {
     Ingestor: IDataIngestor
     Store: IDataObjectStore
@@ -271,4 +298,113 @@ let tests =
                 None
                 "malformed reads None"
         }
+
+        testList "the declared payload format (Phase 834)" [
+
+            test "a connector that declares nothing reads Csv and ingests exactly as before" {
+                // A plain delegating implementation — NOT an
+                // `IDeclaresPayloadFormat` — is what every pre-834
+                // implementation, a consumer's own included, looks like.
+                let r = rigWith undeclared
+                let csv = "id,amount,region\n1,2.5,EU\n"
+                seed r csv baseSchema
+
+                Expect.isFalse
+                    (box (undeclared (r.Source :> IDataSource)) :? IDeclaresPayloadFormat)
+                    "the probe connector really declares nothing"
+
+                Expect.equal
+                    (PayloadFormat.declaredBy (undeclared (r.Source :> IDataSource)))
+                    PayloadFormat.Csv
+                    "the default is Csv"
+
+                let payload = ingest r
+
+                let bytes =
+                    r.Store.GetContent(scopeId, payload.ContentHash) |> Async.RunSynchronously
+
+                Expect.equal bytes (Ok(Encoding.UTF8.GetBytes csv)) "bytes stored unchanged"
+                Expect.equal (IngestedPayload.contentFormat payload) (Some PayloadFormat.Csv) "recorded as csv"
+                Expect.isSome (IngestedPayload.schemaRef payload) "832's schema write is unaffected"
+            }
+
+            test "the in-memory source declares Csv and it reaches the payload metadata" {
+                let r = rig ()
+                seed r "id\n1\n" baseSchema
+
+                Expect.equal
+                    (PayloadFormat.declaredBy (r.Source :> IDataSource))
+                    PayloadFormat.Csv
+                    "InMemoryDataSource declares Csv"
+
+                let payload = ingest r
+
+                Expect.equal
+                    (Map.tryFind IngestedPayload.ContentFormatKey payload.Metadata)
+                    (Some "csv")
+                    "metadata token"
+
+                Expect.equal (IngestedPayload.contentFormat payload) (Some PayloadFormat.Csv) "reader accessor"
+            }
+
+            test "a connector declaring Json has Json recorded — what it declared, not what was assumed" {
+                let r = rigWith (declaring PayloadFormat.Json (ref false))
+                seed r "{\"rows\":[]}" baseSchema
+                let payload = ingest r
+
+                Expect.equal
+                    (Map.tryFind IngestedPayload.ContentFormatKey payload.Metadata)
+                    (Some "json")
+                    "metadata token"
+
+                Expect.equal (IngestedPayload.contentFormat payload) (Some PayloadFormat.Json) "reader accessor"
+            }
+
+            test "a format the ingestor does not handle is refused at ingestion, named, with nothing persisted" {
+                let queried = ref false
+                let r = rigWith (declaring (PayloadFormat.Other "avro") queried)
+                seed r "id\n1\n" baseSchema
+
+                match r.Ingestor.RunIngestion(scopeId, sourceId, table) |> Async.RunSynchronously with
+                | Ok run -> failtest $"expected a refusal, got a run with status {run.Status}"
+                | Error(SchemaMismatch message) ->
+                    Expect.stringContains message "'InMemory'" "names the connector"
+                    Expect.stringContains message "'avro'" "names the declared format"
+                | Error other -> failtest $"expected the named format refusal, got {other}"
+
+                Expect.isFalse queried.Value "refused before the source was queried"
+
+                let objects = r.Blobs.List(scopeId, "objects/") |> Async.RunSynchronously
+                Expect.isEmpty objects "no payload, schema or content object was persisted"
+
+                let runs = r.Ingestor.GetRecentRuns(scopeId, sourceId, 5) |> Async.RunSynchronously
+
+                Expect.equal
+                    (runs |> List.map _.Status)
+                    [ IngestionStatus.Failed ]
+                    "the failed attempt is still on record"
+            }
+
+            test "tokens round-trip, and a payload written before Phase 834 has no content format" {
+                for format in [ PayloadFormat.Csv; PayloadFormat.Json; PayloadFormat.Other "avro" ] do
+                    Expect.equal (PayloadFormat.ofToken (PayloadFormat.token format)) format $"{format}"
+
+                let r = rig ()
+
+                let legacy =
+                    r.Store.Save(
+                        scopeId,
+                        "_dataingestion__legacy__t",
+                        Encoding.UTF8.GetBytes "id\n1\n",
+                        "data-ingestion",
+                        "_system",
+                        Map.ofList [ "source-id", "legacy"; "table", "t"; "connector-kind", "InMemory" ],
+                        Versioned
+                    )
+                    |> Async.RunSynchronously
+                    |> Result.defaultWith (fun e -> failtest $"save failed: {e}")
+
+                Expect.equal (IngestedPayload.contentFormat legacy) None "no declaration recorded"
+            }
+        ]
     ]

@@ -5360,6 +5360,8 @@ ToolUp.Platform.IDatasetStore.GetLatest(System.String, System.String) : Microsof
 ToolUp.Platform.IDatasetStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.IDatasetStore.ListVersions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetVersion]]
 ToolUp.Platform.IDatasetStore.ReadPage(System.String, System.String, System.Int32, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDeclaresPayloadFormat (interface)
+ToolUp.Platform.IDeclaresPayloadFormat.PayloadFormat : ToolUp.Platform.PayloadFormat { get }
 ToolUp.Platform.IDeployPipeline (interface)
 ToolUp.Platform.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp.Platform.DeployManifest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
@@ -6182,11 +6184,13 @@ ToolUp.Platform.InTotoSubject..ctor(System.String, Microsoft.FSharp.Collections.
 ToolUp.Platform.InTotoSubject.Digest : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Platform.InTotoSubject.Name : System.String { get }
 ToolUp.Platform.IngestedPayload (class)
+ToolUp.Platform.IngestedPayload.ContentFormatKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.CurrentPayloadFormat : System.String (literal)
 ToolUp.Platform.IngestedPayload.PayloadFormatKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.SchemaDataType : System.String (literal)
 ToolUp.Platform.IngestedPayload.SchemaDriftKey : System.String (literal)
 ToolUp.Platform.IngestedPayload.SchemaRefKey : System.String (literal)
+ToolUp.Platform.IngestedPayload.contentFormat(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PayloadFormat]
 ToolUp.Platform.IngestedPayload.payloadFormat(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.IngestedPayload.readSchema(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.DataObject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]]
 ToolUp.Platform.IngestedPayload.schemaDrift(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
@@ -7786,6 +7790,23 @@ ToolUp.Platform.OwnerTeamBootstrapLifecycle (class)
 ToolUp.Platform.OwnerTeamBootstrapLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.OwnerTeamBootstrapLifecycle+OwnerTeamBootstrapLifecycle (class)
 ToolUp.Platform.OwnerTeamBootstrapLifecycle+OwnerTeamBootstrapLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.PayloadFormat (class)
+ToolUp.Platform.PayloadFormat.Csv : ToolUp.Platform.PayloadFormat { get }
+ToolUp.Platform.PayloadFormat.IsCsv : System.Boolean { get }
+ToolUp.Platform.PayloadFormat.IsJson : System.Boolean { get }
+ToolUp.Platform.PayloadFormat.IsOther : System.Boolean { get }
+ToolUp.Platform.PayloadFormat.Json : ToolUp.Platform.PayloadFormat { get }
+ToolUp.Platform.PayloadFormat.Tag : System.Int32 { get }
+ToolUp.Platform.PayloadFormat+Other (class)
+ToolUp.Platform.PayloadFormat+Other.name : System.String { get }
+ToolUp.Platform.PayloadFormat+Tags (class)
+ToolUp.Platform.PayloadFormat+Tags.Csv : System.Int32 (literal)
+ToolUp.Platform.PayloadFormat+Tags.Json : System.Int32 (literal)
+ToolUp.Platform.PayloadFormat+Tags.Other : System.Int32 (literal)
+ToolUp.Platform.PayloadFormatModule (class)
+ToolUp.Platform.PayloadFormatModule.declaredBy(ToolUp.Platform.IDataSource) : ToolUp.Platform.PayloadFormat
+ToolUp.Platform.PayloadFormatModule.ofToken(System.String) : ToolUp.Platform.PayloadFormat
+ToolUp.Platform.PayloadFormatModule.token(ToolUp.Platform.PayloadFormat) : System.String
 ToolUp.Platform.PeerBearerAuthMiddleware (class)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerBearerSourceModule : System.String (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerNameHeader : System.String (literal)
