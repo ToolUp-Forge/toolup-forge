@@ -7,6 +7,7 @@ ColumnMapping (class)
 ColumnMapping.applyTransform(ColumnMappingTypes+CellTransform, System.String) : System.String
 ColumnMapping.applyTransforms(Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform], System.String) : System.String
 ColumnMapping.columnExprRefs(ColumnMappingTypes+ColumnExpr) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ColumnMapping.columnTypeOfDeclared(System.String) : Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+ColumnType]
 ColumnMapping.describeColumnExpr(ColumnMappingTypes+ColumnExpr) : System.String
 ColumnMapping.describeColumnRemediation(System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ColumnMapping.describeDerivedColumn(ColumnMappingTypes+DerivedColumn) : System.String
@@ -15,6 +16,7 @@ ColumnMapping.inferColumnType(Microsoft.FSharp.Collections.FSharpList`1[System.S
 ColumnMapping.nameSimilarity(System.String, System.String) : System.Double
 ColumnMapping.parsePreview(System.Int32, System.String) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]]
 ColumnMapping.profileColumn(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ColumnMappingTypes+ColumnProfile
+ColumnMapping.profileColumnWith(Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+ColumnDeclaration], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ColumnMappingTypes+ColumnProfile
 ColumnMapping.rewriteCsv(DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], System.String) : System.String
 ColumnMapping.rewriteCsvWithDerived(DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.String) : System.String
 ColumnMapping.suggest(System.String, DataManagementTypes+DataTypeSchema, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ColumnMappingTypes+MappingSuggestion
@@ -66,6 +68,10 @@ ColumnMappingTypes+CellTransform+Tags.StripLeadingApostrophe : System.Int32 (lit
 ColumnMappingTypes+CellTransform+Tags.StripPercent : System.Int32 (literal)
 ColumnMappingTypes+CellTransform+Tags.StripThousandsSeparators : System.Int32 (literal)
 ColumnMappingTypes+CellTransform+Tags.Trim : System.Int32 (literal)
+ColumnMappingTypes+ColumnDeclaration (class)
+ColumnMappingTypes+ColumnDeclaration..ctor(System.String, System.Boolean)
+ColumnMappingTypes+ColumnDeclaration.DeclaredNullable : System.Boolean { get }
+ColumnMappingTypes+ColumnDeclaration.DeclaredType : System.String { get }
 ColumnMappingTypes+ColumnExpr (class)
 ColumnMappingTypes+ColumnExpr.IsConcat : System.Boolean { get }
 ColumnMappingTypes+ColumnExpr.IsConstant : System.Boolean { get }
@@ -126,11 +132,14 @@ ColumnMappingTypes+ColumnMatchFlag+Tags.LowConfidence : System.Int32 (literal)
 ColumnMappingTypes+ColumnMatchFlag+Tags.TypeMismatch : System.Int32 (literal)
 ColumnMappingTypes+ColumnMatchFlag+Tags.Unmatched : System.Int32 (literal)
 ColumnMappingTypes+ColumnProfile (class)
-ColumnMappingTypes+ColumnProfile..ctor(System.String, DataManagementTypes+ColumnType, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue])
+ColumnMappingTypes+ColumnProfile..ctor(System.String, DataManagementTypes+ColumnType, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue], ColumnMappingTypes+ProfileSource, System.Boolean, ColumnMappingTypes+ProfileSource)
 ColumnMappingTypes+ColumnProfile.Column : System.String { get }
 ColumnMappingTypes+ColumnProfile.DetectedUnit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ColumnMappingTypes+ColumnProfile.InferredType : DataManagementTypes+ColumnType { get }
 ColumnMappingTypes+ColumnProfile.Issues : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue] { get }
+ColumnMappingTypes+ColumnProfile.NullabilitySource : ColumnMappingTypes+ProfileSource { get }
+ColumnMappingTypes+ColumnProfile.Nullable : System.Boolean { get }
+ColumnMappingTypes+ColumnProfile.TypeSource : ColumnMappingTypes+ProfileSource { get }
 ColumnMappingTypes+Conversion (class)
 ColumnMappingTypes+Conversion..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+CellTransform]], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.String, System.DateTime)
 ColumnMappingTypes+Conversion.CreatedAt : System.DateTime { get }
@@ -226,6 +235,15 @@ ColumnMappingTypes+MappingSuggestion..ctor(System.String, Microsoft.FSharp.Colle
 ColumnMappingTypes+MappingSuggestion.Fields : Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+FieldSuggestion] { get }
 ColumnMappingTypes+MappingSuggestion.Fingerprint : System.String { get }
 ColumnMappingTypes+MappingSuggestion.TargetTypeId : System.String { get }
+ColumnMappingTypes+ProfileSource (class)
+ColumnMappingTypes+ProfileSource.Declared : ColumnMappingTypes+ProfileSource { get }
+ColumnMappingTypes+ProfileSource.Inferred : ColumnMappingTypes+ProfileSource { get }
+ColumnMappingTypes+ProfileSource.IsDeclared : System.Boolean { get }
+ColumnMappingTypes+ProfileSource.IsInferred : System.Boolean { get }
+ColumnMappingTypes+ProfileSource.Tag : System.Int32 { get }
+ColumnMappingTypes+ProfileSource+Tags (class)
+ColumnMappingTypes+ProfileSource+Tags.Declared : System.Int32 (literal)
+ColumnMappingTypes+ProfileSource+Tags.Inferred : System.Int32 (literal)
 DataManagementTypes (class)
 DataManagementTypes.DataManagerIngestionStatusKey : System.String (literal)
 DataManagementTypes+ColumnType (class)

@@ -375,6 +375,7 @@
              against the Redis companion. -->
         <Compile Include="InProcess\DurableIngestionQueueTests.fs" />
         <Compile Include="InProcess\ColumnMatcherTests.fs" />
+        <Compile Include="InProcess\ColumnMappingTests.fs" />
         <Compile Include="InProcess\MappingDryRunValidationTests.fs" />
         <Compile Include="InProcess\DerivedColumnEvalTests.fs" />
         <Compile Include="InProcess\DataCatalogTests.fs" />

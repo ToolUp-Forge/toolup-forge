@@ -104,6 +104,8 @@ let private registeredTests =
         // the Redis companion too when TOOLUP_REDIS_CONNECTION is set.
         DurableIngestionQueueTests.tests
         ColumnMatcherTests.tests
+        // Phase 835 — the column profiler defers to a declared schema.
+        ColumnMappingTests.tests
         // Phase 218 — CSV-mapping dry-run validation preview.
         MappingDryRunValidationTests.tests
         // Phase 219 — derived/computed columns in CSV mapping.
