@@ -971,15 +971,33 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Unhealthy" 2 (Decode.list Decode.asString))
         |> Decode.apply (Decode.field "Degraded" 3 (Decode.list Decode.asString))
 
+    /// Generated decoder for `DeploymentReadiness.LiveInterfaceSummary` — one combinator per field or case, read off the type's own shape.
+    let liveInterfaceSummary: Decoder<DeploymentReadiness.LiveInterfaceSummary> =
+        Decode.succeed (fun composed hasLiveInterfaceTools liveInterfaceTools groundingMode toolAwareFramingActive note -> ({
+            Composed = composed
+            HasLiveInterfaceTools = hasLiveInterfaceTools
+            LiveInterfaceTools = liveInterfaceTools
+            GroundingMode = groundingMode
+            ToolAwareFramingActive = toolAwareFramingActive
+            Note = note
+        }: DeploymentReadiness.LiveInterfaceSummary))
+        |> Decode.apply (Decode.field "Composed" 0 Decode.asBool)
+        |> Decode.apply (Decode.field "HasLiveInterfaceTools" 1 Decode.asBool)
+        |> Decode.apply (Decode.field "LiveInterfaceTools" 2 (Decode.list Decode.asString))
+        |> Decode.apply (Decode.field "GroundingMode" 3 Decode.asString)
+        |> Decode.apply (Decode.field "ToolAwareFramingActive" 4 Decode.asBool)
+        |> Decode.apply (Decode.field "Note" 5 (Decode.option Decode.asString))
+
     /// Generated decoder for `DeploymentReadiness.DeploymentReadinessReport` — one combinator per field or case, read off the type's own shape.
     let deploymentReadinessReport: Decoder<DeploymentReadiness.DeploymentReadinessReport> =
-        Decode.succeed (fun verdict preflight smokeTests drift health generatedAt -> ({
+        Decode.succeed (fun verdict preflight smokeTests drift health generatedAt liveInterface -> ({
             Verdict = verdict
             Preflight = preflight
             SmokeTests = smokeTests
             Drift = drift
             Health = health
             GeneratedAt = generatedAt
+            LiveInterface = liveInterface
         }: DeploymentReadiness.DeploymentReadinessReport))
         |> Decode.apply (Decode.field "Verdict" 0 readinessVerdict)
         |> Decode.apply (Decode.field "Preflight" 1 preflightSummary)
@@ -987,6 +1005,7 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Drift" 3 driftSummary)
         |> Decode.apply (Decode.field "Health" 4 healthSummary)
         |> Decode.apply (Decode.field "GeneratedAt" 5 Decode.asDateTime)
+        |> Decode.apply (Decode.field "LiveInterface" 6 liveInterfaceSummary)
 
     /// Generated decoder for `VerificationSectionVerdict` — one combinator per field or case, read off the type's own shape.
     let verificationSectionVerdict: Decoder<VerificationSectionVerdict> =
@@ -2949,6 +2968,7 @@ module PlatformDecoders =
         typeof<DeploymentReadiness.SmokeSummary>.FullName
         typeof<DeploymentReadiness.DriftSummary>.FullName
         typeof<DeploymentReadiness.HealthSummary>.FullName
+        typeof<DeploymentReadiness.LiveInterfaceSummary>.FullName
         typeof<DeploymentReadiness.DeploymentReadinessReport>.FullName
         typeof<VerificationSectionVerdict>.FullName
         typeof<DeploymentVerification.ReportSection>.FullName
@@ -3275,6 +3295,7 @@ module PlatformDecoders =
         RemotingDecoders.register<DeploymentReadiness.SmokeSummary> smokeSummary
         RemotingDecoders.register<DeploymentReadiness.DriftSummary> driftSummary
         RemotingDecoders.register<DeploymentReadiness.HealthSummary> healthSummary
+        RemotingDecoders.register<DeploymentReadiness.LiveInterfaceSummary> liveInterfaceSummary
         RemotingDecoders.register<DeploymentReadiness.DeploymentReadinessReport> deploymentReadinessReport
         RemotingDecoders.register<VerificationSectionVerdict> verificationSectionVerdict
         RemotingDecoders.register<DeploymentVerification.ReportSection> reportSection
@@ -3602,6 +3623,7 @@ module PlatformDecoders =
         RemotingDecoders.verify<DeploymentReadiness.SmokeSummary> draws seed smokeSummary
         RemotingDecoders.verify<DeploymentReadiness.DriftSummary> draws seed driftSummary
         RemotingDecoders.verify<DeploymentReadiness.HealthSummary> draws seed healthSummary
+        RemotingDecoders.verify<DeploymentReadiness.LiveInterfaceSummary> draws seed liveInterfaceSummary
         RemotingDecoders.verify<DeploymentReadiness.DeploymentReadinessReport> draws seed deploymentReadinessReport
         RemotingDecoders.verify<VerificationSectionVerdict> draws seed verificationSectionVerdict
         RemotingDecoders.verify<DeploymentVerification.ReportSection> draws seed reportSection

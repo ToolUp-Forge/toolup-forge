@@ -332,4 +332,93 @@ let tests =
                 Expect.contains report.Health.Degraded "oidc-auth" "degraded probe named"
             | Error e -> failtestf "expected Ok, got Error %s" e
         }
+
+        // ── Phase 541 — live-interface posture (informational) ──────
+
+        test
+            "Phase 541 — derive: a live-interface tool ⇒ HasLiveInterfaceTools, framing active under an eligible stance" {
+            let li =
+                DeploymentReadiness.LiveInterfaceSummary.derive
+                    [ "host.read_view"; "_platform.ui.inspect"; "host.read_view" ]
+                    "Preferred"
+                    true
+
+            Expect.isTrue li.Composed "a derived posture is composed"
+            Expect.isTrue li.HasLiveInterfaceTools "tool present ⇒ true"
+            Expect.equal li.LiveInterfaceTools [ "_platform.ui.inspect"; "host.read_view" ] "sorted + distinct"
+            Expect.isTrue li.ToolAwareFramingActive "Preferred + tools ⇒ framing active"
+            Expect.isNone li.Note "nothing lopsided to note"
+        }
+
+        test "Phase 541 — derive: no live-interface tool under Preferred ⇒ false + the framing-inert note" {
+            let li = DeploymentReadiness.LiveInterfaceSummary.derive [] "Preferred" true
+
+            Expect.isFalse li.HasLiveInterfaceTools "no tool ⇒ false"
+            Expect.isFalse li.ToolAwareFramingActive "no tool ⇒ framing inactive"
+            Expect.equal li.Note (Some DeploymentReadiness.LiveInterfaceSummary.FramingInertNote) "inert note"
+
+            Expect.stringContains
+                (DeploymentReadiness.LiveInterfaceSummary.render li)
+                "UI-awareness: off"
+                "rendered line says off"
+        }
+
+        test "Phase 541 — derive: tools under a stance that carries no framing ⇒ inactive, with a note" {
+            let li =
+                DeploymentReadiness.LiveInterfaceSummary.derive [ "host.read_view" ] "Permissive" false
+
+            Expect.isTrue li.HasLiveInterfaceTools "tool present"
+            Expect.isFalse li.ToolAwareFramingActive "Permissive carries no companion"
+            Expect.isSome li.Note "the mismatch is noted"
+        }
+
+        test "Phase 541 — the live-interface posture never moves the verdict" {
+            let clean =
+                DeploymentReadiness.summarise DateTime.UtcNow cleanPreflight cleanSmoke cleanDrift cleanHealth
+
+            Expect.equal
+                clean.LiveInterface
+                DeploymentReadiness.LiveInterfaceSummary.notComposed
+                "summarise defaults the posture to notComposed"
+
+            let inert =
+                clean
+                |> DeploymentReadiness.withLiveInterface (
+                    DeploymentReadiness.LiveInterfaceSummary.derive [] "Preferred" true
+                )
+
+            Expect.equal inert.Verdict ReadinessVerdict.Ready "an inert framing path is not a readiness signal"
+        }
+
+        testCaseAsync "Phase 541 — Admin: the gatherer reports the DI-registered posture, notComposed when absent"
+        <| async {
+            let posture =
+                DeploymentReadiness.LiveInterfaceSummary.derive [ "host.read_view" ] "Preferred" true
+
+            let withPosture =
+                platformAdminContext (fun s ->
+                    s.AddSingleton<DeploymentReadiness.LiveInterfaceSummary>(posture) |> ignore)
+
+            let! reported =
+                (DeploymentReadinessReport.deploymentReadinessApi ServerConfig.defaults withPosture)
+                    .GetReadinessReport()
+
+            match reported with
+            | Ok report ->
+                Expect.equal report.LiveInterface posture "posture threaded from DI"
+                Expect.isTrue report.LiveInterface.HasLiveInterfaceTools "HasLiveInterfaceTools = true"
+            | Error e -> failtestf "expected Ok, got Error %s" e
+
+            let! absent =
+                (DeploymentReadinessReport.deploymentReadinessApi ServerConfig.defaults (platformAdminContext ignore))
+                    .GetReadinessReport()
+
+            match absent with
+            | Ok report ->
+                Expect.equal
+                    report.LiveInterface
+                    DeploymentReadiness.LiveInterfaceSummary.notComposed
+                    "nothing registered ⇒ notComposed, never a fabricated false"
+            | Error e -> failtestf "expected Ok, got Error %s" e
+        }
     ]
