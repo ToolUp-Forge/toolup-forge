@@ -182,6 +182,17 @@ let sweepScope
                         let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
                         let! _ = storage.Delete(container, rawBlobName)
 
+                        // Phase 504.C — a note's body is not at the
+                        // convention path (see `noteBodyBlobName`); the
+                        // same branch `deleteDocument` takes, so an
+                        // expired note leaves no residual blob either.
+                        match doc.Source with
+                        | Note _ ->
+                            let! _ = storage.Delete(container, noteBodyBlobName doc.Id)
+                            ()
+                        | UploadedFile
+                        | FromNarrative _ -> ()
+
                         match doc.ContentHash with
                         | Some hash -> do! hashIndex.Remove hash doc.Id
                         | None -> ()

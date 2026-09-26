@@ -545,3 +545,34 @@ type DataSubjectRequestAuditPayload = {
     /// affected at ErasureCompleted, etc.). Empty for RequestStarted.
     Properties: Map<string, string>
 }
+
+/// Phase 504 — the conversation retention sweep purged one or more AI
+/// conversations from a scope. One row per run that removed something;
+/// a run that expired nothing writes no row (a purge trail records
+/// deletions, not the absence of them), mirroring
+/// `KnowledgeDocumentsPurged`.
+///
+/// The conversation ids ARE recorded, unlike `ConversationErased`: a
+/// retention purge is a scope-level housekeeping act keyed by
+/// conversation id, not by data subject, and a count alone cannot be
+/// reconciled against the store afterwards. The ids are opaque GUIDs
+/// and name no user.
+type ConversationsPurgedPayload = {
+    /// Scope whose conversations were swept (GP 4: one scope per run).
+    ScopeId: string
+    /// Conversation ids removed by this run, oldest activity first.
+    ConversationIds: string list
+    /// `ConversationIds.Length`, denormalised so a sink can aggregate
+    /// without parsing the list.
+    PurgedCount: int
+    /// The age limit in whole seconds that selected them, when the
+    /// policy set one — the row carries the policy that produced it.
+    MaxAgeSeconds: int64 option
+    /// The count limit, when the policy set one.
+    MaxCount: int option
+    /// Conversations the sweep selected but could not fully remove
+    /// (a sibling blob's delete failed). Non-zero means the next sweep
+    /// retries them; the trail carries the same loud signal the
+    /// operator log does (GP 9).
+    FailedCount: int
+}

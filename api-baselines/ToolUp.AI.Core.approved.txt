@@ -424,6 +424,15 @@ ToolUp.AI.ConversationMessage.RetrievedSources : Microsoft.FSharp.Collections.FS
 ToolUp.AI.ConversationMessage.Timestamp : System.DateTime { get }
 ToolUp.AI.ConversationMessage.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord] { get }
 ToolUp.AI.ConversationMessage.Verification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification] { get }
+ToolUp.AI.ConversationRetentionPolicy (class)
+ToolUp.AI.ConversationRetentionPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)
+ToolUp.AI.ConversationRetentionPolicy.MaxAge : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.AI.ConversationRetentionPolicy.MaxCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.AI.ConversationRetentionPolicy.SweepSchedule : System.String { get }
+ToolUp.AI.ConversationRetentionPolicyModule (class)
+ToolUp.AI.ConversationRetentionPolicyModule.isInert(ToolUp.AI.ConversationRetentionPolicy) : System.Boolean
+ToolUp.AI.ConversationRetentionPolicyModule.retainForever : ToolUp.AI.ConversationRetentionPolicy { get }
+ToolUp.AI.ConversationRetentionPolicyModule.selectExpired(System.DateTime, ToolUp.AI.ConversationRetentionPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Guid, System.DateTime]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Guid]
 ToolUp.AI.DisclosedFact (class)
 ToolUp.AI.DisclosedFact..ctor(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict, System.String)
 ToolUp.AI.DisclosedFact.FactId : System.String { get }

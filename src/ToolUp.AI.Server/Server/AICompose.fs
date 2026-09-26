@@ -1155,3 +1155,60 @@ let withAI
     (app: ServerApp)
     : ServerApp =
     AIServerApp.createFrom factory providerProfile app |> configure |> composeAI
+
+// ─── Phase 504 — conversation retention / TTL policy ─────────────
+
+let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
+    app with
+        Extensions = {
+            app.Extensions with
+                ServiceConfig =
+                    match app.Extensions.ServiceConfig with
+                    | None -> Some register
+                    | Some baseFn -> Some(fun s -> register (baseFn s))
+        }
+}
+
+/// Compose a scheduled retention sweep over AI conversations (Phase
+/// 504.B). `scopes` are the scope ids the sweep visits, one job per
+/// scope — the same list `withKnowledgeRetention` takes, because a
+/// job handler cannot discover the containers it should visit. An
+/// empty list schedules nothing, which is honest.
+///
+/// **`retainForever` registers nothing.** An inert policy (no `MaxAge`
+/// and no `MaxCount`) short-circuits before any hosted service or
+/// scheduler entry is created, so a deployment that never calls this —
+/// or calls it with the default — is byte-for-byte its pre-504 self
+/// (GP 11 / GP 13). With `JobScheduler = NoJobScheduler` the deferred
+/// declaration logs the mismatch at startup and nothing runs.
+///
+/// Registration is deferred to `IHostedService.StartAsync` via
+/// `DeferredScheduledJobDeclaration`: the handler resolves
+/// `IBlobStorage` / `IAuditLog` from the built provider on every run,
+/// so nothing is captured at compose time (GP 12 rule 4). Each run
+/// that purges anything writes one `ConversationsPurged` audit row and
+/// removes every sibling blob a `DeleteConversation` would — the two
+/// share `ConversationRetention.deleteSiblings`.
+let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
+    let register (s: IServiceCollection) =
+        let withPolicy = s.AddSingleton<ConversationRetentionPolicy>(policy)
+
+        if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
+            withPolicy
+        else
+            withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    DeferredScheduledJobDeclaration.hostedService
+                        "AI conversation retention sweep"
+                        [
+                            DeferredScheduledJobDeclaration.create (fun provider ->
+                                ScheduledJobDeclaration.create
+                                    ConversationRetention.SweepHandlerName
+                                    (ConversationRetentionSweepJobHandler(provider, policy) :> IJobHandler)
+                                    (Trigger.CronTrigger policy.SweepSchedule)
+                                |> ScheduledJobDeclaration.withScopes scopes)
+                        ]
+                        sp)
+            )
+
+    app |> withServiceConfig register
