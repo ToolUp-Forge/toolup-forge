@@ -25,6 +25,7 @@ open ToolUp.AI.AICompose
 /// shape `ServerApp.AITools` holds. Append new UI-awareness tools here.
 let tools: (AIToolDefinition * (Microsoft.AspNetCore.Http.HttpContext -> string -> Async<string>)) list = [
     InspectActiveModuleTool.toolDefinition, InspectActiveModuleTool.serverExecutor
+    ListActiveActionsTool.toolDefinition, ListActiveActionsTool.serverExecutor
 ]
 
 /// Register the companion's tools on an AI server app. Idempotent: a

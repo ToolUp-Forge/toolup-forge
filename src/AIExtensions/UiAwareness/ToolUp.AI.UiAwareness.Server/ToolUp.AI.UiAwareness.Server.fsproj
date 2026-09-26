@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Server\InspectActiveModuleTool.fs" />
+    <Compile Include="Server\ListActiveActionsTool.fs" />
     <Compile Include="Server\AICompose.fs" />
   </ItemGroup>
   <ItemGroup>

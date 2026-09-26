@@ -9,3 +9,6 @@ ToolUp.AI.UiAwareness.Server.AICompose.tools : Microsoft.FSharp.Collections.FSha
 ToolUp.AI.UiAwareness.Server.InspectActiveModuleTool (class)
 ToolUp.AI.UiAwareness.Server.InspectActiveModuleTool.serverExecutor(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.UiAwareness.Server.InspectActiveModuleTool.toolDefinition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.AI.UiAwareness.Server.ListActiveActionsTool (class)
+ToolUp.AI.UiAwareness.Server.ListActiveActionsTool.serverExecutor(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.AI.UiAwareness.Server.ListActiveActionsTool.toolDefinition : ToolUp.Platform.AIToolDefinition { get }

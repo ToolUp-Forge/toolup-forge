@@ -198,6 +198,8 @@
         <Compile Include="ModuleInspectStateTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
+        <!-- Phase 542 - the UI-awareness companion's list_active_actions executor. -->
+        <Compile Include="ListActiveActionsTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

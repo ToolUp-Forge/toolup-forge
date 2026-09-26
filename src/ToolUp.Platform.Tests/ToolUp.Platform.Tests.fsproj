@@ -1227,6 +1227,9 @@
         <!-- Phase 540 - IUiInspectionContract bound to the forge-native
              companion and a side-panel-only reference provider. -->
         <Compile Include="InProcess\UiInspectionContractBindings.fs" />
+        <!-- Phase 542 - `_platform.ui.list_active_actions`, the narrower
+             action-states-only sibling of the Phase 537 inspect tool. -->
+        <Compile Include="InProcess\ListActiveActionsToolTests.fs" />
         <!-- Phase 489 - MCP server host + agent principals: protocol
              conformance over a client fixture that speaks JSON-RPC 2.0,
              grant-filtered discovery pinned from both sides, an ungranted
