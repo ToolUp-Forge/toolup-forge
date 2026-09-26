@@ -22,6 +22,8 @@
         <Compile Include="Tests\OpenAIProviderTests.fs" />
         <Compile Include="Tests\GeminiProviderTests.fs" />
         <Compile Include="Tests\CopilotProviderTests.fs" />
+        <!-- Phase 661 - per-call model override: offline, per connector. -->
+        <Compile Include="Tests\ModelOverrideTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

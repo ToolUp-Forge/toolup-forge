@@ -154,6 +154,8 @@
         <Compile Include="Contracts\IPeerBearerAuthContract.fs" />
         <Compile Include="Contracts\IAuthProviderContract.fs" />
         <Compile Include="Contracts\IAIProviderContract.fs" />
+        <!-- Phase 661 - IAIProviderModelOverride conformance pack (per-call model override laws). -->
+        <Compile Include="Contracts\IAIProviderModelOverrideContract.fs" />
         <Compile Include="Contracts\IRateLimiterContract.fs" />
         <Compile Include="Contracts\IRateLimitStoreContract.fs" />
         <Compile Include="Contracts\IIdempotencyStoreContract.fs" />
@@ -1045,6 +1047,8 @@
              latency stream, the recorded refusal, and both windows in the
              one decorator chain. -->
         <Compile Include="AI\AITokenBudgetTests.fs" />
+        <!-- Phase 661 — per-call model override: resolution rule, IAIProvider dispatch, decorator forwarding. -->
+        <Compile Include="AI\AIProviderModelOverrideTests.fs" />
         <!-- Phase 499 - monetary AI cost budgets: the price table's four
              rates, the per-user and per-scope spend ceilings over the same
              latency stream, the count-only degradation of an unpriced model,

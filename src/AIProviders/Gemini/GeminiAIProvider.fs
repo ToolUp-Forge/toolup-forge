@@ -67,6 +67,21 @@ let private sharedClient =
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)
 
+// ─── Per-call model override (Phase 661) ─────────────────────────
+
+/// Whether this connector can serve `modelId` at all: a Google id (`gemini-…` /
+/// `gemma-…`, with or without the `models/` prefix).
+/// A vocabulary test, not a probe — the vendor's catalogue is still
+/// the authority on whether the id exists.
+let canServeModel (modelId: string) : bool = ModelIdFamily.isGoogle modelId
+
+/// Resolve the model one call runs on. `options.Model = None` ⇒ the
+/// configured model, `ConfiguredModel`; a servable id ⇒ that id,
+/// `OverrideHonoured`; anything else ⇒ the configured model,
+/// `OverrideFellBack` — the call is never failed for an unservable id.
+let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
+    ModelOverrideOutcome.resolve canServeModel "not a Google (gemini-*/gemma-*) model id" configured options
+
 type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
     let client = sharedClient.Value
 
@@ -299,6 +314,40 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
 
                         return! RetryRunner.run retryPolicy singleAttempt
         }
+
+
+    // Phase 661 — per-call model override. The provider instance IS the
+    // model binding (every send closes over `model`), so a call on
+    // another model is served by a sibling instance bound to that model
+    // with the same key source: byte-for-byte the request
+    // a second registered instance would have emitted, with no second
+    // instance for a composition root to wire. `options.Model = None`
+    // delegates to this instance's own `SendMessage`, so the request
+    // bytes are unchanged.
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
+
+            target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
+
+        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
+
+            target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
 
 /// Create using a secret-store read of `GEMINI_API_KEY` on every
 /// request. Legacy single-provider deployment helper.

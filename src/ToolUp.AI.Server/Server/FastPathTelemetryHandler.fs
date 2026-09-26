@@ -299,7 +299,7 @@ let private decodeTriageAttempt (evt: ModuleEvent) : (FastPathTriageResolver.Tri
         if isNull (box payload) then
             None
         else
-            Some(payload, evt.OccurredAt)
+            Some(FastPathTriageResolver.TriageEventPayload.coerceLegacy payload, evt.OccurredAt)
     with _ ->
         None
 

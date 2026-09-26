@@ -124,6 +124,75 @@ type private FailingTriageProvider() =
             return Error(SchemaUnsupported("structured-output", "test-only failure"))
         }
 
+/// Phase 661 — a triage-capable provider that ALSO implements the
+/// per-call override, the way the shipped connectors do. It records
+/// the options the override path was handed, so a test can assert the
+/// resolver named the declared cheap model on the call rather than
+/// inferring it from a route tag. `canServe` is the connector's family
+/// check; `triageModelId` is what the provider declares.
+type private OverridingTriageProvider(structuredReply: string, canServe: string -> bool, triageModelId: string option) =
+    let mutable structuredCalls = 0
+    let mutable overrideCalls = 0
+    let mutable sendCalls = 0
+    member _.StructuredCalls = structuredCalls
+    member _.OverrideCalls = overrideCalls
+    member _.SendCalls = sendCalls
+    member val LastOptions: AIProviderCallOptions option = None with get, set
+
+    member private this.Resolve(options: AIProviderCallOptions) =
+        overrideCalls <- overrideCalls + 1
+        this.LastOptions <- Some options
+        snd (ModelOverrideOutcome.resolve canServe "not a test-family id" "test-triage-model" options)
+
+    interface IAIProvider with
+        member _.Capabilities = {
+            Streaming = false
+            ToolUse = true
+            Vision = false
+            SupportsPromptCaching = false
+            SupportsTriage = true
+            TriageModelId = triageModelId
+            ProviderName = "test-triage"
+            Model = "test-triage-model"
+        }
+
+        member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            sendCalls <- sendCalls + 1
+
+            return
+                Ok {
+                    Content = "agent answered"
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
+        member _.SendStructuredMessage(_messages, _tools, _systemPrompt, _schema, _retryPolicy) = async {
+            structuredCalls <- structuredCalls + 1
+
+            return
+                Ok {
+                    Content = structuredReply
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            let outcome = this.Resolve options
+
+            (this :> IAIProvider).SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
+
+        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            let outcome = this.Resolve options
+
+            (this :> IAIProvider).SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
+
 /// Records every `Notification.ModuleAction` published, so the locked
 /// "no new wire shape — reuse ModuleAction" decision is asserted on the
 /// value that actually goes to the client.
@@ -642,6 +711,127 @@ let private interceptTests =
         }
     ]
 
+// ─── Phase 661 — which model serves the triage call ──────────────
+//
+// The order is the whole point: an explicit `TriageProvider` wins
+// outright; failing that, the turn provider's declared `TriageModelId`
+// is named on THIS call through the per-call override; failing that,
+// the pre-661 plain path. Every provider here records which of its
+// entry points ran, so "the cheap model was named" is asserted on the
+// options the provider received, not on a route tag alone.
+
+let private routeTests =
+    testList "Phase 661 — which model serves the triage call" [
+        testCaseAsync "an explicit TriageProvider wins outright — the turn provider's override is never consulted"
+        <| async {
+            let turn =
+                OverridingTriageProvider(hitReply, (fun _ -> true), Some "test-cheap-model")
+
+            let explicitProvider = ScriptedProvider(true, hitReply, "agent answered")
+
+            let routed =
+                config
+                |> FastPathTriageConfig.withTriageProvider (explicitProvider :> IAIProvider)
+
+            let! r = runLoop (Some routed) (turn :> IAIProvider) "set country to UK"
+
+            Expect.equal explicitProvider.StructuredCalls 1 "the explicit provider served the triage call"
+            Expect.equal turn.OverrideCalls 0 "the turn provider's override path was not consulted"
+            Expect.equal turn.StructuredCalls 0 "nor its plain structured path"
+            Expect.equal turn.SendCalls 0 "a hit — the full loop did not run"
+            Expect.stringContains r.TriageRows.Head.Payload "\"Route\":\"triage-provider\"" "the row names the route"
+        }
+
+        testCaseAsync
+            "no TriageProvider, a declared TriageModelId — the cheap model is named on the call, no second instance"
+        <| async {
+            let turn =
+                OverridingTriageProvider(hitReply, (fun _ -> true), Some "test-cheap-model")
+
+            let! r = runLoop (Some config) (turn :> IAIProvider) "set country to UK"
+
+            Expect.equal turn.OverrideCalls 1 "the override path served the triage call"
+
+            Expect.equal
+                turn.LastOptions
+                (Some(AIProviderCallOptions.forModel "test-cheap-model"))
+                "with the declared cheap model named on the call"
+
+            Expect.equal turn.SendCalls 0 "a hit — the full loop did not run"
+            let payload = r.TriageRows.Head.Payload
+            Expect.stringContains payload OutcomeHit "recorded as a hit"
+            Expect.stringContains payload "\"Route\":\"override\"" "served through the override"
+            Expect.stringContains payload "\"ServedModel\":\"test-cheap-model\"" "on the cheap model"
+        }
+
+        testCaseAsync
+            "a provider that cannot serve its declared id falls back to its configured model and the row says so"
+        <| async {
+            let turn =
+                OverridingTriageProvider(hitReply, (fun _ -> false), Some "test-cheap-model")
+
+            let! r = runLoop (Some config) (turn :> IAIProvider) "set country to UK"
+
+            Expect.equal turn.OverrideCalls 1 "the override path was asked"
+            let payload = r.TriageRows.Head.Payload
+            Expect.stringContains payload OutcomeHit "the call still succeeded — a fallback is metadata, not an error"
+            Expect.stringContains payload "\"Route\":\"override-fallback\"" "and the row says it fell back"
+            Expect.stringContains payload "\"ServedModel\":\"test-triage-model\"" "to the configured model"
+        }
+
+        testCaseAsync
+            "a provider without the override is served on its configured model — the pre-661 path, reported honestly"
+        <| async {
+            let turn = ScriptedProvider(true, hitReply, "agent answered")
+            let! r = runLoop (Some config) (turn :> IAIProvider) "set country to UK"
+
+            Expect.equal turn.StructuredCalls 1 "the plain structured send served, exactly as before"
+            Expect.equal turn.SendCalls 0 "a hit"
+            let payload = r.TriageRows.Head.Payload
+            Expect.stringContains payload "\"Route\":\"override-fallback\"" "the declared id could not be honoured"
+            Expect.stringContains payload "\"ServedModel\":\"test-triage-model\"" "so the configured model served"
+        }
+
+        testCaseAsync "no TriageModelId declared — the plain path, byte-identical to before"
+        <| async {
+            let turn = OverridingTriageProvider(hitReply, (fun _ -> true), None)
+            let! r = runLoop (Some config) (turn :> IAIProvider) "set country to UK"
+
+            Expect.equal turn.OverrideCalls 0 "nothing to override with — the override path is not consulted"
+            Expect.equal turn.StructuredCalls 1 "the plain structured send served"
+            Expect.stringContains r.TriageRows.Head.Payload "\"Route\":\"turn-provider\"" "recorded as the plain path"
+        }
+
+        testCase "a pre-661 telemetry row decodes with the route and served model filled in"
+        <| fun _ ->
+            let legacy: TriageEventPayload = {
+                ConversationId = Guid.NewGuid()
+                TaskId = Guid.NewGuid()
+                ModuleId = "sales"
+                Outcome = OutcomeHit
+                FieldId = "country"
+                ProviderName = "test"
+                ProviderModel = "test-model"
+                TriageModelId = ""
+                Route = null
+                ServedModel = null
+                LatencyMs = 1.0
+                InstructionChars = 17
+            }
+
+            let coerced = TriageEventPayload.coerceLegacy legacy
+            Expect.equal coerced.Route TriageRouteTurnProvider "the only route that existed"
+            Expect.equal coerced.ServedModel "test-model" "the recorded provider model served"
+
+            let current = {
+                legacy with
+                    Route = "override"
+                    ServedModel = "cheap"
+            }
+
+            Expect.equal (TriageEventPayload.coerceLegacy current) current "a current row is untouched"
+    ]
+
 // ─── Rollup ──────────────────────────────────────────────────────
 
 let private rollupTests =
@@ -657,6 +847,8 @@ let private rollupTests =
                 ProviderName = "test"
                 ProviderModel = "test"
                 TriageModelId = "test-cheap-model"
+                Route = TriageRouteTurnProvider
+                ServedModel = "test"
                 LatencyMs = latency
                 InstructionChars = 17
             }
@@ -695,4 +887,4 @@ let private rollupTests =
     ]
 
 let tests =
-    testList "Phase 6j.B — Tier-3 fast-path triage" [ pureTests; interceptTests; rollupTests ]
+    testList "Phase 6j.B — Tier-3 fast-path triage" [ pureTests; interceptTests; routeTests; rollupTests ]

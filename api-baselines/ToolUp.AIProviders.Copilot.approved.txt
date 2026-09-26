@@ -10,6 +10,7 @@ CopilotAIProvider.DefaultModel : System.String (literal)
 CopilotAIProvider.KnownModels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 CopilotAIProvider.ProviderId : System.String (literal)
 CopilotAIProvider.SecretKeyName : System.String (literal)
+CopilotAIProvider.canServeModel(System.String) : System.Boolean
 CopilotAIProvider.create(ToolUp.Platform.Secrets+ISecretStore, System.String) : ToolUp.Platform.AI.IAIProvider
 CopilotAIProvider.createWithApiKey(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
 CopilotAIProvider.createWithApiKeyAndModel(System.String, System.String, System.String) : ToolUp.Platform.AI.IAIProvider
@@ -18,6 +19,7 @@ CopilotAIProvider.createWithCredentialAndModel(System.String, Azure.Core.TokenCr
 CopilotAIProvider.createWithEntra(System.String) : ToolUp.Platform.AI.IAIProvider
 CopilotAIProvider.createWithEntraAndModel(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
 CopilotAIProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String, System.String) : ToolUp.Platform.AI.IAIProvider
+CopilotAIProvider.resolveCallModel(System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]
 CopilotAIProvider+CopilotAIProvider (class)
 CopilotAIProvider+CopilotAIProvider..ctor(System.String, Azure.Core.TokenCredential, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 CopilotAIProvider+CopilotAIProvider..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])

@@ -20,6 +20,8 @@ let private registeredTests =
         OpenAIProviderTests.tests
         GeminiProviderTests.tests
         CopilotProviderTests.tests
+        // Phase 661 - the per-call model override, offline, per connector.
+        ModelOverrideTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

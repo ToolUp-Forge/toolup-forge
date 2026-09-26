@@ -93,6 +93,28 @@ type private CopilotAuth =
     | ApiKeyAuth of fetchKey: (unit -> Async<string option>)
     | EntraAuth of credential: TokenCredential
 
+// ─── Per-call model override (Phase 661) ─────────────────────────
+
+/// Whether this connector can serve `modelId` at all: an Azure OpenAI deployment
+/// name, i.e. any id that does not carry another vendor's family prefix
+/// (`claude-…`, `gemini-…`) — a deployment under `/openai/deployments/`
+/// cannot be one of those.
+/// A vocabulary test, not a probe — the vendor's catalogue is still
+/// the authority on whether the id exists.
+let canServeModel (modelId: string) : bool =
+    ModelIdFamily.isOpenAICompatible modelId
+
+/// Resolve the model one call runs on. `options.Model = None` ⇒ the
+/// configured model, `ConfiguredModel`; a servable id ⇒ that id,
+/// `OverrideHonoured`; anything else ⇒ the configured model,
+/// `OverrideFellBack` — the call is never failed for an unservable id.
+let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
+    ModelOverrideOutcome.resolve
+        canServeModel
+        "not an Azure OpenAI deployment name (carries another vendor's family prefix)"
+        configured
+        options
+
 type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: CopilotAuth, model: string) =
     let client = sharedClient.Value
 
@@ -367,6 +389,40 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
 
                         return! RetryRunner.run retryPolicy singleAttempt
         }
+
+
+    // Phase 661 — per-call model override. The provider instance IS the
+    // model binding (every send closes over `model`), so a call on
+    // another model is served by a sibling instance bound to that model
+    // with the same key source, endpoint and auth: byte-for-byte the request
+    // a second registered instance would have emitted, with no second
+    // instance for a composition root to wire. `options.Model = None`
+    // delegates to this instance's own `SendMessage`, so the request
+    // bytes are unchanged.
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    CopilotAIProvider(endpoint, apiVersion, auth, served) :> IAIProvider
+
+            target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
+
+        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    CopilotAIProvider(endpoint, apiVersion, auth, served) :> IAIProvider
+
+            target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
 
 // ─── Factory helpers ─────────────────────────────────────────────────
 //

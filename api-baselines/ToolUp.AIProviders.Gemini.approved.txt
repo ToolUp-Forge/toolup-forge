@@ -8,10 +8,12 @@ GeminiAIProvider.DefaultModel : System.String (literal)
 GeminiAIProvider.KnownModels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 GeminiAIProvider.ProviderId : System.String (literal)
 GeminiAIProvider.SecretKeyName : System.String (literal)
+GeminiAIProvider.canServeModel(System.String) : System.Boolean
 GeminiAIProvider.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.AI.IAIProvider
 GeminiAIProvider.createWithApiKey(System.String) : ToolUp.Platform.AI.IAIProvider
 GeminiAIProvider.createWithApiKeyAndModel(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
 GeminiAIProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String) : ToolUp.Platform.AI.IAIProvider
+GeminiAIProvider.resolveCallModel(System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]
 GeminiAIProvider+GeminiAIProvider (class)
 GeminiAIProvider+GeminiAIProvider..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 GeminiAIProvider+GeminiAIProvider..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.String])

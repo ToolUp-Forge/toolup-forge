@@ -287,3 +287,39 @@ module ModelInputProviderExtensions =
             : Async<Result<AIProviderResponse, AIProviderError>> =
             let rendered = ModelInput.render input
             this.SendStructuredMessage(rendered.Messages, tools, rendered.SystemPrompt, schema, retryPolicy)
+
+        /// Phase 661 — `SendMessageWith` over a `ModelInput`: renders
+        /// once and delegates to the per-call-options extension on the
+        /// string-shaped members, so the override reaches a provider
+        /// that implements `IAIProviderModelOverride` and is reported
+        /// as a fallback by one that does not.
+        member this.SendMessageWith
+            (
+                options: AIProviderCallOptions,
+                input: ModelInput,
+                tools: AIProviderToolDef list,
+                onStream: (string -> unit) option,
+                retryPolicy: RetryPolicy
+            ) : Async<Result<AIProviderCallResponse, AIProviderError>> =
+            let rendered = ModelInput.render input
+            this.SendMessageWith(options, rendered.Messages, tools, rendered.SystemPrompt, onStream, retryPolicy)
+
+        /// Phase 661 — `SendStructuredMessageWith` over a `ModelInput`.
+        member this.SendStructuredMessageWith
+            (
+                options: AIProviderCallOptions,
+                input: ModelInput,
+                tools: AIProviderToolDef list,
+                schema: string,
+                retryPolicy: RetryPolicy
+            ) : Async<Result<AIProviderCallResponse, AIProviderError>> =
+            let rendered = ModelInput.render input
+
+            this.SendStructuredMessageWith(
+                options,
+                rendered.Messages,
+                tools,
+                rendered.SystemPrompt,
+                schema,
+                retryPolicy
+            )

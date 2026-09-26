@@ -13,10 +13,12 @@ OpenAIProvider (class)
 OpenAIProvider.DefaultModel : System.String (literal)
 OpenAIProvider.KnownModels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 OpenAIProvider.ProviderId : System.String (literal)
+OpenAIProvider.canServeModel(System.String) : System.Boolean
 OpenAIProvider.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.AI.IAIProvider
 OpenAIProvider.createWithApiKey(System.String) : ToolUp.Platform.AI.IAIProvider
 OpenAIProvider.createWithApiKeyAndModel(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
 OpenAIProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String) : ToolUp.Platform.AI.IAIProvider
+OpenAIProvider.resolveCallModel(System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]
 OpenAIProvider+OpenAIProvider (class)
 OpenAIProvider+OpenAIProvider..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 OpenAIProvider+OpenAIProvider..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[System.String])

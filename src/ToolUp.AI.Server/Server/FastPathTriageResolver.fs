@@ -112,6 +112,29 @@ let OutcomeClearUnsupported = "clear-unsupported"
 [<Literal>]
 let OutcomeProviderError = "provider-error"
 
+// ─── Route tokens (Phase 661) ────────────────────────────────────
+//
+// Which path the triage call took to a model. `TriageEventPayload.Route`
+// carries one of these, or one of `ModelOverrideOutcome.route`'s values
+// (`override` / `override-fallback` / `configured`) when the per-call
+// override path was taken and the provider answered.
+
+/// `config.TriageProvider` served — the explicit escape hatch.
+[<Literal>]
+let TriageRouteTriageProvider = "triage-provider"
+
+/// The turn provider served through the per-call model override at its
+/// declared `TriageModelId`. Recorded as-is only when the call FAILED
+/// before the provider could say whether it honoured the id; a
+/// successful call records `ModelOverrideOutcome.route` instead.
+[<Literal>]
+let TriageRouteOverride = "override"
+
+/// The turn provider served on its configured model, no override
+/// requested — the pre-661 path.
+[<Literal>]
+let TriageRouteTurnProvider = "turn-provider"
+
 /// Every outcome token, in the order a rollup should present them.
 let outcomes: string list = [
     OutcomeHit
@@ -148,11 +171,13 @@ type FastPathTriageConfig = {
     /// The declared-field seam. Required: triage cannot build a prompt
     /// without knowing what the surface exposes.
     Registry: IAIFieldRegistry
-    /// The provider that serves the triage call. `None` ⇒ the turn's
-    /// own provider — correct, but it pays the frontier model's price
-    /// for a decision a cheap model makes just as well. Read the
-    /// primary provider's `Capabilities.TriageModelId` and build a
-    /// second instance at that model to populate this.
+    /// The provider that serves the triage call — the explicit escape
+    /// hatch, and it wins outright when set. `None` ⇒ the turn's own
+    /// provider serves, and since Phase 661 it serves at its declared
+    /// `Capabilities.TriageModelId` through the per-call model
+    /// override, so the cheap tier is reached with nothing wired here.
+    /// Populate this only to route triage somewhere the turn provider's
+    /// own family cannot reach (another vendor, a dedicated key).
     TriageProvider: IAIProvider option
     /// Instructions longer than this are not triaged. A trivial UI
     /// instruction is short; a long one is prose, and prose is what
@@ -575,6 +600,18 @@ type TriageEventPayload = {
     /// Recorded so an operator can tell a triage served by a genuinely
     /// cheap model from one quietly served by the frontier model.
     TriageModelId: string
+    /// Phase 661 — which path reached a model: `triage-provider` (the
+    /// explicit `TriageProvider`), `turn-provider` (no override
+    /// declared), or the per-call override's own report — `override`
+    /// (the cheap model served), `override-fallback` (the provider
+    /// could not serve it and ran its configured model). The
+    /// operator question this answers is whether the triage spend
+    /// actually moved to the cheap tier.
+    Route: string
+    /// Phase 661 — the model that actually served. Equals
+    /// `ProviderModel` except on an honoured override, where it is the
+    /// declared `TriageModelId`.
+    ServedModel: string
     /// Wall-clock for the whole attempt, provider call included.
     LatencyMs: float
     /// Length of the instruction, for tuning `MaxInstructionChars`.
@@ -585,6 +622,35 @@ type TriageEventPayload = {
     /// place to accumulate a second copy of user prose.
     InstructionChars: int
 }
+
+module TriageEventPayload =
+    /// A row written before Phase 661 carries no `Route` / `ServedModel`;
+    /// the STJ + FableConverters path deserialises the absent string
+    /// fields to `null`. Coerce at the read boundary so a rollup over a
+    /// mixed window never meets a null string: the route reads as
+    /// `turn-provider` (the only path that existed) and the served
+    /// model as the recorded `ProviderModel`.
+    let coerceLegacy (payload: TriageEventPayload) : TriageEventPayload =
+        let route =
+            if isNull payload.Route then
+                TriageRouteTurnProvider
+            else
+                payload.Route
+
+        let served =
+            if isNull payload.ServedModel then
+                payload.ProviderModel
+            else
+                payload.ServedModel
+
+        if route = payload.Route && served = payload.ServedModel then
+            payload
+        else
+            {
+                payload with
+                    Route = route
+                    ServedModel = served
+            }
 
 /// Metric names, registered in `AILatencyMetrics.registrations` so the
 /// sink pre-allocates the series.
@@ -764,13 +830,55 @@ let tryTriage
                                 AIProviderMessage.text "user" instruction
                             ]
 
-                        let! response = provider.SendStructuredMessage(triageInput, [], triageSchema, policy)
+                        // Phase 661 — which model serves the triage call, in
+                        // order of precedence:
+                        //   1. `config.TriageProvider` — the explicit escape
+                        //      hatch, a whole instance the composition root
+                        //      chose. It wins outright, whatever the turn
+                        //      provider declares.
+                        //   2. the turn provider's declared
+                        //      `Capabilities.TriageModelId` — served through
+                        //      the per-call override, so the cheap model is
+                        //      named on THIS call and no second instance is
+                        //      wired. A provider that cannot honour the id
+                        //      (or does not implement the override) serves on
+                        //      its configured model and the route says so.
+                        //   3. neither — the turn provider's plain structured
+                        //      send, byte-identical to the pre-661 path.
+                        let! response, route, servedModel =
+                            match config.TriageProvider, turnProvider.Capabilities.TriageModelId with
+                            | Some explicitProvider, _ -> async {
+                                let! r = explicitProvider.SendStructuredMessage(triageInput, [], triageSchema, policy)
+                                return r, TriageRouteTriageProvider, explicitProvider.Capabilities.Model
+                              }
+                            | None, Some cheapModel -> async {
+                                let! r =
+                                    turnProvider.SendStructuredMessageWith(
+                                        AIProviderCallOptions.forModel cheapModel,
+                                        triageInput,
+                                        [],
+                                        triageSchema,
+                                        policy
+                                    )
+
+                                return
+                                    match r with
+                                    | Ok call ->
+                                        Ok call.Response,
+                                        ModelOverrideOutcome.route call.Model,
+                                        ModelOverrideOutcome.served call.Model
+                                    | Error err -> Error err, TriageRouteOverride, turnProvider.Capabilities.Model
+                              }
+                            | None, None -> async {
+                                let! r = turnProvider.SendStructuredMessage(triageInput, [], triageSchema, policy)
+                                return r, TriageRouteTurnProvider, turnProvider.Capabilities.Model
+                              }
 
                         let plan =
                             match response with
                             | Error err ->
                                 logger.Warn
-                                    $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{provider.Capabilities.Model}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
+                                    $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
 
                                 TriageFallThrough OutcomeProviderError
                             | Ok r ->
@@ -794,6 +902,8 @@ let tryTriage
                             ProviderName = provider.Capabilities.ProviderName
                             ProviderModel = provider.Capabilities.Model
                             TriageModelId = defaultArg provider.Capabilities.TriageModelId ""
+                            Route = route
+                            ServedModel = servedModel
                             LatencyMs = sw.Elapsed.TotalMilliseconds
                             InstructionChars = instruction.Length
                         }
