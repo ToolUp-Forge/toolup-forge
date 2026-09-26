@@ -124,6 +124,57 @@ type private FailingTriageProvider() =
             return Error(SchemaUnsupported("structured-output", "test-only failure"))
         }
 
+/// Phase 662 — a triage-capable provider whose triage call NEVER
+/// answers inside the configured budget. Deliberately ignores
+/// `_retryPolicy` entirely — it does not race its own sleep against
+/// `policy.Timeout`, does not honour cancellation, and would hang the
+/// test suite forever if the resolver relied on the provider's own
+/// cooperation. Exercises that the resolver's OWN wall-clock cutoff is
+/// what produces `timeout`, not a courtesy the provider extends.
+type private HangingTriageProvider() =
+    let mutable sendCalls = 0
+    member _.SendCalls = sendCalls
+
+    interface IAIProvider with
+        member _.Capabilities = {
+            Streaming = false
+            ToolUse = true
+            Vision = false
+            SupportsPromptCaching = false
+            SupportsTriage = true
+            TriageModelId = None
+            ProviderName = "test-triage"
+            Model = "test-triage-model"
+        }
+
+        member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            sendCalls <- sendCalls + 1
+
+            return
+                Ok {
+                    Content = "agent answered"
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
+        member _.SendStructuredMessage(_messages, _tools, _systemPrompt, _schema, _retryPolicy) = async {
+            // Far longer than any test's configured `TimeoutMs` — the
+            // resolver must have already fallen through before this
+            // completes.
+            do! Async.Sleep 5_000
+
+            return
+                Ok {
+                    Content =
+                        "{\"decision\":\"set_field\",\"fieldId\":\"country\",\"value\":\"UK\",\"confidence\":0.99,\"reason\":\"\"}"
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
 /// Phase 661 — a triage-capable provider that ALSO implements the
 /// per-call override, the way the shipped connectors do. It records
 /// the options the override path was handed, so a test can assert the
@@ -687,6 +738,25 @@ let private interceptTests =
             Expect.stringContains (r.TriageRows.Head.Payload) OutcomeProviderError "recorded as a provider error"
         }
 
+        testCaseAsync "a deliberately-slow triage provider times out — not a provider error"
+        <| async {
+            // A budget far tighter than the provider's own 5-second sleep,
+            // so the resolver's own wall-clock cutoff — not the provider —
+            // is what ends the attempt.
+            let tightConfig = { config with TimeoutMs = 50 }
+            let provider = HangingTriageProvider()
+            let! r = runLoop (Some tightConfig) (provider :> IAIProvider) "set country to UK"
+
+            Expect.equal provider.SendCalls 1 "fallthrough reached the full agent loop, identically to a provider error"
+            Expect.isEmpty r.Actions "no action was emitted — triage never resolved"
+            Expect.equal (List.length r.TriageRows) 1 "one row, same as any other attempt"
+
+            let payload = r.TriageRows.Head.Payload
+            Expect.stringContains payload OutcomeTimeout "recorded in its own stratum, distinct from provider-error"
+            Expect.isFalse (payload.Contains OutcomeProviderError) "never conflated with an ordinary provider error"
+            Expect.stringContains payload "\"TimeoutBudgetMs\":50" "the configured budget rides with the row"
+        }
+
         testCaseAsync "a question is not triaged at all"
         <| async {
             let provider = ScriptedProvider(true, hitReply, "agent answered")
@@ -816,6 +886,7 @@ let private routeTests =
                 Route = null
                 ServedModel = null
                 LatencyMs = 1.0
+                TimeoutBudgetMs = 0
                 InstructionChars = 17
             }
 
@@ -850,6 +921,7 @@ let private rollupTests =
                 Route = TriageRouteTurnProvider
                 ServedModel = "test"
                 LatencyMs = latency
+                TimeoutBudgetMs = 3_000
                 InstructionChars = 17
             }
 

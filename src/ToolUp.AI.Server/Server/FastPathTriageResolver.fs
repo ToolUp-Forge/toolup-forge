@@ -108,9 +108,25 @@ let OutcomeLowConfidence = "low-confidence"
 [<Literal>]
 let OutcomeClearUnsupported = "clear-unsupported"
 
-/// The triage provider call failed or timed out.
+/// The triage provider call failed — a schema/parse/capability error,
+/// or any other `AIProviderError` the call returned. Distinct from
+/// `OutcomeTimeout`: this stratum is a call that CAME BACK and said no,
+/// not one that never came back inside the configured budget.
 [<Literal>]
 let OutcomeProviderError = "provider-error"
+
+/// The triage call did not complete within `FastPathTriageConfig`'s
+/// configured `TimeoutMs`. Kept separate from `provider-error` because
+/// the operator question is different: a provider answering "no" cheaply
+/// is a healthy miss at the model layer, while a hang is the resolver's
+/// OWN wall-clock guarantee firing — the property that bounds what
+/// triage can cost a turn regardless of whether the provider (or a
+/// misbehaving fake in tests) honours cancellation cooperatively. Paired
+/// with `TimeoutBudgetMs` on the telemetry row so a dashboard can tell a
+/// near-miss (elapsed close to, but under, the budget) from a hang
+/// (elapsed at the budget because this stratum fired).
+[<Literal>]
+let OutcomeTimeout = "timeout"
 
 // ─── Route tokens (Phase 661) ────────────────────────────────────
 //
@@ -144,6 +160,7 @@ let outcomes: string list = [
     OutcomeLowConfidence
     OutcomeClearUnsupported
     OutcomeProviderError
+    OutcomeTimeout
 ]
 
 /// Outcomes that mean the turn continued into the full agent loop.
@@ -614,6 +631,19 @@ type TriageEventPayload = {
     ServedModel: string
     /// Wall-clock for the whole attempt, provider call included.
     LatencyMs: float
+    /// Phase 662 — the configured `TimeoutMs` this attempt ran under
+    /// (`FastPathTriageConfig.effectiveTimeoutMs`), on every row, not
+    /// only a timed-out one. Pairs with `LatencyMs` so a dashboard can
+    /// compute how close a non-timeout attempt ran to the budget (a
+    /// near-miss) versus a `timeout` row, whose `LatencyMs` sits at the
+    /// budget because this is the value that cut it off. A row written
+    /// before Phase 662 carries no `TimeoutBudgetMs` property; STJ
+    /// decodes the missing int field to `0` on its own (no
+    /// `coerceLegacy` change needed — that helper exists for the two
+    /// *string* fields, where `null` is indistinguishable from "absent"
+    /// only by convention). Read a `0` as "budget unknown", never as "no
+    /// budget was configured".
+    TimeoutBudgetMs: int
     /// Length of the instruction, for tuning `MaxInstructionChars`.
     /// The instruction TEXT is not recorded here — the Tier-1 beacon
     /// records instructions because the client already showed them;
@@ -810,6 +840,8 @@ let tryTriage
                     | Some snapshot ->
                         let sw = Stopwatch.StartNew()
 
+                        let effectiveTimeoutMs = FastPathTriageConfig.effectiveTimeoutMs config
+
                         let policy = {
                             RetryPolicy.defaults with
                                 // One attempt. A triage call that failed
@@ -817,18 +849,28 @@ let tryTriage
                                 // retrying spends more to arrive at the
                                 // same fall-through.
                                 MaxAttempts = 1
-                                Timeout =
-                                    Some(
-                                        TimeSpan.FromMilliseconds(
-                                            float (FastPathTriageConfig.effectiveTimeoutMs config)
-                                        )
-                                    )
+                                Timeout = Some(TimeSpan.FromMilliseconds(float effectiveTimeoutMs))
                         }
 
                         let triageInput =
                             ModelInput.ofSystemPrompt "FastPathTriageResolver" (Some(buildTriagePrompt snapshot)) [
                                 AIProviderMessage.text "user" instruction
                             ]
+
+                        // Phase 662 — the route/served-model this attempt
+                        // reports if the call never comes back at all inside
+                        // the budget. Mirrors each arm's own on-`Error` guess
+                        // below exactly (the override arm still computes its
+                        // own precise route from the response when the call
+                        // DOES come back with a failure) — a timeout and a
+                        // same-arm provider error report the identical
+                        // route/servedModel pair, since neither can know more
+                        // than "this is the arm that was attempted".
+                        let routeGuess, servedModelGuess =
+                            match config.TriageProvider, turnProvider.Capabilities.TriageModelId with
+                            | Some explicitProvider, _ -> TriageRouteTriageProvider, explicitProvider.Capabilities.Model
+                            | None, Some _ -> TriageRouteOverride, turnProvider.Capabilities.Model
+                            | None, None -> TriageRouteTurnProvider, turnProvider.Capabilities.Model
 
                         // Phase 661 — which model serves the triage call, in
                         // order of precedence:
@@ -845,7 +887,7 @@ let tryTriage
                         //      its configured model and the route says so.
                         //   3. neither — the turn provider's plain structured
                         //      send, byte-identical to the pre-661 path.
-                        let! response, route, servedModel =
+                        let callAsync =
                             match config.TriageProvider, turnProvider.Capabilities.TriageModelId with
                             | Some explicitProvider, _ -> async {
                                 let! r = explicitProvider.SendStructuredMessage(triageInput, [], triageSchema, policy)
@@ -874,17 +916,52 @@ let tryTriage
                                 return r, TriageRouteTurnProvider, turnProvider.Capabilities.Model
                               }
 
-                        let plan =
-                            match response with
-                            | Error err ->
-                                logger.Warn
-                                    $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
+                        // Phase 662 — the resolver's OWN wall-clock cutoff on
+                        // the whole call, independent of whatever the
+                        // provider does with `policy.Timeout` internally.
+                        // `RetryPolicy.Timeout` asks the provider to honour
+                        // the budget cooperatively (its own
+                        // `CancellationTokenSource`, as every shipped
+                        // connector does); this is the backstop for a
+                        // provider — real, or in tests a deliberately slow
+                        // fake that never looks at the policy at all — that
+                        // does not. Without it a hang is indistinguishable
+                        // from a legitimate long call and either blocks the
+                        // turn indefinitely or, once it does return, is
+                        // misrecorded as an ordinary `provider-error`.
+                        let! timedOut, response, route, servedModel = async {
+                            try
+                                let! child = Async.StartChild(callAsync, effectiveTimeoutMs)
+                                let! response, route, servedModel = child
+                                return false, response, route, servedModel
+                            with :? TimeoutException ->
+                                return
+                                    true,
+                                    Error(
+                                        TransientNetwork
+                                            $"Triage call did not complete within the configured {effectiveTimeoutMs} ms budget"
+                                    ),
+                                    routeGuess,
+                                    servedModelGuess
+                        }
 
-                                TriageFallThrough OutcomeProviderError
-                            | Ok r ->
-                                match parseTriageDecision r.Content with
-                                | None -> TriageFallThrough OutcomeUnparseable
-                                | Some decision -> planTriage config snapshot decision
+                        let plan =
+                            if timedOut then
+                                logger.Warn
+                                    $"FastPath triage timed out after {effectiveTimeoutMs}ms (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}). Falling through to the full agent loop."
+
+                                TriageFallThrough OutcomeTimeout
+                            else
+                                match response with
+                                | Error err ->
+                                    logger.Warn
+                                        $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
+
+                                    TriageFallThrough OutcomeProviderError
+                                | Ok r ->
+                                    match parseTriageDecision r.Content with
+                                    | None -> TriageFallThrough OutcomeUnparseable
+                                    | Some decision -> planTriage config snapshot decision
 
                         sw.Stop()
 
@@ -905,6 +982,7 @@ let tryTriage
                             Route = route
                             ServedModel = servedModel
                             LatencyMs = sw.Elapsed.TotalMilliseconds
+                            TimeoutBudgetMs = effectiveTimeoutMs
                             InstructionChars = instruction.Length
                         }
 
