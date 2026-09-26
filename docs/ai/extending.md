@@ -703,6 +703,8 @@ The first two are conformance subjects (synthetic, never compose into production
 
 For the full companion-authoring walkthrough — wiring the authorizer + handler against the contract packs, integrating with `IServiceCollection`, and the trust-boundary semantics that make the Deny path load-bearing for prompt-injection mitigation — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md` §"Client-resident companion authoring"](../../src/ToolUp.AI/TECHNICAL_GUIDE.md#client-resident-companion-authoring).
 
+A second reference companion, `ToolUp.AI.UiAwareness`, pairs with the sample above as the **no-argument, read-only** `ClientResident` shape — a module declares its live state once (`ClientModule.withInspectState`) and the companion's shared tool answers "what is on the user's screen right now" from that declaration, rather than one bespoke tool per capability. See [`ui-awareness.md`](ui-awareness.md) for the seam walkthrough (worked example, the native-awareness-vs-driving-the-UI boundary) and [`src/AIExtensions/UiAwareness/README.md`](../../src/AIExtensions/UiAwareness/README.md) for the package reference.
+
 ## Authoring a custom `SystemPromptBuilder`
 
 For complex prompts that pull from runtime state:

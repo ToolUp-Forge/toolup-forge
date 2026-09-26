@@ -47,6 +47,12 @@ questions to `_platform_ui_inspect_active_module` can **remove** it — the SDK 
 case. (A downstream consumer's `platformPromptPrefix` is the reference example; removal is optional
 and does not change model behaviour.)
 
+The tool this framing routes on-screen questions to is `ToolUp.AI.UiAwareness`'s
+`_platform.ui.inspect_active_module` — see [`../ai/ui-awareness.md`](../ai/ui-awareness.md) for how a
+module declares the projection that tool reads (`ClientModule.withInspectState` → `UiStateReport`)
+and a worked example. Composing that companion is what makes `HasLiveUiTools` true for a deployment
+that has no other `ClientResident` tools.
+
 ## Verification
 
 - `dotnet build src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj`.

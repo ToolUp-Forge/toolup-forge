@@ -96,6 +96,10 @@ See [api-reference.md](api-reference.md) for the full public surface: `AIServerA
 
 See [extending.md](extending.md) for writing a new `IAIProvider`, registering custom tools, authoring a custom `SystemPromptBuilder`, and declaring capability flags.
 
+## UI awareness — reading what is on the user's screen
+
+See [ui-awareness.md](ui-awareness.md) for the `withInspectState` → `UiStateReport` seam and the `ToolUp.AI.UiAwareness` companion built on it — a read-only, no-argument `ClientResident` tool that answers "what is on my screen right now" from a module's own declared projection, with a worked example.
+
 ## Evaluating prompts and conversations
 
 See [conversation-eval.md](conversation-eval.md) for the conversation / prompt eval harness (`ToolUp.AI.Evaluation`): fixtures, rubric assertions, tool-dispatch replay against recorded tool results, the optional LLM judge, and the `--baseline` regression gate.

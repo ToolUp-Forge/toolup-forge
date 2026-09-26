@@ -19,6 +19,13 @@ module ToolUp.AI.SampleClientTool.Server.Compose
 //      binding subject; not fine for any real deployment.
 //   2. The tool body itself is a calculator. A real companion would
 //      be wired to a domain-specific surface.
+//
+// Phase 539 — a sibling reference companion, `ToolUp.AI.UiAwareness`,
+// sits alongside this one showing the other `ClientResident` shape:
+// no-argument and read-only (a module's declared `withInspectState`
+// projection) rather than argument-taking (this calculator). See
+// `docs/ai/ui-awareness.md` and its worked example at
+// `samples/MinimalClient/UiAwarenessSample.fs`.
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform

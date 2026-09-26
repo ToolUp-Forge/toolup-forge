@@ -46,6 +46,14 @@
          the wiring is the CONSUMER's, exactly as the Yjs import above
          is: neither companion names the other. -->
     <Compile Include="CrdtOfflineCoEditSample.fs" />
+    <!-- Phase 539 — a module declaring `withInspectState` (Phase 536)
+         plus the `ToolUp.AI.UiAwareness` companion's client executor
+         install, alongside the existing `ToolUp.AI.SampleClientTool`
+         reference. Compiled here for the same reason the two CRDT
+         samples above are: the companion's client executor and the
+         `withInspectState` projection are Fable-only, so only a real
+         Fable compile proves they transpile. -->
+    <Compile Include="UiAwarenessSample.fs" />
   </ItemGroup>
   <ItemGroup>
     <!-- ProjectReference to ToolUp.Platform.Client drives the full
@@ -59,6 +67,12 @@
          the queue and the coordinator are Fable-only by construction, so
          a plain `dotnet build` cannot prove they transpile. -->
     <ProjectReference Include="..\..\src\ToolUp.Offline.Client\ToolUp.Offline.Client.fsproj" />
+    <!-- Phase 539 — the UI-awareness companion's client tier, for
+         `UiAwarenessSample.fs` above. Pulls in `ToolUp.AI.Core` /
+         `ToolUp.AI.Client` transitively (the companion's own
+         dependencies), putting that tier through this sample's Fable
+         compile too. -->
+    <ProjectReference Include="..\..\src\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
     <!-- 0.4.3 — ToolUp.Elmish.* folded into ToolUp.Platform.Client; the
