@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Phase 663 - the triage calibration tool's plumbing, driven by a fake
+       provider. An Expecto console runner (a VerifyAll pack): offline and
+       deterministic, no network, no key. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ToolUp.TriageCalibration.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Tests.fs" />
+    <!-- Phase 722 - the unregistered-[<Tests>]-list guard, source-linked from
+         ToolUp.Platform.Tests so there is one implementation. -->
+    <Compile Include="..\..\src\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The README's worked example, decoded by the pack so it cannot rot. -->
+    <None Include="..\ToolUp.TriageCalibration\examples\cases.json" Link="examples\cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.TriageCalibration\ToolUp.TriageCalibration.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Expecto" />
+  </ItemGroup>
+</Project>

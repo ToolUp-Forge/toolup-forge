@@ -154,6 +154,14 @@ let config = {
             // so a fresh checkout stays green. Reads its fixtures from disk,
             // so it is not a `pure` pack.
             TestPack.create "AIEvaluation" "src/ToolUp.AI.Evaluation/ToolUp.AI.Evaluation.fsproj"
+            // Phase 663 — the triage calibration tool's plumbing, driven by a
+            // fake provider: the eligibility short-circuit, one call re-scored
+            // at four floors, the failure strata, the result-file round-trip.
+            // Offline and deterministic; reads its example case file from disk,
+            // so it is not a `pure` pack.
+            TestPack.create
+                "TriageCalibration"
+                "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj"
         ]
 }
 
