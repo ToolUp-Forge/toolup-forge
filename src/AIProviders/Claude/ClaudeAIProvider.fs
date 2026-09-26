@@ -78,6 +78,20 @@ let private sharedClient =
 // (fetch once at construction — per-user BYOK). Each fetch call inside
 // SendMessage re-executes the thunk; the thunk decides whether to hit
 // a store or return a captured value.
+// ─── Per-call model override (Phase 661) ─────────────────────────
+
+/// Whether this connector can serve `modelId` at all: an Anthropic id (`claude-…`).
+/// A vocabulary test, not a probe — the vendor's catalogue is still
+/// the authority on whether the id exists.
+let canServeModel (modelId: string) : bool = ModelIdFamily.isAnthropic modelId
+
+/// Resolve the model one call runs on. `options.Model = None` ⇒ the
+/// configured model, `ConfiguredModel`; a servable id ⇒ that id,
+/// `OverrideHonoured`; anything else ⇒ the configured model,
+/// `OverrideFellBack` — the call is never failed for an unservable id.
+let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
+    ModelOverrideOutcome.resolve canServeModel "not an Anthropic (claude-*) model id" configured options
+
 type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, maxTokens: int) =
     let client = sharedClient.Value
 
@@ -514,6 +528,40 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
 
                     return! retryLoop 0
         }
+
+
+    // Phase 661 — per-call model override. The provider instance IS the
+    // model binding (every send closes over `model`), so a call on
+    // another model is served by a sibling instance bound to that model
+    // with the same key source and `maxTokens` cap: byte-for-byte the request
+    // a second registered instance would have emitted, with no second
+    // instance for a composition root to wire. `options.Model = None`
+    // delegates to this instance's own `SendMessage`, so the request
+    // bytes are unchanged.
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    ClaudeAIProvider(apiKeyFetcher, served, maxTokens) :> IAIProvider
+
+            target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
+
+        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            let served, outcome = resolveCallModel model options
+
+            let target =
+                if served = model then
+                    this :> IAIProvider
+                else
+                    ClaudeAIProvider(apiKeyFetcher, served, maxTokens) :> IAIProvider
+
+            target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            |> AIProviderCallResponse.attach outcome
 
 /// Create a Claude AI provider from a secret store. The API key is
 /// read from `ANTHROPIC_API_KEY` in the `_platform` scope on every

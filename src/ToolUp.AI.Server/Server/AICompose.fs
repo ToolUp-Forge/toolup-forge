@@ -983,12 +983,12 @@ module AIServerApp =
     /// catch. Turning it on before that is known buys an unknown
     /// amount of latency for a known cost.
     ///
-    /// `config.TriageProvider` is where the cheap model goes. Read the
-    /// primary provider's `Capabilities.TriageModelId`, build a second
-    /// provider instance at that model, and pass it via
-    /// `FastPathTriageConfig.withTriageProvider`; leave it `None` and
-    /// triage runs on the turn's own provider, which is correct but
-    /// pays the frontier model's price for the decision.
+    /// Leave `config.TriageProvider` as `None` and triage runs on the
+    /// turn's own provider at its declared `Capabilities.TriageModelId`
+    /// through the per-call model override (Phase 661) — the cheap tier
+    /// with nothing extra wired. `FastPathTriageConfig.withTriageProvider`
+    /// is the explicit escape hatch for routing triage somewhere the turn
+    /// provider's own family cannot reach; it wins outright when set.
     let withFastPathTriage (config: FastPathTriageResolver.FastPathTriageConfig) (app: AIServerApp) : AIServerApp =
         if not config.Enabled then
             app

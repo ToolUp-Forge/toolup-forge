@@ -78,6 +78,18 @@ ToolUp.Platform.AI.AIContentPart+TextPart.Item : System.String { get }
 ToolUp.Platform.AI.AIContentPartModule (class)
 ToolUp.Platform.AI.AIContentPartModule.exportPlaceholder(System.Int32, ToolUp.Platform.AI.AIContentPart) : System.String
 ToolUp.Platform.AI.AIContentPartModule.redactedSummary(ToolUp.Platform.AI.AIContentPart) : System.String
+ToolUp.Platform.AI.AIProviderCallOptions (class)
+ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.AI.AIProviderCallOptions.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AI.AIProviderCallOptionsModule (class)
+ToolUp.Platform.AI.AIProviderCallOptionsModule.forModel(System.String) : ToolUp.Platform.AI.AIProviderCallOptions
+ToolUp.Platform.AI.AIProviderCallOptionsModule.none : ToolUp.Platform.AI.AIProviderCallOptions { get }
+ToolUp.Platform.AI.AIProviderCallResponse (class)
+ToolUp.Platform.AI.AIProviderCallResponse..ctor(ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.ModelOverrideOutcome)
+ToolUp.Platform.AI.AIProviderCallResponse.Model : ToolUp.Platform.AI.ModelOverrideOutcome { get }
+ToolUp.Platform.AI.AIProviderCallResponse.Response : ToolUp.Platform.AI.AIProviderResponse { get }
+ToolUp.Platform.AI.AIProviderCallResponseModule (class)
+ToolUp.Platform.AI.AIProviderCallResponseModule.attach(ToolUp.Platform.AI.ModelOverrideOutcome, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderCallResponse, ToolUp.Platform.AI.AIProviderError]]
 ToolUp.Platform.AI.AIProviderCapabilities (class)
 ToolUp.Platform.AI.AIProviderCapabilities..ctor(System.Boolean, System.Boolean, System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
 ToolUp.Platform.AI.AIProviderCapabilities.Model : System.String { get }
@@ -201,6 +213,33 @@ ToolUp.Platform.AI.ImageSource+Tags.Base64Bytes : System.Int32 (literal)
 ToolUp.Platform.AI.ImageSource+Tags.Url : System.Int32 (literal)
 ToolUp.Platform.AI.ImageSource+Url (class)
 ToolUp.Platform.AI.ImageSource+Url.Item : System.String { get }
+ToolUp.Platform.AI.ModelIdFamily (class)
+ToolUp.Platform.AI.ModelIdFamily.isAnthropic(System.String) : System.Boolean
+ToolUp.Platform.AI.ModelIdFamily.isGoogle(System.String) : System.Boolean
+ToolUp.Platform.AI.ModelIdFamily.isOpenAICompatible(System.String) : System.Boolean
+ToolUp.Platform.AI.ModelOverrideOutcome (class)
+ToolUp.Platform.AI.ModelOverrideOutcome.IsConfiguredModel : System.Boolean { get }
+ToolUp.Platform.AI.ModelOverrideOutcome.IsOverrideFellBack : System.Boolean { get }
+ToolUp.Platform.AI.ModelOverrideOutcome.IsOverrideHonoured : System.Boolean { get }
+ToolUp.Platform.AI.ModelOverrideOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+ConfiguredModel (class)
+ToolUp.Platform.AI.ModelOverrideOutcome+ConfiguredModel.model : System.String { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideFellBack (class)
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideFellBack.reason : System.String { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideFellBack.requested : System.String { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideFellBack.served : System.String { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideHonoured (class)
+ToolUp.Platform.AI.ModelOverrideOutcome+OverrideHonoured.model : System.String { get }
+ToolUp.Platform.AI.ModelOverrideOutcome+Tags (class)
+ToolUp.Platform.AI.ModelOverrideOutcome+Tags.ConfiguredModel : System.Int32 (literal)
+ToolUp.Platform.AI.ModelOverrideOutcome+Tags.OverrideFellBack : System.Int32 (literal)
+ToolUp.Platform.AI.ModelOverrideOutcome+Tags.OverrideHonoured : System.Int32 (literal)
+ToolUp.Platform.AI.ModelOverrideOutcomeModule (class)
+ToolUp.Platform.AI.ModelOverrideOutcomeModule.describe(ToolUp.Platform.AI.ModelOverrideOutcome) : System.String
+ToolUp.Platform.AI.ModelOverrideOutcomeModule.fellBack(ToolUp.Platform.AI.ModelOverrideOutcome) : System.Boolean
+ToolUp.Platform.AI.ModelOverrideOutcomeModule.resolve(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.String, System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]
+ToolUp.Platform.AI.ModelOverrideOutcomeModule.route(ToolUp.Platform.AI.ModelOverrideOutcome) : System.String
+ToolUp.Platform.AI.ModelOverrideOutcomeModule.served(ToolUp.Platform.AI.ModelOverrideOutcome) : System.String
 ToolUp.Platform.AI.RetryRunner (class)
 ToolUp.Platform.AI.RetryRunner.run`1(ToolUp.Platform.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]
 ToolUp.Platform.AI.TokenUsage (class)

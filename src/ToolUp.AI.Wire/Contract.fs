@@ -251,13 +251,18 @@ type AIProviderCapabilities = {
     /// Anthropic connector names its Haiku-grade id here; an OpenAI
     /// connector its mini-grade id).
     ///
-    /// This is a **declaration, not a dispatch instruction**:
-    /// `IAIProvider` has no per-call model override, so the triage
-    /// resolver cannot re-point a provider at this id by itself. It is
-    /// what a composition root reads to decide which instance to hand
-    /// to `FastPathTriageConfig.TriageProvider` — build a second
-    /// provider at this model, register it, and the triage turn runs
-    /// there while the agent loop keeps the frontier model.
+    /// Since Phase 661 this is a **dispatch instruction the triage
+    /// resolver honours by itself**: with no explicit
+    /// `FastPathTriageConfig.TriageProvider` wired, the resolver names
+    /// this id on the triage call through the per-call model override
+    /// (`AIProviderCallOptions.Model` → `IAIProviderModelOverride`,
+    /// which every shipped connector implements), so the cheap turn
+    /// runs on this model and the agent loop keeps `Model` — with no
+    /// second provider instance for a composition root to build. A
+    /// connector that cannot serve the id, or does not implement the
+    /// override, serves triage on `Model` and the triage telemetry row
+    /// says so (`Route = override-fallback`). `TriageProvider` remains
+    /// the explicit escape hatch and wins when set.
     /// `None` ⇒ the provider declares no cheaper tier; triage (when
     /// enabled and `SupportsTriage`) runs on `Model` itself.
     TriageModelId: string option
@@ -364,3 +369,161 @@ module AIProviderError =
         | RetriesExhausted _
         | UnsupportedCapability _
         | SchemaUnsupported _ -> false
+
+
+// ─── Per-call options (Phase 661) ────────────────────────────────
+//
+// `IAIProvider.SendMessage` / `SendStructuredMessage` take positional
+// arguments, not a request record, so there was no request field to
+// widen. The per-call model rides a small options record instead: a
+// future per-call knob (a temperature, a reasoning budget) is an
+// additive field here, not another interface change. The record is
+// Fable-safe like the rest of this file — a browser host that drives a
+// connector through the wire tier can name a model per call too.
+
+/// Options that apply to ONE provider call, carried beside the
+/// messages rather than baked into the provider instance.
+///
+/// `Model = None` is today's behaviour, byte-identical: the provider
+/// serves the call on its configured `Capabilities.Model`, and the
+/// request bytes it emits are unchanged from a plain `SendMessage`.
+type AIProviderCallOptions = {
+    /// The model id to serve THIS call on, in the provider's own id
+    /// vocabulary (an Anthropic connector reads `claude-…`, a Gemini
+    /// connector `models/gemini-…`). A provider that cannot serve the
+    /// named id — a foreign vendor's id, a blank — serves the call on
+    /// its configured model and reports `OverrideFellBack` rather than
+    /// failing the call; see `ModelOverrideOutcome`.
+    Model: string option
+}
+
+module AIProviderCallOptions =
+    /// No per-call options — the configured model, unchanged bytes.
+    let none: AIProviderCallOptions = { Model = None }
+
+    /// Ask for one call on `model`.
+    let forModel (model: string) : AIProviderCallOptions = { Model = Some model }
+
+/// What the provider did about `AIProviderCallOptions.Model` on one
+/// call — the response metadata a caller reads to tell a triage turn
+/// that ran on the cheap model from one quietly served by the frontier
+/// model. Every case names the model that actually served.
+type ModelOverrideOutcome =
+    /// No override was requested; the configured model served.
+    | ConfiguredModel of model: string
+    /// The override was requested and the provider served it.
+    | OverrideHonoured of model: string
+    /// The override was requested and the provider could not serve it:
+    /// it fell back to its configured model (`served`) and says why.
+    /// The call itself succeeded — a fallback is metadata, not an error.
+    | OverrideFellBack of requested: string * served: string * reason: string
+
+module ModelOverrideOutcome =
+    /// The model that actually served the call.
+    let served (outcome: ModelOverrideOutcome) : string =
+        match outcome with
+        | ConfiguredModel m
+        | OverrideHonoured m -> m
+        | OverrideFellBack(_, s, _) -> s
+
+    /// True when an override was asked for and NOT honoured.
+    let fellBack (outcome: ModelOverrideOutcome) : bool =
+        match outcome with
+        | OverrideFellBack _ -> true
+        | ConfiguredModel _
+        | OverrideHonoured _ -> false
+
+    /// Short route tag for telemetry rows and log lines:
+    /// `configured` | `override` | `override-fallback`.
+    let route (outcome: ModelOverrideOutcome) : string =
+        match outcome with
+        | ConfiguredModel _ -> "configured"
+        | OverrideHonoured _ -> "override"
+        | OverrideFellBack _ -> "override-fallback"
+
+    /// Human-readable rendering for logs.
+    let describe (outcome: ModelOverrideOutcome) : string =
+        match outcome with
+        | ConfiguredModel m -> $"served on configured model '{m}'"
+        | OverrideHonoured m -> $"served on requested model '{m}'"
+        | OverrideFellBack(requested, served, reason) ->
+            $"requested model '{requested}' not served ({reason}); fell back to '{served}'"
+
+    /// The one resolution rule every connector applies: decide which
+    /// model serves the call and record the outcome.
+    ///
+    /// - `Model = None` ⇒ `configured`, `ConfiguredModel`.
+    /// - a blank id ⇒ `configured`, `OverrideFellBack` ("blank model id").
+    /// - `canServe id` ⇒ `id`, `OverrideHonoured` (the configured id
+    ///   itself is trivially honoured).
+    /// - otherwise ⇒ `configured`, `OverrideFellBack` with `unservedReason`.
+    ///
+    /// `canServe` is the connector's static family check (an Anthropic
+    /// connector serves `claude-…` ids and nothing else); it is a
+    /// vocabulary test, not a probe — an id in the right family that
+    /// the vendor has retired still fails at HTTP time, as it always did.
+    let resolve
+        (canServe: string -> bool)
+        (unservedReason: string)
+        (configured: string)
+        (options: AIProviderCallOptions)
+        : string * ModelOverrideOutcome =
+        match options.Model with
+        | None -> configured, ConfiguredModel configured
+        | Some requested when System.String.IsNullOrWhiteSpace requested ->
+            configured, OverrideFellBack(requested, configured, "blank model id")
+        | Some requested when canServe requested -> requested, OverrideHonoured requested
+        | Some requested -> configured, OverrideFellBack(requested, configured, unservedReason)
+
+/// A provider call that carried `AIProviderCallOptions`: the ordinary
+/// response plus what the provider did about the options.
+type AIProviderCallResponse = {
+    /// The turn, exactly as `SendMessage` / `SendStructuredMessage`
+    /// would have returned it.
+    Response: AIProviderResponse
+    /// Which model served, and whether that was the one asked for.
+    Model: ModelOverrideOutcome
+}
+
+module AIProviderCallResponse =
+    /// Attach an outcome to a plain send's result — the shape every
+    /// connector's override path returns after delegating the transport
+    /// to its ordinary send.
+    let attach
+        (outcome: ModelOverrideOutcome)
+        (call: Async<Result<AIProviderResponse, AIProviderError>>)
+        : Async<Result<AIProviderCallResponse, AIProviderError>> =
+        async {
+            let! result = call
+            return result |> Result.map (fun response -> { Response = response; Model = outcome })
+        }
+
+/// Vendor-family vocabulary tests over model ids, shared by the
+/// shipped connectors' `canServe` checks so four connectors agree on
+/// what "a foreign vendor's id" means. Prefix tests only — the
+/// vendor's own catalogue is the authority on whether an id exists.
+module ModelIdFamily =
+    let private normalise (id: string) =
+        let trimmed = if isNull id then "" else id.Trim().ToLowerInvariant()
+
+        if trimmed.StartsWith "models/" then
+            trimmed.Substring 7
+        else
+            trimmed
+
+    /// `claude-…` — Anthropic's id vocabulary.
+    let isAnthropic (id: string) : bool = (normalise id).StartsWith "claude"
+
+    /// `gemini-…` / `gemma-…`, with or without the `models/` path
+    /// prefix the Gemini REST API uses.
+    let isGoogle (id: string) : bool =
+        let n = normalise id
+        n.StartsWith "gemini" || n.StartsWith "gemma"
+
+    /// An id that carries neither of the above families' prefixes —
+    /// what an OpenAI-compatible connector (OpenAI itself, an Azure
+    /// OpenAI deployment) is prepared to forward.
+    let isOpenAICompatible (id: string) : bool =
+        not (System.String.IsNullOrWhiteSpace id)
+        && not (isAnthropic id)
+        && not (isGoogle id)

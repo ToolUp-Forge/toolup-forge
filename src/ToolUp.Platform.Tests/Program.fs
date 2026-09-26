@@ -754,6 +754,8 @@ let private registeredTests =
         AIStreamFramingPinTests.tests
         AIChatWorkerTests.tests
         AITokenBudgetTests.tests
+        // Phase 661 — per-call model override on IAIProvider.
+        AIProviderModelOverrideTests.tests
         AISpendBudgetTests.tests
         ConversationReplayStreamTests.tests
         IngestionStatusStreamTests.tests

@@ -226,7 +226,23 @@ For providers with automatic caching (OpenAI), no markers are needed — set `Ca
 
 `false` is the correct default, and the value `AIProviderCapabilities.unknown` carries. Declare `true` only when a small structured-output request is genuinely cheap and reliable for your provider; a connector whose only model is a frontier model gains nothing from the tier and should leave it off.
 
-`Capabilities.TriageModelId` names the cheaper model your provider family would use, when it has one. It is a **declaration a composition root reads**, not a dispatch instruction: `IAIProvider` has no per-call model override, so the resolver cannot re-point your provider at that id. A deployment reads it, builds a second provider instance at that model, and hands it to the triage config. `None` means "no cheaper tier"; triage then runs on `Model` itself. See [`docs/migrations/6j-B-fastpath-triage.md`](../migrations/6j-B-fastpath-triage.md).
+`Capabilities.TriageModelId` names the cheaper model your provider family would use, when it has one. Since Phase 661 it is a **dispatch instruction the resolver honours by itself**: with no explicit `FastPathTriageConfig.TriageProvider` wired, the triage call names this id through the per-call model override (below), so the cheap turn runs there and the agent loop keeps `Model` — no second provider instance to build. A connector that does not implement the override serves triage on `Model`, and the triage telemetry row says so (`Route = override-fallback`). `None` means "no cheaper tier"; triage then runs on `Model` itself. See [`docs/migrations/6j-B-fastpath-triage.md`](../migrations/6j-B-fastpath-triage.md) and [`docs/migrations/661-per-call-model-override.md`](../migrations/661-per-call-model-override.md).
+
+### Per-call model override (optional)
+
+`IAIProvider` itself is unchanged. A connector that can re-point ONE call at another model implements the optional `IAIProviderModelOverride` beside it:
+
+```fsharp skip=fragment
+interface IAIProviderModelOverride with
+    member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+        let served, outcome = ModelOverrideOutcome.resolve canServeModel "not one of my ids" model options
+        // serve on `served` — e.g. through a sibling instance bound to that model
+        ...  |> AIProviderCallResponse.attach outcome
+
+    member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) = ...
+```
+
+Callers never test for the interface — the `SendMessageWith` / `SendStructuredMessageWith` extensions on `IAIProvider` dispatch to it when present and otherwise serve the call on the configured model, reporting `OverrideFellBack` in `AIProviderCallResponse.Model`. Two rules: `options.Model = None` must emit exactly the plain send's request bytes, and a model you cannot serve is a fallback with a reason, **never** a failed call. A decorator over `IAIProvider` should implement the interface too and forward through the extensions, or the override stops at its layer.
 
 ### Provider rules
 

@@ -78,14 +78,21 @@ type private MeteringProvider
     // silently and in the one record the operator bills from. On a
     // deployment with no `FallbackChain` the two reads return the same
     // values they always did.
-    let buildMetadata (extra: (string * string) list) =
+    //
+    // Phase 661 — `model` is a parameter rather than a read of
+    // `caps.Model`, because on the per-call-override path the model
+    // that SERVED the turn is the one the response reports
+    // (`ModelOverrideOutcome.served`), not the one the provider was
+    // configured with. The plain paths pass `inner.Capabilities.Model`
+    // read at the same post-call moment they always read it.
+    let buildMetadata (model: string) (extra: (string * string) list) =
         let caps = inner.Capabilities
 
-        let baseEntries = [ "provider", caps.ProviderName; "model", caps.Model; "userId", userId ]
+        let baseEntries = [ "provider", caps.ProviderName; "model", model; "userId", userId ]
 
         Map.ofList (baseEntries @ extra)
 
-    let emitUnit (kind: string) (unit': string) (qty: decimal) (extra: (string * string) list) = async {
+    let emitUnit (kind: string) (unit': string) (qty: decimal) (model: string) (extra: (string * string) list) = async {
         try
             let record = {
                 RecordId = Guid.NewGuid()
@@ -94,7 +101,7 @@ type private MeteringProvider
                 Quantity = qty
                 Unit = unit'
                 Origin = Some origin
-                Metadata = buildMetadata extra
+                Metadata = buildMetadata model extra
                 Timestamp = DateTime.UtcNow
             }
 
@@ -106,7 +113,8 @@ type private MeteringProvider
             ()
     }
 
-    let emit (kind: string) (qty: decimal) (extra: (string * string) list) = emitUnit kind "tokens" qty extra
+    let emit (kind: string) (qty: decimal) (model: string) (extra: (string * string) list) =
+        emitUnit kind "tokens" qty model extra
 
     // Phase 499.C — the post-call true-up. The turn's ACTUAL reported
     // `TokenUsage` is priced through the registered rate card and
@@ -122,7 +130,7 @@ type private MeteringProvider
     // chain the entry that SERVED the turn is what must be priced, and
     // a construction-time snapshot would bill the primary's rates for
     // the secondary's tokens.
-    let emitCost (usage: TokenUsage) = async {
+    let emitCost (model: string) (usage: TokenUsage) = async {
         match priceTable with
         | None -> ()
         | Some table ->
@@ -132,7 +140,7 @@ type private MeteringProvider
                 table
                 |> ModelPriceTable.tryCost
                     caps.ProviderName
-                    caps.Model
+                    model
                     usage.PromptTokens
                     usage.CachedPromptTokens
                     usage.OutputTokens
@@ -147,9 +155,36 @@ type private MeteringProvider
                 ()
             | Some amount ->
                 do!
-                    emitUnit AISpendResourceKind.cost table.Currency amount [
-                        "price_key", ModelPriceTable.key caps.ProviderName caps.Model
+                    emitUnit AISpendResourceKind.cost table.Currency amount model [
+                        "price_key", ModelPriceTable.key caps.ProviderName model
                     ]
+    }
+
+    /// Meter one returned turn against `model`: the two token records
+    /// plus the Phase 499.C cost true-up. A turn without reported usage
+    /// emits nothing — the provider couldn't extract usage (transient
+    /// parse failure or streaming early-exit), and half a record is
+    /// worse than no record. An error emits nothing.
+    let meter (model: string) (result: Result<AIProviderResponse, AIProviderError>) = async {
+        match result with
+        | Ok response ->
+            match response.Usage with
+            | Some usage ->
+                let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
+                do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) model cachedExtra
+                do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) model []
+                do! emitCost model usage
+            | None -> ()
+        | Error _ -> ()
+    }
+
+    /// Phase 661 — the per-call-options path meters the model that
+    /// SERVED (`ModelOverrideOutcome.served`), which on an honoured
+    /// override is not `inner.Capabilities.Model`.
+    let meterCall (result: Result<AIProviderCallResponse, AIProviderError>) = async {
+        match result with
+        | Ok call -> do! meter (ModelOverrideOutcome.served call.Model) (Ok call.Response)
+        | Error _ -> ()
     }
 
     interface IAIProvider with
@@ -157,22 +192,7 @@ type private MeteringProvider
 
         member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
             let! result = inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
-
-            match result with
-            | Ok response ->
-                match response.Usage with
-                | Some usage ->
-                    let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
-                    do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) cachedExtra
-                    do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) []
-                    do! emitCost usage
-                | None ->
-                    // Provider couldn't extract usage (transient parse
-                    // failure or streaming early-exit). Skip emission
-                    // — half a record is worse than no record.
-                    ()
-            | Error _ -> ()
-
+            do! meter inner.Capabilities.Model result
             return result
         }
 
@@ -182,18 +202,24 @@ type private MeteringProvider
         // the provider's report rather than reconstructed here.
         member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
             let! result = inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            do! meter inner.Capabilities.Model result
+            return result
+        }
 
-            match result with
-            | Ok response ->
-                match response.Usage with
-                | Some usage ->
-                    let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
-                    do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) cachedExtra
-                    do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) []
-                    do! emitCost usage
-                | None -> ()
-            | Error _ -> ()
+    // Phase 661 — the override path is metered identically, and is
+    // forwarded through the `IAIProvider` extension so an inner
+    // provider that does not implement the optional interface still
+    // serves the call (on its configured model, reported as such).
+    interface IAIProviderModelOverride with
+        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            let! result = inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy)
+            do! meterCall result
+            return result
+        }
 
+        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) = async {
+            let! result = inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy)
+            do! meterCall result
             return result
         }
 
@@ -263,53 +289,53 @@ type MeteringProviderFactory
 /// scope is already at/over its configured per-day/per-month budget,
 /// the policy breaches here and the provider is never invoked.
 type private QuotaEnforcingProvider(inner: IAIProvider, quota: ITeamQuotaPolicy, scopeId: string) =
+
+    /// The point-in-time gate, generic over the send it guards so the
+    /// plain and per-call-options paths (Phase 661) share one rule.
+    let gated (proceed: unit -> Async<Result<'r, AIProviderError>>) : Async<Result<'r, AIProviderError>> = async {
+        let! gate = quota.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, 1m)
+
+        match gate with
+        | Ok() -> return! proceed ()
+        | Error qb ->
+            // `PermanentClient(429)` — a quota breach is NOT
+            // retry-worthy inside the provider loop (the budget
+            // won't free up mid-loop). The agent loop surfaces
+            // `AIProviderError.toMessage` as `AITaskFailed`, so the
+            // user sees the quota message instead of a silent stall.
+            return
+                Error(
+                    PermanentClient(
+                        429,
+                        sprintf
+                            "AI usage quota exceeded for scope '%s': %s budget limit %M reached. Usage resets per the configured per-day / per-month window."
+                            qb.ScopeId
+                            qb.Kind
+                            qb.Limit
+                    )
+                )
+    }
+
     interface IAIProvider with
         member _.Capabilities = inner.Capabilities
 
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            let! gate = quota.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, 1m)
-
-            match gate with
-            | Ok() -> return! inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
-            | Error qb ->
-                // `PermanentClient(429)` — a quota breach is NOT
-                // retry-worthy inside the provider loop (the budget
-                // won't free up mid-loop). The agent loop surfaces
-                // `AIProviderError.toMessage` as `AITaskFailed`, so the
-                // user sees the quota message instead of a silent stall.
-                return
-                    Error(
-                        PermanentClient(
-                            429,
-                            sprintf
-                                "AI usage quota exceeded for scope '%s': %s budget limit %M reached. Usage resets per the configured per-day / per-month window."
-                                qb.ScopeId
-                                qb.Kind
-                                qb.Limit
-                        )
-                    )
-        }
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            gated (fun () -> inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
 
         // Phase 67b — structured-output path is quota-gated identically
         // to SendMessage. Same point-in-time gate semantics.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
-            let! gate = quota.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, 1m)
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            gated (fun () -> inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
 
-            match gate with
-            | Ok() -> return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
-            | Error qb ->
-                return
-                    Error(
-                        PermanentClient(
-                            429,
-                            sprintf
-                                "AI usage quota exceeded for scope '%s': %s budget limit %M reached. Usage resets per the configured per-day / per-month window."
-                                qb.ScopeId
-                                qb.Kind
-                                qb.Limit
-                        )
-                    )
-        }
+    // Phase 661 — the override path is gated identically; a denied call
+    // is never sent whichever model it named.
+    interface IAIProviderModelOverride with
+        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            gated (fun () -> inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy))
+
+        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            gated (fun () ->
+                inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy))
 
 /// Wraps an `IAIProviderFactory` so every `Resolve`-d provider's
 /// `SendMessage` is quota-gated. `TryResolveByLabel` (diagnostic

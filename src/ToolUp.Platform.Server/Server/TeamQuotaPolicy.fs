@@ -199,10 +199,13 @@ type QuotaGatedAIProvider(inner: IAIProvider, scopeId: string, quotaPolicy: ITea
 
         messages |> List.map asPair |> RequestTokenEstimator.estimateMessages
 
-    interface IAIProvider with
-        member _.Capabilities = inner.Capabilities
-
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
+    /// The pre-call advisory gate, generic over the send it guards so
+    /// the plain and per-call-options paths (Phase 661) share one rule.
+    let gated
+        (messages: AIProviderMessage list)
+        (proceed: unit -> Async<Result<'r, AIProviderError>>)
+        : Async<Result<'r, AIProviderError>> =
+        async {
             let estimated = estimateInputTokens messages
             let! gate = quotaPolicy.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, estimated)
 
@@ -217,29 +220,32 @@ type QuotaGatedAIProvider(inner: IAIProvider, scopeId: string, quotaPolicy: ITea
                         breach.ScopeId
 
                 return Error(AIProviderError.PermanentClient(429, msg))
-            | Ok() -> return! inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+            | Ok() -> return! proceed ()
         }
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            gated messages (fun () -> inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
 
         // Phase 67b — structured-output path is quota-gated identically to
         // SendMessage: pre-call advisory estimate against the same
         // aiTokensInput budget, then delegate to the inner provider.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
-            let estimated = estimateInputTokens messages
-            let! gate = quotaPolicy.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, estimated)
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            gated messages (fun () -> inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
 
-            match gate with
-            | Error breach ->
-                let msg =
-                    sprintf
-                        "Token quota exceeded (%s): limit=%M requested=%M scope=%s"
-                        breach.Kind
-                        breach.Limit
-                        breach.Requested
-                        breach.ScopeId
+    // Phase 661 — the override path is gated identically and forwarded
+    // through the `IAIProvider` extension, so an inner provider without
+    // the optional interface still serves (on its configured model).
+    interface IAIProviderModelOverride with
+        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            gated messages (fun () ->
+                inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy))
 
-                return Error(AIProviderError.PermanentClient(429, msg))
-            | Ok() -> return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
-        }
+        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            gated messages (fun () ->
+                inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy))
 
 // ─── Decorator: IJobScheduler ────────────────────────────────────
 //

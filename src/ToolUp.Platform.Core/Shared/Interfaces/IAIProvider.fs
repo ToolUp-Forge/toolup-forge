@@ -109,6 +109,53 @@ type IAIProvider =
         retryPolicy: RetryPolicy ->
             Async<Result<AIProviderResponse, AIProviderError>>
 
+// ─── Per-call model override (Phase 661) ─────────────────────────
+//
+// An OPTIONAL second interface rather than two new abstract members on
+// `IAIProvider`, for the reason `ModelInputProviderExtensions` (Phase
+// 791.C) records: widening `IAIProvider` retypes every shipped
+// connector, decorator and test double, which is the break GP 11
+// forbids. A connector that can re-point one call at another model
+// implements this beside `IAIProvider`; a caller never tests for it —
+// the `SendMessageWith` / `SendStructuredMessageWith` extensions on
+// `IAIProvider` below dispatch to it when present and otherwise serve
+// the call on the configured model, reporting the fallback in the
+// response metadata. A provider that implements neither path differently
+// is byte-identical to today.
+
+/// Optional capability: serve ONE call on a model other than the one the
+/// provider was constructed with. Implemented by the shipped connectors
+/// (Claude, OpenAI, Copilot, Gemini) and forwarded by every shipped
+/// decorator (metering, quota, failover) so the override survives the
+/// wrapping a composed deployment applies.
+///
+/// Contract for implementers: resolve `options.Model` through
+/// `ModelOverrideOutcome.resolve` with the connector's own family
+/// check; serve the call on the resolved model; NEVER fail the call
+/// because the named model cannot be served — fall back to the
+/// configured model and report `OverrideFellBack`. With `options.Model
+/// = None` the request bytes are those of the plain send.
+type IAIProviderModelOverride =
+    /// `IAIProvider.SendMessage` with per-call options.
+    abstract SendMessageWith:
+        options: AIProviderCallOptions *
+        messages: AIProviderMessage list *
+        tools: AIProviderToolDef list *
+        systemPrompt: string option *
+        onStream: (string -> unit) option *
+        retryPolicy: RetryPolicy ->
+            Async<Result<AIProviderCallResponse, AIProviderError>>
+
+    /// `IAIProvider.SendStructuredMessage` with per-call options.
+    abstract SendStructuredMessageWith:
+        options: AIProviderCallOptions *
+        messages: AIProviderMessage list *
+        tools: AIProviderToolDef list *
+        systemPrompt: string option *
+        schema: string *
+        retryPolicy: RetryPolicy ->
+            Async<Result<AIProviderCallResponse, AIProviderError>>
+
 /// Phase 67b — fallback implementations external `IAIProvider`
 /// implementers may compose into their own `SendStructuredMessage`
 /// methods. The shipped providers (Gemini, OpenAI, Claude) provide
@@ -181,3 +228,112 @@ module IAIProviderDefaults =
                                 )
                             ))
         }
+
+
+    /// Phase 661 — the per-call-options path for a provider that does
+    /// NOT implement `IAIProviderModelOverride`: the call is served on
+    /// the configured model through the plain `SendMessage`, and the
+    /// metadata says so (`ConfiguredModel` when no model was asked for,
+    /// `OverrideFellBack` when one was). The request bytes are exactly
+    /// the plain send's.
+    let sendWithoutModelOverride
+        (provider: IAIProvider)
+        (options: AIProviderCallOptions)
+        (messages: AIProviderMessage list)
+        (tools: AIProviderToolDef list)
+        (systemPrompt: string option)
+        (onStream: (string -> unit) option)
+        (retryPolicy: RetryPolicy)
+        : Async<Result<AIProviderCallResponse, AIProviderError>> =
+        let _, outcome =
+            ModelOverrideOutcome.resolve
+                (fun _ -> false)
+                "provider does not implement IAIProviderModelOverride"
+                provider.Capabilities.Model
+                options
+
+        provider.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+        |> AIProviderCallResponse.attach outcome
+
+    /// Phase 661 — `sendWithoutModelOverride` for the structured path.
+    let sendStructuredWithoutModelOverride
+        (provider: IAIProvider)
+        (options: AIProviderCallOptions)
+        (messages: AIProviderMessage list)
+        (tools: AIProviderToolDef list)
+        (systemPrompt: string option)
+        (schema: string)
+        (retryPolicy: RetryPolicy)
+        : Async<Result<AIProviderCallResponse, AIProviderError>> =
+        let _, outcome =
+            ModelOverrideOutcome.resolve
+                (fun _ -> false)
+                "provider does not implement IAIProviderModelOverride"
+                provider.Capabilities.Model
+                options
+
+        provider.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+        |> AIProviderCallResponse.attach outcome
+
+// ─── The per-call-options entry on every IAIProvider (Phase 661) ──
+//
+// Type extensions on `IAIProvider`, so a caller holding any provider —
+// a shipped connector, a decorator over one, a test double — can name
+// a model for one call without testing for the optional interface.
+// Dispatch is by runtime type: a provider that implements
+// `IAIProviderModelOverride` serves it natively; any other is served
+// on its configured model with the fallback recorded in the response.
+
+[<AutoOpen>]
+module AIProviderCallOptionsExtensions =
+
+    type IAIProvider with
+
+        /// `SendMessage` with per-call options. Honoured natively when
+        /// the provider implements `IAIProviderModelOverride`; otherwise
+        /// served on the configured model and reported as such.
+        member this.SendMessageWith
+            (
+                options: AIProviderCallOptions,
+                messages: AIProviderMessage list,
+                tools: AIProviderToolDef list,
+                systemPrompt: string option,
+                onStream: (string -> unit) option,
+                retryPolicy: RetryPolicy
+            ) : Async<Result<AIProviderCallResponse, AIProviderError>> =
+            match this with
+            | :? IAIProviderModelOverride as native ->
+                native.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy)
+            | _ ->
+                IAIProviderDefaults.sendWithoutModelOverride
+                    this
+                    options
+                    messages
+                    tools
+                    systemPrompt
+                    onStream
+                    retryPolicy
+
+        /// `SendStructuredMessage` with per-call options. Same dispatch
+        /// as `SendMessageWith`.
+        member this.SendStructuredMessageWith
+            (
+                options: AIProviderCallOptions,
+                messages: AIProviderMessage list,
+                tools: AIProviderToolDef list,
+                systemPrompt: string option,
+                schema: string,
+                retryPolicy: RetryPolicy
+            ) : Async<Result<AIProviderCallResponse, AIProviderError>> =
+            match this with
+            | :? IAIProviderModelOverride as native ->
+                native.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy)
+            | _ ->
+                IAIProviderDefaults.sendStructuredWithoutModelOverride
+                    this
+                    options
+                    messages
+                    tools
+                    systemPrompt
+                    schema
+                    retryPolicy

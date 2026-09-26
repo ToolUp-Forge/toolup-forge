@@ -473,36 +473,42 @@ type private AIFailoverProvider
     /// being issued so both honour the chain identically — a
     /// structured-output call is as entitled to survive an outage as a
     /// conversational one, and two copies of this loop would drift.
-    let sendWithFailover (send: IAIProvider -> Async<Result<AIProviderResponse, AIProviderError>>) = async {
-        let rec attempt () = async {
-            let started = System.Diagnostics.Stopwatch.StartNew()
-            let! result = send active
+    /// Generic over the result too (Phase 661): the per-call-options
+    /// path returns `AIProviderCallResponse`, and nothing in the walk
+    /// reads the payload.
+    let sendWithFailover
+        (send: IAIProvider -> Async<Result<'r, AIProviderError>>)
+        : Async<Result<'r, AIProviderError>> =
+        async {
+            let rec attempt () = async {
+                let started = System.Diagnostics.Stopwatch.StartNew()
+                let! result = send active
 
-            match result with
-            | Ok response -> return Ok response
-            | Error err ->
-                if AIProviderFailover.isOutageClass err then
-                    let! advanced = advance err started.Elapsed.TotalMilliseconds
+                match result with
+                | Ok response -> return Ok response
+                | Error err ->
+                    if AIProviderFailover.isOutageClass err then
+                        let! advanced = advance err started.Elapsed.TotalMilliseconds
 
-                    if advanced then
-                        return! attempt ()
+                        if advanced then
+                            return! attempt ()
+                        else
+                            // Chain exhausted. The LAST error is returned
+                            // rather than a new "everything is down" case:
+                            // the callers' existing handling — the agent
+                            // loop's `classifyForAgentLoop`, the handler's
+                            // `AITaskFailed` rendering — already says the
+                            // right thing about it, and inventing a case
+                            // here would retype the `SendMessage` contract
+                            // for every consumer to serve one diagnostic.
+                            // The failover records name every entry tried.
+                            return Error err
                     else
-                        // Chain exhausted. The LAST error is returned
-                        // rather than a new "everything is down" case:
-                        // the callers' existing handling — the agent
-                        // loop's `classifyForAgentLoop`, the handler's
-                        // `AITaskFailed` rendering — already says the
-                        // right thing about it, and inventing a case
-                        // here would retype the `SendMessage` contract
-                        // for every consumer to serve one diagnostic.
-                        // The failover records name every entry tried.
                         return Error err
-                else
-                    return Error err
-        }
+            }
 
-        return! attempt ()
-    }
+            return! attempt ()
+        }
 
     interface IAIProvider with
         /// The entry CURRENTLY serving. Read per call by the metering
@@ -515,6 +521,19 @@ type private AIFailoverProvider
 
         member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
             sendWithFailover (fun p -> p.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
+
+    // Phase 661 — the override path walks the same chain. The entry that
+    // takes over resolves the named model against ITS OWN family: a
+    // Haiku id requested of a chain that failed over to an OpenAI entry
+    // is served on that entry's configured model and reported as
+    // `OverrideFellBack`, never failed.
+    interface IAIProviderModelOverride with
+        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            sendWithFailover (fun p -> p.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy))
+
+        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            sendWithFailover (fun p ->
+                p.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy))
 
 /// Wrap a factory so a `Resolve`-d provider honours the profile's
 /// `FallbackChain` (Phase 43.B) — the shipped data, not a second
