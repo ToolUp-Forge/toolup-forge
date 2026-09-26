@@ -1,0 +1,45 @@
+{
+  "schema": "toolup.triage-calibration.cases/1",
+  "cases": [
+    {
+      "id": "set-country-alias",
+      "instruction": "set country to britain",
+      "snapshot": { "moduleId": "sales", "page": "overview", "stateSummary": "country=FR, period=2024-Q1" },
+      "fields": [
+        {
+          "fieldId": "country",
+          "description": "the country filter applied to the dataset",
+          "valueType": "enum",
+          "instructionPatterns": [ "set country to {value}", "filter by {value}" ],
+          "valueAliases": { "britain": "UK", "united kingdom": "UK" }
+        },
+        { "fieldId": "region", "description": "the region filter", "valueType": "string-option" }
+      ],
+      "expected": { "decision": "set_field", "fieldId": "country", "value": "UK" }
+    },
+    {
+      "id": "clear-region",
+      "instruction": "clear the region",
+      "snapshot": { "moduleId": "sales", "page": "overview", "stateSummary": "region=north" },
+      "fields": [ { "fieldId": "region", "description": "the region filter", "valueType": "string-option" } ],
+      "expected": { "decision": "set_field", "fieldId": "region", "value": null }
+    },
+    {
+      "id": "multi-clause",
+      "instruction": "set country to UK and region to north",
+      "snapshot": { "moduleId": "sales", "page": null, "stateSummary": "" },
+      "fields": [
+        { "fieldId": "country", "description": "the country filter", "valueType": "enum" },
+        { "fieldId": "region", "description": "the region filter", "valueType": "string-option" }
+      ],
+      "expected": { "decision": "needs_full_agent" }
+    },
+    {
+      "id": "question",
+      "instruction": "which region sold the most?",
+      "snapshot": { "moduleId": "sales", "page": null, "stateSummary": "" },
+      "fields": [ { "fieldId": "region", "description": "the region filter", "valueType": "string-option" } ],
+      "expected": { "decision": "needs_full_agent" }
+    }
+  ]
+}
