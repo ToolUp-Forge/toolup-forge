@@ -187,11 +187,10 @@
              The SAME host-neutral differential the .NET pack compiles
              (WireCorpus.fs precedent) replays the model's verdicts from
              tests/elmish-proof-corpus/ against the transpiled Ring.fs /
-             Sub.fs — the copy every browser client executes. The
-             extraction itself is NOT compiled here: its pre-F#-8 layout
-             needs the strict-indentation opt-out, which Fable does not read from
-             an fsproj (see the differential's header). No new
-             ProjectReference. -->
+             Sub.fs — the copy every browser client executes. Since Phase
+             850 the ring EXTRACTION is compiled here too, through the
+             Fable-host oracle project referenced below, and run live
+             beside the transpiled ring. -->
         <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" />
         <Compile Include="ElmishProofOracleTests.fs" />
         <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
@@ -216,6 +215,11 @@
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" />
         <!-- Phase 537 - the UI-awareness companion's Fable client tier. -->
         <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
+        <!-- Phase 850 — the proved Elmish ring's extraction over a
+             machine-integer Prims, compiled by Fable with the rest of the
+             tier so ElmishProofOracleTests runs the model DIRECTLY beside
+             the transpiled runtime (read that project's header). -->
+        <ProjectReference Include="..\..\proofs\oracle\fable\ToolUp.Remoting.Proofs.Oracle.Fable.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
     </ItemGroup>

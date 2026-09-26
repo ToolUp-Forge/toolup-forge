@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Phase 850 — the proved Elmish ring buffer, extracted, for the FABLE
+         host: the first extraction the browser's own runtime runs directly.
+
+         Two files, and the point is which two. `Prims.fs` beside this
+         project is the machine-integer shim (read its header); the second
+         is the SAME `../ElmishRing.fs` the .NET oracle compiles — one
+         committed extraction, laid out by `proofs/normalise-extraction.fsx`
+         into F# both hosts accept with no flag, byte-held by
+         `proofs/check.ps1` — so the model the Fable pack runs is, byte for
+         byte, the model the prover produced and the .NET differential
+         runs. `ToolUp.AI.Client.Tests` references this project and Fable
+         transpiles both files with the rest of the client tier;
+         `check.ps1` also builds it on .NET, which is the cheap half of
+         "compiles on both hosts".
+
+         It lives under `proofs/oracle/` on purpose: the `Directory.Build.props`
+         one level up stops the repository-wide MSBuild walk, so the FS0025
+         promotion (Phase 624) does not reach the extractor's field
+         projectors here either — the exemption `ArchitectureFitness`
+         mirrors is the `proofs/oracle/` prefix, which this directory is
+         under. It is a second HOST for the generated oracle, which is what
+         that props file says the directory is for.
+
+         Not in the solution, like the .NET oracle: reached by ProjectReference. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <NoWarn>$(NoWarn);64</NoWarn>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <!-- Fable-touching projects keep nullness off, per the forge CLAUDE.md. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The machine-integer runtime. Must precede the extraction. -->
+        <Compile Include="Prims.fs" />
+        <!-- GENERATED from ../../ElmishRing.fst — the committed, normalised
+             extraction, shared with the .NET oracle. Do not edit. -->
+        <Compile Include="../ElmishRing.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Explicit, as every Fable-compiled project in the tree: the
+             SDK-bundled implicit FSharp.Core is too old for Fable's cracker. -->
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

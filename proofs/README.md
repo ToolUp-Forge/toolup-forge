@@ -98,15 +98,17 @@ breaks the encoding computed as the exception. Its ladder is
 | `ElmishRing.fst` | the ring-buffer model — `RingBuffer<'item>`'s two-case state, `Push`, `Pop` and `doubleSize` clause for clause, the backing array as a slot list with the placeholder a constructor, and the `run` driver both hosts execute |
 | `ElmishSub.fst` | the subscription-diff model — `Sub.Internal.diff`, `NewSubs.calculate` and the active-list half of `Fx.change` clause for clause, the key and the start function opaque |
 | `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
-| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract and byte-diff; build the oracle project; run each module's differential host |
+| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract, normalise and byte-diff; build the two oracle projects; run each module's differential host |
+| `normalise-extraction.fsx` | **Phase 850** — the layout normaliser the leg runs between extract and byte-diff: a parser for exactly the dialect the F# backend emits and a printer for indentation-clean F#, so every committed extraction compiles on both hosts with no flag (the section [below](#the-verified-implementation-spike-phase-850) says why the alternatives were not available) |
 | `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
 | `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
 | `oracle/ToolGate.fs` | **generated** — the tool gate model extracted to F#, committed for the same reason |
 | `oracle/ModelInput.fs` | **generated** — the model-input model extracted to F#, committed for the same reason |
 | `oracle/TaintFlow.fs` | **generated** — the taint-flow model extracted to F#, committed for the same reason |
 | `oracle/ElmishRing.fs`, `oracle/ElmishSub.fs` | **generated** — the two Elmish models extracted to F#, committed for the same reason |
-| [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime, because an extraction cannot compile under Fable (below) |
+| [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime; since Phase 850 also the check that the two hosts' `Prims` shims compute the same ring |
 | `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; every later model references a subset of the same nine |
+| `oracle/fable/Prims.fs`, `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the same shim over machine integers, and the project that compiles the committed `oracle/ElmishRing.fs` against it for the **Fable** host; `ToolUp.AI.Client.Tests` references it and runs the ring model live beside the transpiled runtime |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -880,18 +882,22 @@ one every client executes.
   over generated subscription sets with duplicates and with the exact active key set, so the shortcut
   fires. The comparison is on keys **and on the identity** of every handle and start function carried
   through: production must hand back the same object, not an equal-looking one.
-* **…and under Fable, from the model's recorded verdicts.** The drivers are one shared module
+* **…and under Fable — from the model's recorded verdicts, and since Phase 850 from the ring model
+  itself.** The drivers are one shared module
   (`src/ToolUp.Platform.Tests/Client/ElmishProofDifferential.fs`, no test framework and no model in
-  it) compiled into both packs. The extraction itself compiles on .NET only — the F\* extractor emits
-  pre-F#-8 layout that needs `--strict-indentation-`, and Fable reads no `OtherFlags` from an fsproj
-  (checked against the 5.0.0 CLI), so the Fable pack could compile it only by pinning `LangVersion`
-  back to 7, which the workspace baseline forbids. So the .NET host also writes the model's verdicts
-  for its campaign to `tests/elmish-proof-corpus/` as a self-describing corpus — each case carries its
-  inputs and the outputs the proved model produced — holds that file to the live model on every run,
-  and the Fable pack's `ElmishProofOracleTests` replays it against the transpiled `Ring.fs` /
-  `Sub.fs`. Both hosts hold the shipped code to the proved model's answer; one computes it. The
-  generator is a small LCG rather than `System.Random`, so the sequences are the same by seed on
-  either host.
+  it) compiled into both packs. Until Phase 850 the extraction compiled on .NET only — the F\*
+  extractor emits pre-F#-8 layout that needed `--strict-indentation-`, which Fable reads from no
+  fsproj — so the .NET host also writes the model's verdicts for its campaign to
+  `tests/elmish-proof-corpus/` as a self-describing corpus — each case carries its inputs and the
+  outputs the proved model produced — holds that file to the live model on every run, and the Fable
+  pack's `ElmishProofOracleTests` replays it against the transpiled `Ring.fs` / `Sub.fs`. Phase 850's
+  normaliser made the committed extraction F# both hosts compile, and the Fable pack now ALSO
+  compiles `oracle/ElmishRing.fs` over a machine-integer `Prims` and runs the ring model live: it
+  reproduces the corpus's verdicts (so the `BigInteger` and `int` shims are held to each other), it
+  agrees with the transpiled ring on a second campaign the corpus never recorded, and it catches the
+  broken ring. Both hosts hold the shipped ring to the proved model's answer, and both compute it;
+  the diff is still replayed. The generator is a small LCG rather than `System.Random`, so the
+  sequences are the same by seed on either host.
 * **The campaign is known to have reached the grow step.** The .NET host asserts the largest backing
   array the model reached is past several doublings, and that the diff campaign hit both the shortcut
   and the duplicate path — a campaign that only ever exercised the steady state would pass every
@@ -1076,13 +1082,107 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
   handed `dispatch` and returning — `Cmd.OfAsync`, `Cmd.map`, `Cmd.batch` ordering — and what a
   subscription's start does, are the callees the oracle abstracts. The theorem is about what the
   loop does with what they raise, not about what they raise.
-* **Under Fable.** The extraction compiles on .NET only (Phase 788's Rung 2 says why), and 788's
-  answer — the .NET host writing the model's verdicts to a corpus the Fable pack replays — was not
-  taken here: the loop differential drives `Program.runWithDispatch` itself, which would need the
-  script driver in the shared host-neutral module and a corpus of script verdicts. The transpiled
-  loop is the one every browser client executes, and it is not differentially tested by this phase.
+* **Under Fable.** 788's answer — the .NET host writing the model's verdicts to a corpus the Fable
+  pack replays — was not taken here: the loop differential drives `Program.runWithDispatch` itself,
+  which would need the script driver in the shared host-neutral module and a corpus of script
+  verdicts. Since Phase 850 an extraction CAN compile under Fable (the ring's does, and `ElmishLoop.fs`
+  opens only `ElmishRing`), so the cheaper route now is to compile the loop model into the Fable
+  pack beside the ring and drive it live, but that is not done. The transpiled loop is the one every
+  browser client executes, and it is not differentially tested by this phase.
 
 ---
+
+## The verified-implementation spike (Phase 850)
+
+Every theorem above is about a **model** — a clause-for-clause transcription of the shipped F#,
+held to production by a differential test. That tie is what a performance rewrite of the runtime
+breaks on purpose, and the question the operator asked (2026-09-26) was whether the stronger shape
+is reachable: a **verified implementation**, where the code the prover checked is the code that
+runs, on .NET and in the browser. Three things stood between an extraction and production, none of
+them a theorem. The spike took the ring — the smallest model — through all three on the pinned
+release. Two stood; the third did not, and the blocker has a name.
+
+**Layout — stood.** The F# backend prints a verbose, OCaml-shaped dialect: `begin … end`, `let … in`,
+match arms and `if` at column 0 whatever their nesting. F# 8 rejects it (FS0058, 100 errors before
+the compiler stops), and the two ways of not fixing it are both closed: Fable reads no
+`--strict-indentation-` from an fsproj, and F# 10 refuses the verbose-syntax directive outright —
+`#light "off"` is FS1205, "no longer supported" — so there is no per-file escape either. Fantomas
+cannot parse the raw output. What works is `normalise-extraction.fsx`: a parser for exactly the
+constructs the backend emits and a printer for indentation-clean F# — `begin`/`end` become
+parentheses, every block starts a line at its depth, every parenthesis the extractor wrote is kept
+so no precedence moves, and every atom is carried through verbatim. It is deterministic (the leg
+byte-diffs its output), it refuses a shape it does not know rather than guessing, and it refuses its
+own output (so a double pass cannot happen quietly). All eight committed extractions were re-emitted
+through it; the oracle project dropped the strict-indentation opt-out and FS0058; every differential
+host is green on .NET, unchanged.
+
+**Representation — stood.** `Prims.int` is `BigInteger` in `oracle/Prims.fs` because the decoder
+model needs the `uint64` ceiling; the Elmish models need only indices. `oracle/fable/Prims.fs` is the
+same five names over `System.Int32`, and `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj`
+compiles the committed `oracle/ElmishRing.fs` — the same bytes the .NET oracle compiles — against
+it; `ToolUp.AI.Client.Tests` references that project, Fable transpiles both files with the rest of
+the client tier, and the pack runs the ring model **directly** for the first time: it reproduces the
+corpus the .NET host wrote (the two shims held to each other on 200 sequences), agrees with the
+transpiled `Ring.fs` on a second campaign of 120 sequences the corpus never recorded, and catches
+`BrokenRing`. The machine-integer shim is a stated assumption, on the ladder as
+`elmish-fable-shim-machine-integers`: the theorems are about mathematical integers, and hold exactly
+as long as no index or length exceeds `Int32.MaxValue`.
+
+**The array-backed ring — did not stand.** The ring model's backing array is a slot **list**, and an
+extraction of that shape is correct and slow; a verified implementation needs the F\* source over a
+structure whose extraction is fast. On the pinned release (`v2026.09.06`) there is none the F#
+backend can realise:
+
+* **`FStar.Seq` is a list.** `ulib/FStar.Seq.Base.fst` declares `type seq a = MkSeq of list a`;
+  `index` is `List.index`, `upd` rebuilds the prefix, `create` is a cons loop. It is a
+  *specification* type — constant-time in Low\* only through KaRaMeL's C buffers — and the F#
+  backend extracts it as exactly that: a probe module over `Seq.create` / `upd` / `index` /
+  `slice` / `append` checked and extracted cleanly, and `--extract 'SeqProbe FStar.Seq.Base
+  FStar.List.Tot.Base'` produced a list-backed `FStar_Seq_Base.fs` referencing `FStar_List_Tot_Base`.
+  So rewriting the ring over `FStar.Seq` changes its spelling and not its asymptotics: re-proving the
+  six theorems over it would have produced a second correct-and-slow model, which is the shape the
+  question was asking to escape. It was not done, and that is the deliberate part of the answer.
+* **The pinned `ulib` ships no mutable array or state module at all.** `FStar.ST`, `FStar.Ref`,
+  `FStar.Array`, `FStar.HyperStack.ST`, `FStar.Monotonic.Heap` and `LowStar.Buffer` are absent from
+  `lib/fstar/ulib/` (only the OCaml runtime stubs `FStar_ST.ml` / `FStar_Heap.ml` survive under
+  `ulib/ml/app/`, and the F# backend has no runtime directory of its own). A mutable ring cannot be
+  *stated* against this release without pulling the effect modules from elsewhere, and its theorems
+  would move from linear arithmetic over indices into a heap logic. `FStar.ImmutableArray` is
+  present but is an interface (`val t`, "implemented in OCaml by an array"), has no `upd`, and no
+  F# realisation.
+* **Machine integers buy nothing here.** A probe over `FStar.UInt32` extracts to references to a
+  `FStar_UInt32` module — `add`, `mul`, `v`, `uint_to_t` — with every literal routed through
+  `uint_to_t (Prims.parse_int "1")`: a hand-written shim per host, and no representation the
+  machine-integer `Prims` above does not already give.
+
+What "yes" would have needed is therefore not a better proof but a different toolchain: an F\*
+release with a stateful array the F# backend can realise (the release does ship Pulse, under
+`lib/fstar/pulse/`, but it targets C and Rust through KaRaMeL, not F#), or an axiomatised array
+interface realised by hand on each host — at which point the ring's O(1) rests on unverified host
+code and every theorem becomes conditional on the axioms, which is the refinement tie wearing a
+different coat.
+
+**The measurement.** The extraction that *can* be built, against the shipped `Ring.fs`, on both
+hosts, with a local stopwatch (Phase 849's harness was in flight): capacity 10, the same 4,000-op
+sequence at 65 % pushes (the ring grows through several doublings), outputs asserted equal before
+timing. On .NET, `Ring.fs` 141–175 ns/op against the model's 177–187 µs/op — a ratio of
+1,000–1,300×; under Fable on node, 994 ns/op against 2.62 ms/op — 2,600×. The falsifier is stated
+because a measurement without one is not a measurement: both arms assert the same popped values
+from the same sequence, so neither skipped its work; the per-op figures scale with the sequence
+length and are dominated by the model's O(n) `set` / `nth` over a list of a few hundred slots, so a
+ratio that vanished would mean the list model had stopped being a list; and the Fable arm, which
+carries no `BigInteger`, is the *worse* ratio, so the gap is the representation and not the
+arithmetic. The cases are `Phase 850 - the extracted ring against the shipped ring, measured
+(informational)` in both packs; they assert agreement and print the figures, never a threshold.
+
+**The answer, as policy.** The road to a verified runtime runs on the **refinement tie**: the F\*
+model stays the specification, the shipped code stays the implementation, and a rewrite of the
+runtime — the ring, the loop, anything Phase 849's budgets send someone after — is held to the model
+by the differential on both hosts, which this phase made stronger on the browser side, not by
+replacing the shipped code with an extraction. Recorded in [`../proofs.json`](../proofs.json) as
+`verified-implementation-road`. What would reopen it is named above and is a toolchain event, not a
+proof one; until then, the ladder's Rung 2 is the tie, and it is what the two go-red cases and the
+grow-step floor exist to keep honest.
 
 ## Method, and where it comes from
 
@@ -1094,8 +1194,9 @@ met again by anyone touching this file:
 
 * Proof hints no longer exist; the pin, the `z3rlimit` margin and `--quake` replace them.
 * The F# backend ships no runtime, so a `Prims` shim is required.
-* The emitted F# uses pre-F#-8 indentation, so the oracle project — and only that project — relaxes
-  strict indentation and silences `FS0058`.
+* The emitted F# uses pre-F#-8 indentation. Until Phase 850 the oracle project — and only that
+  project — relaxed strict indentation and silenced `FS0058`; since 850 the leg re-lays the
+  extraction out instead (`normalise-extraction.fsx`), and no project carries the flag.
 * A ghost definition needs `noextract_to "FSharp"`; refinement types are erased regardless.
 * Extraction refuses outright on an unchecked module, so the leg is check-then-extract against the
   cache, never one pass.
@@ -1165,6 +1266,27 @@ rather than only mutually-recursive proofs:
   compiling perfectly and leaving the host referring to a name the model does not contain. Renamed at
   source, so the extraction and the `.fst` agree; worth a glance at the emitted top-level names after
   any new model, because nothing fails when this happens.
+
+And four from the verified-implementation spike (Phase 850), the first to touch the leg's shape
+rather than add a module to it:
+
+* **`#light "off"` is gone.** F# 10 refuses the verbose-syntax directive (FS1205, "no longer
+  supported"), so the OCaml-shaped layout the backend emits has no per-file escape; the flag the
+  oracle project used to carry was the last one, and Fable reads none. A re-layout is the only route
+  that reaches both hosts, and `normalise-extraction.fsx` is it.
+* **A continuation line at the offside column is a sequence separator.** `(f a` newline `b)` with
+  `b` under `f` parses as `f a; b`, silently; the normaliser therefore puts every continuation four
+  columns in and lets only the permitted undentations — match arms, `else`, `then`, a let's body —
+  sit at their construct's column. A record whose field holds a structural value is laid out one
+  field per line with an explicit `;`, or the match in the first field swallows the second.
+* **`FStar.Seq` extracts as a list, and the pinned `ulib` has no mutable array.** `seq` is
+  `MkSeq of list`; `FStar.ST` / `FStar.Array` / `LowStar.Buffer` are not in the release; the F#
+  backend ships no runtime for anything. A model that needs constant-time indexing has nowhere to
+  get it from on this toolchain — the section above is the record.
+* **The F# backend names a foreign module with underscores.** `FStar.Seq.Base.create` comes out as
+  `FStar_Seq_Base.create`, `FStar.UInt32.add` as `FStar_UInt32.add`; a shim for either would be a
+  module of that spelling. `Prims` is the one module whose name has no dots, which is why the shim
+  never had to know this.
 
 The 790 note above predicted a third model would be one `$modules` entry and no other edit. That
 held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`,
