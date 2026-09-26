@@ -8,6 +8,7 @@ open Expecto
 open ToolUp.Graph
 open ToolUp.Graph.AGE
 open ToolUp.Graph.AGE.CypherToAgeSql
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 68c — ToolUp.Graph.AGE conformance + translation unit pack ─────────
 //
@@ -304,4 +305,4 @@ let liveTests =
         // in-memory floor refuses — the four cases Phase 607's first live run
         // reported red were the pack asserting interpreter-subset laws here,
         // not AGE defects.
-        GraphStoreContract.tests "AgeGraphStore" GraphStoreContract.FullEngine factory
+        IGraphStoreContract.tests "AgeGraphStore" IGraphStoreContract.FullEngine factory

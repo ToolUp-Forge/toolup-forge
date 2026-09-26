@@ -8,6 +8,7 @@ open Expecto
 open Neo4j.Driver
 open ToolUp.Graph
 open ToolUp.Graph.Neo4j
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 68b — ToolUp.Graph.Neo4j conformance + translation unit pack ───────
 //
@@ -239,4 +240,4 @@ let liveTests =
         // 752 this binding was held to the in-memory floor's subset laws, so
         // it would have failed four cases the first time anyone ran it
         // (recorded at Phase 607 before a server existed to prove it).
-        GraphStoreContract.tests "Neo4jGraphStore" GraphStoreContract.FullEngine factory
+        IGraphStoreContract.tests "Neo4jGraphStore" IGraphStoreContract.FullEngine factory

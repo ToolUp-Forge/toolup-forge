@@ -4,6 +4,7 @@ open System
 open ToolUp.Graph
 open ToolUp.Graph.InMemory
 open ToolUp.Platform.Tests.Graph
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Bind the IGraphStore contract pack to InMemoryGraphStore ───────
 //
@@ -22,4 +23,4 @@ let tests =
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
 
-    GraphStoreContract.tests "InMemoryGraphStore" GraphStoreContract.InterpreterSubset factory
+    IGraphStoreContract.tests "InMemoryGraphStore" IGraphStoreContract.InterpreterSubset factory

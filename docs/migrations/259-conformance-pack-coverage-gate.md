@@ -21,9 +21,22 @@ read from the checkout:
 | Derivation | Source |
 |---|---|
 | the public interface universe | every `X (interface)` line in `api-baselines/*.approved.txt` |
-| the packs | `src/ToolUp.Platform.Tests/Contracts/*Contract.fs` |
-| the bindings | `<Pack>.tests` call sites across `src/**/*.fs` |
+| the test projects `VerifyAll` runs | every `TestPack.create "<name>" "<path>.fsproj"` entry in the repo-root `Build.fs` (the `BuildConfig.TestPacks` literal; `//`-commented entries excluded) |
+| the packs | `<Project>/Contracts/*Contract.fs` for each of those projects |
+| the bindings | `<Pack>.tests` call sites in `.fs` files inside those projects |
 | the production implementation count | `interface I… with` / `new I… with` **outside** the test projects |
+
+**Packs live with their seams, but only packs the gate runs count** (forge tidy decision
+2026-09-26). The scanner originally read `src/ToolUp.Platform.Tests/Contracts/` alone, so a pack
+authored beside its seam — `ICalendarBridgeContract` in `ToolUp.Scheduling.Tests`, `IFormStoreContract`
+in `ToolUp.Forms.Tests`, `IArtefactSignerContract` in `ToolUp.ArtefactSigning.Tests` — read as an
+unpacked seam. It now reads the `Contracts/` directory of every project `VerifyAll` runs. The set is
+parsed from `Build.fs` rather than globbed from `src/*.Tests` on purpose: a pack (or a binding) in a
+test project the gate never executes is conformance code that never runs, and counting it would
+record coverage that does not exist. Adding a test project to `TestPacks` therefore brings its packs
+and bindings into the census in the same commit; a `*Contract.fs` outside the
+`Contracts/<Interface>Contract.fs` convention (e.g. `ToolUp.Platform.Tests/RAG/*Contract.fs`) is not
+a pack here — move it to the convention rather than loosening the scan.
 
 A **replaceable seam** is a public interface with **two or more production implementations**. That is
 GP 12's own definition read off the tree rather than asserted about it, and it is what makes the gate
@@ -32,7 +45,8 @@ must-pack set with no edit to the gate.
 
 Three rules follow:
 
-1. **Every replaceable seam carries a pack** at `Contracts/<Interface>Contract.fs`.
+1. **Every replaceable seam carries a pack** at `Contracts/<Interface>Contract.fs` in a test project
+   `VerifyAll` runs.
 2. **Every pack is run by something.** A pack exposing a `tests` entry point that nothing calls is an
    outright failure with no baseline behind it — the tree has none today, and none may appear.
 3. **A pack run by one implementation is not yet proof.** GP 12 treats a portable interface as
@@ -69,8 +83,9 @@ commit, and a baseline that churns is one whose failures stop being read. The fu
 
 ```text
 IWidgetStore is a replaceable seam (2 production implementations) with NO contract pack, and the
-baseline does not know about it. Author src/ToolUp.Platform.Tests/Contracts/IWidgetStoreContract.fs
-and bind it, or — if it genuinely cannot be packed — add an [EXEMPT] row with the reason.
+baseline does not know about it. Author IWidgetStoreContract.fs in the Contracts/ directory of a test
+project VerifyAll runs (beside the seam's own tests; src/ToolUp.Platform.Tests/Contracts/ for a
+Platform seam) and bind it, or — if it genuinely cannot be packed — add an [EXEMPT] row with the reason.
 ```
 
 Write the pack. This is the intended moment: it is the point at which portability stopped being
@@ -118,11 +133,16 @@ dotnet build src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj
 dotnet src/ToolUp.Platform.Build.Tests/bin/Debug/net10.0/ToolUp.Platform.Build.Tests.dll --filter-test-list ConformanceCoverage
 ```
 
-22 cases. Four of them are vacuity pins asserting each derivation actually saw the tree: the gate's
-content is a set difference, and a set difference over two empty sets is clean, so a derivation that
-silently matched nothing would report perfect coverage forever. Eight more drive every finding class
-and every parser from synthetic inputs, and the whole set was additionally demonstrated red against
-the real tree by deleting a baseline row.
+27 cases. Five of them are vacuity pins asserting each derivation actually saw the tree — including
+that the `VerifyAll` project set parsed from `Build.fs` is non-trivial and that packs were found in
+more than one project: the gate's content is a set difference, and a set difference over two empty
+sets is clean, so a derivation that silently matched nothing would report perfect coverage forever.
+Eight more drive every finding class and every parser from synthetic inputs, and four build a
+throwaway repo-shaped tree on disk to prove a pack in a sibling `VerifyAll` project is discovered
+while a pack or binding in a project the gate does not run is not. The whole set was additionally
+demonstrated red against the real tree by deleting a baseline row, and the multi-project cases by
+reverting the scan to the Platform directory alone and, separately, widening it to a blanket
+`src/*.Tests` glob.
 
 ## Rollback
 

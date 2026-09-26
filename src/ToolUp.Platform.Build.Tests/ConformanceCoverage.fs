@@ -26,9 +26,20 @@
 ///      is precisely why they are the universe rather than a source
 ///      scan for `type I… =`, which would also sweep up private and
 ///      internal shapes that no consumer can implement.
-///   2. **The packs** — `src/ToolUp.Platform.Tests/Contracts/*Contract.fs`.
-///   3. **The bindings** — `<Pack>.tests` call sites across `src/`. Each
-///      one is an implementation running the pack against itself.
+///   2. **The packs** — `<Project>/Contracts/*Contract.fs` for every
+///      test project `VerifyAll` runs. That set is read off the
+///      `TestPack.create` entries in the repo-root `Build.fs` — the
+///      authoritative `BuildConfig.TestPacks` literal — rather than a
+///      `src/*.Tests` glob, because a pack in a project the gate never
+///      executes is conformance code that never runs, and counting it
+///      would record coverage that does not exist (forge tidy decision
+///      2026-09-26). Packs live WITH their seams: Scheduling's calendar
+///      bridge pack sits in `ToolUp.Scheduling.Tests`, Forms' store packs
+///      in `ToolUp.Forms.Tests`.
+///   3. **The bindings** — `<Pack>.tests` call sites in the same
+///      `VerifyAll` test projects. Each one is an implementation running
+///      the pack against itself; a call site in a project the gate never
+///      runs binds nothing, for the same reason.
 ///   4. **The production implementation count** — `interface I… with` /
 ///      `new I… with` occurrences OUTSIDE the test projects.
 ///
@@ -88,9 +99,15 @@ open System.Text.RegularExpressions
 
 // ─── Paths ────────────────────────────────────────────────────────────
 
-/// The directory the contract packs live in.
+/// The Platform test pack's contracts directory. The largest single home
+/// of packs, and the home of the committed baseline — but no longer the
+/// only directory scanned: see `contractsDirs`.
 let contractsDir (root: string) =
     Path.Combine(root, "src", "ToolUp.Platform.Tests", "Contracts")
+
+/// The repo-root FAKE script whose `BuildConfig.TestPacks` literal is the
+/// authoritative list of test projects `VerifyAll` runs.
+let buildScriptPath (root: string) = Path.Combine(root, "Build.fs")
 
 /// The committed ratchet baseline. It sits WITH the packs rather than
 /// with the gate: it is a statement about the contents of that
@@ -197,6 +214,36 @@ let bindingsIn (packNames: Set<string>) (sourceText: string) : string list =
     |> Seq.filter packNames.Contains
     |> List.ofSeq
 
+/// A `TestPack.create "<name>" "<path>.fsproj"` entry, tolerating the
+/// wrapped shape Fantomas gives a long entry (name and path on their own
+/// lines).
+let private testPackEntry =
+    Regex(@"\bTestPack\.create\s+""[^""\n]*""\s+""(?<path>[^""\n]+\.fsproj)""", RegexOptions.Compiled)
+
+/// The project files (repo-relative, `/`-separated) of every
+/// `TestPack.create` entry in a `Build.fs` text — the set `VerifyAll`
+/// runs. `//` comments are stripped first, so a commented-out entry (a
+/// pack parked out of the gate) does not count as run.
+///
+/// Parsed rather than referenced: this module is source-linked into
+/// `Build.fsproj` itself, so it cannot take `Build.fs`'s `config` as a
+/// value, and the test project cannot reference the FAKE script at all.
+/// Reading the literal keeps ONE list authoritative — the one the gate
+/// executes — instead of a second hand-kept copy that drifts from it.
+let testPackProjectsIn (buildScriptText: string) : string list =
+    let uncommented =
+        buildScriptText.Replace("\r\n", "\n").Split('\n')
+        |> Array.map (fun line ->
+            match line.IndexOf("//", StringComparison.Ordinal) with
+            | -1 -> line
+            | i -> line.Substring(0, i))
+        |> String.concat "\n"
+
+    testPackEntry.Matches uncommented
+    |> Seq.map (fun m -> m.Groups["path"].Value.Replace('\\', '/'))
+    |> Seq.distinct
+    |> List.ofSeq
+
 // ─── Tree readers ─────────────────────────────────────────────────────
 
 /// A file lives in a test project when any directory segment of its path
@@ -217,6 +264,39 @@ let private sourceFiles (root: string) =
     else
         []
 
+let private normalise (path: string) = path.Replace('\\', '/').TrimEnd('/')
+
+/// The directory (repo-relative, `/`-separated) of every test project
+/// `VerifyAll` runs, read from `Build.fs`. Empty when there is no
+/// `Build.fs` or it lists nothing — which the vacuity pins catch, rather
+/// than a fallback that would quietly re-privilege one directory.
+let verifyAllProjectDirs (root: string) : string list =
+    let path = buildScriptPath root
+
+    if not (File.Exists path) then
+        []
+    else
+        testPackProjectsIn (File.ReadAllText path)
+        |> List.map (fun project ->
+            match project.LastIndexOf('/') with
+            | -1 -> ""
+            | i -> project.Substring(0, i))
+        |> List.filter (fun dir -> dir <> "")
+        |> List.distinct
+
+/// Every `Contracts/` directory a pack may live in: one per `VerifyAll`
+/// test project, whether or not it exists yet.
+let contractsDirs (root: string) : string list =
+    verifyAllProjectDirs root
+    |> List.map (fun dir -> Path.Combine(root, dir, "Contracts"))
+
+/// True when `file` sits inside one of the `VerifyAll` test projects.
+let private inVerifyAllProject (root: string) (projectDirs: string list) (file: string) =
+    let relative = normalise (Path.GetRelativePath(root, file))
+
+    projectDirs
+    |> List.exists (fun dir -> relative.StartsWith(normalise dir + "/", StringComparison.OrdinalIgnoreCase))
+
 /// Every public interface the repo's api-baselines declare.
 let publicInterfaces (root: string) : Set<string> =
     let dir = apiBaselinesDir root
@@ -235,30 +315,44 @@ type Pack = {
     Interface: string
     /// Exposes a `tests` entry point an implementation can bind.
     Bindable: bool
+    /// The test project the pack lives in (repo-relative directory, e.g.
+    /// `src/ToolUp.Scheduling.Tests`).
+    Project: string
 }
 
+/// Every pack in the `Contracts/` directory of every `VerifyAll` test
+/// project. A `*Contract.fs` anywhere else — a project the gate does not
+/// run, or a file outside the `Contracts/<Interface>Contract.fs`
+/// convention — is not a pack here.
 let packs (root: string) : Pack list =
-    let dir = contractsDir root
+    verifyAllProjectDirs root
+    |> List.collect (fun project ->
+        let dir = Path.Combine(root, project, "Contracts")
 
-    if not (Directory.Exists dir) then
-        []
-    else
-        Directory.EnumerateFiles(dir, "*Contract.fs")
-        |> Seq.choose (fun file ->
-            packNameOfFile file
-            |> Option.map (fun name -> {
-                Name = name
-                Interface = interfaceOfPack name
-                Bindable = hasEntryPoint (File.ReadAllText file)
-            }))
-        |> Seq.sortBy _.Name
-        |> List.ofSeq
+        if not (Directory.Exists dir) then
+            []
+        else
+            Directory.EnumerateFiles(dir, "*Contract.fs")
+            |> Seq.choose (fun file ->
+                packNameOfFile file
+                |> Option.map (fun name -> {
+                    Name = name
+                    Interface = interfaceOfPack name
+                    Bindable = hasEntryPoint (File.ReadAllText file)
+                    Project = project
+                }))
+            |> List.ofSeq)
+    |> List.sortBy (fun p -> p.Name, p.Project)
 
-/// How many implementations bind each pack, keyed by pack name.
+/// How many implementations bind each pack, keyed by pack name. Only
+/// call sites inside a `VerifyAll` test project count: a binding the
+/// gate never executes proves nothing.
 let bindingCounts (root: string) (allPacks: Pack list) : Map<string, int> =
     let names = allPacks |> List.map _.Name |> Set.ofList
+    let projectDirs = verifyAllProjectDirs root
 
     sourceFiles root
+    |> Seq.filter (inVerifyAllProject root projectDirs)
     |> Seq.collect (File.ReadAllText >> bindingsIn names)
     |> Seq.countBy id
     |> Map.ofSeq
@@ -493,7 +587,7 @@ let describeFinding =
     function
     | NewUnpackedSeam(seam, impls) ->
         sprintf
-            "%s is a replaceable seam (%d production implementations) with NO contract pack, and the baseline does not know about it. Author src/ToolUp.Platform.Tests/Contracts/%sContract.fs and bind it, or — if it genuinely cannot be packed — add an [EXEMPT] row with the reason."
+            "%s is a replaceable seam (%d production implementations) with NO contract pack, and the baseline does not know about it. Author %sContract.fs in the Contracts/ directory of a test project VerifyAll runs (beside the seam's own tests; src/ToolUp.Platform.Tests/Contracts/ for a Platform seam) and bind it, or — if it genuinely cannot be packed — add an [EXEMPT] row with the reason."
             seam
             impls
             seam

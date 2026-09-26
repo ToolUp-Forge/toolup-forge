@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.Graph.GraphStoreContract
+module ToolUp.Platform.Tests.Contracts.IGraphStoreContract
 
 open System.Text.Json
 open Expecto

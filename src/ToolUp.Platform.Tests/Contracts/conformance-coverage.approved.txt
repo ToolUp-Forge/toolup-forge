@@ -15,7 +15,7 @@
 # interface (api-baselines) with two or more production implementations.
 # A new seam therefore arrives here on its own rather than being forgotten.
 #
-# At generation: 60 of 158 replaceable seams packed; 44 of 106 bindable packs bound twice or more.
+# At generation: 66 of 161 replaceable seams packed; 51 of 118 bindable packs bound twice or more.
 
 # Replaceable seams carrying no contract pack. Author the pack and drop the row.
 [UNPACKED]
@@ -23,7 +23,6 @@ IAIProviderFactory
 IAnalyserCache
 IAnonymousSessionMigrator
 IAnswerProvenanceAnchors
-IArtefactSigner
 IAuditLog
 IAuthTracer
 IBindingRevocationList
@@ -53,9 +52,7 @@ IEvidenceChainEvidence
 IExposureSink
 IExternalCompletionSink
 IFeedStateStore
-IFormStore
 IGrantConsentVerifier
-IGraphStore
 IGroundingEnvelopeMutator
 IHostActionAuditHook
 IHostI18nResolver
@@ -124,10 +121,12 @@ ClientHostCapabilitiesContract
 ComponentRegistryContract
 IAIProviderContract
 IActionAuthorizerContract
+IActionLedgerContract
 IActivitySinkContract
 IArtifactSignerContract
 IArtifactVerifierContract
 IAssetStoreContract
+IBookingSchedulerContract
 IBuildOrchestratorContract
 IClientToolAuthorizerContract
 IColumnMappingStoreContract
@@ -144,6 +143,7 @@ IEvidencePackGeneratorContract
 IExternalComputeDispatcherContract
 IExternalHandleStoreContract
 IFeatureFlagStoreContract
+IFormStoreContract
 IGrantConsentStoreContract
 ILifecycleLockContract
 ILineageStoreContract
@@ -173,6 +173,7 @@ IRateLimitStoreContract
 IRateLimiterContract
 IServiceAccountStoreContract
 ISessionRegistryContract
+IShareTokenRateLimiterContract
 IShareTokenStoreContract
 ISubjectResolverContract
 ITeamProviderResolverContract
@@ -181,10 +182,10 @@ ITenantFleetContract
 ITenantLifecycleContract
 IUploadValidatorContract
 IUserSchemaStoreContract
+IWorkflowEngineContract
 ModuleContract
 
 # Seams that will never carry a pack, with the reason. `<name>: <why>`.
 # Hand-authored; a regeneration preserves these rows.
 [EXEMPT]
 IIsolatedEntryPoint: one unit of native work per implementation (an OCR pass, a Skia decode, a Verovio render), never a substitutable service — implementations are different operations by design and no law spans them; the one law they share (bytes in, bytes or a typed rejection out, never an exception across the seam) belongs to the seam and is pinned by ICompanionIsolationContract, which drives every kind of entry point through both implementations of the seam.
-ICalendarBridge: it DOES carry a pack — src/ToolUp.Scheduling.Tests/Contracts/ICalendarBridgeContract.fs, bound by the in-memory, CalDAV, Google and Microsoft Graph bridges (Phase 20a) — but the pack lives in the Scheduling test project because the seam and its providers are ToolUp.Scheduling's, and this scanner reads only src/ToolUp.Platform.Tests/Contracts. Exempt until the scanner learns sibling test projects' Contracts/ directories (forge tidy decision 2026-09-23); then drop this row and let the pack count.

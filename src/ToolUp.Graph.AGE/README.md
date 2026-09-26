@@ -215,7 +215,7 @@ scope text), so it is injection-safe by construction too.
 
   **These cases ARE handled by the shared conformance pack now — since Phase
   752, and not before.** The history matters because the README asserted it for
-  a year while it was false. Phase 607 ran `GraphStoreContract` against a live
+  a year while it was false. Phase 607 ran `IGraphStoreContract` against a live
   AGE server for the first time and four cases failed: the pack asserted the
   in-memory interpreter's *subset* laws unconditionally on every binding, with
   no engine-tier exemption, so AGE was scored as failing for supporting full

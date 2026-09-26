@@ -77,7 +77,7 @@
         <!-- Phase 68 — IGraphStore conformance pack + subset-floor corpus +
              in-memory binding (the graph-shaped peer of the entity store). -->
         <Compile Include="Graph\SubsetFloorCorpus.fs" />
-        <Compile Include="Graph\GraphStoreContract.fs" />
+        <Compile Include="Contracts\IGraphStoreContract.fs" />
         <Compile Include="Graph\InMemoryGraphStoreTests.fs" />
         <!-- Phase 68b — Neo4j engine companion: always-on translation unit pack
              + env-gated (TOOLUP_TEST_NEO4J_URI) live IGraphStoreContract arm. -->

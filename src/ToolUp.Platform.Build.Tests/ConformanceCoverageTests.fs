@@ -54,7 +54,61 @@ let private pack name bindable : ConformanceCoverage.Pack = {
     Name = name
     Interface = ConformanceCoverage.interfaceOfPack name
     Bindable = bindable
+    Project = "src/Synthetic.Tests"
 }
+
+/// A throwaway repo-shaped tree on disk: a `Build.fs` whose `TestPacks`
+/// literal lists two projects (one of them nested, one entry wrapped the
+/// way Fantomas wraps a long one), a third entry commented out, and a
+/// fourth project that is never listed at all. Each project carries one
+/// pack in `Contracts/` and binds packs from its own source. Every name is
+/// invented — see the hazard note above — and the tree lives under the
+/// system temp directory, outside `src/`, so the real scan never sees it.
+let private withSyntheticTree (body: string -> unit) =
+    let root =
+        Path.Combine(Path.GetTempPath(), "conformance-coverage-" + System.Guid.NewGuid().ToString("N"))
+
+    let write (relative: string) (text: string) =
+        let path = Path.Combine(root, relative)
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, text)
+
+    let packText = "module M\n\nlet tests (name: string) = []\n"
+
+    try
+        write
+            "Build.fs"
+            (String.concat "\n" [
+                "let config = {"
+                "    BuildConfig.defaults with"
+                "        TestPacks = ["
+                "            TestPack.create \"Alpha\" \"src/Alpha.Tests/Alpha.Tests.fsproj\""
+                "            TestPack.create"
+                "                \"Beta\""
+                "                \"src/Nested/Beta.Tests/Beta.Tests.fsproj\""
+                "            // TestPack.create \"Gamma\" \"src/Gamma.Tests/Gamma.Tests.fsproj\""
+                "        ]"
+                "}"
+            ])
+
+        write "src/Alpha.Tests/Contracts/IAlphaWidgetContract.fs" packText
+        write "src/Nested/Beta.Tests/Contracts/IBetaWidgetContract.fs" packText
+        write "src/Gamma.Tests/Contracts/IGammaWidgetContract.fs" packText
+        write "src/Delta.Tests/Contracts/IDeltaWidgetContract.fs" packText
+
+        // Alpha binds its own pack once and Beta's once. Gamma (commented
+        // out of the gate) binds Alpha's pack a second time — a call site
+        // the gate never executes, so it must not make Alpha double-bound.
+        write
+            "src/Alpha.Tests/Bindings.fs"
+            "let a = IAlphaWidgetContract.tests \"alpha\"\nlet b = IBetaWidgetContract.tests \"beta\"\n"
+
+        write "src/Gamma.Tests/Bindings.fs" "let g = IAlphaWidgetContract.tests \"gamma\"\n"
+
+        body root
+    finally
+        if Directory.Exists root then
+            Directory.Delete(root, true)
 
 /// A world with one packed seam, one unpacked seam, and the unpacked one
 /// acknowledged in the baseline: clean by construction, and the control
@@ -94,16 +148,42 @@ let tests =
                         (ConformanceCoverage.apiBaselinesDir (repoRoot ())))
             }
 
-            test "the contracts directory yields packs" {
+            test "Build.fs yields the VerifyAll test-project set" {
+                let projects = ConformanceCoverage.verifyAllProjectDirs (repoRoot ())
+
+                Expect.isGreaterThan
+                    (List.length projects)
+                    10
+                    (sprintf
+                        "found %d VerifyAll test project(s) in %s. BuildConfig.TestPacks lists over twenty; a count this low means the TestPack.create parse stopped matching, and every pack outside the survivors would silently stop counting."
+                        (List.length projects)
+                        (ConformanceCoverage.buildScriptPath (repoRoot ())))
+
+                Expect.contains
+                    projects
+                    "src/ToolUp.Platform.Tests"
+                    "the Platform pack is the largest home of contract packs; the parsed set must include it."
+            }
+
+            test "the contracts directories yield packs" {
                 let packs = ConformanceCoverage.packs (repoRoot ())
 
                 Expect.isGreaterThan
                     (List.length packs)
                     50
                     (sprintf
-                        "found %d contract pack(s) under %s — the directory carries well over fifty."
+                        "found %d contract pack(s) across %s — the directories carry well over fifty."
                         (List.length packs)
-                        (ConformanceCoverage.contractsDir (repoRoot ())))
+                        (ConformanceCoverage.contractsDirs (repoRoot ()) |> String.concat ", "))
+
+                let projects = packs |> List.map _.Project |> List.distinct
+
+                Expect.isGreaterThan
+                    (List.length projects)
+                    1
+                    (sprintf
+                        "every pack came from ONE project (%s). Packs live with their seams across several VerifyAll test projects (Scheduling, Forms, ArtefactSigning, Algorithms …); a single-project result means the scan has collapsed back to one privileged directory."
+                        (String.concat ", " projects))
 
                 Expect.isGreaterThan
                     (packs |> List.filter _.Bindable |> List.length)
@@ -290,6 +370,64 @@ let tests =
                 Expect.isEmpty
                     (findingsOf (seams |> Map.remove "IBar", packs, Map.empty, ConformanceCoverage.emptyRegistry))
                     "a pack with no `tests` entry point (FailClosedContract is the shipped example — a cross-cutting pack, not a per-interface one) cannot be bound by anything, so it must be excluded from both binding checks rather than reported forever."
+            }
+        ]
+
+        // ── Go-red: the VerifyAll project set scopes packs and bindings ─
+
+        testList "packs and bindings come from every VerifyAll project, and only those" [
+            test "the TestPacks parse reads both entry shapes and skips a commented-out one" {
+                let text =
+                    "TestPacks = [\n    TestPack.create \"A\" \"src/A.Tests/A.Tests.fsproj\"\n    TestPack.create\n        \"B\"\n        \"src/Sub/B.Tests/B.Tests.fsproj\"\n    // TestPack.create \"C\" \"src/C.Tests/C.Tests.fsproj\"\n]\n"
+
+                Expect.equal
+                    (ConformanceCoverage.testPackProjectsIn text)
+                    [ "src/A.Tests/A.Tests.fsproj"; "src/Sub/B.Tests/B.Tests.fsproj" ]
+                    "a one-line entry and a Fantomas-wrapped entry are both packs VerifyAll runs; a commented-out entry is a pack parked OUT of the gate and must not count."
+            }
+
+            test "a pack in a sibling VerifyAll project's Contracts/ is discovered" {
+                withSyntheticTree (fun root ->
+                    let found = ConformanceCoverage.packs root |> List.map (fun p -> p.Name, p.Project)
+
+                    Expect.contains
+                        found
+                        ("IBetaWidgetContract", "src/Nested/Beta.Tests")
+                        "a pack that lives with its seam in a (nested, wrapped-entry) VerifyAll test project must count — Phase 20a's ICalendarBridge pack in ToolUp.Scheduling.Tests was reported as an unpacked seam because only one directory was read."
+
+                    Expect.contains
+                        found
+                        ("IAlphaWidgetContract", "src/Alpha.Tests")
+                        "the one-line-entry project's pack must count too.")
+            }
+
+            test "a pack in a test project VerifyAll does not run is not counted" {
+                withSyntheticTree (fun root ->
+                    let names = ConformanceCoverage.packs root |> List.map _.Name
+
+                    Expect.isFalse
+                        (List.contains "IGammaWidgetContract" names)
+                        "a pack in a project whose TestPack entry is commented out never runs in the gate; counting it would record coverage that does not exist."
+
+                    Expect.isFalse
+                        (List.contains "IDeltaWidgetContract" names)
+                        "a pack in a test project TestPacks never lists never runs in the gate either; a blanket src/*.Tests glob would count it.")
+            }
+
+            test "a binding in a test project VerifyAll does not run is not counted" {
+                withSyntheticTree (fun root ->
+                    let allPacks = ConformanceCoverage.packs root
+                    let bindings = ConformanceCoverage.bindingCounts root allPacks
+
+                    Expect.equal
+                        (bindings |> Map.tryFind "IAlphaWidgetContract")
+                        (Some 1)
+                        "Alpha's pack is bound once inside the gate and once in a project the gate never runs; only the first is an implementation actually running the pack."
+
+                    Expect.equal
+                        (bindings |> Map.tryFind "IBetaWidgetContract")
+                        (Some 1)
+                        "a binding in one VerifyAll project of a pack living in ANOTHER VerifyAll project is a real binding.")
             }
         ]
 
