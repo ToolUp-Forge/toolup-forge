@@ -41,5 +41,9 @@
         <Compile Include="ReportSubscriptionApiHandler.fs" />
         <Compile Include="ReportSubscriptionsContributor.fs" />
         <Compile Include="ReportingCompose.fs" />
+        <!-- Phase 577 — the `_platform.reporting` AI tool family. Last:
+             it renders through ReportApiHandler and composes onto a
+             ServerApp the way ReportingCompose's consumers do. -->
+        <Compile Include="ReportingAITools.fs" />
     </ItemGroup>
 </Project>
