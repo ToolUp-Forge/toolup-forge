@@ -194,6 +194,8 @@
              ProjectReference. -->
         <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" />
         <Compile Include="ElmishProofOracleTests.fs" />
+        <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
+        <Compile Include="ModuleInspectStateTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

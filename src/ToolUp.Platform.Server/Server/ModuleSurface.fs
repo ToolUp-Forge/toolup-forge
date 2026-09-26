@@ -673,6 +673,10 @@ module ModuleSurface =
         "ActionKeys", ProvidesFacet
         "Visibility", OpaqueFacet
         "EventSubscriptions", NeedsFacet
+        // Phase 536 — the inspect-state projector. Opaque, like `View`:
+        // a function over module state whose report is a runtime value,
+        // not a declaration a composition reader can enumerate.
+        "InspectState", OpaqueFacet
     ]
 
     let private clientField (name: string) = "client:" + name

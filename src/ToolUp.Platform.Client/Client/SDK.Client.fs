@@ -1591,7 +1591,7 @@ module Client =
                     // ModuleActionReceived branch — companions
                     // observe state changes without the shell taking
                     // a compile-time dependency on them.
-                    ModuleStateObserver.publish model.ActiveModuleId newState
+                    ModuleStateObserver.publishState moduleImpl.InspectState model.ActiveModuleId newState
 
                     {
                         model with
@@ -2327,7 +2327,7 @@ module Client =
                         // Phase 6g.A: same observer publish as the
                         // ModuleMsg branch — server-emitted action
                         // arrivals also change module state.
-                        ModuleStateObserver.publish moduleId newState
+                        ModuleStateObserver.publishState moduleImpl.InspectState moduleId newState
 
                         let updatedModel = {
                             model with
@@ -2422,7 +2422,7 @@ module Client =
 
                         // Phase 6g.A observer publish — same as the other
                         // state-changing branches.
-                        ModuleStateObserver.publish moduleId newState
+                        ModuleStateObserver.publishState moduleImpl.InspectState moduleId newState
 
                         let routedCmd =
                             if moduleId = accModel.ActiveModuleId then

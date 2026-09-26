@@ -197,6 +197,7 @@ let private referenceClient () : ErasedModule = {
     ActionKeys = Some [ "apply-budget" ]
     Visibility = Visibility.visibleToAll
     EventSubscriptions = Map.ofList [ "sales.refreshed", (fun (_: string) -> box ()) ]
+    InspectState = None
 }
 
 /// Phase 621 — the same registration with all three declarations absent.

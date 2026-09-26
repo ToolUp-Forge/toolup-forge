@@ -62,6 +62,7 @@ let private erasedModule (id: string) (name: string) : ErasedModule = {
     ActionKeys = None
     Visibility = Visibility.visibleToAll
     EventSubscriptions = Map.empty
+    InspectState = None
 }
 
 /// Resolve a registered server module's id the way `addModule` does, so

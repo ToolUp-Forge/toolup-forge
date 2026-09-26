@@ -114,6 +114,7 @@ let private erased (id: string) : ErasedModule = {
     ActionKeys = None
     Visibility = Visibility.visibleToAll
     EventSubscriptions = Map.empty
+    InspectState = None
 }
 
 let tests =

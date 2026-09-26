@@ -221,6 +221,62 @@ type ModuleArea =
     | Product
     | Administration
 
+// ─── Inspectable UI state (Phase 536) ─────────────────────────────
+
+/// Phase 536 — a module's live UI state, declared as a pure projection
+/// of its Elmish `Model` (`ClientModule.withInspectState`) so a reader —
+/// the AI layer's "what is on the user's screen" question, a host
+/// adapter — can answer it without observing the DOM.
+///
+/// Every map is string-keyed and every leaf is a string, so the report
+/// is host-neutral data: `Fields` carries each field's current value as
+/// a JSON-encoded leaf (`"\"Q3\""`, `"42"`, `"true"`), `Selections` the
+/// selected item key(s) per selectable surface, `Actions` whether each
+/// named action is currently enabled. Keys are the module's own
+/// vocabulary; nothing in the shell interprets them. Build one from
+/// `UiStateReport.empty` with the `UiStateReport.with*` helpers.
+type UiStateReport = {
+    /// Field name → current value, as a JSON-encoded leaf.
+    Fields: Map<string, string>
+    /// Selectable surface name → the key(s) of its current selection.
+    /// An empty list is a real report ("nothing selected").
+    Selections: Map<string, string list>
+    /// Action name → `true` when currently enabled, `false` when disabled.
+    Actions: Map<string, bool>
+}
+
+/// Phase 536 — builders for `UiStateReport`.
+[<RequireQualifiedAccess>]
+module UiStateReport =
+    /// A report declaring no fields, selections or actions.
+    let empty: UiStateReport = {
+        Fields = Map.empty
+        Selections = Map.empty
+        Actions = Map.empty
+    }
+
+    /// Record a field's current value; `jsonValue` is the JSON-encoded
+    /// leaf (a string value carries its quotes). Replaces an earlier
+    /// value under the same name.
+    let withField (name: string) (jsonValue: string) (report: UiStateReport) : UiStateReport = {
+        report with
+            Fields = report.Fields |> Map.add name jsonValue
+    }
+
+    /// Record the current selection of a selectable surface. Replaces an
+    /// earlier selection under the same name.
+    let withSelection (name: string) (selected: string list) (report: UiStateReport) : UiStateReport = {
+        report with
+            Selections = report.Selections |> Map.add name selected
+    }
+
+    /// Record whether a named action is currently enabled. Replaces an
+    /// earlier state under the same name.
+    let withAction (name: string) (enabled: bool) (report: UiStateReport) : UiStateReport = {
+        report with
+            Actions = report.Actions |> Map.add name enabled
+    }
+
 // ─── Type erasure ─────────────────────────────────────────────────
 
 /// Type-erased module wrapper for heterogeneous list composition.
@@ -422,6 +478,15 @@ type ErasedModule = {
     /// sibling events declare nothing. Construct via
     /// `ClientModule.withEventSubscription`.
     EventSubscriptions: Map<string, string -> obj>
+    /// Phase 536 — the module's inspect-state projector, erased to
+    /// `obj -> UiStateReport`. The shell hands it to
+    /// `ModuleStateObserver.publishState` at every state-changing
+    /// publish point, which keeps the latest report per module for
+    /// `ModuleStateObserver.tryInspect`. Default `None` — the module
+    /// declares no inspectable state, is never projected, and reports
+    /// "no observable state" (GP 11 / GP 13). Construct via
+    /// `ClientModule.withInspectState`.
+    InspectState: (obj -> UiStateReport) option
 }
 
 /// Phase 66 Stream B.3 — smart constructors for the per-module
@@ -558,6 +623,10 @@ type ClientModule<'Model, 'Msg> = {
     /// result into `obj`. Construct via `withEventSubscription`.
     /// Default `Map.empty`.
     EventSubscriptions: Map<string, string -> 'Msg>
+    /// Phase 536 — pure `'Model -> UiStateReport` projection declaring
+    /// the module's live UI state. See `ErasedModule.InspectState`; set
+    /// via `ClientModule.withInspectState`. Default `None`.
+    InspectState: ('Model -> UiStateReport) option
 }
 
 // ─── Client configuration ─────────────────────────────────────────
@@ -2969,6 +3038,9 @@ module ClientModule =
             EventSubscriptions =
                 m.EventSubscriptions
                 |> Map.map (fun _ mapMsg -> fun payload -> box (mapMsg payload))
+            InspectState =
+                m.InspectState
+                |> Option.map (fun project -> fun state -> project (unbox<'Model> state))
         }
 
     /// Adapter for modules that do not need a `ClientModuleContext`.
@@ -3036,6 +3108,9 @@ module ClientModule =
         ActionKeys = None
         Visibility = Visibility.visibleToAll
         EventSubscriptions = Map.empty
+        // Phase 536 — no projector: the module declares no inspectable
+        // state and the shell never projects it (GP 13).
+        InspectState = None
     }
 
     /// Set the single-page view function on a `ClientModule` built by
@@ -3135,6 +3210,21 @@ module ClientModule =
             m with
                 ProvidesNarrative = Some extract
         }
+
+    /// Phase 536 — declare the module's live UI state as a pure
+    /// projection of its `Model`. The shell applies it to the module's
+    /// state after each update (`ModuleMsg`, `ModuleActionReceived` and
+    /// client-event routing) and keeps the latest report per module,
+    /// readable through `ModuleStateObserver.tryInspect`. The projection
+    /// is evaluated lazily, on first read after an update, so a
+    /// declared module pays nothing on an Elmish tick nobody inspects.
+    /// It must be pure — no `Cmd`, no side effect. A module that never
+    /// calls this declares no inspectable state.
+    let withInspectState
+        (project: 'Model -> UiStateReport)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        { m with InspectState = Some project }
 
     /// Attach client-side `ModuleQueryBus` handlers to a strongly-typed
     /// `ClientModule` before erasure. Each handler answers one

@@ -93,6 +93,9 @@ let allTests =
         // beside the TRANSPILED runtime, from the same shared differential
         // and the same seed as the .NET pack.
         ElmishProofOracleTests.tests
+        // Phase 536 — ClientModule.withInspectState: the latest UiStateReport per
+        // module at the shell publish points; undeclared modules report nothing.
+        ModuleInspectStateTests.tests
     ]
 
 [<EntryPoint>]

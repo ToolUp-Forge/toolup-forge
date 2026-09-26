@@ -23,9 +23,9 @@ let private log = Logger.forCategory "client.module-state"
 //
 // Observers receive the module Id as a string and the (erased)
 // Model as an `obj`. The companion is responsible for casting back
-// to its known type — a projector with signature `Model -> Snapshot`
-// can be wrapped by `withAIObservableState` so the cast happens once
-// per registration.
+// to its known type. A module that wants its state readable without
+// any companion declares a projector via `ClientModule.withInspectState`
+// (Phase 536) — see `publishState` / `tryInspect` below.
 //
 // Observer exceptions are swallowed (with a console warning in
 // browsers that have one) — a buggy companion must never break the
@@ -55,3 +55,48 @@ let publish (moduleId: string) (model: obj) =
                 log.Warn $"observer swallowed: {ex.Message}"
             with _ ->
                 ()
+// ─── Inspectable state (Phase 536) ──────────────────────────────
+//
+// The latest `UiStateReport` per module, for modules that declared a
+// projector via `ClientModule.withInspectState`. Kept beside the
+// observer list because the shell's publish points are the moments
+// the report changes. The projection is stored LAZILY: the shell pays
+// one dictionary write per update of a declared module, and the
+// projector runs only when a reader asks — so the AI layer can read
+// "what is on the user's screen" without re-projecting on every
+// Elmish tick. A module with no projector never enters the table and
+// pays nothing (GP 13).
+//
+// Same sanctioned-mutable-global precedent as `observers` above.
+
+let private reports = Dictionary<string, Lazy<UiStateReport>>()
+
+/// Phase 536 — the shell's publish point: record the module's latest
+/// inspect-state report (when it declared a projector), then notify
+/// every observer exactly as `publish` does. The report is recorded
+/// first so an observer that reads `tryInspect` sees the new state.
+let publishState (inspect: (obj -> UiStateReport) option) (moduleId: string) (model: obj) =
+    match inspect with
+    | Some project -> reports[moduleId] <- lazy (project model)
+    | None -> ()
+
+    publish moduleId model
+
+/// Phase 536 — the latest inspect-state report the named module
+/// published, or `None` when it declares no observable state (never
+/// called `withInspectState`) or has not been updated since the shell
+/// started. A projector that throws is reported as `None`, with a
+/// warning — a buggy projection must never break its reader.
+let tryInspect (moduleId: string) : UiStateReport option =
+    match reports.TryGetValue moduleId with
+    | true, report ->
+        try
+            Some report.Value
+        with ex ->
+            try
+                log.Warn $"inspect-state projector for '{moduleId}' threw: {ex.Message}"
+            with _ ->
+                ()
+
+            None
+    | _ -> None
