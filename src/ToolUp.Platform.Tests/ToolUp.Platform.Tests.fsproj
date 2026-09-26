@@ -2685,6 +2685,11 @@
              missing-placeholder envelope, inline-vs-blob routing, the
              long-render job, audit, and composition-gated registration. -->
         <Compile Include="InProcess\ReportingAIToolsTests.fs" />
+        <!-- Phase 516 — conversation titles, search + pagination: keyset paging
+             stability, title/content search, first-message and generated titles
+             with provider-failure fallback, deleted/purged rows unlisted, and
+             GetTaskStatus polling through a real turn. -->
+        <Compile Include="InProcess\ConversationListingTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

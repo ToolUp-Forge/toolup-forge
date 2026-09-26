@@ -1212,3 +1212,20 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
             )
 
     app |> withServiceConfig register
+
+// ─── Phase 516.B — conversation titling ──────────────────────────
+
+/// Compose how AI conversations are titled in the conversation list
+/// (Phase 516.B). `ConversationTitlingPolicy.generatedOn "<small model>"`
+/// asks the provider that served a conversation's first turn for a short
+/// title, once, after that turn's terminal event — metered like every
+/// other call of the turn, bounded by the policy's input/output caps and
+/// timeout, and falling back to the first message on any failure.
+///
+/// **Not composing this is the default and makes no provider call**:
+/// every title is the conversation's first user message, truncated
+/// (`ConversationTitlingPolicy.firstMessage`), so a deployment that never
+/// calls this pays nothing new.
+let withConversationTitling (policy: ConversationTitlingPolicy) (app: ServerApp) : ServerApp =
+    app
+    |> withServiceConfig (fun s -> s.AddSingleton<ConversationTitlingPolicy>(policy))

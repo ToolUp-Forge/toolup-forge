@@ -4,12 +4,13 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AI.AIAssistantApi (class)
-ToolUp.AI.AIAssistantApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AITask]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.AI.AIAssistantApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AITask]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ConversationListQuery, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ConversationPage]])
 ToolUp.AI.AIAssistantApi.DeleteConversation : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AIAssistantApi.GetAvailableTools : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]]] { get }
 ToolUp.AI.AIAssistantApi.GetConversation : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]]] { get }
 ToolUp.AI.AIAssistantApi.GetTaskStatus : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask]]] { get }
 ToolUp.AI.AIAssistantApi.ListConversations : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation]]] { get }
+ToolUp.AI.AIAssistantApi.ListConversationsPage : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ConversationListQuery, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ConversationPage]] { get }
 ToolUp.AI.AIAssistantApi.SetConversationOverride : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.AI.AIAssistantApi.SubmitMessage : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AITask]] { get }
 ToolUp.AI.AIAssistantBranding (class)
@@ -411,6 +412,15 @@ ToolUp.AI.Conversation.MessageCount : System.Int32 { get }
 ToolUp.AI.Conversation.OverrideProviderLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Conversation.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Conversation.UpdatedAt : System.DateTime { get }
+ToolUp.AI.ConversationListQuery (class)
+ToolUp.AI.ConversationListQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.AI.ConversationListQuery.Cursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.ConversationListQuery.PageSize : System.Int32 { get }
+ToolUp.AI.ConversationListQuery.Search : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.ConversationListQueryModule (class)
+ToolUp.AI.ConversationListQueryModule.DefaultPageSize : System.Int32 (literal)
+ToolUp.AI.ConversationListQueryModule.MaxPageSize : System.Int32 (literal)
+ToolUp.AI.ConversationListQueryModule.firstPage : ToolUp.AI.ConversationListQuery { get }
 ToolUp.AI.ConversationMessage (class)
 ToolUp.AI.ConversationMessage..ctor(System.Guid, System.Guid, ToolUp.AI.ParticipantType, System.String, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification])
 ToolUp.AI.ConversationMessage.BeaconId : System.String { get }
@@ -424,6 +434,11 @@ ToolUp.AI.ConversationMessage.RetrievedSources : Microsoft.FSharp.Collections.FS
 ToolUp.AI.ConversationMessage.Timestamp : System.DateTime { get }
 ToolUp.AI.ConversationMessage.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord] { get }
 ToolUp.AI.ConversationMessage.Verification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification] { get }
+ToolUp.AI.ConversationPage (class)
+ToolUp.AI.ConversationPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.AI.ConversationPage.Items : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation] { get }
+ToolUp.AI.ConversationPage.NextCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.ConversationPage.TotalCount : System.Int32 { get }
 ToolUp.AI.ConversationRetentionPolicy (class)
 ToolUp.AI.ConversationRetentionPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)
 ToolUp.AI.ConversationRetentionPolicy.MaxAge : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }

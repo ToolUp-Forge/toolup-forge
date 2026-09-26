@@ -100,10 +100,23 @@ let private providerHistoryBlobName (conversationId: Guid) =
 let private conversationMetaBlobName (conversationId: Guid) =
     $"ai-conversations/{conversationId}.meta.json"
 
-type private ConversationMeta = { OverrideProviderLabel: string option }
+type private ConversationMeta = {
+    OverrideProviderLabel: string option
+    /// Phase 516.B — the model-generated title, when titling is composed
+    /// in `Generate` mode and the call succeeded. `None` otherwise, and
+    /// for every meta blob written before this field existed (a missing
+    /// option field deserialises to `None`); the listing then derives a
+    /// title from the first user message. Lives here, not in its own
+    /// sibling, so the erasure `deleteSiblings` performs removes it with
+    /// no change to the sibling set.
+    Title: string option
+}
 
 module private ConversationMeta =
-    let empty = { OverrideProviderLabel = None }
+    let empty = {
+        OverrideProviderLabel = None
+        Title = None
+    }
 
 let private saveConversation
     (storage: IBlobStorage)
@@ -190,6 +203,120 @@ let private loadConversationMeta (logger: ILogger) (storage: IBlobStorage) (cont
     | Error _ -> return ConversationMeta.empty
 }
 
+// ─── Phase 516.D — task status for the polling fallback ──────────
+//
+// `GetTaskStatus` used to return `None` unconditionally, so a client that
+// missed the terminal SSE event had nothing to poll. Every status a turn
+// reaches is already emitted exactly once, through the `emit` sink the
+// turn is built over; the registry records what went through it.
+//
+// Process-local by design, and for the same reason the SSE stream and
+// the chat worker are: a task runs on the process that accepted it, and
+// that process is the only one that can say where it got to. Bounded two
+// ways so a long-lived process never accumulates history — a terminal
+// task is forgotten `retention` after it finished, and past `capacity`
+// the oldest entries go first. Erasure reaches it too: `deleteSiblings`
+// forgets a deleted or purged conversation's tasks, because an `AITask`
+// carries the prompt the user typed.
+
+type private TrackedTask = {
+    Container: string
+    Owner: string
+    Task: AITask
+}
+
+/// The per-process record of each chat task's latest status (Phase
+/// 516.D). `AITaskStatusRegistry.Shared` is the instance the handler
+/// uses; construct one directly only in a test.
+type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
+    let tasks = System.Collections.Concurrent.ConcurrentDictionary<Guid, TrackedTask>()
+
+    let mutable registrations = 0L
+
+    let isTerminal (status: AITaskStatus) =
+        match status with
+        | AITaskCompleted
+        | AITaskFailed _ -> true
+        | Queued
+        | InProgress -> false
+
+    let isExpired (now: DateTime) (tracked: TrackedTask) =
+        match tracked.Task.CompletedAt with
+        | Some finished -> now - finished > retention
+        | None -> false
+
+    let evict (now: DateTime) =
+        for KeyValue(id, tracked) in tasks do
+            if isExpired now tracked then
+                tasks.TryRemove id |> ignore
+
+        let excess = tasks.Count - capacity
+
+        if excess > 0 then
+            tasks.Values
+            |> Seq.sortBy (fun t -> t.Task.CreatedAt)
+            |> Seq.truncate excess
+            |> Seq.toList
+            |> List.iter (fun t -> tasks.TryRemove t.Task.TaskId |> ignore)
+
+    /// The process-wide instance: 10 000 tasks, terminal ones kept for an
+    /// hour — ample for a client that reconnects after a dropped stream.
+    static member val Shared = AITaskStatusRegistry(10_000, TimeSpan.FromHours 1.0)
+
+    /// Record a task the moment it is accepted. `container` and `owner`
+    /// are the storage container and user id that submitted it; a read
+    /// must present both.
+    member _.Register(container: string, owner: string, task: AITask, now: DateTime) =
+        tasks[task.TaskId] <- {
+            Container = container
+            Owner = owner
+            Task = task
+        }
+
+        let n = System.Threading.Interlocked.Increment(&registrations)
+
+        if tasks.Count > capacity || n % 256L = 0L then
+            evict now
+
+    /// Apply a status the turn emitted. A terminal status stamps
+    /// `CompletedAt`; once a task is terminal it stays so, because the
+    /// first terminal event is the one the stream delivered.
+    member _.Transition(taskId: Guid, status: AITaskStatus, now: DateTime) =
+        match tasks.TryGetValue taskId with
+        | true, tracked when not (isTerminal tracked.Task.Status) ->
+            let completedAt = if isTerminal status then Some now else None
+
+            tasks[taskId] <- {
+                tracked with
+                    Task = {
+                        tracked.Task with
+                            Status = status
+                            CompletedAt = completedAt
+                    }
+            }
+        | _ -> ()
+
+    /// The task's latest status, for the caller that submitted it. `None`
+    /// for an unknown id, an expired entry, or a different container or
+    /// user — a task id is not a capability.
+    member _.TryGet(container: string, owner: string, taskId: Guid, now: DateTime) : AITask option =
+        match tasks.TryGetValue taskId with
+        | true, tracked when isExpired now tracked ->
+            tasks.TryRemove taskId |> ignore
+            None
+        | true, tracked when tracked.Container = container && tracked.Owner = owner -> Some tracked.Task
+        | _ -> None
+
+    /// Forget every task of a conversation — called when the conversation
+    /// is erased, so no prompt outlives it here.
+    member _.ForgetConversation(container: string, conversationId: Guid) =
+        for KeyValue(id, tracked) in tasks do
+            if tracked.Container = container && tracked.Task.ConversationId = conversationId then
+                tasks.TryRemove id |> ignore
+
+    /// How many tasks are held (diagnostics and tests).
+    member _.Count = tasks.Count
+
 // ─── Phase 504 — conversation retention sweep ────────────────────
 //
 // The scope-level purge behind `ConversationRetentionPolicy`. Lives
@@ -271,12 +398,19 @@ module ConversationRetention =
                 |> List.map (fun name -> storage.Delete(container, name))
                 |> Async.Sequential
 
-            return
+            let outcome =
                 results
                 |> Array.tryPick (function
                     | Error e -> Some(Error e)
                     | Ok() -> None)
                 |> Option.defaultValue (Ok())
+
+            // Phase 516.D — the task-status registry holds each task's
+            // prompt; an erased conversation takes those entries with it.
+            if Result.isOk outcome then
+                AITaskStatusRegistry.Shared.ForgetConversation(container, conversationId)
+
+            return outcome
         }
 
     /// Resolve the blob container for a scope id, mirroring the
@@ -509,6 +643,385 @@ type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: Co
                 return
                     PermanentFailure
                         "No IBlobStorage is registered; the AI conversation retention sweep has nothing to sweep."
+        }
+
+// ─── Phase 516.A/C — real listing metadata, paging and search ────
+//
+// `ListConversations` used to return `Title = None`, `MessageCount = 0`
+// and `DateTime.MinValue` for every row. The metadata is read from the
+// same UI blob `GetConversation` serves and the retention sweep dates,
+// so the list, the conversation view and the purge agree on what a
+// conversation is: a conversation whose `{id}.json` is gone — deleted,
+// or purged by `deleteSiblings` — is not listed, even while a sibling it
+// used to own is still being removed.
+//
+// The listing does NOT read the Phase 53 `IConversationStore`: that
+// substrate is opt-in (`NoConversationStore` is the default), while
+// every conversation has its blob. Reading the blob is what makes the
+// listing real in every composition.
+
+/// One conversation as the listing reads it: the row the client sees,
+/// plus the text a search is matched against (never returned).
+type ConversationListingRow = {
+    Conversation: Conversation
+    /// The title and every message's text.
+    SearchText: string list
+}
+
+module ConversationListing =
+    /// Collapse runs of whitespace and cut `text` to at most `maxChars`
+    /// characters, an ellipsis included. `None` for blank text.
+    let truncateTitle (maxChars: int) (text: string) : string option =
+        if String.IsNullOrWhiteSpace text then
+            None
+        else
+            let collapsed =
+                String.Join(" ", text.Split([| ' '; '\t'; '\r'; '\n' |], StringSplitOptions.RemoveEmptyEntries))
+
+            let limit = max 1 maxChars
+
+            if collapsed.Length <= limit then
+                Some collapsed
+            else
+                Some(collapsed.Substring(0, limit - 1).TrimEnd() + "…")
+
+    /// The title a conversation has when none was generated: its first
+    /// user message, truncated (Phase 516.B's fallback).
+    let fallbackTitle (maxChars: int) (messages: ConversationMessage list) : string option =
+        messages
+        |> List.tryFind (fun m -> m.Participant = User && not (String.IsNullOrWhiteSpace m.Content))
+        |> Option.bind (fun m -> truncateTitle maxChars m.Content)
+
+    let private idKey (id: Guid) = id.ToString("N")
+
+    /// The listing order: newest activity first, ties broken by id so
+    /// two reads of the same data page identically.
+    let compareRows (a: Conversation) (b: Conversation) : int =
+        match compare b.UpdatedAt.Ticks a.UpdatedAt.Ticks with
+        | 0 -> String.CompareOrdinal(idKey a.Id, idKey b.Id)
+        | c -> c
+
+    /// The keyset cursor naming `row` as the last one a page returned.
+    let encodeCursor (row: Conversation) : string =
+        sprintf "%d.%s" row.UpdatedAt.Ticks (idKey row.Id)
+
+    let private tryDecodeCursor (cursor: string) : (int64 * string) option =
+        match cursor.Split('.') with
+        | [| ticks; id |] ->
+            match Int64.TryParse ticks, Guid.TryParseExact(id, "N") with
+            | (true, t), (true, g) -> Some(t, idKey g)
+            | _ -> None
+        | _ -> None
+
+    let private isAfter (ticks: int64, key: string) (row: Conversation) =
+        row.UpdatedAt.Ticks < ticks
+        || (row.UpdatedAt.Ticks = ticks && String.CompareOrdinal(idKey row.Id, key) > 0)
+
+    /// Whether `row` matches `search`: a case-insensitive substring of
+    /// its title or of any message's text. A blank search matches all.
+    let matches (search: string option) (row: ConversationListingRow) : bool =
+        match search with
+        | Some term when not (String.IsNullOrWhiteSpace term) ->
+            let term = term.Trim()
+
+            row.SearchText
+            |> List.exists (fun text -> not (isNull text) && text.Contains(term, StringComparison.OrdinalIgnoreCase))
+        | _ -> true
+
+    /// One page of `rows` under `query`. Pure — the handler and the
+    /// tests share it. A cursor that does not decode yields an empty
+    /// last page rather than restarting at the first, so a client
+    /// holding a corrupt cursor cannot loop over the same rows forever.
+    let page (query: ConversationListQuery) (rows: ConversationListingRow list) : ConversationPage =
+        let size = query.PageSize |> max 1 |> min ConversationListQuery.MaxPageSize
+
+        let matching =
+            rows
+            |> List.filter (matches query.Search)
+            |> List.sortWith (fun a b -> compareRows a.Conversation b.Conversation)
+
+        let remaining =
+            match query.Cursor with
+            | None -> Some matching
+            | Some cursor when String.IsNullOrWhiteSpace cursor -> Some matching
+            | Some cursor ->
+                tryDecodeCursor cursor
+                |> Option.map (fun key -> matching |> List.filter (fun r -> isAfter key r.Conversation))
+
+        match remaining with
+        | None -> {
+            Items = []
+            NextCursor = None
+            TotalCount = matching.Length
+          }
+        | Some rest ->
+            let items = rest |> List.truncate size
+
+            {
+                Items = items |> List.map _.Conversation
+                NextCursor =
+                    if rest.Length > size then
+                        items |> List.tryLast |> Option.map (fun r -> encodeCursor r.Conversation)
+                    else
+                        None
+                TotalCount = matching.Length
+            }
+
+    /// Read one conversation's listing row. `None` when its UI blob can
+    /// no longer be read — the conversation was deleted or purged after
+    /// the container was enumerated, and must not reappear in the list.
+    let readRow
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (maxTitleChars: int)
+        (conversationId: Guid)
+        : Async<ConversationListingRow option> =
+        async {
+            let blobName = conversationBlobName conversationId
+
+            match! storage.Download(container, blobName) with
+            | Error _ -> return None
+            | Ok bytes ->
+                let messages =
+                    try
+                        fromJson<ConversationMessage list> bytes
+                    with ex ->
+                        logger.Warn
+                            $"AI conversation {conversationId} blob is unparseable ({ex.Message}); listing it with no messages."
+
+                        []
+
+                let! meta = loadConversationMeta logger storage container conversationId
+
+                let! createdAt, updatedAt =
+                    match messages with
+                    | _ :: _ ->
+                        let stamps = messages |> List.map _.Timestamp
+                        async.Return(List.min stamps, List.max stamps)
+                    | [] -> async {
+                        match! storage.GetMetadata(container, blobName) with
+                        | Ok m -> return m.LastModified, m.LastModified
+                        | Error _ -> return DateTime.MinValue, DateTime.MinValue
+                      }
+
+                let title =
+                    match meta.Title with
+                    | Some t when not (String.IsNullOrWhiteSpace t) -> Some t
+                    | _ -> fallbackTitle maxTitleChars messages
+
+                return
+                    Some {
+                        Conversation = {
+                            Id = conversationId
+                            Title = title
+                            CreatedAt = createdAt
+                            UpdatedAt = updatedAt
+                            MessageCount = messages.Length
+                            OverrideProviderLabel = meta.OverrideProviderLabel
+                        }
+                        SearchText = [
+                            yield! Option.toList title
+                            for m in messages do
+                                if not (String.IsNullOrEmpty m.Content) then
+                                    m.Content
+                        ]
+                    }
+        }
+
+    /// Every conversation in `container`, in listing order. At most 16
+    /// reads are in flight, so a large scope does not open one blob read
+    /// per conversation at once.
+    let readAll
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (maxTitleChars: int)
+        : Async<ConversationListingRow list> =
+        async {
+            let! ids = ConversationRetention.listConversationIds storage container
+
+            let! rows =
+                Async.Parallel(
+                    ids |> List.map (readRow logger storage container maxTitleChars),
+                    maxDegreeOfParallelism = 16
+                )
+
+            return
+                rows
+                |> Array.toList
+                |> List.choose id
+                |> List.sortWith (fun a b -> compareRows a.Conversation b.Conversation)
+        }
+
+// ─── Phase 516.B — conversation titling ──────────────────────────
+
+/// How conversations get their list titles (Phase 516.B). Composed with
+/// `AICompose.withConversationTitling`; a deployment that composes
+/// nothing gets `firstMessage` — titles derived from the first user
+/// message, and no provider call it did not ask for.
+type ConversationTitlingPolicy = {
+    /// When true, a conversation's first completed turn is followed by
+    /// ONE provider call asking for a short title, made after the turn's
+    /// terminal event so it never delays the reply. The call runs on the
+    /// provider that served the turn, so it is metered, budgeted and
+    /// failed-over like every other call of that turn. On any failure
+    /// the title stays derived from the first message: titling never
+    /// blocks or empties the list.
+    Generate: bool
+    /// The model the titling call asks for through the per-call override
+    /// (Phase 661) — name a small, cheap model. `None` titles on the
+    /// conversation's own model. A provider that cannot serve the id
+    /// serves the call on its configured model rather than failing it.
+    Model: string option
+    /// Characters of the first message sent to the titling call — the
+    /// input half of the budget cap.
+    MaxInputChars: int
+    /// Longest title kept, generated or derived — the output half.
+    MaxTitleChars: int
+    /// Wall-clock bound on the titling call. One attempt, no retries.
+    Timeout: TimeSpan
+}
+
+module ConversationTitlingPolicy =
+    /// No titling call: every title is the first user message, truncated.
+    let firstMessage: ConversationTitlingPolicy = {
+        Generate = false
+        Model = None
+        MaxInputChars = 1000
+        MaxTitleChars = 60
+        Timeout = TimeSpan.FromSeconds 10.0
+    }
+
+    /// Generate titles on the conversation's own model.
+    let generated: ConversationTitlingPolicy = { firstMessage with Generate = true }
+
+    /// Generate titles on `model` (a small, cheap one).
+    let generatedOn (model: string) : ConversationTitlingPolicy = { generated with Model = Some model }
+
+module ConversationTitling =
+    /// The titling call's system prompt.
+    [<Literal>]
+    let Instruction =
+        "Write a short title of at most eight words for a conversation that begins with the user message you are given. Reply with the title only: no quotation marks, no preamble, no trailing punctuation."
+
+    /// One attempt, bounded by the policy's timeout.
+    let retryPolicy (policy: ConversationTitlingPolicy) : RetryPolicy = {
+        MaxAttempts = 1
+        InitialBackoff = TimeSpan.Zero
+        MaxBackoff = TimeSpan.Zero
+        Timeout = Some policy.Timeout
+    }
+
+    let private decoration = [| '"'; '\''; '*'; '#'; '`'; '“'; '”' |]
+
+    /// The first non-blank line of a model's reply, stripped of the
+    /// quoting and label a model adds despite being asked not to, then
+    /// truncated. `None` when nothing is left.
+    let cleanTitle (maxChars: int) (raw: string) : string option =
+        if isNull raw then
+            None
+        else
+            raw.Split([| '\r'; '\n' |], StringSplitOptions.RemoveEmptyEntries)
+            |> Array.map (fun line ->
+                let line = line.Trim()
+
+                let unlabelled =
+                    if line.StartsWith("Title:", StringComparison.OrdinalIgnoreCase) then
+                        line.Substring(6)
+                    else
+                        line
+
+                unlabelled.Trim().Trim(decoration).Trim().TrimEnd('.').Trim())
+            |> Array.tryFind (fun line -> line <> "")
+            |> Option.bind (ConversationListing.truncateTitle maxChars)
+
+    /// Ask `provider` for a title for a conversation opening with
+    /// `firstMessage`. `Error` carries the reason for a log line — it
+    /// never carries message content — and is what the caller degrades
+    /// on; nothing here throws.
+    let generate
+        (policy: ConversationTitlingPolicy)
+        (provider: IAIProvider)
+        (firstMessage: string)
+        : Async<Result<string, string>> =
+        async {
+            match ConversationListing.truncateTitle policy.MaxInputChars firstMessage with
+            | None -> return Error "the first message has no text to title"
+            | Some input ->
+                try
+                    let options =
+                        policy.Model
+                        |> Option.map AIProviderCallOptions.forModel
+                        |> Option.defaultValue AIProviderCallOptions.none
+
+                    let message: AIProviderMessage = {
+                        Role = "user"
+                        Content = input
+                        ToolCalls = []
+                        ToolResults = []
+                        Parts = []
+                    }
+
+                    let! result =
+                        provider.SendMessageWith(options, [ message ], [], Some Instruction, None, retryPolicy policy)
+                        |> withTimeout "Conversation titling" (int policy.Timeout.TotalMilliseconds + 1000)
+
+                    match result with
+                    | Ok served ->
+                        match cleanTitle policy.MaxTitleChars served.Response.Content with
+                        | Some title -> return Ok title
+                        | None -> return Error "the provider returned an empty title"
+                    | Error err -> return Error(AIProviderError.toMessage err)
+                with ex ->
+                    return Error ex.Message
+        }
+
+    /// The title a conversation opening with `firstMessage` shows under
+    /// `policy`: generated when the policy asks and the call succeeds,
+    /// else the first message truncated.
+    let titleOrFallback
+        (policy: ConversationTitlingPolicy)
+        (provider: IAIProvider)
+        (firstMessage: string)
+        : Async<string option> =
+        async {
+            if policy.Generate then
+                match! generate policy provider firstMessage with
+                | Ok title -> return Some title
+                | Error _ -> return ConversationListing.truncateTitle policy.MaxTitleChars firstMessage
+            else
+                return ConversationListing.truncateTitle policy.MaxTitleChars firstMessage
+        }
+
+    /// Title a conversation after its first turn and persist the result
+    /// on its meta sibling, preserving the provider override stored
+    /// there. A failed call persists nothing, so the listing keeps the
+    /// first-message title; a no-op unless `policy.Generate`. Never
+    /// throws — it runs after the turn's terminal event, where an
+    /// exception would reach the turn's failure handler.
+    let titleConversation
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (conversationId: Guid)
+        (policy: ConversationTitlingPolicy)
+        (provider: IAIProvider)
+        (firstMessage: string)
+        : Async<unit> =
+        async {
+            if policy.Generate then
+                try
+                    match! generate policy provider firstMessage with
+                    | Ok title ->
+                        let! meta = loadConversationMeta logger storage container conversationId
+                        do! saveConversationMeta storage container conversationId { meta with Title = Some title }
+                    | Error reason ->
+                        logger.Warn
+                            $"AI conversation {conversationId} titling failed ({reason}); the list shows its first message instead."
+                with ex ->
+                    logger.Warn
+                        $"AI conversation {conversationId} title could not be saved ({ex.Message}); the list shows its first message instead."
         }
 
 // ─── Provider message conversion ─────────────────────────────────
@@ -761,6 +1274,16 @@ let aiAssistantApi
 
     let convId (id: Guid) : ConversationId = id.ToString("N")
 
+    // Phase 516.B — the titling policy `withConversationTitling` composed,
+    // else titles derived from the first message and no titling call.
+    let titlingPolicy =
+        match ctx.RequestServices.GetService(typeof<ConversationTitlingPolicy>) with
+        | :? ConversationTitlingPolicy as p -> p
+        | _ -> ConversationTitlingPolicy.firstMessage
+
+    // Phase 516.D — where every task's latest status is recorded.
+    let taskRegistry = AITaskStatusRegistry.Shared
+
     let sha256OfText (text: string) : string =
         let bytes = System.Text.Encoding.UTF8.GetBytes text
         let hash = System.Security.Cryptography.SHA256.HashData bytes
@@ -976,6 +1499,16 @@ let aiAssistantApi
     // a mutable the typed endpoint armed before firing the turn — with a
     // parameter: no state to arm, nothing a future third surface could
     // forget to reset, and the legacy path no longer consults a cell at all.
+    // Phase 516.D — every status a turn reaches passes through the sink its
+    // api record is built over, so wrapping BOTH sinks below keeps
+    // `GetTaskStatus` in step with the stream without touching an emit site.
+    let trackTaskStatus (sink: AIStreamEvent -> unit) (event: AIStreamEvent) =
+        match event with
+        | TaskStatusChanged(taskId, status) -> taskRegistry.Transition(taskId, status, DateTime.UtcNow)
+        | _ -> ()
+
+        sink event
+
     let makeAssistantApi (emit: AIStreamEvent -> unit) : AIAssistantApi = {
         SubmitMessage =
             fun (request: AIMessageRequest) -> async {
@@ -1006,6 +1539,8 @@ let aiAssistantApi
                     CreatedAt = DateTime.UtcNow
                     CompletedAt = None
                 }
+
+                taskRegistry.Register(scope.Container, userId, task, task.CreatedAt)
 
                 // Build the system prompt for this request. The builder
                 // sees the resolved access context plus the active module
@@ -1654,6 +2189,21 @@ let aiAssistantApi
                         // already removes the entry on cancellation,
                         // so this is the no-cancel path.
                         cancellationRegistry.Unregister(taskId)
+
+                        // Phase 516.B — title a new conversation after its
+                        // first turn, AFTER the terminal event so the reply
+                        // is never kept waiting on it. A no-op unless a
+                        // generating policy is composed; never throws.
+                        if existingUiMessages.IsEmpty then
+                            do!
+                                ConversationTitling.titleConversation
+                                    logger
+                                    storage
+                                    scope.Container
+                                    conversationId
+                                    titlingPolicy
+                                    provider
+                                    content
                     with
                     | :? System.OperationCanceledException when userCancelToken.IsCancellationRequested ->
                         // Phase 6h: user-initiated cancel. The agent
@@ -1745,39 +2295,13 @@ let aiAssistantApi
         GetConversation =
             fun conversationId -> async { return! loadConversation logger storage scope.Container conversationId }
 
+        // Phase 516.A — real titles, counts and timestamps, newest
+        // activity first, read by the same `ConversationListing` the paged
+        // endpoint uses.
         ListConversations =
             fun () -> async {
-                let! blobs = storage.List(scope.Container, "ai-conversations/")
-
-                let conversationIds =
-                    blobs
-                    |> List.choose (fun blobName ->
-                        // Sibling blobs (`{id}.history.json`, `{id}.meta.json`)
-                        // strip-and-trim to `"{id}.history"` / `"{id}.meta"`
-                        // which `Guid.TryParse` rejects, so they fall through.
-                        let fileName = blobName.Replace("ai-conversations/", "").Replace(".json", "")
-
-                        match Guid.TryParse(fileName) with
-                        | true, id -> Some id
-                        | _ -> None)
-
-                let! conversations =
-                    conversationIds
-                    |> List.map (fun id -> async {
-                        let! meta = loadConversationMeta logger storage scope.Container id
-
-                        return {
-                            Id = id
-                            Title = None
-                            CreatedAt = DateTime.MinValue
-                            UpdatedAt = DateTime.MinValue
-                            MessageCount = 0
-                            OverrideProviderLabel = meta.OverrideProviderLabel
-                        }
-                    })
-                    |> Async.Parallel
-
-                return conversations |> Array.toList
+                let! rows = ConversationListing.readAll logger storage scope.Container titlingPolicy.MaxTitleChars
+                return rows |> List.map _.Conversation
             }
 
         // Phase 36.A: the client-visible tool listing is filtered by the
@@ -1810,12 +2334,10 @@ let aiAssistantApi
                     |> List.map _.Definition
             }
 
+        // Phase 516.D — the polling fallback: the last status the task's
+        // turn emitted, for the caller that submitted it.
         GetTaskStatus =
-            fun _taskId -> async {
-                // Task status is ephemeral — delivered via SSE events.
-                // This endpoint can be used for polling fallback.
-                return None
-            }
+            fun taskId -> async { return taskRegistry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow) }
 
         DeleteConversation =
             fun conversationId -> async {
@@ -1836,16 +2358,33 @@ let aiAssistantApi
         SetConversationOverride =
             fun (conversationId, label) -> async {
                 try
-                    do! saveConversationMeta storage scope.Container conversationId { OverrideProviderLabel = label }
+                    // Read-modify-write: the meta sibling also carries the
+                    // generated title (Phase 516.B), which an override
+                    // change must not erase.
+                    let! meta = loadConversationMeta logger storage scope.Container conversationId
+
+                    do!
+                        saveConversationMeta storage scope.Container conversationId {
+                            meta with
+                                OverrideProviderLabel = label
+                        }
 
                     return Ok()
                 with ex ->
                     return Error ex.Message
             }
+
+        // Phase 516.C — one page, filtered by title/content search.
+        ListConversationsPage =
+            fun query -> async {
+                let! rows = ConversationListing.readAll logger storage scope.Container titlingPolicy.MaxTitleChars
+                return ConversationListing.page query rows
+            }
     }
 
     // The legacy surface: the turn over the per-user SSE broadcast.
-    let assistantApi: AIAssistantApi = makeAssistantApi (sendEvent sseManager userId)
+    let assistantApi: AIAssistantApi =
+        makeAssistantApi (trackTaskStatus (sendEvent sseManager userId))
 
     // Phase 69c.F — the typed streaming surface: the SAME turn over the
     // stream's channel sink. `SubmitMessage`'s foreground returns once the
@@ -1857,7 +2396,8 @@ let aiAssistantApi
         StreamChatV2 =
             fun (request: AIMessageRequest) ->
                 ToolUp.Remoting.Server.AsyncStream.fromCallback isTerminalStreamEvent (fun emitTyped ->
-                    (makeAssistantApi emitTyped).SubmitMessage request |> Async.Ignore)
+                    (makeAssistantApi (trackTaskStatus emitTyped)).SubmitMessage request
+                    |> Async.Ignore)
     }
 
     assistantApi, streamingApi
