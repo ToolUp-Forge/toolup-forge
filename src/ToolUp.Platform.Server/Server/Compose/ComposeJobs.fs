@@ -615,8 +615,14 @@ let registerDataIngestion
             let connectors =
                 sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
 
+            // Phase 837 — native payload readers a companion registered
+            // (e.g. the Parquet companion's reader). None registered = the
+            // pre-837 behaviour: every connector's CSV `Query`.
+            let payloadReaders =
+                sp.GetServices(typeof<IPayloadReader>) |> Seq.cast<IPayloadReader> |> List.ofSeq
+
             let ingestor =
-                DataIngestor.create
+                DataIngestor.createWithReaders
                     configStoreInstance
                     secretStore
                     dataObjectStore
@@ -624,6 +630,7 @@ let registerDataIngestion
                     connectors
                     resolvedBlobStorage
                     resolvedLogger
+                    payloadReaders
 
             // When the job scheduler is also enabled, register the
             // ingestion handler against it so `IDataIngestionApi.

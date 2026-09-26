@@ -2685,8 +2685,10 @@ ToolUp.Platform.DataIngestionJobHandler+RunPayload.table : System.String { get }
 ToolUp.Platform.DataIngestor (class)
 ToolUp.Platform.DataIngestor.DataIngestionSourceModule : System.String (literal)
 ToolUp.Platform.DataIngestor.create(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.IDataIngestor
+ToolUp.Platform.DataIngestor.createWithReaders(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader]) : ToolUp.Platform.IDataIngestor
 ToolUp.Platform.DataIngestor+DataIngestor (class)
 ToolUp.Platform.DataIngestor+DataIngestor..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.DataIngestor+DataIngestor..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader])
 ToolUp.Platform.DataObjectOrphanSweep (class)
 ToolUp.Platform.DataObjectOrphanSweep.SweepHandlerName : System.String (literal)
 ToolUp.Platform.DataObjectOrphanSweep.sweepScope(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, System.DateTime, ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DataObjectOrphanSweep+OrphanSweepReport]
@@ -5485,6 +5487,9 @@ ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.forScope(ToolUp.Platform.IEmb
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.isScopeKeyed(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : System.Boolean
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.resetScope(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.tryFactory(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory]
+ToolUp.Platform.IEmitsNativePayload (interface)
+ToolUp.Platform.IEmitsNativePayload.NativeFormat : ToolUp.Platform.PayloadFormat { get }
+ToolUp.Platform.IEmitsNativePayload.QueryNative(ToolUp.Platform.DataSourceCallContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.IngestionError]]
 ToolUp.Platform.IEntityLockStore (interface)
 ToolUp.Platform.IEntityLockStore.Acquire(System.String, ToolUp.Platform.EntityLockRef, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]
 ToolUp.Platform.IEntityLockStore.GetHolder(System.String, ToolUp.Platform.EntityLockRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LockLease]]
@@ -5785,6 +5790,9 @@ ToolUp.Platform.IOcrProvider+OcrPage (class)
 ToolUp.Platform.IOcrProvider+OcrPage..ctor(System.Int32, System.String)
 ToolUp.Platform.IOcrProvider+OcrPage.PageNumber : System.Int32 { get }
 ToolUp.Platform.IOcrProvider+OcrPage.Text : System.String { get }
+ToolUp.Platform.IPayloadReader (interface)
+ToolUp.Platform.IPayloadReader.Format : ToolUp.Platform.PayloadFormat { get }
+ToolUp.Platform.IPayloadReader.Read(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]
 ToolUp.Platform.IPlatformAdminStore (interface)
 ToolUp.Platform.IPlatformAdminStore.AssignPlatformAdmin(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IPlatformAdminStore.IsPlatformAdmin(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
@@ -7807,6 +7815,23 @@ ToolUp.Platform.PayloadFormatModule (class)
 ToolUp.Platform.PayloadFormatModule.declaredBy(ToolUp.Platform.IDataSource) : ToolUp.Platform.PayloadFormat
 ToolUp.Platform.PayloadFormatModule.ofToken(System.String) : ToolUp.Platform.PayloadFormat
 ToolUp.Platform.PayloadFormatModule.token(ToolUp.Platform.PayloadFormat) : System.String
+ToolUp.Platform.PayloadReadError (class)
+ToolUp.Platform.PayloadReadError.IsNoReaderComposed : System.Boolean { get }
+ToolUp.Platform.PayloadReadError.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.PayloadReadError.Tag : System.Int32 { get }
+ToolUp.Platform.PayloadReadError+NoReaderComposed (class)
+ToolUp.Platform.PayloadReadError+NoReaderComposed.format : System.String { get }
+ToolUp.Platform.PayloadReadError+Tags (class)
+ToolUp.Platform.PayloadReadError+Tags.NoReaderComposed : System.Int32 (literal)
+ToolUp.Platform.PayloadReadError+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.PayloadReadError+Unreadable (class)
+ToolUp.Platform.PayloadReadError+Unreadable.format : System.String { get }
+ToolUp.Platform.PayloadReadError+Unreadable.reason : System.String { get }
+ToolUp.Platform.PayloadReader (class)
+ToolUp.Platform.PayloadReader.describe(ToolUp.Platform.PayloadReadError) : System.String
+ToolUp.Platform.PayloadReader.forFormat(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader], ToolUp.Platform.PayloadFormat) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPayloadReader]
+ToolUp.Platform.PayloadReader.handles(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader], ToolUp.Platform.PayloadFormat) : System.Boolean
+ToolUp.Platform.PayloadReader.read(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader], ToolUp.Platform.DataObject, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], ToolUp.Platform.PayloadReadError]
 ToolUp.Platform.PeerBearerAuthMiddleware (class)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerBearerSourceModule : System.String (literal)
 ToolUp.Platform.PeerBearerAuthMiddleware.PeerNameHeader : System.String (literal)

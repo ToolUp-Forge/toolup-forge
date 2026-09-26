@@ -82,14 +82,32 @@ let private resultObjectId (sourceId: DataSourceId) (table: string) = $"_dataing
 
 /// Phase 834 — the payload formats this ingestor stores. It holds payload
 /// bytes opaquely, so "handles" means "a format this SDK names and a
-/// reader can be told about": `Csv` and `Json`. `Other` is refused.
-let private handlesPayloadFormat (format: PayloadFormat) =
+/// reader can be told about": `Csv` and `Json`. `Other` is refused —
+/// unless (Phase 837) the deployment composed an `IPayloadReader` for it,
+/// in which case a module reading the payload has somewhere to ask.
+let private handlesPayloadFormat (readers: IPayloadReader list) (format: PayloadFormat) =
     match format with
     | PayloadFormat.Csv
     | PayloadFormat.Json -> true
-    | PayloadFormat.Other _ -> false
+    | PayloadFormat.Other _ -> PayloadReader.handles readers format
+
+/// Phase 837 — the connector's native emission, when it offers one AND the
+/// deployment composed a reader for that format. `None` means the
+/// connector's `Query` (its declared format) is used exactly as before, so
+/// a deployment composing no native reader is byte-for-byte unchanged.
+let private nativeEmission (readers: IPayloadReader list) (connector: IDataSource) : IEmitsNativePayload option =
+    match box connector with
+    | :? IEmitsNativePayload as native when PayloadReader.handles readers native.NativeFormat -> Some native
+    | _ -> None
 
 // ─── DataIngestor ─────────────────────────────────────────────────
+//
+// Phase 837 — native payload formats. `payloadReaders` are the
+// deployment's composed `IPayloadReader`s. A connector implementing
+// `IEmitsNativePayload` whose native format has a composed reader is
+// queried through `QueryNative`, and its bytes are stored UNCHANGED with
+// that format recorded as `content-format`; every other connector goes
+// through `Query` exactly as before. The ingestor never parses either.
 //
 // Default `IDataIngestor` implementation. Resolves the config + the
 // matching connector + the credential (via `ISecretStore` thunk
@@ -118,7 +136,8 @@ type DataIngestor
         eventStore: IEventStore,
         connectors: IDataSource list,
         storage: IBlobStorage,
-        logger: ILogger
+        logger: ILogger,
+        payloadReaders: IPayloadReader list
     ) =
 
     let connectorByKind = connectors |> List.map (fun c -> c.Kind, c) |> Map.ofList
@@ -223,6 +242,20 @@ type DataIngestor
             return! saved None
     }
 
+    /// The pre-Phase-837 shape: no payload reader composed, so every
+    /// connector is queried through `IDataSource.Query`.
+    new
+        (
+            configStore: IDataSourceConfigStore,
+            secretStore: ISecretStore,
+            objectStore: IDataObjectStore,
+            eventStore: IEventStore,
+            connectors: IDataSource list,
+            storage: IBlobStorage,
+            logger: ILogger
+        ) =
+        DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, [])
+
     interface IDataIngestor with
         member _.RunIngestion(scopeId, sourceId, table) = async {
             let runId = Guid.NewGuid()
@@ -253,7 +286,10 @@ type DataIngestor
                 // connector boundary and naming the connector, before any
                 // probe, query or persistence — not weeks later in whichever
                 // module parses the payload.
-                | Some connector when not (handlesPayloadFormat (PayloadFormat.declaredBy connector)) ->
+                | Some connector when
+                    (nativeEmission payloadReaders connector).IsNone
+                    && not (handlesPayloadFormat payloadReaders (PayloadFormat.declaredBy connector))
+                    ->
                     let err =
                         SchemaMismatch
                             $"Connector '{connector.Kind}' declares payload format '{PayloadFormat.token (PayloadFormat.declaredBy connector)}', which this ingestor does not handle; nothing was persisted"
@@ -263,7 +299,19 @@ type DataIngestor
                     do! emitEvent scopeId RunFailedEventType run
                     return Error err
                 | Some connector ->
-                    let payloadFormat = PayloadFormat.declaredBy connector
+                    // Phase 837 — the native path when the connector offers
+                    // one and a reader for it is composed; else `Query`.
+                    let native = nativeEmission payloadReaders connector
+
+                    let payloadFormat =
+                        match native with
+                        | Some emitter -> emitter.NativeFormat
+                        | None -> PayloadFormat.declaredBy connector
+
+                    let query (ctx: DataSourceCallContext) (sql: string) =
+                        match native with
+                        | Some emitter -> emitter.QueryNative(ctx, sql)
+                        | None -> connector.Query(ctx, sql)
 
                     // 3. Resolve credential. `None` is permitted at this
                     // stage — connectors that don't need a credential
@@ -294,7 +342,7 @@ type DataIngestor
                         // 6. Run the query. Connector dialect varies — for
                         // in-memory the SQL string is the table name; for
                         // BigQuery / Redshift it is real SQL.
-                        match! connector.Query(ctx, table) with
+                        match! query ctx table with
                         | Error err ->
                             let run = runFailed scopeId sourceId table runId startedAt err None
                             do! recordRun run
@@ -396,4 +444,21 @@ let create
     (storage: IBlobStorage)
     (logger: ILogger)
     : IDataIngestor =
-    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger) :> IDataIngestor
+    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, []) :> IDataIngestor
+
+/// Phase 837 — `create` with the deployment's composed payload readers. A
+/// connector that emits a native format whose reader is composed here has
+/// its native bytes stored unchanged; with `payloadReaders = []` this is
+/// exactly `create`.
+let createWithReaders
+    (configStore: IDataSourceConfigStore)
+    (secretStore: ISecretStore)
+    (objectStore: IDataObjectStore)
+    (eventStore: IEventStore)
+    (connectors: IDataSource list)
+    (storage: IBlobStorage)
+    (logger: ILogger)
+    (payloadReaders: IPayloadReader list)
+    : IDataIngestor =
+    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, payloadReaders)
+    :> IDataIngestor
