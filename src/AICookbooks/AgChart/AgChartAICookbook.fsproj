@@ -16,7 +16,13 @@
          collide with MSBuild ordering picking the winner. -->
     <Content Include="..\..\ToolUp.Platform.Client\Client\UI\COOKBOOK.md" Link="COOKBOOK.Community.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>content\COOKBOOK.Community.md</PackagePath>
+      <!-- Phase 768: two package paths. `content\` is the legacy location (kept so a
+           consumer pinning its path via GeneratePathProperty keeps working until it
+           drops that workaround); `contentFiles\any\any\` is what NuGet delivers to a
+           PackageReference consumer, and PackageCopyToOutput lands it beside the
+           assembly, which is the builder's assembly-relative candidate path. -->
+      <PackagePath>content\COOKBOOK.Community.md;contentFiles\any\any\COOKBOOK.Community.md</PackagePath>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
   </ItemGroup>
   <ItemGroup>

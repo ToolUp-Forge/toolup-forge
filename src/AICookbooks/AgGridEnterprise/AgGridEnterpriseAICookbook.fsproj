@@ -14,7 +14,13 @@
          Community companion's — see the note in AgChartAICookbook.fsproj. -->
     <Content Include="..\..\Feliz.AgGrid.Enterprise\COOKBOOK.md" Link="COOKBOOK.Enterprise.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>content\COOKBOOK.Enterprise.md</PackagePath>
+      <!-- Phase 768: two package paths. `content\` is the legacy location (kept so a
+           consumer pinning its path via GeneratePathProperty keeps working until it
+           drops that workaround); `contentFiles\any\any\` is what NuGet delivers to a
+           PackageReference consumer, and PackageCopyToOutput lands it beside the
+           assembly, which is the builder's assembly-relative candidate path. -->
+      <PackagePath>content\COOKBOOK.Enterprise.md;contentFiles\any\any\COOKBOOK.Enterprise.md</PackagePath>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
   </ItemGroup>
   <ItemGroup>
