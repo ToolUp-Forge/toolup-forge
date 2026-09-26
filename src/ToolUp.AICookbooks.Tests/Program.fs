@@ -8,7 +8,7 @@ open System.Reflection
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
-    testList "ToolUp.AICookbooks.Tests" [ LicensingBoundaryTests.tests ]
+    testList "ToolUp.AICookbooks.Tests" [ LicensingBoundaryTests.tests; PackageReferenceDeliveryTests.tests ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
