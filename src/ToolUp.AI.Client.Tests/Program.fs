@@ -99,6 +99,10 @@ let allTests =
         // Phase 537 - the UI-awareness companion's inspect_active_module executor:
         // the live report for the request's active module and both status branches.
         UiAwarenessInspectTests.tests
+        // Phase 542 - the UI-awareness companion's list_active_actions executor:
+        // enabled/disabled action states for the request's active module, and
+        // both status branches.
+        ListActiveActionsTests.tests
     ]
 
 [<EntryPoint>]

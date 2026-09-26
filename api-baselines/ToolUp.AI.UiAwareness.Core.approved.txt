@@ -5,6 +5,7 @@
 # still be folded into this file in the same PR.
 ToolUp.AI.UiAwareness (class)
 ToolUp.AI.UiAwareness.InspectActiveModuleToolName : System.String (literal)
+ToolUp.AI.UiAwareness.ListActiveActionsToolName : System.String (literal)
 ToolUp.AI.UiAwareness.UiAwarenessSourceModule : System.String (literal)
 ToolUp.AI.UiAwareness+InspectStatus (class)
 ToolUp.AI.UiAwareness+InspectStatus.NoActiveModule : System.String (literal)

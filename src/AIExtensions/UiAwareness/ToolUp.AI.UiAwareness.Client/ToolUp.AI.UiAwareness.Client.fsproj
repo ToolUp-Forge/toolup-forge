@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Client\InspectActiveModule.fs" />
+    <Compile Include="Client\ListActiveActions.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.AI.UiAwareness.Core\ToolUp.AI.UiAwareness.Core.fsproj" />

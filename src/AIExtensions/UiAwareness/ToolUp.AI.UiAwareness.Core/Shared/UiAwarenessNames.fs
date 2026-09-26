@@ -21,6 +21,13 @@ module ToolUp.AI.UiAwareness
 [<Literal>]
 let InspectActiveModuleToolName = "_platform.ui.inspect_active_module"
 
+/// Phase 542 — the client-resident tool that projects only the active
+/// module's action states (enabled/disabled) out of the same
+/// `UiStateReport` (Phase 536) `InspectActiveModuleToolName` reads in full.
+/// Reaches the provider as `_platform_ui_list_active_actions`.
+[<Literal>]
+let ListActiveActionsToolName = "_platform.ui.list_active_actions"
+
 /// The SDK-reserved source the tool is registered under. `_`-prefixed,
 /// so the per-module RBAC filter treats it as a reserved source: exempt
 /// unless a deployment names it in its permission map, in which case the
