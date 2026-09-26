@@ -17,11 +17,28 @@ ToolUp.DataSources.Common.Credentials (class)
 ToolUp.DataSources.Common.Credentials.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Credentials.resolveOptional(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.DataSources.Common.Csv (class)
+ToolUp.DataSources.Common.Csv.NullDistinguishingPayloadFormat : System.Int32 (literal)
+ToolUp.DataSources.Common.Csv.absentIfEmpty(System.String) : System.String
+ToolUp.DataSources.Common.Csv.distinguishesNull(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.DataSources.Common.Csv.escapeField(System.String) : System.String
 ToolUp.DataSources.Common.Csv.ofReader(System.Data.Common.DbDataReader) : Microsoft.FSharp.Control.FSharpAsync`1[System.Byte[]]
+ToolUp.DataSources.Common.Csv.readField(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Boolean) : ToolUp.DataSources.Common.Csv+PayloadField
 ToolUp.DataSources.Common.Csv.renderRow(System.Collections.Generic.IEnumerable`1[System.String]) : System.String
 ToolUp.DataSources.Common.Csv.renderValue(System.Object) : System.String
 ToolUp.DataSources.Common.Csv.toBytes(System.Collections.Generic.IEnumerable`1[System.String], System.Collections.Generic.IEnumerable`1[System.Collections.Generic.IEnumerable`1[System.String]]) : System.Byte[]
+ToolUp.DataSources.Common.Csv+PayloadField (class)
+ToolUp.DataSources.Common.Csv+PayloadField.AmbiguousEmpty : ToolUp.DataSources.Common.Csv+PayloadField { get }
+ToolUp.DataSources.Common.Csv+PayloadField.IsAmbiguousEmpty : System.Boolean { get }
+ToolUp.DataSources.Common.Csv+PayloadField.IsNull : System.Boolean { get }
+ToolUp.DataSources.Common.Csv+PayloadField.IsValue : System.Boolean { get }
+ToolUp.DataSources.Common.Csv+PayloadField.Null : ToolUp.DataSources.Common.Csv+PayloadField { get }
+ToolUp.DataSources.Common.Csv+PayloadField.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.Csv+PayloadField+Tags (class)
+ToolUp.DataSources.Common.Csv+PayloadField+Tags.AmbiguousEmpty : System.Int32 (literal)
+ToolUp.DataSources.Common.Csv+PayloadField+Tags.Null : System.Int32 (literal)
+ToolUp.DataSources.Common.Csv+PayloadField+Tags.Value : System.Int32 (literal)
+ToolUp.DataSources.Common.Csv+PayloadField+Value (class)
+ToolUp.DataSources.Common.Csv+PayloadField+Value.Item : System.String { get }
 ToolUp.DataSources.Common.Errors (class)
 ToolUp.DataSources.Common.Errors.classify(System.String, System.Exception) : ToolUp.Platform.IngestionError
 ToolUp.DataSources.Common.Errors.guard`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]

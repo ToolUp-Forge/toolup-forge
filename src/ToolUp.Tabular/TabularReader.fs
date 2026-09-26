@@ -43,7 +43,28 @@ module TabularReader =
         | Bool of bool
         | CellError of message: string
 
-    type private SourceCell = { RawText: string; Content: Content }
+    /// Whether the SOURCE said a cell holds a value. Only a producer
+    /// that declares a null convention can say either way; every
+    /// other cell is `Unstated`, and its emptiness is judged from its
+    /// text exactly as it always was.
+    [<RequireQualifiedAccess>]
+    type private Presence =
+        /// No convention in force — empty/whitespace text reads as an
+        /// empty cell (`TabularValue.Empty`), NULL and "" alike.
+        | Unstated
+        /// The producer declared this cell NULL (an unquoted empty
+        /// field under `Csv.EmptyFieldConvention.UnquotedEmptyIsNull`).
+        | Absent
+        /// The producer declared this cell a value — including a
+        /// zero-length string, which then binds `TabularValue.Text ""`
+        /// rather than collapsing into `Empty`.
+        | Present
+
+    type private SourceCell = {
+        RawText: string
+        Content: Content
+        Presence: Presence
+    }
 
     [<RequireQualifiedAccess>]
     type private SourceRow =
@@ -58,13 +79,37 @@ module TabularReader =
     let private textCell (text: string) = {
         RawText = text
         Content = Content.Text text
+        Presence = Presence.Unstated
     }
 
-    let private csvSource (delimiter: char) (reader: TextReader) : seq<SourceRow> =
-        Csv.parseRecords delimiter reader
+    /// One CSV field as a source cell, under the producer's declared
+    /// empty-field convention. Without one, every field is `Unstated`
+    /// — the pre-convention reading, unchanged.
+    let private csvCell (convention: Csv.EmptyFieldConvention) (field: Csv.CsvField) =
+        let presence =
+            match convention with
+            | Csv.EmptyFieldConvention.Undistinguished -> Presence.Unstated
+            | Csv.EmptyFieldConvention.UnquotedEmptyIsNull ->
+                if field.Quoted || field.Text.Length > 0 then
+                    Presence.Present
+                else
+                    Presence.Absent
+
+        {
+            RawText = field.Text
+            Content = Content.Text field.Text
+            Presence = presence
+        }
+
+    let private csvSource
+        (convention: Csv.EmptyFieldConvention)
+        (delimiter: char)
+        (reader: TextReader)
+        : seq<SourceRow> =
+        Csv.parseFields delimiter reader
         |> Seq.map (fun (rowIndex, record) ->
             match record with
-            | Ok fields -> SourceRow.Data(rowIndex, fields |> Array.map textCell)
+            | Ok fields -> SourceRow.Data(rowIndex, fields |> Array.map (csvCell convention))
             | Error message -> SourceRow.Broken(rowIndex, message))
 
     let private xlsxSource (selection: SheetSelection) (stream: Stream) : seq<SourceRow> =
@@ -96,6 +141,7 @@ module TabularReader =
                     dense[cell.ColumnIndex] <- {
                         RawText = cell.RawText
                         Content = content
+                        Presence = Presence.Unstated
                     }
 
                 SourceRow.Data(row.RowIndex, dense))
@@ -219,7 +265,8 @@ module TabularReader =
 
         match cell with
         | None -> emptyCell ()
-        | Some cell when isEmptyCell cell -> emptyCell ()
+        | Some cell when cell.Presence = Presence.Absent -> emptyCell ()
+        | Some cell when cell.Presence = Presence.Unstated && isEmptyCell cell -> emptyCell ()
         | Some cell ->
             let typeFailure () =
                 Error(cellError rowIndex plan cell.RawText None)
@@ -487,8 +534,15 @@ module TabularReader =
                     // Fully-empty rows (blank CSV lines, stray
                     // formatted-but-empty XLSX rows) are skipped:
                     // they are not data, and reporting them against
-                    // Required columns would flood the report.
-                    if cells |> Array.forall isEmptyCell then
+                    // Required columns would flood the report. A row
+                    // whose producer declared its cells (a null
+                    // convention) is never blank: an all-NULL row is
+                    // a row, and a one-column NULL row is exactly a
+                    // blank line.
+                    if
+                        cells
+                        |> Array.forall (fun cell -> cell.Presence = Presence.Unstated && isEmptyCell cell)
+                    then
                         ()
                     else
                         match binding with
@@ -569,8 +623,30 @@ module TabularReader =
     /// caller to dispose.
     let streamCsv (schema: TableSchema) (options: CsvReadOptions) (stream: Stream) : seq<RowOutcome> = seq {
         use reader = Csv.openReader stream
-        yield! validateRows schema (csvSource options.Delimiter reader)
+        yield! validateRows schema (csvSource Csv.EmptyFieldConvention.Undistinguished options.Delimiter reader)
     }
+
+    /// `streamCsv` under the producer's declared empty-field
+    /// convention. Under `Csv.EmptyFieldConvention.UnquotedEmptyIsNull`
+    /// a cell the producer declared NULL binds `TabularValue.Empty`
+    /// (or fails `RequiredValueMissing` on a `Required` column), and a
+    /// cell it declared a value binds as one — a quoted `""` in a
+    /// `Text` column is `TabularValue.Text ""`, never `Empty`, and in a
+    /// typed column it is a type failure rather than a silent blank.
+    /// So NULL and the empty string stay distinct at the type level
+    /// with no sentinel. Under `Undistinguished` this is `streamCsv`
+    /// exactly — the right call for a file whose producer declares
+    /// nothing, including every user upload.
+    let streamCsvWithConvention
+        (convention: Csv.EmptyFieldConvention)
+        (schema: TableSchema)
+        (options: CsvReadOptions)
+        (stream: Stream)
+        : seq<RowOutcome> =
+        seq {
+            use reader = Csv.openReader stream
+            yield! validateRows schema (csvSource convention options.Delimiter reader)
+        }
 
     /// Stream per-row outcomes from XLSX. Same contract as
     /// `streamCsv`.
@@ -607,6 +683,30 @@ module TabularReader =
         : TabularReadResult<'Row> =
         use stream = new MemoryStream(bytes)
         readCsvWith binder schema options stream
+
+    /// `readCsvWith` under the producer's declared empty-field
+    /// convention — see `streamCsvWithConvention` for what it changes.
+    let readCsvWithConvention
+        (binder: RowBinder<'Row>)
+        (convention: Csv.EmptyFieldConvention)
+        (schema: TableSchema)
+        (options: CsvReadOptions)
+        (stream: Stream)
+        : TabularReadResult<'Row> =
+        streamCsvWithConvention convention schema options stream
+        |> materialise binder options.MaxErrors
+
+    /// `readCsvWithConvention` over an in-memory byte payload — the
+    /// shape a module reading an ingested connector payload holds.
+    let readCsvBytesWithConvention
+        (binder: RowBinder<'Row>)
+        (convention: Csv.EmptyFieldConvention)
+        (schema: TableSchema)
+        (options: CsvReadOptions)
+        (bytes: byte[])
+        : TabularReadResult<'Row> =
+        use stream = new MemoryStream(bytes)
+        readCsvWithConvention binder convention schema options stream
 
     /// `readCsv` over an in-memory byte payload.
     let readCsvBytes

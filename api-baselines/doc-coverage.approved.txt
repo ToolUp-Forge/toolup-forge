@@ -66,7 +66,7 @@ ToolUp.ContentAuthoring 32/72
 ToolUp.ContentScanners.ClamAv 15/25
 ToolUp.DataSources.Athena 14/16
 ToolUp.DataSources.BigQuery 13/15
-ToolUp.DataSources.Common 51/52
+ToolUp.DataSources.Common 57/69
 ToolUp.DataSources.Csv 10/12
 ToolUp.DataSources.Excel 18/26
 ToolUp.DataSources.GitHub 10/17
@@ -165,7 +165,7 @@ ToolUp.Storage.GoogleCloud 9/20
 ToolUp.Stripe.Server 69/128
 ToolUp.Stripe.TierToken 25/94
 ToolUp.Stripe.Webhook 30/88
-ToolUp.Tabular 95/256
+ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
 ToolUp.VectorStores.Hnsw 4/26

@@ -77,7 +77,21 @@ ToolUp.Tabular.ConstraintViolation+TooLong.actualLength : System.Int32 { get }
 ToolUp.Tabular.ConstraintViolation+TooLong.maxLength : System.Int32 { get }
 ToolUp.Tabular.Csv (class)
 ToolUp.Tabular.Csv.openReader(System.IO.Stream) : System.IO.StreamReader
+ToolUp.Tabular.Csv.parseFields(System.Char, System.IO.TextReader) : System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.Int32, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Tabular.Csv+CsvField[], System.String]]]
 ToolUp.Tabular.Csv.parseRecords(System.Char, System.IO.TextReader) : System.Collections.Generic.IEnumerable`1[System.Tuple`2[System.Int32, Microsoft.FSharp.Core.FSharpResult`2[System.String[], System.String]]]
+ToolUp.Tabular.Csv+CsvField (struct)
+ToolUp.Tabular.Csv+CsvField..ctor(System.String, System.Boolean)
+ToolUp.Tabular.Csv+CsvField.Quoted : System.Boolean { get }
+ToolUp.Tabular.Csv+CsvField.Text : System.String { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention (class)
+ToolUp.Tabular.Csv+EmptyFieldConvention.IsUndistinguished : System.Boolean { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention.IsUnquotedEmptyIsNull : System.Boolean { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention.Tag : System.Int32 { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention.Undistinguished : ToolUp.Tabular.Csv+EmptyFieldConvention { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention.UnquotedEmptyIsNull : ToolUp.Tabular.Csv+EmptyFieldConvention { get }
+ToolUp.Tabular.Csv+EmptyFieldConvention+Tags (class)
+ToolUp.Tabular.Csv+EmptyFieldConvention+Tags.Undistinguished : System.Int32 (literal)
+ToolUp.Tabular.Csv+EmptyFieldConvention+Tags.UnquotedEmptyIsNull : System.Int32 (literal)
 ToolUp.Tabular.CsvReadOptions (class)
 ToolUp.Tabular.CsvReadOptions..ctor(System.Char, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Tabular.CsvReadOptions.Delimiter : System.Char { get }
@@ -184,13 +198,16 @@ ToolUp.Tabular.TabularReadResult`1.Truncated : System.Boolean { get }
 ToolUp.Tabular.TabularReader (class)
 ToolUp.Tabular.TabularReader.readCsv(ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.IO.Stream) : ToolUp.Tabular.TabularReadResult`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue]]
 ToolUp.Tabular.TabularReader.readCsvBytes(ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.Byte[]) : ToolUp.Tabular.TabularReadResult`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue]]
+ToolUp.Tabular.TabularReader.readCsvBytesWithConvention`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.Csv+EmptyFieldConvention, ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.Byte[]) : ToolUp.Tabular.TabularReadResult`1[Row]
 ToolUp.Tabular.TabularReader.readCsvBytesWith`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.Byte[]) : ToolUp.Tabular.TabularReadResult`1[Row]
+ToolUp.Tabular.TabularReader.readCsvWithConvention`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.Csv+EmptyFieldConvention, ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.IO.Stream) : ToolUp.Tabular.TabularReadResult`1[Row]
 ToolUp.Tabular.TabularReader.readCsvWith`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.IO.Stream) : ToolUp.Tabular.TabularReadResult`1[Row]
 ToolUp.Tabular.TabularReader.readXlsx(ToolUp.Tabular.TableSchema, ToolUp.Tabular.XlsxReadOptions, System.IO.Stream) : ToolUp.Tabular.TabularReadResult`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue]]
 ToolUp.Tabular.TabularReader.readXlsxBytes(ToolUp.Tabular.TableSchema, ToolUp.Tabular.XlsxReadOptions, System.Byte[]) : ToolUp.Tabular.TabularReadResult`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue]]
 ToolUp.Tabular.TabularReader.readXlsxBytesWith`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.TableSchema, ToolUp.Tabular.XlsxReadOptions, System.Byte[]) : ToolUp.Tabular.TabularReadResult`1[Row]
 ToolUp.Tabular.TabularReader.readXlsxWith`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Tabular.TabularValue], Microsoft.FSharp.Core.FSharpResult`2[Row, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Tabular.CellError]]], ToolUp.Tabular.TableSchema, ToolUp.Tabular.XlsxReadOptions, System.IO.Stream) : ToolUp.Tabular.TabularReadResult`1[Row]
 ToolUp.Tabular.TabularReader.streamCsv(ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.IO.Stream) : System.Collections.Generic.IEnumerable`1[ToolUp.Tabular.RowOutcome]
+ToolUp.Tabular.TabularReader.streamCsvWithConvention(ToolUp.Tabular.Csv+EmptyFieldConvention, ToolUp.Tabular.TableSchema, ToolUp.Tabular.CsvReadOptions, System.IO.Stream) : System.Collections.Generic.IEnumerable`1[ToolUp.Tabular.RowOutcome]
 ToolUp.Tabular.TabularReader.streamXlsx(ToolUp.Tabular.TableSchema, ToolUp.Tabular.XlsxReadOptions, System.IO.Stream) : System.Collections.Generic.IEnumerable`1[ToolUp.Tabular.RowOutcome]
 ToolUp.Tabular.TabularValue (class)
 ToolUp.Tabular.TabularValue.Empty : ToolUp.Tabular.TabularValue { get }
