@@ -581,6 +581,39 @@ let private pureTests =
                 prompt
                 "ends in `-option`"
                 "the general optional-typed clearing rule, not a single literal type name"
+
+        testCase "Phase 665 — every exemplar's verdict parses verbatim, and the prompt carries all six"
+        <| fun _ ->
+            Expect.equal (List.length triageExemplars) 6 "the pack is exactly six exemplars"
+
+            for instruction, verdict in triageExemplars do
+                match parseTriageDecision verdict with
+                | None -> failtestf "exemplar for %A does not parse: %s" instruction verdict
+                | Some d ->
+                    Expect.isTrue
+                        (d.Decision = "set_field" || d.Decision = "needs_full_agent")
+                        $"exemplar for {instruction} decodes to a real decision, got {d.Decision}"
+
+                    if d.Decision = "needs_full_agent" then
+                        Expect.isFalse
+                            (String.IsNullOrWhiteSpace d.Reason)
+                            "a decline exemplar carries a one-line reason"
+
+            let declineCount =
+                triageExemplars
+                |> List.filter (fun (_, v) ->
+                    match parseTriageDecision v with
+                    | Some d -> d.Decision = "needs_full_agent"
+                    | None -> false)
+                |> List.length
+
+            Expect.isTrue (declineCount >= 2) "at least two exemplars demonstrate the decline form"
+
+            let prompt = buildTriagePrompt snapshot
+
+            for instruction, verdict in triageExemplars do
+                Expect.stringContains prompt instruction "every exemplar instruction reaches the prompt"
+                Expect.stringContains prompt verdict "every exemplar verdict reaches the prompt verbatim"
     ]
 
 // ─── Loop-intercept tests ────────────────────────────────────────
@@ -693,6 +726,19 @@ let private interceptTests =
                 Expect.stringContains p "set country to {value}" "the declared phrasing reached the model"
                 Expect.stringContains p "sales" "as did the active module"
             | None -> failtest "triage must send a system prompt — without it the model has no field vocabulary"
+        }
+
+        testCaseAsync "Phase 665 — all six exemplars reach the model, not just buildTriagePrompt's own return value"
+        <| async {
+            let provider = ScriptedProvider(true, hitReply, "agent answered")
+            let! _ = runLoop (Some config) (provider :> IAIProvider) "set country to UK"
+
+            match provider.LastStructuredSystemPrompt with
+            | Some p ->
+                for instruction, verdict in triageExemplars do
+                    Expect.stringContains p instruction "the exemplar instruction reached the wire prompt"
+                    Expect.stringContains p verdict "the exemplar verdict reached the wire prompt verbatim"
+            | None -> failtest "triage must send a system prompt — without it there is no exemplar pack to check"
         }
 
         testCaseAsync "needs_full_agent falls through to the loop and is recorded as such"

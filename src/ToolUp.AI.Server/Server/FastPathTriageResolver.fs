@@ -382,6 +382,32 @@ let lastUserInstruction (messages: AIProviderMessage list) : string option =
 [<Literal>]
 let private MaxStateSummaryChars = 2000
 
+/// Phase 665 — a fixed few-shot pack teaching the OUTPUT GRAMMAR, not
+/// this snapshot's fields. Each pair is an instruction and the exact
+/// JSON verdict `parseTriageDecision` accepts for it, so the pack is a
+/// contract with the parser as much as with the model: every entry
+/// here is asserted, verbatim, to round-trip through
+/// `parseTriageDecision` in `FastPathTriageResolverTests.fs`. The field
+/// ids used (`region`, `units`, `country`, `showComparisons`) are
+/// illustrative only — they are not declared on every surface, and the
+/// "Declared fields" section above is what actually constrains a real
+/// answer; the model is told so explicitly below. Four `set_field`
+/// hits show a plain value, an aliased value, an optional-field clear,
+/// and a boolean-shaped value; two `needs_full_agent` declines show the
+/// one-line `reason` form for an instruction that needs a lookup and
+/// one that names no single field plainly.
+let triageExemplars: (string * string) list = [
+    "set the region to EMEA", """{"decision":"set_field","fieldId":"region","value":"EMEA","confidence":0.95}"""
+    "switch to imperial units", """{"decision":"set_field","fieldId":"units","value":"imperial","confidence":0.9}"""
+    "clear the country filter", """{"decision":"set_field","fieldId":"country","value":null,"confidence":0.93}"""
+    "turn showComparisons off",
+    """{"decision":"set_field","fieldId":"showComparisons","value":"false","confidence":0.88}"""
+    "set the summary to reflect the trends this quarter",
+    """{"decision":"needs_full_agent","confidence":0.97,"reason":"the value requires analysis, not a value stated plainly in the instruction"}"""
+    "adjust the dashboard for the new quarter",
+    """{"decision":"needs_full_agent","confidence":0.96,"reason":"no single declared field is named plainly"}"""
+]
+
 /// Build the triage system prompt from the declared surface. The
 /// declared instruction patterns are the exemplars — the SAME
 /// declarations Tier 1 pattern-matches on, so the two tiers cannot
@@ -450,6 +476,12 @@ let buildTriagePrompt (snapshot: AIFieldSnapshot) : string =
         "`confidence` is your own probability, 0 to 1, that a `set_field` answer is exactly what the"
         "user asked for. Report it honestly; a well-calibrated low number is more useful than a"
         "confident guess."
+        ""
+        "Examples of the exact answer grammar (the field ids below are illustrative only — never"
+        "name one unless it also appears in \"Declared fields\" above):"
+        (triageExemplars
+         |> List.map (fun (instruction, verdict) -> $"  instruction: \"{instruction}\"\n  answer: {verdict}")
+         |> String.concat "\n")
     ]
 
 /// Parse the model's answer. Total: any shape that is not the
