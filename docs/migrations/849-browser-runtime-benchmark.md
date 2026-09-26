@@ -69,7 +69,7 @@ node --import ./register-loader.mjs output/Program.js ClientBench --seed 849001
 ## 849.D — what the first runs measured, lever by lever
 
 Measured 2026-09-27, node v25.9.0, win32/x64, React production build, seed 849001, on a machine
-running a concurrent build campaign (load average 100% throughout — so these overstate a quiet
+running other builds concurrently (load average 100% throughout — so these overstate a quiet
 machine, the way Phase 192's loaded run did). Minimums unless stated; per-run figures are in the
 budget's notes. Each later phase cites these as its **before**.
 

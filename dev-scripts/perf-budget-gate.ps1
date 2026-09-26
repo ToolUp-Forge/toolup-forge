@@ -428,8 +428,8 @@ if (-not $EvaluateOnly) {
 
 # ─── Measure the client (Phase 849) ──────────────────────────────────────
 
-# Sibling launcher conventions — see workspace CLAUDE.md "Sibling launcher conventions (mandate)".
-# Copy-pasted from the canonical body there; do not diverge without updating the workspace doc.
+# npm is called through this helper, never as a bare `& npm`: on Windows the npm.ps1 shim that
+# ships with Node corrupts arguments when invoked from inside another script (see below).
 function Invoke-Npm {
     # Node 22.x ships an npm.ps1 shim that rebuilds args from the caller's command-line text via
     # Substring(InvocationName.Length). Called from inside another .ps1 as `& npm ci ...`, the
