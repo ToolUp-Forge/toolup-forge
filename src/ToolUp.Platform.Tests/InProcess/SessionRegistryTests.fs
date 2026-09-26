@@ -30,7 +30,15 @@ let private freshScopes () =
 let tests =
     let factory () =
         let blobs = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
-        let registry = BlobBackedSessionRegistry.create blobs None 30
+        // Frozen clock at the contract pack's fixture instant: with the
+        // wall clock, the pack's fixed `LastSeenAt` aged past the 30-day
+        // retention window on 2026-09-25 and every listing came back empty
+        // (a time bomb, not a regression).
+        let fixtureNow = DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero)
+
+        let registry =
+            BlobBackedSessionRegistry(blobs, None, 30, (fun () -> fixtureNow)) :> ISessionRegistry
+
         let scopeA, scopeB = freshScopes ()
         registry, scopeA, scopeB
 
