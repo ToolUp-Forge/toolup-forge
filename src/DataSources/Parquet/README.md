@@ -187,6 +187,15 @@ let ordersSource = {
 // TriggerRefresh schedules a Manual job; the ingestor calls Connect
 // then Query and writes the returned CSV through IDataObjectStore with
 // a Versioned policy. Poll ListRecentRuns for completion.
+//
+// Native passthrough (Phase 837, opt-in per deployment): ALSO register
+//     services.AddSingleton<IPayloadReader>(ParquetDataSource.payloadReader ())
+// and the ingestor stores the file's own Parquet bytes unchanged
+// (content-format "parquet") instead of the CSV rendering. A module reads
+// them back as typed rows — types from the footer, nulls from the
+// definition levels, nothing re-inferred — with
+//     PayloadReader.read readers payload bytes
+// Without the reader composed, ingestion is byte-for-byte the CSV path.
 async {
     let! _ = api.SaveDataSource ordersSource
     let! jobId = api.TriggerRefresh("orders-parquet", "orders")

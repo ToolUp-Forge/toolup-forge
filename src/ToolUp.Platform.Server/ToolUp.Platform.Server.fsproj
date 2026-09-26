@@ -595,6 +595,9 @@
         <Compile Include="Server\IDataIngestor.fs" />
         <Compile Include="Server\InMemoryDataSource.fs" />
         <Compile Include="Server\DataSourceConfigStore.fs" />
+        <!-- Phase 837 — native payload formats: the IPayloadReader /
+             IEmitsNativePayload seams (vendor readers live in companions). -->
+        <Compile Include="Server\IPayloadReader.fs" />
         <Compile Include="Server\DataIngestor.fs" />
         <Compile Include="Server\DataIngestionJobHandler.fs" />
         <Compile Include="Server\Infra\EnvironmentSecretStore.fs" />

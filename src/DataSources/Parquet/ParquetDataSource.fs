@@ -331,6 +331,202 @@ let private toCsv (reader: ParquetReader) : Task<Result<byte[], IngestionError>>
     | None -> return Ok(Encoding.UTF8.GetBytes(builder.ToString()))
 }
 
+// ─── Native passthrough (Phase 837) ───────────────────────────────
+//
+// Rendering to CSV above is lossy at the SOURCE: Parquet states every
+// column's type and nullness, and CSV can express neither, so everything
+// downstream re-infers what the file already said. When a deployment
+// composes `ParquetDataSource.payloadReader ()`, the ingestor instead asks
+// the connector for its NATIVE bytes (`IEmitsNativePayload.QueryNative`),
+// stores them unchanged, and a module reads them back through the reader
+// seam as typed rows — types and nulls straight from the footer and the
+// definition levels, nothing re-inferred. CSV stays the connector's
+// declared `Query` format and the fallback for a deployment that composes
+// no reader (GP 13: opt-in per deployment).
+
+/// The native payload format the connector emits and the reader reads.
+/// Named here, not by the platform: `ToolUp.Platform.*` carries no Parquet
+/// knowledge (GP 1), which is what `PayloadFormat.Other` is for.
+let NativeFormat = PayloadFormat.Other "parquet"
+
+/// The `DatasetDType` a Parquet field's declared CLR type reads as. Integer
+/// widths collapse to `Int` (int64), floating and decimal types to `Float`
+/// (`DatasetDType` has no decimal: a `decimal` column narrows to double),
+/// date/time instants to `Timestamp`; durations, times of day, GUIDs, byte
+/// arrays (base64) and strings to `Text`.
+let datasetDType (field: DataField) : DatasetDType =
+    let clrType =
+        match field.ClrType with
+        | null -> null
+        | declared ->
+            match Nullable.GetUnderlyingType declared with
+            | null -> declared
+            | underlying -> underlying
+
+    if isNull clrType then
+        DatasetDType.Text
+    elif clrType = typeof<bool> then
+        DatasetDType.Bool
+    elif
+        clrType = typeof<sbyte>
+        || clrType = typeof<byte>
+        || clrType = typeof<int16>
+        || clrType = typeof<uint16>
+        || clrType = typeof<int>
+        || clrType = typeof<uint32>
+        || clrType = typeof<int64>
+        || clrType = typeof<uint64>
+    then
+        DatasetDType.Int
+    elif
+        clrType = typeof<float32>
+        || clrType = typeof<float>
+        || clrType = typeof<decimal>
+    then
+        DatasetDType.Float
+    elif
+        clrType = typeof<DateTime>
+        || clrType = typeof<DateTimeOffset>
+        || clrType = typeof<DateOnly>
+    then
+        DatasetDType.Timestamp
+    else
+        DatasetDType.Text
+
+/// One decoded cell as a `DatasetValue`. `null` is `Null` whatever the
+/// column's type — the definition level said so, not a text heuristic.
+let private toDatasetValue (column: string) (cell: obj) : Result<DatasetValue, string> =
+    match cell with
+    | null -> Ok DatasetValue.Null
+    | :? bool as v -> Ok(DatasetValue.Bool v)
+    | :? sbyte as v -> Ok(DatasetValue.Int(int64 v))
+    | :? byte as v -> Ok(DatasetValue.Int(int64 v))
+    | :? int16 as v -> Ok(DatasetValue.Int(int64 v))
+    | :? uint16 as v -> Ok(DatasetValue.Int(int64 v))
+    | :? int as v -> Ok(DatasetValue.Int(int64 v))
+    | :? uint32 as v -> Ok(DatasetValue.Int(int64 v))
+    | :? int64 as v -> Ok(DatasetValue.Int v)
+    | :? uint64 as v when v <= uint64 Int64.MaxValue -> Ok(DatasetValue.Int(int64 v))
+    | :? uint64 as v -> Error $"column '%s{column}': UInt64 value %d{v} exceeds the Int64 range of DatasetValue.Int"
+    | :? float32 as v -> Ok(DatasetValue.Float(float v))
+    | :? float as v -> Ok(DatasetValue.Float v)
+    | :? decimal as v -> Ok(DatasetValue.Float(float v))
+    | :? DateTime as v ->
+        let utc =
+            match v.Kind with
+            | DateTimeKind.Local -> v.ToUniversalTime()
+            | DateTimeKind.Utc -> v
+            | _ -> DateTime.SpecifyKind(v, DateTimeKind.Utc)
+
+        Ok(DatasetValue.Timestamp(DateTimeOffset utc))
+    | :? DateTimeOffset as v -> Ok(DatasetValue.Timestamp v)
+    | :? DateOnly as v -> Ok(DatasetValue.Timestamp(DateTimeOffset(v.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)))
+    | :? (byte[]) as v -> Ok(DatasetValue.Text(Convert.ToBase64String v))
+    | :? string as v -> Ok(DatasetValue.Text v)
+    | :? TimeSpan as v -> Ok(DatasetValue.Text(v.ToString("c", Globalization.CultureInfo.InvariantCulture)))
+    | :? TimeOnly as v -> Ok(DatasetValue.Text(v.ToString("O", Globalization.CultureInfo.InvariantCulture)))
+    | :? Guid as v -> Ok(DatasetValue.Text(v.ToString "D"))
+    | other -> Error $"column '%s{column}': no DatasetValue for a %s{other.GetType().Name} cell"
+
+/// The declared `DatasetSchema` of a Parquet file — read from the footer,
+/// never inferred from values.
+let datasetSchemaOf (fields: DataField seq) : DatasetSchema = {
+    Columns =
+        fields
+        |> Seq.map (fun field -> {
+            Name = fieldPath field
+            DType = datasetDType field
+            Nullable = field.IsNullable
+            Role = DatasetColumnRole.Plain
+        })
+        |> List.ofSeq
+}
+
+let private describeError (error: IngestionError) : string =
+    match error with
+    | SchemaMismatch message -> message
+    | other -> string other
+
+/// Decode the whole file to typed rows, one row group at a time, through
+/// the same column decoders the CSV rendering uses — so a column the CSV
+/// path refuses is refused here too, by the same name.
+let private toRows (reader: ParquetReader) : Task<Result<DatasetSchema * DatasetRow list, IngestionError>> = task {
+    let fields = reader.Schema.DataFields
+    let schema = datasetSchemaOf fields
+    let names = fields |> Array.map fieldPath
+    let rows = ResizeArray<DatasetRow>()
+    let mutable failure: IngestionError option = None
+
+    for groupIndex in 0 .. reader.RowGroupCount - 1 do
+        if failure.IsNone then
+            use rowGroup = reader.OpenRowGroupReader groupIndex
+            let rowCount = int rowGroup.RowCount
+            let columns = Array.zeroCreate<obj[]> fields.Length
+
+            for i in 0 .. fields.Length - 1 do
+                if failure.IsNone then
+                    let! decoded = readColumn rowGroup fields[i] rowCount
+
+                    match decoded with
+                    | Error err -> failure <- Some err
+                    | Ok values -> columns[i] <- values
+
+            let mutable rowIndex = 0
+
+            while failure.IsNone && rowIndex < rowCount do
+                let cells = ResizeArray<DatasetValue>(fields.Length)
+                let mutable i = 0
+
+                while failure.IsNone && i < fields.Length do
+                    let cell = columns[i][rowIndex]
+
+                    match toDatasetValue names[i] cell with
+                    | Ok value -> cells.Add value
+                    | Error message -> failure <- Some(SchemaMismatch message)
+
+                    i <- i + 1
+
+                if failure.IsNone then
+                    rows.Add { Cells = List.ofSeq cells }
+
+                rowIndex <- rowIndex + 1
+
+    match failure with
+    | Some err -> return Error err
+    | None -> return Ok(schema, List.ofSeq rows)
+}
+
+/// Open a reader over in-memory Parquet bytes and run `body`. A task
+/// because `ParquetReader` is `IAsyncDisposable` only.
+let private readBytes
+    (context: string)
+    (bytes: byte[])
+    (body: ParquetReader -> Task<Result<'T, IngestionError>>)
+    : Task<Result<'T, IngestionError>> =
+    task {
+        try
+            use stream = new MemoryStream(bytes, writable = false)
+            use! reader = ParquetReader.CreateAsync stream
+            return! body reader
+        with ex ->
+            return Error(SchemaMismatch $"%s{context}: not a readable Parquet file: %s{ex.Message}")
+    }
+
+/// Phase 837 — the `IPayloadReader` for native Parquet payloads. Compose
+/// it (`services.AddSingleton<IPayloadReader>(ParquetDataSource.payloadReader ())`)
+/// to opt a deployment into Parquet passthrough.
+type ParquetPayloadReader() =
+    interface IPayloadReader with
+        member _.Format = NativeFormat
+
+        member _.Read(payload) =
+            (readBytes "Parquet payload" payload toRows).GetAwaiter().GetResult()
+            |> Result.mapError describeError
+
+/// The Parquet payload reader, as the seam type a deployment composes.
+let payloadReader () : IPayloadReader =
+    ParquetPayloadReader() :> IPayloadReader
+
 type private ParquetDataSourceImpl(storage: IBlobStorage) =
 
     let withSettings
@@ -359,22 +555,30 @@ type private ParquetDataSourceImpl(storage: IBlobStorage) =
         async {
             match! Files.download storage context settings.File table with
             | Error err -> return Error err
-            | Ok bytes ->
-                let read = task {
-                    try
-                        use stream = new MemoryStream(bytes, writable = false)
-                        use! reader = ParquetReader.CreateAsync stream
-                        return! body reader
-                    with ex ->
-                        return Error(SchemaMismatch $"%s{context}: not a readable Parquet file: %s{ex.Message}")
-                }
-
-                return! read |> Async.AwaitTask
+            | Ok bytes -> return! readBytes context bytes body |> Async.AwaitTask
         }
 
     // Phase 834 — `Query` emits RFC 4180 CSV; declared, not implied.
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
+
+    // Phase 837 — the native bytes, unconverted. Called by the ingestor only
+    // when the deployment composed the Parquet payload reader. The file is
+    // decoded once through the reader's own path before its bytes are
+    // returned, so a payload the reader would refuse (an unsupported or
+    // repeated column) is refused HERE, at ingestion and by column name,
+    // rather than stored and discovered by whichever module reads it.
+    interface IEmitsNativePayload with
+        member _.NativeFormat = NativeFormat
+
+        member _.QueryNative(ctx, sql) =
+            withSettings ctx "Parquet QueryNative" (fun settings -> async {
+                match! Files.download storage "Parquet QueryNative" settings.File sql with
+                | Error err -> return Error err
+                | Ok bytes ->
+                    let! decoded = readBytes "Parquet QueryNative" bytes toRows |> Async.AwaitTask
+                    return decoded |> Result.map (fun _ -> bytes)
+            })
 
     interface IDataSource with
         member _.Kind = Kind
