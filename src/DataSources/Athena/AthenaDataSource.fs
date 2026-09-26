@@ -271,10 +271,10 @@ type private AthenaDataSourceImpl(secretStore: ISecretStore option) =
     let readResults (client: AmazonAthenaClient) (executionId: string) : Async<byte[]> = async {
         let! ct = Async.CancellationToken
 
-        let cellOf (datum: Datum) =
-            match datum.VarCharValue with
-            | null -> ""
-            | value -> value
+        // Athena omits `VarCharValue` for a NULL and sends "" for an
+        // empty string; the absent value stays the `null` string so the
+        // shared writer emits it unquoted (NULL) rather than as `""`.
+        let cellOf (datum: Datum) : string = datum.VarCharValue
 
         let mutable header: string list = []
         let rows = ResizeArray<string list>()

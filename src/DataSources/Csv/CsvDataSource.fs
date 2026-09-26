@@ -391,7 +391,12 @@ type private CsvDataSourceImpl(storage: IBlobStorage) =
                 | Ok bytes ->
                     match readTable settings bytes None with
                     | Error err -> return Error err
-                    | Ok(header, rows) -> return Ok(CsvWire.toBytes header (rows |> Seq.map Seq.ofList))
+                    | Ok(header, rows) ->
+                        // A blank cell in an uploaded file says only "blank": write
+                        // it absent (unquoted, as before) rather than as a quoted
+                        // empty string the file never asserted.
+                        return
+                            Ok(CsvWire.toBytes header (rows |> Seq.map (Seq.ofList >> Seq.map CsvWire.absentIfEmpty)))
             })
 
 /// Build the connector over the deployment's blob storage.

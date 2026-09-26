@@ -195,8 +195,11 @@ let renderField (field: Field) : string =
         | :? bool as flag -> flag
         | _ -> false
 
+    // A NULL is the `null` string (an ABSENT cell), never "" — the
+    // shared writer renders "" as a quoted empty string, so returning
+    // "" here would assert an empty string the database never held.
     if isNullArm then
-        ""
+        null
     else
         let arms: obj list = [
             box field.StringValue
@@ -209,7 +212,7 @@ let renderField (field: Field) : string =
         | Some value -> Csv.renderValue value
         | None ->
             match field.BlobValue with
-            | null -> ""
+            | null -> null
             | blob -> Convert.ToBase64String(blob.ToArray())
 
 type private RedshiftDataSourceImpl(secretStore: ISecretStore option) =

@@ -40,6 +40,38 @@ module Csv =
             leaveOpen = true
         )
 
+    /// One parsed field plus the one fact about its spelling that the
+    /// text alone loses: whether it was written inside quotes. `a,,b`
+    /// and `a,"",b` both yield an empty `Text`; only `Quoted` tells
+    /// them apart. The parser SURFACES this and interprets nothing —
+    /// whether an unquoted empty means NULL is a convention of the
+    /// file's producer, applied by the caller (see
+    /// `EmptyFieldConvention`), never by the parser.
+    [<Struct>]
+    type CsvField = {
+        /// The field's text, quotes removed and `""` unescaped.
+        Text: string
+        /// `true` when the field opened with a quote character.
+        Quoted: bool
+    }
+
+    /// What an EMPTY field means in a CSV stream. The file format
+    /// itself does not say: RFC 4180 has no NULL, so the meaning is
+    /// a convention of whoever wrote the bytes, and a reader applies
+    /// one only when the producer declares it.
+    [<RequireQualifiedAccess>]
+    type EmptyFieldConvention =
+        /// No convention — the default, and the right reading for a
+        /// user-uploaded file (Excel and friends quote inconsistently,
+        /// and many tools quote every field). An empty field is just
+        /// empty; NULL and the empty string are not distinguishable.
+        | Undistinguished
+        /// The PostgreSQL `COPY ... WITH (FORMAT csv)` convention: an
+        /// UNQUOTED empty field is NULL (absent), a QUOTED empty field
+        /// (`""`) is the empty string. Applied only to bytes whose
+        /// producer declares it.
+        | UnquotedEmptyIsNull
+
     [<RequireQualifiedAccess>]
     type private State =
         /// Start of a field — quoting decision pending.
@@ -52,29 +84,23 @@ module Csv =
         /// an escaped `""` or the closing quote.
         | QuoteInQuoted
 
-    /// Parse RFC 4180 records off a `TextReader`, yielding
-    /// `(recordIndex, Ok fields)` per well-formed record and
-    /// `(recordIndex, Error message)` per record whose quoting is
-    /// malformed (unterminated quote at EOF, or content after a
-    /// closing quote). `recordIndex` is 1-based in record order —
-    /// the row number a spreadsheet UI would show. Embedded
-    /// newlines inside quotes do not advance it.
-    ///
-    /// Lazy: records are parsed as the sequence is consumed; a
-    /// caller taking the first 10 records of a 100k-record file
-    /// reads only those records' characters.
-    let parseRecords (delimiter: char) (reader: TextReader) : seq<int * Result<string[], string>> = seq {
-        let fields = ResizeArray<string>()
+    // The one state machine behind both public readers. `makeField`
+    // builds each committed field from its text and its quoting, so
+    // `parseRecords` pays for no per-field record it would discard.
+    let private parseWith (makeField: string -> bool -> 'Field) (delimiter: char) (reader: TextReader) = seq {
+        let fields = ResizeArray<'Field>()
         let field = StringBuilder()
         let mutable state = State.FieldStart
+        let mutable quoted = false
         let mutable recordIndex = 0
         let mutable malformed: string option = None
         let mutable eof = false
 
         // Local helpers keep the per-character match flat.
         let commitField () =
-            fields.Add(field.ToString())
+            fields.Add(makeField (field.ToString()) quoted)
             field.Clear() |> ignore
+            quoted <- false
 
         let takeRecord () =
             recordIndex <- recordIndex + 1
@@ -112,6 +138,7 @@ module Csv =
                 match state with
                 | State.FieldStart ->
                     if c = '"' then
+                        quoted <- true
                         state <- State.Quoted
                     elif c = delimiter then
                         commitField ()
@@ -179,3 +206,25 @@ module Csv =
                         field.Append c |> ignore
                         state <- State.Unquoted
     }
+
+    /// Parse RFC 4180 records off a `TextReader`, yielding
+    /// `(recordIndex, Ok fields)` per well-formed record and
+    /// `(recordIndex, Error message)` per record whose quoting is
+    /// malformed (unterminated quote at EOF, or content after a
+    /// closing quote). `recordIndex` is 1-based in record order —
+    /// the row number a spreadsheet UI would show. Embedded
+    /// newlines inside quotes do not advance it.
+    ///
+    /// Lazy: records are parsed as the sequence is consumed; a
+    /// caller taking the first 10 records of a 100k-record file
+    /// reads only those records' characters.
+    let parseRecords (delimiter: char) (reader: TextReader) : seq<int * Result<string[], string>> =
+        parseWith (fun text _ -> text) delimiter reader
+
+    /// `parseRecords` with each field's quoting surfaced beside its
+    /// text (`CsvField.Quoted`). Same records, same indices, same
+    /// error reporting — the only addition is the bit `parseRecords`
+    /// drops, which is what a caller applying a producer's
+    /// `EmptyFieldConvention` needs to tell `,,` from `,"",`.
+    let parseFields (delimiter: char) (reader: TextReader) : seq<int * Result<CsvField[], string>> =
+        parseWith (fun text quoted -> { Text = text; Quoted = quoted }) delimiter reader

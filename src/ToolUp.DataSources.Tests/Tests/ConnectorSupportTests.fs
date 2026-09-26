@@ -168,7 +168,9 @@ let private csvTests =
             Expect.equal (Csv.escapeField "a,b") "\"a,b\"" "comma"
             Expect.equal (Csv.escapeField "say \"hi\"") "\"say \"\"hi\"\"\"" "embedded quotes are doubled"
             Expect.equal (Csv.escapeField "line\nbreak") "\"line\nbreak\"" "newline"
-            Expect.equal (Csv.escapeField null) "" "null renders empty"
+            Expect.equal (Csv.escapeField null) "" "null (an absent cell) renders as the unquoted empty field"
+            Expect.equal (Csv.escapeField "") "\"\"" "a present empty string is quoted, so it is not NULL"
+            Expect.equal (Csv.escapeField " ") " " "whitespace is not empty and stays unquoted"
         }
 
         test "renderValue is invariant-culture, so a comma-decimal host cannot corrupt numbers" {
@@ -183,8 +185,9 @@ let private csvTests =
         }
 
         test "renderValue maps nulls, DBNull, dates, bytes and bools" {
-            Expect.equal (Csv.renderValue null) "" "null"
-            Expect.equal (Csv.renderValue (box DBNull.Value)) "" "DBNull"
+            Expect.isNull (Csv.renderValue null) "null is ABSENT, not the empty string"
+            Expect.isNull (Csv.renderValue (box DBNull.Value)) "DBNull is ABSENT, not the empty string"
+            Expect.equal (Csv.renderValue (box "")) "" "an empty string stays an empty string"
             Expect.equal (Csv.renderValue (box true)) "true" "bool true"
             Expect.equal (Csv.renderValue (box false)) "false" "bool false"
 
@@ -209,6 +212,251 @@ let private csvTests =
         test "toBytes with no rows still emits the header" {
             let text = Csv.toBytes [ "only" ] [] |> Encoding.UTF8.GetString
             Expect.equal text "only\r\n" "header-only payload"
+        }
+    ]
+
+// ─── Phase 833 — CSV null fidelity ────────────────────────────────
+//
+// NULL and the empty string must survive writer → bytes → reader as
+// DIFFERENT values. The reader side is `ToolUp.Tabular` (reached here
+// through the Excel companion's reference), named in full because this
+// file's `Csv` is the connector writer.
+
+module private NullFidelity =
+
+    module TabularCsv = ToolUp.Tabular.Csv
+
+    /// The pre-833 writer, verbatim — the collapse the go-red probe
+    /// runs against.
+    let legacyEscape (field: string) =
+        let value = if isNull field then "" else field
+
+        if
+            value.Contains ','
+            || value.Contains '"'
+            || value.Contains '\n'
+            || value.Contains '\r'
+        then
+            "\"" + value.Replace("\"", "\"\"") + "\""
+        else
+            value
+
+    let legacyRender (value: obj) =
+        match Csv.renderValue value with
+        | null -> ""
+        | text -> text
+
+    /// One record's fields, with quoting, off a CSV line.
+    let fieldsOf (line: string) : ToolUp.Tabular.Csv.CsvField[] =
+        use reader = new IO.StringReader(line + "\r\n")
+
+        match TabularCsv.parseFields ',' reader |> Seq.exactlyOne with
+        | _, Ok fields -> fields
+        | _, Error message -> failtestf "unparseable %s: %s" line message
+
+    /// What the connector reader makes of one line under a payload format.
+    let readLine (payloadFormat: string option) (line: string) =
+        fieldsOf line
+        |> Array.map (fun field -> Csv.readField payloadFormat field.Text field.Quoted)
+
+    /// The probe: do a NULL and an empty string come back as different
+    /// values after the round trip? `render`/`escape` pick the writer.
+    let nullAndEmptyStayDistinct (render: obj -> string) (escape: string -> string) =
+        let line =
+            [ box "a"; null; box ""; box DBNull.Value; box "b" ]
+            |> List.map (render >> escape)
+            |> String.concat ","
+
+        match readLine (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) line with
+        | [| _; nullCell; emptyCell; dbNullCell; _ |] -> nullCell <> emptyCell && nullCell = dbNullCell
+        | other -> failtestf "expected five fields, got %A" other
+
+let private csvNullFidelityTests =
+    testList "Csv null fidelity (Phase 833)" [
+        test "NULL and the empty string round-trip renderValue -> renderRow -> parseFields to DIFFERENT values" {
+            let line =
+                Csv.renderRow ([ box "a"; null; box ""; box DBNull.Value ] |> List.map Csv.renderValue)
+
+            Expect.equal line "a,,\"\"," "absent cells unquoted, the empty string quoted"
+
+            let fields = NullFidelity.fieldsOf line
+            Expect.equal (fields |> Array.map _.Quoted) [| false; false; true; false |] "quoting is surfaced"
+            Expect.equal (fields |> Array.map _.Text) [| "a"; ""; ""; "" |] "text alone cannot tell them apart"
+
+            Expect.equal
+                (NullFidelity.readLine (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) line)
+                [|
+                    Csv.PayloadField.Value "a"
+                    Csv.PayloadField.Null
+                    Csv.PayloadField.Value ""
+                    Csv.PayloadField.Null
+                |]
+                "a payload of the current format reads NULL as Null and \"\" as the empty string"
+        }
+
+        test "the go-red probe: the old collapse fails it, the new rule passes it" {
+            Expect.isFalse
+                (NullFidelity.nullAndEmptyStayDistinct NullFidelity.legacyRender NullFidelity.legacyEscape)
+                "under the pre-833 writer NULL and \"\" are the same bytes - the probe must be able to fail"
+
+            Expect.isTrue
+                (NullFidelity.nullAndEmptyStayDistinct Csv.renderValue Csv.escapeField)
+                "under the null convention they stay distinct"
+        }
+
+        test "a probe that passes under the old collapse fails under the new rule" {
+            // The pre-833 invariant: `a,,b` and `a,"",b` mean the same.
+            let sameMeaning (payloadFormat: string option) =
+                NullFidelity.readLine payloadFormat "a,,b" = NullFidelity.readLine payloadFormat "a,\"\",b"
+
+            Expect.isTrue (sameMeaning None) "a pre-832 payload keeps the old reading"
+            Expect.isTrue (sameMeaning (Some "1")) "a Phase-832 payload keeps the old reading"
+
+            Expect.isFalse
+                (sameMeaning (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat))
+                "a current payload no longer collapses them"
+        }
+
+        test "every non-empty field renders byte-identically to the RFC 4180 writer it replaced" {
+            for value in [ "plain"; "a,b"; "say \"hi\""; "line\nbreak"; "cr\rhere"; " "; "0" ] do
+                Expect.equal (Csv.escapeField value) (NullFidelity.legacyEscape value) $"field %A{value}"
+
+            Expect.equal (Csv.escapeField null) (NullFidelity.legacyEscape null) "an absent cell too"
+        }
+
+        test "a pre-convention payload reports its empties as ambiguous, resolved neither way" {
+            for format in [ None; Some "1"; Some "not-a-number"; Some "" ] do
+                Expect.equal (Csv.readField format "" false) Csv.PayloadField.AmbiguousEmpty $"unquoted, %A{format}"
+                Expect.equal (Csv.readField format "" true) Csv.PayloadField.AmbiguousEmpty $"quoted, %A{format}"
+                Expect.equal (Csv.readField format "x" false) (Csv.PayloadField.Value "x") $"a value, %A{format}"
+        }
+
+        test "distinguishesNull keys on the payload-format token, and the ingestor stamps one that declares it" {
+            Expect.isFalse (Csv.distinguishesNull None) "no token - written before Phase 832"
+            Expect.isFalse (Csv.distinguishesNull (Some "1")) "Phase 832 payloads predate the convention"
+            Expect.isTrue (Csv.distinguishesNull (Some "2")) "the Phase 833 token"
+            Expect.isTrue (Csv.distinguishesNull (Some " 3 ")) "later formats keep it"
+            Expect.isFalse (Csv.distinguishesNull (Some "2a")) "an unreadable token is not evidence"
+
+            Expect.isTrue
+                (Csv.distinguishesNull (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat))
+                "the token the ingestor writes today declares the convention the writer uses"
+        }
+
+        test "a user-uploaded CSV that quotes every field parses exactly as before" {
+            let parse (text: string) =
+                use reader = new IO.StringReader(text)
+                ToolUp.Tabular.Csv.parseRecords ',' reader |> List.ofSeq
+
+            Expect.equal
+                (parse "\"a\",\"\",\"b\"\r\n\"1\",\"\",\"2\"\r\n")
+                (parse "a,,b\r\n1,,2\r\n")
+                "parseRecords interprets nothing: quoted and unquoted empties read alike"
+
+            let schema =
+                ToolUp.Tabular.TableSchema.make [
+                    ToolUp.Tabular.ColumnSchema.make "a" ToolUp.Tabular.ColumnType.Text
+                    ToolUp.Tabular.ColumnSchema.make "note" ToolUp.Tabular.ColumnType.Text
+                ]
+
+            let read (text: string) =
+                ToolUp.Tabular.TabularReader.readCsvBytes
+                    schema
+                    ToolUp.Tabular.CsvReadOptions.defaults
+                    (Encoding.UTF8.GetBytes text)
+
+            let quotedEverything = read "\"a\",\"note\"\r\n\"x\",\"\"\r\n"
+            Expect.equal quotedEverything (read "a,note\r\nx,\r\n") "the default reader sees no difference"
+
+            Expect.equal
+                (quotedEverything.Rows |> List.map (Map.find "note"))
+                [ ToolUp.Tabular.TabularValue.Empty ]
+                "an upload's empty stays Empty, as today"
+        }
+
+        test "TabularReader carries absence through a connector payload at the type level" {
+            let payload =
+                Csv.toBytes [ "name"; "note"; "qty" ] [
+                    [ box "a"; null; box 1 ] |> Seq.map Csv.renderValue
+                    [ box "b"; box ""; box DBNull.Value ] |> Seq.map Csv.renderValue
+                ]
+
+            let schema =
+                ToolUp.Tabular.TableSchema.make [
+                    ToolUp.Tabular.ColumnSchema.make "name" ToolUp.Tabular.ColumnType.Text
+                    ToolUp.Tabular.ColumnSchema.make "note" ToolUp.Tabular.ColumnType.Text
+                    ToolUp.Tabular.ColumnSchema.make "qty" ToolUp.Tabular.ColumnType.Integer
+                ]
+
+            let read convention =
+                ToolUp.Tabular.TabularReader.readCsvBytesWithConvention
+                    Ok
+                    convention
+                    schema
+                    ToolUp.Tabular.CsvReadOptions.defaults
+                    payload
+
+            let convention =
+                if Csv.distinguishesNull (Some ToolUp.Platform.IngestedPayload.CurrentPayloadFormat) then
+                    ToolUp.Tabular.Csv.EmptyFieldConvention.UnquotedEmptyIsNull
+                else
+                    ToolUp.Tabular.Csv.EmptyFieldConvention.Undistinguished
+
+            let under = read convention
+            Expect.isEmpty under.CellErrors "no cell errors"
+
+            Expect.equal
+                (under.Rows |> List.map (fun row -> row["note"], row["qty"]))
+                [
+                    ToolUp.Tabular.TabularValue.Empty, ToolUp.Tabular.TabularValue.Integer 1L
+                    ToolUp.Tabular.TabularValue.Text "", ToolUp.Tabular.TabularValue.Empty
+                ]
+                "NULL binds Empty, the empty string binds Text \"\""
+
+            let legacy = read ToolUp.Tabular.Csv.EmptyFieldConvention.Undistinguished
+
+            Expect.equal
+                (legacy.Rows |> List.map (fun row -> row["note"]))
+                [ ToolUp.Tabular.TabularValue.Empty; ToolUp.Tabular.TabularValue.Empty ]
+                "without the convention both stay the ambiguous Empty, as today"
+        }
+
+        test "an all-NULL row is a row under the convention, not a skipped blank line" {
+            let payload = Csv.toBytes [ "only" ] [ [ Csv.renderValue null ]; [ "x" ] ]
+            Expect.equal (Encoding.UTF8.GetString payload) "only\r\n\r\nx\r\n" "a one-column NULL row is a blank line"
+
+            let schema =
+                ToolUp.Tabular.TableSchema.make [
+                    ToolUp.Tabular.ColumnSchema.make "only" ToolUp.Tabular.ColumnType.Text
+                ]
+
+            let read convention =
+                ToolUp.Tabular.TabularReader.readCsvBytesWithConvention
+                    Ok
+                    convention
+                    schema
+                    ToolUp.Tabular.CsvReadOptions.defaults
+                    payload
+
+            Expect.equal
+                ((read ToolUp.Tabular.Csv.EmptyFieldConvention.UnquotedEmptyIsNull).Rows
+                 |> List.map (Map.find "only"))
+                [ ToolUp.Tabular.TabularValue.Empty; ToolUp.Tabular.TabularValue.Text "x" ]
+                "the NULL row survives"
+
+            Expect.equal
+                ((read ToolUp.Tabular.Csv.EmptyFieldConvention.Undistinguished).Rows
+                 |> List.map (Map.find "only"))
+                [ ToolUp.Tabular.TabularValue.Text "x" ]
+                "the default reader still skips blank lines"
+        }
+
+        test "Redshift renders a NULL field absent, not as an empty string" {
+            let field = Amazon.RedshiftDataAPIService.Model.Field(IsNull = true)
+            Expect.isNull (ToolUp.DataSources.Redshift.RedshiftDataSource.renderField field) "NULL is absent"
+
+            let empty = Amazon.RedshiftDataAPIService.Model.Field(StringValue = "")
+            Expect.equal (ToolUp.DataSources.Redshift.RedshiftDataSource.renderField empty) "" "\"\" stays \"\""
         }
     ]
 
@@ -392,6 +640,7 @@ let tests =
         connectionScopeTests
         credentialTests
         csvTests
+        csvNullFidelityTests
         credentialJsonTests
         sqlIdentifierTests
         typeMapTests

@@ -322,18 +322,29 @@ module CredentialJson =
 /// emits CSV natively — so one format serves the whole family without
 /// a per-connector translation the operator has to know about. Types
 /// are recovered from `GetSchema`, not from the payload.
+///
+/// **NULL is not the empty string (Phase 833).** The family writes the
+/// PostgreSQL `COPY ... WITH (FORMAT csv)` convention inside plain RFC
+/// 4180 bytes: an UNQUOTED empty field is NULL, a QUOTED empty field
+/// (`""`) is the empty string. On the write side a cell's absence is the
+/// `null` string — `renderValue` answers `null` for `null`/`DBNull`, and
+/// `escapeField` writes `null` unquoted and `""` quoted. On the read side
+/// the meaning is applied only to payloads whose `payload-format` declares
+/// it (`distinguishesNull`); an older payload's empties stay ambiguous.
 module Csv =
 
-    /// Round-trippable rendering of one cell. Nulls and `DBNull`
-    /// become the empty field (indistinguishable from an empty
-    /// string in CSV — documented, and why `GetSchema` carries
-    /// `Nullable`). Everything else renders invariant-culture so a
-    /// connector running on a comma-decimal host does not silently
-    /// corrupt every number in the payload.
+    /// Round-trippable rendering of one cell. `null` and `DBNull`
+    /// render as the `null` string — the cell is ABSENT, which
+    /// `escapeField` writes as an unquoted empty field, distinct from
+    /// a present empty string (`""`). Everything else renders
+    /// invariant-culture so a connector running on a comma-decimal
+    /// host does not silently corrupt every number in the payload.
+    /// A caller using this as a plain stringifier must treat `null`
+    /// as "no value" (`isNull`), never dereference it.
     let renderValue (value: obj) : string =
         match value with
-        | null -> ""
-        | :? DBNull -> ""
+        | null -> null
+        | :? DBNull -> null
         | :? string as s -> s
         | :? bool as b -> if b then "true" else "false"
         | :? DateTime as d -> d.ToString("O", CultureInfo.InvariantCulture)
@@ -346,20 +357,34 @@ module Csv =
         | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
         | other -> string other
 
-    /// Quote a field per RFC 4180 — quoted only when it contains a
-    /// comma, a quote, or a line break; embedded quotes doubled.
+    /// Quote a field per RFC 4180 — quoted when it contains a comma,
+    /// a quote, or a line break (embedded quotes doubled), and when it
+    /// is a present EMPTY string: `null` (an absent cell) writes as
+    /// the unquoted empty field, `""` writes as `""`. Every non-empty
+    /// field renders exactly as RFC 4180 alone would have it.
     let escapeField (field: string) : string =
-        let value = if isNull field then "" else field
-
-        if
-            value.Contains ','
-            || value.Contains '"'
-            || value.Contains '\n'
-            || value.Contains '\r'
+        if isNull field then
+            ""
+        elif field.Length = 0 then
+            "\"\""
+        elif
+            field.Contains ','
+            || field.Contains '"'
+            || field.Contains '\n'
+            || field.Contains '\r'
         then
-            "\"" + value.Replace("\"", "\"\"") + "\""
+            "\"" + field.Replace("\"", "\"\"") + "\""
         else
-            value
+            field
+
+    /// The field a source that CANNOT tell NULL from the empty string
+    /// (a user-uploaded CSV or workbook, where a blank cell is all the
+    /// file says) hands the writer: a zero-length field is written as
+    /// absent, so the source's bytes stay what they were rather than
+    /// acquiring a quoted `""` that would assert an empty string the
+    /// file never stated.
+    let absentIfEmpty (field: string) : string =
+        if String.IsNullOrEmpty field then null else field
 
     /// Render one record as a CSV line (no terminator).
     let renderRow (fields: string seq) : string =
@@ -402,6 +427,55 @@ module Csv =
 
         return Encoding.UTF8.GetBytes(sb.ToString())
     }
+
+    /// The first `payload-format` token whose payloads carry the
+    /// null convention (unquoted empty = NULL, quoted empty = the
+    /// empty string). Payloads without the key (written before Phase
+    /// 832) and `"1"` payloads (Phase 832) predate it.
+    [<Literal>]
+    let NullDistinguishingPayloadFormat = 2
+
+    /// Does a payload of this `payload-format` (the value of
+    /// `IngestedPayload.payloadFormat`) distinguish NULL from the
+    /// empty string? `false` for a payload with no token, an older
+    /// token, or one this SDK cannot read as a format number — an
+    /// unknown token is not evidence of the convention.
+    let distinguishesNull (payloadFormat: string option) : bool =
+        match payloadFormat with
+        | Some token ->
+            match Int32.TryParse(token.Trim(), NumberStyles.None, CultureInfo.InvariantCulture) with
+            | true, format -> format >= NullDistinguishingPayloadFormat
+            | false, _ -> false
+        | None -> false
+
+    /// One field of an ingested payload, read under that payload's
+    /// own `payload-format`.
+    [<RequireQualifiedAccess>]
+    type PayloadField =
+        /// A present value — non-empty text, or an empty string the
+        /// payload asserts (a quoted `""` under the null convention).
+        | Value of string
+        /// The cell was NULL at the source.
+        | Null
+        /// An empty field in a payload written before the null
+        /// convention: NULL or the empty string, and the bytes cannot
+        /// say which. Reported as such rather than guessed either way.
+        | AmbiguousEmpty
+
+    /// Apply the payload's convention to one parsed field — its text
+    /// and whether it was quoted, as `ToolUp.Tabular`'s
+    /// `Csv.parseFields` surfaces them. The parser reports quoting and
+    /// interprets nothing; the meaning belongs here, beside the writer
+    /// that established it, and only for a payload that declares it.
+    let readField (payloadFormat: string option) (text: string) (quoted: bool) : PayloadField =
+        if not (String.IsNullOrEmpty text) then
+            PayloadField.Value text
+        elif not (distinguishesNull payloadFormat) then
+            PayloadField.AmbiguousEmpty
+        elif quoted then
+            PayloadField.Value ""
+        else
+            PayloadField.Null
 
 /// Native-type-name → coarse `ColumnType` classification.
 ///

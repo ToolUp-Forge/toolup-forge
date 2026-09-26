@@ -128,9 +128,14 @@ module IngestedPayload =
     [<Literal>]
     let SchemaDriftKey = "schema-drift"
 
-    /// The payload-format token this SDK version writes.
+    /// The payload-format token this SDK version writes. `"1"` (Phase
+    /// 832): schema-carrying payloads, empty CSV fields ambiguous
+    /// between NULL and the empty string. `"2"` (Phase 833): the same,
+    /// plus the null convention — an unquoted empty field is NULL, a
+    /// quoted `""` is the empty string (read it with
+    /// `ConnectorSupport.Csv.distinguishesNull` / `readField`).
     [<Literal>]
-    let CurrentPayloadFormat = "1"
+    let CurrentPayloadFormat = "2"
 
     /// `DataType` recorded on schema objects, distinct from the payload's
     /// `"data-ingestion"` so catalog sweeps can tell them apart.
