@@ -139,6 +139,7 @@
     <ProjectReference Include="../src/NotificationChannels/Redis/ToolUp.NotificationChannels.Redis.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/Sms/Twilio/ToolUp.NotificationChannels.Sms.Twilio.fsproj" />
     <ProjectReference Include="../src/NotificationChannels/WhatsApp/Twilio/ToolUp.NotificationChannels.WhatsApp.Twilio.fsproj" />
+    <ProjectReference Include="../src/Observability/Datadog/ToolUp.Observability.Datadog.fsproj" />
     <ProjectReference Include="../src/OcrProviders/Tesseract/ToolUp.OcrProviders.Tesseract.fsproj" />
     <ProjectReference Include="../src/RateLimit/AzureTableStorage/ToolUp.RateLimit.AzureTableStorage.fsproj" />
     <ProjectReference Include="../src/RateLimit/Redis/ToolUp.RateLimit.Redis.fsproj" />
