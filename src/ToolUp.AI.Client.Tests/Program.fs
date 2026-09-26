@@ -101,5 +101,13 @@ let allTests =
         UiAwarenessInspectTests.tests
     ]
 
+// Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
+// benchmark INSTEAD of the tests; `node --test` passes no arguments, so the
+// ordinary run never reaches it.
 [<EntryPoint>]
-let main _argv = runTests allTests
+let main argv =
+    if Array.contains "ClientBench" argv then
+        ClientBench.run argv
+        0
+    else
+        runTests allTests

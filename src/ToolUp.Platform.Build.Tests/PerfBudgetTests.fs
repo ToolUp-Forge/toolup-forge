@@ -282,10 +282,10 @@ let private checkTests =
 
 let private shippedBudgetTests =
     testList "shipped budget" [
-        test "perf-budgets.json parses, and covers both metrics the gate knows" {
+        test "perf-budgets.json parses, and covers both server metrics the gate knows" {
             let budget = budgetOrFail "shipped-budget.json" (shippedBudgetJson ())
 
-            for metric in PerfMetric.all do
+            for metric in PerfMetric.server do
                 Expect.isTrue
                     (budget.Ceilings |> List.exists (fun (m, _) -> m = metric))
                     $"the shipped budget must place a ceiling on '{PerfMetric.key metric}' — a metric the gate can measure but nothing budgets is measured and then discarded"
@@ -329,4 +329,167 @@ let private shippedBudgetTests =
         }
     ]
 
-let tests = testList "PerfBudget" [ parserTests; checkTests; shippedBudgetTests ]
+// ─── Phase 849 — the client block ──────────────────────────────────────
+//
+// The browser-runtime ceilings ClientBench measures live in the SAME
+// budget file, under `client`, in the server block's shape. The laws are
+// the server block's laws — nothing passes silently, widening is a file
+// change, slack is bounded — plus one of its own: the two blocks'
+// metric sets are disjoint, so a ceiling placed in the wrong block is an
+// unknown metric there rather than a budget checked against the other
+// half's measurements.
+
+let private clientBudgetOrFail label json =
+    match PerfBudgetGate.parseClientBudget label json with
+    | Ok b -> b
+    | Error errors -> failtestf "expected the client block of '%s' to parse, got: %s" label (String.concat "; " errors)
+
+let private clientBudgetErrors label json =
+    match PerfBudgetGate.parseClientBudget label json with
+    | Ok _ -> failtestf "expected the client block of '%s' to be REFUSED, but it parsed" label
+    | Error errors -> errors
+
+let private clientBlock =
+    """ "client": { "subject": "bench", "statistic": "min", "ceilings": { "bootMs": 3000, "decodePerResponseUs": 100, "viewPerDispatchUs": 5000 }, "minimumSamples": { "bootMs": 5, "decodePerResponseUs": 9, "viewPerDispatchUs": 9 }, "baselines": { "bootMs": 300, "decodePerResponseUs": 7, "viewPerDispatchUs": 400 } } """
+
+let private clientRun (boot: float) (decode: float) (view: float) =
+    let sample metric (value: float) samples =
+        let v = value.ToString(Globalization.CultureInfo.InvariantCulture)
+
+        $"""{{ "metric": "{metric}", "statistic": "min", "value": {v}, "samples": {samples}, "observed": true, "evidence": "fixture" }}"""
+
+    let samples =
+        String.Join(
+            ", ",
+            [
+                sample "bootMs" boot 6
+                sample "decodePerResponseUs" decode 9
+                sample "viewPerDispatchUs" view 9
+            ]
+        )
+
+    $"""{{ "schema": "toolup.perf-measurements/v1", "appDirectory": "output", "samples": [ {samples} ] }}"""
+
+/// The shipped document's `client.notes`, read directly: the parser does
+/// not model notes (they are for a reviewer), so the law that every
+/// ceiling carries one is asserted on the JSON itself.
+let private shippedClientNotes () =
+    use document = Text.Json.JsonDocument.Parse(shippedBudgetJson ())
+
+    match document.RootElement.TryGetProperty "client" with
+    | true, client ->
+        match client.TryGetProperty "notes" with
+        | true, notes when notes.ValueKind = Text.Json.JsonValueKind.Object -> [
+            for p in notes.EnumerateObject() do
+                if p.Value.ValueKind = Text.Json.JsonValueKind.String then
+                    yield p.Name, p.Value.GetString()
+          ]
+        | _ -> []
+    | _ -> []
+
+let private clientTests =
+    testList "client block" [
+        test "a budget with no client block is refused by the client parser, not read as asserting nothing" {
+            let errors = clientBudgetErrors "no-client.json" (budgetJson defaultCeilings)
+            Expect.isTrue (mentions "declares no 'client' block" errors) $"got: %A{errors}"
+        }
+
+        test "the server parser ignores the client block, so the server budget is unchanged by it" {
+            let budget =
+                budgetOrFail "both.json" (budgetJson (defaultCeilings + "," + clientBlock))
+
+            Expect.equal
+                (budget.Ceilings |> List.map fst)
+                [ ColdStartMs; HotPathMs ]
+                "the client block must not leak into the server block's ceilings"
+        }
+
+        test "a server metric placed in the client block is an unknown metric there" {
+            let misplaced =
+                """ "client": { "subject": "bench", "statistic": "min", "ceilings": { "coldStartMs": 3000 }, "minimumSamples": { "coldStartMs": 5 } } """
+
+            let errors =
+                clientBudgetErrors "misplaced.json" (budgetJson (defaultCeilings + "," + misplaced))
+
+            Expect.isTrue (mentions "unknown metric 'coldStartMs'" errors) $"got: %A{errors}"
+        }
+
+        test "a client metric placed at the top level is an unknown metric there" {
+            let errors =
+                budgetErrors
+                    "misplaced.json"
+                    (budgetJson """ "ceilings": { "bootMs": 3000 }, "minimumSamples": { "bootMs": 5 } """)
+
+            Expect.isTrue (mentions "unknown metric 'bootMs'" errors) $"got: %A{errors}"
+        }
+
+        test "a within-budget client run passes, and its headroom lines carry the metric's own unit" {
+            let budget =
+                clientBudgetOrFail "client.json" (budgetJson (defaultCeilings + "," + clientBlock))
+
+            let run = runOrFail "client-run.json" (clientRun 1200.0 8.5 900.0)
+            let findings = PerfBudgetGate.check budget run
+
+            Expect.isEmpty (PerfBudgetGate.breaches findings) "every client measurement is within its ceiling"
+            let text = PerfBudgetGate.report budget findings
+            Expect.stringContains text "decodePerResponseUs 8.5 us / 100 us" "microsecond metrics render in us"
+            Expect.stringContains text "bootMs 1200 ms / 3000 ms" "the boot metric renders in ms"
+        }
+
+        test "a regressed client run breaches, naming the value and the ceiling in the metric's unit" {
+            let budget =
+                clientBudgetOrFail "client.json" (budgetJson (defaultCeilings + "," + clientBlock))
+
+            let run = runOrFail "client-run.json" (clientRun 1200.0 250.0 900.0)
+            let findings = PerfBudgetGate.check budget run
+
+            Expect.equal
+                (PerfBudgetGate.breaches findings)
+                [ CeilingBreached(ClientDecodePerResponseUs, 250.0, 100.0) ]
+                "exactly the regressed metric breaches"
+
+            Expect.stringContains
+                (PerfFinding.render (CeilingBreached(ClientDecodePerResponseUs, 250.0, 100.0)))
+                "was 250 us, budget allows at most 100 us"
+                "the breach line names both numbers in microseconds"
+        }
+
+        test "perf-budgets.json carries a client block covering every client metric" {
+            let budget = clientBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+
+            for metric in PerfMetric.client do
+                Expect.isTrue
+                    (budget.Ceilings |> List.exists (fun (m, _) -> m = metric))
+                    $"the shipped client block must place a ceiling on '{PerfMetric.key metric}' — ClientBench measures it, and a measured number nothing budgets is discarded"
+        }
+
+        test "no shipped client ceiling is more than 20x its recorded baseline" {
+            // The same anti-slack law the server block is held to, for the
+            // same reason: generous is not unbounded.
+            let budget = clientBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+
+            for metric, ceiling in budget.Ceilings do
+                match budget.Baselines |> List.tryFind (fun (m, _) -> m = metric) with
+                | None -> failtestf "'%s' has a client ceiling but no baseline" (PerfMetric.key metric)
+                | Some(_, baseline) ->
+                    Expect.isLessThanOrEqual
+                        ceiling
+                        (baseline * 20.0)
+                        $"'client.{PerfMetric.key metric}' allows {ceiling} {PerfMetric.unit metric} against a {baseline} {PerfMetric.unit metric} baseline — re-measure and lower it, or justify the new baseline in the client block's notes."
+        }
+
+        test "every shipped client ceiling carries a note saying why it is where it is" {
+            let budget = clientBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+            let notes = shippedClientNotes ()
+
+            for metric, _ in budget.Ceilings do
+                Expect.isTrue
+                    (notes
+                     |> List.exists (fun (name, text) ->
+                         name = PerfMetric.key metric && not (String.IsNullOrWhiteSpace text)))
+                    $"'client.{PerfMetric.key metric}' has no entry in client.notes — a ceiling nobody can explain is one nobody can safely raise"
+        }
+    ]
+
+let tests =
+    testList "PerfBudget" [ parserTests; checkTests; shippedBudgetTests; clientTests ]

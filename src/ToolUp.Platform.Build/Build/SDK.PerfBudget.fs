@@ -63,8 +63,10 @@ open System.Text.Json
 // samples than the budget requires — a "min" over one run is just that
 // run.
 
-/// Phase 192 — the two wallclock quantities a perf budget places a
-/// ceiling on. Both are milliseconds.
+/// Phase 192 — the wallclock quantities a perf budget places a ceiling
+/// on. The two server metrics are milliseconds; Phase 849 added the three
+/// CLIENT metrics, measured under Node by the Fable-tier ClientBench
+/// harness, whose unit each case names (`PerfMetric.unit`).
 type PerfMetric =
     /// Process start to the host's ready line: what a serverless cold
     /// invocation pays before it can serve anything.
@@ -73,22 +75,55 @@ type PerfMetric =
     /// every `No*` default active: the per-request cost the platform
     /// imposes on a deployment that opted into nothing.
     | HotPathMs
+    /// Phase 849 — `import()` of the transpiled minimal client's entry
+    /// module to its first commit into the page, in a fresh process.
+    /// Milliseconds.
+    | ClientBootMs
+    /// Phase 849 — one remoting response through the client proxy's decode
+    /// path (`SimpleJson.parseNative` + `Convert.fromJsonAs`), averaged over
+    /// the wire corpus. Microseconds.
+    | ClientDecodePerResponseUs
+    /// Phase 849 — the `view` construction the render hook performs for one
+    /// dispatched model-changing message. Microseconds.
+    | ClientViewPerDispatchUs
 
 module PerfMetric =
 
     /// The token a budget file and a measurement file both spell it
-    /// with. One function, so the two sides cannot drift.
+    /// with. One function, so the two sides cannot drift. A client
+    /// metric's token is the key it carries INSIDE the budget's `client`
+    /// block (`client.bootMs`), which is also what the harness writes.
     let key metric =
         match metric with
         | ColdStartMs -> "coldStartMs"
         | HotPathMs -> "hotPathMs"
+        | ClientBootMs -> "bootMs"
+        | ClientDecodePerResponseUs -> "decodePerResponseUs"
+        | ClientViewPerDispatchUs -> "viewPerDispatchUs"
+
+    /// The metrics the budget file's top level (the server block) budgets,
+    /// in report order.
+    let server = [ ColdStartMs; HotPathMs ]
+
+    /// Phase 849 — the metrics the budget file's `client` block budgets, in
+    /// report order.
+    let client = [ ClientBootMs; ClientDecodePerResponseUs; ClientViewPerDispatchUs ]
 
     /// Every metric the gate knows, in report order.
-    let all = [ ColdStartMs; HotPathMs ]
+    let all = server @ client
 
     let tryParse (token: string) =
         all
         |> List.tryFind (fun m -> String.Equals(key m, token, StringComparison.Ordinal))
+
+    /// The unit every value, ceiling and baseline of this metric is in.
+    let unit metric =
+        match metric with
+        | ColdStartMs
+        | HotPathMs
+        | ClientBootMs -> "ms"
+        | ClientDecodePerResponseUs
+        | ClientViewPerDispatchUs -> "us"
 
     /// What a regression in this metric would mean, rendered into the
     /// failure so a CI log is actionable without opening this file.
@@ -96,6 +131,9 @@ module PerfMetric =
         match metric with
         | ColdStartMs -> "process start to the host's ready line"
         | HotPathMs -> "one representative request through the composed pipeline"
+        | ClientBootMs -> "import of the transpiled minimal client to its first render"
+        | ClientDecodePerResponseUs -> "one remoting response through the client proxy's reflective decode"
+        | ClientViewPerDispatchUs -> "the view the render hook builds for one dispatched message"
 
 /// Phase 192 — one statistic the measuring half produced, with the
 /// evidence that it measured a real thing.
@@ -213,7 +251,7 @@ module PerfFinding =
     let render finding =
         match finding with
         | CeilingBreached(metric, observed, ceiling) ->
-            $"[breach] {PerfMetric.key metric} was {num observed} ms, budget allows at most {num ceiling} ms ({PerfMetric.describe metric})"
+            $"[breach] {PerfMetric.key metric} was {num observed} {PerfMetric.unit metric}, budget allows at most {num ceiling} {PerfMetric.unit metric} ({PerfMetric.describe metric})"
         | MetricNotMeasured metric ->
             $"[unmeasured] {PerfMetric.key metric} — the budget places a ceiling on it, but the run carries no sample for it"
         | MeasurementUnobserved(metric, evidence) ->
@@ -229,10 +267,10 @@ module PerfFinding =
         | WithinCeiling(metric, observed, ceiling, baseline) ->
             let baselineText =
                 match baseline with
-                | Some b -> $", baseline {num b} ms"
+                | Some b -> $", baseline {num b} {PerfMetric.unit metric}"
                 | None -> ""
 
-            $"[ok] {PerfMetric.key metric} {num observed} ms / {num ceiling} ms ({ratio observed ceiling} headroom{baselineText})"
+            $"[ok] {PerfMetric.key metric} {num observed} {PerfMetric.unit metric} / {num ceiling} {PerfMetric.unit metric} ({ratio observed ceiling} headroom{baselineText})"
 
 /// Phase 192 — everything the gate needs to decide one run.
 type PerfBudgetGateOptions = {
@@ -332,16 +370,29 @@ module PerfBudgetGate =
     /// Read a `{ "coldStartMs": 2000, … }` object into metric-keyed
     /// pairs, in the order the file declared them. Every unknown key
     /// and every non-numeric value is an error, never a skipped line.
-    let private readMetricMap (label: string) (section: string) (element: JsonElement) (errors: ResizeArray<string>) =
+    ///
+    /// Phase 849 — `allowed` is the block's own metric set: a server metric
+    /// in the `client` block (or the reverse) is an unknown metric THERE,
+    /// never silently budgeted against the other half's measurements.
+    let private readMetricMap
+        (label: string)
+        (allowed: PerfMetric list)
+        (section: string)
+        (element: JsonElement)
+        (errors: ResizeArray<string>)
+        =
         if element.ValueKind <> JsonValueKind.Object then
             errors.Add $"'{label}' — '{section}' must be a JSON object, but is {element.ValueKind}."
             []
         else
             [
                 for property in element.EnumerateObject() do
-                    match PerfMetric.tryParse property.Name with
+                    match
+                        PerfMetric.tryParse property.Name
+                        |> Option.filter (fun m -> List.contains m allowed)
+                    with
                     | None ->
-                        let known = String.Join(", ", PerfMetric.all |> List.map PerfMetric.key)
+                        let known = String.Join(", ", allowed |> List.map PerfMetric.key)
 
                         errors.Add
                             $"'{label}' — '{section}' names an unknown metric '{property.Name}'. Known metrics: {known}."
@@ -385,94 +436,131 @@ module PerfBudgetGate =
             if not (obj.ReferenceEquals(document, null)) then
                 document.Dispose()
 
-    /// Parse a budget document. Returns EVERY defect found rather than
-    /// the first, so one run tells an author the whole story about a
-    /// file they are editing by hand.
+    /// One budget block — the file's top level (the server block), or its
+    /// `client` block (Phase 849). Both have the same shape, so both are
+    /// read by this one function, restricted to the block's own metrics.
+    let private readBlock
+        (label: string)
+        (allowed: PerfMetric list)
+        (root: JsonElement)
+        (errors: ResizeArray<string>)
+        : PerfBudget =
+        let budgetLabel =
+            tryProperty root "label" |> Option.bind asString |> Option.defaultValue label
+
+        let subject =
+            match tryProperty root "subject" |> Option.bind asString with
+            | Some s when not (String.IsNullOrWhiteSpace s) -> s
+            | _ ->
+                errors.Add
+                    $"'{label}' declares no 'subject' — it must name the app the gate measures, so a failing log says which one."
+
+                ""
+
+        let statistic =
+            match tryProperty root "statistic" |> Option.bind asString with
+            | Some s when s = MinStatistic -> s
+            | Some s ->
+                errors.Add
+                    $"'{label}' declares statistic '{s}' — this gate reasons only about '{MinStatistic}' (wallclock noise on a shared runner is one-sided, so the minimum is the only estimate that does not widen as the runner gets busier)."
+
+                s
+            | None ->
+                errors.Add $"'{label}' declares no 'statistic' — it must declare '{MinStatistic}'."
+                ""
+
+        let ceilings =
+            match tryProperty root "ceilings" with
+            | Some e ->
+                let parsed = readMetricMap label allowed "ceilings" e errors
+
+                if List.isEmpty parsed && e.ValueKind = JsonValueKind.Object then
+                    errors.Add
+                        $"'{label}' declares an empty 'ceilings' object — a budget with no ceiling asserts nothing."
+
+                parsed
+            | None ->
+                errors.Add $"'{label}' declares no 'ceilings' — a budget with no ceiling asserts nothing."
+                []
+
+        let minimumSamples =
+            match tryProperty root "minimumSamples" with
+            | Some e ->
+                readMetricMap label allowed "minimumSamples" e errors
+                |> List.map (fun (m, v) -> m, int v)
+            | None ->
+                errors.Add
+                    $"'{label}' declares no 'minimumSamples' — every ceiling needs the observation count its statistic must be drawn from, or a 'min' over one run passes as a measurement."
+
+                []
+
+        for metric, _ in ceilings do
+            if not (minimumSamples |> List.exists (fun (m, _) -> m = metric)) then
+                errors.Add
+                    $"'{label}' places a ceiling on '{PerfMetric.key metric}' but declares no 'minimumSamples.{PerfMetric.key metric}'."
+
+        let baselines =
+            match tryProperty root "baselines" with
+            | Some e -> readMetricMap label allowed "baselines" e errors
+            | None -> []
+
+        let absentAssemblies =
+            match tryProperty root "absentAssemblies" with
+            | None -> []
+            | Some e when e.ValueKind <> JsonValueKind.Array ->
+                errors.Add $"'{label}' — 'absentAssemblies' must be a JSON array, but is {e.ValueKind}."
+                []
+            | Some e -> [
+                for item in e.EnumerateArray() do
+                    match asString item with
+                    | Some s when not (String.IsNullOrWhiteSpace s) -> yield s.Trim()
+                    | _ -> errors.Add $"'{label}' — every 'absentAssemblies' entry must be a non-empty string."
+              ]
+
+        {
+            Label = budgetLabel
+            Subject = subject
+            Statistic = statistic
+            Ceilings = ceilings
+            MinimumSamples = minimumSamples
+            Baselines = baselines
+            AbsentAssemblies = absentAssemblies
+        }
+
+    /// Parse a budget document's server block (its top level). Returns
+    /// EVERY defect found rather than the first, so one run tells an author
+    /// the whole story about a file they are editing by hand.
     let parseBudget (label: string) (json: string) : Result<PerfBudget, string list> =
         parseDocument label json (fun root errors ->
             readSchema label BudgetSchemaToken root errors
+            Some(readBlock label PerfMetric.server root errors))
 
-            let budgetLabel =
-                tryProperty root "label" |> Option.bind asString |> Option.defaultValue label
+    /// The property the client block sits under in the budget file.
+    [<Literal>]
+    let ClientBlockProperty = "client"
 
-            let subject =
-                match tryProperty root "subject" |> Option.bind asString with
-                | Some s when not (String.IsNullOrWhiteSpace s) -> s
-                | _ ->
-                    errors.Add
-                        $"'{label}' declares no 'subject' — it must name the app the gate measures, so a failing log says which one."
+    /// Phase 849 — parse the same budget document's `client` block: the
+    /// browser-runtime ceilings ClientBench measures. Same shape as the
+    /// server block (label, subject, statistic, ceilings, minimumSamples,
+    /// baselines), restricted to `PerfMetric.client`. A document with no
+    /// client block is REFUSED rather than read as a budget asserting
+    /// nothing about the client.
+    let parseClientBudget (label: string) (json: string) : Result<PerfBudget, string list> =
+        parseDocument label json (fun root errors ->
+            readSchema label BudgetSchemaToken root errors
+            let blockLabel = $"{label} ({ClientBlockProperty})"
 
-                    ""
+            match tryProperty root ClientBlockProperty with
+            | Some block when block.ValueKind = JsonValueKind.Object ->
+                Some(readBlock blockLabel PerfMetric.client block errors)
+            | Some block ->
+                errors.Add $"'{label}' — '{ClientBlockProperty}' must be a JSON object, but is {block.ValueKind}."
+                None
+            | None ->
+                errors.Add
+                    $"'{label}' declares no '{ClientBlockProperty}' block — the client gate has no ceiling to check against."
 
-            let statistic =
-                match tryProperty root "statistic" |> Option.bind asString with
-                | Some s when s = MinStatistic -> s
-                | Some s ->
-                    errors.Add
-                        $"'{label}' declares statistic '{s}' — this gate reasons only about '{MinStatistic}' (wallclock noise on a shared runner is one-sided, so the minimum is the only estimate that does not widen as the runner gets busier)."
-
-                    s
-                | None ->
-                    errors.Add $"'{label}' declares no 'statistic' — it must declare '{MinStatistic}'."
-                    ""
-
-            let ceilings =
-                match tryProperty root "ceilings" with
-                | Some e ->
-                    let parsed = readMetricMap label "ceilings" e errors
-
-                    if List.isEmpty parsed && e.ValueKind = JsonValueKind.Object then
-                        errors.Add
-                            $"'{label}' declares an empty 'ceilings' object — a budget with no ceiling asserts nothing."
-
-                    parsed
-                | None ->
-                    errors.Add $"'{label}' declares no 'ceilings' — a budget with no ceiling asserts nothing."
-                    []
-
-            let minimumSamples =
-                match tryProperty root "minimumSamples" with
-                | Some e ->
-                    readMetricMap label "minimumSamples" e errors
-                    |> List.map (fun (m, v) -> m, int v)
-                | None ->
-                    errors.Add
-                        $"'{label}' declares no 'minimumSamples' — every ceiling needs the observation count its statistic must be drawn from, or a 'min' over one run passes as a measurement."
-
-                    []
-
-            for metric, _ in ceilings do
-                if not (minimumSamples |> List.exists (fun (m, _) -> m = metric)) then
-                    errors.Add
-                        $"'{label}' places a ceiling on '{PerfMetric.key metric}' but declares no 'minimumSamples.{PerfMetric.key metric}'."
-
-            let baselines =
-                match tryProperty root "baselines" with
-                | Some e -> readMetricMap label "baselines" e errors
-                | None -> []
-
-            let absentAssemblies =
-                match tryProperty root "absentAssemblies" with
-                | None -> []
-                | Some e when e.ValueKind <> JsonValueKind.Array ->
-                    errors.Add $"'{label}' — 'absentAssemblies' must be a JSON array, but is {e.ValueKind}."
-                    []
-                | Some e -> [
-                    for item in e.EnumerateArray() do
-                        match asString item with
-                        | Some s when not (String.IsNullOrWhiteSpace s) -> yield s.Trim()
-                        | _ -> errors.Add $"'{label}' — every 'absentAssemblies' entry must be a non-empty string."
-                  ]
-
-            Some {
-                Label = budgetLabel
-                Subject = subject
-                Statistic = statistic
-                Ceilings = ceilings
-                MinimumSamples = minimumSamples
-                Baselines = baselines
-                AbsentAssemblies = absentAssemblies
-            })
+                None)
 
     /// Parse a measurement run. Same all-defects-at-once contract as
     /// the budget parser.
@@ -653,20 +741,34 @@ module PerfBudgetGate =
 
     /// Load both documents and check them. Errors are everything that
     /// stopped the gate from DECIDING; findings are what it decided.
-    let verify (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+    let private verifyWith
+        (parse: string -> string -> Result<PerfBudget, string list>)
+        (options: PerfBudgetGateOptions)
+        : Result<PerfBudget * PerfFinding list, string list> =
         match readFile "budget" options.BudgetFile, readFile "measurements" options.MeasurementsFile with
         | Error a, Error b -> Error(a @ b)
         | Error a, _ -> Error a
         | _, Error b -> Error b
         | Ok budgetJson, Ok measurementJson ->
             match
-                parseBudget (Path.GetFileName options.BudgetFile) budgetJson,
+                parse (Path.GetFileName options.BudgetFile) budgetJson,
                 parseMeasurements (Path.GetFileName options.MeasurementsFile) measurementJson
             with
             | Error a, Error b -> Error(a @ b)
             | Error a, _ -> Error a
             | _, Error b -> Error b
             | Ok budget, Ok run -> Ok(budget, check budget run)
+
+    /// Load both documents and check the run against the budget's server
+    /// block (its top level). Errors are everything that stopped the gate
+    /// from DECIDING; findings are what it decided.
+    let verify (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseBudget options
+
+    /// Phase 849 — the same load-and-check against the budget file's
+    /// `client` block and a ClientBench measurement run.
+    let verifyClient (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseClientBudget options
 
     /// FAKE's `Target` module cannot be reached fully-qualified from
     /// here — the same binding collision the Core-Web-Vitals target
@@ -679,30 +781,20 @@ module PerfBudgetGate =
 
         let trace (text: string) = Trace.tracefn "%s" text
 
-    /// Register the `VerifyPerfBudget` FAKE target. The runner script
-    /// sets the two environment variables and invokes it as the last
-    /// step of a gate run, after the boots and requests have written
-    /// their measurements:
-    ///
-    /// ```text
-    /// TOOLUP_PERF_BUDGET=perf-budgets.json
-    /// TOOLUP_PERF_MEASUREMENTS=artifacts/perf-budget/measurements.json
-    /// dotnet run --project Build.fsproj -- VerifyPerfBudget
-    /// ```
-    ///
-    /// Options are resolved INSIDE the target body, not at
-    /// registration: a repo registering this target must stay runnable
-    /// for every other target with neither variable set.
-    let registerTarget () : unit =
-        FakeSurface.createTarget "VerifyPerfBudget" (fun () ->
+    let private decideTarget
+        (target: string)
+        (run: PerfBudgetGateOptions -> Result<PerfBudget * PerfFinding list, string list>)
+        =
+        FakeSurface.createTarget target (fun () ->
             match PerfBudgetGateOptions.fromEnvironment () with
             | Error errors ->
-                failwithf "VerifyPerfBudget: %s%s" Environment.NewLine (String.Join(Environment.NewLine, errors))
+                failwithf "%s: %s%s" target Environment.NewLine (String.Join(Environment.NewLine, errors))
             | Ok options ->
-                match verify options with
+                match run options with
                 | Error errors ->
                     failwithf
-                        "VerifyPerfBudget: could not run.%s%s"
+                        "%s: could not run.%s%s"
+                        target
                         Environment.NewLine
                         (String.Join(Environment.NewLine, errors))
                 | Ok(budget, findings) ->
@@ -711,8 +803,33 @@ module PerfBudgetGate =
 
                     if not (List.isEmpty (breaches findings)) then
                         failwithf
-                            "VerifyPerfBudget: %d budget breach(es) against '%s'.%s%s"
+                            "%s: %d budget breach(es) against '%s'.%s%s"
+                            target
                             (List.length (breaches findings))
                             budget.Label
                             Environment.NewLine
                             text)
+
+    /// Register the `VerifyPerfBudget` FAKE target, and (Phase 849) its
+    /// client twin `VerifyClientPerfBudget`. The runner script sets the
+    /// two environment variables and invokes each as the last step of its
+    /// half of a gate run, after the measurements have been written:
+    ///
+    /// ```text
+    /// TOOLUP_PERF_BUDGET=perf-budgets.json
+    /// TOOLUP_PERF_MEASUREMENTS=artifacts/perf-budget/measurements.json
+    /// dotnet run --project Build.fsproj -- VerifyPerfBudget
+    ///
+    /// TOOLUP_PERF_MEASUREMENTS=artifacts/perf-budget/client-measurements.json
+    /// dotnet run --project Build.fsproj -- VerifyClientPerfBudget
+    /// ```
+    ///
+    /// The client target reads the SAME budget file — its `client` block —
+    /// so both halves' ceilings live in one reviewable document.
+    ///
+    /// Options are resolved INSIDE the target body, not at
+    /// registration: a repo registering this target must stay runnable
+    /// for every other target with neither variable set.
+    let registerTarget () : unit =
+        decideTarget "VerifyPerfBudget" verify
+        decideTarget "VerifyClientPerfBudget" verifyClient

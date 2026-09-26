@@ -184,6 +184,25 @@ Both remain useful as **conformance instances**: a proposed change to the seam t
 could not express in principle is a change worth re-reading, because the seam's job is to be the
 shape every ceiling in the SDK has.
 
+### Performance budgets are a CI gate, not a runtime ceiling
+
+`perf-budgets.json` at the repo root is the other thing in this repository called a budget, and it is
+deliberately not on the seam: it bounds what the SDK *costs*, not what a subject may *spend*, and it
+is decided in CI rather than in any deployment. It has two blocks of the same shape — ceiling,
+baseline, minimum samples, the `min` statistic, and a note per ceiling:
+
+| Block | Measured by | Metrics |
+|---|---|---|
+| top level (server, Phase 192) | `dev-scripts/perf-budget-gate.ps1` booting `samples/MinimalApp` | `coldStartMs`, `hotPathMs`, plus the absent-assembly rule |
+| `client` (Phase 849) | the same script running `ClientBench` in `src/ToolUp.AI.Client.Tests` under Node | `bootMs`, `decodePerResponseUs`, `viewPerDispatchUs` |
+
+Both are decided by `ToolUp.Platform.Build`'s `PerfBudgetGate` (`VerifyPerfBudget` /
+`VerifyClientPerfBudget`), print every ceiling's headroom ratio on a green run, and are held by
+`ToolUp.Platform.Build.Tests` to at most 20x their recorded baselines. The client numbers — and which
+of them transfer from Node to a browser — are recorded in
+[`../migrations/849-browser-runtime-benchmark.md`](../migrations/849-browser-runtime-benchmark.md);
+the server ones in [`../migrations/192-cold-start-perf-budget-ci-gate.md`](../migrations/192-cold-start-perf-budget-ci-gate.md).
+
 ---
 
 ## How refusals surface

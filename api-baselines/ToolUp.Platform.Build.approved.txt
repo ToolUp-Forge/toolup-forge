@@ -345,15 +345,18 @@ ToolUp.Platform.PerfBudget.Statistic : System.String { get }
 ToolUp.Platform.PerfBudget.Subject : System.String { get }
 ToolUp.Platform.PerfBudgetGate (class)
 ToolUp.Platform.PerfBudgetGate.BudgetSchemaToken : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.ClientBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MeasurementSchemaToken : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MinStatistic : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.breaches(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
 ToolUp.Platform.PerfBudgetGate.check(ToolUp.Platform.PerfBudget, ToolUp.Platform.PerfMeasurementRun) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
 ToolUp.Platform.PerfBudgetGate.parseBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.parseClientBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseMeasurements(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfMeasurementRun, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.registerTarget() : System.Void
 ToolUp.Platform.PerfBudgetGate.report(ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : System.String
 ToolUp.Platform.PerfBudgetGate.verify(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.verifyClient(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGateOptions (class)
 ToolUp.Platform.PerfBudgetGateOptions..ctor(System.String, System.String)
 ToolUp.Platform.PerfBudgetGateOptions.BudgetFile : System.String { get }
@@ -418,19 +421,31 @@ ToolUp.Platform.PerfMeasurementRun.Label : System.String { get }
 ToolUp.Platform.PerfMeasurementRun.OutputAssemblies : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.PerfMeasurementRun.Samples : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfSample] { get }
 ToolUp.Platform.PerfMetric (class)
+ToolUp.Platform.PerfMetric.ClientBootMs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.ClientDecodePerResponseUs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.ClientViewPerDispatchUs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.ColdStartMs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.HotPathMs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.IsClientBootMs : System.Boolean { get }
+ToolUp.Platform.PerfMetric.IsClientDecodePerResponseUs : System.Boolean { get }
+ToolUp.Platform.PerfMetric.IsClientViewPerDispatchUs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsColdStartMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsHotPathMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.Tag : System.Int32 { get }
 ToolUp.Platform.PerfMetric+Tags (class)
+ToolUp.Platform.PerfMetric+Tags.ClientBootMs : System.Int32 (literal)
+ToolUp.Platform.PerfMetric+Tags.ClientDecodePerResponseUs : System.Int32 (literal)
+ToolUp.Platform.PerfMetric+Tags.ClientViewPerDispatchUs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.ColdStartMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.HotPathMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetricModule (class)
 ToolUp.Platform.PerfMetricModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
+ToolUp.Platform.PerfMetricModule.client : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
 ToolUp.Platform.PerfMetricModule.describe(ToolUp.Platform.PerfMetric) : System.String
 ToolUp.Platform.PerfMetricModule.key(ToolUp.Platform.PerfMetric) : System.String
+ToolUp.Platform.PerfMetricModule.server : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
 ToolUp.Platform.PerfMetricModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PerfMetric]
+ToolUp.Platform.PerfMetricModule.unit(ToolUp.Platform.PerfMetric) : System.String
 ToolUp.Platform.PerfSample (class)
 ToolUp.Platform.PerfSample..ctor(ToolUp.Platform.PerfMetric, System.String, System.Double, System.Int32, System.Boolean, System.String)
 ToolUp.Platform.PerfSample.Evidence : System.String { get }

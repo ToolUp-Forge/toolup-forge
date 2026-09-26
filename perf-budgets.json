@@ -24,5 +24,33 @@
     "statistic": "Wallclock noise on a shared runner is one-sided - a neighbouring job can only make a boot slower - so the minimum over N runs is the least contaminated estimate, and the only statistic whose spread does not widen as the runner gets busier.",
     "absentAssemblies": "The zero-cost-when-unused invariant (GP 13, and the Phase 9y 'default-on DROPPED' conclusion) made byte-level rather than timed. A companion nobody registered should not be in the deployment at all - which is checkable exactly, where 'costs no measurable time' is not.",
     "reviewing-a-change": "Raising a ceiling is a claim that the SDK is now legitimately slower. Say why in this block, in the same diff."
+  },
+  "client": {
+    "label": "Browser runtime under Node - boot, decode, dispatch-to-render (Phase 849)",
+    "subject": "samples/MinimalClient (boot) + src/ToolUp.AI.Client.Tests ClientBench (decode over tests/remoting-corpus, dispatch over a 200-row view)",
+    "statistic": "min",
+    "ceilings": {
+      "bootMs": 17500,
+      "decodePerResponseUs": 80,
+      "viewPerDispatchUs": 12500
+    },
+    "minimumSamples": {
+      "bootMs": 5,
+      "decodePerResponseUs": 9,
+      "viewPerDispatchUs": 9
+    },
+    "baselines": {
+      "bootMs": 1265,
+      "decodePerResponseUs": 5.66,
+      "viewPerDispatchUs": 906
+    },
+    "notes": {
+      "bootMs": "Baseline 1265 ms is the minimum over three production-build ClientBench runs (6 fresh-process boots each, node v25.9.0 win32/x64, 2026-09-27): 1315 / 1866 / 1265, the last from the end-to-end perf-budget-gate.ps1 run. It was NOT a quiet machine - the load average read 100% throughout, a concurrent campaign building beside it - so it overstates the quiet cost, the same way Phase 192's loaded run did. The ceiling is ~14x (Phase 192's slack ratio). Boot is import() of the transpiled samples/MinimalClient to its first commit into #elmish-app under jsdom; import cost transfers to a browser, paint does not (jsdom lays nothing out and AG Charts draws into a no-op canvas).",
+      "decodePerResponseUs": "Baseline 5.66 us is the minimum over four runs (5.66 / 6.87 / 5.83, and 8.57 from a development-build run - React's build does not touch decode) of the proxy's 200 path - SimpleJson.parseNative then Convert.fromJsonAs over createTypeInfo - averaged across the 72 cross-host wire-corpus .json fixtures that decode to their declared value (decimal-max and date-timespan-negative do not, and are excluded by name on every run). JSON.parse alone over the same bytes measured 0.58 us and parseNative alone 1.42 us (minimums over the same runs), so about three-quarters of a response's decode is the reflective Convert.fromJsonAs walk Phase 843 replaces. Ceiling ~14x. Decode is the same JavaScript a browser runs.",
+      "viewPerDispatchUs": "Baseline 906 us is the minimum over the same three production-build runs (1258 / 1908 / 906) of the view the render hook builds per dispatched message - a 200-row Feliz table, one render-hook call per message - with React's production build (the development build is refused by the harness, it validates every element). Ceiling ~14x. View construction is the same JavaScript a browser runs; React's commit and paint are not in this number.",
+      "statistic": "Min over rounds (decode, view) and over fresh-process boots (boot), for Phase 192's reason: wallclock noise is one-sided.",
+      "reproducing": "cd src/ToolUp.AI.Client.Tests; NODE_ENV=production node --import ./register-loader.mjs output/Program.js ClientBench --seed 849001. The seed orders the fixtures and the dispatch sequence, and is printed beside the runtime on every run.",
+      "reviewing-a-change": "Raising a client ceiling is a claim that the client runtime is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
+    }
   }
 }

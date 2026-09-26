@@ -198,6 +198,17 @@
         <Compile Include="ModuleInspectStateTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
+        <!-- Phase 849 — the browser runtime, measured. MinimalClient's entry
+             module is COMPILED IN so its transpiled output sits beside the
+             harness; nothing in this pack references it, so no test imports
+             it and its module-level `Program.run` never executes here. Only
+             ClientBench's fresh-process boot child (client-bench-boot.mjs)
+             imports it, which is the boot being timed. ClientBench itself runs
+             only under `output/Program.js ClientBench` — never under
+             `node:test`. Must follow WireCorpus.fs and ElmishProofDifferential.fs
+             (the corpus and the seeded LCG it reuses). -->
+        <Compile Include="..\..\samples\MinimalClient\Client.fs" />
+        <Compile Include="ClientBench.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

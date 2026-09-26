@@ -30,6 +30,18 @@
 #
 #   pwsh ./dev-scripts/perf-budget-gate.ps1 -TeethCheck
 #
+# ── The client half (Phase 849) ──────────────────────────────────────────
+#
+# After the server half, the script measures the BROWSER runtime: it
+# Fable-compiles the client-tier harness (src/ToolUp.AI.Client.Tests), runs
+# its ClientBench entry under Node with React's production build, and decides
+# the run against the `client` block of the same budget file through the
+# VerifyClientPerfBudget target. Boot (import of the transpiled minimal client
+# to its first render), decode per response (the proxy's reflective JSON
+# decode over the wire corpus) and view per dispatch (the render hook's view
+# construction) — each printed with its headroom ratio on a green run, exactly
+# as the server ceilings are. -SkipClient runs the server half alone.
+#
 # ── What "cold start" means here, exactly ───────────────────────────────
 #
 # Process start to the host's "Application started." line on stdout. That is
@@ -103,7 +115,22 @@ param(
     [switch] $TeethCheck,
 
     # First port tried. Each boot takes the next one.
-    [int] $BasePort = 5240
+    [int] $BasePort = 5240,
+
+    # Phase 849 — the Fable-tier harness whose ClientBench entry measures the
+    # browser runtime, and where its measurement file is written.
+    [string] $ClientHarness = "src/ToolUp.AI.Client.Tests",
+    [string] $ClientMeasurementsFile = "artifacts/perf-budget/client-measurements.json",
+
+    # Fresh-process client boots. Must be at least client.minimumSamples.bootMs.
+    [int] $ClientBoots = 6,
+
+    # The seed ClientBench orders its fixtures and dispatches by; printed on
+    # every run, so a surprising number is reproducible.
+    [int] $ClientSeed = 849001,
+
+    # Measure and decide the server half only.
+    [switch] $SkipClient
 )
 
 $ErrorActionPreference = "Stop"
@@ -399,6 +426,94 @@ if (-not $EvaluateOnly) {
     Write-Host "== perf-budget: measurements written to $MeasurementsFile" -ForegroundColor Cyan
 }
 
+# ─── Measure the client (Phase 849) ──────────────────────────────────────
+
+# Sibling launcher conventions — see workspace CLAUDE.md "Sibling launcher conventions (mandate)".
+# Copy-pasted from the canonical body there; do not diverge without updating the workspace doc.
+function Invoke-Npm {
+    # Node 22.x ships an npm.ps1 shim that rebuilds args from the caller's command-line text via
+    # Substring(InvocationName.Length). Called from inside another .ps1 as `& npm ci ...`, the
+    # 3-char slice eats `& n` and npm sees `pm ci ...` — `Unknown command: "pm"`. Resolving npm.cmd
+    # directly skips the shim.
+    #
+    # `Get-Command npm.cmd` returns EVERY npm.cmd on PATH — typically two (Program Files installer
+    # shim + %APPDATA%\npm self-update shim). `$cmd.Source` would then be an array and `& $cmd.Source`
+    # concatenates the paths into one bogus string. Pin to the first match — both shims behave alike.
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)] $Arguments)
+    $cmd = Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    & $cmd.Source @Arguments
+}
+
+function Invoke-NpmAnyOs {
+    <#
+      The canonical helper above resolves `npm.cmd`, which exists only on
+      Windows — and this script also runs on the Linux CI runner, where npm
+      is a plain executable with no PowerShell shim to dodge. Windows takes
+      the canonical path; elsewhere the npm APPLICATION on PATH is resolved
+      explicitly (never a bare `& npm`).
+    #>
+    param([Parameter(ValueFromRemainingArguments = $true)] $Arguments)
+    if ($IsWindows) {
+        Invoke-Npm @Arguments
+    }
+    else {
+        $cmd = Get-Command npm -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        & $cmd.Source @Arguments
+    }
+}
+
+$clientMeasurementsPath = Join-Path $repoRoot $ClientMeasurementsFile
+
+if (-not $SkipClient -and -not $EvaluateOnly) {
+    $harnessDir = Join-Path $repoRoot $ClientHarness
+    $bench = Join-Path $harnessDir "output/Program.js"
+
+    Push-Location $harnessDir
+    try {
+        if (-not $SkipBuild -or -not (Test-Path $bench)) {
+            Write-Host "== perf-budget: client — Fable-compile $ClientHarness" -ForegroundColor Cyan
+            dotnet tool restore
+            if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: dotnet tool restore failed in $ClientHarness."; exit 1 }
+            Invoke-NpmAnyOs ci --no-fund --no-audit
+            if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: npm ci failed in $ClientHarness."; exit 1 }
+            dotnet fable -o output --noCache
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "perf-budget: the client harness did not transpile; there is nothing to measure."
+                exit 1
+            }
+        }
+
+        if (Test-Path $clientMeasurementsPath) { Remove-Item $clientMeasurementsPath }
+
+        # React picks its build from NODE_ENV at first import. A browser bundle
+        # runs the production build, and ClientBench REFUSES boot and view
+        # numbers taken under the development one.
+        Write-Host "== perf-budget: client — ClientBench ($ClientBoots boots, seed $ClientSeed, React production build)" -ForegroundColor Cyan
+        $previousNodeEnv = $env:NODE_ENV
+        $env:NODE_ENV = "production"
+        try {
+            node --import ./register-loader.mjs output/Program.js ClientBench `
+                --out $clientMeasurementsPath --seed $ClientSeed --boot-samples $ClientBoots | Out-Host
+            $benchExit = $LASTEXITCODE
+        }
+        finally {
+            $env:NODE_ENV = $previousNodeEnv
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    # A non-zero ClientBench exit means some measurement was not OBSERVED;
+    # it still wrote every sample with its evidence, and the decider refuses
+    # the unobserved ones by name. No file at all is a harness failure.
+    if (-not (Test-Path $clientMeasurementsPath)) {
+        Write-Error "perf-budget: ClientBench exited $benchExit and wrote no measurement file."
+        exit 1
+    }
+}
+
 # ─── Decide ──────────────────────────────────────────────────────────────
 
 function Invoke-Decider {
@@ -411,17 +526,38 @@ function Invoke-Decider {
       `$verdict -ne 0` is then true for a run that passed. That defect was
       in the first draft and the end-to-end run caught it — a green budget
       reported as BREACHED.
+
+      Phase 849: the target and the measurement file are parameters, so the
+      client half is decided by the same function against the budget's
+      `client` block (VerifyClientPerfBudget).
     #>
-    param([string] $BudgetPath)
+    param(
+        [string] $BudgetPath,
+        [string] $Target = "VerifyPerfBudget",
+        [string] $Measurements = $MeasurementsFile
+    )
     $env:TOOLUP_PERF_BUDGET = $BudgetPath
-    $env:TOOLUP_PERF_MEASUREMENTS = $MeasurementsFile
-    dotnet run --project (Join-Path $repoRoot "Build.fsproj") -- VerifyPerfBudget | Out-Host
+    $env:TOOLUP_PERF_MEASUREMENTS = $Measurements
+    dotnet run --project (Join-Path $repoRoot "Build.fsproj") -- $Target | Out-Host
     $code = $LASTEXITCODE
     return $code
 }
 
+$decideClient = -not $SkipClient
+
+if ($decideClient -and -not (Test-Path $clientMeasurementsPath)) {
+    Write-Error "perf-budget: no client measurement file at $clientMeasurementsPath — run without -EvaluateOnly, or pass -SkipClient."
+    exit 1
+}
+
 Write-Host "== perf-budget: decide against $Budget" -ForegroundColor Cyan
 $verdict = Invoke-Decider -BudgetPath $Budget
+
+$clientVerdict = 0
+if ($decideClient) {
+    Write-Host "== perf-budget: client — decide against the 'client' block of $Budget" -ForegroundColor Cyan
+    $clientVerdict = Invoke-Decider -BudgetPath $Budget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
+}
 
 if ($TeethCheck) {
     # A gate nobody has watched fail is a gate nobody knows works. Re-decide
@@ -439,11 +575,24 @@ if ($TeethCheck) {
   "subject": "teeth check",
   "statistic": "min",
   "ceilings": { "coldStartMs": 0.001, "hotPathMs": 0.0001 },
-  "minimumSamples": { "coldStartMs": 1, "hotPathMs": 1 }
+  "minimumSamples": { "coldStartMs": 1, "hotPathMs": 1 },
+  "client": {
+    "label": "TEETH CHECK - deliberately unreachable client block",
+    "subject": "teeth check",
+    "statistic": "min",
+    "ceilings": { "bootMs": 0.001, "decodePerResponseUs": 0.0001, "viewPerDispatchUs": 0.0001 },
+    "minimumSamples": { "bootMs": 1, "decodePerResponseUs": 1, "viewPerDispatchUs": 1 }
+  }
 }
 '@ | Set-Content -Path $teethBudget -Encoding utf8
 
     $teeth = Invoke-Decider -BudgetPath $teethBudget
+
+    $clientTeeth = 1
+    if ($decideClient) {
+        $clientTeeth = Invoke-Decider -BudgetPath $teethBudget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
+    }
+
     Remove-Item $teethBudget -ErrorAction SilentlyContinue
 
     if ($teeth -eq 0) {
@@ -451,7 +600,12 @@ if ($TeethCheck) {
         exit 1
     }
 
-    Write-Host "== perf-budget: teeth check passed — the gate went red (exit $teeth) on the unreachable budget" -ForegroundColor Green
+    if ($clientTeeth -eq 0) {
+        Write-Error "perf-budget: TEETH CHECK FAILED — the client gate passed an unreachable client block. It is not deciding anything; do not trust its green."
+        exit 1
+    }
+
+    Write-Host "== perf-budget: teeth check passed — the gate went red (exit $teeth$(if ($decideClient) { ", client exit $clientTeeth" })) on the unreachable budget" -ForegroundColor Green
 }
 
 if ($verdict -ne 0) {
@@ -459,5 +613,10 @@ if ($verdict -ne 0) {
     exit $verdict
 }
 
-Write-Host "== perf-budget: within budget" -ForegroundColor Green
+if ($clientVerdict -ne 0) {
+    Write-Host "== perf-budget: client BREACHED (exit $clientVerdict)" -ForegroundColor Red
+    exit $clientVerdict
+}
+
+Write-Host "== perf-budget: within budget$(if ($decideClient) { ' (server and client)' })" -ForegroundColor Green
 exit 0

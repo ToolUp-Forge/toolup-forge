@@ -1241,9 +1241,23 @@ jobs:
   #      0.001 ms budget and fails the job if the gate passes it. The
   #      gate is watched failing on every run, so its green means
   #      something.
+  #
+  # ── The client half (Phase 849) ────────────────────────────────────
+  #
+  # After the server half the same script Fable-compiles the client-tier
+  # harness (src/ToolUp.AI.Client.Tests), runs its ClientBench entry
+  # under Node with React's production build — boot of the transpiled
+  # samples/MinimalClient to first render, the proxy's reflective JSON
+  # decode per response over the wire corpus, and the view built per
+  # dispatched message — and decides it against the `client` block of the
+  # same perf-budgets.json via VerifyClientPerfBudget, headroom printed
+  # beside the server lines. The teeth check covers both blocks. Same job,
+  # and still NOT a required check (see docs/migrations/849-browser-
+  # runtime-benchmark.md): Node is not a browser, and the numbers are a
+  # before/after instrument for the client-runtime phases first.
   perf-budget:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
 
@@ -1251,6 +1265,13 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/ToolUp.AI.Client.Tests/package-lock.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -1266,7 +1287,7 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
-      - name: Measure the minimal shape and decide against perf-budgets.json
+      - name: Measure the minimal shape and the client runtime, and decide against perf-budgets.json
         shell: pwsh
         run: ./dev-scripts/perf-budget-gate.ps1 -TeethCheck
 
