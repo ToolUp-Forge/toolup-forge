@@ -96,6 +96,10 @@ See [api-reference.md](api-reference.md) for the full public surface: `AIServerA
 
 See [extending.md](extending.md) for writing a new `IAIProvider`, registering custom tools, authoring a custom `SystemPromptBuilder`, and declaring capability flags.
 
+## Evaluating prompts and conversations
+
+See [conversation-eval.md](conversation-eval.md) for the conversation / prompt eval harness (`ToolUp.AI.Evaluation`): fixtures, rubric assertions, tool-dispatch replay against recorded tool results, the optional LLM judge, and the `--baseline` regression gate.
+
 ## Cost-control posture
 
 Even in authenticated modes, deployments should consider:

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ToolUp.AI.Evaluation</RootNamespace>
+    <!-- Compile against the referenced projects' IMPLEMENTATION assemblies,
+         not their reference assemblies. This harness reads its env-var names
+         from [<Literal>] bindings in ToolUp.Platform.Core's ConfigKeys.Names,
+         and adding a literal there does not move Core's reference-assembly
+         MVID: CopyRefAssembly then reports the stale obj/ref copy as "already
+         has latest information", and an INCREMENTAL build fails here with
+         FS0039 on a name that plainly exists (observed while landing Phase
+         514). Harmless for a non-packable harness: the cost is recompiling
+         it whenever Core's implementation changes. -->
+    <CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
+  </PropertyGroup>
+  <!-- Phase 514 - the conversation / prompt eval harness. An Expecto
+       console runner (the VerifyAll pack: offline, deterministic, the
+       live arms Pending without their env vars) plus the `eval`
+       regression gate, shaped like ToolUp.RAG.Evaluation. See
+       docs/ai/conversation-eval.md. -->
+  <ItemGroup>
+    <Compile Include="ConversationEval.fs" />
+    <!-- Phase 722 - the unregistered-[<Tests>]-list guard, source-linked from
+         ToolUp.Platform.Tests so there is one implementation. -->
+    <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fixtures\baselines\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- The live replay and LLM-judge arms, each env-gated: nothing here
+         is constructed unless TOOLUP_AI_EVAL_PROVIDER / TOOLUP_AI_EVAL_JUDGE
+         names it. -->
+    <ProjectReference Include="..\AIProviders\Claude\ClaudeAIProvider.fsproj" />
+    <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
+    <ProjectReference Include="..\AIProviders\Gemini\Gemini.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Expecto" />
+  </ItemGroup>
+</Project>

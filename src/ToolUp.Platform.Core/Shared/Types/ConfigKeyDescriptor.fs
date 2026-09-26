@@ -934,6 +934,26 @@ module Names =
     [<Literal>]
     let calDavEndpoint = "TOOLUP_CALDAV_ENDPOINT"
 
+    // Phase 514 — the conversation eval harness's live arms. Eval-time
+    // only: `ToolUp.AI.Evaluation` reads them, and a running deployment
+    // never consults any of the four.
+
+    /// The provider the eval harness's live replay arm calls.
+    [<Literal>]
+    let aiEvalProvider = "TOOLUP_AI_EVAL_PROVIDER"
+
+    /// Model the eval harness's live replay provider is pinned to.
+    [<Literal>]
+    let aiEvalModel = "TOOLUP_AI_EVAL_MODEL"
+
+    /// The provider the eval harness's LLM-judge arm calls.
+    [<Literal>]
+    let aiEvalJudge = "TOOLUP_AI_EVAL_JUDGE"
+
+    /// Model the eval harness's LLM judge is pinned to.
+    [<Literal>]
+    let aiEvalJudgeModel = "TOOLUP_AI_EVAL_JUDGE_MODEL"
+
 /// The full registry. Add a descriptor here whenever a `*FromEnv` reader
 /// gains a new env var; the coverage test fails if a reader consults a
 /// var with no descriptor, and the golden-file test fails until the
@@ -2821,6 +2841,43 @@ let all: ConfigKeyDescriptor list = [
         Default = None
         IsSecret = false
         Category = "Platform subsystems"
+    }
+    // --- Phase 514: the conversation eval harness's live arms ---
+    {
+        EnvVar = Names.aiEvalProvider
+        Description =
+            "Eval-time: the provider (claude, openai or gemini) the ToolUp.AI.Evaluation harness's live replay arm calls; its key comes from that provider's usual variable. Unset leaves the arm Pending. Never consulted by a running deployment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.aiEvalModel
+        Description =
+            "Eval-time: the model the eval harness's live replay provider is pinned to. Unset uses the provider's default model."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.aiEvalJudge
+        Description =
+            "Eval-time: the provider (claude, openai or gemini) the eval harness's LLM-judge arm calls. Unset leaves every judged case Pending. Never consulted by a running deployment."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.aiEvalJudgeModel
+        Description =
+            "Eval-time: the model the eval harness's LLM judge is pinned to. Unset uses the provider's default model."
+        Type = StringKey
+        Default = None
+        IsSecret = false
+        Category = ToolingCategory
     }
 ]
 

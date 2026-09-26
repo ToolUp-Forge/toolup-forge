@@ -143,6 +143,17 @@ let config = {
             TestPack.create
                 "CompanionsIsolation"
                 "src/ToolUp.Companions.Isolation.Tests/ToolUp.Companions.Isolation.Tests.fsproj"
+            // Phase 514 — the conversation / prompt eval harness, opted in
+            // here deliberately and documented in docs/ai/conversation-eval.md.
+            // What runs is its OFFLINE self-test pack only: the committed
+            // fixtures replayed from their recordings (tool dispatch against
+            // recorded results, the rubric) and gated against their
+            // committed baselines — deterministic, no network, no key. The
+            // live replay and LLM-judge arms report Pending unless
+            // TOOLUP_AI_EVAL_PROVIDER / TOOLUP_AI_EVAL_JUDGE name a provider,
+            // so a fresh checkout stays green. Reads its fixtures from disk,
+            // so it is not a `pure` pack.
+            TestPack.create "AIEvaluation" "src/ToolUp.AI.Evaluation/ToolUp.AI.Evaluation.fsproj"
         ]
 }
 

@@ -4,7 +4,7 @@
      (or `TOOLUP_REGEN_CONFIG_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The source
      of truth is `ConfigKeys.all` in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs. -->
 
-Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (209 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
+Every `TOOLUP_*` environment variable the SDK reads, projected from the central config-key registry (213 keys). Most are read at startup by `ServerConfig.fromEnv` or a companion's `create`; the "Build & tooling" section covers the few read by the build and analyzer instead. Run `--print-config` to see the effective resolved value and source of each on a running deployment, `--print-config --diff` for the non-default values only, or `--validate-config` to run the startup preflight without booting.
 
 The **Manifest** column says whether a deployment configuration manifest may supply the key: `yes` (its reader resolves through the config-resolution seam), `pending` (registered, but its reader has not migrated yet — the manifest would state it and nothing would read it, so the loader warns), `never` (a secret; the manifest is refused outright, set the environment variable instead), `n/a` (the key is outside the manifest's reach altogether — a build/test/analyzer variable no running server reads, or one of the two variables that name what to load, `TOOLUP_CONFIG_FILE` and `TOOLUP_PROFILE`). Precedence is consumer literal > environment variable > manifest > profile > override record > default.
 
@@ -328,6 +328,10 @@ These keys are read by the build, the test run or the analyzer, never by a runni
 
 | Env var | Type | Default | Secret | Manifest | Description |
 |---|---|---|---|---|---|
+| `TOOLUP_AI_EVAL_JUDGE` | string | — | no | n/a | Eval-time: the provider (claude, openai or gemini) the eval harness's LLM-judge arm calls. Unset leaves every judged case Pending. Never consulted by a running deployment. |
+| `TOOLUP_AI_EVAL_JUDGE_MODEL` | string | — | no | n/a | Eval-time: the model the eval harness's LLM judge is pinned to. Unset uses the provider's default model. |
+| `TOOLUP_AI_EVAL_MODEL` | string | — | no | n/a | Eval-time: the model the eval harness's live replay provider is pinned to. Unset uses the provider's default model. |
+| `TOOLUP_AI_EVAL_PROVIDER` | string | — | no | n/a | Eval-time: the provider (claude, openai or gemini) the ToolUp.AI.Evaluation harness's live replay arm calls; its key comes from that provider's usual variable. Unset leaves the arm Pending. Never consulted by a running deployment. |
 | `TOOLUP_APPROVE_API` | bool | false | no | n/a | Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment. |
 | `TOOLUP_BEIR_CACHE` | string | — | no | n/a | Benchmark-only: directory the BEIR retrieval corpus is cached in. |
 | `TOOLUP_COOKBOOK_PATH` | string | — | no | n/a | Overrides the path the AG Charts AI cookbook is loaded from. |
