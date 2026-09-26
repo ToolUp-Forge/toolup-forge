@@ -693,6 +693,33 @@ Any companion implementing `IClientToolAuthorizer` must clear the SDK's portabil
        }
    ```
 
+3. **`IUiInspectionContract`** (`src/ToolUp.Platform.Tests/Contracts/IUiInspectionContract.fs`, Phase 540) — the inspection-semantics pack for a **read-only live-interface inspect tool** such as `_platform.ui.inspect_active_module`. Where pack (2) pins the dispatch round trip for any client-resident tool, this one pins what an inspect tool answers. It drives the real agent loop through pack (2)'s shared harness (`IClientToolDispatchContract.runClientToolLoop`): the provider's `RegisteredTool` is registered, a scripted model calls it by its provider name, and the provider's client executor answers from a module-state table the pack owns. Asserts:
+   - the declaration — client-resident, `IsLiveInterface`, no `EmitsActions`, effects declared and every class read-only, admitted under `ToolPolicy.readOnly`;
+   - an observable active module answers `{ moduleId, activePage, snapshot }`, the snapshot's field values embedded as JSON rather than strings of JSON;
+   - only the request's active module is read — another module's report never leaks, and a module the model names in its arguments is not read instead;
+   - `no-active-module` for an absent or blank active module, `no-observable-state` for a module that published no report;
+   - read-only — two invocations leave the module-state table unchanged and answer identically;
+   - a denying `IClientToolAuthorizer` stops the call before the executor runs, and the denial is audited;
+   - the tool is offered to the model on exactly the surfaces its `AISurfaceFilter` names.
+
+   The fixture is the tool as the provider registers it plus its client executor, which receives the pack's module-state reader:
+
+   ```fsharp
+   open ToolUp.Platform.Tests.Contracts
+   open ToolUp.Platform.Tests.InProcess
+   open ToolUp.AI.UiAwareness.Server
+
+   let inspectionTests =
+       IUiInspectionContract.tests {
+           Name = "forge-native inspect_active_module"
+           Tool = AIToolRegistry.createTool InspectActiveModuleTool.toolDefinition InspectActiveModuleTool.serverExecutor
+           // Your browser executor's answer, reading module state only through the reader.
+           ClientExecutor = UiInspectionContractBindings.answer
+       }
+   ```
+
+   Bound in `src/ToolUp.Platform.Tests/InProcess/UiInspectionContractBindings.fs` to the forge-native companion (its tool taken from `ToolUp.AI.UiAwareness.Server.AICompose.tools`) and to a side-panel-only reference provider, so the surface case runs against a filter that excludes a surface. The companion's browser executor is Fable code and cannot run on .NET, so its binding answers through a BCL rendition of `InspectActiveModule.respond`; the Fable executor itself is held to the same result shapes by `src/ToolUp.AI.Client.Tests/UiAwarenessInspectTests.fs`.
+
 Forge ships three in-tree subjects bound to the packs:
 
 - **`SyntheticClientToolAuthorizer`** (`src/ToolUp.Platform.Tests/InProcess/SyntheticClientToolAuthorizerTests.fs`) — trivial allow / deny stub, bound to pack (1).

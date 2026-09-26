@@ -189,6 +189,9 @@
              fails a non-conforming module. Test/build infra only. -->
         <Compile Include="Contracts\ModuleContract.fs" />
         <Compile Include="Contracts\IClientToolDispatchContract.fs" />
+        <!-- Phase 540 - the read-only UI-inspection conformance pack; drives
+             the loop through the shared harness above, so it follows it. -->
+        <Compile Include="Contracts\IUiInspectionContract.fs" />
         <!-- Phase 112 — scope-isolated live-session host conformance bar
              (structural cross-scope denial, single-session ordering,
              idempotent unsubscribe/close). -->
@@ -1221,6 +1224,9 @@
         <Compile Include="InProcess\SampleClientToolDispatchTests.fs" />
         <!-- Phase 537 - ToolUp.AI.UiAwareness companion, server half. -->
         <Compile Include="InProcess\UiAwarenessInspectToolTests.fs" />
+        <!-- Phase 540 - IUiInspectionContract bound to the forge-native
+             companion and a side-panel-only reference provider. -->
+        <Compile Include="InProcess\UiInspectionContractBindings.fs" />
         <!-- Phase 489 - MCP server host + agent principals: protocol
              conformance over a client fixture that speaks JSON-RPC 2.0,
              grant-filtered discovery pinned from both sides, an ungranted

@@ -886,6 +886,9 @@ let private registeredTests =
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
         UiAwarenessInspectToolTests.tests
+        // Phase 540 - the read-only UI-inspection conformance pack, bound to the
+        // forge-native companion and a side-panel-only reference provider.
+        UiInspectionContractBindings.tests
         // Phase 489 - the MCP server host companion: an off-the-shelf-shaped
         // client fixture drives the real handler over real JSON-RPC bodies,
         // so what is asserted is what a connecting agent actually sees.

@@ -41,6 +41,11 @@ module ToolUp.Platform.Tests.Contracts.IClientToolDispatchContract
 //     `AIAgentEngine.fs`); not directly asserted because no test
 //     can wait 90 s in the suite.
 //
+// The loop harness below (`runClientToolLoop` and the scripted-turn
+// helpers) is public and shared: Phase 540's `IUiInspectionContract`
+// drives the same loop through it to pin the inspection semantics of a
+// read-only live-interface tool on top of this pack's dispatch semantics.
+//
 // Phase 46.B will add a binding to the in-tree
 // `ToolUp.AI.SampleClientTool` reference companion against this pack;
 // today the only binding is a deny-only authorizer stub
@@ -126,10 +131,11 @@ let private buildHttpContext (eventStore: IEventStore) (authorizer: IClientToolA
     ctx :> HttpContext
 
 /// Scripted `IAIProvider` — emits one response per `SendMessage` call,
-/// drawn in order from the supplied list. Inputs are ignored. The
-/// pack's tests own the script content so the agent loop's branching
-/// is fully deterministic.
-type private ScriptedProvider(script: AIProviderResponse list) =
+/// drawn in order from the supplied list. The pack's tests own the script
+/// content so the agent loop's branching is fully deterministic. The only
+/// input read is the per-turn tool list, recorded in `offered` so a pack
+/// can assert what the model was shown (Phase 540's surface assertion).
+type private ScriptedProvider(script: AIProviderResponse list, offered: ResizeArray<string list>) =
     let mutable callCount = 0
 
     interface IAIProvider with
@@ -144,7 +150,8 @@ type private ScriptedProvider(script: AIProviderResponse list) =
             Model = "test-scripted-model"
         }
 
-        member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+        member _.SendMessage(_messages, tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            lock offered (fun () -> offered.Add(tools |> List.map _.Name))
             let response = script[callCount]
             callCount <- callCount + 1
             return Ok response
@@ -160,44 +167,79 @@ type private ScriptedProvider(script: AIProviderResponse list) =
             return Ok response
         }
 
-let private mkToolCall (name: string) : AIProviderToolCall = {
+// ─── Shared loop harness (Phase 540) ─────────────────────────────────
+//
+// Public so the Phase 540 `IUiInspectionContract` pack drives the SAME
+// agent loop, scripted provider, `HttpContext` and `IEventStore` wiring
+// this pack does, rather than a second copy of it that could drift.
+
+/// A model tool call naming `name`, with `{}` arguments.
+let mkToolCall (name: string) : AIProviderToolCall = {
     Id = Guid.NewGuid().ToString()
     Name = name
     Arguments = "{}"
 }
 
-let private endTurnResponse: AIProviderResponse = {
+/// A model tool call naming `name`, with the given JSON arguments.
+let mkToolCallWith (name: string) (argumentsJson: string) : AIProviderToolCall = {
+    mkToolCall name with
+        Arguments = argumentsJson
+}
+
+/// The turn that ends the loop.
+let endTurnResponse: AIProviderResponse = {
     Content = "done"
     ToolCalls = []
     StopReason = "end_turn"
     Usage = None
 }
 
-let private toolUseResponse (toolCalls: AIProviderToolCall list) : AIProviderResponse = {
+/// A turn asking for `toolCalls`.
+let toolUseResponse (toolCalls: AIProviderToolCall list) : AIProviderResponse = {
     Content = ""
     ToolCalls = toolCalls
     StopReason = "tool_use"
     Usage = None
 }
 
-/// Drive `runAgentLoop` once with the given script + simulator. The
-/// simulator hook on `onEvent` resolves the pending TCS as
-/// `ClientToolInvoke` events arrive, so the loop's `Task.WhenAny`
-/// awakens without hitting the 90 s timeout.
-///
-/// Returns the captured event stream so the caller can assert on its
-/// shape. `eventStore` is exposed so the caller can read denial-audit
-/// rows after the loop finishes.
-let private driveLoop
-    (fixture: ClientToolDispatchContractFixture)
+/// One request through the loop: the tools it registers, the authorizer
+/// the request's services carry, and the request's surface and context.
+type ClientToolLoopRequest = {
+    Tools: AIToolRegistry.RegisteredTool list
+    Authorizer: IClientToolAuthorizer
+    Surface: AISurface
+    ActiveModule: string option
+    ActivePage: string option
+}
+
+/// What one loop run produced.
+type ClientToolLoopRun = {
+    /// Every SSE event the loop emitted, in order.
+    Events: AIStreamEvent list
+    /// The store the loop's audit rows were written to.
+    EventStore: IEventStore
+    /// The provider tool names the model was offered, one list per
+    /// provider turn, in order.
+    OfferedTools: string list list
+}
+
+/// Drive `runAgentLoopWithInput` once with the given script + simulator.
+/// The simulator hook on `onEvent` resolves the pending TCS as
+/// `ClientToolInvoke` events arrive, so the loop's `Task.WhenAny` awakens
+/// without hitting the 90 s timeout.
+let runClientToolLoop
+    (request: ClientToolLoopRequest)
     (script: AIProviderResponse list)
-    : Async<AIStreamEvent list * IEventStore> =
+    (simulator: ClientSimulator)
+    : Async<ClientToolLoopRun> =
     async {
         let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
-        let ctx = buildHttpContext eventStore fixture.Authorizer
-        let registry = buildRegistry fixture.AllowedToolName fixture.DeniedToolName
+        let ctx = buildHttpContext eventStore request.Authorizer
+        let registry = AIToolRegistry.AIToolRegistry()
+        registry.RegisterAll request.Tools
         let dispatchRegistry = ClientToolDispatch.ClientToolDispatchRegistry()
-        let provider = ScriptedProvider(script) :> IAIProvider
+        let offered = ResizeArray<string list>()
+        let provider = ScriptedProvider(script, offered) :> IAIProvider
 
         let events = ResizeArray<AIStreamEvent>()
 
@@ -206,7 +248,7 @@ let private driveLoop
 
             match evt with
             | ClientToolInvoke(_, toolCallId, _, _, _, _) ->
-                match fixture.Simulator evt with
+                match simulator evt with
                 | Some resultJson -> dispatchRegistry.TryComplete(toolCallId, resultJson) |> ignore
                 | None -> ()
             | _ -> ()
@@ -221,16 +263,45 @@ let private driveLoop
                 ctx
                 (Guid.NewGuid())
                 (Guid.NewGuid())
-                AISurface.FullPage
-                (Some "TestModule")
-                (Some "/test")
+                request.Surface
+                request.ActiveModule
+                request.ActivePage
                 CancellationToken.None
                 initialMessages
                 ToolUp.AI.ModelInput.empty
                 onEvent
 
-        let captured = lock events (fun () -> events.ToArray() |> Array.toList)
-        return captured, eventStore
+        return {
+            Events = lock events (fun () -> events.ToArray() |> Array.toList)
+            EventStore = eventStore
+            OfferedTools = lock offered (fun () -> offered.ToArray() |> Array.toList)
+        }
+    }
+
+/// This pack's fixed request shape over `runClientToolLoop`: the fixture's
+/// two anchor tools, full-page surface, a fixed active module and page.
+///
+/// Returns the captured event stream so the caller can assert on its
+/// shape. `eventStore` is exposed so the caller can read denial-audit
+/// rows after the loop finishes.
+let private driveLoop
+    (fixture: ClientToolDispatchContractFixture)
+    (script: AIProviderResponse list)
+    : Async<AIStreamEvent list * IEventStore> =
+    async {
+        let! run =
+            runClientToolLoop
+                {
+                    Tools = (buildRegistry fixture.AllowedToolName fixture.DeniedToolName).GetAll()
+                    Authorizer = fixture.Authorizer
+                    Surface = AISurface.FullPage
+                    ActiveModule = Some "TestModule"
+                    ActivePage = Some "/test"
+                }
+                script
+                fixture.Simulator
+
+        return run.Events, run.EventStore
     }
 
 // ─── Tests ───────────────────────────────────────────────────────────
