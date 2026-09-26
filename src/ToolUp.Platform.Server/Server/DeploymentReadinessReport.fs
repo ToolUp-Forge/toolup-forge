@@ -218,7 +218,18 @@ let buildReport (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentRead
     let! smoke = gatherSmoke config ctx
     let! drift = gatherDrift config ctx
     let! health = gatherHealth ctx
-    return DeploymentReadiness.summarise DateTime.UtcNow preflight smoke drift health
+
+    // Phase 541 — informational live-interface posture, registered by a
+    // composition that owns the tool-aware framing (RAG). Absent ⇒
+    // `notComposed`; never feeds the verdict.
+    let liveInterface =
+        match ctx.RequestServices.GetService(typeof<DeploymentReadiness.LiveInterfaceSummary>) with
+        | :? DeploymentReadiness.LiveInterfaceSummary as summary -> summary
+        | _ -> DeploymentReadiness.LiveInterfaceSummary.notComposed
+
+    return
+        DeploymentReadiness.summarise DateTime.UtcNow preflight smoke drift health
+        |> DeploymentReadiness.withLiveInterface liveInterface
 }
 
 /// Build the `IDeploymentReadinessApi` ToolUp.Remoting handler.

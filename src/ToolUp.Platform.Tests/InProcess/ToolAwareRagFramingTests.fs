@@ -234,4 +234,72 @@ let tests =
 
             Expect.equal viaBackCompat viaToolAware "the 4-arg wrapper is the ToolFraming.none path"
         }
+
+        // ── Phase 541 — live-interface posture surfaced ──────────────
+
+        test "Phase 541 — liveInterfaceSummary: a live-interface tool ⇒ HasLiveInterfaceTools = true, framing active" {
+            let li =
+                RAGCompose.liveInterfaceSummary
+                    [ serverReadTool; declaredLiveInterfaceTool; uiInspectTool ]
+                    RAGCompose.Preferred
+
+            Expect.isTrue li.HasLiveInterfaceTools "a declared / client-resident tool is a live-interface tool"
+
+            Expect.equal
+                li.LiveInterfaceTools
+                [ "_platform.ui.inspect_active_module"; "acme_host.read_active_view" ]
+                "names the live-interface tools only — the server read tool is excluded"
+
+            Expect.isTrue li.ToolAwareFramingActive "Preferred + tools ⇒ the companion is appended"
+            Expect.equal li.GroundingMode "Preferred" "stance named"
+        }
+
+        test "Phase 541 — liveInterfaceSummary agrees with the framing predicate (no name matching)" {
+            let tools = [ serverToolWithUiName; serverReadTool ]
+            let li = RAGCompose.liveInterfaceSummary tools RAGCompose.Preferred
+
+            Expect.equal
+                li.HasLiveInterfaceTools
+                (RAGPromptBuilder.ToolFraming.fromTools tools).HasLiveUiTools
+                "same derivation as the framing"
+
+            Expect.isFalse li.HasLiveInterfaceTools "a `_platform.ui.` name alone is not live-interface"
+        }
+
+        test "Phase 541 — no live-interface tool under Preferred ⇒ false + the framing-inert note" {
+            let li = RAGCompose.liveInterfaceSummary [ serverReadTool ] RAGCompose.Preferred
+
+            Expect.isFalse li.HasLiveInterfaceTools "HasLiveInterfaceTools = false"
+            Expect.isFalse li.ToolAwareFramingActive "framing inactive"
+            Expect.equal li.Note (Some DeploymentReadiness.LiveInterfaceSummary.FramingInertNote) "framing inert note"
+        }
+
+        test "Phase 541 — tools under StrictlyGrounded ⇒ framing inactive, matching resolveFramingWithTools" {
+            let li =
+                RAGCompose.liveInterfaceSummary [ uiInspectTool ] RAGCompose.StrictlyGrounded
+
+            let resolved =
+                RAGCompose.resolveFramingWithTools
+                    RAGCompose.StrictlyGrounded
+                    ""
+                    (RAGPromptBuilder.ToolFraming.fromTools [ uiInspectTool ])
+
+            Expect.isFalse li.ToolAwareFramingActive "no companion under StrictlyGrounded"
+            Expect.isFalse (resolved.Contains RAGCompose.uiToolFramingCompanion) "and indeed none is appended"
+        }
+
+        testAsync "Phase 541 — the /dev/inspect panel carries the posture" {
+            let li = RAGCompose.liveInterfaceSummary [ uiInspectTool ] RAGCompose.Preferred
+
+            let contributor =
+                RAGCompose.LiveInterfaceContributor(li) :> IDevDiagnosticsContributor
+
+            let! name, payload = contributor.Contribute()
+
+            Expect.equal name "Live interface" "panel name"
+
+            let json = System.Text.Json.JsonSerializer.Serialize payload
+            Expect.stringContains json "\"uiAwareness\":\"on\"" "UI-awareness on"
+            Expect.stringContains json "\"toolAwareFramingActive\":true" "framing active"
+        }
     ]

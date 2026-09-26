@@ -155,6 +155,52 @@ let resolveFramingWithTools
             baseFraming + "\n\n" + uiToolFramingCompanion
     | _ -> baseFraming
 
+/// Phase 541 — the deployment's live-interface posture, derived from the
+/// same tool list and the same predicate the framing uses
+/// (`RAGPromptBuilder.ToolFraming.fromTools`, Phase 538: a tool declaring
+/// `IsLiveInterface`, or a `ClientResident` one — never a name match), so
+/// the report cannot disagree with what the prompt actually does. The
+/// framing-eligible stance is `Preferred`, the one `resolveFramingWithTools`
+/// appends the companion under. Surfaced on `/dev/inspect` and on the
+/// deployment-readiness report; informational only — it gates nothing.
+let liveInterfaceSummary
+    (tools: AIToolDefinition list)
+    (mode: GroundingMode)
+    : DeploymentReadiness.LiveInterfaceSummary =
+    let liveInterfaceTools =
+        tools
+        |> List.filter (fun def -> (RAGPromptBuilder.ToolFraming.fromTools [ def ]).HasLiveUiTools)
+        |> List.map _.Name
+
+    let framingEligible =
+        match mode with
+        | Preferred -> true
+        | Permissive
+        | StrictlyGrounded -> false
+
+    DeploymentReadiness.LiveInterfaceSummary.derive liveInterfaceTools (string mode) framingEligible
+
+/// Phase 541 — the `/dev/inspect` panel for the live-interface posture.
+/// Closed over at compose time (no I/O, GP 13), unconditional for the same
+/// reason as the RAG durability panel: "UI-awareness: off" is often the
+/// fine answer, and hiding it would hide exactly what an operator wants to
+/// confirm.
+type LiveInterfaceContributor(summary: DeploymentReadiness.LiveInterfaceSummary) =
+    interface IDevDiagnosticsContributor with
+        member _.Contribute() = async {
+            let payload = {|
+                uiAwareness = (if summary.HasLiveInterfaceTools then "on" else "off")
+                hasLiveInterfaceTools = summary.HasLiveInterfaceTools
+                liveInterfaceTools = summary.LiveInterfaceTools
+                groundingMode = summary.GroundingMode
+                toolAwareFramingActive = summary.ToolAwareFramingActive
+                note = summary.Note |> Option.toObj
+                summary = DeploymentReadiness.LiveInterfaceSummary.render summary
+            |}
+
+            return "Live interface", box payload
+        }
+
 // ─── Post-save vectorisation hook ────────────────────────────────
 
 /// Build the file-save hook that enqueues processed data for vectorisation.
@@ -988,6 +1034,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
     // framing, no regression.
     let toolFraming = RAGPromptBuilder.ToolFraming.fromTools (b.AITools |> List.map fst)
 
+    // Phase 541 — the same derivation, surfaced: which live-interface tools
+    // are loaded and whether the framing above is consequently active.
+    let liveInterface =
+        liveInterfaceSummary (b.AITools |> List.map fst) app.GroundingMode
+
     // Phase 63.A — retrieval-pipeline override seam. When a consumer supplies
     // a pipeline via `withRetrievalPipeline` (e.g. a build-time-precomputed
     // static-corpus pipeline), it is registered verbatim and the default
@@ -1750,6 +1801,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     b.VectorisationHandlers |> List.map _.DataTypeId
                 )
                 :> IDevDiagnosticsContributor
+            )
+            // Phase 541 — the live-interface posture: a `/dev/inspect`
+            // panel, plus the typed value the deployment-readiness
+            // gatherer reads (DI-only, so the composition manifest and
+            // its boot seal are unchanged).
+            .AddSingleton<DeploymentReadiness.LiveInterfaceSummary>(liveInterface)
+            .AddSingleton<IDevDiagnosticsContributor>(
+                LiveInterfaceContributor(liveInterface) :> IDevDiagnosticsContributor
             )
 
     // RAG config validators (mirrors the set the former `composeWithRAG` /

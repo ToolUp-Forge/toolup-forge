@@ -5009,7 +5009,6 @@ ToolUp.Platform.DeploymentReadiness (class)
 ToolUp.Platform.DeploymentReadiness.summarise(System.DateTime, ToolUp.Platform.DeploymentReadiness+PreflightSummary, ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Platform.DeploymentReadiness+DriftSummary, ToolUp.Platform.DeploymentReadiness+HealthSummary) : ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport
 ToolUp.Platform.DeploymentReadiness.verdictOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SourceStatus]) : ToolUp.Platform.ReadinessVerdict
 ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport (class)
-ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport..ctor(ToolUp.Platform.ReadinessVerdict, ToolUp.Platform.DeploymentReadiness+PreflightSummary, ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Platform.DeploymentReadiness+DriftSummary, ToolUp.Platform.DeploymentReadiness+HealthSummary, System.DateTime)
 ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport.Drift : ToolUp.Platform.DeploymentReadiness+DriftSummary { get }
 ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport.GeneratedAt : System.DateTime { get }
 ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport.Health : ToolUp.Platform.DeploymentReadiness+HealthSummary { get }
@@ -14538,3 +14537,21 @@ Toolup.TimeManagement+TimeRange (class)
 Toolup.TimeManagement+TimeRange..ctor(System.DateTime, System.DateTime)
 Toolup.TimeManagement+TimeRange.EndDate : System.DateTime { get }
 Toolup.TimeManagement+TimeRange.StartDate : System.DateTime { get }
+ToolUp.Platform.DeploymentReadiness.withLiveInterface(ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary, ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport) : ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport
+ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport..ctor(ToolUp.Platform.ReadinessVerdict, ToolUp.Platform.DeploymentReadiness+PreflightSummary, ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Platform.DeploymentReadiness+DriftSummary, ToolUp.Platform.DeploymentReadiness+HealthSummary, System.DateTime, ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary)
+ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport.LiveInterface : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary (class)
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary..ctor(System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.Composed : System.Boolean { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.GroundingMode : System.String { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.HasLiveInterfaceTools : System.Boolean { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.LiveInterfaceTools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.Note : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary.ToolAwareFramingActive : System.Boolean { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule (class)
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule.FramingInertNote : System.String (literal)
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule.derive(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Boolean) : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule.framingNotCarriedNote(System.String) : System.String
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule.notComposed : ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary { get }
+ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummaryModule.render(ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary) : System.String
+ToolUp.Remoting.PlatformDecoders.liveInterfaceSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary, ToolUp.Remoting.DecodeError]] { get }
