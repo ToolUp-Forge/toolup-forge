@@ -190,6 +190,8 @@ let private registeredTests =
         ModuleQueryBusTests.tests
         InMemoryDataSourceTests.tests
         InMemoryDataSourceTests.payloadFormatTests
+        // Phase 836 - the fidelity pack's fixture source and its go-red.
+        DataSourceFidelityContract.selfTests
         DataIngestorTests.tests
         // Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store +
         // IOAuth1aFlow conformance pack).

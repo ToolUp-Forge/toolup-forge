@@ -21,6 +21,7 @@ let private registeredTests =
         ExcelDataSourceTests.tests
         ParquetDataSourceTests.tests
         PayloadFormatDeclarationTests.tests
+        FidelityContractTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

@@ -53,6 +53,8 @@
         <Compile Include="Contracts\IModuleQueryBusContract.fs" />
         <Compile Include="Contracts\IDataSourceContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
+        <!-- Phase 836 - the IDataSource null-and-type fidelity pack. -->
+        <Compile Include="Contracts\DataSourceFidelityContract.fs" />
         <Compile Include="Contracts\IOAuthStateStoreContract.fs" />
         <Compile Include="Contracts\IOAuthCredentialFlowContract.fs" />
         <!-- Phase 10g — OAuth 1.0a flow conformance pack. -->

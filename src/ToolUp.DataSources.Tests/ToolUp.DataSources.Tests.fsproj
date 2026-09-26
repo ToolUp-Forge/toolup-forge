@@ -52,6 +52,10 @@
              every connector in this pack. -->
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDeclaresPayloadFormatContract.fs" Link="Contracts\IDeclaresPayloadFormatContract.fs" />
         <Compile Include="Tests\PayloadFormatDeclarationTests.fs" />
+        <!-- Phase 836 - the IDataSource fidelity pack, source-linked from
+             ToolUp.Platform.Tests, bound to every connector in this pack. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\DataSourceFidelityContract.fs" Link="Contracts\DataSourceFidelityContract.fs" />
+        <Compile Include="Tests\FidelityContractTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
