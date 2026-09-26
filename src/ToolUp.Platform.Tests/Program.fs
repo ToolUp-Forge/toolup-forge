@@ -2439,6 +2439,10 @@ let private registeredTests =
         // the sibling-blob sweep with its ConversationsPurged audit row, the
         // DI-resolving job handler, and the KB note-erasure fix.
         ConversationRetentionTests.tests
+        // Phase 577 - the `_platform.reporting` AI tool family: RBAC denial, the
+        // missing-placeholder envelope, inline-vs-blob routing, the long-render
+        // job, the ReportRendered audit row, and composition-gated registration.
+        ReportingAIToolsTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

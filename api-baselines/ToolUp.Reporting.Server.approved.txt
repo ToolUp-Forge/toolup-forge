@@ -150,6 +150,58 @@ ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore (class)
 ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Reporting.ReportSubscriptionsContributor (class)
 ToolUp.Reporting.ReportSubscriptionsContributor..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, System.String)
+ToolUp.Reporting.ReportingAITools (class)
+ToolUp.Reporting.ReportingAITools.ListTemplatesToolName : System.String (literal)
+ToolUp.Reporting.ReportingAITools.RenderJobHandlerName : System.String (literal)
+ToolUp.Reporting.ReportingAITools.RenderReportToolName : System.String (literal)
+ToolUp.Reporting.ReportingAITools.ReportRenderedEventType : System.String (literal)
+ToolUp.Reporting.ReportingAITools.SourceModule : System.String (literal)
+ToolUp.Reporting.ReportingAITools.estimateInputBytes(ToolUp.Reporting.ReportTemplate, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]) : System.Int64
+ToolUp.Reporting.ReportingAITools.renderJobHandler(ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps, System.IServiceProvider) : ToolUp.Platform.IJobHandler
+ToolUp.Reporting.ReportingAITools.tools(ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
+ToolUp.Reporting.ReportingAITools.withReportingAITools(ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Reporting.ReportingAITools+ItemsKeys (class)
+ToolUp.Reporting.ReportingAITools+ItemsKeys.ActiveModule : System.String (literal)
+ToolUp.Reporting.ReportingAITools+ItemsKeys.ConversationId : System.String (literal)
+ToolUp.Reporting.ReportingAITools+LongRenderPolicy (class)
+ToolUp.Reporting.ReportingAITools+LongRenderPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat])
+ToolUp.Reporting.ReportingAITools+LongRenderPolicy.DeferredFormats : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.TemplateFormat] { get }
+ToolUp.Reporting.ReportingAITools+LongRenderPolicy.InputBytesThreshold : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule (class)
+ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defaults : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }
+ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defers(ToolUp.Reporting.ReportingAITools+LongRenderPolicy, ToolUp.Reporting.TemplateFormat, System.Int64) : System.Boolean
+ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.never : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload (class)
+ToolUp.Reporting.ReportingAITools+RenderJobPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue])
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.ScopeId : System.String { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.TemplateId : System.String { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.UserId : System.String { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue] { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule (class)
+ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule.decode(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportingAITools+RenderJobPayload]
+ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule.encode(ToolUp.Reporting.ReportingAITools+RenderJobPayload) : System.String
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent (class)
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent..ctor(System.String, System.String, System.Int32, System.Boolean, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.Guid])
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.Format : System.String { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.Inline : System.Boolean { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.JobId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.OutputSize : System.Int32 { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.RequestedBy : System.String { get }
+ToolUp.Reporting.ReportingAITools+ReportRenderedEvent.TemplateId : System.String { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps (class)
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps..ctor(ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.RendererRegistry+RendererRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Reporting.ReportApiConfig, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]], ToolUp.Reporting.ReportingAITools+LongRenderPolicy)
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.AuditOnRender : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportApiHandler+ReportRenderedAudit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.Config : ToolUp.Reporting.ReportApiConfig { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.DownloadLink : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]] { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.InlineTextBudget : System.Int32 { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.LongRender : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.Renderers : ToolUp.Reporting.RendererRegistry+RendererRegistry { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.StoreBlob : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]] { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps.Templates : ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore { get }
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDepsModule (class)
+ToolUp.Reporting.ReportingAITools+ReportingAIToolDepsModule.create(ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.RendererRegistry+RendererRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]]) : ToolUp.Reporting.ReportingAITools+ReportingAIToolDeps
 ToolUp.Reporting.ReportingCompose (class)
 ToolUp.Reporting.ReportingCompose.buildDefaultRegistry() : ToolUp.Reporting.RendererRegistry+RendererRegistry
 ToolUp.Reporting.ReportingCompose.buildRegistryWith(ToolUp.Reporting.ReportingCompose+ReportingComposeOptions) : ToolUp.Reporting.RendererRegistry+RendererRegistry

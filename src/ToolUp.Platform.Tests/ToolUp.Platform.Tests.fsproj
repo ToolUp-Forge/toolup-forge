@@ -2679,6 +2679,10 @@
              sibling-blob sweep + ConversationsPurged audit row, the DI-resolving
              job handler, and the KB note-erasure fix (deleteDocument + sweep). -->
         <Compile Include="InProcess\ConversationRetentionTests.fs" />
+        <!-- Phase 577 — the `_platform.reporting` AI tool family: RBAC, the
+             missing-placeholder envelope, inline-vs-blob routing, the
+             long-render job, audit, and composition-gated registration. -->
+        <Compile Include="InProcess\ReportingAIToolsTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
