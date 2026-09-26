@@ -169,6 +169,55 @@ type Conversation = {
     OverrideProviderLabel: string option
 }
 
+// ─── Phase 516 — paged, searchable conversation listing ──────────
+
+/// One request for a page of the caller's conversations (Phase 516.C).
+///
+/// Rows are ordered newest-activity first (`UpdatedAt` descending, ties
+/// broken by id), and `Cursor` is a KEYSET cursor over that order rather
+/// than an offset: a conversation started while the user is paging sorts
+/// ahead of the cursor instead of shifting every later row by one, so
+/// "load more" neither repeats nor skips a row.
+type ConversationListQuery = {
+    /// Case-insensitive substring matched against each conversation's
+    /// title and message text. `None`, or a blank string, matches every
+    /// conversation.
+    Search: string option
+    /// The `NextCursor` of the previous page; `None` asks for the first
+    /// page. Opaque to the client — pass it back verbatim.
+    Cursor: string option
+    /// Rows per page. Clamped server-side to
+    /// `1 .. ConversationListQuery.MaxPageSize`.
+    PageSize: int
+}
+
+/// One page of the caller's conversations (Phase 516.C).
+type ConversationPage = {
+    /// The page's rows, in listing order.
+    Items: Conversation list
+    /// Pass back as `ConversationListQuery.Cursor` for the next page;
+    /// `None` when this page is the last.
+    NextCursor: string option
+    /// How many conversations match the query across ALL pages.
+    TotalCount: int
+}
+
+module ConversationListQuery =
+    /// Rows per page when a caller has no preference.
+    [<Literal>]
+    let DefaultPageSize = 25
+
+    /// Upper bound on `PageSize`; larger requests are clamped to it.
+    [<Literal>]
+    let MaxPageSize = 100
+
+    /// The first page, unfiltered, at the default size.
+    let firstPage: ConversationListQuery = {
+        Search = None
+        Cursor = None
+        PageSize = DefaultPageSize
+    }
+
 // ─── Task types ──────────────────────────────────────────────────
 
 /// Status of an AI task submitted by the user
@@ -456,13 +505,20 @@ type AIAssistantApi = {
     /// Get conversation history
     [<AllowAnonymous>]
     GetConversation: Guid -> Async<ConversationMessage list>
-    /// List all conversations for current user/scope
+    /// List all conversations for current user/scope, newest activity
+    /// first, each row carrying its real title, message count and
+    /// timestamps (Phase 516.A). Prefer `ListConversationsPage` for a
+    /// panel: this reads every conversation in the scope.
     [<AllowAnonymous>]
     ListConversations: unit -> Async<Conversation list>
     /// Get available tools
     [<AllowAnonymous>]
     GetAvailableTools: unit -> Async<AIToolDefinition list>
-    /// Get task status
+    /// Get task status. `Some` for a task this process accepted within
+    /// its retention window, reflecting the last status it emitted
+    /// (Phase 516.D) — the polling fallback for a client that missed the
+    /// terminal SSE event. `None` for an unknown or expired task id, or
+    /// one submitted by a different caller.
     [<AllowAnonymous>]
     GetTaskStatus: Guid -> Async<AITask option>
     /// Delete a conversation
@@ -477,6 +533,11 @@ type AIAssistantApi = {
     /// provider). Idempotent.
     [<AllowAnonymous>]
     SetConversationOverride: Guid * string option -> Async<Result<unit, string>>
+    /// Phase 516.C — one page of the caller's conversations, optionally
+    /// filtered by a title/content search. See `ConversationListQuery`
+    /// for the ordering and cursor contract.
+    [<AllowAnonymous>]
+    ListConversationsPage: ConversationListQuery -> Async<ConversationPage>
 }
 
 // ─── Branding ─────────────────────────────────────────────────────

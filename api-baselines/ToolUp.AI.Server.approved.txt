@@ -54,6 +54,27 @@ ToolUp.AI.AIAssistantHandler.aiAssistantApi(Microsoft.FSharp.Core.FSharpOption`1
 ToolUp.AI.AIAssistantHandler+AIStreamingApi (class)
 ToolUp.AI.AIAssistantHandler+AIStreamingApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, System.Collections.Generic.IAsyncEnumerable`1[ToolUp.AI.AIStreamEvent]])
 ToolUp.AI.AIAssistantHandler+AIStreamingApi.StreamChatV2 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIMessageRequest, System.Collections.Generic.IAsyncEnumerable`1[ToolUp.AI.AIStreamEvent]] { get }
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry (class)
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry..ctor(System.Int32, System.TimeSpan)
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.Count : System.Int32 { get }
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.ForgetConversation(System.String, System.Guid) : System.Void
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.Register(System.String, System.String, ToolUp.AI.AITask, System.DateTime) : System.Void
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.Shared : ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry { get }
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.Transition(System.Guid, ToolUp.AI.AITaskStatus, System.DateTime) : System.Void
+ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.TryGet(System.String, System.String, System.Guid, System.DateTime) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask]
+ToolUp.AI.AIAssistantHandler+ConversationListing (class)
+ToolUp.AI.AIAssistantHandler+ConversationListing.compareRows(ToolUp.AI.Conversation, ToolUp.AI.Conversation) : System.Int32
+ToolUp.AI.AIAssistantHandler+ConversationListing.encodeCursor(ToolUp.AI.Conversation) : System.String
+ToolUp.AI.AIAssistantHandler+ConversationListing.fallbackTitle(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.AIAssistantHandler+ConversationListing.matches(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.AIAssistantHandler+ConversationListingRow) : System.Boolean
+ToolUp.AI.AIAssistantHandler+ConversationListing.page(ToolUp.AI.ConversationListQuery, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIAssistantHandler+ConversationListingRow]) : ToolUp.AI.ConversationPage
+ToolUp.AI.AIAssistantHandler+ConversationListing.readAll(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIAssistantHandler+ConversationListingRow]]
+ToolUp.AI.AIAssistantHandler+ConversationListing.readRow(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Int32, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAssistantHandler+ConversationListingRow]]
+ToolUp.AI.AIAssistantHandler+ConversationListing.truncateTitle(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.AIAssistantHandler+ConversationListingRow (class)
+ToolUp.AI.AIAssistantHandler+ConversationListingRow..ctor(ToolUp.AI.Conversation, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.AI.AIAssistantHandler+ConversationListingRow.Conversation : ToolUp.AI.Conversation { get }
+ToolUp.AI.AIAssistantHandler+ConversationListingRow.SearchText : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.AIAssistantHandler+ConversationPurgeReport (class)
 ToolUp.AI.AIAssistantHandler+ConversationPurgeReport..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Guid], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.AI.AIAssistantHandler+ConversationPurgeReport.Container : System.String { get }
@@ -75,6 +96,24 @@ ToolUp.AI.AIAssistantHandler+ConversationRetention.siblingBlobNames(System.Guid)
 ToolUp.AI.AIAssistantHandler+ConversationRetention.sweepContainer(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, System.DateTime, ToolUp.AI.ConversationRetentionPolicy, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AIAssistantHandler+ConversationPurgeReport]
 ToolUp.AI.AIAssistantHandler+ConversationRetentionSweepJobHandler (class)
 ToolUp.AI.AIAssistantHandler+ConversationRetentionSweepJobHandler..ctor(System.IServiceProvider, ToolUp.AI.ConversationRetentionPolicy)
+ToolUp.AI.AIAssistantHandler+ConversationTitling (class)
+ToolUp.AI.AIAssistantHandler+ConversationTitling.Instruction : System.String (literal)
+ToolUp.AI.AIAssistantHandler+ConversationTitling.cleanTitle(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.AIAssistantHandler+ConversationTitling.generate(ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy, ToolUp.Platform.AI.IAIProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]
+ToolUp.AI.AIAssistantHandler+ConversationTitling.retryPolicy(ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy) : ToolUp.Platform.RetryPolicy
+ToolUp.AI.AIAssistantHandler+ConversationTitling.titleConversation(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Guid, ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy, ToolUp.Platform.AI.IAIProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.AIAssistantHandler+ConversationTitling.titleOrFallback(ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy, ToolUp.Platform.AI.IAIProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy (class)
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy..ctor(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.TimeSpan)
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy.Generate : System.Boolean { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy.MaxInputChars : System.Int32 { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy.MaxTitleChars : System.Int32 { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy.Timeout : System.TimeSpan { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule (class)
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.firstMessage : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.generated : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy { get }
+ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.generatedOn(System.String) : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy
 ToolUp.AI.AIBudgetEnforcer (class)
 ToolUp.AI.AIBudgetEnforcer.AssumedOutputTokens : System.Int32 (literal)
 ToolUp.AI.AIBudgetEnforcer.EstimateDriftTolerance : System.Decimal { get }
@@ -180,6 +219,7 @@ ToolUp.AI.AICompose (class)
 ToolUp.AI.AICompose.composeAI(ToolUp.AI.AICompose+AIServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withAI(ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AICompose+AIServerApp, ToolUp.AI.AICompose+AIServerApp], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose.withConversationRetention(ToolUp.AI.ConversationRetentionPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.AICompose.withConversationTitling(ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.AI.AICompose+AIServerApp (class)
 ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])
 ToolUp.AI.AICompose+AIServerApp.AIConfig : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig] { get }

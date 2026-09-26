@@ -2443,6 +2443,10 @@ let private registeredTests =
         // missing-placeholder envelope, inline-vs-blob routing, the long-render
         // job, the ReportRendered audit row, and composition-gated registration.
         ReportingAIToolsTests.tests
+        // Phase 516 - conversation titles, search + pagination: real listing
+        // metadata, stable keyset paging, search, titling with fallback, and
+        // the GetTaskStatus polling fallback.
+        ConversationListingTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

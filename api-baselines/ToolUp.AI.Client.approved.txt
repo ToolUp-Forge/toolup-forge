@@ -26,11 +26,14 @@ ToolUp.AI.Client.AIAssistantUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolU
 ToolUp.AI.Client.AIAssistantUI.init() : System.Tuple`2[ToolUp.AI.Client.AIAssistantUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AIAssistantUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AIAssistantUI.update(ToolUp.AI.Client.AIAssistantUI+Msg, ToolUp.AI.Client.AIAssistantUI+Model) : System.Tuple`2[ToolUp.AI.Client.AIAssistantUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AIAssistantUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AIAssistantUI+Model (class)
-ToolUp.AI.Client.AIAssistantUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderInstanceView], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Guid])
+ToolUp.AI.Client.AIAssistantUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderInstanceView], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
 ToolUp.AI.Client.AIAssistantUI+Model.ActiveConversation : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
 ToolUp.AI.Client.AIAssistantUI+Model.AvailableTools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition] { get }
 ToolUp.AI.Client.AIAssistantUI+Model.ConfiguredProviders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIProviderInstanceView] { get }
+ToolUp.AI.Client.AIAssistantUI+Model.ConversationSearch : System.String { get }
+ToolUp.AI.Client.AIAssistantUI+Model.ConversationTotal : System.Int32 { get }
 ToolUp.AI.Client.AIAssistantUI+Model.Conversations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation] { get }
+ToolUp.AI.Client.AIAssistantUI+Model.ConversationsCursor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Client.AIAssistantUI+Model.CurrentTask : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask] { get }
 ToolUp.AI.Client.AIAssistantUI+Model.DebugMode : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Model.ErrorMessage : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -41,29 +44,41 @@ ToolUp.AI.Client.AIAssistantUI+Msg (class)
 ToolUp.AI.Client.AIAssistantUI+Msg.DismissError : ToolUp.AI.Client.AIAssistantUI+Msg { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsApiError : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsCancelTask : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsConversationPageLoaded : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsDeleteConversation : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsDismissError : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadConversationPage : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadConversations : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadMessages : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadMoreConversations : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadProviders : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsLoadTools : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsMessageSubmitted : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsNewConversation : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsProviderOverrideSet : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSSEEvent : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsSearchConversations : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSelectConversation : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSetProviderOverride : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSubmitMessage : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsSubmitMessagePrepared : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.IsTaskStatusPolled : System.Boolean { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.IsWatchdogFired : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg.LoadMoreConversations : ToolUp.AI.Client.AIAssistantUI+Msg { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.NewConversation : ToolUp.AI.Client.AIAssistantUI+Msg { get }
 ToolUp.AI.Client.AIAssistantUI+Msg.Tag : System.Int32 { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+ApiError (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+ApiError.Item : System.String { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+CancelTask (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+CancelTask.taskId : System.Guid { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+ConversationPageLoaded (class)
+ToolUp.AI.Client.AIAssistantUI+Msg+ConversationPageLoaded.append : System.Boolean { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+ConversationPageLoaded.page : ToolUp.AI.ConversationPage { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+ConversationPageLoaded.search : System.String { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+DeleteConversation (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+DeleteConversation.Item : ToolUp.Platform.ApiCall`2[System.Guid, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]] { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+LoadConversationPage (class)
+ToolUp.AI.Client.AIAssistantUI+Msg+LoadConversationPage.Item : ToolUp.AI.ConversationListQuery { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+LoadConversations (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+LoadConversations.Item : ToolUp.Platform.ApiCall`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation]] { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+LoadMessages (class)
@@ -78,6 +93,8 @@ ToolUp.AI.Client.AIAssistantUI+Msg+ProviderOverrideSet (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+ProviderOverrideSet.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+SSEEvent (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+SSEEvent.Item : ToolUp.AI.AIStreamEvent { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+SearchConversations (class)
+ToolUp.AI.Client.AIAssistantUI+Msg+SearchConversations.Item : System.String { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+SelectConversation (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+SelectConversation.Item : System.Guid { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+SetProviderOverride (class)
@@ -89,21 +106,29 @@ ToolUp.AI.Client.AIAssistantUI+Msg+SubmitMessagePrepared.Item : ToolUp.AI.Client
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.ApiError : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.CancelTask : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.ConversationPageLoaded : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.DeleteConversation : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.DismissError : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadConversationPage : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadConversations : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadMessages : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadMoreConversations : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadProviders : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.LoadTools : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.MessageSubmitted : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.NewConversation : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.ProviderOverrideSet : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SSEEvent : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SearchConversations : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SelectConversation : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SetProviderOverride : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SubmitMessage : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.SubmitMessagePrepared : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+Tags.TaskStatusPolled : System.Int32 (literal)
 ToolUp.AI.Client.AIAssistantUI+Msg+Tags.WatchdogFired : System.Int32 (literal)
+ToolUp.AI.Client.AIAssistantUI+Msg+TaskStatusPolled (class)
+ToolUp.AI.Client.AIAssistantUI+Msg+TaskStatusPolled.status : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AITask] { get }
+ToolUp.AI.Client.AIAssistantUI+Msg+TaskStatusPolled.token : System.Guid { get }
 ToolUp.AI.Client.AIAssistantUI+Msg+WatchdogFired (class)
 ToolUp.AI.Client.AIAssistantUI+Msg+WatchdogFired.token : System.Guid { get }
 ToolUp.AI.Client.AIAssistantUI+PreparedSubmission (class)

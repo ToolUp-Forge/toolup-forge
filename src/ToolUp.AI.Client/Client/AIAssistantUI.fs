@@ -41,6 +41,15 @@ type Model = {
     /// AIClientConfig.fs for the full contract. Catches silent failures
     /// where the server never produces a final `MessageComplete`.
     WatchdogToken: Guid option
+    /// Phase 516.C — the search the conversation list is filtered by;
+    /// `""` lists everything.
+    ConversationSearch: string
+    /// Phase 516.C — the cursor for the next page of the list; `None`
+    /// when every matching conversation is loaded.
+    ConversationsCursor: string option
+    /// Phase 516.C — how many conversations match the current search
+    /// across all pages.
+    ConversationTotal: int
 }
 
 /// Non-deterministic inputs for a chat submission — generated in the
@@ -88,6 +97,20 @@ type Msg =
     /// the matching CancellationToken; the agent loop bails at the
     /// next turn boundary with a StreamCancelled SSE event.
     | CancelTask of taskId: Guid
+    /// Phase 516.C — fetch a page of the conversation list. A query with
+    /// no cursor replaces the list; one with a cursor appends to it.
+    | LoadConversationPage of ConversationListQuery
+    /// Phase 516.C — a page arrived for `search`. Ignored when the user
+    /// has since searched for something else.
+    | ConversationPageLoaded of search: string * append: bool * page: ConversationPage
+    /// Phase 516.C — the user submitted a search (`""` clears it).
+    | SearchConversations of string
+    /// Phase 516.C — the user asked for the next page.
+    | LoadMoreConversations
+    /// Phase 516.D — the answer to a `GetTaskStatus` poll made when the
+    /// stream went quiet. `None` when the server no longer knows the task
+    /// or the poll failed.
+    | TaskStatusPolled of token: Guid * status: AITask option
 
 let private aiApi =
     Api.makeProxy<AIAssistantApi> (customOptions = UserSession.withRequestHeaders)
@@ -183,6 +206,26 @@ let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     Verification = None
 }
 
+/// The first-page query for `search` (Phase 516.C).
+let private firstPageFor (search: string) : ConversationListQuery = {
+    ConversationListQuery.firstPage with
+        Search =
+            if String.IsNullOrWhiteSpace search then
+                None
+            else
+                Some(search.Trim())
+}
+
+let private loadPage (query: ConversationListQuery) : Cmd<Msg> =
+    let search = query.Search |> Option.defaultValue ""
+    let append = query.Cursor.IsSome
+
+    Cmd.OfRemoting.call
+        aiApi.ListConversationsPage
+        query
+        (fun page -> ConversationPageLoaded(search, append, page))
+        (fun ex -> ApiError ex.Message)
+
 let init () =
     {
         Conversations = []
@@ -195,9 +238,12 @@ let init () =
         ErrorMessage = None
         DebugMode = false
         WatchdogToken = None
+        ConversationSearch = ""
+        ConversationsCursor = None
+        ConversationTotal = 0
     },
     Cmd.batch [
-        Cmd.OfRemoting.call aiApi.ListConversations () (Finished >> LoadConversations) (fun ex -> ApiError ex.Message)
+        loadPage ConversationListQuery.firstPage
         Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
         Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
     // The SSE stream subscription is NOT a boot-time `Cmd.ofEffect` —
@@ -214,11 +260,46 @@ let update msg model =
     match msg with
     | LoadConversations action ->
         match action with
-        | Start() ->
-            model,
-            Cmd.OfRemoting.call aiApi.ListConversations () (Finished >> LoadConversations) (fun ex ->
-                ApiError ex.Message)
+        // Phase 516.C — a refresh reloads the first page of the current
+        // search rather than every conversation in the scope.
+        | Start() -> model, loadPage (firstPageFor model.ConversationSearch)
         | Finished convos -> { model with Conversations = convos }, Cmd.none
+
+    | LoadConversationPage query -> model, loadPage query
+
+    | ConversationPageLoaded(search, append, page) ->
+        if search <> model.ConversationSearch.Trim() then
+            model, Cmd.none
+        else
+            {
+                model with
+                    Conversations =
+                        if append then
+                            model.Conversations @ page.Items
+                        else
+                            page.Items
+                    ConversationsCursor = page.NextCursor
+                    ConversationTotal = page.TotalCount
+            },
+            Cmd.none
+
+    | SearchConversations term ->
+        {
+            model with
+                ConversationSearch = term.Trim()
+                ConversationsCursor = None
+        },
+        loadPage (firstPageFor term)
+
+    | LoadMoreConversations ->
+        match model.ConversationsCursor with
+        | Some cursor ->
+            model,
+            loadPage {
+                firstPageFor model.ConversationSearch with
+                    Cursor = Some cursor
+            }
+        | None -> model, Cmd.none
 
     | LoadTools action ->
         match action with
@@ -517,6 +598,14 @@ let update msg model =
             // shows why an agent loop bailed (rate-limit, max turns
             // exceeded, malformed provider response, etc.) without the
             // operator having to consult the server log.
+            // Phase 516.A — a finished turn changes the list: a new
+            // conversation appears, and the active one moves to the top
+            // with a new count and timestamp.
+            let refresh =
+                match status with
+                | AITaskCompleted -> Cmd.ofMsg (LoadConversations(Start()))
+                | _ -> Cmd.none
+
             match status, model.DebugMode, model.ActiveConversation with
             | AITaskFailed reason, true, Some convId ->
                 let note = debugNote convId $"⚠️ Agent-loop failure: {reason}"
@@ -527,8 +616,8 @@ let update msg model =
                         Messages = model.Messages @ [ note ]
                         StreamingContent = ""
                 },
-                Cmd.none
-            | _ -> { model with CurrentTask = taskUpdate }, Cmd.none
+                refresh
+            | _ -> { model with CurrentTask = taskUpdate }, refresh
 
         | ToolCallStarted(convId, toolName, toolCallId) ->
             match model.ActiveConversation with
@@ -677,8 +766,19 @@ let update msg model =
         // Token-based invalidation: only fire when the live token still
         // matches. `None` (response arrived) and mismatched Guid (newer
         // stream has started) both collapse to "stale — ignore".
-        match model.WatchdogToken, model.ActiveConversation with
-        | Some liveToken, Some convId when liveToken = token ->
+        //
+        // Phase 516.D — before declaring the stream dead, ask the server
+        // where the task got to: a client that merely missed the terminal
+        // SSE event recovers the reply instead of showing the note.
+        match model.WatchdogToken, model.ActiveConversation, model.CurrentTask with
+        | Some liveToken, Some _, Some task when liveToken = token ->
+            model,
+            Cmd.OfRemoting.call
+                aiApi.GetTaskStatus
+                task.TaskId
+                (fun status -> TaskStatusPolled(token, status))
+                (fun _ -> TaskStatusPolled(token, None))
+        | Some liveToken, Some convId, None when liveToken = token ->
             let note = watchdogNote convId
 
             {
@@ -690,9 +790,90 @@ let update msg model =
             Cmd.none
         | _ -> model, Cmd.none
 
+    | TaskStatusPolled(token, polled) ->
+        match model.WatchdogToken, model.ActiveConversation with
+        | Some liveToken, Some convId when liveToken = token ->
+            match polled |> Option.map (fun t -> t, t.Status) with
+            | Some(_, AITaskCompleted) ->
+                // Finished while the stream was silent: the persisted
+                // conversation holds the reply.
+                {
+                    model with
+                        StreamingContent = ""
+                        WatchdogToken = None
+                        CurrentTask = None
+                },
+                Cmd.batch [
+                    Cmd.OfRemoting.call aiApi.GetConversation convId (Finished >> LoadMessages) (fun ex ->
+                        ApiError ex.Message)
+                    Cmd.ofMsg (LoadConversations(Start()))
+                ]
+            | Some(_, AITaskFailed reason) ->
+                {
+                    model with
+                        StreamingContent = ""
+                        WatchdogToken = None
+                        CurrentTask = None
+                        ErrorMessage = Some reason
+                },
+                Cmd.none
+            | Some(task, _) ->
+                // Still queued or running server-side: keep waiting, and
+                // ask again at the next watchdog interval.
+                { model with CurrentTask = Some task }, scheduleWatchdog token
+            | None ->
+                let note = watchdogNote convId
+
+                {
+                    model with
+                        Messages = model.Messages @ [ note ]
+                        StreamingContent = ""
+                        WatchdogToken = None
+                },
+                Cmd.none
+        | _ -> model, Cmd.none
+
 // ─── View ─────────────────────────────────────────────────────────
 
-let private conversationList (conversations: Conversation list) activeId dispatch =
+/// Phase 516.C — the conversation search box. Local state holds the
+/// draft; the search runs on Enter (or when the box is cleared), so a
+/// scan of the scope is not issued per keystroke.
+[<ReactComponent>]
+let private ConversationSearchBox (current: string) (onSearch: string -> unit) =
+    let draft, setDraft = React.useState current
+
+    Html.input [
+        prop.className
+            "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+        prop.placeholder "Search conversations\u2026"
+        prop.value draft
+        prop.onChange (fun (text: string) ->
+            setDraft text
+
+            if text = "" && current <> "" then
+                onSearch "")
+        prop.onKeyDown (fun e ->
+            if e.key = "Enter" then
+                onSearch draft)
+    ]
+
+/// One row's secondary line: message count and last activity.
+let private conversationMeta (conv: Conversation) =
+    let messages =
+        if conv.MessageCount = 1 then
+            "1 message"
+        else
+            sprintf "%d messages" conv.MessageCount
+
+    if conv.UpdatedAt = DateTime.MinValue then
+        messages
+    else
+        sprintf "%s \u00B7 %s" messages (conv.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+
+let private conversationList (model: Model) dispatch =
+    let conversations = model.Conversations
+    let activeId = model.ActiveConversation
+
     Html.div [
         prop.className "space-y-1"
         prop.children [
@@ -703,6 +884,14 @@ let private conversationList (conversations: Conversation list) activeId dispatc
                 prop.onClick (fun _ -> dispatch NewConversation)
                 prop.text "+ New conversation"
             ]
+
+            ConversationSearchBox model.ConversationSearch (SearchConversations >> dispatch)
+
+            if conversations.IsEmpty && model.ConversationSearch <> "" then
+                Html.div [
+                    prop.className "px-3 py-2 text-xs text-gray-500"
+                    prop.text (sprintf "No conversations match \u201C%s\u201D." model.ConversationSearch)
+                ]
 
             for conv in conversations do
                 let isActive = activeId = Some conv.Id
@@ -717,8 +906,20 @@ let private conversationList (conversations: Conversation list) activeId dispatc
                     ]
                     prop.onClick (fun _ -> dispatch (SelectConversation conv.Id))
                     prop.children [
-                        Html.span [ prop.text (conv.Title |> Option.defaultValue (conv.Id.ToString()[..7])) ]
+                        Html.div [
+                            prop.className "truncate"
+                            prop.text (conv.Title |> Option.defaultValue (conv.Id.ToString()[..7]))
+                        ]
+                        Html.div [ prop.className "text-xs text-gray-400"; prop.text (conversationMeta conv) ]
                     ]
+                ]
+
+            if model.ConversationsCursor.IsSome then
+                Html.button [
+                    prop.className
+                        "w-full text-center px-3 py-1.5 text-xs text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+                    prop.onClick (fun _ -> dispatch LoadMoreConversations)
+                    prop.text (sprintf "Load more (%d more)" (model.ConversationTotal - conversations.Length))
                 ]
         ]
     ]
@@ -950,7 +1151,7 @@ let private SseSubscription (dispatch: Msg -> unit) =
 let private view model dispatch =
     let inputPanel =
         Layout.Panel.panel "Conversations" [
-            conversationList model.Conversations model.ActiveConversation dispatch
+            conversationList model dispatch
 
             if model.AvailableTools.Length > 0 then
                 Layout.Panel.panelSection "Available Tools" [
