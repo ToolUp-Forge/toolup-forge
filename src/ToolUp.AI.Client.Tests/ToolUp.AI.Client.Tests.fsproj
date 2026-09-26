@@ -196,6 +196,8 @@
         <Compile Include="ElmishProofOracleTests.fs" />
         <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
         <Compile Include="ModuleInspectStateTests.fs" />
+        <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
+        <Compile Include="UiAwarenessInspectTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
@@ -212,6 +214,8 @@
              have to re-derive the loader, the jsdom mount and the
              node:test facade. -->
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" />
+        <!-- Phase 537 - the UI-awareness companion's Fable client tier. -->
+        <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
     </ItemGroup>

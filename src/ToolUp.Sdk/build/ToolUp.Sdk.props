@@ -126,6 +126,9 @@
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.SampleClientTool.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.UiAwareness.Client" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.UiAwareness.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.UiAwareness.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AI.Wire" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AICookbooks.AgChart" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.AICookbooks.AgGridEnterprise" Version="$(ToolUpSdkVersion)" />

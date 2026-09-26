@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.UiAwareness.Server</PackageId>
+    <Description>ToolUp.AI.UiAwareness (Server tier) — opt-in registration of the read-only, client-resident _platform.ui.inspect_active_module AI tool, which reads the active module's live UiStateReport. Not auto-wired by composeAI: a deployment that does not compose it pays nothing.</Description>
+    <PackageTags>fsharp;sdk;ai;server;client-resident;ui-awareness</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Server\InspectActiveModuleTool.fs" />
+    <Compile Include="Server\AICompose.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.AI.UiAwareness.Core\ToolUp.AI.UiAwareness.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One companion README, packed into each tier. -->
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

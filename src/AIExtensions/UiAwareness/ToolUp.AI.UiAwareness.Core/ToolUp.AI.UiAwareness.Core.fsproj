@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.UiAwareness.Core</PackageId>
+    <Description>ToolUp.AI.UiAwareness (Core tier) — the tool name and result vocabulary shared by the server and client tiers of the opt-in UI-awareness companion, which lets the AI read the live UI state of the module the user is viewing.</Description>
+    <PackageTags>fsharp;fable;sdk;ai;client-resident;ui-awareness</PackageTags>
+  </PropertyGroup>
+  <!-- Pack source for Fable consumers under fable/: the Client tier (Fable)
+       and the Server tier (.NET) both reference these names. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Shared\UiAwarenessNames.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One companion README, packed into each tier. -->
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

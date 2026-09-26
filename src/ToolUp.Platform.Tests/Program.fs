@@ -885,6 +885,7 @@ let private registeredTests =
         DevVersionEndpointTests.tests
         ClientToolDispatchContractBindings.tests
         SampleClientToolDispatchTests.tests
+        UiAwarenessInspectToolTests.tests
         // Phase 489 - the MCP server host companion: an off-the-shelf-shaped
         // client fixture drives the real handler over real JSON-RPC bodies,
         // so what is asserted is what a connecting agent actually sees.

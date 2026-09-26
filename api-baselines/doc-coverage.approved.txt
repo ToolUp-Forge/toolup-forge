@@ -15,6 +15,9 @@ ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
 ToolUp.AI.Server 578/975
+ToolUp.AI.UiAwareness.Client 3/4
+ToolUp.AI.UiAwareness.Core 5/6
+ToolUp.AI.UiAwareness.Server 4/6
 ToolUp.AI.Wire 109/259
 ToolUp.AICookbooks.AgChart 9/9
 ToolUp.AICookbooks.AgGridEnterprise 7/7

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.AI.UiAwareness.Client</PackageId>
+    <Description>ToolUp.AI.UiAwareness (Client tier) — Fable executor for the _platform.ui.inspect_active_module AI tool: reads the active module's latest UiStateReport through ModuleStateObserver and returns it to the model. Read-only.</Description>
+    <PackageTags>fsharp;fable;sdk;client;ai;client-resident;ui-awareness</PackageTags>
+  </PropertyGroup>
+  <!-- Pack source for Fable consumers under fable/. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Client\InspectActiveModule.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ToolUp.AI.UiAwareness.Core\ToolUp.AI.UiAwareness.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+    <ProjectReference Include="..\..\..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
+  </ItemGroup>
+  <!-- Fable.SimpleJson flows transitively from ToolUp.Platform.Client. -->
+  <ItemGroup>
+    <!-- One companion README, packed into each tier. -->
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
