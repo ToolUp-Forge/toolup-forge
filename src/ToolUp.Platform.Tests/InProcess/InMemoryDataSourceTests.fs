@@ -17,3 +17,9 @@ let tests =
         source :> IDataSource, seeder
 
     IDataSourceContract.tests "InMemoryDataSource" factory
+
+/// Phase 834 — the payload-format declaration pack, bound to the
+/// in-memory connector (which declares `Csv`).
+let payloadFormatTests =
+    IDeclaresPayloadFormatContract.tests "InMemoryDataSource" PayloadFormat.Csv (fun () ->
+        InMemoryDataSource.create () :> IDataSource)

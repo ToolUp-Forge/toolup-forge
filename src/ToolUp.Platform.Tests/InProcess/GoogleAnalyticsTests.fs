@@ -211,6 +211,12 @@ let private contractTests =
 
     IDataSourceContract.tests "GoogleAnalyticsDataSource" factory
 
+/// Phase 834 — the payload-format declaration pack: the report envelope
+/// is JSON, so the connector declares `Json`.
+let private payloadFormatContractTests =
+    IDeclaresPayloadFormatContract.tests "GoogleAnalyticsDataSource" PayloadFormat.Json (fun () ->
+        fst (mkConnector None))
+
 // ─── Connector-specific tests ────────────────────────────────────────
 
 let private mkCtx (sourceId: DataSourceId) (connectionScope: (string * string) list) : DataSourceCallContext = {
@@ -953,4 +959,5 @@ let tests =
         flowContractTests
         flowTests
         liveTests
+        payloadFormatContractTests
     ]
