@@ -368,6 +368,15 @@ module Program =
     /// every message (it wraps `update`). The loop is the step machine
     /// `proofs/ElmishLoop.fst` models clause for clause, held to it by
     /// `ElmishLoopProofOracleTests`.
+    ///
+    /// Two things the model takes for granted are made true here by
+    /// construction. The error reporter RETURNS: every call to the
+    /// program's reporter goes through `guarded`, because a reporter
+    /// that raised used to escape the drain with the latch still set,
+    /// after which every dispatch queued its message and nothing was
+    /// processed again. And nothing the program supplied runs with the
+    /// latch clear at boot: the latch is set before the sinks and the
+    /// effects' start functions are called (`boot_paints_init_model`).
     let runWithDispatch
         (syncDispatch: Dispatch<'msg> -> Dispatch<'msg>)
         (arg: 'arg)
@@ -376,23 +385,39 @@ module Program =
         let dispatcherCore = DispatcherCore<'msg>()
         let effectRegistry = EffectRegistry<'msg>()
 
+        // The reporter, made total. `text` and `ex` are what was being
+        // reported; if the reporter raises, both failures go to the
+        // console — the original, which would otherwise be lost, and the
+        // reporter's own. The console write is the last resort and is
+        // itself guarded: there is nowhere left to report to.
+        let guarded (text: string) (ex: exn) (report: unit -> unit) =
+            try
+                report ()
+            with reporterEx ->
+                try
+                    Log.onError ("The error reporter raised while reporting: " + text, reporterEx)
+                    Log.onError (text, ex)
+                with _ ->
+                    ()
+
         let reportException (phase: ErrorPhase) (text: string) (ex: exn) =
-            program.errorReporter {
-                Phase = phase
-                ModuleId = None
-                CorrelationId = None
-                Message = text
-                Exception = ex
-            }
+            guarded text ex (fun () ->
+                program.errorReporter {
+                    Phase = phase
+                    ModuleId = None
+                    CorrelationId = None
+                    Message = text
+                    Exception = ex
+                })
 
         let reportRaw (ex: exn) =
-            program.errorReporter {
-                Phase = ErrorPhase.Update(box ())
-                ModuleId = None
-                CorrelationId = None
-                Message = "Background callback raised"
-                Exception = ex
-            }
+            reportException (ErrorPhase.Update(box ())) "Background callback raised" ex
+
+        // The upstream-shape hook the subscription effects report through
+        // (`withErrorReporter` points it at the same reporter), guarded
+        // the same way.
+        let onError (text: string, ex: exn) =
+            guarded text ex (fun () -> program.onError (text, ex))
 
         let model, cmd = program.init arg
         let sub = program.subscribe model
@@ -455,7 +480,7 @@ module Program =
                 | Some msg ->
                     try
                         if toTerminate msg then
-                            Subs.Fx.stop program.onError activeSubs
+                            Subs.Fx.stop onError activeSubs
                             effectRegistry.DisposeAll reportRaw
                             terminate state
                             terminated <- true
@@ -470,7 +495,7 @@ module Program =
                             let model', cmd' = program.update msg state
                             let sub' = program.subscribe model'
 
-                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change program.onError dispatch'
+                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change onError dispatch'
 
                             cmd'
                             |> Cmd.exec
@@ -502,7 +527,7 @@ module Program =
         dispatcherCore.SetTerminateCallback(fun () ->
             if not terminated then
                 try
-                    Subs.Fx.stop program.onError activeSubs
+                    Subs.Fx.stop onError activeSubs
                 with ex ->
                     reportRaw ex
 
@@ -526,6 +551,19 @@ module Program =
                     effectRegistry.DisposeByModule moduleId reportRaw
             }
 
+        // F*: `preboot`. The latch is set BEFORE anything the program
+        // supplied is called. A sink or an effect's start function that
+        // dispatches synchronously therefore only queues its message
+        // (`reentrant_no_loss`); the boot drain below hands it to `update`
+        // after the boot paint, ahead of `init`'s command's messages and
+        // in the order it was raised. Until this moved, the latch was set
+        // after them: such a dispatch found it clear and ran a whole
+        // drain — `update`, the subscription diff, the command, a paint
+        // — so the hook's first model was not the one `init` returned,
+        // and the boot's diff against `sub` (the init model's
+        // subscriptions, computed above) stopped what that drain started.
+        reentered <- true
+
         // Fan out to every registered sink (in declaration order — sinks
         // were prepended so reverse here). Each sink runs in its own try
         // so a failing sink doesn't suppress the next.
@@ -545,15 +583,15 @@ module Program =
         for effect in program.effects do
             effectRegistry.Register effect dispatch' reportRaw
 
-        // F*: `boot`. The boot paint is unconditional and runs BEFORE
-        // `init`'s command: a hydrating renderer (`withReactHydrate`) must
-        // be handed the model the server rendered, not one that init's
-        // synchronous dispatches have already moved on. Those dispatches
+        // F*: `boot_paint`, then the rest of `boot`. The boot paint is
+        // unconditional and runs BEFORE `init`'s command: a hydrating
+        // renderer (`withReactHydrate`) must be handed the model the
+        // server rendered, not one that synchronous dispatches — init's,
+        // a sink's, an effect's — have already moved on. Those dispatches
         // are drained — and painted once — by `processMsgs` below.
-        reentered <- true
         paint ()
 
-        activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change program.onError dispatch'
+        activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch'
 
         cmd
         |> Cmd.exec (fun ex -> reportException ErrorPhase.Init "Error initialising" ex) dispatch'

@@ -31,7 +31,9 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 //
 // **A proof is about the MODEL, and this pack is the only thing that
 // says the model is about the code.** Every arm below is differential:
-// a generated SCRIPT — which messages `init`'s command raises, which
+// a generated SCRIPT — which messages a dispatcher-handle sink and an
+// effect's start function raise BEFORE the boot paint, which messages
+// `init`'s command raises, which
 // each message's command raises (including `Terminate`), which messages
 // the render hook raises when handed a given model (the post-drain
 // `setState` dispatch — the case Phase 851 creates), which messages
@@ -40,8 +42,10 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // and a scripted `setState`, and through the extracted machine with the
 // same script as its oracles, and the two must agree on the messages
 // `update` saw in order, on the messages `dispatch` accepted, on the
-// final model, on `IsActive`, on how many times the hook was called, and
-// on the model it was last handed.
+// final model, on `IsActive`, on how many times the hook was called, on
+// the model it was last handed, and on the BOOT paint: the model it was
+// handed and what `update` had seen by then (`boot_paints_init_model` —
+// nothing, whatever the sinks and effects dispatched).
 //
 // The `log` comparison is what holds the two-flag encoding: production's
 // log is recorded through `IDispatcher.IsActive`, the model's through
@@ -52,7 +56,10 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // moved each — the latch released BEFORE the drain; the paint made after
 // every message as it was until 851; the paint made once after the
 // `while` with no pop after it, so a hook that dispatches leaves its
-// message in the ring — run over the same campaign and asserted CAUGHT;
+// message in the ring; the latch set AFTER the sinks and effects ran, as
+// it was until the boot was restated, so an effect that dispatches from
+// its start function runs a drain ahead of the boot paint — run over the
+// same campaign and asserted CAUGHT;
 // the same skeleton, faithful, is asserted to agree, so the difference
 // each go-red measures is the one line.
 
@@ -71,6 +78,10 @@ type Ext =
 
 type Script = {
     Capacity: int
+    /// Raised BEFORE the boot paint: the head by a dispatcher-handle
+    /// sink, the rest by an effect's start function. Any id, because
+    /// nothing has been processed yet for a reply to point back at.
+    Pre: Ev list
     /// Raised by `init`'s command, during the boot drain.
     Init: Ev list
     /// Raised by each message's command. Absent means none. Every
@@ -113,6 +124,10 @@ type Outcome = {
     Renders: int
     /// Phase 851 — the model the render hook was last handed.
     Painted: int list option
+    /// The model the render hook was handed FIRST — the boot paint.
+    BootPainted: int list option
+    /// The messages `update` had been handed when the boot paint ran.
+    BootTrace: int list
     /// The model's drain finished (its latch is clear). Production
     /// cannot say otherwise — it would not have returned.
     Finished: bool
@@ -121,7 +136,10 @@ type Outcome = {
 // ─── The generator ───────────────────────────────────────────────────
 
 /// A script over ids `0 .. n-1`. Replies and paints point forward only.
-let private genScript (rng: Lcg) : Script =
+/// `preRng` is a SECOND generator, drawn from only for `Pre`, so the
+/// scripts the campaign held before `Pre` existed are the same scripts
+/// with a `Pre` added — the shapes the coverage case counts did not move.
+let private genScript (rng: Lcg) (preRng: Lcg) : Script =
     let n = 3 + rng.Next 6
     let capacity = 2 + rng.Next 4
 
@@ -171,8 +189,17 @@ let private genScript (rng: Lcg) : Script =
                 XDispatch(rng.Next n)
     ]
 
+    let pre =
+        if preRng.Next 100 < 40 then
+            [
+                for _ in 1 .. 1 + preRng.Next 3 -> if preRng.Next 100 < 8 then ETerm else EMsg(preRng.Next n)
+            ]
+        else
+            []
+
     {
         Capacity = capacity
+        Pre = pre
         Init = genEvs 0 3
         Replies = replies
         Paints = paintsMap
@@ -184,7 +211,8 @@ let private genScript (rng: Lcg) : Script =
 let private campaign: Lazy<Script list> =
     lazy
         (let rng = Lcg 789_001
-         [ for _ in 1..400 -> genScript rng ])
+         let preRng = Lcg 789_002
+         [ for _ in 1..400 -> genScript rng preRng ])
 
 // ─── Production ──────────────────────────────────────────────────────
 
@@ -200,12 +228,22 @@ let private productionRun (script: Script) : Outcome =
     let mutable model: int list = []
     let mutable renders = 0
     let mutable painted: int list option = None
+    let mutable bootPainted: int list option = None
+    let mutable bootTrace: int list = []
     let mutable dispatcher: IDispatcher<int> option = None
 
     let handle () =
         match dispatcher with
         | Some d -> d
-        | None -> failtest "the dispatcher handle was not captured before init's command ran"
+        | None -> failtest "the dispatcher handle was not captured before anything dispatched"
+
+    // The head of `Pre` is raised by a dispatcher-handle sink, through the
+    // handle it was just given; the rest by an effect's start function,
+    // through the dispatch it was started with.
+    let preFromSink, preFromEffect =
+        match script.Pre with
+        | [] -> [], []
+        | first :: rest -> [ first ], rest
 
     let raise (dispatch: int -> unit) (evs: Ev list) =
         for ev in evs do
@@ -231,6 +269,10 @@ let private productionRun (script: Script) : Outcome =
         next, Cmd.ofEffect (fun dispatch -> raise dispatch (replies script msg))
 
     let setState (m: int list) (dispatch: int -> unit) =
+        if renders = 0 then
+            bootPainted <- Some m
+            bootTrace <- List.ofSeq trace
+
         renders <- renders + 1
         painted <- Some m
         raise dispatch (paints script m)
@@ -240,6 +282,15 @@ let private productionRun (script: Script) : Outcome =
     |> Program.withTermination (fun msg -> script.Terminating.Contains msg) ignore
     |> Program.withRingBufferCapacity script.Capacity
     |> Program.withDispatcherHandle (fun d -> dispatcher <- Some d)
+    |> Program.withDispatcherHandle (fun d -> raise d.Dispatch preFromSink)
+    |> Program.withEffect (
+        EffectHandle.programLifetime "scripted-pre-boot" (fun dispatch ->
+            raise dispatch preFromEffect
+
+            { new System.IDisposable with
+                member _.Dispose() = ()
+            })
+    )
     |> Program.runWithDispatch id ()
 
     for ext in script.Exts do
@@ -258,6 +309,8 @@ let private productionRun (script: Script) : Outcome =
         Active = (handle ()).IsActive
         Renders = renders
         Painted = painted
+        BootPainted = bootPainted
+        BootTrace = bootTrace
         Finished = true
     }
 
@@ -286,16 +339,31 @@ let private modelRun (script: Script) : Outcome =
     let render (model: int list) =
         paints script model |> List.map toModelEv
 
+    let toTerminate (msg: int) = script.Terminating.Contains msg
+    let pre = List.map toModelEv script.Pre
+
     let s =
         ElmishLoop.program
             fuel
             update
-            (fun msg -> script.Terminating.Contains msg)
+            toTerminate
             render
             (big script.Capacity)
             []
+            pre
             (List.map toModelEv script.Init)
             (List.map toModelExt script.Exts)
+
+    // The model's own account of the boot paint: the state `boot` passes
+    // through on its way to the drain, which `boot_paints_init_model` is
+    // stated over.
+    let atBootPaint =
+        ElmishLoop.boot_paint fuel update toTerminate render (ElmishLoop.initial (big script.Capacity) []) pre
+
+    let painted (st: ElmishLoop.st<int, int list>) =
+        match st.painted with
+        | ElmishRing.OSome m -> Some m
+        | ElmishRing.ONone -> None
 
     {
         Trace = s.trace
@@ -303,10 +371,9 @@ let private modelRun (script: Script) : Outcome =
         Model = s.model
         Active = s.active
         Renders = int s.renders
-        Painted =
-            match s.painted with
-            | ElmishRing.OSome m -> Some m
-            | ElmishRing.ONone -> None
+        Painted = painted s
+        BootPainted = painted atBootPaint
+        BootTrace = atBootPaint.trace
         Finished = not s.reentered
     }
 
@@ -328,6 +395,11 @@ type private Variant =
     /// after it — a hook that dispatches leaves its message in the ring
     /// until the next external dispatch happens to drain it.
     | PaintsWithoutRedrain
+    /// The boot as it was until it was restated: the sinks and the
+    /// effects' start functions run BEFORE the latch is set, so a dispatch
+    /// one of them makes finds it clear and runs a whole drain — `update`,
+    /// the command, a paint — ahead of the boot paint.
+    | LatchesAfterEffects
 
 /// `runWithDispatch`'s scheduling skeleton, transcribed by hand with the
 /// callees replaced by the script — the same abstraction the model
@@ -343,6 +415,8 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
     let mutable state: int list = []
     let mutable renders = 0
     let mutable painted: int list option = None
+    let mutable bootPainted: int list option = None
+    let mutable bootTrace: int list = []
 
     let terminate () =
         if not terminated then
@@ -360,7 +434,8 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
                     processMsgs ()
                 | Faithful
                 | PaintsPerMessage
-                | PaintsWithoutRedrain ->
+                | PaintsWithoutRedrain
+                | LatchesAfterEffects ->
                     reentered <- true
                     processMsgs ()
                     reentered <- false
@@ -377,6 +452,11 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
 
     and paint () =
         dirty <- false
+
+        if renders = 0 then
+            bootPainted <- Some state
+            bootTrace <- List.ofSeq trace
+
         renders <- renders + 1
         painted <- Some state
         raise (paints script state)
@@ -400,7 +480,8 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
 
         match variant with
         | Faithful
-        | ClearsLatchBeforeDrain ->
+        | ClearsLatchBeforeDrain
+        | LatchesAfterEffects ->
             while not terminated && (Option.isSome nextMsg || dirty) do
                 match nextMsg with
                 | None ->
@@ -421,7 +502,17 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
             if not terminated && dirty then
                 paint ()
 
-    reentered <- true
+    match variant with
+    | LatchesAfterEffects ->
+        raise script.Pre
+        reentered <- true
+    | Faithful
+    | ClearsLatchBeforeDrain
+    | PaintsPerMessage
+    | PaintsWithoutRedrain ->
+        reentered <- true
+        raise script.Pre
+
     paint ()
     raise script.Init
     processMsgs ()
@@ -443,6 +534,8 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
         Active = not terminated
         Renders = renders
         Painted = painted
+        BootPainted = bootPainted
+        BootTrace = bootTrace
         Finished = true
     }
 
@@ -494,6 +587,30 @@ let private paintDispatched (script: Script) =
 /// A quiet script: no paint anywhere raises anything.
 let private quiet (script: Script) =
     Map.isEmpty script.Paints && List.isEmpty script.BootPaint
+
+/// Run `body` with `Console.Error` captured, and hand back what it wrote.
+/// The guard's last resort is the console, so this is both how the
+/// reporter cases READ what the guard did and how they keep a deliberate
+/// failure's stack trace out of the gate's log. The cases that use it are
+/// `testSequenced`: the writer is process-wide.
+let private capturingStderr (body: unit -> unit) : string =
+    let original = System.Console.Error
+    use captured = new System.IO.StringWriter()
+    System.Console.SetError captured
+
+    try
+        body ()
+    finally
+        System.Console.SetError original
+
+    captured.ToString()
+
+/// How many times `needle` occurs in `text`.
+let private occurrences (needle: string) (text: string) : int =
+    (text.Length - text.Replace(needle, "").Length) / needle.Length
+
+[<Literal>]
+let private ReporterRaised = "The error reporter raised while reporting: "
 
 let tests =
     testList "Phase 789 - the proved dispatch loop as oracle" [
@@ -654,9 +771,14 @@ let tests =
                     match candidate with
                     | None -> None
                     | Some m ->
+                        // …and nothing raised before the boot paint, the
+                        // theorem's other premise: an effect's message
+                        // would be one more message in the boot drain and
+                        // a drain of its own ahead of the dispatch.
                         let viaBoot =
                             productionRun {
                                 script with
+                                    Pre = []
                                     Init = [ EMsg m ]
                                     BootPaint = []
                                     Exts = []
@@ -665,6 +787,7 @@ let tests =
                         let viaDispatch =
                             productionRun {
                                 script with
+                                    Pre = []
                                     Init = []
                                     BootPaint = []
                                     Exts = [ XDispatch m ]
@@ -807,5 +930,271 @@ let tests =
             let s = ElmishLoop.fallback_terminate (ElmishLoop.initial (big 2) ([]: int list))
             Expect.isFalse s.active "the model's `active`"
             Expect.isFalse s.terminated "…while the loop's flag is untouched"
+        }
+
+        // ─── The boot, restated: the latch before the sinks and effects ───
+
+        test "the campaign dispatched from a sink and from an effect's start function before the boot paint" {
+            // The same rule as the coverage case above, for the clause the
+            // restated boot adds: an agreement over scripts that raise
+            // nothing before the boot paint says nothing about it.
+            let scripts = campaign.Force()
+            let count p = scripts |> List.filter p |> List.length
+            let isMsg (e: Ev) = e <> ETerm
+
+            let fromSink = count (fun s -> s.Pre |> List.truncate 1 |> List.exists isMsg)
+
+            let fromEffect =
+                count (fun s -> s.Pre |> List.skip (min 1 (List.length s.Pre)) |> List.exists isMsg)
+
+            let termBeforeBoot = count (fun s -> List.contains ETerm s.Pre)
+            let nothingBefore = count (fun s -> List.isEmpty s.Pre)
+
+            Expect.isGreaterThan fromSink 100 $"only {fromSink} scripts dispatch from a dispatcher-handle sink"
+            Expect.isGreaterThan fromEffect 60 $"only {fromEffect} scripts dispatch from an effect's start function"
+
+            Expect.isGreaterThan
+                termBeforeBoot
+                10
+                $"only {termBeforeBoot} scripts raise Terminate before the boot paint"
+
+            Expect.isGreaterThan nothingBefore 150 $"only {nothingBefore} scripts raise nothing before the boot paint"
+        }
+
+        test "a loop that sets the latch after the effects ran is caught - go-red" {
+            // The boot as it shipped until it was restated. An effect that
+            // dispatches from its start function finds the latch clear and
+            // runs a drain of its own, so `update` has been handed a message
+            // — and the hook a model the server never rendered — before the
+            // boot paint.
+            let caught = mismatches (skeletonRun LatchesAfterEffects) |> List.length
+
+            Expect.isGreaterThan
+                caught
+                80
+                "a loop whose sinks and effects run before the latch is set was not caught by the boot-paint comparison"
+        }
+
+        test
+            "an effect that dispatches from its start function does not move the boot paint - boot_paints_init_model, run" {
+            let renders = ResizeArray<int list>()
+            let seen = ResizeArray<int>()
+            let seenAtBootPaint = ResizeArray<int>()
+
+            let update (msg: int) (model: int list) =
+                seen.Add msg
+                model @ [ msg ], Cmd.none
+
+            Program.mkProgram (fun () -> [], Cmd.ofMsg 3) update (fun _ _ -> ())
+            |> Program.withSetState (fun m _ ->
+                if renders.Count = 0 then
+                    seenAtBootPaint.AddRange seen
+
+                renders.Add m)
+            |> Program.withDispatcherHandle (fun d -> d.Dispatch 1)
+            |> Program.withEffect (
+                EffectHandle.programLifetime "dispatches-at-start" (fun dispatch ->
+                    dispatch 2
+
+                    { new System.IDisposable with
+                        member _.Dispose() = ()
+                    })
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.isEmpty seenAtBootPaint "`update` had been handed nothing when the boot paint ran"
+
+            Expect.equal
+                (List.ofSeq renders)
+                [ []; [ 1; 2; 3 ] ]
+                "the boot paint was handed the init model, and ONE drain painted everything raised at boot"
+
+            Expect.equal
+                (List.ofSeq seen)
+                [ 1; 2; 3 ]
+                "the sink's message, the effect's, then init's command's — in the order they were raised"
+        }
+
+        test "a subscription an effect's message asks for is running after the boot" {
+            // The second thing the old order broke. The early drain started
+            // the subscriptions of the model it produced; the boot then
+            // diffed against the INIT model's subscriptions, computed before
+            // anything ran, and stopped them — leaving a model that wants a
+            // subscription with none running until the next message.
+            let started = ResizeArray<string>()
+            let stopped = ResizeArray<string>()
+
+            let subscribe (model: int list) : Sub<int> =
+                if List.contains 1 model then
+                    [
+                        [ "wanted-once-1-arrived" ],
+                        (fun _ ->
+                            started.Add "wanted-once-1-arrived"
+
+                            { new System.IDisposable with
+                                member _.Dispose() = stopped.Add "wanted-once-1-arrived"
+                            })
+                    ]
+                else
+                    []
+
+            Program.mkProgram (fun () -> [], Cmd.none) (fun msg model -> model @ [ msg ], Cmd.none) (fun _ _ -> ())
+            |> Program.withSubscription subscribe
+            |> Program.withEffect (
+                EffectHandle.programLifetime "dispatches-at-start" (fun dispatch ->
+                    dispatch 1
+
+                    { new System.IDisposable with
+                        member _.Dispose() = ()
+                    })
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.equal (List.ofSeq started) [ "wanted-once-1-arrived" ] "started, once"
+            Expect.isEmpty stopped "…and not stopped by the boot's diff against the init model's subscriptions"
+        }
+
+        // ─── The reporter is total by construction ───────────────────────
+        //
+        // The model has no transition for an error reporter that throws: an
+        // exception from a callee is an oracle reply, reported, and the
+        // loop goes on. That is only true of a reporter that returns, so
+        // production routes every call to the program's reporter through a
+        // guard. These pin that it does, at each site a reporter is reached
+        // from — a reporter that escaped any of them would leave the latch
+        // set, and every later dispatch would queue and never drain.
+
+        testSequenced
+        <| test "a reporter that throws does not wedge the loop - from update, from a command, from the render hook" {
+            let seen = ResizeArray<int>()
+            let renders = ResizeArray<int list>()
+            let mutable handle: IDispatcher<int> option = None
+            let mutable reports = 0
+
+            let update (msg: int) (model: int list) =
+                seen.Add msg
+
+                if msg = 1 then
+                    failwith "update raised"
+
+                let cmd =
+                    if msg = 2 then
+                        Cmd.ofEffect (fun _ -> failwith "the command raised")
+                    else
+                        Cmd.none
+
+                model @ [ msg ], cmd
+
+            let setState (m: int list) (_: int -> unit) =
+                renders.Add m
+
+                if List.tryLast m = Some 3 then
+                    failwith "the render hook raised"
+
+            let written =
+                capturingStderr (fun () ->
+                    Program.mkProgram (fun () -> [], Cmd.none) update (fun _ _ -> ())
+                    |> Program.withSetState setState
+                    |> Program.withErrorReporter (fun _ ->
+                        reports <- reports + 1
+                        failwith "the reporter raised")
+                    |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+                    |> Program.runWithDispatch id ()
+
+                    for msg in [ 1; 2; 3 ] do
+                        // Neither may raise into the caller, and the second must be
+                        // DRAINED: a latch left set would accept it and process nothing.
+                        handle.Value.Dispatch msg
+                        handle.Value.Dispatch(msg * 10))
+
+            Expect.equal (List.ofSeq seen) [ 1; 10; 2; 20; 3; 30 ] "every message was handed to `update`, in order"
+            Expect.equal reports 3 "each failure reached the reporter once"
+
+            // …and neither failure was lost: the guard wrote the reporter's
+            // exception AND the one it had been asked to report.
+            Expect.equal (occurrences ReporterRaised written) 3 "the guard said so, once per failure"
+
+            for original in [ "update raised"; "the command raised"; "the render hook raised" ] do
+                Expect.stringContains written original "the failure being reported reached the console"
+
+            Expect.equal
+                renders.[renders.Count - 1]
+                [ 10; 2; 20; 3; 30 ]
+                "…and the last drain painted the model it ended on"
+        }
+
+        testSequenced
+        <| test
+            "a reporter that throws does not wedge the boot - from a sink, an effect, a subscription, init's command" {
+            let seen = ResizeArray<int>()
+            let mutable handle: IDispatcher<int> option = None
+            let mutable reports = 0
+
+            let update (msg: int) (model: int list) =
+                seen.Add msg
+                model @ [ msg ], Cmd.none
+
+            let written =
+                capturingStderr (fun () ->
+                    Program.mkProgram
+                        (fun () -> [], Cmd.ofEffect (fun _ -> failwith "init's command raised"))
+                        update
+                        (fun _ _ -> ())
+                    |> Program.withSubscription (fun _ -> [
+                        [ "raises" ], (fun _ -> failwith "the subscription's start raised")
+                    ])
+                    |> Program.withErrorReporter (fun _ ->
+                        reports <- reports + 1
+                        failwith "the reporter raised")
+                    |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+                    |> Program.withDispatcherHandle (fun _ -> failwith "the sink raised")
+                    |> Program.withEffect (
+                        EffectHandle.programLifetime "raises" (fun _ -> failwith "the effect's start raised")
+                    )
+                    |> Program.runWithDispatch id ())
+
+            Expect.equal reports 4 "the sink, the effect, the subscription and the command each reached the reporter"
+            Expect.equal (occurrences ReporterRaised written) 4 "the guard said so, once per failure"
+
+            for original in
+                [
+                    "the sink raised"
+                    "the effect's start raised"
+                    "the subscription's start raised"
+                    "init's command raised"
+                ] do
+                Expect.stringContains written original "the failure being reported reached the console"
+
+            capturingStderr (fun () -> handle.Value.Dispatch 7) |> ignore
+            Expect.equal (List.ofSeq seen) [ 7 ] "the boot returned with the latch released, and the loop drains"
+        }
+
+        testSequenced
+        <| test "a reporter that throws does not stop Terminate tearing down" {
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let raisingOnDispose (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() =
+                        disposed.Add name
+                        failwith (name + " raised on dispose")
+                }
+
+            let written =
+                capturingStderr (fun () ->
+                    Program.mkProgram (fun () -> [], Cmd.none) (fun msg model -> model @ [ msg ], Cmd.none) (fun _ _ ->
+                        ())
+                    |> Program.withSubscription (fun _ -> [ [ "sub" ], (fun _ -> raisingOnDispose "sub") ])
+                    |> Program.withErrorReporter (fun _ -> failwith "the reporter raised")
+                    |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+                    |> Program.withEffect (EffectHandle.programLifetime "effect" (fun _ -> raisingOnDispose "effect"))
+                    |> Program.runWithDispatch id ()
+
+                    handle.Value.Terminate())
+
+            Expect.equal (List.ofSeq disposed) [ "sub"; "effect" ] "the subscription and the effect were both disposed"
+            Expect.equal (occurrences ReporterRaised written) 2 "the guard said so, once per failure"
+            Expect.isFalse handle.Value.IsActive "…and the program terminated"
         }
     ]

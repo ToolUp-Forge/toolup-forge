@@ -101,6 +101,36 @@ is the oracle, never production.
   for one loop and changes only when the program is re-run (HMR). Nothing should have depended on it
   changing.
 
+## Amendment — the boot sets its latch first, and the reporter cannot wedge the loop
+
+Two defects in the loop this phase re-proved, both older than the phase, fixed on top of it.
+
+**An effect or a sink that dispatches at start is now queued, not drained.** `runWithDispatch` used
+to call the dispatcher-handle sinks, the effect-controller sinks and every effect's start function
+*before* it set the re-entrancy latch. One that dispatched synchronously therefore ran a whole drain
+— `update`, the subscription diff, the command, a paint — ahead of the boot paint. Three things
+followed: the render hook's first model was not the one `init` returned (a hydration mismatch under
+`withReactHydrate`); the boot painted twice; and the boot's subscription diff, computed from the
+init model before anything ran, stopped the subscriptions that drain had started. The latch is now
+set before anything the program supplied is called, so such a message is queued and handed to
+`update` by the boot drain, after the boot paint, ahead of `init`'s command's messages and in the
+order it was raised.
+
+*Who has to do anything:* nobody whose effects only register callbacks, which is every effect the
+SDK ships. An effect of your own that dispatches from its start function, and code that read state
+it expected that message to have produced *before the first render*, now sees it one drain later —
+in the second paint rather than the first.
+
+**An error reporter that throws no longer wedges the loop.** The loop reports a failing `update`,
+command, render hook, sink, effect or subscription through the program's reporter and carries on. If
+the reporter itself raised, the exception escaped the drain with the latch still set, and from then
+on every dispatch queued its message and processed nothing. Every call to the reporter now goes
+through a guard that catches what it raises and writes both failures to the console. A reporter
+that throws is still a defect in the reporter; it is no longer fatal to the program.
+
+`proofs/ElmishLoop.fst` gains the events raised before the boot paint as a parameter and one
+theorem, `boot_paints_init_model`; the other eight were re-proved over the restated boot.
+
 ## What did NOT change
 
 - `withReactSynchronous` keeps its name and is still the default every client calls. Its meaning
