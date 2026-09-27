@@ -627,7 +627,7 @@ jobs:
           # Node-provisioned runner; this job relies on the runner image's
           # preinstalled Node, which is what `VerifyFable`'s PATH probe
           # names when it is missing.
-          EXPECTED_PACKS: 25
+          EXPECTED_PACKS: 27
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded
