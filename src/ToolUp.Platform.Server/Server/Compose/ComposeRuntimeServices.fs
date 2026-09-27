@@ -573,6 +573,46 @@ let registerHealthStateTracker
         )
         |> ignore
 
+/// Phase 856.C — the remoting audit queue and its drain, which take the
+/// default remoting audit write off the response path (`RemotingAuditQueue`
+/// in Api.fs says what that changes and what it never loses).
+///
+/// NOT a `BackgroundSubsystem`, and deliberately not gated by that matrix:
+/// the queue is in-memory and fed by THIS process's HTTP requests, so it
+/// must drain wherever HTTP is served — `WebOnly` included, where a sibling
+/// worker could never reach it. Composed when an audit log is (nothing to
+/// write otherwise, GP 13), when the failure policy is not `RefuseAction`
+/// (whose caller must see the failure, which a write after the response
+/// cannot give), on a `KestrelHost` (a serverless host keeps no drain
+/// alive), and where the HTTP pipeline is mounted. Absent, the default
+/// emitter writes inline exactly as before.
+let internal registerRemotingAuditQueue
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (resolvedLogger: ILogger)
+    : unit =
+    let composed =
+        config.AuditLog = EnabledAuditLog
+        && config.AuditFailurePolicy <> RefuseAction
+        && config.ServerlessHost = KestrelHost
+        && ProcessProfileGate.shouldRegisterHttpPipeline config
+
+    if composed then
+        let queue = RemotingAuditQueue(RemotingAuditQueue.DefaultCapacity)
+        services.AddSingleton<RemotingAuditQueue>(queue) |> ignore
+
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                let metrics () =
+                    match sp.GetService(typeof<Metrics.IMetricsSink>) with
+                    | :? Metrics.IMetricsSink as sink -> sink
+                    | _ -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink
+
+                new RemotingAuditDrainService.RemotingAuditDrainService(queue, resolvedLogger, metrics)
+                :> Microsoft.Extensions.Hosting.IHostedService)
+        )
+        |> ignore
+
 /// Phase 178 — opt-in alert-rule / threshold engine BackgroundService.
 /// Hosted only when `config.AlertRules` is non-empty (GP 13 — an empty
 /// set registers no service and pays no tick cost) AND the ProcessProfile

@@ -6,6 +6,19 @@
 
 **Optional compliance gate.** `TOOLUP_AUDIT_ADMIN_REQUIRED=true` composes the admin-must-be-audited startup gate: any method carrying `[<RequiresRole>]` (Phase 69d) without an `[<Audit>]` annotation refuses startup, naming the record + method. Off by default.
 
+## Ordering: the entry may land AFTER the response (Phase 856)
+
+Since Phase 856 the `Api.make` bridge no longer awaits the `IAuditLog` write on the response path. It enqueues the `RemotingMethodAudited` record on a bounded in-process queue and a hosted service writes it, so a storage-backed audit log no longer adds its write latency to every audited call. **The one observable change: the audit row may appear after the client has its response.** A test or tool that reads the audit trail immediately after an audited call must wait for it (or stop the host, which drains the queue) rather than assume it is already there.
+
+What does NOT change:
+
+- **Nothing is dropped.** A full queue is back-pressure: the record is written inline, as before. A write that fails is classified exactly as a failed audit write always was — the `toolup.audit.write_failures_total` counter and the `[AuditLog] write failed` Warn. Host shutdown drains the queue; a record still queued when the shutdown timeout expires is logged at Error with the count.
+- **`AuditFailurePolicy = RefuseAction` keeps the inline write.** Its contract is that the caller sees the audit failure as a 500, which a write after the response cannot give, so compose does not register the queue under it.
+- **Where no drain can run, the write stays inline:** a `ServerlessHost`, and a `WorkerOnly` silo (no HTTP, so no audited calls). `WebOnly` DOES get the queue — it is fed by this process's own requests, so it drains in this process rather than on a sibling worker.
+- **A consumer-supplied emitter** (`Remoting.withAudit myEmitter`) is untouched: the dispatcher still awaits `Emit`. Only the forge default bridge queues.
+
+Registration: `ComposeRuntimeServices.registerRemotingAuditQueue`; the queue and its rules: `RemotingAuditQueue` in `Server/Api.fs`; the drain: `Server/RemotingAuditDrainService.fs`; the contract: `InProcess/ServerRemotingTailTests.fs`.
+
 ## Diff to apply
 
 ```fsharp

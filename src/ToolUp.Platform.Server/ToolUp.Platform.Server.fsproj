@@ -637,6 +637,9 @@
         <Compile Include="Server\PermissionAuditChain.fs" />
         <Compile Include="Server\AuditLog.fs" />
         <Compile Include="Server\AuditFallbackReplayService.fs" />
+        <!-- Phase 856.C - drains the remoting audit queue (Api.fs) off the
+             response path. After AuditLog.fs (the failure counter it shares). -->
+        <Compile Include="Server\RemotingAuditDrainService.fs" />
         <!-- Phase 120 — default IAuthAuditHook (writes AuthorizationDenied
              via IAuditLog + per-(route,subject) flood guard). After
              AuditLog.fs (uses the audit registry); before the emission

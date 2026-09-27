@@ -1994,6 +1994,7 @@
              materialisation from cached bytes. Same TestServer-scaffold
              deferral as the 69l pack. -->
         <Compile Include="InProcess\DispatcherBodyAndArgFastpathTests.fs" />
+        <Compile Include="InProcess\ServerRemotingTailTests.fs" />
         <!-- Phase 69n — fromContextAsync build-once dispatcher table.
              Textual checks pin the buildDispatcherTable carve-out + the
              `let dispatch = ...` compose-time bind in the FromContextAsync

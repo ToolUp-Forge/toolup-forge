@@ -347,6 +347,17 @@ let rec private makeEndpointProxy<'fieldPart>
 
                             let inp = box bytes :?> 'inp
                             outp (f inp) { props with Arguments = t }
+                        | Choice2Of2 _ :: t when props.FirstArgument.IsSome ->
+                            // Phase 856.B — the adapter's validation stage
+                            // already decoded this argument through the
+                            // same `tryDeserialiseArgWithBackend<'inp>`
+                            // (see `ApiProxy.ParseFirst`); the value is
+                            // reused, never deserialised twice.
+                            outp (f (unbox<'inp> props.FirstArgument.Value)) {
+                                props with
+                                    Arguments = t
+                                    FirstArgument = ValueNone
+                            }
                         | Choice2Of2 argElement :: t ->
                             // Phase 69m: argElement is a self-contained
                             // (Clone'd) `JsonElement`. `JsonElement.Deserialize`
@@ -416,15 +427,48 @@ let rec private makeEndpointProxy<'fieldPart>
                 makeProps.FieldName
                 makeProps.RecordName
 
-let makeApiProxy<'impl, 'ctx>
-    (options: RemotingOptions<'ctx, 'impl>)
-    : InvocationProps<'impl> -> Task<InvocationResult> =
-    let wrap (p: InvocationProps<'a> -> Task<InvocationResult>) =
-        unbox<InvocationProps<'impl> -> Task<InvocationResult>> p
+/// Phase 856.B — a request's arguments, parsed and with the FIRST one
+/// decoded, by the proxy's own argument path, ahead of dispatch.
+type internal ParsedArguments = {
+    /// The outer array's elements, exactly as the dispatch path parses them.
+    Elements: JsonElement list
+    /// `Elements.Head`, decoded through `tryDeserialiseArgWithBackend<'inp>`
+    /// for the method's first parameter type — the value the handler gets.
+    First: obj
+}
 
-    let memberVisitor (shape: IShapeMember<'impl>, flattenedTypes: Type[]) =
+/// Phase 856.B — the proxy, with its argument parse exposed to the adapter.
+///
+/// The validation pre-flight used to parse the buffered body a SECOND time
+/// (`Validation.parseFirstArgFromBody`: text, `JsonDocument`, `GetRawText`,
+/// a plain `JsonSerializer.Deserialize` by `Type`) and then the proxy parsed
+/// it again to dispatch. Worse than the cost, the two decodes were not the
+/// same decode: since Phase 839 the dispatch path resolves a record-scoped
+/// algebra decoder first, so validation could pass or refuse a value the
+/// handler would never have received. `ParseFirst` is the dispatch path's
+/// own parse and first-argument decode, run early; handing its result to
+/// `Invoke` means the body is parsed once and the first argument decoded
+/// once, and validation sees exactly the value the handler is given.
+///
+/// `ParseFirst` answers `ValueNone` for anything it cannot parse or decode —
+/// the refusal stays the dispatch path's to make, with its proper
+/// `DecodeRefused` result, exactly as validation deferred before.
+type internal ApiProxy<'impl> = {
+    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<InvocationResult>
+    /// Endpoint name (the built route, as `InvocationProps.EndpointName`),
+    /// then the cached body bytes.
+    ParseFirst: string -> byte[] -> ParsedArguments voption
+}
+
+type private ProxyEndpoint<'impl> = {
+    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<InvocationResult>
+    ParseFirst: byte[] -> ParsedArguments voption
+}
+
+let internal makeApiProxyWithParse<'impl, 'ctx> (options: RemotingOptions<'ctx, 'impl>) : ApiProxy<'impl> =
+    let memberVisitor (shape: IShapeMember<'impl>, flattenedTypes: Type[]) : ProxyEndpoint<'impl> =
         shape.Accept
-            { new IReadOnlyMemberVisitor<'impl, InvocationProps<'impl> -> Task<InvocationResult>> with
+            { new IReadOnlyMemberVisitor<'impl, ProxyEndpoint<'impl>> with
                 member _.Visit(shape: ReadOnlyMember<'impl, 'field>) =
                     let fieldProxy =
                         makeEndpointProxy<'field> {
@@ -439,7 +483,47 @@ let makeApiProxy<'impl, 'ctx>
                         flattenedTypes.Length = 1
                         || (flattenedTypes.Length = 2 && flattenedTypes[0] = typeof<unit>)
 
-                    wrap (fun (props: InvocationProps<'impl>) -> task {
+                    // Phase 856.B — the first parameter's decode, built once
+                    // per method. Absent for a method with no JSON first
+                    // argument to decode (no-argument, or `unit`).
+                    let decodeFirst: (JsonElement -> Result<obj, DecodeError>) option =
+                        if flattenedTypes.Length < 2 || flattenedTypes[0] = typeof<unit> then
+                            None
+                        else
+                            Some(
+                                TypeShape.Create(flattenedTypes[0]).Accept
+                                    { new ITypeVisitor<JsonElement -> Result<obj, DecodeError>> with
+                                        member _.Visit<'inp>() =
+                                            fun element ->
+                                                tryDeserialiseArgWithBackend<'inp>
+                                                    (Some typeof<'impl>.Name)
+                                                    options.JsonSerializer
+                                                    element
+                                                |> Result.map box
+                                    }
+                            )
+
+                    let parseFirst (bytes: byte[]) : ParsedArguments voption =
+                        match decodeFirst with
+                        | Some decode when bytes.Length > 0 ->
+                            try
+                                match
+                                    parseArgumentArrayBytes
+                                        options.JsonSerializer
+                                        shape.MemberInfo.Name
+                                        (flattenedTypes.Length - 1)
+                                        bytes
+                                with
+                                | first :: _ as elements ->
+                                    match decode first with
+                                    | Ok value -> ValueSome { Elements = elements; First = value }
+                                    | Error _ -> ValueNone
+                                | [] -> ValueNone
+                            with DecodeException _ ->
+                                ValueNone
+                        | _ -> ValueNone
+
+                    let invoke (props: InvocationProps<'impl>) (parsed: ParsedArguments voption) = task {
                         let mutable requestBodyText = None
 
                         try
@@ -448,13 +532,12 @@ let makeApiProxy<'impl, 'ctx>
                                 && not (isNoArg && props.HttpVerb.Equals("GET", StringComparison.OrdinalIgnoreCase))
                             then
                                 return InvalidHttpVerb
-                            elif
-                                props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal)
-                            then
+                            elif props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal) then
                                 let! args = readMultipartArgs props options
 
                                 let props' = {
                                     Arguments = args
+                                    FirstArgument = ValueNone
                                     IsProxyHeaderPresent = props.IsProxyHeaderPresent
                                     Output = props.Output
                                 }
@@ -468,8 +551,12 @@ let makeApiProxy<'impl, 'ctx>
                                 // and no second stream read on `ctx.Request.Body`.
                                 // Fallback (no cache) reads the stream as before.
                                 let! args = task {
-                                    match props.InputBytes with
-                                    | Some bytes when bytes.Length > 0 ->
+                                    match parsed, props.InputBytes with
+                                    | ValueSome p, _ ->
+                                        // Phase 856.B — parsed ahead of dispatch
+                                        // from these same cached bytes.
+                                        return p.Elements |> List.map Choice2Of2
+                                    | ValueNone, Some bytes when bytes.Length > 0 ->
                                         // `requestBodyText` stays None on the
                                         // happy path; the exception arm
                                         // materialises text from these bytes
@@ -481,11 +568,11 @@ let makeApiProxy<'impl, 'ctx>
                                                 (flattenedTypes.Length - 1)
                                                 bytes
                                             |> List.map Choice2Of2
-                                    | Some _ ->
+                                    | ValueNone, Some _ ->
                                         // Empty cached bytes — same shape as
                                         // an empty stream read.
                                         return []
-                                    | None ->
+                                    | ValueNone, None ->
                                         // Phase 461 — the proxy BORROWS
                                         // `props.Input`; it never owns it.
                                         // `props.Input` is `ctx.Request.Body`,
@@ -532,6 +619,10 @@ let makeApiProxy<'impl, 'ctx>
 
                                 let props' = {
                                     Arguments = args
+                                    FirstArgument =
+                                        match parsed with
+                                        | ValueSome p -> ValueSome p.First
+                                        | ValueNone -> ValueNone
                                     IsProxyHeaderPresent = props.IsProxyHeaderPresent
                                     Output = props.Output
                                 }
@@ -579,7 +670,12 @@ let makeApiProxy<'impl, 'ctx>
                                     | _ -> None
 
                             return InvocationResult.Exception(e, shape.MemberInfo.Name, resolvedBodyText)
-                    })
+                    }
+
+                    {
+                        Invoke = invoke
+                        ParseFirst = parseFirst
+                    }
             }
 
     match shapeof<'impl> with
@@ -591,11 +687,28 @@ let makeApiProxy<'impl, 'ctx>
                 memberVisitor (f, TypeInfo.flattenFuncTypes f.Member.Type))
             |> Map.ofArray
 
-        wrap (fun (props: InvocationProps<'impl>) ->
-            match Map.tryFind props.EndpointName endpoints with
-            | Some endpoint -> endpoint props
-            | _ -> Task.FromResult EndpointNotFound)
+        {
+            Invoke =
+                fun (props: InvocationProps<'impl>) parsed ->
+                    match Map.tryFind props.EndpointName endpoints with
+                    | Some endpoint -> endpoint.Invoke props parsed
+                    | _ -> Task.FromResult EndpointNotFound
+            ParseFirst =
+                fun endpointName bytes ->
+                    match Map.tryFind endpointName endpoints with
+                    | Some endpoint -> endpoint.ParseFirst bytes
+                    | None -> ValueNone
+        }
     | _ ->
         failwithf
             "Protocol definition must be encoded as a record type. The input type '%s' was not a record."
             typeof<'impl>.Name
+
+/// The proxy the adapters dispatch through: `InvocationProps` in,
+/// `InvocationResult` out. Phase 856.B left its shape unchanged — it is
+/// `makeApiProxyWithParse` with nothing parsed ahead of dispatch.
+let makeApiProxy<'impl, 'ctx>
+    (options: RemotingOptions<'ctx, 'impl>)
+    : InvocationProps<'impl> -> Task<InvocationResult> =
+    let proxy = makeApiProxyWithParse options
+    fun props -> proxy.Invoke props ValueNone

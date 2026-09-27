@@ -1537,6 +1537,10 @@ let private registeredTests =
         // pack pinning the JsonElement-shaped argument arm + the
         // InputBytes cache plumbing.
         DispatcherBodyAndArgFastpathTests.tests
+        // Phase 856 - the server remoting tail: one deserialise for a
+        // validated method (behavioural, over a TestServer) and the
+        // default audit write off the response path.
+        ServerRemotingTailTests.tests
         // Phase 69n — fromContextAsync build-once dispatcher table.
         // Source-audit pack pinning the `buildDispatcherTable` carve +
         // the compose-time bind in the FromContextAsync arm.
