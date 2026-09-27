@@ -106,6 +106,8 @@ let allTests =
         ModuleInspectStateTests.tests
         // Phase 851.D - the module dispatch prop is stable across renders.
         ModuleDispatchStabilityTests.tests
+        // Phase 851.A - two drains in one task construct the view once.
+        RenderCoalescingTests.tests
         // Phase 537 - the UI-awareness companion's inspect_active_module executor:
         // the live report for the request's active module and both status branches.
         UiAwarenessInspectTests.tests

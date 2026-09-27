@@ -74,6 +74,34 @@ module internal Helpers =
                 placeholderId
         | el -> el
 
+/// Phase 851 — one pending view construction per queue, however many render
+/// hook calls arrive before it runs. `enqueue` is the queue: `queueMicrotask`
+/// for the default mode (one construction per task), `requestAnimationFrame`
+/// for `Batched` (one per frame). The flag is cleared BEFORE the render so a
+/// hook call the render itself provokes (a React effect dispatching
+/// synchronously is not a thing, but a consumer's `setState` wrapper could)
+/// schedules a fresh construction rather than being folded into a finished
+/// one. Internal so the Fable pack can pin the coalescing on the transpiled
+/// code (`RenderCoalescingTests`); the adapter below is its only production
+/// caller.
+type internal RenderScheduler(enqueue: (unit -> unit) -> unit) =
+    let mutable scheduled = false
+
+    /// A construction is queued and has not yet run.
+    member _.Pending = scheduled
+
+    /// Ask for `render` to run once, on the queue — a no-op while one is
+    /// already pending. The `render` that runs is the LAST one requested
+    /// only in the sense that it reads whatever state the caller keeps;
+    /// the scheduler holds no model of its own.
+    member _.Request(render: unit -> unit) =
+        if not scheduled then
+            scheduled <- true
+
+            enqueue (fun () ->
+                scheduled <- false
+                render ())
+
 [<RequireQualifiedAccess>]
 module Program =
 
@@ -96,7 +124,6 @@ module Program =
         let mutable root: obj option = None
         let mutable lastModel: 'model option = None
         let mutable lastDispatch: Dispatch<'msg> option = None
-        let mutable scheduled = false
 
         let actuallyRender () =
             match root, lastModel, lastDispatch with
@@ -105,19 +132,12 @@ module Program =
                 r?render (view) |> ignore
             | _ -> ()
 
-        // One pending construction at a time, whatever the queue. The
-        // flag is cleared BEFORE the render so a hook call the render
-        // itself provokes (a React effect dispatching synchronously is
-        // not a thing, but a consumer's `setState` wrapper could) schedules
-        // a fresh construction rather than being folded into a finished
-        // one.
-        let schedule (enqueue: (unit -> unit) -> unit) =
-            if not scheduled then
-                scheduled <- true
-
-                enqueue (fun () ->
-                    scheduled <- false
-                    actuallyRender ())
+        // The queue the mode coalesces over (see `AppMode`).
+        let scheduler =
+            match mode with
+            | AppMode.Batched -> RenderScheduler(fun k -> window.requestAnimationFrame (fun _ -> k ()) |> ignore)
+            | AppMode.Sync
+            | AppMode.Hydrate -> RenderScheduler queueMicrotask
 
         let setState (model: 'model) (dispatch: Dispatch<'msg>) =
             // First call: mount the root.
@@ -136,11 +156,7 @@ module Program =
 
             lastModel <- Some model
             lastDispatch <- Some dispatch
-
-            match mode with
-            | AppMode.Batched -> schedule (fun k -> window.requestAnimationFrame (fun _ -> k ()) |> ignore)
-            | AppMode.Sync
-            | AppMode.Hydrate -> schedule queueMicrotask
+            scheduler.Request actuallyRender
 
         let installBeforeUnload (dispatcher: IDispatcher<'msg>) =
             // `beforeunload` fires on page navigation, tab close, and

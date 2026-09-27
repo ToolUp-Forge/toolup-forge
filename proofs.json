@@ -91,7 +91,16 @@
     "would need an `assume` the leg refuses, and it extracts as a list regardless (Phase 850). Every theorem was",
     "re-checked on the pinned prover with no flag change - totality, characterisation, the tuple and several-field",
     "lemmas, the width rule and the reference round trip - and the oracle re-emitted; the Phase 784 corpus",
-    "differential holds the shipped array reader to the list model element for element."
+    "differential holds the shipped array reader to the list model element for element.",
+    "",
+    "Phase 851 AMENDED the dispatch-loop model and moved no rung. The render hook now runs once per DRAIN (when the",
+    "ring is empty, with the model the drain ended on) instead of after every `update`, so ElmishLoop.fst gains a",
+    "`dirty` cell, `painted` / `renders` observables, a `paint` transition and a SECOND oracle `render : md -> list ev`",
+    "(the events `setState` raises synchronously). The six theorems were re-proved on the pinned prover with no flag",
+    "change; two are added - `painted_is_model` (unconditional) and `render_once_per_drain` (CONDITIONAL on the render",
+    "oracle being quiet, which the React adapter's hook is; stated as the `assumed` row `elmish-loop-render-oracle-quiet`).",
+    "The differential scripts the post-drain setState dispatch and compares render count and painted model too. The",
+    "async-command start under Fable is `Async.StartImmediate` (no timer hop), justified by `reentrant_no_loss`."
   ],
   "kind": "proofs",
   "version": 1,
@@ -1352,7 +1361,7 @@
     {
       "id": "elmish-loop-reentrant-no-loss",
       "level": "proved",
-      "claim": "A `dispatch` made while the latch is set - from `update`'s command, from `setState`, from a subscription's start - queues its message at the BACK of what is pending, logs it, and processes nothing: the trace, the model and everything already waiting are untouched. Under the latch `dispatch` IS `enqueue`. With exactly-once and in-order, the message can be neither lost nor moved ahead.",
+      "claim": "A `dispatch` made while the latch is set - from `update`'s command, from the post-drain `setState`, from a subscription's start, from an async command that completed synchronously - queues its message at the BACK of what is pending, logs it, and processes and paints nothing: the trace, the model, the paint and everything already waiting are untouched. Under the latch `dispatch` IS `enqueue`. With exactly-once and in-order, the message can be neither lost nor moved ahead. Since Phase 851 this is also what makes `Async.StartImmediate` the Fable async-command start: a command whose body reaches a dispatch before its first real await dispatches under the latch, and the drain already running hands it to `update` in order.",
       "evidence": {
         "theorem": "reentrant_no_loss",
         "model": "proofs/ElmishLoop.fst",
@@ -1365,7 +1374,7 @@
     {
       "id": "elmish-loop-terminated-absorbing",
       "level": "proved",
-      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the model, and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed; a boot drain on a machine terminated before it ran processes nothing.",
+      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the model, or what was painted (Phase 851: `painted` and `renders` are frozen too - a terminated loop paints nothing further), and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed or painted; a boot drain on a machine terminated before it ran still makes its unconditional boot paint and processes nothing.",
       "evidence": {
         "theorem": "terminated_absorbing",
         "model": "proofs/ElmishLoop.fst",
@@ -1380,7 +1389,7 @@
     {
       "id": "elmish-loop-boot-drain-equiv",
       "level": "proved",
-      "claim": "The boot drain - the hand-duplicated `reentered <- true; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events those effects raised under the latch; for a single message it is `dispatch` itself. Proved equivalent; the source is not unified (no behaviour change to the loop).",
+      "claim": "The boot drain - the hand-duplicated `reentered <- true; boot paint; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the boot paint and then the events those effects raised under the latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s`, the paint with the latch released, is where `dispatch` starts). Proved equivalent; the source is not unified.",
       "evidence": {
         "theorem": "boot_drain_equiv",
         "model": "proofs/ElmishLoop.fst",
@@ -1405,20 +1414,55 @@
       }
     },
     {
+      "id": "elmish-loop-painted-is-model",
+      "level": "proved",
+      "claim": "Phase 851. In every idle, non-terminated state a program reaches, nothing is left unpainted and the model the render hook was last handed IS the model: not dirty, and painted == OSome model. Rendering once at the END of the drain has to establish what rendering after every `update` got for free - the last paint saw the last model - and this is that theorem, unconditional on the render oracle (a hook that dispatches re-dirties the model and the drain paints again before it returns).",
+      "evidence": {
+        "theorem": "painted_is_model",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "program_inv",
+          "paint_spec",
+          "loop_spec"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-render-once-per-drain",
+      "level": "proved",
+      "claim": "Phase 851. From an idle, non-terminated state, a `dispatch` that finishes without terminating hands the render hook the model EXACTLY ONCE - however many messages the drain processed, however many the commands re-dispatched - and a `dispatch` that terminates hands it nothing. CONDITIONAL on the render oracle being quiet (`quiet render`: the hook dispatches nothing synchronously), which is the React adapter's `setState`; see the assumed row `elmish-loop-render-oracle-quiet`. Under a hook that dispatches, the drain re-opens and paints again, and `painted_is_model` / `exactly_once` still hold - the differential scripts that case.",
+      "evidence": {
+        "theorem": "render_once_per_drain",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "loop_quiet",
+          "paint_spec",
+          "step_spec"
+        ]
+      }
+    },
+    {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, and IsActive. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain is caught.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, and the model it was last handed. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), and with one paint after the while and no pop after it, are each caught.",
       "evidence": {
         "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
         "cases": [
           "the extracted machine agrees with the production loop over generated reentrancy scripts",
           "every drain in the campaign finished - the fuel bound never decided an agreement",
-          "the campaign re-dispatched from update, from the boot drain, and after Terminate",
+          "the campaign re-dispatched from update, from the boot drain, from the paint, and after Terminate",
           "the hand-transcribed skeleton agrees with the model",
           "a loop that releases the latch before draining is caught - go-red",
+          "a loop that paints after every message is caught - go-red, Phase 851",
+          "a loop that paints once but never re-pops is caught - go-red, Phase 851",
           "a single-message boot drain and a steady-state dispatch process the same trace - boot_drain_equiv, run",
-          "after Terminate nothing is processed and IsActive is false - terminated_absorbing, run",
+          "after Terminate nothing is processed or painted and IsActive is false - terminated_absorbing, run",
+          "a drain of N messages calls the render hook once - render_once_per_drain, run",
+          "the model on screen is the model whenever the loop is idle - painted_is_model, run",
+          "a terminating dispatch paints nothing - render_once_per_drain, the terminated arm, run",
           "the fallback arm drives the two flags apart - the encoding's one exception"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
@@ -1438,9 +1482,18 @@
       "level": "assumed",
       "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. The teardown callbacks on the terminating path are assumed not to dispatch.",
       "evidence": {
-        "assumption": "update, setState, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns"
+        "assumption": "update, subscribe, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns; since Phase 851 setState is a second oracle, a pure function of the model it is handed to the events it raises synchronously"
       },
       "mitigation": "a dispatch a teardown callback made would land in the ring and never be processed, which terminated_absorbing covers; the exception shape is expressible as an oracle reply and could be scripted"
+    },
+    {
+      "id": "elmish-loop-render-oracle-quiet",
+      "level": "assumed",
+      "claim": "Phase 851. `render_once_per_drain` is stated under `quiet render` - the render hook dispatches nothing synchronously. The React adapter's `setState` (`React.fs`) hands the view to React and returns; React 18 commits asynchronously, so no dispatch runs inside the hook. A consumer's own `withSetState` that dispatches synchronously is outside the theorem's hypothesis: the loop still processes its message exactly once (`exactly_once`) and paints the final model (`painted_is_model`), but paints more than once per drain.",
+      "evidence": {
+        "assumption": "the shipped render hook raises no synchronous dispatch and no Terminate"
+      },
+      "mitigation": "the differential scripts a DISPATCHING hook on about a third of its campaign and holds production to the model over it, so the unconditional theorems are measured on the case the conditional one excludes; the quiet case is measured directly by the `render_once_per_drain, run` case (a 17-message fan-out, one paint)"
     },
     {
       "id": "elmish-loop-bridges-hand-written",
