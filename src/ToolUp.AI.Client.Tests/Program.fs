@@ -66,6 +66,10 @@ let allTests =
         // shell's background subscriptions; the admin-tile click-through
         // silent-no-op regression).
         ShellLifetimeEffectsTests.tests
+        // Phase 879 - shell slots: the prepared module list and the
+        // built-ins' admin tiles over reference configurations, pinned by
+        // baselines recorded before the slot refactor.
+        ShellSlotSnapshotTests.tests
         // Phase 610 — the Phase 180 a11y floor over the shell rail's STATES:
         // the real component mounted in each rail state (both widths, both
         // areas, a collapsed group, the hidden-items list, the

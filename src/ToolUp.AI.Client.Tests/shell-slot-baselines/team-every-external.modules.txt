@@ -1,0 +1,23 @@
+custom.home | Custom home | Replacements | - | product | AUTC
+custom.dataManager | Custom dataManager | Replacements | - | product | AUTC
+app.alpha | Alpha | Work | - | product | AUTC
+app.beta | Beta | Work | - | product | AUTC
+custom.teamManager | Custom teamManager | Replacements | - | product | AUTC
+custom.teamConfig | Custom teamConfig | Replacements | - | product | AUTC
+custom.webhookAdmin | Custom webhookAdmin | Replacements | - | product | AUTC
+custom.serviceAccountAdmin | Custom serviceAccountAdmin | Replacements | - | product | AUTC
+custom.externalContactManager | Custom externalContactManager | Replacements | - | product | AUTC
+custom.notificationPreferences | Custom notificationPreferences | Replacements | - | product | AUTC
+custom.moduleVisibilityAdmin | Custom moduleVisibilityAdmin | Replacements | - | product | AUTC
+custom.sessionSecurity | Custom sessionSecurity | Replacements | - | product | AUTC
+custom.permissionsAdmin | Custom permissionsAdmin | Replacements | - | product | AUTC
+custom.usageDashboard | Custom usageDashboard | Replacements | - | product | AUTC
+custom.auditViewer | Custom auditViewer | Replacements | - | product | AUTC
+custom.dataIngestionAdmin | Custom dataIngestionAdmin | Replacements | - | product | AUTC
+custom.platformAdmin | Custom platformAdmin | Replacements | - | product | AUTC
+custom.healthMonitor | Custom healthMonitor | Replacements | - | product | AUTC
+custom.serviceStatusBoard | Custom serviceStatusBoard | Replacements | - | product | AUTC
+custom.dataSubjectRequestAdmin | Custom dataSubjectRequestAdmin | Replacements | - | product | AUTC
+custom.migrationAdmin | Custom migrationAdmin | Replacements | - | product | AUTC
+_sdk.TenantLifecycleAdmin | Tenant Lifecycle | Platform Management | PlatformAdminOnly | product | -UTC
+custom.compositionInspector | Custom compositionInspector | Replacements | - | product | AUTC

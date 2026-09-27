@@ -1,0 +1,8 @@
+_sdk.home | My home | - | - | product | AUTC
+_sdk.DataManager | My uploads | My data | - | product | -UTC
+app.alpha | Alpha | Work | - | product | AUTC
+app.beta | Beta | Work | - | product | AUTC
+_sdk.PlatformAdmin | My platform | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.HealthMonitor | My health | Observability | PlatformAdminOnly | product | -UTC
+_sdk.ServiceStatusBoard | My status | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.TenantLifecycleAdmin | Tenant Lifecycle | Platform Management | PlatformAdminOnly | product | -UTC

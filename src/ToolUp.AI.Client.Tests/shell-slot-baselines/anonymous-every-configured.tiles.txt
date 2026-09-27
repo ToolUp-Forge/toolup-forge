@@ -1,0 +1,4 @@
+_sdk.tile.teams | _sdk.TeamManager | My teams | 10
+_sdk.tile.usage | _sdk.UsageDashboard | My usage | 20
+_sdk.tile.health | _sdk.HealthMonitor | My health | 30
+_sdk.tile.service-status | _sdk.ServiceStatusBoard | My status | 40
