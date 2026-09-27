@@ -47,7 +47,7 @@ Module-level construction is safe because **the customiser is a no-op passthroug
 let withRequestHeaders (options: RemoteBuilderOptions) = options
 ```
 
-The request-guard itself is installed by `SDK.Client.fs`'s `installRequestGuard` at app boot, which patches the browser's `XMLHttpRequest` and `fetch` to attach `identityHeaderPairs ()` (re-reads per call) and the CSRF token (re-reads from `CsrfClient`'s cache per call) before every outgoing `/api/*` request.
+The request-guard itself is installed by `SDK.Client.fs`'s `installRequestGuard` at app boot, which wraps the browser's `fetch` (the proxy's default transport since Phase 855) and `XMLHttpRequest` (the opt-out transport) to attach `identityHeaderPairs ()` (re-reads per call) and the CSRF token (re-reads from `CsrfClient`'s cache per call) before every outgoing `/api/*` request. On the `fetch` path the headers are set on the request's own `Headers` object; the `XMLHttpRequest.prototype` wrap is only reached by a proxy that opted back into XHR.
 
 So: the proxy's construction-time customiser doesn't matter for header freshness — the work happens at the wire, not in the proxy's options record.
 
@@ -60,7 +60,7 @@ The request-guard owns four header keys: `Authorization`, `X-User-Id`, `X-CSRF-T
 
 The doc-comments on `Remoting.withAuthorizationHeader` / `withCustomHeader` carry the same warning at the call site. Use those helpers only for app-specific keys the guard doesn't own, or on proxies that deliberately target an origin the guard excludes.
 
-One more guard behaviour worth knowing: on the `fetch` path, a state-changing request issued before the CSRF token cache is populated **waits (up to 2s) on the shared in-flight token fetch** before dispatching — a fast first click after paint no longer 403s. The XHR path cannot wait (`send()` is synchronous by contract), so XHR-transported Remoting calls in that window still rely on the boot prefetch winning the race.
+One more guard behaviour worth knowing: a state-changing request issued before the CSRF token cache is populated **waits (up to 2s) on the shared in-flight token fetch** before dispatching — a fast first click after paint no longer 403s. Both transports wait: the `fetch` wrapper awaits the token before calling through, and the XHR wrapper defers the real `send()` while the request is still open.
 
 ## When per-call would be needed — re-introducing a snapshot customiser is a regression
 
@@ -167,3 +167,64 @@ change the client learns of some other way (a notification, say).
 
 With nothing registered, `Cmd.OfRemoting` runs its pre-854 path exactly — the check is one count.
 Migration notes and the measured before/after: [`docs/migrations/854-client-read-policies.md`](../migrations/854-client-read-policies.md).
+
+## The transport, and same-tick batching (Phase 855)
+
+### `fetch` is the default transport
+
+Every proxy request goes out through `fetch`. What a call sends is unchanged — the same URL, method,
+headers and body, cookies exactly as XHR sent them without `withCredentials` (`credentials:
+"same-origin"`; `withCredentials = true` is `"include"`) — and so is what a caller sees: a network
+failure is still a `ProxyRequestException` with status 0, which is how XHR reported it, and every other
+status reaches the same error categorisation. Connection reuse (HTTP/1.1 keep-alive, HTTP/2
+multiplexing) is the browser's behaviour for every `fetch`; the `keepalive` request flag is
+deliberately **not** set — it lets a request outlive the page, and the browser caps the bodies of all
+in-flight `keepalive` requests at 64 KiB together, so it would refuse every large upload.
+
+A consumer that needs the old transport opts out page-wide, once, at composition:
+
+```fsharp skip=fragment
+Http.useTransport Http.Transport.Xhr
+```
+
+Streaming methods (`RemoteStream`) always used `fetch` and are unaffected.
+
+### Same-tick calls travel as one request — opt in on both sides
+
+Batching is off until both halves are composed (GP 11):
+
+```fsharp skip=fragment
+// Server composition root — serves POST /api/_batch.
+ServerApp.empty |> ServerApp.withRemotingBatching // ...the rest of the composition
+
+// Client composition — once, before or after the proxies are built.
+RemoteBatching.enable RemoteBatching.DefaultRoute
+```
+
+From then on a proxy call is queued when it is made, and at the next microtask boundary every queued
+call is sent: **one plain request when a call is alone** (exactly the request it sends today), **one
+envelope when more than one is pending** — `POST /api/_batch` with a JSON array of `{ route, body }`.
+The server runs each element through the rest of its pipeline on a request of its own and answers
+`{ status, body }` per element, in order; each call's promise resolves from its element through the
+same decode and error handling a response of its own would have taken.
+
+| Guarantee | How it holds |
+|---|---|
+| Each element is authorised, rate-limited, audited, idempotency-checked and validated individually | the element is a request of its own through scope resolution, surface enforcement, the inbound rate limiters and the dispatcher's per-call seams; the CSRF middleware (which sits ahead of the batch point) is re-applied per element by `ServerApp.withRemotingBatching` |
+| A refusal of one element is that element's, not the envelope's | the element's `status` carries it (401 / 403 / 429 / 400 …); the others are served |
+| Streaming and long-running methods are never batched | the server refuses a whole envelope naming such a route (or a long-running method's `/status`, `/progress`, `/cancel`) with `400 remoting_batch_refused` before running anything, and the client then re-sends those calls one request each |
+| No duplicates in an envelope | the Phase 854 read table runs first: identical in-flight declared reads are one call before anything is queued |
+| Calls with different headers never share an envelope | calls are grouped by base URL, credentials and the proxy's header list |
+
+Not batched: multipart uploads, binary (`withBinarySerialization` / `byte[]`-returning) methods, and
+streaming. Elements run one after another on the server, in order. An envelope carries at most 32
+calls (`RemotingBatchOptions.MaxElements` on the server, `RemoteBatching.enableWith` on the client);
+a larger tick is sent as several envelopes.
+
+**What "same tick" catches today.** Calls started in the same JavaScript task. An Elmish
+`Cmd.OfAsync` / `Cmd.OfRemoting` command currently starts its async behind a `setTimeout` hop, one
+per command, so commands issued by one `update` start in separate tasks and are not coalesced until
+that hop is removed (Phase 851's "no timer hop"); calls started directly (`Async.StartImmediate`,
+promise-returning proxies, several calls inside one async) are coalesced now.
+
+Migration notes and the measured before/after: [`docs/migrations/855-fetch-and-batching.md`](../migrations/855-fetch-and-batching.md).
