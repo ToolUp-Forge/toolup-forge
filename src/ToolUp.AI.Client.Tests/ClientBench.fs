@@ -238,6 +238,10 @@ type private BootChild = {
     ImportMs: float
     RenderMs: float option
     ProxiesBuilt: int
+    /// Phase 853 — `Api.makeProxy` resolutions a GENERATED proxy served.
+    ProxiesGenerated: int
+    /// Phase 853 — proxies whose reflective build waits for a first call.
+    ProxiesDeferred: int
     CounterState: string
     Detail: string
 }
@@ -286,6 +290,8 @@ let private runBootChild (moduleRelative: string) (mode: string) : BootChild =
             ImportMs = 0.0
             RenderMs = None
             ProxiesBuilt = 0
+            ProxiesGenerated = 0
+            ProxiesDeferred = 0
             CounterState = "no report"
             Detail = sprintf "the boot child printed no report (exit %O). stderr tail: %s" result?status (tail stderr)
         }
@@ -302,6 +308,8 @@ let private runBootChild (moduleRelative: string) (mode: string) : BootChild =
                 else
                     Some(unbox<float> r?renderMs)
             ProxiesBuilt = r?proxiesBuilt
+            ProxiesGenerated = r?proxiesGenerated
+            ProxiesDeferred = r?proxiesDeferred
             CounterState = r?counterState
             Detail = if isNull error then "" else error
         }
@@ -539,6 +547,8 @@ let private runAsync (argv: string[]) : Async<int> = async {
     let rendered = boots |> List.filter (fun b -> b.Ok && Option.isSome b.RenderMs)
     let bootStats = rendered |> List.choose _.RenderMs |> stats
     let bootProxies = boots |> List.map _.ProxiesBuilt |> List.distinct
+    let bootGenerated = boots |> List.map _.ProxiesGenerated |> List.distinct
+    let bootDeferred = boots |> List.map _.ProxiesDeferred |> List.distinct
     let bootCounter = boots |> List.map _.CounterState |> List.distinct
 
     for b in boots |> List.filter (fun b -> not b.Ok || Option.isNone b.RenderMs) do
@@ -554,12 +564,14 @@ let private runAsync (argv: string[]) : Async<int> = async {
     | Some s ->
         say (
             sprintf
-                "boot (samples/MinimalClient, import -> first render): min %s ms  median %s ms  max %s ms  (n=%d) · proxies built during boot: %A (counter: %s)"
+                "boot (samples/MinimalClient, import -> first render): min %s ms  median %s ms  max %s ms  (n=%d) · proxies built by reflection during boot: %A, generated: %A, deferred to first call: %A (counter: %s)"
                 (fmt s.Min)
                 (fmt s.Median)
                 (fmt s.Max)
                 s.Count
                 bootProxies
+                bootGenerated
+                bootDeferred
                 (String.Join(", ", bootCounter))
         )
     | None -> say "boot: NO boot reached a first render"
@@ -567,6 +579,8 @@ let private runAsync (argv: string[]) : Async<int> = async {
     let shells = [ for _ in 1..3 -> runBootChild shellModule "import" ]
     let shellStats = shells |> List.filter _.Ok |> List.map _.ImportMs |> stats
     let shellProxies = shells |> List.map _.ProxiesBuilt |> List.distinct
+    let shellGenerated = shells |> List.map _.ProxiesGenerated |> List.distinct
+    let shellDeferred = shells |> List.map _.ProxiesDeferred |> List.distinct
     let shellCounter = shells |> List.map _.CounterState |> List.distinct
 
     for b in shells |> List.filter (fun b -> not b.Ok) do
@@ -576,10 +590,12 @@ let private runAsync (argv: string[]) : Async<int> = async {
     | Some s ->
         say (
             sprintf
-                "shell import (ToolUp.Platform.Client SDK.Client module graph, no render): min %s ms (n=%d) · proxies built at import: %A (counter: %s)"
+                "shell import (ToolUp.Platform.Client SDK.Client module graph, no render): min %s ms (n=%d) · proxies built by reflection at import: %A, generated: %A, deferred to first call: %A (counter: %s)"
                 (fmt s.Min)
                 s.Count
                 shellProxies
+                shellGenerated
+                shellDeferred
                 (String.Join(", ", shellCounter))
         )
     | None -> say "shell import: NOT observed"
@@ -651,6 +667,53 @@ let private runAsync (argv: string[]) : Async<int> = async {
                 (List.length fixtures)
                 DecodeFixtureFloor
         )
+
+    // ── Phase 853 — serialise per call ──
+    // The request body a call builds, both ways, over the Phase 853 encoder
+    // fixture: the reflective proxy's per-call `Convert.serialize` through
+    // the tuple TypeInfo wrapper it rebuilds per call (its argument
+    // `TypeInfo` is built once per proxy, so it is built once here), and
+    // the generated proxy's `JsonEncode.arguments` over the generated
+    // encoder. Each is CHECKED to decode to the value first.
+    let encodeCases =
+        ToolUp.Platform.Tests.Remoting.ClientEncoderFixture.cases
+        |> List.map (fun c -> c, createTypeInfo c.ValueType)
+
+    for (c, _) in encodeCases do
+        match c.DecodesToValue(c.Encode()) with
+        | Ok() -> ()
+        | Error e -> failwithf "ClientBench: the generated encoder for %s does not round-trip: %s" c.Name e
+
+    let encodeRounds (op: ToolUp.Platform.Tests.Remoting.ClientEncoderFixture.EncoderCase * TypeInfo -> obj) = [
+        for _ in 1 .. options.Rounds do
+            let start = now ()
+
+            for _ in 1..passes do
+                for case in encodeCases do
+                    sink <- op case
+
+            (now () - start) * 1000.0 / float (passes * List.length encodeCases)
+    ]
+
+    let reflectiveEncode (c: ToolUp.Platform.Tests.Remoting.ClientEncoderFixture.EncoderCase, info: TypeInfo) =
+        box (Convert.serialize c.Value (TypeInfo.Tuple(fun _ -> [| info |])))
+
+    let generatedEncode (c: ToolUp.Platform.Tests.Remoting.ClientEncoderFixture.EncoderCase, _: TypeInfo) =
+        box ("[" + c.Encode() + "]")
+
+    encodeRounds reflectiveEncode |> ignore
+    encodeRounds generatedEncode |> ignore
+    let reflectiveEncodeRounds = encodeRounds reflectiveEncode
+    let generatedEncodeRounds = encodeRounds generatedEncode
+
+    say (
+        sprintf
+            "serialise per call: reflective Convert.serialize %s us · generated encoder %s us  (min over %d rounds, %d fixture argument(s))"
+            (minOf reflectiveEncodeRounds)
+            (minOf generatedEncodeRounds)
+            options.Rounds
+            (List.length encodeCases)
+    )
 
     // ── Dispatch to render hook ──
     let probe = LoopProbe()
@@ -764,8 +827,14 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "proxiesBuiltAtMinimalClientBoot" ==> Array.ofList bootProxies
             "proxyCounterAtMinimalClientBoot" ==> Array.ofList bootCounter
             "proxiesBuiltAtShellImport" ==> Array.ofList shellProxies
+            "generatedProxiesAtMinimalClientBoot" ==> Array.ofList bootGenerated
+            "deferredProxiesAtMinimalClientBoot" ==> Array.ofList bootDeferred
+            "generatedProxiesAtShellImport" ==> Array.ofList shellGenerated
+            "deferredProxiesAtShellImport" ==> Array.ofList shellDeferred
             "proxyCounterAtShellImport" ==> Array.ofList shellCounter
             "shellImportMsMin" ==> (shellStats |> optMin)
+            "serialisePerCallReflectiveUsMin" ==> (stats reflectiveEncodeRounds |> optMin)
+            "serialisePerCallGeneratedUsMin" ==> (stats generatedEncodeRounds |> optMin)
             "decodeParseNativeUsMin" ==> (stats nativeRounds |> optMin)
             "decodeJsonParseUsMin" ==> (stats parseRounds |> optMin)
             "decodeFixturesExcluded" ==> (excluded |> List.map fst |> Array.ofList)

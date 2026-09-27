@@ -14051,6 +14051,49 @@ ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
 ToolUp.Remoting.Json.JsonDecoders.tryGet(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
 ToolUp.Remoting.Json.JsonDecoders.verifyByTypeWith(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonDecoders.verifyWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonEncode (class)
+ToolUp.Remoting.Json.JsonEncode.arguments(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue]) : System.String
+ToolUp.Remoting.Json.JsonEncode.array`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], T[]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.bool(System.Boolean) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.byte(System.Byte) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.bytes(System.Byte[]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.case0(System.String) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.char(System.Char) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.dateOnly(System.DateOnly) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.dateTime(System.DateTime) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.dateTimeOffset(System.DateTimeOffset) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.decimal(System.Decimal) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.fields(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.float(System.Double) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.float32(System.Single) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.guid(System.Guid) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.int16(System.Int16) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.int32(System.Int32) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.int64(System.Int64) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.list`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpList`1[T]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.map`2(Microsoft.FSharp.Core.FSharpFunc`2[K, System.String], Microsoft.FSharp.Core.FSharpFunc`2[V, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpMap`2[K, V]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.option`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpOption`1[T]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.payload(System.String, ToolUp.Remoting.Json.JsonValue) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.record(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Json.JsonValue]]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.result`2(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[E, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[T, E]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.sbyte(System.SByte) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.set`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpSet`1[T]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.string(System.String) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.timeOnly(System.TimeOnly) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.timeSpan(System.TimeSpan) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.toText(ToolUp.Remoting.Json.JsonValue) : System.String
+ToolUp.Remoting.Json.JsonEncode.tuple2`2(Microsoft.FSharp.Core.FSharpFunc`2[A, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[B, ToolUp.Remoting.Json.JsonValue], A, B) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.tuple3`3(Microsoft.FSharp.Core.FSharpFunc`2[A, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[B, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[C, ToolUp.Remoting.Json.JsonValue], A, B, C) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.tuple4`4(Microsoft.FSharp.Core.FSharpFunc`2[A, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[B, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[C, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[D, ToolUp.Remoting.Json.JsonValue], A, B, C, D) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.uint16(System.UInt16) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.uint32(System.UInt32) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.uint64(System.UInt64) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.unit() : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode+Key (class)
+ToolUp.Remoting.Json.JsonEncode+Key.guid(System.Guid) : System.String
+ToolUp.Remoting.Json.JsonEncode+Key.int32(System.Int32) : System.String
+ToolUp.Remoting.Json.JsonEncode+Key.int64(System.Int64) : System.String
+ToolUp.Remoting.Json.JsonEncode+Key.string : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Remoting.Json.JsonOracleLoss (class)
 ToolUp.Remoting.Json.JsonOracleLoss..ctor(System.Type, System.String)
 ToolUp.Remoting.Json.JsonOracleLoss.Reason : System.String { get }

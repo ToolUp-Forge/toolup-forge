@@ -190,6 +190,11 @@ Revisit only if both change: the JSON follow-on lands and a request-level measur
 
 Closed by Phase 804: the package and the consumer wiring (69k.E), the AOT sample (69k.H), the benchmarks (69k.G), and the pre-flight-chain decision (69k.C).
 
+Phase 853 adds two commands and their build items: `json-decoders` / `<ToolUpRemotingJsonDecoders>`
+(Phase 841's argument decoders for a consumer's own records) and `client-proxies` /
+`<ToolUpRemotingClientProxies>` (generated client proxies that `Api.makeProxy` uses in place of the
+reflective proxy). See [853-generated-client-proxies.md](853-generated-client-proxies.md).
+
 ## See also
 
 - [69-family-overview.md](69-family-overview.md) — family map and adoption sequence.

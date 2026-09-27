@@ -23,7 +23,7 @@ No `()` on the binding; no `()` at the call sites; no wrapping parens around `(f
 
 **Why module-level is preferred:**
 
-1. **One construction, faster boot.** `Api.makeProxy` does a small reflection pass over the API interface to build the dispatcher; doing it once per process beats doing it once per call.
+1. **One construction.** `Api.makeProxy` builds a record of closures; doing it once per process beats doing it once per call. Since Phase 853 that construction does no reflection for a record with a generated proxy, and defers the reflective build of any other record to its first call — see [Generated first](#generated-first--no-reflection-at-boot-or-per-call-phase-853).
 2. **One canonical re-introduction point for any future header-snapshot defect.** If someone ever changes `UserSession.withRequestHeaders` to splice header state, the defect surfaces uniformly at the customiser file — not silently across every per-call site that "looks defensive".
 3. **Reads as a value, not as a thunk.** Calling code says `fooApi.Method args` — the same shape as any other module-level Remoting client. New contributors don't have to grok why one type of API is "called twice" (once to construct, once to invoke).
 4. **Uniform with the rest of the SDK.** The Category-B proxies (`FormsClient`, `AIAssistantUI`, `AISettingsUI`, `AIClientConfig`, `KnowledgeBase/ClientModel`, `KnowledgeBase/PlatformKnowledgeAdminUI`) have always been module-level; the rest of `ToolUp.Platform.Client/Client/` has been converged to match.
@@ -96,6 +96,55 @@ When you add a new `*.Client` companion:
 5. Don't add per-call construction. Don't add a header-snapshot customiser.
 
 If any of these feel wrong for your use case, that's a conversation worth having on a PR review — not a unilateral deviation in your companion.
+
+## Generated first — no reflection at boot or per call (Phase 853)
+
+`Api.makeProxy<'TApi>` resolves a proxy in this order:
+
+1. **A generated proxy** — `ToolUp.Remoting.Generator`'s `client-proxies` emission: per API record,
+   a record VALUE whose fields are closures over generated argument **encoders** (`JsonEncode`, the
+   writer's conventions: members by name, unions by case name, the signed `int64` string), the
+   transport, and a generated response **decoder** (`JsonDecode`). Nothing reflects — no
+   `createTypeInfo` when it is built, no `Convert.serialize` / `Convert.fromJsonAs` per call. The
+   platform's own records are generated and checked in (`PlatformClientProxies`, 37 of 39 records),
+   so every `Api.makeProxy` of a platform record is generated with no composition step. A
+   consumer's records come from `GeneratedProxies.register`, which the consumer's generated
+   module's `registerAll ()` fills.
+2. **Otherwise, a deferred reflective proxy** — the pre-853 proxy, byte for byte on the wire, whose
+   reflective build waits for the record's FIRST CALL instead of running at import. That first call
+   looks for a generated builder again, so one registered at composition — after a module-level
+   proxy was made — is still used.
+
+A generated proxy is declined (and the reflective one used) for options it does not reproduce:
+`withBinarySerialization` (it reads JSON) and `withMultipartOptimization`. A record is not generated
+at all when a method is not `… -> Async<_>` (streaming, promise-shaped), returns `byte[]`, or reaches
+a type the JSON algebra cannot express — the CLI names each skipped record and why. Generated proxies
+compose with the [read policies](#declared-reads--in-flight-sharing-and-stale-while-revalidate-phase-854)
+and [batching](#the-transport-and-same-tick-batching-phase-855) exactly as reflective ones do, and a
+record's `[<Cacheable>]` / `[<Invalidates>]` attributes are EMITTED as its `ReadPolicies.register`
+call — the hand-written declaration list below is unnecessary for a generated record.
+
+**What changes on the wire.** The request BYTES of a generated call are the System.Text.Json
+writer's form (`"+42"` for an `int64`, no spaces) rather than Fable.SimpleJson's; the server's
+argument seam reads both, through the algebra decoder or the converter set, to the same value
+(held over every platform argument type by `ClientProxyGenerationTests` 853.D).
+
+### Consumer recipe
+
+```xml
+<!-- the project whose built assembly carries the API records -->
+<ItemGroup>
+  <PackageReference Include="ToolUp.Remoting.Generator" PrivateAssets="all" />
+  <ToolUpRemotingClientProxies Include="..\MyApp.Client\Generated\ClientProxies.fs"
+                               ApiRecords="MyApp.IOrdersApi" />
+</ItemGroup>
+```
+
+Build, add the file to the client project's `<Compile>` list (after the shared types), and call
+`GeneratedClientProxies.registerAll ()` at client composition. Call sites are unchanged:
+`Api.makeProxy<IOrdersApi> (customOptions = …)` now returns the generated proxy. Skip the item and
+nothing changes except that the reflective proxy is built on first use. Measured before/after and
+the migration notes: [`docs/migrations/853-generated-client-proxies.md`](../migrations/853-generated-client-proxies.md).
 
 ## Declared reads — in-flight sharing and stale-while-revalidate (Phase 854)
 

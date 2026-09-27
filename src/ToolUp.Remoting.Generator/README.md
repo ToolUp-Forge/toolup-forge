@@ -10,6 +10,11 @@ F# source you commit and compile like any other:
   binary responses under `PublishAot`.
 - **Typed argument-parse tables** — per API record, one typed parse per method through the
   statically-typed System.Text.Json seam, and a `methods` manifest.
+- **JSON argument decoders** — per API record, a JSON algebra decoder for every argument type its
+  methods take, registered scoped to the record: what the server's argument seam reads through.
+- **Client proxies** — per API record, argument encoders, response decoders and a proxy builder
+  that `Api.makeProxy` uses in place of the reflective proxy: no `createTypeInfo` when the proxy
+  is built, no `Convert.serialize` per call.
 
 There is no Roslyn source-generator route for F#, so generation runs over the **built** assembly —
 which is also why field positions and union tags are the writer's own enumeration rather than a
@@ -30,9 +35,22 @@ project whose assembly carries the API records:
 </ItemGroup>
 ```
 
+The two JSON emissions are declared the same way:
+
+```xml
+<ItemGroup>
+  <ToolUpRemotingJsonDecoders Include="..\MyApp.Shared\Generated\JsonDecoders.fs"
+                              ApiRecords="MyApp.IOrdersApi" />
+  <ToolUpRemotingClientProxies Include="..\MyApp.Client\Generated\ClientProxies.fs"
+                               ApiRecords="MyApp.IOrdersApi" />
+</ItemGroup>
+```
+
 Build. The files appear (or are left byte-identical when nothing changed); add them to the
-sibling projects' `<Compile>` lists and call `GeneratedDecoders.registerAll ()` from the
-composition root. A project that declares no item is untouched, and
+sibling projects' `<Compile>` lists and call `GeneratedDecoders.registerAll ()` (and
+`GeneratedJsonDecoders.registerAll ()` on the server, `GeneratedClientProxies.registerAll ()` in the
+client) from the composition root. With no `Opens`, the JSON emissions open every namespace their
+types reach. A project that declares no item is untouched, and
 `<ToolUpRemotingGenerate>false</ToolUpRemotingGenerate>` opts a declaring project out for one build.
 
 A wire type the algebra cannot express is refused **by name, with its reason**, and nothing is

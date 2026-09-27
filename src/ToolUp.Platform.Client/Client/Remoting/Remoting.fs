@@ -226,5 +226,92 @@ type Remoting() =
                 "Cannot build proxy. Exepected type %s to be a valid protocol definition which is a record of functions"
                 resolvedType.FullName
 
+    /// Phase 853 — a proxy for the API record `resolvedType` whose real
+    /// proxy is built on its FIRST CALL, by `resolve`, rather than here.
+    ///
+    /// `buildProxy` walks the record's whole type graph (`createTypeInfo`)
+    /// and wraps every field, and because proxies are module-level values
+    /// that cost is paid at import, for every proxy a session will never
+    /// call. This reads only the record's field list and each field's
+    /// arity — no type graph — and gives each field a forwarding closure
+    /// of the same arity that forces `resolve ()` once and calls the real
+    /// proxy's field. A call returns exactly what the real field returns
+    /// (the same `Async` object, so the Phase 854 read table recognises a
+    /// declared read's call as it always has). A field that is an
+    /// `Async<_>` value rather than a function is forwarded as an `Async`
+    /// that runs the real one.
+    ///
+    /// `Api.makeProxy` uses it for every record with no generated proxy;
+    /// `resolve` there consults the generated registry again (a builder a
+    /// composition registered after the proxy was made is found) and falls
+    /// back to `buildProxy`.
+    static member buildLazyProxy(resolvedType: Type, resolve: unit -> obj) : obj =
+        let fields = FSharpType.GetRecordFields resolvedType
+        let real = lazy (FSharpValue.GetRecordFields(resolve ()))
+
+        let rec arityOf (t: Type) =
+            if FSharpType.IsFunction t then
+                let _, range = FSharpType.GetFunctionElements t
+                1 + arityOf range
+            else
+                0
+
+        // One forwarding value per field. A helper rather than an array
+        // comprehension: inside a comprehension F#'s implicit yield would
+        // infer the delegate arms' `unbox` as a unit STATEMENT and drop them.
+        let forward (index: int) : obj =
+            let target () = real.Force().[index]
+
+            match arityOf fields.[index].PropertyType with
+            | 0 ->
+                box (
+                    async {
+                        let! value = unbox<Async<obj>> (target ())
+                        return value
+                    }
+                )
+            | 1 -> box (fun (a: obj) -> (unbox<obj -> obj> (target ())) a)
+            | 2 ->
+                let proxyF (a: obj) (b: obj) =
+                    (unbox<System.Func<obj, obj, obj>> (target ())).Invoke(a, b)
+
+                box (System.Func<_, _, _> proxyF)
+            | 3 ->
+                let proxyF (a: obj) (b: obj) (c: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj>> (target ())).Invoke(a, b, c)
+
+                box (System.Func<_, _, _, _> proxyF)
+            | 4 ->
+                let proxyF (a: obj) (b: obj) (c: obj) (d: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj, obj>> (target ())).Invoke(a, b, c, d)
+
+                box (System.Func<_, _, _, _, _> proxyF)
+            | 5 ->
+                let proxyF (a: obj) (b: obj) (c: obj) (d: obj) (e: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj, obj, obj>> (target ())).Invoke(a, b, c, d, e)
+
+                box (System.Func<_, _, _, _, _, _> proxyF)
+            | 6 ->
+                let proxyF (a: obj) (b: obj) (c: obj) (d: obj) (e: obj) (f: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj, obj, obj, obj>> (target ())).Invoke(a, b, c, d, e, f)
+
+                box (System.Func<_, _, _, _, _, _, _> proxyF)
+            | 7 ->
+                let proxyF (a: obj) (b: obj) (c: obj) (d: obj) (e: obj) (f: obj) (g: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj, obj, obj, obj, obj>> (target ())).Invoke(a, b, c, d, e, f, g)
+
+                box (System.Func<_, _, _, _, _, _, _, _> proxyF)
+            | _ ->
+                let proxyF (a: obj) (b: obj) (c: obj) (d: obj) (e: obj) (f: obj) (g: obj) (h: obj) =
+                    (unbox<System.Func<obj, obj, obj, obj, obj, obj, obj, obj, obj>> (target ()))
+                        .Invoke(a, b, c, d, e, f, g, h)
+
+                box (System.Func<_, _, _, _, _, _, _, _, _> proxyF)
+
+        let recordFields = Array.init fields.Length forward
+
+
+        FSharpValue.MakeRecord(resolvedType, recordFields)
+
     static member inline buildProxy<'t>(options: RemoteBuilderOptions) : 't =
         Remoting.buildProxy (options, typeof<'t>)

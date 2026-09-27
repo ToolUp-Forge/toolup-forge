@@ -156,6 +156,65 @@ type GenerationPlan = {
     RecursiveGroups: string list list
 }
 
+/// Phase 853 — one API record method as a generated client proxy calls it.
+type ClientMethodPlan = {
+    /// The record field's name — the route's method segment.
+    MethodName: string
+    /// One encoder expression per curried argument, in declaration order;
+    /// a `unit` argument is `JsonEncode.unit`, as the reflective proxy
+    /// writes it. Empty for a method that is an `Async<_>` value.
+    ArgumentEncoders: string list
+    /// Whether the call carries a body — `false` for `Async<_>` and
+    /// `unit -> Async<_>`, which the reflective proxy sends as a GET.
+    SendsBody: bool
+    /// The F# source spelling of the response type.
+    ReturnSpelling: string
+    /// The decoder expression that reads the response.
+    ReturnDecoder: string
+}
+
+/// Phase 853 — one method's read policy, as its `[<Cacheable>]` /
+/// `[<Invalidates>]` attributes declare it. Read off the attribute DATA,
+/// so the generator needs no reference to the assembly declaring them.
+type ClientReadPolicy = {
+    /// The method's field name.
+    PolicyMethod: string
+    /// `[<Cacheable(n)>]`'s `n`; `None` for a method that is not a read.
+    MaxAgeSeconds: int option
+    /// `[<Invalidates(…)>]`'s method names, in declaration order.
+    Invalidates: string list
+}
+
+/// Phase 853 — one API record's generated client proxy, as planned.
+type ClientRecordPlan = {
+    /// `Type.Name` — the route's type segment.
+    RecordName: string
+    /// The key the client's proxy registry and read-policy table use for
+    /// the record: its `FullName` with a nested type's `+` written `.`,
+    /// which is how the Fable host spells a type's full name.
+    RecordKey: string
+    /// The record's F# source spelling.
+    RecordSpelling: string
+    /// Every method, in the record's declaration order.
+    Methods: ClientMethodPlan list
+    /// The read policies its attributes declare (Phase 854), emitted as
+    /// the registration a Fable client cannot read off the record itself.
+    ReadPolicies: ClientReadPolicy list
+}
+
+/// Phase 853 — everything one client-proxy generation run decided.
+type ClientPlan = {
+    /// The argument encoders (`Plan.forJsonEncoders`).
+    Encoders: GenerationPlan
+    /// The response decoders (`Plan.forJsonResponseDecoders`).
+    Decoders: GenerationPlan
+    /// The records whose proxies are generated, in the order asked.
+    Records: ClientRecordPlan list
+    /// The records NOT generated, each with its reason. Each keeps the
+    /// reflective proxy, built on its first call.
+    Skipped: Refusal list
+}
+
 [<RequireQualifiedAccess>]
 module Plan =
 
@@ -455,6 +514,44 @@ module Plan =
             typeof<Guid>, "JsonDecode.Key.guid"
         ]
 
+    /// Phase 853 — the JSON wire's primitives WRITTEN: `JsonEncode`'s
+    /// scalars, one per `jsonPrimitiveDecoders` arm, so the two runs admit
+    /// exactly the same primitive set.
+    let private jsonPrimitiveEncoders =
+        dict [
+            typeof<bool>, "JsonEncode.bool"
+            typeof<unit>, "JsonEncode.unit"
+            typeof<string>, "JsonEncode.string"
+            typeof<char>, "JsonEncode.char"
+            typeof<int>, "JsonEncode.int32"
+            typeof<int64>, "JsonEncode.int64"
+            typeof<int16>, "JsonEncode.int16"
+            typeof<sbyte>, "JsonEncode.sbyte"
+            typeof<byte>, "JsonEncode.byte"
+            typeof<uint16>, "JsonEncode.uint16"
+            typeof<uint32>, "JsonEncode.uint32"
+            typeof<uint64>, "JsonEncode.uint64"
+            typeof<float>, "JsonEncode.float"
+            typeof<float32>, "JsonEncode.float32"
+            typeof<decimal>, "JsonEncode.decimal"
+            typeof<Guid>, "JsonEncode.guid"
+            typeof<TimeSpan>, "JsonEncode.timeSpan"
+            typeof<DateTime>, "JsonEncode.dateTime"
+            typeof<DateTimeOffset>, "JsonEncode.dateTimeOffset"
+            typeof<DateOnly>, "JsonEncode.dateOnly"
+            typeof<TimeOnly>, "JsonEncode.timeOnly"
+        ]
+
+    /// Phase 853 — the map keys written: the inverse of each
+    /// `jsonKeyDecoders` entry.
+    let private jsonKeyEncoders =
+        dict [
+            typeof<string>, "JsonEncode.Key.string"
+            typeof<int>, "JsonEncode.Key.int32"
+            typeof<int64>, "JsonEncode.Key.int64"
+            typeof<Guid>, "JsonEncode.Key.guid"
+        ]
+
     /// Phase 841 — which wire a planning run renders combinators for.
     /// The type walk, the naming, the ordering and the cycle grouping are
     /// one algorithm; only the combinator each shape takes differs, so
@@ -467,11 +564,20 @@ module Plan =
         /// `JsonDecode` over `JsonValue` — NAMED records, unions on the
         /// case name (Phase 799), the argument side's wire (Phase 841).
         | Json
+        /// Phase 853 — `JsonEncode` into `JsonValue`: the same wire
+        /// WRITTEN, by the client's generated proxies. The walk, the
+        /// refusals and the naming are the `Json` run's; only the
+        /// combinator each shape takes is the writing one.
+        | JsonEncoding
 
     /// Mutable planning state, private to one `plan` call.
     type private State = {
         /// The wire this run plans for.
         Wire: Wire
+        /// Phase 853 — a prefix every binding name carries (`encode`,
+        /// `decode`), so an encoder and a decoder of one type can share a
+        /// module. Empty for the pre-853 runs, whose names are unchanged.
+        NamePrefix: string
         mutable Ordered: (Type * TypePlan) list // reverse order
         Bound: Collections.Generic.HashSet<Type>
         InProgress: Collections.Generic.HashSet<Type>
@@ -507,12 +613,17 @@ module Plan =
         match state.Names.TryGetValue t with
         | true, n -> n
         | _ ->
-            let preferred = bindingName t
+            let preferred =
+                if state.NamePrefix = "" then
+                    bindingName t
+                else
+                    state.NamePrefix + simpleName t
 
             let qualified =
                 match t.DeclaringType with
                 | null -> preferred
-                | parent -> camelCase (simpleName parent) + simpleName t
+                | parent when state.NamePrefix = "" -> camelCase (simpleName parent) + simpleName t
+                | parent -> state.NamePrefix + simpleName parent + simpleName t
 
             let rec pick candidate n =
                 if not (state.Used.Contains candidate) then candidate
@@ -542,7 +653,8 @@ module Plan =
     let rec private decoderFor (state: State) (t: Type) : string option =
         match state.Wire with
         | MessagePack -> messagePackDecoderFor state t
-        | Json -> jsonDecoderFor state t
+        | Json
+        | JsonEncoding -> jsonDecoderFor state t
 
     /// The MessagePack wire's decoder expression for `t` — Phases 69k–817,
     /// unchanged by Phase 841's wire axis.
@@ -626,15 +738,26 @@ module Plan =
     /// `JsonDecode` twin of each MessagePack arm, and two refusals this
     /// wire has that the binary one does not.
     and private jsonDecoderFor (state: State) (t: Type) : string option =
-        match jsonPrimitiveDecoders.TryGetValue t with
+        // Phase 853 — the combinator names are the only thing the writing
+        // run changes; every branch, and so every refusal, is shared.
+        let writing = state.Wire = JsonEncoding
+        let name (decode: string) (encode: string) = if writing then encode else decode
+
+        let primitives =
+            if writing then
+                jsonPrimitiveEncoders
+            else
+                jsonPrimitiveDecoders
+
+        match primitives.TryGetValue t with
         | true, d -> Some d
         | _ ->
 
             if t = typeof<byte[]> then
-                Some "JsonDecode.asBytes"
+                Some(name "JsonDecode.asBytes" "JsonEncode.bytes")
             elif t.IsArray then
                 jsonDecoderFor state (t.GetElementType())
-                |> Option.map (fun e -> sprintf "JsonDecode.array %s" (arg e))
+                |> Option.map (fun e -> sprintf "%s %s" (name "JsonDecode.array" "JsonEncode.array") (arg e))
             elif isGenericOf optionDef t then
                 let inner = t.GetGenericArguments()[0]
 
@@ -648,20 +771,22 @@ module Plan =
                         "an option of an option — the JSON writer flattens `Some None` to `null`, so the wire cannot carry what the type distinguishes"
                 else
                     jsonDecoderFor state inner
-                    |> Option.map (fun e -> sprintf "JsonDecode.option %s" (arg e))
+                    |> Option.map (fun e -> sprintf "%s %s" (name "JsonDecode.option" "JsonEncode.option") (arg e))
             elif isGenericOf listDef t then
                 jsonDecoderFor state (t.GetGenericArguments()[0])
-                |> Option.map (fun e -> sprintf "JsonDecode.list %s" (arg e))
+                |> Option.map (fun e -> sprintf "%s %s" (name "JsonDecode.list" "JsonEncode.list") (arg e))
             elif isGenericOf setDef t then
                 jsonDecoderFor state (t.GetGenericArguments()[0])
-                |> Option.map (fun e -> sprintf "JsonDecode.asSet %s" (arg e))
+                |> Option.map (fun e -> sprintf "%s %s" (name "JsonDecode.asSet" "JsonEncode.set") (arg e))
             elif isGenericOf mapDef t then
                 let args = t.GetGenericArguments()
 
-                match jsonKeyDecoders.TryGetValue args[0] with
+                let keys = if writing then jsonKeyEncoders else jsonKeyDecoders
+
+                match keys.TryGetValue args[0] with
                 | true, key ->
                     jsonDecoderFor state args[1]
-                    |> Option.map (fun v -> sprintf "JsonDecode.asMap %s %s" key (arg v))
+                    |> Option.map (fun v -> sprintf "%s %s %s" (name "JsonDecode.asMap" "JsonEncode.map") key (arg v))
                 | _ ->
                     refuse
                         state
@@ -673,7 +798,8 @@ module Plan =
                 let args = t.GetGenericArguments()
 
                 match jsonDecoderFor state args[0], jsonDecoderFor state args[1] with
-                | Some ok, Some err -> Some(sprintf "JsonDecode.result %s %s" (arg ok) (arg err))
+                | Some ok, Some err ->
+                    Some(sprintf "%s %s %s" (name "JsonDecode.result" "JsonEncode.result") (arg ok) (arg err))
                 | _ -> None
             elif isReferenceTuple t then
                 // A tuple is an array of its elements on this wire too
@@ -693,7 +819,7 @@ module Plan =
 
                     if planned |> Array.forall Option.isSome then
                         let arguments = planned |> Array.map (Option.get >> arg) |> String.concat " "
-                        Some(sprintf "JsonDecode.tuple%d %s" elements.Length arguments)
+                        Some(sprintf "%s%d %s" (name "JsonDecode.tuple" "JsonEncode.tuple") elements.Length arguments)
                     else
                         None
             elif FSharpType.IsTuple t then
@@ -727,6 +853,10 @@ module Plan =
     and private fieldRead (state: State) (inUnionCase: bool) (position: int) (f: PropertyInfo) : string option =
         match state.Wire with
         | MessagePack -> decoderFor state f.PropertyType
+        // Phase 853 — a written member is its type's encoder; the emitter
+        // supplies the name (a record member) or the position (a case's
+        // field), so the plan carries only the value's writing.
+        | JsonEncoding -> jsonDecoderFor state f.PropertyType
         | Json when inUnionCase ->
             jsonDecoderFor state f.PropertyType
             |> Option.map (fun d -> sprintf "JsonDecode.index %d %s" position (arg d))
@@ -963,9 +1093,10 @@ module Plan =
         bindings, groups
 
     /// One planning run over `roots`, for `wire`.
-    let private forTypesOn (wire: Wire) (roots: Type seq) : GenerationPlan =
+    let private forTypesOn (wire: Wire) (namePrefix: string) (roots: Type seq) : GenerationPlan =
         let state = {
             Wire = wire
+            NamePrefix = namePrefix
             Ordered = []
             Bound = Collections.Generic.HashSet<Type>(HashIdentity.Reference)
             Names = Collections.Generic.Dictionary<Type, string>(HashIdentity.Reference)
@@ -1006,7 +1137,7 @@ module Plan =
     /// Total: a root the algebra cannot express appears in `Refusals` and
     /// nowhere else, and the run still returns a plan for every root that
     /// could be expressed.
-    let forTypes (roots: Type seq) : GenerationPlan = forTypesOn MessagePack roots
+    let forTypes (roots: Type seq) : GenerationPlan = forTypesOn MessagePack "" roots
 
     /// Phase 841 — `forTypes` for the JSON wire: the same walk, naming,
     /// ordering, cycle grouping and refusal discipline, rendering
@@ -1018,7 +1149,23 @@ module Plan =
     /// type. Refused beyond the MessagePack set: an option of an option
     /// (the writer flattens `Some None`) and a map whose key `JsonDecode.Key`
     /// cannot parse.
-    let forJsonTypes (roots: Type seq) : GenerationPlan = forTypesOn Json roots
+    let forJsonTypes (roots: Type seq) : GenerationPlan = forTypesOn Json "" roots
+
+    /// Phase 853 — the JSON wire WRITTEN: `forJsonTypes`' walk over
+    /// `roots` rendering `JsonEncode` combinators, every binding named
+    /// `encode<Type>`. A record member's `FieldPlan.Decoder` is its
+    /// value's encoder expression and a one-field case's payload is the
+    /// field's; the emitter adds the member name. The refusals are
+    /// exactly `forJsonTypes`' over the same roots — one walk, two
+    /// vocabularies — so a type is written by a generated encoder if and
+    /// only if the server's argument seam can read it through a generated
+    /// decoder.
+    let forJsonEncoders (roots: Type seq) : GenerationPlan = forTypesOn JsonEncoding "encode" roots
+
+    /// Phase 853 — `forJsonTypes` with every binding named `decode<Type>`,
+    /// for a module that also carries `forJsonEncoders`' bindings (the
+    /// generated client proxies decode each method's RESPONSE through it).
+    let forJsonResponseDecoders (roots: Type seq) : GenerationPlan = forTypesOn Json "decode" roots
 
     // ─── API records ─────────────────────────────────────────────────
 
@@ -1095,3 +1242,280 @@ module Plan =
         |> Array.filter (fun t -> not t.IsGenericTypeDefinition && isApiRecord t)
         |> Array.sortBy _.FullName
         |> Array.toList
+
+    // ─── Phase 853 — the opens an emission needs ────────────────────
+
+    /// Phase 853 — every namespace `roots` reach through array elements,
+    /// generic arguments, record members and union case fields, sorted:
+    /// the `open` lines an emitted module over them needs, since the
+    /// emitter spells a type by its module-qualified name and leaves the
+    /// namespace to an `open`. `System`, `System.*`, `Microsoft.FSharp.*`
+    /// and the three namespaces every emission already opens
+    /// (`ToolUp.Remoting`, `ToolUp.Remoting.Json`, `ToolUp.Remoting.Client`)
+    /// are left out. The generator's CLI uses it when no `--open` is given.
+    let namespacesReachedBy (roots: Type seq) : string list =
+        let seen = Collections.Generic.HashSet<Type>()
+
+        let rec walk (t: Type) =
+            if seen.Add t then
+                if t.IsArray then
+                    walk (t.GetElementType())
+                elif t.IsGenericType then
+                    t.GetGenericArguments() |> Array.iter walk
+                elif FSharpType.IsRecord(t, true) then
+                    FSharpType.GetRecordFields(t, true) |> Array.iter (fun f -> walk f.PropertyType)
+                elif FSharpType.IsUnion(t, true) then
+                    FSharpType.GetUnionCases(t, true)
+                    |> Array.iter (fun c -> c.GetFields() |> Array.iter (fun f -> walk f.PropertyType))
+
+        roots |> Seq.iter walk
+
+        seen
+        |> Seq.choose (fun t -> Option.ofObj t.Namespace)
+        |> Seq.filter (fun ns ->
+            ns <> "System"
+            && ns <> "ToolUp.Remoting"
+            && ns <> "ToolUp.Remoting.Json"
+            && ns <> "ToolUp.Remoting.Client"
+            && not (ns.StartsWith "Microsoft.FSharp")
+            && not (ns.StartsWith "System."))
+        |> Seq.distinct
+        |> Seq.sort
+        |> List.ofSeq
+
+    // ─── Phase 853 — client proxies ─────────────────────────────────
+
+    /// Phase 853 — the namespaces a client-proxy emission over `apiRecords`
+    /// opens: every namespace the records, their argument types and their
+    /// response types reach (`namespacesReachedBy`).
+    let clientNamespaces (apiRecords: Type list) : string list =
+        namespacesReachedBy (
+            apiRecords
+            @ (apiRecords |> List.collect argumentTypes)
+            @ (apiRecords |> List.collect returnTypes)
+        )
+
+    /// The widest method the reflective proxy builds (`Remoting.buildProxy`).
+    let private widestMethod = 8
+
+    /// A record's key in the client's proxy registry and read-policy
+    /// table: `FullName`, a nested type's `+` written `.` as the Fable
+    /// host writes it.
+    let clientKey (apiRecord: Type) : string = apiRecord.FullName.Replace('+', '.')
+
+    /// Phase 853 — every method of `apiRecord` as the reflective client
+    /// proxy calls it: the name, EVERY curried domain (`unit` included —
+    /// the reflective proxy writes it), and the response type. `Error`
+    /// names why the record cannot have a generated proxy; it then keeps
+    /// the reflective one, so the reasons are the shapes the generated
+    /// transport does not reproduce: a method that is not `… -> Async<_>`
+    /// (a streaming or promise-shaped method), a `byte[]` response (the
+    /// binary read path), or more arguments than the reflective proxy
+    /// supports.
+    let clientMethodsOf (apiRecord: Type) : Result<(string * Type list * Type) list, string> =
+        let rec walk (t: Type) (acc: Type list) =
+            if FSharpType.IsFunction t then
+                let domain, range = FSharpType.GetFunctionElements t
+                walk range (domain :: acc)
+            elif isGenericOf asyncDef t then
+                Some(List.rev acc, t.GetGenericArguments()[0])
+            else
+                None
+
+        let methods =
+            FSharpType.GetRecordFields(apiRecord, true)
+            |> Array.toList
+            |> List.map (fun f ->
+                match walk f.PropertyType [] with
+                | None ->
+                    Error(
+                        sprintf
+                            "method %s does not return Async<_> — a streaming or promise-shaped method keeps the reflective proxy"
+                            f.Name
+                    )
+                | Some(_, returns) when returns = typeof<byte[]> ->
+                    Error(
+                        sprintf "method %s returns byte[] — the binary response path keeps the reflective proxy" f.Name
+                    )
+                | Some(domains, _) when List.length domains > widestMethod ->
+                    Error(
+                        sprintf
+                            "method %s takes %d arguments — the proxy supports %d"
+                            f.Name
+                            (List.length domains)
+                            widestMethod
+                    )
+                | Some(domains, returns) -> Ok(f.Name, domains, returns))
+
+        match
+            methods
+            |> List.tryPick (function
+                | Error why -> Some why
+                | Ok _ -> None)
+        with
+        | Some why -> Error why
+        | None ->
+            Ok(
+                methods
+                |> List.choose (function
+                    | Ok m -> Some m
+                    | Error _ -> None)
+            )
+
+    /// Phase 853 — the read policies `apiRecord`'s attributes declare,
+    /// read by the attributes' NAMES off the metadata (the attributes live
+    /// in `ToolUp.Platform`, which the generator does not reference).
+    let readPoliciesOf (apiRecord: Type) : ClientReadPolicy list = [
+        for f in FSharpType.GetRecordFields(apiRecord, true) do
+            let data = f.GetCustomAttributesData()
+
+            let maxAge =
+                data
+                |> Seq.tryFind (fun a -> a.AttributeType.Name = "CacheableAttribute")
+                |> Option.map (fun a -> a.ConstructorArguments[0].Value :?> int)
+
+            let invalidates =
+                data
+                |> Seq.filter (fun a -> a.AttributeType.Name = "InvalidatesAttribute")
+                |> Seq.collect (fun a ->
+                    match a.ConstructorArguments[0].Value with
+                    | :? Collections.Generic.IReadOnlyCollection<CustomAttributeTypedArgument> as items ->
+                        items |> Seq.map (fun i -> i.Value :?> string)
+                    | _ -> Seq.empty)
+                |> List.ofSeq
+
+            if maxAge.IsSome || not invalidates.IsEmpty then
+                yield {
+                    PolicyMethod = f.Name
+                    MaxAgeSeconds = maxAge
+                    Invalidates = invalidates
+                }
+    ]
+
+    /// Phase 853 — plan generated client proxies for `apiRecords`.
+    ///
+    /// A record is generated when every method has a shape the generated
+    /// transport reproduces (`clientMethodsOf`), every argument type has an
+    /// encoder and every response type a decoder; otherwise it is in
+    /// `Skipped` with the reason, and keeps the reflective proxy. The
+    /// encoders and decoders are planned over the GENERATED records' types
+    /// only, so a skipped record contributes no binding nobody calls.
+    let forClientProxies (apiRecords: Type seq) : ClientPlan =
+        let records = apiRecords |> Seq.distinct |> Seq.toList
+
+        let shapes = records |> List.map (fun r -> r, clientMethodsOf r)
+
+        let argumentRootsOf (methods: (string * Type list * Type) list) =
+            methods
+            |> List.collect (fun (_, domains, _) -> domains)
+            |> List.filter (fun d -> d <> typeof<unit>)
+            |> List.distinct
+
+        let returnRootsOf (methods: (string * Type list * Type) list) =
+            methods |> List.map (fun (_, _, r) -> r) |> List.distinct
+
+        let spellingOf (t: Type) =
+            if isNull t.FullName then t.Name else t.FullName
+
+        // Pass 1: which records every type of which is expressible.
+        let shaped =
+            shapes
+            |> List.choose (fun (r, shape) ->
+                match shape with
+                | Ok methods -> Some(r, methods)
+                | Error _ -> None)
+
+        let probeEncoders =
+            forJsonEncoders (shaped |> List.collect (snd >> argumentRootsOf))
+
+        let probeDecoders =
+            forJsonResponseDecoders (shaped |> List.collect (snd >> returnRootsOf))
+
+        let plannedIn (plan: GenerationPlan) =
+            plan.Roots |> List.map _.RootFullName |> Set.ofList
+
+        let refusalsOf (plan: GenerationPlan) =
+            plan.Refusals
+            |> List.map (fun r -> sprintf "%s: %s" r.RefusedType r.Why)
+            |> String.concat "; "
+
+        let encodable = plannedIn probeEncoders
+        let decodable = plannedIn probeDecoders
+
+        let why (r: Type) =
+            match List.find (fst >> (=) r) shapes |> snd with
+            | Error why -> Some why
+            | Ok methods ->
+                let unwritable =
+                    argumentRootsOf methods
+                    |> List.filter (fun t -> not (encodable.Contains(spellingOf t)))
+
+                let unreadable =
+                    returnRootsOf methods
+                    |> List.filter (fun t -> not (decodable.Contains(spellingOf t)))
+
+                match unwritable, unreadable with
+                | [], [] -> None
+                | t :: _, _ ->
+                    Some(
+                        sprintf
+                            "argument type %s has no JSON encoder (%s) — the record keeps the reflective proxy"
+                            (typeSpelling t)
+                            (refusalsOf probeEncoders)
+                    )
+                | [], t :: _ ->
+                    Some(
+                        sprintf
+                            "response type %s has no JSON decoder (%s) — the record keeps the reflective proxy"
+                            (typeSpelling t)
+                            (refusalsOf probeDecoders)
+                    )
+
+        let generated = shaped |> List.filter (fun (r, _) -> (why r).IsNone)
+
+        // Pass 2: the bindings the generated records actually call.
+        let encoders = forJsonEncoders (generated |> List.collect (snd >> argumentRootsOf))
+
+        let decoders =
+            forJsonResponseDecoders (generated |> List.collect (snd >> returnRootsOf))
+
+        let expressionIn (plan: GenerationPlan) (t: Type) =
+            plan.Roots
+            |> List.find (fun p -> p.RootFullName = spellingOf t)
+            |> _.RootDecoder
+
+        {
+            Encoders = encoders
+            Decoders = decoders
+            Records =
+                generated
+                |> List.map (fun (r, methods) -> {
+                    RecordName = r.Name
+                    RecordKey = clientKey r
+                    RecordSpelling = typeSpelling r
+                    Methods =
+                        methods
+                        |> List.map (fun (name, domains, returns) -> {
+                            MethodName = name
+                            ArgumentEncoders =
+                                domains
+                                |> List.map (fun d ->
+                                    if d = typeof<unit> then
+                                        "JsonEncode.unit"
+                                    else
+                                        expressionIn encoders d)
+                            SendsBody = not (List.isEmpty domains || domains = [ typeof<unit> ])
+                            ReturnSpelling = typeSpelling returns
+                            ReturnDecoder = expressionIn decoders returns
+                        })
+                    ReadPolicies = readPoliciesOf r
+                })
+            Skipped =
+                records
+                |> List.choose (fun r ->
+                    why r
+                    |> Option.map (fun reason -> {
+                        RefusedType = r.FullName
+                        Why = reason
+                    }))
+        }

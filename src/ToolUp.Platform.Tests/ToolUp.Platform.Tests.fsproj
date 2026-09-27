@@ -340,6 +340,10 @@
              equal to the declaration the Fable pack registers (shared fixture). -->
         <Compile Include="Remoting\ReadPolicyFixture.fs" />
         <Compile Include="Remoting\ReadPolicyAttributeTests.fs" />
+        <!-- Phase 853 - the generator's client-proxies emission over ReadCatalogApi:
+             read policies emitted from the attributes. Pinned by
+             ClientProxyGenerationTests; compiled by the Fable pack too. -->
+        <Compile Include="Remoting\ReadCatalogClientProxies.fs" />
         <!-- Phase 855 - the remoting batch route: each element through the
              ordinary per-call pipeline (auth, rate limit, audit, downstream
              middleware); refusals whole and per element. -->
@@ -351,6 +355,10 @@
              784 corpus, and this proves the generator plans the same decode.
              Neither the corpus nor the reader is re-derived here. -->
         <Compile Include="Remoting\GeneratorFidelityTests.fs" />
+        <!-- Phase 853 - generated client proxies and encoders: the platform emission
+             pinned, the census, and cross-host agreement over draws. -->
+        <Compile Include="Remoting\ClientEncoderFixture.fs" />
+        <Compile Include="Remoting\ClientProxyGenerationTests.fs" />
         <!-- Phase 801 — the platform's decoders are the generator's emission over every API
              record, held to it by this pack, and every registration verified against the
              reflection reader here (the recorded run the browser's registerAll relies on). -->
