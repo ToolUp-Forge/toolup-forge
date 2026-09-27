@@ -211,7 +211,7 @@ let tests =
                 contents
                 "InputBytes = None"
                 "Initial props record must declare InputBytes = None. The cache-populated \
-                 version is built just before `proxy propsWithCache` is invoked."
+                 version is built just before `apiProxy.Invoke propsWithCache` is invoked."
         }
 
         test "AspNetCore middleware adapter defaults InputBytes to None" {
