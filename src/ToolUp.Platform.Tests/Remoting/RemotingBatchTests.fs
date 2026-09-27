@@ -114,6 +114,12 @@ let private start (options: RemotingBatchOptions) = async {
                                 lock downstream (fun () ->
                                     downstream.Add((ctx.Request.Method, ctx.Request.Path.Value)))
 
+                                // Test-only: mark a DIRECT request as a batch
+                                // element, to reach the dispatcher's backstop
+                                // without the envelope's route check.
+                                if ctx.Request.Headers.ContainsKey "x-test-as-element" then
+                                    ctx.Items.[RemotingBatch.ElementItemsKey] <- box true
+
                                 next.Invoke ctx)
                         )
                         |> ignore
@@ -373,6 +379,22 @@ let tests =
                     let! status, text = post harness "/BatchedApi/Echo" "[\"alone\"]"
                     Expect.equal status HttpStatusCode.OK "an ordinary call is served"
                     Expect.equal text "\"echo:alone\"" "unchanged by the batch middleware"
+                })
+        }
+
+        testAsync "the dispatcher refuses a streaming call that arrives as a batch element (the backstop)" {
+            do!
+                withHarness RemotingBatch.defaults (fun harness -> async {
+                    use request = new HttpRequestMessage(HttpMethod.Post, "/BatchedApi/Numbers")
+                    request.Content <- new StringContent("[3]", Encoding.UTF8, "application/json")
+                    request.Headers.Add("x-remoting-proxy", "true")
+                    request.Headers.Add("x-test-as-element", "1")
+                    let! response = harness.Client.SendAsync request |> Async.AwaitTask
+                    let! text = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                    Expect.equal response.StatusCode HttpStatusCode.BadRequest "the element is refused"
+                    Expect.stringContains text RemotingBatch.RefusalCode "with the batch refusal code"
+                    Expect.stringContains text "Numbers" "naming the method"
                 })
         }
     ]
