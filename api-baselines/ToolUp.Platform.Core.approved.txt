@@ -13929,7 +13929,7 @@ ToolUp.Remoting.DecodeErrorModule.renderPath(Microsoft.FSharp.Collections.FSharp
 ToolUp.Remoting.DecodeErrorModule.under(System.String, ToolUp.Remoting.DecodeError) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.DecodeException (class)
 ToolUp.Remoting.DecodeException..ctor()
-$CTOR
+ToolUp.Remoting.DecodeException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Remoting.DecodeException..ctor(ToolUp.Remoting.DecodeError)
 ToolUp.Remoting.DecodeException.Data0 : ToolUp.Remoting.DecodeError { get }
 ToolUp.Remoting.DecoderDivergence (class)
@@ -14024,6 +14024,11 @@ ToolUp.Remoting.Json.JsonDecoders.register`1(Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Remoting.Json.JsonDecoders.registered() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
 ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
 ToolUp.Remoting.Json.JsonDecoders.tryGet(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Json.JsonText (class)
+ToolUp.Remoting.Json.JsonText.DefaultMaxDepth : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonText.DefaultMaxMembers : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonText.tryParse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonText.tryParseWith(System.Int32, System.Int32, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.JsonValue (class)
 ToolUp.Remoting.Json.JsonValue.IsArray : System.Boolean { get }
 ToolUp.Remoting.Json.JsonValue.IsBool : System.Boolean { get }
