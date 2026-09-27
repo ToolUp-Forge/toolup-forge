@@ -31,10 +31,9 @@ namespace ToolUp.Platform
 // **Fable-safe floor.** The pack *types* + the pure governance / drift /
 // canonical-JSON helpers are Fable-safe (records, DUs, string building), so
 // `ServerConfig` can carry a pinned-pack field that ships under `fable/`.
-// Only the SHA-256 `hash` and the `load` parser are BCL-bound and guarded
-// under `#if !FABLE_COMPILER` (the JwtCrypto ship-with-guard pattern) — the
-// module declaration stays outside the guard so a Fable consumer transpiles
-// it to a valid module.
+// The BCL-bound half — the SHA-256 `hash`, the `load` parser and the `pin`
+// that carries the hash — is server-tier since Phase 880, in the
+// `DataVocabulary` module ToolUp.Platform.Server declares in this namespace.
 
 /// A field's declared value-type in a vocabulary schema — a closed,
 /// wire-neutral, generic set. Deliberately *not* F#'s type system nor a
@@ -91,13 +90,13 @@ type DataVocabularyPack = {
 type VocabularyPackPin = {
     PackId: string
     Version: VocabularyPackVersion
-    /// Lowercase-hex SHA-256 over the pack's canonical JSON, or `""` on a
-    /// Fable-compiled surface where the BCL hash is unavailable.
+    /// Lowercase-hex SHA-256 over the pack's canonical JSON, computed by the
+    /// server tier's `DataVocabulary.pin`.
     Hash: string
 }
 
 /// Pure governance / drift helpers over `DataVocabularyPack`, plus the
-/// canonical-JSON projection and (server-only) hash + loader.
+/// canonical-JSON projection. The hash, loader and pin are server-tier.
 module DataVocabulary =
 
     /// The current pack canonical-JSON format version — bumped only if the
@@ -247,124 +246,3 @@ module DataVocabulary =
             pack.Version.Major
             pack.Version.Minor
             entries
-
-#if !FABLE_COMPILER
-    /// Lowercase-hex SHA-256 over the pack's canonical JSON. Server-only
-    /// (BCL crypto); the canonical determinism above is what makes it a
-    /// stable pin fingerprint.
-    let hash (pack: DataVocabularyPack) : string =
-        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonicalJson pack))
-        |> System.Convert.ToHexString
-        |> _.ToLowerInvariant()
-
-    /// Load a pack from its canonical JSON. Server-only (`System.Text.Json`
-    /// is not Fable-compatible). Returns `Error` with a descriptive reason
-    /// on malformed input or an unknown field value-type — a pinned pack that
-    /// does not parse is a compose-time defect, not a silent skip.
-    let load (json: string) : Result<DataVocabularyPack, string> =
-        try
-            use doc = System.Text.Json.JsonDocument.Parse json
-            let root = doc.RootElement
-
-            let getString (el: System.Text.Json.JsonElement) (name: string) : Result<string, string> =
-                match el.TryGetProperty name with
-                | true, v when v.ValueKind = System.Text.Json.JsonValueKind.String -> Ok(v.GetString())
-                | _ -> Error(sprintf "missing or non-string property '%s'" name)
-
-            let getInt (el: System.Text.Json.JsonElement) (name: string) : Result<int, string> =
-                match el.TryGetProperty name with
-                | true, v when v.ValueKind = System.Text.Json.JsonValueKind.Number -> Ok(v.GetInt32())
-                | _ -> Error(sprintf "missing or non-numeric property '%s'" name)
-
-            let optString (el: System.Text.Json.JsonElement) (name: string) : string =
-                match el.TryGetProperty name with
-                | true, v when v.ValueKind = System.Text.Json.JsonValueKind.String -> v.GetString()
-                | _ -> ""
-
-            let resultList (items: Result<'a, string> list) : Result<'a list, string> =
-                (Ok [], items)
-                ||> List.fold (fun acc item ->
-                    match acc, item with
-                    | Ok xs, Ok x -> Ok(xs @ [ x ])
-                    | Error e, _ -> Error e
-                    | _, Error e -> Error e)
-
-            let parseField (el: System.Text.Json.JsonElement) : Result<VocabularyField, string> =
-                getString el "name"
-                |> Result.bind (fun name ->
-                    getString el "type"
-                    |> Result.bind (fun typeToken ->
-                        match fieldTypeOfWire typeToken with
-                        | None -> Error(sprintf "field '%s' has unknown value-type '%s'" name typeToken)
-                        | Some fieldType ->
-                            let unit =
-                                match el.TryGetProperty "unit" with
-                                | true, v when v.ValueKind = System.Text.Json.JsonValueKind.String ->
-                                    Some(v.GetString())
-                                | _ -> None
-
-                            Ok {
-                                Name = name
-                                Type = fieldType
-                                Unit = unit
-                                Description = optString el "description"
-                            }))
-
-            let parseEntry (el: System.Text.Json.JsonElement) : Result<VocabularyEntry, string> =
-                getString el "typeName"
-                |> Result.bind (fun typeName ->
-                    let fields =
-                        match el.TryGetProperty "fields" with
-                        | true, arr when arr.ValueKind = System.Text.Json.JsonValueKind.Array ->
-                            arr.EnumerateArray() |> Seq.map parseField |> List.ofSeq |> resultList
-                        | _ -> Ok []
-
-                    fields
-                    |> Result.map (fun fs -> {
-                        TypeName = typeName
-                        Fields = fs
-                        Description = optString el "description"
-                    }))
-
-            getString root "id"
-            |> Result.bind (fun id ->
-                getString root "namespace"
-                |> Result.bind (fun ns ->
-                    match root.TryGetProperty "version" with
-                    | true, ver ->
-                        getInt ver "major"
-                        |> Result.bind (fun major ->
-                            getInt ver "minor"
-                            |> Result.bind (fun minor ->
-                                let entries =
-                                    match root.TryGetProperty "entries" with
-                                    | true, arr when arr.ValueKind = System.Text.Json.JsonValueKind.Array ->
-                                        arr.EnumerateArray() |> Seq.map parseEntry |> List.ofSeq |> resultList
-                                    | _ -> Ok []
-
-                                entries
-                                |> Result.map (fun es -> {
-                                    Id = id
-                                    Namespace = ns
-                                    Version = { Major = major; Minor = minor }
-                                    Entries = es
-                                })))
-                    | _ -> Error "missing 'version' object"))
-        with ex ->
-            Error(sprintf "malformed vocabulary pack JSON: %s" ex.Message)
-#endif
-
-    /// The pinnable `(Id, Version, Hash)` of a pack. `Hash` is `""` on a
-    /// Fable surface (no BCL SHA-256); server-side it carries the canonical
-    /// hash so a counterparty can detect an in-place mutation. Placed after
-    /// the guarded `hash` so the server compile resolves it in-order.
-    let pin (pack: DataVocabularyPack) : VocabularyPackPin = {
-        PackId = pack.Id
-        Version = pack.Version
-        Hash =
-#if FABLE_COMPILER
-            ""
-#else
-            hash pack
-#endif
-    }

@@ -10,8 +10,9 @@ open ToolUp.Platform.Narrative
 // documented irreducible core of the former monolith. A record type is one
 // compilation unit and cannot be split across files without changing its
 // public surface; the `*Mode` DUs it selects between live under
-// Shared/Config/, its companion module (`defaults` + `fromEnv`) in
-// Shared/Config/ServerConfigFromEnv.fs, and the inter-module event types in
+// Shared/Config/, its companion module's `defaults` in
+// Shared/Config/ServerConfigDefaults.fs (the `fromEnv` binder is server-tier
+// since Phase 880), and the inter-module event types in
 // Shared/ModuleEvents.fs.
 
 /// Configuration for the server application

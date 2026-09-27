@@ -10,21 +10,16 @@
          the DLL) and Fable client-tier (consumes the source) — both ship
          in the same nupkg. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <!-- Shared\JwtCrypto.fs is BCL-crypto (System.Security.Cryptography)
-             and is NOT Fable-safe, but it MUST still ship under fable/:
-             the same .fsproj is packed into the nupkg, and it lists
-             JwtCrypto.fs as a <Compile> item. Excluding the .fs file while
-             keeping the Compile reference leaves the packed Fable fsproj
-             pointing at a missing source — Fable then reads it as empty and
-             fails with "must begin with a namespace or module declaration"
-             (FS0222). The file guards itself instead: its `module
-             ToolUp.Platform.JwtCrypto` declaration sits OUTSIDE the
-             `#if !FABLE_COMPILER`, while the whole BCL-crypto body sits
-             inside it, so a Fable consumer transpiles it to a valid empty
-             module. Its real consumers are server-tier (StaticJwt / peer
-             auth / ShareTokenStore), which get the implementation via the
-             Core DLL. This is the same ship-with-guard pattern every other
-             server-only Shared file in Core uses. -->
+        <!-- The same .fsproj is packed into fable/ and Fable compiles every
+             <Compile> item it lists, so a source file listed here is a file
+             every Fable consumer transpiles. Phase 880: what only a server
+             can run (the env binder, the manifest seam, the JWT crypto, the
+             vocabulary hash / loader, the signed-URL probe) moved to
+             ToolUp.Platform.Server, namespaces preserved, rather than
+             shipping here behind a whole-file `#if !FABLE_COMPILER` guard.
+             ArchitectureFitness holds the line: a `#if !FABLE_COMPILER`
+             region in a listed file above the stated size fails the build
+             unless it is a pinned, named exception. -->
         <Content Include="**\*.fsproj;**\*.fs;**\*.svg" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <!-- Phase 11.C.2 closure: pack the parent companion's README. All
@@ -122,14 +117,11 @@
              Api.make consumes them via the AuthAttributeBridge at
              composition time. -->
         <Compile Include="Shared\AuthAttributes.fs" />
-        <!-- Wave 19 TIDY-UP — shared JWT/crypto primitives, consolidating
-             the base64url codec + HS256/HMAC helpers hand-copied across
-             every token site. Base64Url is Fable-safe; JwtCrypto is
-             BCL-crypto but self-guards under Fable (`#if !FABLE_COMPILER`
-             body, module declaration outside) so both ship under fable/.
-             Placed early — every later token/auth file references them. -->
+        <!-- Wave 19 TIDY-UP — the Fable-safe base64url codec shared by every
+             token site. Its HS256/HMAC twin, JwtCrypto, is BCL crypto and
+             lives in ToolUp.Platform.Server since Phase 880. Placed early —
+             every later token/auth file references it. -->
         <Compile Include="Shared\Base64Url.fs" />
-        <Compile Include="Shared\JwtCrypto.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
         <!-- Phase 57 — static-prerender substrate types lifted out of
              Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can
@@ -331,13 +323,6 @@
              generated reference. Before BrandingTypes.fs (BrandingKeys) and
              SDK.Shared.fs (fromEnv). -->
         <Compile Include="Shared\Types\ConfigKeyDescriptor.fs" />
-        <!-- Phase 696 — the per-key resolution seam (env-then-manifest, with
-             provenance). Dependency-free and Fable-safe: the loader that
-             discovers, parses and hashes the manifest file is server-side
-             (System.IO cannot appear in packed source). After
-             ConfigKeyDescriptor.fs and before SDK.Shared.fs, whose
-             `ServerConfig.fromEnv` resolves every key through it. -->
-        <Compile Include="Shared\Types\ConfigResolution.fs" />
         <Compile Include="Shared\Types\ConfigApi.fs" />
         <Compile Include="Shared\Types\BrandingTypes.fs" />
         <Compile Include="Shared\Types\NotificationTypes.fs" />
@@ -437,10 +422,10 @@
         <Compile Include="Shared\Types\LocaleTypes.fs" />
         <!-- Phase 594 — pinned data-vocabulary packs: versioned, immutable
              TypeName → schema documents + governance / drift / canonical-JSON
-             helpers (+ server-only hash / loader). Before SDK.Shared.fs so
-             ServerConfig can carry the pinned-pack + declared-schema fields.
-             Fable-safe types + pure helpers; SHA-256 hash / STJ loader guarded
-             under #if !FABLE_COMPILER (the JwtCrypto ship-with-guard pattern). -->
+             helpers. Before SDK.Shared.fs so ServerConfig can carry the
+             pinned-pack + declared-schema fields. Fable-safe types + pure
+             helpers; the SHA-256 hash, STJ loader and pin are server-tier
+             (Phase 880). -->
         <Compile Include="Shared\DataVocabulary.fs" />
         <!-- Phase 318 — external-compute value types (ExternalHandle /
              ExternalWorkSpec / ExternalOutcome / ExternalComputeError) + the
@@ -512,7 +497,9 @@
         <Compile Include="Shared\SDK.Shared.fs" />
         <Compile Include="Shared\Config\ServerConfigOverrides.fs" />
         <Compile Include="Shared\Config\DeploymentConfig.fs" />
-        <Compile Include="Shared\Config\ServerConfigFromEnv.fs" />
+        <!-- Phase 880 — `ServerConfig.defaults` only; the env binder
+             (`ServerConfig.fromEnv`) is in ToolUp.Platform.Server. -->
+        <Compile Include="Shared\Config\ServerConfigDefaults.fs" />
         <!-- Phase 9u — the event-store decorator chain's position model
              (IEventStoreDecorator + the EventStoreChain walk/check). After
              ModuleEvents.fs, which declares the IEventStore it decorates;
