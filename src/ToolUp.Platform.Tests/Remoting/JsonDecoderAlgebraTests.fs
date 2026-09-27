@@ -1764,4 +1764,272 @@ let tests =
                     | Error _ -> ()
                     | Ok decoded -> failtestf "`%s` should have been refused, decoded to %d" text decoded
         ]
+
+        testList "Phase 885 — the JSON gate verifies against the browser's writer" [
+            let browserGate = JsonDecoders.browserOracle gateOracle
+
+            // The pre-885 `asDecimal`, kept as a probe: a number token only.
+            // Right on every text the SERVER writes, wrong on the browser's
+            // quoted decimal — exactly the decoder 840's one-writer gate
+            // admitted and the browser's first call refused.
+            let numberOnlyDecimal: JsonDecoder<decimal> =
+                function
+                | JsonValue.Number _ as value -> JsonDecode.asDecimal value
+                | value -> Error(DecodeError.create "Decimal" (JsonValue.describe value))
+
+            let decodeText (decoder: JsonDecoder<'T>) (text: string) =
+                JsonRead.tryParse text |> Result.bind decoder
+
+            // The browser texts the SERVER refuses on both of its paths, each
+            // with why. Declared, and asserted still refused, so the list
+            // cannot outlive the fact.
+            let serverRefusesBrowserText = [
+                "NaN: a quoted name",
+                "the converter set reads a double from no string and the algebra's asFloat takes a number token only: a browser NaN argument is refused on both paths, as it was before this phase"
+            ]
+
+            // Measured by this phase's gate and NOT closed by it: a `Map`
+            // whose key is neither primitive nor an enum-like union is written
+            // by the browser as an ARRAY of `[key, value]` pairs, which the
+            // converter set reads and `JsonDecode.asMap` (an object only, keys
+            // read through a member-name `KeyDecoder`) refuses — even empty
+            // (`[]`). Closing it needs a JSON-value key decoder on `asMap` and
+            // in the generator: a successor phase, not a widening of this one.
+            // The gate REFUSES such a decoder against the browser's writer,
+            // which is the gate doing its job; the case is asserted refused
+            // so the declaration goes red the day the successor lands.
+            let browserStrictness: (Type * string) list = [
+                typeof<Map<Outcome, Address>>,
+                "the browser writes a union-keyed Map as an array of [key, value] pairs; asMap reads an object only"
+            ]
+
+            testCase "885.A — the mirror writes every pinned case exactly as the transpiled Fable.SimpleJson does"
+            <| fun () ->
+                Expect.isGreaterThan (List.length BrowserWriterFixture.cases) 40 "the fixture is close to empty"
+
+                for c in BrowserWriterFixture.cases do
+                    Expect.equal (BrowserJsonWriter.serialize c.ValueType c.Value) c.Browser c.Name
+
+            testCase "885.A — the server's reference decode reads every pinned browser text to its value"
+            <| fun () ->
+                for c in BrowserWriterFixture.cases do
+                    match List.tryFind (fun (name, _) -> name = c.Name) serverRefusesBrowserText with
+                    | Some(_, reason) ->
+                        Expect.isError (browserGate.Decode c.ValueType c.Browser) (c.Name + ": " + reason)
+                        Expect.isError (decodeText JsonDecode.asFloat c.Browser) (c.Name + ": " + reason)
+                    | None ->
+                        match browserGate.Decode c.ValueType c.Browser with
+                        | Ok decoded -> Expect.equal (sprintf "%A" decoded) (sprintf "%A" c.Value) c.Name
+                        | Error e ->
+                            failtestf
+                                "%s: the converter set refused the browser's text: %s"
+                                c.Name
+                                (DecodeError.render e)
+
+            testCase
+                "885.B — the gate runs both references: right on the server's text, wrong on the browser's, is refused"
+            <| fun () ->
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed numberOnlyDecimal with
+                | Ok verification ->
+                    Expect.isNone verification.Verification.Divergence "the server writer never quotes a decimal"
+                | Error refusal ->
+                    failtestf "the probe should agree on the server's text: %s" (JsonDecoders.describeRefusal refusal)
+
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed numberOnlyDecimal with
+                | Error(DecoderDiverges { Divergence = Some d }) ->
+                    Expect.equal d.Draw 0 "refused at the browser's first draw"
+                    Expect.stringContains d.Candidate "Error" "the candidate refused the quoted decimal"
+                | other -> failtestf "the browser's quoted decimal was not refused: %A" other
+
+                JsonDecoders.resetForTests ()
+
+                match ToolUp.Remoting.Json.SystemTextJson.FableConverters.registerVerified numberOnlyDecimal with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "`registerVerified` admitted a decoder the browser's text refutes: %A" other
+
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.verifyDecoder
+                        gateDraws
+                        gateSeed
+                        numberOnlyDecimal
+                with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "`verifyDecoder` ran one writer only: %A" other
+
+                Expect.equal (JsonDecoders.count ()) 0 "the refusal registered nothing"
+
+            testCase "885.B — the corpus decoders and the platform set agree with the browser's writer"
+            <| fun () ->
+                let refusals =
+                    covered
+                    |> List.choose (fun (target, decoder) ->
+                        let declared = List.tryFind (fun (t, _) -> t = target) browserStrictness
+
+                        match
+                            JsonDecoders.verifyByTypeWith browserGate gateDraws gateSeed target decoder, declared
+                        with
+                        | Ok _, None -> None
+                        | Error refusal, None -> Some(JsonDecoders.describeRefusal refusal)
+                        | Error(DecoderDiverges _), Some _ -> None
+                        | other, Some(_, reason) ->
+                            Some(sprintf "%s: declared (%s) but the gate said %A" target.FullName reason other))
+
+                Expect.isEmpty refusals (String.Join("\n", refusals))
+
+                for key, result in PlatformJsonDecoders.verifyAll browserGate gateDraws gateSeed do
+                    match result with
+                    | Ok verification ->
+                        for d in verification.DeclaredDifferences do
+                            Expect.equal d.Loss.Type typeof<TimeSpan> (sprintf "%A: draw %d" key d.Draw)
+                    | Error refusal -> failtestf "%A: %s" key (JsonDecoders.describeRefusal refusal)
+
+            testCase "885.B — the browser twin declares the converter set's TimeSpan loss, and says which writer it was"
+            <| fun () ->
+                match JsonDecoders.verifyWith browserGate gateDraws gateSeed JsonDecode.asTimeSpan with
+                | Ok verification ->
+                    Expect.isNonEmpty
+                        verification.DeclaredDifferences
+                        "the browser's millisecond text is read a tick off too"
+
+                    for d in verification.DeclaredDifferences do
+                        Expect.equal d.Loss.Type typeof<TimeSpan> "attributed to the declared loss"
+                        Expect.stringStarts d.Loss.Reason JsonDecoders.BrowserLossPrefix "and to the browser's writer"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+                match
+                    JsonDecoders.verifyWith { browserGate with Losses = [] } gateDraws gateSeed JsonDecode.asTimeSpan
+                with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "an undeclared loss on the browser's text was not a divergence: %A" other
+
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed JsonDecode.asTimeSpan with
+                | Ok verification ->
+                    let browser, server =
+                        verification.DeclaredDifferences
+                        |> List.partition (fun d -> d.Loss.Reason.StartsWith JsonDecoders.BrowserLossPrefix)
+
+                    Expect.isNonEmpty server "the server writer's run is said"
+                    Expect.isNonEmpty browser "and the browser writer's, each naming its writer"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+            testCase
+                "885.C decimal — ADMITTED: a quoted decimal reads exactly, as the converter set's AllowReadingFromString does"
+            <| fun () ->
+                Expect.equal (decodeText JsonDecode.asDecimal "\"1234.5\"") (Ok 1234.5M) "the browser's form"
+
+                Expect.equal
+                    (decodeText JsonDecode.asDecimal "\"79228162514264337593543950335\"")
+                    (Ok 79228162514264337593543950335M)
+                    "every digit, not through a double"
+
+                Expect.equal
+                    (decodeText JsonDecode.asDecimal "\"0.0000000000000000000000000001\"")
+                    (Ok 0.0000000000000000000000000001M)
+                    "the smallest positive"
+
+                Expect.equal (decodeText JsonDecode.asDecimal "1234.50") (Ok 1234.50M) "the number form, unchanged"
+
+                for text in [ "\"abc\""; "\" 1\""; "\"1 \""; "\"+1\""; "\"\""; "\"0x10\""; "\"1e999\"" ] do
+                    match decodeText JsonDecode.asDecimal text with
+                    | Error _ -> ()
+                    | Ok d -> failtestf "`%s` is not a decimal the browser writes, decoded to %M" text d
+
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed JsonDecode.asDecimal with
+                | Ok verification -> Expect.isEmpty verification.DeclaredDifferences "exact on both writers"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+            testCase
+                "885.C TimeSpan — ONE representation: milliseconds as a number token, every writer's spelling to the same tick"
+            <| fun () ->
+                let read = decodeText JsonDecode.asTimeSpan
+
+                // The browser (`90000`), the server and generated encoders
+                // (`90000.0`), and a double's exponent spelling.
+                for text in [ "90000"; "90000.0"; "9e4"; "9E+4" ] do
+                    Expect.equal (read text) (Ok(TimeSpan.FromSeconds 90.0)) text
+
+                Expect.equal (read "1.5") (Ok(TimeSpan.FromTicks 15000L)) "fractional milliseconds, exactly"
+                Expect.equal (read "0.0001") (Ok(TimeSpan.FromTicks 1L)) "one tick"
+                Expect.equal (read "-250.25") (Ok(TimeSpan.FromTicks -2502500L)) "negative"
+
+                // The same span through every writer is the same number.
+                let span = TimeSpan.FromMilliseconds 5400000.25
+                Expect.equal (BrowserJsonWriter.serialize typeof<TimeSpan> (box span)) "5400000.25" "the browser"
+                Expect.equal (JsonEncode.toText (JsonEncode.timeSpan span)) "5400000.25" "the generated encoder"
+                Expect.equal (gateOracle.Write typeof<TimeSpan> (box span)) "5400000.25" "the converter set"
+
+                // No writer uses a second representation (ticks, a string).
+                for c in BrowserWriterFixture.cases do
+                    if c.ValueType = typeof<TimeSpan> then
+                        match JsonRead.tryParse c.Browser with
+                        | Ok(JsonValue.Number _) -> Expect.equal (read c.Browser) (Ok(unbox<TimeSpan> c.Value)) c.Name
+                        | other -> failtestf "%s: the browser wrote a TimeSpan as %A, not a number" c.Name other
+
+            testCase
+                "885.C DateTime — the browser's toISOString reads with its kind: `Z` is UTC, no offset is Unspecified"
+            <| fun () ->
+                match decodeText JsonDecode.asDateTime "\"2026-09-27T10:30:00.123Z\"" with
+                | Ok d ->
+                    Expect.equal d.Kind DateTimeKind.Utc "UTC kind"
+                    Expect.equal d (DateTime(2026, 9, 27, 10, 30, 0, 123, DateTimeKind.Utc)) "the instant"
+                | Error e -> failtest (DecodeError.render e)
+
+                match decodeText JsonDecode.asDateTime "\"2026-01-15T08:05:09.007\"" with
+                | Ok d ->
+                    Expect.equal d.Kind DateTimeKind.Unspecified "Unspecified kind"
+                    Expect.equal d (DateTime(2026, 1, 15, 8, 5, 9, 7)) "its fields"
+                | Error e -> failtest (DecodeError.render e)
+
+            testCase
+                "885 acceptance — a consumer argument's decimal, TimeSpan and DateTime round-trip from each browser writer to the server decoder"
+            <| fun () ->
+                let booking = BrowserWriterFixture.booking
+
+                Expect.equal
+                    (JsonEncode.arguments [ BrowserWriterFixture.bookingEncoder booking ])
+                    BrowserWriterFixture.ServerBody
+                    "the encoder on this host writes the server's spelling"
+
+                Expect.equal
+                    ("["
+                     + BrowserJsonWriter.serialize typeof<BrowserWriterFixture.Booking> (box booking)
+                     + "]")
+                    BrowserWriterFixture.ReflectiveBody
+                    "the mirror writes what the reflective proxy sent"
+
+                let bodies = [
+                    "reflective proxy", BrowserWriterFixture.ReflectiveBody
+                    "generated proxy, in the browser", BrowserWriterFixture.EncodedBody
+                    "server writer", BrowserWriterFixture.ServerBody
+                ]
+
+                for name, body in bodies do
+                    use document = JsonDocument.Parse body
+                    let element = document.RootElement.[0]
+
+                    for route in [ "algebra"; "converter set" ] do
+                        JsonDecoders.resetForTests ()
+
+                        if route = "algebra" then
+                            JsonDecoders.registerFor<BrowserWriterFixture.Booking>
+                                "BookingApi"
+                                BrowserWriterFixture.bookingDecoder
+
+                        match
+                            ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                                (Some "BookingApi")
+                                element
+                                typeof<BrowserWriterFixture.Booking>
+                                jsonOptions
+                        with
+                        | Ok value ->
+                            let b = unbox<BrowserWriterFixture.Booking> value
+                            let label = sprintf "%s via the %s" name route
+                            Expect.equal b booking label
+                            Expect.equal b.At.Kind DateTimeKind.Utc (label + ": UTC kind")
+                            Expect.equal b.Duration.Ticks 54000002500L (label + ": the tick")
+                        | Error e -> failtestf "%s via the %s: refused: %s" name route (DecodeError.render e)
+
+                JsonDecoders.resetForTests ()
+        ]
     ]

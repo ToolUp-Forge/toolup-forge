@@ -70,6 +70,20 @@ asked for. `unsigned` is read by neither reconstruction — the low/high bit pat
 bits regardless of the tag. None of the four records above takes an `int64` argument, so no traffic
 changes for them; a consumer registering a decoder for a record that does may rely on this shape.
 
+**A quoted `decimal` is admitted by `asDecimal` (decided Phase 885)**, because that is how the
+browser writes one: `Fable.SimpleJson` sends `"1234.50"`, which the converter set always read and
+the algebra refused — so a consumer API with a `decimal` argument failed from a reflective client
+once its decoder was registered. The string must hold a JSON number token and nothing else. Two
+companions from the same phase: on the Fable client `asDateTime` now keeps the text's kind (`…Z` is
+`Utc`, not the same instant in an unspecified kind), and **`registerVerified` / `verifyDecoder` /
+the generated `registerAllVerified` now verify against the browser's writer as well as the server's**
+(`JsonDecoders.browserOracle`). A decoder you register through them that reads the server's text but
+refuses the browser's — the pre-885 `asDecimal` was one — is now refused at registration, naming the
+draw; that refusal is a real browser call that would have failed. One such shape is known and not
+yet closed: a `Map` keyed by a union with fields (or a tuple/record) arrives from the browser as an
+array of `[key, value]` pairs, which `asMap` does not read; keep such an argument type on the STJ
+path until its successor phase lands. See `docs/platform/remoting-decoder-algebra.md` §8.
+
 ## Registering your own
 
 ```fsharp skip=fragment

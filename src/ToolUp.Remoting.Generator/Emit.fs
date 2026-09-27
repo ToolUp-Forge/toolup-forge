@@ -642,7 +642,7 @@ module Emit =
             registrations
             |> List.map (fun (record, spelling, decoder) ->
                 sprintf
-                    "            (Some \"%s\", typeof<%s>.FullName), JsonDecoders.verifyWith<%s> oracle draws seed %s"
+                    "            (Some \"%s\", typeof<%s>.FullName), JsonDecoders.verifyBothWith<%s> oracle draws seed %s"
                     record
                     spelling
                     spelling
@@ -681,7 +681,9 @@ module Emit =
             "#if !FABLE_COMPILER"
             "    /// Phase 840's gate over every registration above: each decoder beside"
             "    /// `oracle` (the shipped one is `FableConverters.decoderOracle`) over"
-            "    /// `draws` draws of its own type from `seed`, keyed as `covered` is."
+            "    /// `draws` draws of its own type from `seed`, keyed as `covered` is —"
+            "    /// every draw written by the server's writer AND the browser's"
+            "    /// (Phase 885, `JsonDecoders.verifyBothWith`)."
             "    let verifyAll"
             "        (oracle: JsonDecoderOracle)"
             "        (draws: int)"

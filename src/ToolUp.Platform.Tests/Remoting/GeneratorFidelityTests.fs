@@ -1009,7 +1009,7 @@ let tests =
 
                 Expect.stringContains
                     source
-                    (sprintf "JsonDecoders.verifyWith<%s> oracle draws seed jsonShapeArgument" shape)
+                    (sprintf "JsonDecoders.verifyBothWith<%s> oracle draws seed jsonShapeArgument" shape)
                     "every registration has its Phase 840 verification beside it"
 
                 Expect.stringContains source "let registerAllVerified" "the gated registration is emitted"

@@ -38,9 +38,11 @@ type EncoderCase = {
     Encode: unit -> string
     /// Decode a text through the Phase 841 generated decoder and compare
     /// the result with the value — as INSTANTS where the value carries a
-    /// `DateTime`: the Fable host's `DateTime.TryParse` reads the writer's
-    /// `…Z` text as the same instant in LOCAL kind, which F# equality on
-    /// that host does not equate with the UTC value.
+    /// `DateTime`. Until Phase 885 the Fable host's `asDateTime` read the
+    /// writer's `…Z` text as the same instant in a non-UTC kind, which F#
+    /// equality on that host did not equate with the UTC value; it now
+    /// keeps the text's kind, and the instant comparison stays as the
+    /// weaker claim this fixture needs.
     DecodesToValue: string -> Result<unit, string>
 }
 
