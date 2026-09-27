@@ -398,6 +398,22 @@ type IRemotingDecoderEvidence =
     /// no API records to the facet.
     abstract RemotingDecoders: RemotingDecoderIntegrity option
 
+/// Phase 842 — the argument-side twin of `IRemotingDecoderEvidence`.
+///
+/// A separate sibling interface rather than a second member on it, for
+/// the reason Phase 693 recorded when it cut the first one of these: an
+/// abstract member added to a shipped F# interface is a source break,
+/// because F# cannot author a default implementation and every
+/// hand-written object expression stops compiling. `RemotingDecoderIntegrity`
+/// is reused as-is — it is already tier-neutral over "one API record's
+/// classification against a decoder registry", and the argument facet
+/// classifies the same served set by the same shape, just against
+/// `JsonDecoders` instead of `RemotingDecoders`.
+type IRemotingArgumentDecoderEvidence =
+    /// The argument-decode edge's posture. `None` when this deployment
+    /// declared no API records to the facet.
+    abstract RemotingArgumentDecoders: RemotingDecoderIntegrity option
+
 /// Phase 772 — one composed component's declared outbound authority, as
 /// the egress policy resolved it. Prefixed field names for the Phase 431
 /// inference reason recorded on `ComponentSeamAuthority`.
@@ -519,6 +535,16 @@ module DeploymentVerificationEvidence =
         | :? IRemotingDecoderEvidence as source -> source.RemotingDecoders
         | _ -> None
 
+    /// Phase 842 — read the remoting-ARGUMENT-decoder member off an
+    /// evidence value that carries one. `None` for any evidence that
+    /// does not implement the sibling interface, which is every value
+    /// built before this phase. The same single-read-path discipline
+    /// `seamAuthorityOf` established.
+    let remotingArgumentDecodersOf (evidence: IDeploymentVerificationEvidence) : RemotingDecoderIntegrity option =
+        match box evidence with
+        | :? IRemotingArgumentDecoderEvidence as source -> source.RemotingArgumentDecoders
+        | _ -> None
+
     /// Phase 772 — read the egress member off an evidence value that
     /// carries one. `None` for any evidence that does not implement the
     /// sibling interface, which is every value built before this phase.
@@ -547,6 +573,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = None
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = None
 
           interface IEgressEvidence with
               member _.Egress = None
@@ -577,6 +606,9 @@ module DeploymentVerificationEvidence =
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = None
 
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = None
+
           interface IEgressEvidence with
               member _.Egress = None
         }
@@ -599,6 +631,7 @@ module DeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
@@ -616,6 +649,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
 
           interface IEgressEvidence with
               member _.Egress = egress
@@ -637,6 +673,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
@@ -654,6 +691,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
 
           interface IEgressEvidence with
               member _.Egress = egress
@@ -673,6 +713,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
@@ -690,6 +731,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
 
           interface IEgressEvidence with
               member _.Egress = egress
@@ -709,6 +753,7 @@ module DeploymentVerificationEvidence =
         : IDeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
@@ -726,6 +771,47 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
+        }
+
+    /// Phase 842 — supply the remoting-ARGUMENT-decoder facet, preserving
+    /// every other source. The argument-side twin of
+    /// `withRemotingDecoders`, for the same reason: a sixth argument to
+    /// `create` retypes it, which the public-API approval gate reads as
+    /// a REMOVAL of the five-argument form and which breaks every
+    /// existing call.
+    let withRemotingArgumentDecoders
+        (remotingArgumentDecoders: RemotingDecoderIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
+        let egress = egressOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
 
           interface IEgressEvidence with
               member _.Egress = egress
@@ -746,6 +832,7 @@ module DeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -762,6 +849,9 @@ module DeploymentVerificationEvidence =
 
           interface IRemotingDecoderEvidence with
               member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
 
           interface IEgressEvidence with
               member _.Egress = egress
@@ -1568,6 +1658,87 @@ module DeploymentVerificationReport =
                     ))
                     findings
 
+    // ─── Phase 842 — the twelfth section: the ARGUMENT side of the same
+    // decode edge ────────────────────────────────────────────────────────
+
+    /// The remoting decode edge's argument side (Phase 842).
+    ///
+    /// The twin of `gatherRemotingDecoders`, over the SAME
+    /// `RemotingDecoderIntegrity` shape and the same `decoderFindings`
+    /// renderer, read off the `IRemotingArgumentDecoderEvidence` member
+    /// instead: that section is what the CLIENT decodes (a record's
+    /// method RETURN types), this one is what the SERVER decodes (a
+    /// record's method ARGUMENT types, at the Phase 783 seam). A
+    /// `Reflection` record is `Observed` and never `Failed`, for the same
+    /// reason the response section never fails one: reflection decoding
+    /// is the SDK's shipped default, and the profile's requirement is
+    /// enforced at the boot preflight (`RemotingDecoderFacet.verifyArguments`),
+    /// not by colouring a report line.
+    let gatherRemotingArgumentDecoders (evidence: IDeploymentVerificationEvidence) : ReportSection =
+        let title = "Remoting decode edge — arguments"
+
+        match DeploymentVerificationEvidence.remotingArgumentDecodersOf evidence with
+        | None ->
+            section
+                RemotingArgumentDecoderSection
+                title
+                (VerificationSectionVerdict.NotComposed
+                    "no API record is declared to the remoting-argument-decoder facet, so nothing here says how this deployment's server decodes its clients' arguments")
+                []
+        | Some integrity ->
+            let posture =
+                if integrity.DecoderMandatory then
+                    "mandatory"
+                else
+                    "advisory"
+
+            let binding =
+                sprintf "profile %s, argument algebra decoders %s" integrity.DecoderProfile posture
+
+            let findings = decoderFindings integrity.DecoderRecords
+            let total = List.length integrity.DecoderRecords
+
+            let verified =
+                integrity.DecoderRecords
+                |> List.filter (fun record -> record.RecordClassification = "algebra" && record.RecordCorpusCovered)
+
+            let reflection =
+                integrity.DecoderRecords
+                |> List.filter (fun record -> record.RecordClassification <> "algebra")
+
+            if total = 0 then
+                section
+                    RemotingArgumentDecoderSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf "the facet is composed and declares no API record, so it bounds nothing (%s)" binding
+                    ))
+                    findings
+            elif List.length verified = total then
+                section
+                    RemotingArgumentDecoderSection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "all %d declared API record(s) take every argument through the closed JSON algebra with corpus-covered shapes (%s)"
+                            total
+                            binding
+                    ))
+                    findings
+            else
+                section
+                    RemotingArgumentDecoderSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "%d of %d declared API record(s) take every argument through the closed JSON algebra with corpus-covered shapes; %d still take one or more by reflection over an open type graph (%s)"
+                            (List.length verified)
+                            total
+                            (List.length reflection)
+                            binding
+                    ))
+                    findings
+
     // ─── Phase 713 — the ninth section: the join ─────────────────────────
 
     /// How many hop lines the evidence-chain section carries.
@@ -2310,6 +2481,24 @@ module DeploymentVerificationReport =
                     else
                         None
             }
+            {
+                // Phase 842. The argument-side twin of
+                // "decode-is-not-authorisation" — same bound, other
+                // wire direction. Kept as its own statement rather than
+                // folded into that one, because the two sections compose
+                // independently: a deployment can carry one and not the
+                // other, and a reader should be able to tell which half
+                // of the decode edge this deployment has narrowed.
+                Id = "argument-decode-is-not-authorisation"
+                Statement =
+                    "The remoting argument-decode edge establishes that a client's arguments become a value of the declared type or a named refusal, with bounded length and depth, before any handler runs. It establishes nothing about that value's authorisation, tenancy or session integrity, nothing about its semantic validity, and nothing about the bytes-to-value pass itself, which is BOUNDED rather than proved. Records on the reflection fallback, and argument types with no JSON decoder registered, are outside it entirely."
+                Narrowing =
+                    if isComposed RemotingArgumentDecoderSection then
+                        Some
+                            "the section names every API record this deployment SERVES and which of them take every argument through the closed JSON algebra over corpus-covered shapes, so the boundary is enumerated record by record and its coverage is a ratio over the served set rather than a claim for the deployment as a whole. What it does not narrow is any of the four clauses above."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -2364,6 +2553,11 @@ module DeploymentVerificationReport =
             // each component to reach, and what it refused.
             let egress = gatherEgress evidence
 
+            // Phase 842. The argument-side twin of the Phase 785 section
+            // above — the SERVER's decode of the CLIENT's arguments,
+            // rather than the other way round.
+            let remotingArgumentDecoders = gatherRemotingArgumentDecoders evidence
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
@@ -2393,6 +2587,9 @@ module DeploymentVerificationReport =
                 // Phase 772 appends for the same reason: the report grew
                 // by one section, and every earlier line keeps its place.
                 egress
+                // Phase 842 appends for the same reason: the report grew
+                // by one section, and every earlier line keeps its place.
+                remotingArgumentDecoders
             ]
 
             let notProved = notProvedFor sections
