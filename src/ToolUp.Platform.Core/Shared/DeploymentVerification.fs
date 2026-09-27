@@ -259,6 +259,18 @@ module DeploymentVerification =
     [<Literal>]
     let EgressSection = "egress"
 
+    /// Phase 842 — the twelfth section: which of this deployment's
+    /// registered API records take every argument through the closed
+    /// JSON decoder algebra, and which still decode one or more
+    /// arguments by reflection at the Phase 783 seam.
+    ///
+    /// The argument-side twin of `RemotingDecoderSection`: that section
+    /// is the CLIENT's decode of the server's RESPONSE; this one is the
+    /// SERVER's decode of the client's ARGUMENTS — the other direction
+    /// across the same decode edge, on the other wire.
+    [<Literal>]
+    let RemotingArgumentDecoderSection = "remoting-argument-decoders"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

@@ -983,7 +983,7 @@ let tests =
         ]
 
         testList "the served argument facet" [
-            testCase "coverage is a ratio over the served set by ARGUMENT types, advisory under every profile"
+            testCase "coverage is a ratio over the served set by ARGUMENT types, advisory under Standard"
             <| fun () ->
                 ToolUp.Platform.ServedApiRecords.resetForTests ()
                 JsonDecoders.resetForTests ()
@@ -997,9 +997,15 @@ let tests =
                 // regardless of what the platform set later adds.
                 ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
 
+                // Phase 842 made the facet follow the profile
+                // (`requiresAlgebraDecoders`), the same predicate the
+                // response facet has used since Phase 801 — so this case,
+                // which is about the STANDARD (advisory) reading, now
+                // inspects under Standard rather than Verified. The
+                // Verified/mandatory reading is "Phase 842" below.
                 let facet =
                     ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
-                        ToolUp.Platform.CompositionProfile.Verified
+                        ToolUp.Platform.CompositionProfile.Standard
 
                 Expect.equal
                     (ToolUp.Platform.RemotingDecoderFacet.coverage facet)
@@ -1010,11 +1016,11 @@ let tests =
                     facet.FacetBindings |> List.find (fun b -> b.DecoderApiRecord = "ProbeApi")
 
                 Expect.equal probe.DecoderUncovered [ typeof<string>.FullName ] "the uncovered argument type is named"
-                Expect.isFalse facet.FacetRequired "advisory even under Verified — see the facet's own note"
+                Expect.isFalse facet.FacetRequired "advisory under Standard"
 
                 Expect.isOk
-                    (ToolUp.Platform.RemotingDecoderFacet.verify facet)
-                    "so the verified profile does not refuse on it"
+                    (ToolUp.Platform.RemotingDecoderFacet.verifyArguments facet)
+                    "not required under Standard, so nothing refuses"
 
                 Expect.stringContains
                     (ToolUp.Platform.RemotingDecoderFacet.describeArguments facet)
@@ -1572,5 +1578,181 @@ let tests =
                         match JsonDecoders.verifyByTypeWith gateOracle gateDraws gateSeed m.Target decoder with
                         | Ok verification -> Expect.isNone verification.Verification.Divergence name
                         | Error refusal -> failtestf "`%s`: %s" name (JsonDecoders.describeRefusal refusal)
+        ]
+
+        testList "Phase 842 — the argument facet becomes mandatory under the verified profile" [
+            testCase "842.A — mandatory under Verified, advisory under Standard"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+                PlatformJsonDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
+
+                let standard =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Standard
+
+                Expect.isFalse standard.FacetRequired "the argument facet stays advisory under Standard"
+
+                let verified =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Verified
+
+                Expect.isTrue
+                    verified.FacetRequired
+                    "mandatory under Verified since Phase 842, following the response facet since Phase 801"
+
+                // 842.E — a Verified deployment serving only platform
+                // records (fully covered by Phase 841's generated
+                // decoders) boots.
+                Expect.isOk
+                    (ToolUp.Platform.RemotingDecoderFacet.verifyArguments verified)
+                    "IPresenceApi's arguments are fully covered by PlatformJsonDecoders (Phase 841), so a Verified deployment serving only platform records boots"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+
+            testCase
+                "842.B/C — a Verified deployment serving an unregistered consumer record refuses, naming the record and its uncovered argument types"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+                PlatformJsonDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
+                // ProbeApi (this file's local record, `DoThing: string -> Async<unit>`)
+                // stands in for "a consumer's own record" — registered
+                // nowhere, so its `string` argument stays uncovered.
+                ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
+
+                let verified =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Verified
+
+                match ToolUp.Platform.RemotingDecoderFacet.verifyArguments verified with
+                | Ok() -> failtest "a served record with an unregistered argument type must refuse under Verified"
+                | Error(ToolUp.Platform.RemotingArgumentDecodersUnregistered records) ->
+                    Expect.equal (List.map fst records) [ "ProbeApi" ] "the refusal names the served record"
+
+                    Expect.equal
+                        (records |> List.tryFind (fun (r, _) -> r = "ProbeApi") |> Option.map snd)
+                        (Some [ typeof<string>.FullName ])
+                        "the refusal names the uncovered argument type beside the record"
+
+                    let message =
+                        ToolUp.Platform.CompositionProfileRefusal.describe (
+                            ToolUp.Platform.RemotingArgumentDecodersUnregistered records
+                        )
+
+                    Expect.stringContains message "ProbeApi" "the operator-facing message names the record"
+
+                    Expect.stringContains
+                        message
+                        typeof<string>.FullName
+                        "the operator-facing message names the uncovered type, not just that something is missing"
+                | Error other -> failtestf "expected RemotingArgumentDecodersUnregistered, got %A" other
+
+                // 842.C — the same served set under Standard is
+                // unaffected: the gap is the same, but nothing refuses.
+                let standard =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Standard
+
+                Expect.isOk
+                    (ToolUp.Platform.RemotingDecoderFacet.verifyArguments standard)
+                    "Standard never refuses on the argument facet — register the consumer's own decoders, or stay on Standard"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+
+            testCase "842.E — the deployment report renders the argument-decoder ratio on both sides"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+                PlatformJsonDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
+
+                let coveredEvidence =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Verified
+                    |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+                    |> Some
+                    |> fun integrity ->
+                        ToolUp.Platform.DeploymentVerificationEvidence.none
+                        |> ToolUp.Platform.DeploymentVerificationEvidence.withRemotingArgumentDecoders integrity
+
+                let coveredSection =
+                    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingArgumentDecoders coveredEvidence
+
+                // `inspectServedArguments` hardcodes `DecoderCorpusCovered
+                // = false` throughout (the wire corpus draws its own
+                // types, never a platform argument type — see the
+                // facet's own doc comment), so this section can never
+                // read `Verified`, only `Observed` — an honest ceiling,
+                // not a gap in this test — and its summary counts
+                // corpus-covered records, which is zero here even though
+                // IPresenceApi is fully algebra-covered. The per-record
+                // FINDING is what actually renders that: one line,
+                // naming IPresenceApi, with nothing uncovered.
+                match coveredSection.Verdict with
+                | ToolUp.Platform.VerificationSectionVerdict.Observed summary ->
+                    Expect.stringContains
+                        summary
+                        "of 1 declared API record(s)"
+                        "the fully-covered side renders the denominator"
+
+                    Expect.stringContains
+                        summary
+                        "0 still take one or more by reflection"
+                        "nothing is left on the reflection path"
+                | other -> failtestf "expected Observed, got %A" other
+
+                Expect.equal
+                    coveredSection.Findings
+                    [ "IPresenceApi: algebra, corpus coverage NOT declared" ]
+                    "the fully-covered side's one finding names the record, fully covered"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+                PlatformJsonDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
+
+                let partialEvidence =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Verified
+                    |> ToolUp.Platform.RemotingDecoderFacet.toIntegrity
+                    |> Some
+                    |> fun integrity ->
+                        ToolUp.Platform.DeploymentVerificationEvidence.none
+                        |> ToolUp.Platform.DeploymentVerificationEvidence.withRemotingArgumentDecoders integrity
+
+                let partialSection =
+                    ToolUp.Platform.DeploymentVerificationReport.gatherRemotingArgumentDecoders partialEvidence
+
+                match partialSection.Verdict with
+                | ToolUp.Platform.VerificationSectionVerdict.Observed summary ->
+                    Expect.stringContains
+                        summary
+                        "of 2 declared API record(s)"
+                        "the partially-covered side renders the denominator"
+
+                    Expect.stringContains
+                        summary
+                        "1 still take one or more by reflection"
+                        "the uncovered record shows up in the reflection count"
+                | other -> failtestf "expected Observed, got %A" other
+
+                Expect.equal
+                    partialSection.Findings
+                    [
+                        "IPresenceApi: algebra, corpus coverage NOT declared"
+                        sprintf
+                            "ProbeApi: reflection, corpus coverage NOT declared — no decoder for %s"
+                            typeof<string>.FullName
+                    ]
+                    "the partially-covered side's findings name both records, one still uncovered"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
         ]
     ]
