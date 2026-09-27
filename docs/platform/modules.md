@@ -365,6 +365,65 @@ This isn't a style preference, and it is worth knowing exactly what the runtime 
 
 So the cost of a dispatch is `update` plus one view construction per task — not one per message. What that does **not** change is why free-typing inputs stay in local state: every keystroke is its own browser task, so per-keystroke dispatch still costs one `update` and one whole-module view build per character, on the input's critical path, where `React.useState` costs a re-render of the input alone. Reach for the model when the value is *meaning* the rest of the module reacts to (a committed filter, a submitted query); keep it local while it is *typing*. Where a module genuinely wants to dispatch per keystroke — a live search that must round-trip through `update` — the shell's scheduling means it pays one drain and one paint per keystroke, which is the floor, and the cost that remains is the module's own `update` and `view`.
 
+## Return the same state when nothing changed
+
+**The rule.** When `update` handles a message that leaves the module's state as it was, return the
+state it was handed — the same object — not a copy of it:
+
+```fsharp
+type Model = { Selected: string option }
+
+type Msg =
+    | Select of string
+    | Refresh
+
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    match msg with
+    | Select id when model.Selected = Some id -> model, Cmd.none // unchanged: the SAME model
+    | Select id -> { model with Selected = Some id }, Cmd.none // changed: a new one
+    | Refresh -> model, Cmd.none // a command would go here; the state did not change
+```
+
+Most modules already do this by construction — `model, Cmd.none` and `model, someCommand` return
+the input — and the ones that do not usually rebuild a record with `{ model with X = model.X }` or
+re-map a list that did not change. The rule costs nothing to follow and it is what the next
+paragraph relies on.
+
+**What it buys (since Phase 852).** `Client.run` mounts the shell on a model store
+(`Program.withReactStore`): the shell's chrome and the active module are two separate React
+boundaries, and each re-renders only when the slice it reads changes **by reference**. The active
+module's boundary reads `ModuleStates[yourModuleId]`; the shell stores exactly what your `update`
+returned there (`Map.add` leaves every other module's entry the same object). So:
+
+- a message that changes your state re-renders **your module and nothing else** — the sidebar,
+  header, overlays and providers are not rebuilt;
+- a message that changes only the shell (the command palette, a sidebar toggle, a team switch that
+  does not reset you) re-renders **the chrome and not your module**;
+- a message your `update` answers with the same state object re-renders **nothing below the store's
+  root** (the root re-reads the store and stops at both boundaries). One that
+  answers with an equal *copy* re-renders your whole view for no visible change — correct, but the
+  cost the store exists to remove.
+
+The comparison is reference identity, never structural equality: it is one pointer compare per
+publish however large your state is, and it cannot be fooled by a field that compares equal but
+changed identity (a callback, a mutable array a child component holds).
+
+**Your view must read only its arguments.** Under the store, a module's view runs when its own state
+changes — not whenever the shell happens to re-render. A view that reads anything else — a
+module-level mutable, a value some callback writes outside `update` — used to be refreshed by the
+next unrelated message and now is not. Put that value in your model (or read it through a React
+context or hook, which re-render their readers on their own). The shell's own shared data already
+arrives that way: `ProcessedData.forType`, feature flags, branding and the message catalog are React
+contexts, and a change to any of them re-renders the components that read it, boundary or not.
+
+**Where it does not apply.** The store is the `Client.run` entry point's. An application that builds
+its own program over `Client.program` or `Client.view` — the AI assistant's composer, a custom
+composition root — renders the whole tree per message exactly as before (GP 11); following the rule
+there costs nothing and changes nothing. Components you write yourself can use the same mechanism
+under any store-bound program: `ModelStore.useSelector store selector ModelStore.refEquals` reads a
+slice and re-renders only when it changes. Migration notes and the measurement:
+[`docs/migrations/852-sliced-model-store.md`](../migrations/852-sliced-model-store.md).
+
 ## Module independence
 
 Modules:

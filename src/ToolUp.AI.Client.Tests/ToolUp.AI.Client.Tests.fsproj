@@ -215,6 +215,11 @@
         <!-- Phase 851.A - the React adapter constructs the view once per task
              (RenderScheduler over queueMicrotask), pinned on the transpiled code. -->
         <Compile Include="RenderCoalescingTests.fs" />
+        <!-- Phase 852 - the sliced model store: the store binding, selector reads, the
+             shell render scope (RenderScope.fs is shared with ClientBench) and the
+             AG Grid props compare, pinned on the transpiled code. -->
+        <Compile Include="RenderScope.fs" />
+        <Compile Include="SlicedStoreTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
         <!-- Phase 849 — the browser runtime, measured. MinimalClient's entry

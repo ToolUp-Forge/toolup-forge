@@ -4,6 +4,7 @@
 
 namespace ToolUp.Elmish.React
 
+open System
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.React
@@ -102,6 +103,180 @@ type internal RenderScheduler(enqueue: (unit -> unit) -> unit) =
                 scheduled <- false
                 render ())
 
+/// Phase 852 — one published value of a `ModelStore`: the model the loop
+/// last painted and the dispatch it painted with. A new snapshot is minted
+/// per PUBLISH and never between, so a reader comparing snapshots by
+/// reference sees a change exactly when the loop published one — which is
+/// the contract `useSyncExternalStore` requires of `getSnapshot`.
+type StoreSnapshot<'model, 'msg> = {
+    Model: 'model
+    Dispatch: Dispatch<'msg>
+}
+
+/// Phase 852 — the model store a store-bound program publishes to
+/// (`Program.withReactStore`). The loop's render hook hands the store the
+/// model once per task (the same coalescing `withReactSynchronous` does);
+/// the root component reads it through `useSyncExternalStore` and calls
+/// `Program.view` on it; any component below can read a SLICE of it through
+/// `ModelStore.useSelector`, and re-renders only when that slice changes
+/// (by the comparison the reader names). The store holds no update logic
+/// and makes no decision the MVU loop does: the loop hands it a model, and
+/// how the tree reads that model is React's concern — so nothing under
+/// `proofs/` models it.
+///
+/// Create one per program run, before the program is built, so the view
+/// can close over it (`ModelStore.create ()`).
+[<Sealed>]
+type ModelStore<'model, 'msg>() =
+    let listeners = ResizeArray<Action>()
+    let mutable snapshot: StoreSnapshot<'model, 'msg> option = None
+
+    // Both handed to React as-is, so both are created ONCE: a `subscribe`
+    // whose identity changed per render would make React resubscribe on
+    // every render.
+    let subscribe =
+        Func<Action, Action>(fun listener ->
+            listeners.Add listener
+            Action(fun () -> listeners.Remove listener |> ignore))
+
+    let getSnapshot =
+        Func<obj>(fun () ->
+            match snapshot with
+            | Some s -> box s
+            | None -> null)
+
+    /// The last published snapshot; `None` before the first publish.
+    member _.Snapshot = snapshot
+
+    /// `useSyncExternalStore`'s `subscribe` — stable for the store's life.
+    member internal _.SubscribeFn: obj = box subscribe
+
+    /// `useSyncExternalStore`'s `getSnapshot` — stable for the store's life.
+    member internal _.SnapshotFn: obj = box getSnapshot
+
+    /// Replace the snapshot and notify every subscriber, synchronously.
+    /// The caller (the render hook) decides WHEN — once per task — so a
+    /// burst of drains notifies once. A listener that unsubscribes while
+    /// being notified does not disturb the walk (it runs over a copy).
+    member internal _.Publish(model: 'model, dispatch: Dispatch<'msg>) =
+        snapshot <- Some { Model = model; Dispatch = dispatch }
+
+        for listener in listeners.ToArray() do
+            listener.Invoke()
+
+[<AutoOpen>]
+module internal StoreBindings =
+
+    [<Import("useSyncExternalStore", "react")>]
+    let useSyncExternalStore (subscribe: obj, getSnapshot: obj, getServerSnapshot: obj) : obj = jsNative
+
+    [<Import("useRef", "react")>]
+    let useRef (initial: obj) : obj = jsNative
+
+    [<Import("createElement", "react")>]
+    let createElement (elementType: obj, props: obj) : ReactElement = jsNative
+
+    /// Report an error the way an uncaught one is reported — to the
+    /// window's `error` listeners and the console — without throwing into
+    /// the caller: `reportError` where the host has it (every current
+    /// browser), else a rethrow on the microtask queue.
+    [<Emit("(typeof window !== 'undefined' && window && typeof window.reportError === 'function') ? window.reportError($0) : queueMicrotask(function () { throw $0; })")>]
+    let reportUncaught (error: exn) : unit = jsNative
+
+    /// Build a view inside a component render, keeping the push binding's
+    /// behaviour when the view THROWS. The push binding constructs the
+    /// view outside React (on the microtask queue), so a throwing view
+    /// raised an uncaught error and left the last good tree on screen. A
+    /// view built inside a component would instead make React unmount the
+    /// whole root. So: remember the last element that built (`lastGood` is
+    /// a `useRef` cell), and on a throw report the error as uncaught and
+    /// render that element again. A throw on the FIRST build has nothing to
+    /// hold and propagates, as a failing first render always did.
+    let buildHoldingLastGood (lastGood: obj) (build: unit -> ReactElement) : ReactElement =
+        try
+            let element = build ()
+            lastGood?current <- element
+            element
+        with error ->
+            if isNull lastGood?current then
+                reraise ()
+            else
+                reportUncaught error
+                unbox<ReactElement> lastGood?current
+
+    /// The store-bound root: reads the whole snapshot and renders
+    /// `Program.view` on it (`render` closes over the program). Passing
+    /// `getSnapshot` as the server snapshot too is what lets a hydrating
+    /// mount read the first published model — the one the server rendered.
+    let storeRoot (props: obj) : ReactElement =
+        let snapshot =
+            useSyncExternalStore (props?subscribe, props?getSnapshot, props?getSnapshot)
+
+        let lastGood = useRef null
+        buildHoldingLastGood lastGood (fun () -> (unbox<obj -> ReactElement> props?render) snapshot)
+
+/// Phase 852 — reading a store.
+[<RequireQualifiedAccess>]
+module ModelStore =
+
+    /// A fresh, unpublished store for one program run.
+    let create<'model, 'msg> () : ModelStore<'model, 'msg> = ModelStore<'model, 'msg>()
+
+    /// Reference identity — the comparison a selector over an immutable
+    /// model wants: `Map.add` for one key leaves every other value the same
+    /// object, and an `update` that changed nothing returns the same state.
+    let refEquals (a: 'slice) (b: 'slice) : bool = obj.ReferenceEquals(a, b)
+
+    /// A React hook: the slice `selector` picks out of the store's current
+    /// model. The calling component re-renders when a publish produces a
+    /// slice that `equals` says differs from the last one it read — and
+    /// never otherwise, however often the store publishes. When `equals`
+    /// says the new slice is the same, the PREVIOUS value is returned, so a
+    /// selector that allocates (a tuple, an option) is still read as
+    /// unchanged. The selector may be a fresh closure per render (it is
+    /// re-applied when its identity changes); it must be pure.
+    ///
+    /// Call only from a component rendered under a store-bound root, after
+    /// the store's first publish (the root mounts on it, so every
+    /// descendant does).
+    let useSelector
+        (store: ModelStore<'model, 'msg>)
+        (selector: 'model -> 'slice)
+        (equals: 'slice -> 'slice -> bool)
+        : 'slice =
+        let cache = useRef null
+
+        let read () : obj =
+            let current =
+                match store.Snapshot with
+                | Some s -> s
+                | None -> invalidOp "ModelStore.useSelector: the store has not published a model yet."
+
+            let last = cache?current
+
+            if
+                not (isNull last)
+                && obj.ReferenceEquals(last?snapshot, current)
+                && obj.ReferenceEquals(last?selector, selector)
+            then
+                last?selection
+            else
+                let next = selector current.Model
+
+                let selection =
+                    if not (isNull last) && equals (unbox<'slice> last?selection) next then
+                        last?selection
+                    else
+                        box next
+
+                cache?current <-
+                    createObj [ "snapshot" ==> current; "selector" ==> selector; "selection" ==> selection ]
+
+                selection
+
+        let getSelection = Func<obj>(read)
+        unbox<'slice> (useSyncExternalStore (store.SubscribeFn, getSelection, getSelection))
+
 [<RequireQualifiedAccess>]
 module Program =
 
@@ -192,3 +367,96 @@ module Program =
     /// HTML for this route.
     let withReactHydrate (placeholderId: string) (program: Program<'arg, 'model, 'msg, ReactElement>) =
         withReactImpl placeholderId AppMode.Hydrate program
+    // ─── Phase 852 — the store binding (opt-in) ─────────────────────────
+    //
+    // `withReactImpl` pushes a freshly constructed view through
+    // `root.render` on every construction, so React reconciles the whole
+    // tree from the top each time. The store binding mounts ONE root
+    // component, once, and publishes each model to a `ModelStore` instead;
+    // the root reads the store through `useSyncExternalStore` and calls
+    // `Program.view` on what it read. Rendering the root's view is still a
+    // whole-tree construction — what changes is that a component below can
+    // subscribe to its own slice (`ModelStore.useSelector`) and a
+    // `React.memo` boundary can hold between a component and the root,
+    // because the root is no longer the only thing that can re-render it.
+    // The coalescing is the adapter's, unchanged: one publish per task (or
+    // per frame), through the same `RenderScheduler`.
+    let private withReactStoreImpl
+        (store: ModelStore<'model, 'msg>)
+        (placeholderId: string)
+        (hydrate: bool)
+        (program: Program<'arg, 'model, 'msg, ReactElement>)
+        =
+        let mutable mounted = false
+        let mutable latest: ('model * Dispatch<'msg>) option = None
+
+        let publish () =
+            match latest with
+            | Some(model, dispatch) -> store.Publish(model, dispatch)
+            | None -> ()
+
+        let scheduler = RenderScheduler queueMicrotask
+
+        // Created once: the root's `render` prop never changes identity.
+        let render (snapshot: obj) : ReactElement =
+            let s = unbox<StoreSnapshot<'model, 'msg>> snapshot
+            Program.view program s.Model s.Dispatch
+
+        let setState (model: 'model) (dispatch: Dispatch<'msg>) =
+            latest <- Some(model, dispatch)
+
+            if not mounted then
+                mounted <- true
+                // The first model is published synchronously, before the
+                // root mounts, so the root's first read — and a hydrating
+                // mount's server snapshot — is this model: the boot paint,
+                // `init`'s model, the one a server rendered.
+                publish ()
+                let el = getElement placeholderId
+
+                let rootElement =
+                    createElement (
+                        box storeRoot,
+                        createObj [
+                            "subscribe" ==> store.SubscribeFn
+                            "getSnapshot" ==> store.SnapshotFn
+                            "render" ==> box render
+                        ]
+                    )
+
+                if hydrate then
+                    hydrateRoot el rootElement |> ignore
+                else
+                    (createRoot el)?render (rootElement) |> ignore
+            else
+                scheduler.Request publish
+
+        let installBeforeUnload (dispatcher: IDispatcher<'msg>) =
+            window.addEventListener ("beforeunload", (fun _ -> dispatcher.Terminate()), false)
+
+        program
+        |> Program.withSetState setState
+        |> Program.withDispatcherHandle installBeforeUnload
+
+    /// Phase 852 — opt in to the store binding: publish each model to
+    /// `store` (once per task, as `withReactSynchronous` constructs once per
+    /// task) and mount one root that reads it through
+    /// `useSyncExternalStore`. `Program.view` is the root's read of the
+    /// store; components below it may read slices with
+    /// `ModelStore.useSelector` and re-render only when their slice changes.
+    /// A program that does not call this renders exactly as before.
+    let withReactStore
+        (store: ModelStore<'model, 'msg>)
+        (placeholderId: string)
+        (program: Program<'arg, 'model, 'msg, ReactElement>)
+        =
+        withReactStoreImpl store placeholderId false program
+
+    /// Phase 852 — `withReactStore`, mounting by hydrating a server-rendered
+    /// tree (`hydrateRoot`) with the first published model.
+    let withReactStoreHydrate
+        (store: ModelStore<'model, 'msg>)
+        (placeholderId: string)
+        (program: Program<'arg, 'model, 'msg, ReactElement>)
+        =
+        withReactStoreImpl store placeholderId true program

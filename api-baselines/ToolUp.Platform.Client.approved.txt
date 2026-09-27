@@ -2718,10 +2718,23 @@ ToolUp.Elmish.ProgramModule.withSubscription`4(Microsoft.FSharp.Core.FSharpFunc`
 ToolUp.Elmish.ProgramModule.withTermination`4(Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.ProgramModule.withTrace`4(Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.Unit]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Elmish.Program`4 (class)
+ToolUp.Elmish.React.ModelStore (class)
+ToolUp.Elmish.React.ModelStore.create`2() : ToolUp.Elmish.React.ModelStore`2[model, msg]
+ToolUp.Elmish.React.ModelStore.refEquals`1(slice, slice) : System.Boolean
+ToolUp.Elmish.React.ModelStore.useSelector`3(ToolUp.Elmish.React.ModelStore`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, slice], Microsoft.FSharp.Core.FSharpFunc`2[slice, Microsoft.FSharp.Core.FSharpFunc`2[slice, System.Boolean]]) : slice
+ToolUp.Elmish.React.ModelStore`2 (class)
+ToolUp.Elmish.React.ModelStore`2..ctor()
+ToolUp.Elmish.React.ModelStore`2.Snapshot : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.React.StoreSnapshot`2[model, msg]] { get }
 ToolUp.Elmish.React.Program (class)
 ToolUp.Elmish.React.Program.withReactBatched`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
 ToolUp.Elmish.React.Program.withReactHydrate`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
+ToolUp.Elmish.React.Program.withReactStoreHydrate`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
+ToolUp.Elmish.React.Program.withReactStore`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
 ToolUp.Elmish.React.Program.withReactSynchronous`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
+ToolUp.Elmish.React.StoreSnapshot`2 (class)
+ToolUp.Elmish.React.StoreSnapshot`2..ctor(model, Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit])
+ToolUp.Elmish.React.StoreSnapshot`2.Dispatch : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Elmish.React.StoreSnapshot`2.Model : model { get }
 ToolUp.Elmish.Sub (class)
 ToolUp.Elmish.Sub.batch`2(a) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]
 ToolUp.Elmish.Sub.map`2(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.Unit], System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]

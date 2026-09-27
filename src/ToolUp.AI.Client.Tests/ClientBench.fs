@@ -38,6 +38,13 @@
 ///     message; the number of render-hook calls one drain of several
 ///     messages makes; and the latency between an update issuing a
 ///     `Cmd.OfAsync` command and that async body starting.
+///   * RENDER SCOPE (Phase 852) — components rendered per message in a
+///     mounted one-module SDK shell (`RenderScope`): chrome renders and
+///     module-view runs for a module message and for a chrome message, on
+///     the whole-tree path (`Client.program` composers) and the sliced
+///     store (`Client.run`). Reported as levers, not budgeted samples: they
+///     are counts that pin a structure, and `SlicedStoreTests` asserts
+///     them on every run.
 ///
 /// ─── Discipline ──────────────────────────────────────────────────────
 ///
@@ -747,6 +754,37 @@ let private runAsync (argv: string[]) : Async<int> = async {
         )
     | None -> ()
 
+    // ── Render scope (Phase 852) ──
+    // How much of the SDK shell one message re-renders — chrome renders
+    // and module-view runs — on the whole-tree path every `Client.program`
+    // composer takes (the "before") and the sliced store `Client.run` takes
+    // (the "after"). Counts, not times: see `RenderScope`.
+    let scopeOf (sliced: bool) =
+        Async.FromContinuations(fun (ok, _, _) -> RenderScope.run sliced ok)
+
+    let! wholeTree = scopeOf false
+    let! slicedScope = scopeOf true
+
+    let perMessage (r: RenderScope.ScopeRun) =
+        let delta (a: RenderScope.ScopeCounts) (b: RenderScope.ScopeCounts) =
+            createObj [ "chrome" ==> b.Chrome - a.Chrome; "module" ==> b.Module - a.Module ]
+
+        createObj [
+            "moduleMessage" ==> delta r.AfterMount r.AfterModuleMsg
+            "chromeMessage" ==> delta r.AfterModuleMsg r.AfterChromeMsg
+        ]
+
+    for r in [ wholeTree; slicedScope ] do
+        say (
+            sprintf
+                "render scope (%s): module message -> %d chrome + %d module render(s); chrome message -> %d chrome + %d module render(s)"
+                r.Path
+                (r.AfterModuleMsg.Chrome - r.AfterMount.Chrome)
+                (r.AfterModuleMsg.Module - r.AfterMount.Module)
+                (r.AfterChromeMsg.Chrome - r.AfterModuleMsg.Chrome)
+                (r.AfterChromeMsg.Module - r.AfterModuleMsg.Module)
+        )
+
     // ── The measurement document ──
     let samples = [|
         sample
@@ -773,6 +811,8 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "drainMessages" ==> DrainBurst + 1
             "asyncHopMsMin" ==> (hopStats |> optMin)
             "asyncHopMsMedian" ==> (hopStats |> optMedian)
+            "renderScopeWholeTree" ==> perMessage wholeTree
+            "renderScopeSliced" ==> perMessage slicedScope
         ]
 
     let document =

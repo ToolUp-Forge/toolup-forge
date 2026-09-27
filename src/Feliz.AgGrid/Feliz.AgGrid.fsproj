@@ -43,6 +43,8 @@
   <ItemGroup>
     <Compile Include="AgGrid.fs" />
     <Content Include="package.json" />
+    <!-- Phase 852: the Fable pack pins the grid props compare. -->
+    <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
   </ItemGroup>
   <!-- Client-tier closure: pack source for Fable consumers under fable/.
        The library's own .fsproj + .fs files ship inside the nupkg; Fable's
