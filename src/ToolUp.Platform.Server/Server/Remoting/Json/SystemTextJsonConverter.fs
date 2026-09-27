@@ -1573,17 +1573,31 @@ module FableConverters =
     /// type or refuses by name. A miss is `None`, which means the STJ
     /// path below, exactly as before; nothing about a type the algebra
     /// has not been asked about changes.
-    let private tryDecodeThroughAlgebra (element: JsonElement) (targetType: Type) : Result<obj, DecodeError> option =
-        match ToolUp.Remoting.Json.JsonDecoders.tryGet targetType with
+    ///
+    /// Phase 839 — `recordName` narrows the registry lookup to a
+    /// decoder scoped to that API record, falling back to an unscoped
+    /// registration (`JsonDecoders.tryGet`). `None` here is exactly the
+    /// pre-839 lookup.
+    let private tryDecodeThroughAlgebraFor
+        (recordName: string option)
+        (element: JsonElement)
+        (targetType: Type)
+        : Result<obj, DecodeError> option =
+        match ToolUp.Remoting.Json.JsonDecoders.tryGet recordName targetType with
         | None -> None
         | Some decoder -> Some(ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder)
 
+    /// Phase 839 — the erased seam, scoped to the API record
+    /// `recordName` names. `None` is a caller with no record to name (a
+    /// test, a non-dispatch path), which gets exactly the bare-type
+    /// behaviour this seam always had.
     let tryDeserialiseElement
+        (recordName: string option)
         (element: JsonElement)
         (targetType: Type)
         (options: JsonSerializerOptions)
         : Result<obj, DecodeError> =
-        match tryDecodeThroughAlgebra element targetType with
+        match tryDecodeThroughAlgebraFor recordName element targetType with
         | Some decoded -> decoded
         | None ->
             try
@@ -1599,16 +1613,31 @@ module FableConverters =
     /// rather than routed through a boxing `unbox`.
     ///
     /// Phase 799 — consults the JSON algebra first (see
-    /// `tryDecodeThroughAlgebra`); the `unbox` on that arm is the same
+    /// `tryDecodeThroughAlgebraFor`); the `unbox` on that arm is the same
     /// erased-decoder cast `RemotingDecoders` makes on the binary wire.
-    let tryDeserialise<'T> (element: JsonElement) (options: JsonSerializerOptions) : Result<'T, DecodeError> =
-        match tryDecodeThroughAlgebra element typeof<'T> with
+    ///
+    /// Phase 839 — `tryDeserialiseFor` is the record-scoped form: the
+    /// server's reflection dispatch proxy (`Proxy.fs`) passes
+    /// `makeProps.RecordName` here for every argument it parses.
+    /// `tryDeserialise` stays the bare two-argument seam the source
+    /// generator's emitted fast-path code calls (`ToolUp.Remoting.Generator`
+    /// has no per-request record name to plumb through at codegen time) —
+    /// unchanged, and now a thin `None`-scoped call onto the same seam.
+    let tryDeserialiseFor<'T>
+        (recordName: string option)
+        (element: JsonElement)
+        (options: JsonSerializerOptions)
+        : Result<'T, DecodeError> =
+        match tryDecodeThroughAlgebraFor recordName element typeof<'T> with
         | Some decoded -> decoded |> Result.map unbox<'T>
         | None ->
             try
                 Ok(element.Deserialize<'T>(options))
             with ex ->
                 Error(refusalOf element typeof<'T> ex)
+
+    let tryDeserialise<'T> (element: JsonElement) (options: JsonSerializerOptions) : Result<'T, DecodeError> =
+        tryDeserialiseFor<'T> None element options
 
     /// Lazily-initialised singleton for the canonical default-shape options.
     /// Hidden behind the `shared` accessor below — direct mutation is

@@ -128,10 +128,12 @@ let tests =
 
             Expect.stringContains
                 contents
-                "FableConverters.tryDeserialise<'inp> argElement stjOptions"
-                "the proxy must hand the already-parsed ELEMENT to the decode seam. Passing \
-                 raw text (or the element's RawText) would re-introduce the N+1 parse the \
-                 fastpath removed, and would do it invisibly."
+                "FableConverters.tryDeserialiseFor<'inp> recordName argElement stjOptions"
+                "the proxy must hand the already-parsed ELEMENT to the decode seam (Phase 839's \
+                 record-scoped `tryDeserialiseFor`, not the bare two-argument `tryDeserialise` \
+                 the source generator's emitted code still calls). Passing raw text (or the \
+                 element's RawText) would re-introduce the N+1 parse the fastpath removed, and \
+                 would do it invisibly."
 
             let seamPath =
                 Path.Combine(
