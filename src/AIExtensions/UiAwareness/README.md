@@ -4,8 +4,10 @@ An opt-in AI companion that lets the assistant read **what is on the user's scre
 live state of the module they are viewing — so a question such as "what filters do I currently have
 applied?" is answered from the interface itself rather than from documentation.
 
-It registers one read-only, client-resident tool, `_platform.ui.inspect_active_module`, built
-entirely on retained ToolUp substrate:
+It registers two read-only, client-resident tools built entirely on retained ToolUp substrate:
+`_platform.ui.inspect_active_module`, the full snapshot, and `_platform.ui.list_active_actions`
+(Phase 542), a narrower sibling that projects just the action states for "what can I do next?"
+questions. Both are built on:
 
 - a module declares its live state as a pure `'Model -> UiStateReport` projection with
   `ClientModule.withInspectState`;
@@ -14,8 +16,8 @@ entirely on retained ToolUp substrate:
 - the agent loop dispatches the tool to the browser (`Location = ClientResident`), where this
   companion's executor reads the active module's report and returns it.
 
-The tool is offered on both the side panel and the full-page assistant (`Surface = Both`), declares
-`ReadFacts` only, and changes nothing.
+Both tools are offered on both the side panel and the full-page assistant (`Surface = Both`),
+declare `ReadFacts` only, and change nothing.
 
 ## Packages
 
@@ -36,6 +38,7 @@ aiApp |> ToolUp.AI.UiAwareness.Server.AICompose.register
 
 // Client boot, alongside the AI client configuration
 ToolUp.AI.UiAwareness.Client.InspectActiveModule.install ()
+ToolUp.AI.UiAwareness.Client.ListActiveActions.install ()
 ```
 
 `register` is idempotent. Modules become inspectable by declaring a projection:
@@ -49,20 +52,26 @@ ClientModule.create definition
     |> UiStateReport.withAction "export" (not model.SelectedRows.IsEmpty))
 ```
 
-## What the tool returns
+## What the tools return
 
+`_platform.ui.inspect_active_module`:
 - `{ "moduleId": …, "activePage": … | null, "snapshot": { "fields": …, "selections": …, "actions": … } }`
   — field values are embedded as JSON (a report's field values are JSON-encoded leaves).
 - `{ "status": "no-active-module" }` — the request carried no active module.
 - `{ "status": "no-observable-state", "moduleId": … }` — the module declares no projection, has not
   published since the shell started, or its projector threw.
 
-The module inspected is always the request's active module, never one the model names: the tool
-takes no arguments.
+`_platform.ui.list_active_actions` (Phase 542):
+- `{ "moduleId": …, "actions": [ { "id": …, "enabled": true|false }, … ] }` — every action the
+  module's report declares; an empty list when it declares none.
+- The same `no-active-module` / `no-observable-state` status branches, on the same conditions.
+
+The module inspected is always the request's active module, never one the model names: neither
+tool takes arguments.
 
 ## Access control
 
-No new gate is introduced; the tool passes the ones every tool passes.
+No new gate is introduced; both tools pass the ones every tool passes.
 
 - **Per-module RBAC.** The tool is sourced from the SDK-reserved `_platform.ui`, so it is admitted
   unless a deployment names `_platform.ui` in its module permission map, in which case the caller

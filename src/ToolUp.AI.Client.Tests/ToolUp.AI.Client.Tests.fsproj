@@ -214,6 +214,8 @@
              (the corpus and the seeded LCG it reuses). -->
         <Compile Include="..\..\samples\MinimalClient\Client.fs" />
         <Compile Include="ClientBench.fs" />
+        <!-- Phase 542 - the UI-awareness companion's list_active_actions executor. -->
+        <Compile Include="ListActiveActionsTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

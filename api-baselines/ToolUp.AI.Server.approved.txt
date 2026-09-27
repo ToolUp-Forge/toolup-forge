@@ -783,6 +783,7 @@ ToolUp.AI.FastPathTriageResolver.outcomes : Microsoft.FSharp.Collections.FSharpL
 ToolUp.AI.FastPathTriageResolver.parseTriageDecision(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.FastPathTriageResolver+TriageModelDecision]
 ToolUp.AI.FastPathTriageResolver.planTriage(ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig, ToolUp.AI.AIFieldSnapshot, ToolUp.AI.FastPathTriageResolver+TriageModelDecision) : ToolUp.AI.FastPathTriageResolver+TriagePlan
 ToolUp.AI.FastPathTriageResolver.syntheticReply(ToolUp.AI.AIFieldSnapshot, ToolUp.AI.AIFieldDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
+ToolUp.AI.FastPathTriageResolver.triageExemplars : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.AI.FastPathTriageResolver.triageSchema : System.String { get }
 ToolUp.AI.FastPathTriageResolver.tryTriage(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AI.IAIProvider, System.Guid, System.Guid, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.FastPathTriageResolver+TriageResult]]
 ToolUp.AI.FastPathTriageResolver+FastPathTriageConfig (class)
