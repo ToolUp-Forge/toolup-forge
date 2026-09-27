@@ -100,7 +100,19 @@
     "change; two are added - `painted_is_model` (unconditional) and `render_once_per_drain` (CONDITIONAL on the render",
     "oracle being quiet, which the React adapter's hook is; stated as the `assumed` row `elmish-loop-render-oracle-quiet`).",
     "The differential scripts the post-drain setState dispatch and compares render count and painted model too. The",
-    "async-command start under Fable is `Async.StartImmediate` (no timer hop), justified by `reentrant_no_loss`."
+    "async-command start under Fable is `Async.StartImmediate` (no timer hop), justified by `reentrant_no_loss`.",
+    "",
+    "The boot was then RESTATED and moved no rung. `runWithDispatch` set its latch AFTER the dispatcher-handle sinks,",
+    "the effect-controller sinks and the effects' start functions had run, so one of them that dispatched found the",
+    "latch clear and ran a whole drain - `update`, the subscription diff, the command and a paint - ahead of the boot",
+    "paint, which was then handed a model `init` never returned (and the boot's subscription diff, computed from the",
+    "init model before anything ran, stopped what that drain had started). The latch is now set first. ElmishLoop.fst",
+    "gains `pre_evs` - the events raised before the boot paint, applied under the latch - as a parameter of `boot` and",
+    "`program`, the eight theorems were re-proved over it on the pinned prover with no flag change, and one is added:",
+    "`boot_paints_init_model`. The differential scripts a sink and an effect that dispatch and compares the boot paint",
+    "too. Separately the error reporter is made TOTAL by construction (every call goes through a guard that catches",
+    "what the reporter raises), because a reporter that threw escaped the drain with the latch set and wedged the",
+    "loop; the model has no transition for it and the host pins that production has none (`elmish-loop-reporter-total`)."
   ],
   "kind": "proofs",
   "version": 1,
@@ -1374,7 +1386,7 @@
     {
       "id": "elmish-loop-terminated-absorbing",
       "level": "proved",
-      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the model, or what was painted (Phase 851: `painted` and `renders` are frozen too - a terminated loop paints nothing further), and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed or painted; a boot drain on a machine terminated before it ran still makes its unconditional boot paint and processes nothing.",
+      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the model, or what was painted (Phase 851: `painted` and `renders` are frozen too - a terminated loop paints nothing further), and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed or painted; a boot drain on a machine terminated before it ran - or terminated by a sink or an effect's start function before the boot paint - still makes its unconditional boot paint and processes nothing.",
       "evidence": {
         "theorem": "terminated_absorbing",
         "model": "proofs/ElmishLoop.fst",
@@ -1389,7 +1401,7 @@
     {
       "id": "elmish-loop-boot-drain-equiv",
       "level": "proved",
-      "claim": "The boot drain - the hand-duplicated `reentered <- true; boot paint; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the boot paint and then the events those effects raised under the latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s`, the paint with the latch released, is where `dispatch` starts). Proved equivalent; the source is not unified.",
+      "claim": "The boot drain - the hand-duplicated `reentered <- true; sinks and effect starts; boot paint; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events raised before the boot paint, the boot paint, and then the events init's effects raised, all under the latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s`, the paint with the latch released, is where `dispatch` starts). Proved equivalent; the source is not unified.",
       "evidence": {
         "theorem": "boot_drain_equiv",
         "model": "proofs/ElmishLoop.fst",
@@ -1444,9 +1456,39 @@
       }
     },
     {
+      "id": "elmish-loop-boot-paints-init-model",
+      "level": "proved",
+      "claim": "Whatever the dispatcher-handle sinks, the effect-controller sinks and the effects' start functions dispatch before the boot paint - any number of messages, a Terminate, both - none of it is handed to `update`, none of it moves the model, and none of it paints; the boot paint then hands the render hook the model `init` returned, once. This is the property a hydrating renderer depends on, and it holds because `runWithDispatch` sets the latch BEFORE it calls anything the program supplied: with the latch clear the first such dispatch would run a drain and paint a model the server never rendered.",
+      "evidence": {
+        "theorem": "boot_paints_init_model",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "boot_evs_are_apply_evs",
+          "apply_evs_spec",
+          "paint_spec"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-reporter-total",
+      "level": "tested",
+      "claim": "An error reporter that THROWS does not escape the loop. Every call `runWithDispatch` makes to the program's reporter - from the message arm, from a command, from the render hook, from a sink, an effect's start or dispose, a subscription's start or stop, and from the terminate callback - goes through a guard that catches what the reporter itself raises and falls back to the console, so the drain always returns and the latch is always released. Measured on production at each of those sites with a reporter that raises on every call: no dispatch raises into its caller, every message is still handed to `update` in order, the boot returns, and Terminate still tears down.",
+      "evidence": {
+        "family": "Phase 789 - the proved dispatch loop as oracle",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
+        "cases": [
+          "a reporter that throws does not wedge the loop - from update, from a command, from the render hook",
+          "a reporter that throws does not wedge the boot - from a sink, an effect, a subscription, init's command",
+          "a reporter that throws does not stop Terminate tearing down"
+        ],
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, and the model it was last handed. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), and with one paint after the while and no pop after it, are each caught.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, and with the latch set after the sinks and effects ran (the boot as it was until it was restated), are each caught.",
       "evidence": {
         "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
@@ -1458,6 +1500,10 @@
           "a loop that releases the latch before draining is caught - go-red",
           "a loop that paints after every message is caught - go-red, Phase 851",
           "a loop that paints once but never re-pops is caught - go-red, Phase 851",
+          "the campaign dispatched from a sink and from an effect's start function before the boot paint",
+          "a loop that sets the latch after the effects ran is caught - go-red",
+          "an effect that dispatches from its start function does not move the boot paint - boot_paints_init_model, run",
+          "a subscription an effect's message asks for is running after the boot",
           "a single-message boot drain and a steady-state dispatch process the same trace - boot_drain_equiv, run",
           "after Terminate nothing is processed or painted and IsActive is false - terminated_absorbing, run",
           "a drain of N messages calls the render hook once - render_once_per_drain, run",
@@ -1480,7 +1526,7 @@
     {
       "id": "elmish-loop-oracle-abstracts-callees",
       "level": "assumed",
-      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. The teardown callbacks on the terminating path are assumed not to dispatch.",
+      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. That reply presumes the exception was REPORTED AND THE LOOP WENT ON, which is true only of a reporter that returns; production makes the reporter total by construction and the tested row `elmish-loop-reporter-total` pins it. The teardown callbacks on the terminating path are assumed not to dispatch.",
       "evidence": {
         "assumption": "update, subscribe, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns; since Phase 851 setState is a second oracle, a pure function of the model it is handed to the events it raises synchronously"
       },

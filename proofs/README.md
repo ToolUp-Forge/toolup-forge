@@ -966,6 +966,19 @@ differential gained). The boot paint stays explicit and unconditional, BEFORE `i
 hydrating renderer is handed the model the server rendered. The six theorems below hold on the
 amended machine and two are added; the operator accepted the re-proof in advance (2026-09-26).
 
+**The boot was then restated.** "BEFORE `init`'s command" turned out not to be enough. The loop set
+its latch *after* the dispatcher-handle sinks, the effect-controller sinks and the effects' start
+functions had run, so any of them that dispatched found the latch clear and ran a whole drain —
+`update`, the subscription diff, the command, and a paint — ahead of the boot paint. The hook's
+first model was then one `init` never returned, the boot painted a second time, and the boot's
+subscription diff (computed from the init model before anything ran) stopped what that drain had
+started. No shipped effect dispatches from its start function, so nothing in the tree was broken;
+the model simply had no clause for it, having taken "after `Wire`" as the first moment anything
+could dispatch and gone straight to the boot. The latch is now set before anything the program
+supplied is called. The model gains `pre_evs` — the events raised before the boot paint, applied
+under the latch — as a parameter of `boot` and `program`; the eight theorems were re-proved over it
+and `boot_paints_init_model` is added.
+
 ### Rung 1 — Proved
 
 **Formally verified, on the pinned prover, with `--report_assumes error`, and spent on these lemma
@@ -999,13 +1012,22 @@ families alone:**
   nothing after it is ever processed or painted. The boot on a machine terminated before it ran
   still makes its unconditional boot paint, and processes nothing.
 * **`boot_drain_equiv`**, with `boot_single_is_dispatch`. The tail of `runWithDispatch` —
-  `reentered <- true`, the boot paint, the init effects through `dispatch'`, `processMsgs ()`,
-  `reentered <- false` — is transcribed literally and then shown *equal* to the steady-state
-  critical section run over the boot paint and then the events those effects raised under the
-  latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s` — the
-  paint with the latch released — is the state `dispatch` starts from, and the lemma asks that the
-  paint did not terminate the machine). The hand-duplicated section and the one `dispatch` runs are
-  one function. The source is not unified: the equivalence is proved, and the two copies stay.
+  `reentered <- true`, the sinks and the effects' start functions, the boot paint, the init effects
+  through `dispatch'`, `processMsgs ()`, `reentered <- false` — is transcribed literally and then
+  shown *equal* to the steady-state critical section run over the events raised before the boot
+  paint, the boot paint, and then the events `init`'s effects raised, all under the latch; for a
+  single message raised by `init`'s command and nothing before the paint it is the boot paint
+  followed by `dispatch` itself (`booted s` — the paint with the latch released — is the state
+  `dispatch` starts from, and the lemma asks that the paint did not terminate the machine). The
+  hand-duplicated section and the one `dispatch` runs are one function. The source is not unified:
+  the equivalence is proved, and the two copies stay.
+* **`boot_paints_init_model`.** Whatever the dispatcher-handle sinks, the effect-controller sinks
+  and the effects' start functions dispatch before the boot paint — any number of messages, a
+  `Terminate`, both — none of it is handed to `update`, none of it moves the model, none of it
+  paints; and the boot paint then hands the render hook **the model `init` returned**, once. It is
+  stated over `preboot` and `boot_paint`, the two functions `boot` is built from, so it is a fact
+  about the boot and not about a paraphrase of it. The prover's go-red is the old order: apply the
+  pre-boot events with the latch clear and the boot's invariant no longer checks.
 * **`active_iff_not_terminated`**, with `fallback_breaks_encoding`. In every reachable state
   `DispatcherCore.active = not terminated`. Both sites that set `terminated` call `MarkTerminated`
   and `Wire` set `active` before anything could dispatch; the model carries the two cells in
@@ -1044,7 +1066,9 @@ Not proved. *Measured*, on every run of the gate.
 
 * **The model agrees with production, on .NET.** `ElmishLoopProofOracleTests` in the platform pack
   runs the real `Program.runWithDispatch` with a **scripted `update` and a scripted `setState`**: a
-  generated script says which messages `init`'s command raises during the boot drain, which each
+  generated script says which messages a dispatcher-handle sink and an effect's start function
+  raise *before the boot paint* (about two scripts in five raise some, and some of those raise
+  `Terminate`), which messages `init`'s command raises during the boot drain, which each
   message's command raises (including `Terminate`), which messages the render hook raises when
   handed a model whose last message is a given id (the post-drain `setState` dispatch — Phase 851's
   case; about a third of the campaign has one fire, and some raise `Terminate` from the hook), which
@@ -1052,9 +1076,12 @@ Not proved. *Measured*, on every run of the gate.
   through `IDispatcher` — and the same script is the extracted machine's two oracles. The two must
   agree on the messages `update` saw in order, on the messages `dispatch` accepted, on the final
   model (read off `update`'s output — the value `state` takes — since a hook that runs once per
-  drain no longer sees every model), on `IsActive`, on how many times the hook was called, and on
-  the model it was last handed. Four hundred scripts over ids `0..8`, replies and paints pointing
-  forward only so every drain finishes.
+  drain no longer sees every model), on `IsActive`, on how many times the hook was called, on
+  the model it was last handed, and on the boot paint — the model the hook was handed *first*, and
+  what `update` had seen by then, which the model reads off `boot_paint`. Four hundred scripts over
+  ids `0..8`, replies and paints pointing forward only so every drain finishes. The pre-boot events
+  are drawn from a second generator, so the scripts the campaign held before they existed are the
+  same scripts with a `Pre` added.
 * **The `log` comparison is what holds the two-flag encoding.** Production's log is recorded through
   `IDispatcher.IsActive` at the moment of each dispatch; the model's through its `terminated` cell.
   A state in which the two disagreed would log differently on the next dispatch, so
@@ -1063,26 +1090,44 @@ Not proved. *Measured*, on every run of the gate.
   a re-dispatch under a sibling (the shape on which a nested drain changes the order), raise two or
   more messages from the boot drain, dispatch after a `Terminate` raised from *inside* a command,
   dispatch from outside after a `Terminate`, reach the termination predicate, and end still active —
-  and that no drain stalled, so the fuel bound never decided an agreement.
-* **Five of the theorems are also run on production directly.** `boot_single_is_dispatch`: one
+  and that no drain stalled, so the fuel bound never decided an agreement. A second counted case
+  does the same for the restated boot: scripts that dispatch from a sink, from an effect's start
+  function, that raise `Terminate` before the boot paint, and that raise nothing before it.
+* **Six of the theorems are also run on production directly.** `boot_paints_init_model`: a sink
+  and an effect that each dispatch at boot, and an `init` command that does too, produce exactly two
+  paints — the init model, then the model one drain built from all three messages in the order they
+  were raised — with `update` handed nothing before the first. `boot_single_is_dispatch`: one
   message raised from `init`'s command versus the same message dispatched from outside produce the
-  same trace, log, model, render count and painted model (with the boot paint quiet, which is the
-  lemma's premise). `terminated_absorbing`: after a `Terminate`, further dispatches and `Terminate`s
+  same trace, log, model, render count and painted model (with the boot paint quiet and nothing
+  raised before it, which are the lemma's premises). `terminated_absorbing`: after a `Terminate`, further dispatches and `Terminate`s
   change nothing — paint included — and `IsActive` is false. `render_once_per_drain`: one external
   dispatch whose command fans out into a seventeen-message chain calls the hook once, with the
   model the drain ended on; and a terminating dispatch calls it not at all. `painted_is_model`: over
   the whole campaign, whenever production returns to the host still active, the model the hook was
   last handed is the model `update` last produced.
-* **One faithful loop skeleton, three go-reds.** The loop's scheduling skeleton is transcribed by
+* **A subscription an early message asks for survives the boot.** The second thing the old boot
+  order broke, pinned on production: an effect dispatches a message from its start function, the
+  model that results asks for a subscription, and after the boot that subscription has been started
+  once and not stopped.
+* **The reporter is total, at every site it is reached from.** With a reporter that raises on every
+  call, production is driven through a failing `update`, a failing command, a failing render hook,
+  a failing sink, a failing effect start, a failing subscription start, a failing `init` command and
+  a teardown whose disposables fail: no dispatch raises into its caller, every message is still
+  handed to `update` in order, the boot returns with the latch released, and `Terminate` still
+  disposes everything and terminates. Each of these escaped the drain with the latch set before the
+  guard existed, after which every dispatch queued and nothing was ever processed again.
+* **One faithful loop skeleton, four go-reds.** The loop's scheduling skeleton is transcribed by
   hand over the production ring with the callees replaced by the script — the same abstraction the
   model makes, in F#. Faithful, it is asserted to *agree* with the model over the campaign. With one
   line moved each, it is asserted *caught*: the latch released *before* the drain instead of after
   it, so a dispatch from inside `update` recurses into a nested drain, processing a child before its
   waiting siblings and letting the outer `state <- model'` overwrite the model the nested drain
   built; the paint made after every `update`, which is the pre-851 loop (caught on the render count
-  on every multi-message drain, and on the trace wherever the hook dispatches); and one paint after
+  on every multi-message drain, and on the trace wherever the hook dispatches); one paint after
   the `while` with no pop after it, so a hook that dispatches leaves its message in the ring until
-  some later external dispatch happens to drain it (caught on the trace). The difference each go-red
+  some later external dispatch happens to drain it (caught on the trace); and the latch set after
+  the sinks and the effects ran, which is the boot as it shipped until it was restated (caught on
+  the boot paint, on every script that dispatches before it). The difference each go-red
   measures is its one line. A differential that has never been shown to fail agrees with whatever
   it is shown.
 * **The fallback arm, on production.** A `DispatcherCore` exposed without its terminate callback is
@@ -1105,6 +1150,10 @@ Not proved. *Measured*, on every run of the gate.
   throw — the abstraction admits it, and the differential does not script it. Production marks the
   model dirty *before* the callees run for exactly this reason: a message that threw is still, to
   the model, a processed message, and its (unchanged) model is painted once at the end of the drain.
+  That reply presumes the exception was *reported and the loop went on*, which is true only of a
+  reporter that returns. The reporter is not a parameter of the model; production makes it total by
+  construction — `runWithDispatch` calls the program's reporter only through a guard that catches
+  what the reporter raises — and Rung 2 pins that at every site.
   The teardown callbacks on the terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to
   dispatch; a dispatch they made would land in the ring and never be processed, which
   `terminated_absorbing` covers.
