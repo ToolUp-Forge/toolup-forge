@@ -1657,3 +1657,59 @@ module FableConverters =
     /// shape and per-call construction wastes the converter set's first-
     /// touch reflection cost.
     let shared: JsonSerializerOptions = cached.Value
+
+    /// Phase 840 — the shipped converter set as the JSON wire's
+    /// registration oracle (`ToolUp.Remoting.Json.JsonDecoderOracle`):
+    /// `shared` writes each draw exactly as a client writes an argument,
+    /// `JsonRead.tryParse` is the value-model pass the argument seam runs,
+    /// and `Decode` is STJ's own typed read of the same text. `Decode`
+    /// calls `JsonSerializer.Deserialize` DIRECTLY rather than through
+    /// `tryDeserialiseElement`, which consults the decoder table first and
+    /// would compare a registered candidate with itself. `Losses` declares
+    /// the one place this converter set is known to read the writer's text
+    /// into a different value (`TimeSpan`), so the gate says so on a draw
+    /// the algebra reads exactly rather than refusing the exact decoder.
+    let decoderOracle: ToolUp.Remoting.Json.JsonDecoderOracle = {
+        Write = fun (target: Type) (value: obj) -> JsonSerializer.Serialize(value, target, shared)
+        Read = ToolUp.Remoting.Json.JsonRead.tryParse
+        Decode =
+            fun (target: Type) (text: string) ->
+                try
+                    use document = JsonDocument.Parse text
+                    Ok(document.RootElement.Deserialize(target, shared))
+                with ex ->
+                    Error(DecodeError.create target.Name (sprintf "%s: %s" (ex.GetType().Name) ex.Message))
+        Losses = [
+            {
+                Type = typeof<TimeSpan>
+                Reason =
+                    "TimeSpanConverter.Read goes through a double (TimeSpan.FromMilliseconds of GetDouble), so a value whose ticks do not survive float64 comes back a tick off (Phase 784); the algebra's asTimeSpan reads the millisecond text exactly to the nearest tick (Phase 799, 785.F)"
+            }
+        ]
+    }
+
+    /// Phase 840 — `JsonDecoders.verifyWith` against the shipped converter
+    /// set: draw `draws` values of `'T` from `seed` and refuse on the first
+    /// draw the candidate decodes differently from STJ.
+    let verifyDecoder<'T>
+        (draws: int)
+        (seed: int)
+        (decoder: ToolUp.Remoting.Json.JsonDecoder<'T>)
+        : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
+        ToolUp.Remoting.Json.JsonDecoders.verifyWith<'T> decoderOracle draws seed decoder
+
+    /// Phase 840 — register `decoder` UNSCOPED only if it agrees with the
+    /// shipped converter set (`JsonDecoders.registerVerifiedWith`); a
+    /// refusal registers nothing and says why.
+    let registerVerified<'T>
+        (decoder: ToolUp.Remoting.Json.JsonDecoder<'T>)
+        : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
+        ToolUp.Remoting.Json.JsonDecoders.registerVerifiedWith<'T> decoderOracle decoder
+
+    /// Phase 840 — the record-scoped twin of `registerVerified`
+    /// (`JsonDecoders.registerVerifiedForWith`).
+    let registerVerifiedFor<'T>
+        (recordName: string)
+        (decoder: ToolUp.Remoting.Json.JsonDecoder<'T>)
+        : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
+        ToolUp.Remoting.Json.JsonDecoders.registerVerifiedForWith<'T> decoderOracle recordName decoder
