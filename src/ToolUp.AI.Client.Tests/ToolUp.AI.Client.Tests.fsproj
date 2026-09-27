@@ -113,6 +113,7 @@
              tiles over reference configurations, pinned by baselines
              recorded BEFORE the shell-slot refactor (shell-slot-baselines/). -->
         <Compile Include="ShellSlotSnapshotTests.fs" />
+        <Compile Include="ShellSlotTests.fs" />
         <!-- Phase 610 — the Phase 180 a11y rule set over the shell rail's
              states. The rules are COMPILED IN from ToolUp.Platform.Testing
              rather than reimplemented: that project ProjectReferences

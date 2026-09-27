@@ -1,1 +1,4 @@
-(no tiles)
+_sdk.tile.teams | custom.teamManager | Custom teamManager | 10
+_sdk.tile.usage | custom.usageDashboard | Custom usageDashboard | 20
+_sdk.tile.health | custom.healthMonitor | Custom healthMonitor | 30
+_sdk.tile.service-status | custom.serviceStatusBoard | Custom serviceStatusBoard | 40

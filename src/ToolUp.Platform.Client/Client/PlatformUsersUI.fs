@@ -1028,7 +1028,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Platfor
 /// callers, and every `IPlatformTenantApi` method is Platform-Admin gated
 /// server-side regardless (GP 4). Injected only when
 /// `ClientConfig.PlatformUsers = DefaultPlatformUsers` (GP 11/13).
-let create (config: PlatformUsersConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Users"
 
     let icon =

@@ -266,11 +266,16 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement = UsageDashboardB
 
 // ─── Module creation ─────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.UsageDashboard"
+
 /// Create the built-in usage dashboard admin as an `ErasedModule`.
-/// The shell's `prepareModules` injects this in any non-Anonymous
-/// mode unless `UsageDashboard = NoUsageDashboard`. The server-side
+/// It fills the `UsageDashboard` shell slot (Default / Configured),
+/// which the shell admits on any authenticated surface. The server-side
 /// handler enforces the Owner/Admin gate independently.
-let create (config: UsageDashboardConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Usage"
 
     let icon =
@@ -282,34 +287,30 @@ let create (config: UsageDashboardConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.UsageDashboard"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
 
-/// Phase 573.B — the administration-landing tile this built-in
-/// contributes (see `HealthMonitorUI.adminTile` for the full
-/// rationale). Supply `"_sdk.admin.usage"` from an
-/// `IHomeWidgetDataProvider` to lead the tile with the period's
-/// headline figure.
-let adminTile (config: UsageDashboardConfig option) : AdminTile =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Usage"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.usage
-
-    {
-        OwnerModuleId = "_sdk.UsageDashboard"
-        Widget = {
-            Id = "_sdk.tile.usage"
-            Title = name
-            Icon = icon
-            Weight = 20
-            Body =
-                AdminTileBody.summary
-                    "_sdk.admin.usage"
-                    "Per-scope consumption and cost telemetry for the current billing period."
-        }
+/// Phase 573.B — the administration-landing tile of this built-in's
+/// slot (see `HealthMonitorUI.adminTile` for the full rationale): built
+/// for whichever module fills the slot (`owner`), so a replacement keeps
+/// the tile, with its own id, name and icon.
+///
+/// Supply `"_sdk.admin.usage"` from an `IHomeWidgetDataProvider` to
+/// lead the tile with the period's headline figure.
+let adminTile (owner: ModuleDefinition) : AdminTile = {
+    OwnerModuleId = owner.Id
+    Widget = {
+        Id = "_sdk.tile.usage"
+        Title = owner.Name
+        Icon = owner.Icon
+        Weight = 20
+        Body =
+            AdminTileBody.summary
+                "_sdk.admin.usage"
+                "Per-scope consumption and cost telemetry for the current billing period."
     }
+}

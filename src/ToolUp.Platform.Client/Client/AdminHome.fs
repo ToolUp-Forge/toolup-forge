@@ -30,7 +30,7 @@ open ToolUp.Platform
 // navigation decision the rail and the route guard run
 // (`AdminTiles.visible`) and publishes the survivors on
 // `AdminTileContext`. So this file reads a list and renders it — which
-// is exactly why a deployment with `NoHealthMonitor` has no health tile
+// is exactly why a deployment with an empty health-monitor slot has no health tile
 // without this file knowing what a health monitor is (GP 9).
 //
 // The data behind a tile rides the same seam too: one call to

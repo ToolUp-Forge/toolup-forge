@@ -23,8 +23,8 @@ open ToolUp.Platform
 // run.
 //
 // A deployment on `ServerConfig.DataMigrations = NoDataMigrations`
-// mounts no route; `ClientConfig.MigrationAdmin` therefore defaults to
-// `NoMigrationAdmin` and this module is not injected at all.
+// mounts no route; the `MigrationAdmin` shell slot therefore defaults
+// to `SlotFill.Empty` and this module is not injected at all.
 
 // ─── Model ──────────────────────────────────────────────────────────
 
@@ -403,7 +403,12 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 // ─── Module creation ────────────────────────────────────────────────
 
-let create (config: MigrationAdminConfig option) : ErasedModule =
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.DataMigrations"
+
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Data Migrations"
 
     let icon =
@@ -417,7 +422,7 @@ let create (config: MigrationAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.DataMigrations"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

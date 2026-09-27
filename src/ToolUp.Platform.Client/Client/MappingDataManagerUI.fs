@@ -17,7 +17,8 @@
 /// each produced object also gets a `ConversionRecord` (provenance) marking
 /// the conversion on the ingestion.
 ///
-/// Selected by `ClientConfig.DataManager = MappingDataManager`; pair with
+/// Fills the data-manager shell slot when it is
+/// `SlotFill.Configured (DataManagerChoice.ColumnMapping _)`; pair with
 /// `ServerConfig.ColumnMapping = EnabledColumnMapping` to back the store.
 module MappingDataManagerUI
 
@@ -2184,6 +2185,11 @@ let private view (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg 
 
 // ─── Module creation ──────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.MappingDataManager"
+
 /// Create the mapping-aware Data Manager as an `ErasedModule`. `displays`
 /// supplies the registered data types (and their schemas) the wizard maps
 /// into — same list the built-in `FileManagerUI` receives. Optional
@@ -2202,7 +2208,7 @@ let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) :
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.MappingDataManager"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withView (view displays)
     |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
     |> ToolUp.Platform.ClientModule.withGroup group

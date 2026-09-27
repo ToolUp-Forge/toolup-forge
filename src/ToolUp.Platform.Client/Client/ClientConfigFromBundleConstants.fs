@@ -22,7 +22,7 @@ type ClientConfigOverrides = {
     /// retired `Mode: PlatformMode option` field; clean cutover.
     Surfaces: SurfaceProfile list option
     AuthUI: AuthUIMode option
-    WebhookAdmin: WebhookAdminMode option
+    WebhookAdmin: SlotFill<ModuleLabel> option
     /// AG Grid module configuration. Consumer typically builds via
     /// `AgGridEnterprise.gridModuleConfig agGridLicense` (consuming
     /// the `BundleConstants.agGridLicense` value).
@@ -38,9 +38,9 @@ type ClientConfigOverrides = {
     /// in Release.
     DevDefaultUserId: string option
     ActiveModule: string option
-    DataManager: DataManagerMode option
-    UsageDashboard: UsageDashboardMode option
-    DataIngestionAdmin: DataIngestionAdminMode option
+    DataManager: SlotFill<DataManagerChoice> option
+    UsageDashboard: SlotFill<ModuleLabel> option
+    DataIngestionAdmin: SlotFill<ModuleLabel> option
 }
 
 module ClientConfigOverrides =
@@ -67,7 +67,7 @@ module ClientConfigOverrides =
     /// `ServerConfigOverrides.referenceApp`).
     let referenceApp: ClientConfigOverrides = {
         empty with
-            WebhookAdmin = Some DefaultWebhookAdmin
+            WebhookAdmin = Some SlotFill.Default
     }
 
 let private applyOption defaultValue =
@@ -214,7 +214,7 @@ let fromBundleConstantValues
             ActiveModule = overrides.ActiveModule
             Surfaces = resolvedSurfaces
             AuthUI = overrides.AuthUI |> applyOption ClientConfig.defaults.AuthUI
-            WebhookAdmin = overrides.WebhookAdmin |> applyOption ClientConfig.defaults.WebhookAdmin
+            Slots.WebhookAdmin = overrides.WebhookAdmin |> applyOption ClientConfig.defaults.Slots.WebhookAdmin
             GridModules = overrides.GridModules |> applyOption ClientConfig.defaults.GridModules
             ModuleFilter = normalisedFilter
             Handlers = overrides.Handlers |> applyOption ClientConfig.defaults.Handlers
@@ -228,11 +228,13 @@ let fromBundleConstantValues
                 overrides.ShowDebugOnlyModules
                 |> applyOption ClientConfig.defaults.ShowDebugOnlyModules
             DevDefaultUserId = overrides.DevDefaultUserId
-            DataManager = overrides.DataManager |> applyOption ClientConfig.defaults.DataManager
-            UsageDashboard = overrides.UsageDashboard |> applyOption ClientConfig.defaults.UsageDashboard
-            DataIngestionAdmin =
+            Slots.DataManager = overrides.DataManager |> applyOption ClientConfig.defaults.Slots.DataManager
+            Slots.UsageDashboard =
+                overrides.UsageDashboard
+                |> applyOption ClientConfig.defaults.Slots.UsageDashboard
+            Slots.DataIngestionAdmin =
                 overrides.DataIngestionAdmin
-                |> applyOption ClientConfig.defaults.DataIngestionAdmin
+                |> applyOption ClientConfig.defaults.Slots.DataIngestionAdmin
     }
 
 /// Phase 71.A.10 — fold the brand-string Vite-define values into the
@@ -306,27 +308,27 @@ let applyAdminModuleConstants
     : ClientConfig =
     {
         config with
-            TeamManager =
-                parseNoDefault teamManager NoTeamManager DefaultTeamManager
-                |> Option.defaultValue config.TeamManager
-            TeamConfig =
-                parseNoDefault teamConfig NoTeamConfig DefaultTeamConfig
-                |> Option.defaultValue config.TeamConfig
-            PlatformAdmin =
-                parseNoDefault platformAdmin NoPlatformAdmin DefaultPlatformAdmin
-                |> Option.defaultValue config.PlatformAdmin
-            PermissionsAdmin =
-                parseNoDefault permissionsAdmin NoPermissionsAdmin DefaultPermissionsAdmin
-                |> Option.defaultValue config.PermissionsAdmin
-            HealthMonitor =
-                parseNoDefault healthMonitor NoHealthMonitor DefaultHealthMonitor
-                |> Option.defaultValue config.HealthMonitor
-            ServiceStatusBoard =
-                parseNoDefault serviceStatusBoard NoServiceStatusBoard DefaultServiceStatusBoard
-                |> Option.defaultValue config.ServiceStatusBoard
-            DataSubjectRequestAdmin =
-                parseNoDefault dataSubjectRequestAdmin NoDataSubjectRequestAdmin DefaultDataSubjectRequestAdmin
-                |> Option.defaultValue config.DataSubjectRequestAdmin
+            Slots.TeamManager =
+                parseNoDefault teamManager SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.TeamManager
+            Slots.TeamConfig =
+                parseNoDefault teamConfig SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.TeamConfig
+            Slots.PlatformAdmin =
+                parseNoDefault platformAdmin SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.PlatformAdmin
+            Slots.PermissionsAdmin =
+                parseNoDefault permissionsAdmin SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.PermissionsAdmin
+            Slots.HealthMonitor =
+                parseNoDefault healthMonitor SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.HealthMonitor
+            Slots.ServiceStatusBoard =
+                parseNoDefault serviceStatusBoard SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.ServiceStatusBoard
+            Slots.DataSubjectRequestAdmin =
+                parseNoDefault dataSubjectRequestAdmin SlotFill.Empty SlotFill.Default
+                |> Option.defaultValue config.Slots.DataSubjectRequestAdmin
             ToastCentre =
                 parseNoDefault toastCentre NoToastCentre DefaultToastCentre
                 |> Option.defaultValue config.ToastCentre

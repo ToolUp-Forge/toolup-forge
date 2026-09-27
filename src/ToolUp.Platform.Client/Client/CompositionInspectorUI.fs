@@ -519,13 +519,18 @@ let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -
     config,
     (fun (model: Model) (dispatch: Msg -> unit) -> PageContent.FullWidth(InspectorPage panel model dispatch render))
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.CompositionInspector"
+
 /// Create the built-in composition inspector as an `ErasedModule`. The
-/// shell's `prepareModules` injects this in any non-Anonymous mode
-/// unless `CompositionInspector = NoCompositionInspector`. The
+/// module fills the `CompositionInspector` shell slot (Default /
+/// Configured), admitted on any authenticated surface. The
 /// server-side handler enforces the Owner/Admin gate independently — the
 /// `NavRole` below hides the sidebar entry, which is an affordance,
 /// never the boundary.
-let create (config: CompositionInspectorConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Composition"
 
     // `interconnected` is the closest glyph in the shipped set to "what
@@ -544,7 +549,7 @@ let create (config: CompositionInspectorConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.CompositionInspector"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withPages [
         page CompositionPanel compositionBody
         page SurfacesPanel surfacesBody

@@ -32,8 +32,8 @@ open Feliz
 // them declares its own tile beside its `create` (573.B).
 
 /// Registry of module-contributed administration tiles. Populated once
-/// at boot from the SDK's tile-contributing built-ins (gated on their
-/// own `ClientConfig` modes) plus
+/// at boot from the shell slots' tiles (`ShellSlots.adminTiles` — one
+/// per filled tile-bearing slot, pointed at whatever fills it) plus
 /// `ClientConfig.Handlers.AdminTileContributors`. The landing module
 /// reads `tiles ()` for the contributed total; the shell reads it for
 /// the set it filters and publishes.
@@ -52,8 +52,8 @@ module AdminTileRegistry =
         Weight = tile.Widget.Weight
     }
 
-    /// Called once by `SDK.Client.boot` with the SDK's own built-in
-    /// contributors followed by
+    /// Called once by `SDK.Client.boot` with one contributor yielding the
+    /// shell slots' tiles followed by those of
     /// `ClientConfig.Handlers.AdminTileContributors`. Flattens and
     /// orders once, so the render path is a field read.
     let setContributors (contributors: IAdminTileContributor list) : unit =

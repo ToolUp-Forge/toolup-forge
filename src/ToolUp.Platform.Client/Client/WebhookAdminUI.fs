@@ -877,10 +877,15 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Webhook
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.WebhookAdmin"
+
 /// Create the built-in webhook admin as an `ErasedModule`. The shell's
 /// `prepareModules` injects this in any non-Anonymous mode — Anonymous
 /// has no persistent scope and the API short-circuits with an error.
-let create (config: WebhookAdminConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Webhooks"
 
     let icon =
@@ -896,7 +901,7 @@ let create (config: WebhookAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.WebhookAdmin"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

@@ -715,10 +715,15 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Service
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.ServiceAccountAdmin"
+
 /// Create the built-in service-account admin as an `ErasedModule`.
 /// `NavRole.TeamOwnerAdmin` keeps it out of a Member's sidebar; the
 /// server-side handler is the enforcement (see the module preamble).
-let create (config: ServiceAccountAdminConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Service Accounts"
 
     let icon =
@@ -730,7 +735,7 @@ let create (config: ServiceAccountAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.ServiceAccountAdmin"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

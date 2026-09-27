@@ -434,12 +434,11 @@
         <Compile Include="Client\UsageDashboard.fs" />
         <!-- Phase 529 - audit-trail viewer admin module over
              IAuditViewApi. Auto-injected in non-Anonymous modes unless
-             ClientConfig.AuditViewer = NoAuditViewer. -->
+             ClientConfig.Slots.AuditViewer = SlotFill.Empty. -->
         <Compile Include="Client\AuditLogUI.fs" />
         <!-- Phase 593 - composition-inspector admin module over
-             ICompositionInspectorApi. Auto-injected in non-Anonymous modes
-             unless ClientConfig.CompositionInspector =
-             NoCompositionInspector. -->
+             ICompositionInspectorApi. Fills the CompositionInspector shell
+             slot, admitted in non-Anonymous modes. -->
         <Compile Include="Client\CompositionInspectorUI.fs" />
         <!-- Phase 217 — module-contributed Home-widget registry (read by
              Home.fs; populated at boot by SDK.Client.program). -->
@@ -485,6 +484,11 @@
              .PlatformUsers) + Platform-Admin gated. Before SDK.Client.fs
              (prepareModules calls create). -->
         <Compile Include="Client\PlatformUsersUI.fs" />
+        <!-- Phase 879 - the shell's slot table: every replaceable built-in
+             (and the chrome built-ins that interleave with them) with its
+             position, gate and administration tile. After every built-in
+             it builds; before SDK.Client.fs (prepareModules walks it). -->
+        <Compile Include="Client\ShellSlots.fs" />
         <Compile Include="Components\ModuleBoundary.fs" />
         <!-- Phase 569 — the shell's typed "not authorised" surface,
              rendered when the route guard refuses a deep-linked module.

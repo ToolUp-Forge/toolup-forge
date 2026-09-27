@@ -1720,12 +1720,15 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamMan
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Create the built-in team manager as an `ErasedModule`. The shell's
-/// `prepareModules` in SDK.Client.fs injects this when
-/// `ClientConfig.Surfaces` declares a single-team `Team` surface
-/// (`Switching = NoSwitcher`) and `ClientConfig.TeamManager` is not
-/// `NoTeamManager`.
-let create (config: TeamManagerConfig option) : ErasedModule =
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.TeamManager"
+
+/// Create the built-in team manager as an `ErasedModule`. It fills the
+/// `TeamManager` shell slot (Default / Configured), which the shell
+/// admits on any `Team` surface.
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Teams"
 
     let icon =
@@ -1735,7 +1738,7 @@ let create (config: TeamManagerConfig option) : ErasedModule =
 
     // SDK-built-in module — `Id` is reserved under the `_sdk.` namespace so
     // it can never collide with an app's RBAC-managed `ServerConfig.ModuleNames`
-    // key. Apps that swap in an `ExternalTeamManager` set their own Id.
+    // key. A deployment's own module in the slot carries its own Id.
     // `init` here is `ClientModuleContext -> Model * Cmd<Msg>` so we use
     // `withContextInit` to override `create`'s unit-init default.
     ToolUp.Platform.ClientModule.create {
@@ -1744,7 +1747,7 @@ let create (config: TeamManagerConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.TeamManager"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
@@ -1752,29 +1755,23 @@ let create (config: TeamManagerConfig option) : ErasedModule =
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
 
-/// Phase 573.B — the administration-landing tile this built-in
-/// contributes (see `HealthMonitorUI.adminTile` for the full
-/// rationale). Team-scoped, so it carries the lightest weight of the
-/// SDK tiles and leads the grid — mirroring the rail, where the
-/// "Team Management" group sits above "Platform Management". Supply
-/// `"_sdk.admin.teams"` from an `IHomeWidgetDataProvider` to lead with
-/// a member count.
-let adminTile (config: TeamManagerConfig option) : AdminTile =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Teams"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
-
-    {
-        OwnerModuleId = "_sdk.TeamManager"
-        Widget = {
-            Id = "_sdk.tile.teams"
-            Title = name
-            Icon = icon
-            Weight = 10
-            Body =
-                AdminTileBody.summary
-                    "_sdk.admin.teams"
-                    "Membership, invitations and roles for the teams you administer."
-        }
+/// Phase 573.B — the administration-landing tile of this built-in's
+/// slot (see `HealthMonitorUI.adminTile` for the full rationale): built
+/// for whichever module fills the slot (`owner`), so a replacement keeps
+/// the tile, with its own id, name and icon.
+///
+/// Team-scoped, so it carries the lightest weight of the SDK tiles and
+/// leads the grid — mirroring the rail, where the "Team Management"
+/// group sits above "Platform Management". Supply `"_sdk.admin.teams"`
+/// from an `IHomeWidgetDataProvider` to lead with a member count.
+let adminTile (owner: ModuleDefinition) : AdminTile = {
+    OwnerModuleId = owner.Id
+    Widget = {
+        Id = "_sdk.tile.teams"
+        Title = owner.Name
+        Icon = owner.Icon
+        Weight = 10
+        Body =
+            AdminTileBody.summary "_sdk.admin.teams" "Membership, invitations and roles for the teams you administer."
     }
+}

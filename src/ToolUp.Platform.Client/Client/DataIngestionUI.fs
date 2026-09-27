@@ -732,7 +732,12 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = DataIng
 
 // ─── Module creation ────────────────────────────────────────────────
 
-let create (config: DataIngestionAdminConfig option) : ErasedModule =
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.DataIngestion"
+
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Data Sources"
 
     let icon =
@@ -744,7 +749,7 @@ let create (config: DataIngestionAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.DataIngestion"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

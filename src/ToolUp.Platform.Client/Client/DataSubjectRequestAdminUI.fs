@@ -877,14 +877,19 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.DataSubjectRequests"
+
 /// Create the built-in DSR admin module as an `ErasedModule`. The
 /// shell's `prepareModules` in `SDK.Client.fs` injects this when
 /// `ClientConfig.Surfaces` declares any authenticated surface
-/// (`ClientConfig.requiresAnyAuth`) and `ClientConfig.DataSubjectRequestAdmin`
-/// is not `NoDataSubjectRequestAdmin`. Owner / Admin gating is the
+/// (`ClientConfig.requiresAnyAuth`) and the `DataSubjectRequestAdmin`
+/// shell slot is filled by it. Owner / Admin gating is the
 /// server-side handler's job; the sidebar entry shows for every
 /// authenticated caller and the API itself rejects non-admin writes.
-let create (config: DataSubjectRequestAdminConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name =
         config |> Option.map _.Name |> Option.defaultValue "Data subject requests"
 
@@ -897,7 +902,7 @@ let create (config: DataSubjectRequestAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.DataSubjectRequests"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly

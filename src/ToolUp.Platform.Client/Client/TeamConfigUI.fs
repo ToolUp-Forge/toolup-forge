@@ -951,11 +951,16 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamCon
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.TeamConfig"
+
 /// Create the built-in configuration admin as an `ErasedModule`. The
 /// shell's `prepareModules` injects this when the deployment runs in
 /// any non-Anonymous mode — Anonymous has no persistent scope so the
 /// form would fail every read.
-let create (config: TeamConfigConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Configuration"
 
     let icon =
@@ -973,7 +978,7 @@ let create (config: TeamConfigConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.TeamConfig"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

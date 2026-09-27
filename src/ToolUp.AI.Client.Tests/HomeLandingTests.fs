@@ -17,13 +17,13 @@ open ToolUp.Platform
 // `ToolUp.Platform.Tests/InProcess/HomeOverviewTests.fs`).
 //
 // Pins the `prepareModules` head-injection contract behind
-// `ClientConfig.HomeModule`:
-//   - `EnabledHomeModule` + `ActiveModule = None` ⇒ Home is `modules[0]`,
+// the `HomeModule` shell slot (`ClientConfig.Slots.HomeModule`):
+//   - `SlotFill.Default` + `ActiveModule = None` ⇒ Home is `modules[0]`,
 //     so the shell's documented init rule ("land on `modules[0]` when
 //     `ActiveModule = None`") makes `_sdk.home` the default surface.
 //   - an explicit `ActiveModule` still wins (Home injection is
 //     orthogonal — it stays head-injected for the sidebar).
-//   - `NoHomeModule` (the default) ⇒ Home is absent entirely (GP 13).
+//   - `SlotFill.Empty` (the default) ⇒ Home is absent entirely (GP 13).
 
 /// Minimal app module with a chosen id — enough for `prepareModules`
 /// ordering assertions (the view is never rendered here).
@@ -54,11 +54,11 @@ let private apps = [ appModule "app.alpha" "Alpha"; appModule "app.beta" "Beta" 
 let tests =
     testList "Home landing selection (Phase 171)" [
 
-        testCase "EnabledHomeModule + ActiveModule = None ⇒ Home is head and the landing surface"
+        testCase "Home slot Default + ActiveModule = None ⇒ Home is head and the landing surface"
         <| fun () ->
             let config = {
                 ClientConfig.defaults with
-                    HomeModule = EnabledHomeModule
+                    Slots.HomeModule = SlotFill.Default
                     ActiveModule = None
             }
 
@@ -72,7 +72,7 @@ let tests =
         <| fun () ->
             let config = {
                 ClientConfig.defaults with
-                    HomeModule = EnabledHomeModule
+                    Slots.HomeModule = SlotFill.Default
                     ActiveModule = Some "app.alpha"
             }
 
@@ -86,11 +86,11 @@ let tests =
             Expect.isTrue (List.contains "app.alpha" ids) "the explicitly-selected module is present"
             Expect.equal (landingId config prepared) "app.alpha" "explicit ActiveModule wins over modules[0]"
 
-        testCase "NoHomeModule (default) ⇒ Home absent entirely"
+        testCase "Home slot Empty (default) ⇒ Home absent entirely"
         <| fun () ->
             let config = {
                 ClientConfig.defaults with
-                    HomeModule = NoHomeModule
+                    Slots.HomeModule = SlotFill.Empty
             }
 
             let prepared = Client.prepareModules config apps
@@ -100,32 +100,32 @@ let tests =
             Expect.isFalse (List.head ids = "_sdk.home") "head is the first non-Home module"
 
             // The default is off, so an existing deployment is byte-for-byte
-            // unchanged (GP 13). HomeModuleMode carries non-equatable cases
+            // unchanged (GP 13). SlotFill carries non-equatable cases
             // (ReactElement / ErasedModule), so assert via a pattern match.
             let defaultIsOff =
-                match ClientConfig.defaults.HomeModule with
-                | NoHomeModule -> true
+                match ClientConfig.defaults.Slots.HomeModule with
+                | SlotFill.Empty -> true
                 | _ -> false
 
-            Expect.isTrue defaultIsOff "default HomeModule is NoHomeModule (off)"
+            Expect.isTrue defaultIsOff "the default Home slot is Empty (off)"
 
-        testCase "ConfiguredHomeModule + ExternalHomeModule also head-inject"
+        testCase "Configured and External Home fills also head-inject"
         <| fun () ->
             let configured = {
                 ClientConfig.defaults with
-                    HomeModule = ConfiguredHomeModule { Name = "Dashboard"; Icon = Html.none }
+                    Slots.HomeModule = SlotFill.Configured { Name = "Dashboard"; Icon = Html.none }
             }
 
             let configuredIds = moduleIds (Client.prepareModules configured apps)
-            Expect.equal (List.head configuredIds) "_sdk.home" "ConfiguredHomeModule head-injects the Home module"
+            Expect.equal (List.head configuredIds) "_sdk.home" "a Configured fill head-injects the Home module"
 
             let custom = appModule "custom.home" "Custom Home"
 
             let external = {
                 ClientConfig.defaults with
-                    HomeModule = ExternalHomeModule custom
+                    Slots.HomeModule = SlotFill.External custom
             }
 
             let externalIds = moduleIds (Client.prepareModules external apps)
-            Expect.equal (List.head externalIds) "custom.home" "ExternalHomeModule head-injects the supplied module"
+            Expect.equal (List.head externalIds) "custom.home" "an External fill head-injects the supplied module"
     ]

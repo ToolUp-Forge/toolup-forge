@@ -45,8 +45,8 @@ open ToolUp.Platform
 // banner on the failed write path; the sidebar role filter further
 // hides the entry from members in Team / MultiTeam modes.
 //
-// Auto-injected by `SDK.Client.prepareModules` in every non-Anonymous
-// mode unless `ClientConfig.PermissionsAdmin = NoPermissionsAdmin`.
+// Fills the `PermissionsAdmin` shell slot (default `SlotFill.Default`),
+// admitted in every non-Anonymous mode.
 // Anonymous mode never has role concepts so the gate is suppressed by
 // construction.
 
@@ -1274,16 +1274,21 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Permiss
 
 // ─── Module registration ─────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.PermissionsAdmin"
+
 /// Create the built-in permissions admin as an `ErasedModule`. The
-/// shell's `prepareModules` injects this in any non-Anonymous mode
-/// unless `PermissionsAdmin = NoPermissionsAdmin` — Anonymous mode has
+/// module fills the `PermissionsAdmin` shell slot, admitted on any
+/// authenticated surface — Anonymous mode has
 /// no role concept so the gate is suppressed by construction.
 ///
 /// Sits in the "Admin" sidebar group alongside `TeamConfigUI`,
 /// `WebhookAdminUI`, `DataIngestionUI`. Owner/Admin gating on the
 /// write paths is enforced server-side via `PermissionApi`'s docstring
 /// contract; the client surfaces the gating message as a banner.
-let create (config: PermissionsAdminConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Permissions"
 
     let icon =
@@ -1299,7 +1304,7 @@ let create (config: PermissionsAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.PermissionsAdmin"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"

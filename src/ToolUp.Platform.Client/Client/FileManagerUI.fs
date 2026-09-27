@@ -713,8 +713,15 @@ let private view (displays: DataTypeDisplay list) model dispatch =
 
 // ─── Module creation ──────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.DataManager"
+
 /// Create the built-in file manager as an ErasedModule.
-/// The DataTypeDisplay list determines how summaries are rendered.
+/// The DataTypeDisplay list determines how summaries are rendered. It
+/// fills the data-manager shell slot when that slot is `SlotFill.Default`
+/// or `Configured (DataManagerChoice.FileUpload _)`.
 /// Optional DataManagerConfig overrides the default name, icon, and
 /// group. The defaults — "File Upload" in group "Data Management" —
 /// keep file ingestion separate from any RAG / knowledge-base
@@ -732,14 +739,14 @@ let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) :
 
     // SDK-built-in module — `Id` is reserved under the `_sdk.` namespace so
     // it can never collide with an app's RBAC-managed `ServerConfig.ModuleNames`
-    // key. Apps that swap in an `ExternalDataManager` set their own Id.
+    // key. A deployment's own module in the data slot carries its own Id.
     ToolUp.Platform.ClientModule.create {
         Init = init
         Update = update
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.DataManager"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withView (view displays)
     |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
     |> ToolUp.Platform.ClientModule.withGroup group

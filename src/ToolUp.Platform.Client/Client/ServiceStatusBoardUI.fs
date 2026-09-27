@@ -447,12 +447,17 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Service
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.ServiceStatusBoard"
+
 /// Create the built-in service-status-board admin module. The shell's
-/// `prepareModules` injects this in any non-Anonymous mode unless
-/// `ServiceStatusBoard = NoServiceStatusBoard`. Grouped under
+/// module fills the `ServiceStatusBoard` shell slot (Default /
+/// Configured), which the shell admits on every surface. Grouped under
 /// "Platform Management" so the role-gated sidebar filter (commit 4f.2)
 /// hides the entry from non-admin callers.
-let create (config: ServiceStatusBoardConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Service Status"
 
     let icon =
@@ -464,36 +469,30 @@ let create (config: ServiceStatusBoardConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.ServiceStatusBoard"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
 
-/// Phase 573.B — the administration-landing tile this built-in
-/// contributes (see `HealthMonitorUI.adminTile` for the full rationale:
-/// declared here so the landing page never names a module, added by the
-/// shell only for the SDK-owned modes, and `Title` / `Icon` following
-/// the same derivation `create` uses). Supply `"_sdk.admin.service-status"`
-/// from an `IHomeWidgetDataProvider` to lead the tile with a live
-/// headline.
-let adminTile (config: ServiceStatusBoardConfig option) : AdminTile =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Service Status"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.health
-
-    {
-        OwnerModuleId = "_sdk.ServiceStatusBoard"
-        Widget = {
-            Id = "_sdk.tile.service-status"
-            Title = name
-            Icon = icon
-            Weight = 40
-            Body =
-                AdminTileBody.summary
-                    "_sdk.admin.service-status"
-                    "One snapshot across health, preflight, config drift, rate limits, the job queue and smoke tests."
-        }
+/// Phase 573.B — the administration-landing tile of this built-in's
+/// slot (see `HealthMonitorUI.adminTile` for the full rationale): built
+/// for whichever module fills the slot (`owner`), so a replacement keeps
+/// the tile, with its own id, name and icon.
+///
+/// Supply `"_sdk.admin.service-status"` from an `IHomeWidgetDataProvider`
+/// to lead the tile with a live headline.
+let adminTile (owner: ModuleDefinition) : AdminTile = {
+    OwnerModuleId = owner.Id
+    Widget = {
+        Id = "_sdk.tile.service-status"
+        Title = owner.Name
+        Icon = owner.Icon
+        Weight = 40
+        Body =
+            AdminTileBody.summary
+                "_sdk.admin.service-status"
+                "One snapshot across health, preflight, config drift, rate limits, the job queue and smoke tests."
     }
+}

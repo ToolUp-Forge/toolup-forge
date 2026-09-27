@@ -167,168 +167,136 @@ let private anonymous = {
         Surfaces = Surfaces.anonymous
 }
 
+let private label (name: string) : ModuleLabel = { Name = name; Icon = Html.none }
+
 let private everyDefault (config: ClientConfig) = {
     config with
-        HomeModule = EnabledHomeModule
-        DataManager = DefaultDataManager
-        TeamManager = DefaultTeamManager
-        TeamConfig = DefaultTeamConfig
-        WebhookAdmin = DefaultWebhookAdmin
-        ServiceAccountAdmin = DefaultServiceAccountAdmin
-        ExternalContactManager = DefaultExternalContactManager
-        NotificationPreferences = DefaultNotificationPreferencesUI
-        ModuleVisibilityAdmin = DefaultModuleVisibilityAdmin
-        SessionSecurity = DefaultSessionSecurity
-        PlatformAdmin = DefaultPlatformAdmin
-        PermissionsAdmin = DefaultPermissionsAdmin
-        HealthMonitor = DefaultHealthMonitor
-        ServiceStatusBoard = DefaultServiceStatusBoard
-        UsageDashboard = DefaultUsageDashboard
-        AuditViewer = DefaultAuditViewer
-        CompositionInspector = DefaultCompositionInspector
-        DataIngestionAdmin = DefaultDataIngestionAdmin
-        MigrationAdmin = DefaultMigrationAdmin
-        DataSubjectRequestAdmin = DefaultDataSubjectRequestAdmin
+        Slots = {
+            HomeModule = SlotFill.Default
+            DataManager = SlotFill.Default
+            TeamManager = SlotFill.Default
+            TeamConfig = SlotFill.Default
+            WebhookAdmin = SlotFill.Default
+            ServiceAccountAdmin = SlotFill.Default
+            ExternalContactManager = SlotFill.Default
+            NotificationPreferences = SlotFill.Default
+            ModuleVisibilityAdmin = SlotFill.Default
+            SessionSecurity = SlotFill.Default
+            PlatformAdmin = SlotFill.Default
+            PermissionsAdmin = SlotFill.Default
+            HealthMonitor = SlotFill.Default
+            ServiceStatusBoard = SlotFill.Default
+            UsageDashboard = SlotFill.Default
+            AuditViewer = SlotFill.Default
+            CompositionInspector = SlotFill.Default
+            DataIngestionAdmin = SlotFill.Default
+            MigrationAdmin = SlotFill.Default
+            DataSubjectRequestAdmin = SlotFill.Default
+        }
 }
 
 let private everyConfigured (config: ClientConfig) = {
     config with
-        HomeModule = ConfiguredHomeModule { Name = "My home"; Icon = Html.none }
-        DataManager =
-            ConfiguredDataManager {
-                Name = "My uploads"
-                Icon = Html.none
-                Group = Some "My data"
-            }
-        TeamManager = ConfiguredTeamManager { Name = "My teams"; Icon = Html.none }
-        TeamConfig =
-            ConfiguredTeamConfig {
-                Name = "My team config"
-                Icon = Html.none
-            }
-        WebhookAdmin =
-            ConfiguredWebhookAdmin {
-                Name = "My webhooks"
-                Icon = Html.none
-            }
-        ServiceAccountAdmin =
-            ConfiguredServiceAccountAdmin {
-                Name = "My service accounts"
-                Icon = Html.none
-            }
-        ExternalContactManager =
-            ConfiguredExternalContactManager {
-                Name = "My contacts"
-                Icon = Html.none
-            }
-        NotificationPreferences =
-            ConfiguredNotificationPreferencesUI {
-                Name = "My notifications"
-                Icon = Html.none
-            }
-        ModuleVisibilityAdmin =
-            ConfiguredModuleVisibilityAdmin {
-                Name = "My visibility"
-                Icon = Html.none
-            }
-        SessionSecurity =
-            ConfiguredSessionSecurity {
-                Name = "My sessions"
-                Icon = Html.none
-            }
-        PlatformAdmin =
-            ConfiguredPlatformAdmin {
-                Name = "My platform"
-                Icon = Html.none
-            }
-        PermissionsAdmin =
-            ConfiguredPermissionsAdmin {
-                Name = "My permissions"
-                Icon = Html.none
-            }
-        HealthMonitor = ConfiguredHealthMonitor { Name = "My health"; Icon = Html.none }
-        ServiceStatusBoard = ConfiguredServiceStatusBoard { Name = "My status"; Icon = Html.none }
-        UsageDashboard = ConfiguredUsageDashboard { Name = "My usage"; Icon = Html.none }
-        AuditViewer = ConfiguredAuditViewer { Name = "My audit"; Icon = Html.none }
-        CompositionInspector =
-            ConfiguredCompositionInspector {
-                Name = "My composition"
-                Icon = Html.none
-            }
-        DataIngestionAdmin =
-            ConfiguredDataIngestionAdmin {
-                Name = "My ingestion"
-                Icon = Html.none
-            }
-        MigrationAdmin =
-            ConfiguredMigrationAdmin {
-                Name = "My migrations"
-                Icon = Html.none
-            }
-        DataSubjectRequestAdmin = ConfiguredDataSubjectRequestAdmin { Name = "My DSRs"; Icon = Html.none }
+        Slots = {
+            HomeModule = SlotFill.Configured(label "My home")
+            DataManager =
+                SlotFill.Configured(
+                    DataManagerChoice.FileUpload {
+                        Name = "My uploads"
+                        Icon = Html.none
+                        Group = Some "My data"
+                    }
+                )
+            TeamManager = SlotFill.Configured(label "My teams")
+            TeamConfig = SlotFill.Configured(label "My team config")
+            WebhookAdmin = SlotFill.Configured(label "My webhooks")
+            ServiceAccountAdmin = SlotFill.Configured(label "My service accounts")
+            ExternalContactManager = SlotFill.Configured(label "My contacts")
+            NotificationPreferences = SlotFill.Configured(label "My notifications")
+            ModuleVisibilityAdmin = SlotFill.Configured(label "My visibility")
+            SessionSecurity = SlotFill.Configured(label "My sessions")
+            PlatformAdmin = SlotFill.Configured(label "My platform")
+            PermissionsAdmin = SlotFill.Configured(label "My permissions")
+            HealthMonitor = SlotFill.Configured(label "My health")
+            ServiceStatusBoard = SlotFill.Configured(label "My status")
+            UsageDashboard = SlotFill.Configured(label "My usage")
+            AuditViewer = SlotFill.Configured(label "My audit")
+            CompositionInspector = SlotFill.Configured(label "My composition")
+            DataIngestionAdmin = SlotFill.Configured(label "My ingestion")
+            MigrationAdmin = SlotFill.Configured(label "My migrations")
+            DataSubjectRequestAdmin = SlotFill.Configured(label "My DSRs")
+        }
 }
 
 let private everyExternal (config: ClientConfig) = {
     config with
-        HomeModule = ExternalHomeModule(replacement "home")
-        DataManager = ExternalDataManager(replacement "dataManager")
-        TeamManager = ExternalTeamManager(replacement "teamManager")
-        TeamConfig = ExternalTeamConfig(replacement "teamConfig")
-        WebhookAdmin = ExternalWebhookAdmin(replacement "webhookAdmin")
-        ServiceAccountAdmin = ExternalServiceAccountAdmin(replacement "serviceAccountAdmin")
-        ExternalContactManager = ExternalExternalContactManager(replacement "externalContactManager")
-        NotificationPreferences = ExternalNotificationPreferencesUI(replacement "notificationPreferences")
-        ModuleVisibilityAdmin = ExternalModuleVisibilityAdmin(replacement "moduleVisibilityAdmin")
-        SessionSecurity = ExternalSessionSecurity(replacement "sessionSecurity")
-        PlatformAdmin = ExternalPlatformAdmin(replacement "platformAdmin")
-        PermissionsAdmin = ExternalPermissionsAdmin(replacement "permissionsAdmin")
-        HealthMonitor = ExternalHealthMonitor(replacement "healthMonitor")
-        ServiceStatusBoard = ExternalServiceStatusBoard(replacement "serviceStatusBoard")
-        UsageDashboard = ExternalUsageDashboard(replacement "usageDashboard")
-        AuditViewer = ExternalAuditViewer(replacement "auditViewer")
-        CompositionInspector = ExternalCompositionInspector(replacement "compositionInspector")
-        DataIngestionAdmin = ExternalDataIngestionAdmin(replacement "dataIngestionAdmin")
-        MigrationAdmin = ExternalMigrationAdmin(replacement "migrationAdmin")
-        DataSubjectRequestAdmin = ExternalDataSubjectRequestAdmin(replacement "dataSubjectRequestAdmin")
+        Slots = {
+            HomeModule = SlotFill.External(replacement "home")
+            DataManager = SlotFill.External(replacement "dataManager")
+            TeamManager = SlotFill.External(replacement "teamManager")
+            TeamConfig = SlotFill.External(replacement "teamConfig")
+            WebhookAdmin = SlotFill.External(replacement "webhookAdmin")
+            ServiceAccountAdmin = SlotFill.External(replacement "serviceAccountAdmin")
+            ExternalContactManager = SlotFill.External(replacement "externalContactManager")
+            NotificationPreferences = SlotFill.External(replacement "notificationPreferences")
+            ModuleVisibilityAdmin = SlotFill.External(replacement "moduleVisibilityAdmin")
+            SessionSecurity = SlotFill.External(replacement "sessionSecurity")
+            PlatformAdmin = SlotFill.External(replacement "platformAdmin")
+            PermissionsAdmin = SlotFill.External(replacement "permissionsAdmin")
+            HealthMonitor = SlotFill.External(replacement "healthMonitor")
+            ServiceStatusBoard = SlotFill.External(replacement "serviceStatusBoard")
+            UsageDashboard = SlotFill.External(replacement "usageDashboard")
+            AuditViewer = SlotFill.External(replacement "auditViewer")
+            CompositionInspector = SlotFill.External(replacement "compositionInspector")
+            DataIngestionAdmin = SlotFill.External(replacement "dataIngestionAdmin")
+            MigrationAdmin = SlotFill.External(replacement "migrationAdmin")
+            DataSubjectRequestAdmin = SlotFill.External(replacement "dataSubjectRequestAdmin")
+        }
 }
 
 let private everyEmpty (config: ClientConfig) = {
     config with
-        HomeModule = NoHomeModule
-        DataManager = NoDataManager
-        TeamManager = NoTeamManager
-        TeamConfig = NoTeamConfig
-        WebhookAdmin = NoWebhookAdmin
-        ServiceAccountAdmin = NoServiceAccountAdmin
-        ExternalContactManager = NoExternalContactManager
-        NotificationPreferences = NoNotificationPreferencesUI
-        ModuleVisibilityAdmin = NoModuleVisibilityAdmin
-        SessionSecurity = NoSessionSecurity
-        PlatformAdmin = NoPlatformAdmin
-        PermissionsAdmin = NoPermissionsAdmin
-        HealthMonitor = NoHealthMonitor
-        ServiceStatusBoard = NoServiceStatusBoard
-        UsageDashboard = NoUsageDashboard
-        AuditViewer = NoAuditViewer
-        CompositionInspector = NoCompositionInspector
-        DataIngestionAdmin = NoDataIngestionAdmin
-        MigrationAdmin = NoMigrationAdmin
-        DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
+        Slots = {
+            HomeModule = SlotFill.Empty
+            DataManager = SlotFill.Empty
+            TeamManager = SlotFill.Empty
+            TeamConfig = SlotFill.Empty
+            WebhookAdmin = SlotFill.Empty
+            ServiceAccountAdmin = SlotFill.Empty
+            ExternalContactManager = SlotFill.Empty
+            NotificationPreferences = SlotFill.Empty
+            ModuleVisibilityAdmin = SlotFill.Empty
+            SessionSecurity = SlotFill.Empty
+            PlatformAdmin = SlotFill.Empty
+            PermissionsAdmin = SlotFill.Empty
+            HealthMonitor = SlotFill.Empty
+            ServiceStatusBoard = SlotFill.Empty
+            UsageDashboard = SlotFill.Empty
+            AuditViewer = SlotFill.Empty
+            CompositionInspector = SlotFill.Empty
+            DataIngestionAdmin = SlotFill.Empty
+            MigrationAdmin = SlotFill.Empty
+            DataSubjectRequestAdmin = SlotFill.Empty
+        }
 }
 
 let private columnMapping (config: ClientConfig) = {
     config with
-        DataManager = MappingDataManager
+        Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
 }
 
 let private configuredColumnMapping (config: ClientConfig) = {
     config with
-        DataManager =
-            ConfiguredMappingDataManager {
-                Name = "My mapping"
-                Icon = Html.none
-                Group = Some "My data"
-            }
+        Slots.DataManager =
+            SlotFill.Configured(
+                DataManagerChoice.ColumnMapping(
+                    Some {
+                        Name = "My mapping"
+                        Icon = Html.none
+                        Group = Some "My data"
+                    }
+                )
+            )
 }
 
 let private referenceConfigurations: (string * ClientConfig) list = [
