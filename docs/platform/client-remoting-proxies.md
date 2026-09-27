@@ -96,3 +96,74 @@ When you add a new `*.Client` companion:
 5. Don't add per-call construction. Don't add a header-snapshot customiser.
 
 If any of these feel wrong for your use case, that's a conversation worth having on a PR review — not a unilateral deviation in your companion.
+
+## Declared reads — in-flight sharing and stale-while-revalidate (Phase 854)
+
+A proxy sends every call it is asked for, unless the method is **declared** a read. Two policies,
+both opt-in per method (GP 11), both a **client** policy — the server's dispatcher reads neither
+attribute and serves a declared method exactly as it serves an undeclared one:
+
+| Declaration | What the client proxy does |
+|---|---|
+| `[<Cacheable(maxAgeSeconds)>]` | Identical calls in flight at once share **one** request, and every caller receives its result. A result is then served for `maxAgeSeconds` without waiting on the network; each such hit starts a background refresh. `Cacheable(0)` shares in-flight calls and caches nothing. |
+| `[<Invalidates("GetA", "GetB")>]` | A **successful** call drops the named reads' cached results and detaches their in-flight requests, so the next read goes to the server. The method itself is never shared: two identical mutations are two requests. |
+| neither | Unchanged, byte for byte — never shared, never cached, its own set of interceptor events per call. |
+
+"Identical" means identical on the wire: the same HTTP method, URL, proxy headers and request body.
+The table is one per page, not one per proxy — the shell builds several proxies of one API record,
+and the second caller the policy exists for is usually on another one. Multipart uploads are never
+shared (their bodies cannot be compared). Declare `Cacheable` only on a method with no side effects.
+
+### Declaring it — the attribute, and the data a Fable client registers
+
+The attributes (`ToolUp.Platform`, beside `[<RequiresRole>]` and the rest) go on the shared API
+record. **Fable's reflection carries no custom attributes**, so a browser proxy cannot read them off
+the record at runtime; the client registers the same declaration as data, once, at composition:
+
+```fsharp skip=fragment
+// Shared — compiled by both hosts.
+type CatalogApi = {
+    [<Cacheable(60)>] GetCatalog: unit -> Async<Catalog>
+    [<Invalidates("GetCatalog")>] AddItem: Item -> Async<unit>
+}
+
+let catalogReadPolicies = [
+    "GetCatalog", ReadPolicy.cacheable 60
+    "AddItem", ReadPolicy.invalidates [ "GetCatalog" ]
+]
+
+// Client composition — before or after the proxy is built; the table is read per call.
+ReadPolicies.registerFor<CatalogApi> catalogReadPolicies
+
+// A .NET test keeps the two declarations from drifting.
+Expect.equal (ReadPolicies.ofAttributes typeof<CatalogApi>) catalogReadPolicies "declared once"
+```
+
+`ReadPolicies.ofAttributes` is .NET-only; it is the drift check, not a Fable code path. The forge's
+own pinned example is `src/ToolUp.Platform.Tests/Remoting/ReadPolicyFixture.fs`, which both test
+packs compile.
+
+### What a consumer sees
+
+- **Plain `Async`** (`let! x = api.GetCatalog ()`): a shared call returns the shared result; a
+  cache hit returns **synchronously**, and the refresh updates the cache for the next caller.
+- **`Cmd.OfRemoting.call` / `callWithName`**: a cache hit dispatches `ofSuccess cached`, then — when
+  the refresh lands — `ofSuccess fresh` as an ordinary second message. A refresh that fails
+  dispatches nothing more: the served value stands, the interceptor chain's `OnError` observes the
+  failure, and the stale entry is evicted so the next call goes to the server. `callWithRetry`
+  receives the shared or cached value but not the second message.
+- **Interceptors observe requests, not call sites.** The first `Cmd.OfRemoting` call to reach a
+  shared request owns its chain: `OnCalling` once, then `OnSuccess` or `OnError` once, and every
+  waiting call receives that chain's outcome — an `OnError` replacement exception included. A cache
+  hit sends nothing, so fires nothing; its refresh is a request and fires the chain.
+
+### Identity
+
+The request guard attaches the caller's identity at send time, below the table, so a cached result
+belongs to the identity that fetched it. `UserSession.setAuthToken` (for a different subject, or one
+whose subject cannot be read) and `UserSession.clearAuthToken` call `ReadPolicies.clear`. A
+deployment that changes identity another way calls it too. `ReadPolicies.invalidate` is there for a
+change the client learns of some other way (a notification, say).
+
+With nothing registered, `Cmd.OfRemoting` runs its pre-854 path exactly — the check is one count.
+Migration notes and the measured before/after: [`docs/migrations/854-client-read-policies.md`](../migrations/854-client-read-policies.md).

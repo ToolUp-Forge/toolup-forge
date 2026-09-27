@@ -6493,6 +6493,49 @@ ToolUp.Remoting.Client.ProxyRequestException.DecodeError : Microsoft.FSharp.Core
 ToolUp.Remoting.Client.ProxyRequestException.Response : ToolUp.Remoting.Client.HttpResponse { get }
 ToolUp.Remoting.Client.ProxyRequestException.ResponseText : System.String { get }
 ToolUp.Remoting.Client.ProxyRequestException.StatusCode : System.Int32 { get }
+ToolUp.Remoting.Client.ReadPolicies (class)
+ToolUp.Remoting.Client.ReadPolicies.anyDeclared() : System.Boolean
+ToolUp.Remoting.Client.ReadPolicies.clear() : System.Void
+ToolUp.Remoting.Client.ReadPolicies.invalidate(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Void
+ToolUp.Remoting.Client.ReadPolicies.ofAttributes(System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Client.ReadPolicy]]
+ToolUp.Remoting.Client.ReadPolicies.register(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Client.ReadPolicy]]) : System.Void
+ToolUp.Remoting.Client.ReadPolicies.registerFor`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Client.ReadPolicy]]) : System.Void
+ToolUp.Remoting.Client.ReadPolicies.tryFind(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Client.ReadPolicy]
+ToolUp.Remoting.Client.ReadPolicies.tryObserve`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[r]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Client.ReadPolicies+Observation`1[r]]
+ToolUp.Remoting.Client.ReadPolicies+Observation`1 (class)
+ToolUp.Remoting.Client.ReadPolicies+Observation`1.IsPlain : System.Boolean { get }
+ToolUp.Remoting.Client.ReadPolicies+Observation`1.IsShared : System.Boolean { get }
+ToolUp.Remoting.Client.ReadPolicies+Observation`1.Tag : System.Int32 { get }
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Plain (class)
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Plain.call : Microsoft.FSharp.Control.FSharpAsync`1[r] { get }
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Shared (class)
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Shared.leg : ToolUp.Remoting.Client.ReadPolicies+ReadLeg { get }
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Tags (class)
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Tags.Plain : System.Int32 (literal)
+ToolUp.Remoting.Client.ReadPolicies+Observation`1+Tags.Shared : System.Int32 (literal)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg (class)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg.IsAwaiting : System.Boolean { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg.IsServed : System.Boolean { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg.Tag : System.Int32 { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Awaiting (class)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Awaiting.request : ToolUp.Remoting.Client.ReadPolicies+SharedRequest { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Served (class)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Served.cached : System.Object { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Served.refresh : ToolUp.Remoting.Client.ReadPolicies+SharedRequest { get }
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Tags (class)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Tags.Awaiting : System.Int32 (literal)
+ToolUp.Remoting.Client.ReadPolicies+ReadLeg+Tags.Served : System.Int32 (literal)
+ToolUp.Remoting.Client.ReadPolicies+SharedRequest (class)
+ToolUp.Remoting.Client.ReadPolicies+SharedRequest.AwaitFinal() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Object, System.Exception]]
+ToolUp.Remoting.Client.ReadPolicies+SharedRequest.IsSettled : System.Boolean { get }
+ToolUp.Remoting.Client.ReadPolicies+SharedRequest.TryClaimChain(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[System.Object, System.Exception], Microsoft.FSharp.Core.FSharpResult`2[System.Object, System.Exception]]) : System.Boolean
+ToolUp.Remoting.Client.ReadPolicy (class)
+ToolUp.Remoting.Client.ReadPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Remoting.Client.ReadPolicy.Invalidates : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Client.ReadPolicy.MaxAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Remoting.Client.ReadPolicyModule (class)
+ToolUp.Remoting.Client.ReadPolicyModule.cacheable(System.Int32) : ToolUp.Remoting.Client.ReadPolicy
+ToolUp.Remoting.Client.ReadPolicyModule.invalidates(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Remoting.Client.ReadPolicy
 ToolUp.Remoting.Client.RemoteBuilderOptions (class)
 ToolUp.Remoting.Client.RemoteBuilderOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.Type, System.Object]]], System.Boolean)
 ToolUp.Remoting.Client.RemoteBuilderOptions.Authorization : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

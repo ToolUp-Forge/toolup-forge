@@ -166,7 +166,15 @@ type Remoting() =
                             fieldTypes
                             |> Array.pick (fun (name, typ) -> if name = field.FieldName then Some typ else None)
 
-                        let fn = Proxy.proxyFetch options recordType.Name field fieldType
+                        // Phase 854 — keyed by the record's FullName, the
+                        // key `ReadPolicies.register` declarations use.
+                        let fn =
+                            Proxy.proxyFetchWithPolicies
+                                (Some recordType.FullName)
+                                options
+                                recordType.Name
+                                field
+                                fieldType
 
                         match n with
                         | 0 -> box (fn null null null null null null null null)

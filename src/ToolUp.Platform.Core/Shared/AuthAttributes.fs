@@ -212,3 +212,39 @@ module RateLimitSeconds =
 
     [<Literal>]
     let perDay = 86400
+// Phase 854 — client read-policy attributes. Unlike every family above,
+// these are a CLIENT policy: the server's dispatcher reads neither of them
+// and serves a `Cacheable` or `Invalidates` method exactly as it serves an
+// undeclared one. They live here, beside the attributes the dispatcher
+// does read, so an API record declares its whole wire behaviour in one
+// place and both hosts compile the declaration.
+//
+// Readable at RUNTIME on .NET only. Fable's reflection metadata carries no
+// custom attributes, so the browser proxy cannot see these on the record:
+// a Fable client receives the same declaration as data through
+// `ToolUp.Remoting.Client.ReadPolicies.register`, and the .NET host's
+// `ReadPolicies.ofAttributes` reads these attributes into that data so a
+// test can pin the two equal. See docs/platform/client-remoting-proxies.md.
+
+/// Declares a READ method whose result the client proxy may share and
+/// serve stale-while-revalidate. Two identical calls (same method, same
+/// arguments, same proxy headers) in flight at once make ONE request and
+/// both callers receive its result; a result is then served for
+/// `maxAgeSeconds` without waiting on the network, each such hit starting
+/// a background refresh. `maxAgeSeconds = 0` shares in-flight calls and
+/// caches nothing. Declare it only on a method with no side effects: an
+/// undeclared method is never deduplicated or cached.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type CacheableAttribute(maxAgeSeconds: int) =
+    inherit Attribute()
+    member _.MaxAgeSeconds = maxAgeSeconds
+
+/// Declares that a successful call of this method makes the named READ
+/// methods of the same API record stale: the client proxy drops their
+/// cached results and detaches their in-flight requests from the shared
+/// table, so the next read goes to the server. Correctness never rests on
+/// a `Cacheable` timer alone.
+[<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
+type InvalidatesAttribute([<ParamArray>] methodNames: string[]) =
+    inherit Attribute()
+    member _.MethodNames = methodNames

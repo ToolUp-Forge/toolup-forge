@@ -419,6 +419,16 @@ let getUserId () =
 /// are still persisted on BOTH paths — they drive `getUserId` /
 /// `getDisplayName` and are not the bearer credential.
 let setAuthToken (token: string) =
+    // Phase 854 — a cached read result belongs to the identity that fetched
+    // it: a token for a different subject (or one whose subject cannot be
+    // read) drops the client read cache. A refresh for the same subject
+    // keeps it.
+    let previousUserId = Browser.Dom.window.localStorage.getItem tokenUserIdKey
+
+    match decodeJwtIdentity token with
+    | Some identity when identity.UserId = previousUserId -> ()
+    | _ -> ToolUp.Remoting.Client.ReadPolicies.clear ()
+
     // Identity claims (non-secret) persist on both paths.
     match decodeJwtIdentity token with
     | Some identity ->
@@ -468,6 +478,8 @@ let setAuthToken (token: string) =
 /// `DELETE /api/auth/session` — so the next sign-in resolves a fresh
 /// subject and no usable token survives in either store.
 let clearAuthToken () =
+    // Phase 854 — sign-out drops every cached read result.
+    ToolUp.Remoting.Client.ReadPolicies.clear ()
     Browser.Dom.window.localStorage.removeItem tokenKey
     Browser.Dom.window.localStorage.removeItem tokenUserIdKey
     Browser.Dom.window.localStorage.removeItem tokenDisplayNameKey
