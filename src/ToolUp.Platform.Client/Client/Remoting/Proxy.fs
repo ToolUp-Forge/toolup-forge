@@ -983,6 +983,105 @@ module Proxy =
         | None -> ()
     ]
 
+    /// Phase 854 — the wire identity of a call, less its body: two calls
+    /// of one method whose bodies are also equal send identical bytes.
+    let private readKeyPrefixOf (funcNeedParameters: bool) (url: string) (headers: (string * string) list) =
+        (if funcNeedParameters then "POST " else "GET ")
+        + url
+        + "\n"
+        + (headers
+           |> List.map (fun (name, value) -> name + ": " + value)
+           |> String.concat "\n")
+        + "\n\n"
+
+    /// Phase 853 — the JSON request both proxies send, the reflective one
+    /// and the generated one: a body-carrying call is a POST, a
+    /// parameterless one a GET, and with batching enabled (Phase 855) the
+    /// call joins this tick's envelope instead; its element comes back as
+    /// the response the caller reads, unchanged.
+    let private sendJson
+        (options: RemoteBuilderOptions)
+        (route: string)
+        (url: string)
+        (headers: (string * string) list)
+        (funcNeedParameters: bool)
+        (isMultipart: bool)
+        (requestBody: RequestBody)
+        : Async<HttpResponse> =
+        if RemoteBatching.isEnabled () && not isMultipart then
+            let body =
+                match requestBody with
+                | RequestBody.Json text when funcNeedParameters -> Some text
+                | _ -> None
+
+            RemoteBatching.send options.BaseUrl route url headers options.WithCredentials body
+        elif funcNeedParameters then
+            Http.post url
+            |> Http.withBody requestBody
+            |> Http.withHeaders headers
+            |> Http.withCredentials options.WithCredentials
+            |> Http.send
+        else
+            Http.get url
+            |> Http.withHeaders headers
+            |> Http.withCredentials options.WithCredentials
+            |> Http.send
+
+    /// Phase 853 — a JSON response that is not a 200, raised as the
+    /// `ProxyRequestException` a caller has always received for it.
+    let private raiseStatus (url: string) (response: HttpResponse) : 'T =
+        match response.StatusCode with
+        | 500 ->
+            raise (
+                ProxyRequestException(
+                    response,
+                    sprintf "Internal server error (500) while making request to %s" url,
+                    response.ResponseBody,
+                    // Phase 783 — a 500 should no longer be able to carry
+                    // one (a decode refusal is a 400 now), but the
+                    // recovery is cheap and total, and a consumer pinned
+                    // to an older server still reads whatever arrives.
+                    tryReadDecodeError response.ResponseBody
+                )
+            )
+        | n ->
+            raise (
+                ProxyRequestException(
+                    response,
+                    sprintf "Http error (%d) from server occured while making request to %s" n url,
+                    response.ResponseBody,
+                    // Phase 783 — the decode-refusal path: the server
+                    // answers 400 + a `validation` envelope carrying the
+                    // structured refusal.
+                    tryReadDecodeError response.ResponseBody
+                )
+            )
+
+    /// Phase 843 — a 200 body through a JSON algebra decoder: read ONCE
+    /// into the lexical value model (`JsonText`, numbers kept as written)
+    /// and decoded by total combinators; a malformed body is a named
+    /// refusal on the same `ProxyRequestException` the binary path raises,
+    /// never an exception from inside the parse.
+    let private decodeJsonResponse
+        (url: string)
+        (response: HttpResponse)
+        (decoder: ToolUp.Remoting.Json.JsonValue -> Result<'T, DecodeError>)
+        : 'T =
+        match
+            ToolUp.Remoting.Json.JsonText.tryParse response.ResponseBody
+            |> Result.bind decoder
+        with
+        | Ok value -> value
+        | Error error ->
+            raise (
+                ProxyRequestException(
+                    response,
+                    sprintf "The server's response to %s did not decode: %s" url (DecodeError.render error),
+                    response.ResponseBody,
+                    Some error
+                )
+            )
+
     /// Phase 854 — `proxyFetch` with the method's read policy applied:
     /// `apiFullName` is the API record's `FullName`, the key
     /// `ReadPolicies` declarations are registered under (`None` never
@@ -1019,16 +1118,8 @@ module Proxy =
 
         let headers = requestHeaders options isMultipart
 
-        // Phase 854 — the wire identity of a call, less its body: two calls
-        // of this method whose bodies are also equal send identical bytes.
-        let readKeyPrefix =
-            (if funcNeedParameters then "POST " else "GET ")
-            + url
-            + "\n"
-            + (headers
-               |> List.map (fun (name, value) -> name + ": " + value)
-               |> String.concat "\n")
-            + "\n\n"
+        // Phase 854 — the wire identity of a call, less its body.
+        let readKeyPrefix = readKeyPrefixOf funcNeedParameters url headers
 
         let executeRequest =
             if options.CustomResponseSerialization.IsSome || isAsyncOfByteArray returnTypeAsync then
@@ -1129,98 +1220,25 @@ module Proxy =
 
                 fun requestBody -> async {
                     // make plain RPC request and let it go through the deserialization pipeline
-                    let! response =
-                        // Phase 855 — with batching enabled the call joins
-                        // this tick's envelope; its element comes back as the
-                        // response the lines below read, unchanged.
-                        if RemoteBatching.isEnabled () && not isMultipart then
-                            let body =
-                                match requestBody with
-                                | RequestBody.Json text when funcNeedParameters -> Some text
-                                | _ -> None
-
-                            RemoteBatching.send options.BaseUrl route url headers options.WithCredentials body
-                        elif funcNeedParameters then
-                            Http.post url
-                            |> Http.withBody requestBody
-                            |> Http.withHeaders headers
-                            |> Http.withCredentials options.WithCredentials
-                            |> Http.send
-                        else
-                            Http.get url
-                            |> Http.withHeaders headers
-                            |> Http.withCredentials options.WithCredentials
-                            |> Http.send
+                    let! response = sendJson options route url headers funcNeedParameters isMultipart requestBody
 
                     match response.StatusCode with
                     | 200 ->
                         // Phase 843 — the opt-in branch, the JSON twin of
                         // `withBinarySerialization`'s. A return type with a
-                        // registered JSON algebra decoder is read ONCE from
-                        // the response text into the lexical value model
-                        // (`JsonText`, numbers kept as written) and decoded
-                        // by total combinators; a malformed body is a named
-                        // refusal on the same `ProxyRequestException` the
-                        // binary path raises, never an exception from
-                        // inside the parse. A MISS is the reflection path
-                        // below, unchanged, so a consumer that registers
-                        // nothing sees nothing different (GP 11). The
-                        // lookup is per call, as the binary branch's is:
+                        // registered JSON algebra decoder is decoded through
+                        // it (`decodeJsonResponse`). A MISS is the reflection
+                        // path below, unchanged, so a consumer that registers
+                        // nothing sees nothing different (GP 11). The lookup
+                        // is per call, as the binary branch's is:
                         // registration happens at composition and need not
                         // precede the proxy's construction.
                         match ToolUp.Remoting.Json.JsonDecoders.tryGet None returnClrType with
-                        | Some decoder ->
-                            match
-                                ToolUp.Remoting.Json.JsonText.tryParse response.ResponseBody
-                                |> Result.bind decoder
-                            with
-                            | Ok value -> return value
-                            | Error error ->
-                                return!
-                                    raise (
-                                        ProxyRequestException(
-                                            response,
-                                            sprintf
-                                                "The server's response to %s did not decode: %s"
-                                                url
-                                                (DecodeError.render error),
-                                            response.ResponseBody,
-                                            Some error
-                                        )
-                                    )
+                        | Some decoder -> return decodeJsonResponse url response decoder
                         | None ->
                             let parsedJson = SimpleJson.parseNative response.ResponseBody
                             return Convert.fromJsonAs parsedJson returnType
-                    | 500 ->
-                        return!
-                            raise (
-                                ProxyRequestException(
-                                    response,
-                                    sprintf "Internal server error (500) while making request to %s" url,
-                                    response.ResponseBody,
-                                    // Phase 783 — a 500 should no longer
-                                    // be able to carry one (a decode
-                                    // refusal is a 400 now), but the
-                                    // recovery is cheap and total, and a
-                                    // consumer pinned to an older server
-                                    // still reads whatever arrives.
-                                    tryReadDecodeError response.ResponseBody
-                                )
-                            )
-                    | n ->
-                        return!
-                            raise (
-                                ProxyRequestException(
-                                    response,
-                                    sprintf "Http error (%d) from server occured while making request to %s" n url,
-                                    response.ResponseBody,
-                                    // Phase 783 — the decode-refusal path:
-                                    // the server answers 400 + a
-                                    // `validation` envelope carrying the
-                                    // structured refusal.
-                                    tryReadDecodeError response.ResponseBody
-                                )
-                            )
+                    | _ -> return raiseStatus url response
                 }
 
         fun arg0 arg1 arg2 arg3 arg4 arg5 arg6 arg7 ->
@@ -1293,6 +1311,68 @@ module Proxy =
     let proxyFetch options typeName (func: RecordField) fieldType =
         proxyFetchWithPolicies None options typeName func fieldType
 
+    /// Phase 853 — one generated proxy's call context: the record's
+    /// registry key (the key its read policies are registered under), its
+    /// route type name, and the builder options. Built by a generated
+    /// proxy builder (`ToolUp.Remoting.Generator`'s `client-proxies`) once
+    /// per proxy.
+    let generatedApi (apiKey: string) (typeName: string) (options: RemoteBuilderOptions) = apiKey, typeName, options
+
+    /// Phase 853 — one generated proxy method: a closure over the
+    /// transport and the method's generated response decoder, taking the
+    /// request body the generated ENCODERS wrote (`JsonEncode.arguments`)
+    /// and returning the call. Route, URL, headers and the read-policy key
+    /// prefix are computed here, once per proxy; a call does no reflection
+    /// — no `createTypeInfo`, no `Convert.serialize`, no `Convert.fromJsonAs`
+    /// — and composes with the Phase 854 read table and the Phase 855
+    /// transport and batching exactly as the reflective proxy's call does:
+    /// both go through `sendJson`, `raiseStatus` and `ReadPolicies.invoke`.
+    ///
+    /// `sendsBody = false` is a GET (a method that is an `Async<_>` value or
+    /// takes `unit`); its body text is then only the read-policy key's
+    /// tail, the one the reflective proxy uses (`[]` / `{}`).
+    let generatedMethod<'R>
+        (api: string * string * RemoteBuilderOptions)
+        (methodName: string)
+        (sendsBody: bool)
+        (decoder: ToolUp.Remoting.Json.JsonValue -> Result<'R, DecodeError>)
+        : string -> Async<'R> =
+        let apiKey, typeName, options = api
+        let route = options.RouteBuilder typeName methodName
+        let url = combineRouteWithBaseUrl route options.BaseUrl
+        let headers = requestHeaders options false
+        let readKeyPrefix = readKeyPrefixOf sendsBody url headers
+
+        let execute (requestBody: RequestBody) : Async<obj> = async {
+            let! response = sendJson options route url headers sendsBody false requestBody
+
+            match response.StatusCode with
+            | 200 -> return box (decodeJsonResponse url response decoder)
+            | _ -> return raiseStatus url response
+        }
+
+        fun (body: string) ->
+            let requestBody = RequestBody.Json body
+
+            let call =
+                match ReadPolicies.tryFind apiKey methodName with
+                | None -> execute requestBody
+                | Some policy ->
+                    ReadPolicies.invoke apiKey methodName policy (Some(readKeyPrefix + body)) (fun () ->
+                        execute requestBody)
+
+#if FABLE_COMPILER
+            // The SAME Async object — `ReadPolicies.tryObserve` recognises a
+            // declared read's call by reference, as it does the reflective
+            // proxy's (whose boxed `Async<obj>` Fable hands back uncast).
+            unbox<Async<'R>> call
+#else
+            async {
+                let! value = call
+                return unbox<'R> value
+            }
+#endif
+
     /// Phase 69c.D — `Some elementType` when `fieldType` is a streaming
     /// field (`'arg -> IAsyncEnumerable<'T>`), recognised at proxy-build time
     /// exactly as the server classifies it at startup. `IAsyncEnumerable<'T>`
@@ -1349,3 +1429,43 @@ module Proxy =
                     Convert.serialize arg (TypeInfo.Tuple(fun _ -> [| argumentType |]))
 
             box (RemoteStream.create url headers body options.WithCredentials tryReadDecodeError elementType)
+
+/// Phase 853 — the registry of GENERATED client proxy builders, by API
+/// record key (its `FullName`, a nested type's `+` written `.`).
+/// `Api.makeProxy` consults it before building a reflective proxy; a
+/// generated module's `registerAll` fills it. The platform's own records
+/// are not registered here — `Api.makeProxy` reads their generated module
+/// directly, so no composition step is needed for them.
+[<RequireQualifiedAccess>]
+module GeneratedProxies =
+
+    let private builders =
+        System.Collections.Generic.Dictionary<string, RemoteBuilderOptions -> obj>()
+
+    /// Register `build` as the generated proxy builder for `apiKey`.
+    /// Idempotent: a later registration of the same key replaces it.
+    let register (apiKey: string) (build: RemoteBuilderOptions -> obj) : unit = builders.[apiKey] <- build
+
+    /// How many builders are registered.
+    let count () : int = builders.Count
+
+    /// Whether a generated proxy reproduces what the reflective proxy
+    /// would do with `options`. It does not for binary responses
+    /// (`withBinarySerialization` — the generated proxy reads JSON) or
+    /// multipart uploads (`withMultipartOptimization`), which keep the
+    /// reflective proxy.
+    let admits (options: RemoteBuilderOptions) : bool =
+        options.CustomResponseSerialization.IsNone && not options.IsMultipartEnabled
+
+    /// The registered builder for `apiKey`, applied to `options`, when one
+    /// is registered and admits them.
+    let tryBuild (apiKey: string) (options: RemoteBuilderOptions) : obj option =
+        if not (admits options) then
+            None
+        else
+            match builders.TryGetValue apiKey with
+            | true, build -> Some(build options)
+            | _ -> None
+
+    /// The key an API record type is registered under.
+    let keyOf (apiType: System.Type) : string = apiType.FullName.Replace('+', '.')

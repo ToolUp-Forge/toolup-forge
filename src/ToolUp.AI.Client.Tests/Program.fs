@@ -31,6 +31,8 @@ let allTests =
         ReadPolicyTests.tests
         // Phase 855 - the fetch transport, and same-tick calls as one request.
         RemoteBatchingTests.tests
+        // Phase 853 - generated client proxies and encoders, transpiled.
+        GeneratedProxyTests.tests
         // Phase 217 — module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.

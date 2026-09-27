@@ -193,6 +193,13 @@
         <!-- Phase 855 - the fetch transport and same-tick batching through the
              real proxy, against a scripted fetch. -->
         <Compile Include="Remoting\RemoteBatchingTests.fs" />
+        <!-- Phase 853 - generated client proxies and encoders, transpiled: the
+             shared encoder fixture and the generated ReadCatalogApi proxy (both
+             compiled by the .NET pack too), Api.makeProxy generated-first, and
+             composition with the 854 read table and 855 batching. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadCatalogClientProxies.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientEncoderFixture.fs" />
+        <Compile Include="Remoting\GeneratedProxyTests.fs" />
         <!-- Phase 69c.D — the streaming proxy: cold RemoteStream for an
              IAsyncEnumerable field, SSE decoding across chunk boundaries,
              every non-happy ending as OnError. fetch is stubbed. -->

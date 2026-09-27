@@ -26,6 +26,13 @@ open ToolUp.Remoting.Generator
 //              nobody declared; this can.
 //   decoders — emit a registration module for the named API records.
 //   dispatch — emit the typed argument-parse table for one API record.
+//   json-decoders  — (Phase 853, exposing Phase 841) emit the JSON algebra
+//              decoders for the ARGUMENTS the named records' methods take,
+//              each registered scoped to its record — the server's
+//              argument seam reads through them.
+//   client-proxies — (Phase 853) emit generated client proxies: argument
+//              encoders, response decoders and one proxy builder per record,
+//              which `Api.makeProxy` uses in place of the reflective proxy.
 
 let private usage =
     """ToolUp.Remoting.Generator — Phase 69k
@@ -34,6 +41,13 @@ let private usage =
   decoders --assembly <path> --out <file> [--namespace N] [--module M]
            [--open NS]... [--api-record FullName]... [--corpus-covered FullName]...
   dispatch --assembly <path> --api-record <FullName> --out <file> [--namespace N]
+  json-decoders  --assembly <path> --out <file> [--namespace N] [--module M]
+                 [--open NS]... [--api-record FullName]...
+  client-proxies --assembly <path> --out <file> [--namespace N] [--module M]
+                 [--open NS]... [--api-record FullName]...
+
+With no --open, `json-decoders` and `client-proxies` open every namespace
+the emitted types reach.
 
 With no --api-record, `decoders` and `census` cover every API record the
 assembly declares."""
@@ -176,6 +190,72 @@ let private decoders (assembly: Assembly) (records: Type list) (args: (string * 
 
     printfn "%s" (Emit.refusalReport plan)
 
+/// The `open` lines for an emission over `roots`: the caller's, or — none
+/// given — every namespace the roots reach.
+let private opensFor (args: (string * string) list) (roots: Type list) =
+    match values "open" args with
+    | [] -> Plan.namespacesReachedBy roots
+    | given -> given
+
+/// Phase 853 — Phase 841's argument-decoder emission, exposed: what
+/// ToolUp.Platform.Core's `PlatformJsonDecoders` is, for a consumer's own
+/// records.
+let private jsonDecoders (records: Type list) (args: (string * string) list) =
+    let argumentRecords = records |> List.map (fun r -> r, Plan.argumentTypes r)
+    let roots = argumentRecords |> List.collect snd |> List.distinct
+    let plan = Plan.forJsonTypes roots
+
+    let options = {
+        JsonNamespace = defaultArg (value "namespace" args) "ToolUp.Remoting.Json"
+        JsonModuleName = defaultArg (value "module" args) "GeneratedJsonDecoders"
+        JsonOpens = opensFor args roots
+        ArgumentRecords =
+            argumentRecords
+            |> List.map (fun (r, arguments) -> r.Name, arguments |> List.map Plan.typeSpelling)
+    }
+
+    let out = required "out" args
+    let written = writeIfChanged out (Emit.jsonCompilationUnit options plan)
+
+    printfn
+        "%s %s — %d decoder(s), %d of %d record(s) covered"
+        (if written then "wrote" else "unchanged")
+        out
+        (List.length plan.Bindings)
+        (List.length (Emit.jsonCoveredApiRecords options plan))
+        (List.length records)
+
+    printfn "%s" (Emit.refusalReport plan)
+
+/// Phase 853 — generated client proxies for the named records.
+let private clientProxies (records: Type list) (args: (string * string) list) =
+    let plan = Plan.forClientProxies records
+
+    let options = {
+        ClientNamespace = defaultArg (value "namespace" args) "ToolUp.Remoting.Client"
+        ClientModuleName = defaultArg (value "module" args) "GeneratedClientProxies"
+        ClientOpens =
+            match values "open" args with
+            | [] -> Plan.clientNamespaces records
+            | given -> given
+    }
+
+    let out = required "out" args
+    let written = writeIfChanged out (Emit.clientCompilationUnit options plan)
+
+    printfn
+        "%s %s — %d of %d record(s) generated, %d encoder(s), %d decoder(s)"
+        (if written then "wrote" else "unchanged")
+        out
+        (List.length plan.Records)
+        (List.length records)
+        (List.length plan.Encoders.Bindings)
+        (List.length plan.Decoders.Bindings)
+
+    printfn "%s" (Emit.clientSkipReport plan)
+    printfn "%s" (Emit.refusalReport plan.Encoders)
+    printfn "%s" (Emit.refusalReport plan.Decoders)
+
 let private dispatch (records: Type list) (args: (string * string) list) =
     let record =
         match records with
@@ -212,6 +292,12 @@ let main argv =
                 0
             | "dispatch" ->
                 dispatch records args
+                0
+            | "json-decoders" ->
+                jsonDecoders records args
+                0
+            | "client-proxies" ->
+                clientProxies records args
                 0
             | other ->
                 eprintfn "unknown command '%s'\n\n%s" other usage

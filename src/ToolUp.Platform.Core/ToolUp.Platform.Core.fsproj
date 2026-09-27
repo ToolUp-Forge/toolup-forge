@@ -751,6 +751,9 @@
              hand-written argument decoders. -->
         <Compile Include="Shared\Remoting\Json\JsonValue.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecode.fs" />
+        <!-- Phase 853 - the writing half: the encoders a generated client
+             proxy builds a request's argument array through. -->
+        <Compile Include="Shared\Remoting\Json\JsonEncode.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
         <Compile Include="Shared\Remoting\Json\PlatformJsonDecoders.fs" />

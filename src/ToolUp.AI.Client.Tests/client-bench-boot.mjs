@@ -140,7 +140,17 @@ if (!target) {
     // `view` and React's commit transfer to a browser; the paint does not.
     installCanvasStub(dom.window);
 
-    globalThis.__toolupClientBench = { proxiesBuilt: 0, remotingLoaded: false, counterInstalled: false, counterProblem: null };
+    globalThis.__toolupClientBench = {
+        proxiesBuilt: 0,
+        proxiesDeferred: 0,
+        proxiesResolved: 0,
+        remotingLoaded: false,
+        apiLoaded: false,
+        counterInstalled: false,
+        deferredCounterInstalled: false,
+        resolvedCounterInstalled: false,
+        counterProblem: null,
+    };
 
     const host = dom.window.document.getElementById(placeholder);
     let renderedAt = null;
@@ -170,13 +180,18 @@ if (!target) {
     }
 
     const bench = globalThis.__toolupClientBench;
+    // Phase 853 — three counters (reflective builds, deferred proxies,
+    // makeProxy resolutions); a loaded module whose counter is missing is
+    // UNOBSERVED, never zero.
     const counterState = bench.counterProblem
         ? `UNOBSERVED: ${bench.counterProblem}`
-        : bench.counterInstalled
-            ? "counted"
-            : bench.remotingLoaded
-                ? "UNOBSERVED: Remoting.js loaded but the counter was not installed"
-                : "remoting module never loaded (no proxy can have been built)";
+        : bench.remotingLoaded && !(bench.counterInstalled && bench.deferredCounterInstalled)
+            ? "UNOBSERVED: Remoting.js loaded but its counters were not installed"
+            : bench.apiLoaded && !bench.resolvedCounterInstalled
+                ? "UNOBSERVED: Api.js loaded but the resolution counter was not installed"
+                : bench.remotingLoaded
+                    ? "counted"
+                    : "remoting module never loaded (no proxy can have been built)";
 
     report({
         mode,
@@ -184,6 +199,8 @@ if (!target) {
         importMs: importedAt - t0,
         renderMs: mode === "render" && renderedAt !== null ? renderedAt - t0 : null,
         proxiesBuilt: bench.proxiesBuilt,
+        proxiesDeferred: bench.proxiesDeferred,
+        proxiesGenerated: bench.proxiesResolved - bench.proxiesDeferred,
         counterState,
     });
 }

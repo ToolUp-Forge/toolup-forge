@@ -39,6 +39,20 @@
                        inferred.
     - ApiRecord      : (dispatch) exactly one API record per item.
 
+    Phase 853 - the two JSON emissions take the same metadata (ApiRecords,
+    Opens, Namespace, Module); with no Opens they open every namespace the
+    emitted types reach:
+
+      <ToolUpRemotingJsonDecoders Include="..\MyApp.Shared\Generated\JsonDecoders.fs"
+                                  ApiRecords="MyApp.IOrdersApi" />
+      <ToolUpRemotingClientProxies Include="..\MyApp.Client\Generated\ClientProxies.fs"
+                                   ApiRecords="MyApp.IOrdersApi" />
+
+    - ToolUpRemotingJsonDecoders  : the JSON algebra decoders for the records'
+                                    ARGUMENT types (the server's argument seam).
+    - ToolUpRemotingClientProxies : generated client proxies (argument encoders,
+                                    response decoders, one builder per record).
+
     The tool writes only when the text changed, so an unchanged assembly
     leaves the emitted file's timestamp alone and no sibling recompiles.
     Incrementality on top of that is MSBuild's own: the target is skipped
@@ -58,7 +72,7 @@
   </PropertyGroup>
 
   <Target Name="_ToolUpRemotingResolveGenerator"
-          Condition="'$(ToolUpRemotingGenerate)' != 'false' and ('@(ToolUpRemotingDecoders)' != '' or '@(ToolUpRemotingDispatch)' != '')">
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and ('@(ToolUpRemotingDecoders)' != '' or '@(ToolUpRemotingDispatch)' != '' or '@(ToolUpRemotingJsonDecoders)' != '' or '@(ToolUpRemotingClientProxies)' != '')">
     <PropertyGroup>
       <ToolUpRemotingGeneratorDll Condition="'$(ToolUpRemotingGeneratorDll)' == '' and Exists('$(ToolUpRemotingGeneratorPackagedDll)')">$(ToolUpRemotingGeneratorPackagedDll)</ToolUpRemotingGeneratorDll>
       <ToolUpRemotingGeneratorDll Condition="'$(ToolUpRemotingGeneratorDll)' == '' and Exists('$(ToolUpRemotingGeneratorInTreeProject)')">$(MSBuildThisFileDirectory)../bin/$(Configuration)/net10.0/ToolUp.Remoting.Generator.dll</ToolUpRemotingGeneratorDll>
@@ -100,6 +114,44 @@
       <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingDispatch.Namespace)&quot;</_ToolUpRemotingArgs>
     </PropertyGroup>
     <Message Importance="high" Text="ToolUp.Remoting.Generator: dispatch -> %(ToolUpRemotingDispatch.Identity)" />
+    <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <!-- Phase 853 - the JSON argument decoders (Phase 841's emission, exposed). -->
+  <Target Name="ToolUpRemotingGenerateJsonDecoders"
+          AfterTargets="Build"
+          DependsOnTargets="_ToolUpRemotingResolveGenerator"
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and '@(ToolUpRemotingJsonDecoders)' != ''"
+          Inputs="$(TargetPath);$(ToolUpRemotingGeneratorDll)"
+          Outputs="%(ToolUpRemotingJsonDecoders.FullPath)">
+    <PropertyGroup>
+      <_ToolUpRemotingArgs>json-decoders --assembly &quot;$(TargetPath)&quot; --out &quot;%(ToolUpRemotingJsonDecoders.FullPath)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingJsonDecoders.ApiRecords)' != ''">$(_ToolUpRemotingArgs) --api-record &quot;%(ToolUpRemotingJsonDecoders.ApiRecords)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingJsonDecoders.Opens)' != ''">$(_ToolUpRemotingArgs) --open &quot;%(ToolUpRemotingJsonDecoders.Opens)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingJsonDecoders.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingJsonDecoders.Namespace)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingJsonDecoders.Module)' != ''">$(_ToolUpRemotingArgs) --module &quot;%(ToolUpRemotingJsonDecoders.Module)&quot;</_ToolUpRemotingArgs>
+    </PropertyGroup>
+    <Message Importance="high" Text="ToolUp.Remoting.Generator: json-decoders -> %(ToolUpRemotingJsonDecoders.Identity)" />
+    <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <!-- Phase 853 - generated client proxies. -->
+  <Target Name="ToolUpRemotingGenerateClientProxies"
+          AfterTargets="Build"
+          DependsOnTargets="_ToolUpRemotingResolveGenerator"
+          Condition="'$(ToolUpRemotingGenerate)' != 'false' and '@(ToolUpRemotingClientProxies)' != ''"
+          Inputs="$(TargetPath);$(ToolUpRemotingGeneratorDll)"
+          Outputs="%(ToolUpRemotingClientProxies.FullPath)">
+    <PropertyGroup>
+      <_ToolUpRemotingArgs>client-proxies --assembly &quot;$(TargetPath)&quot; --out &quot;%(ToolUpRemotingClientProxies.FullPath)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingClientProxies.ApiRecords)' != ''">$(_ToolUpRemotingArgs) --api-record &quot;%(ToolUpRemotingClientProxies.ApiRecords)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingClientProxies.Opens)' != ''">$(_ToolUpRemotingArgs) --open &quot;%(ToolUpRemotingClientProxies.Opens)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingClientProxies.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingClientProxies.Namespace)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingClientProxies.Module)' != ''">$(_ToolUpRemotingArgs) --module &quot;%(ToolUpRemotingClientProxies.Module)&quot;</_ToolUpRemotingArgs>
+    </PropertyGroup>
+    <Message Importance="high" Text="ToolUp.Remoting.Generator: client-proxies -> %(ToolUpRemotingClientProxies.Identity)" />
     <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"
           WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>

@@ -68,6 +68,11 @@
         <Compile Include="Client\Remoting\Streaming.fs" />
         <Compile Include="Client\Remoting\Proxy.fs" />
         <Compile Include="Client\Remoting\Remoting.fs" />
+        <!-- Phase 853 - the platform's own API records' GENERATED proxies
+             (ToolUp.Remoting.Generator client-proxies over ToolUp.Platform.Core),
+             held byte-for-byte to the emission by Remoting/ClientProxyGenerationTests.
+             Api.makeProxy reads it before building a reflective proxy. -->
+        <Compile Include="Client\Remoting\PlatformClientProxies.fs" />
         <Compile Include="Client\Elmish\Prelude.fs" />
         <Compile Include="Client\Elmish\Cmd.fs" />
         <Compile Include="Client\Elmish\Sub.fs" />

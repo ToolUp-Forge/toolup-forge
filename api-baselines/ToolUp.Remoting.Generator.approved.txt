@@ -17,6 +17,36 @@ ToolUp.Remoting.Generator.CasePayload+Tags (class)
 ToolUp.Remoting.Generator.CasePayload+Tags.NoFields : System.Int32 (literal)
 ToolUp.Remoting.Generator.CasePayload+Tags.OneField : System.Int32 (literal)
 ToolUp.Remoting.Generator.CasePayload+Tags.SeveralFields : System.Int32 (literal)
+ToolUp.Remoting.Generator.ClientEmitOptions (class)
+ToolUp.Remoting.Generator.ClientEmitOptions..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Remoting.Generator.ClientEmitOptions.ClientModuleName : System.String { get }
+ToolUp.Remoting.Generator.ClientEmitOptions.ClientNamespace : System.String { get }
+ToolUp.Remoting.Generator.ClientEmitOptions.ClientOpens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Generator.ClientMethodPlan (class)
+ToolUp.Remoting.Generator.ClientMethodPlan..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, System.String, System.String)
+ToolUp.Remoting.Generator.ClientMethodPlan.ArgumentEncoders : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Generator.ClientMethodPlan.MethodName : System.String { get }
+ToolUp.Remoting.Generator.ClientMethodPlan.ReturnDecoder : System.String { get }
+ToolUp.Remoting.Generator.ClientMethodPlan.ReturnSpelling : System.String { get }
+ToolUp.Remoting.Generator.ClientMethodPlan.SendsBody : System.Boolean { get }
+ToolUp.Remoting.Generator.ClientPlan (class)
+ToolUp.Remoting.Generator.ClientPlan..ctor(ToolUp.Remoting.Generator.GenerationPlan, ToolUp.Remoting.Generator.GenerationPlan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientRecordPlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal])
+ToolUp.Remoting.Generator.ClientPlan.Decoders : ToolUp.Remoting.Generator.GenerationPlan { get }
+ToolUp.Remoting.Generator.ClientPlan.Encoders : ToolUp.Remoting.Generator.GenerationPlan { get }
+ToolUp.Remoting.Generator.ClientPlan.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientRecordPlan] { get }
+ToolUp.Remoting.Generator.ClientPlan.Skipped : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal] { get }
+ToolUp.Remoting.Generator.ClientReadPolicy (class)
+ToolUp.Remoting.Generator.ClientReadPolicy..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Remoting.Generator.ClientReadPolicy.Invalidates : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Generator.ClientReadPolicy.MaxAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Remoting.Generator.ClientReadPolicy.PolicyMethod : System.String { get }
+ToolUp.Remoting.Generator.ClientRecordPlan (class)
+ToolUp.Remoting.Generator.ClientRecordPlan..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientMethodPlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientReadPolicy])
+ToolUp.Remoting.Generator.ClientRecordPlan.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientMethodPlan] { get }
+ToolUp.Remoting.Generator.ClientRecordPlan.ReadPolicies : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientReadPolicy] { get }
+ToolUp.Remoting.Generator.ClientRecordPlan.RecordKey : System.String { get }
+ToolUp.Remoting.Generator.ClientRecordPlan.RecordName : System.String { get }
+ToolUp.Remoting.Generator.ClientRecordPlan.RecordSpelling : System.String { get }
 ToolUp.Remoting.Generator.Dispatch (class)
 ToolUp.Remoting.Generator.Dispatch.compilationUnit(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Remoting.Generator.DispatchTable) : System.String
 ToolUp.Remoting.Generator.Dispatch.tableFor(System.Type) : ToolUp.Remoting.Generator.DispatchTable
@@ -31,6 +61,8 @@ ToolUp.Remoting.Generator.DispatchTable.ApiRecordName : System.String { get }
 ToolUp.Remoting.Generator.DispatchTable.ApiRecordSpelling : System.String { get }
 ToolUp.Remoting.Generator.DispatchTable.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.DispatchMethod] { get }
 ToolUp.Remoting.Generator.Emit (class)
+ToolUp.Remoting.Generator.Emit.clientCompilationUnit(ToolUp.Remoting.Generator.ClientEmitOptions, ToolUp.Remoting.Generator.ClientPlan) : System.String
+ToolUp.Remoting.Generator.Emit.clientSkipReport(ToolUp.Remoting.Generator.ClientPlan) : System.String
 ToolUp.Remoting.Generator.Emit.compilationUnit(ToolUp.Remoting.Generator.EmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : System.String
 ToolUp.Remoting.Generator.Emit.coveredSpellings(ToolUp.Remoting.Generator.GenerationPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Remoting.Generator.Emit.jsonCompilationUnit(ToolUp.Remoting.Generator.JsonEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : System.String
@@ -67,11 +99,19 @@ ToolUp.Remoting.Generator.Plan.argumentTypes(System.Type) : Microsoft.FSharp.Col
 ToolUp.Remoting.Generator.Plan.argumentTypesOf(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.Type]]
 ToolUp.Remoting.Generator.Plan.bindingName(System.Type) : System.String
 ToolUp.Remoting.Generator.Plan.camelCase(System.String) : System.String
+ToolUp.Remoting.Generator.Plan.clientKey(System.Type) : System.String
+ToolUp.Remoting.Generator.Plan.clientMethodsOf(System.Type) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type]], System.String]
+ToolUp.Remoting.Generator.Plan.clientNamespaces(Microsoft.FSharp.Collections.FSharpList`1[System.Type]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Remoting.Generator.Plan.forClientProxies(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.ClientPlan
+ToolUp.Remoting.Generator.Plan.forJsonEncoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
+ToolUp.Remoting.Generator.Plan.forJsonResponseDecoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forJsonTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.isApiRecord(System.Type) : System.Boolean
+ToolUp.Remoting.Generator.Plan.namespacesReachedBy(System.Collections.Generic.IEnumerable`1[System.Type]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Remoting.Generator.Plan.parameterName(System.String) : System.String
 ToolUp.Remoting.Generator.Plan.qualifiedName(System.Type) : System.String
+ToolUp.Remoting.Generator.Plan.readPoliciesOf(System.Type) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientReadPolicy]
 ToolUp.Remoting.Generator.Plan.returnTypeOf(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[System.Type]
 ToolUp.Remoting.Generator.Plan.returnTypes(System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Type]
 ToolUp.Remoting.Generator.Plan.simpleName(System.Type) : System.String

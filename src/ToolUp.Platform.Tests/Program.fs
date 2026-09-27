@@ -2395,6 +2395,10 @@ let private registeredTests =
         // which the facet cannot report because an undeclared record is
         // absent from it rather than classified `Reflection`.
         GeneratorFidelityTests.tests
+        // Phase 853 - generated client proxies and encoders: the platform's
+        // emission pinned byte for byte, the census, and every generated
+        // encoder / response decoder agreeing with the server's both paths.
+        ClientProxyGenerationTests.tests
         // Phase 801 — the platform's own decoders are the generator's
         // emission over every API record, held to it byte for byte, and
         // every registration verified against the reflection reader over

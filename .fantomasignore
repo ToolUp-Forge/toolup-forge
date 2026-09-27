@@ -21,6 +21,11 @@ src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs
 # Phase 841 — the argument side's twin: the generator's JSON emission over every API
 # record's ARGUMENT types, held byte-for-byte to it by Remoting/GeneratorFidelityTests (841.C).
 src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
+# Phase 853 - the client side: the generator's client-proxies emission over every platform API
+# record, and over the ReadCatalogApi test fixture, each held byte-for-byte to it by
+# Remoting/ClientProxyGenerationTests (853.C).
+src/ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.fs
+src/ToolUp.Platform.Tests/Remoting/ReadCatalogClientProxies.fs
 proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
 proofs/oracle/ModelInput.fs
