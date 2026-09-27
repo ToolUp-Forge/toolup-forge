@@ -110,6 +110,9 @@ let allTests =
         ModuleDispatchStabilityTests.tests
         // Phase 851.A - two drains in one task construct the view once.
         RenderCoalescingTests.tests
+        // Phase 852 - the sliced model store: store binding, selectors, shell
+        // render scope, and the AG Grid props compare.
+        SlicedStoreTests.tests
         // Phase 537 - the UI-awareness companion's inspect_active_module executor:
         // the live report for the request's active module and both status branches.
         UiAwarenessInspectTests.tests

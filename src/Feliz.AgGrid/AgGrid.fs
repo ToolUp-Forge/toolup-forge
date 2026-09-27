@@ -80,27 +80,153 @@ let ensureGridModulesRegistered () =
 
 let agGrid: obj = import "AgGridReact" "ag-grid-react"
 
-/// React-memoised wrapper around `AgGridReact`. The Elmish runtime feeds the
-/// grid a fresh props object on every shell re-render (state churn, prefetch
-/// arrivals, parent re-render); without memoisation `AgGridReact` would
-/// internally diff the new props against the prior render, often hitting the
-/// destroy-and-recreate path on prop-shape changes that aren't structurally
-/// meaningful (a closed-over callback reference flipping reference while
-/// pointing at the same logic, a fresh `rowData` array carrying byte-identical
-/// rows, a re-created `columnDefs` literal). The same problem hit `AgChart`
-/// and was resolved by the `MemoizedChart` pattern; this is the AG Grid twin.
+// ─── Phase 852 — the grid's props compare, without serialising ─────────
+//
+// Until Phase 852 the wrapper below discriminated props by
+// `JSON.stringify` on every render: a full serialisation of the props —
+// rows included — allocated as one string, whether or not anything had
+// changed. It is replaced by a walk that answers the same question
+// ("would the previous props serialise identically?") and short-circuits on
+// REFERENCE identity at every node, so shared immutable data costs one
+// pointer compare per node and a changed row is found without visiting the
+// rest.
+//
+// The rules mirror what the serialisation used to see, so the dedupe
+// decisions are unchanged:
+//   * `a === b` is equal, at every depth — the fast path.
+//   * two functions are equal: serialisation omitted them, so a render whose
+//     ONLY change is a fresh closure keeps the previous props (see the
+//     limitation on `MemoizedGrid`). A key whose value is a function or
+//     `undefined` is absent, as it was from the JSON.
+//   * `NaN` equals `NaN` (both serialised as `null`); dates compare by time.
+//   * arrays compare element-wise; any other iterable (an F# list, map or
+//     set as Fable represents it) compares in lockstep, without recursing
+//     down a list's spine; any other object compares its own enumerable
+//     keys.
+//   * past `MaxPropsDepth` levels the answer is "changed" — the safe
+//     direction (the grid receives the new props), where serialisation
+//     would have thrown on a cycle.
+
+[<Literal>]
+let private MaxPropsDepth = 64
+
+[<Emit("typeof $0")>]
+let private jsTypeOf (value: obj) : string = jsNative
+
+[<Emit("Array.isArray($0)")>]
+let private isJsArray (value: obj) : bool = jsNative
+
+[<Emit("($0 instanceof Date)")>]
+let private isJsDate (value: obj) : bool = jsNative
+
+[<Emit("$0.getTime()")>]
+let private dateTime (value: obj) : float = jsNative
+
+[<Emit("(typeof $0[Symbol.iterator] === 'function')")>]
+let private isIterable (value: obj) : bool = jsNative
+
+[<Emit("$0[Symbol.iterator]()")>]
+let private iteratorOf (value: obj) : obj = jsNative
+
+[<Emit("Object.keys($0)")>]
+let private ownKeys (value: obj) : string[] = jsNative
+
+[<Emit("($0 !== $0)")>]
+let private isNaNValue (value: obj) : bool = jsNative
+
+/// A key the serialisation would have left out.
+let private absent (value: obj) : bool =
+    isNull value && jsTypeOf value = "undefined" || jsTypeOf value = "function"
+
+let rec private sameValue (depth: int) (a: obj) (b: obj) : bool =
+    if obj.ReferenceEquals(a, b) then
+        true
+    else
+        let ta = jsTypeOf a
+        let tb = jsTypeOf b
+
+        if ta = "function" && tb = "function" then
+            true
+        elif isNull a || isNull b || ta <> "object" || tb <> "object" then
+            ta = "number" && tb = "number" && isNaNValue a && isNaNValue b
+        elif depth >= MaxPropsDepth then
+            false
+        elif isJsArray a || isJsArray b then
+            isJsArray a
+            && isJsArray b
+            && (let xs = unbox<obj[]> a
+                let ys = unbox<obj[]> b
+                xs.Length = ys.Length && Array.forall2 (sameValue (depth + 1)) xs ys)
+        elif isJsDate a || isJsDate b then
+            isJsDate a
+            && isJsDate b
+            && (let ta, tb = dateTime a, dateTime b
+                ta = tb || (Double.IsNaN ta && Double.IsNaN tb))
+        elif isIterable a || isIterable b then
+            isIterable a
+            && isIterable b
+            && sameSequence (depth + 1) (iteratorOf a) (iteratorOf b)
+        else
+            let present (o: obj) =
+                ownKeys o |> Array.filter (fun k -> not (absent (o?(k))))
+
+            let ka = present a
+            let kb = present b
+
+            ka.Length = kb.Length
+            && ka
+               |> Array.forall (fun k ->
+                   let bv: obj = b?(k)
+                   not (absent bv) && sameValue (depth + 1) (a?(k)) bv)
+
+and private sameSequence (depth: int) (xs: obj) (ys: obj) : bool =
+    let mutable result = None
+
+    while result.IsNone do
+        let x = xs?next ()
+        let y = ys?next ()
+        let xDone: bool = unbox (x?``done``)
+        let yDone: bool = unbox (y?``done``)
+
+        if xDone || yDone then
+            result <- Some(xDone && yDone)
+        elif not (sameValue depth (x?value) (y?value)) then
+            result <- Some false
+
+    result.Value
+
+/// Would `previous` and `next` have serialised identically? See the
+/// section comment above for the rules. Internal so the Fable pack can pin
+/// them (`GridPropsCompareTests`).
+let internal sameGridProps (previous: obj) (next: obj) : bool = sameValue 0 previous next
+
+/// React-memoised wrapper around `AgGridReact`. `AgGridReact` diffs each
+/// prop it is handed by reference and re-applies every one that moved — so
+/// a fresh `rowData` array or a re-created `columnDefs` literal, which is
+/// what `AgGrid.grid` builds on every call (`Seq.toArray`, `createObj`),
+/// costs a row-data reset (lost selection without `getRowId`) or a column
+/// re-application each time the grid's owner renders. The wrapper keeps the
+/// PREVIOUS props object whenever the new one carries the same data, so
+/// AG Grid sees no change at all.
 ///
-/// Discriminates props by `JS.JSON.stringify`. That gives us reference
-/// stability when the data side of props is unchanged, at the cost of a
-/// known limitation: function-typed props (cellRenderer / valueFormatter /
-/// onCellClicked closures) are omitted by JSON serialisation, so a render
-/// whose ONLY change is a different callback closure will be deduplicated
-/// and the grid will keep the prior callbacks. In practice the data side of
-/// props changes alongside callback closures (an MVU state transition mints
-/// new rowData / configs at the same time it mints new closures), so this
-/// rarely surfaces; if a consumer hits a stale-callback bug, the escape
-/// hatch is to thread the changing state into a non-function prop (e.g.
-/// inject a token into `context` or `rowData`).
+/// The invariant it relies on (Phase 852): the wrapper runs only when the
+/// view that owns the grid runs. In the SDK shell under the sliced store
+/// (`Client.run`) that is only when the owning module's own state changed
+/// — the shell's chrome and other modules' messages never reach it — so
+/// the compare is paid per change of the module's state, not per message;
+/// under a program that re-renders its whole tree it is paid per render, as
+/// before. The compare itself allocates nothing and stops at the first
+/// shared reference (see `sameGridProps`), so rows carried over from an
+/// immutable model cost one pointer compare each.
+///
+/// Known limitation, unchanged: function-typed props (cellRenderer /
+/// valueFormatter / onCellClicked closures) are not compared, so a render
+/// whose ONLY change is a different callback closure keeps the prior
+/// callbacks. In practice the data side of props changes alongside callback
+/// closures (an MVU state transition mints new rowData / configs at the same
+/// time it mints new closures), so this rarely surfaces; if a consumer hits a
+/// stale-callback bug, the escape hatch is to thread the changing state into
+/// a non-function prop (e.g. inject a token into `context` or `rowData`).
 ///
 /// Must NOT be `private` — `AgGrid.grid` is a `static member inline` on an
 /// `[<Erase>]` type, so Fable inlines the call site and imports
@@ -108,12 +234,9 @@ let agGrid: obj = import "AgGridReact" "ag-grid-react"
 /// `MemoizedChart` (see forge `CLAUDE.md` "Build verification") applies.
 [<ReactComponent>]
 let MemoizedGrid (reactProps: obj) =
-    let prevJsonRef = React.useRef ""
     let stableRef = React.useRef reactProps
-    let json = JS.JSON.stringify reactProps
 
-    if json <> prevJsonRef.current then
-        prevJsonRef.current <- json
+    if not (sameGridProps stableRef.current reactProps) then
         stableRef.current <- reactProps
 
     ReactLegacy.createElement (unbox<ReactElement> agGrid, stableRef.current)

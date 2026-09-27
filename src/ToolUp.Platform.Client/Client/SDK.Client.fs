@@ -705,9 +705,18 @@ module Client =
     /// `LocaleSwitched`) first, then the declared `ClientConfig.Locale`
     /// resolved against the team's `_platform.locale` and the browser
     /// preference. Under the default `FixedLocale "en"` with no override
-    /// this is a `match` returning a constant plus a `None` branch, and
-    /// `MessageCatalog.english` comes back by reference — no map read, no
-    /// browser call, no allocation (GP 11 / GP 13).
+    /// this is a `match` returning a constant plus a `None` branch, and no
+    /// map read or browser call.
+    ///
+    /// Phase 852 — the SAME catalog object comes back while the locale and
+    /// the override are unchanged (a one-entry cache below).
+    /// `MessageCatalog.resolve` stamps the locale onto a copy of the built-in
+    /// catalog, so without the cache every render handed
+    /// `MessageCatalogProvider` a new value and re-rendered every
+    /// `useMessages` reader — including readers inside a module subtree the
+    /// sliced shell's memo boundary would otherwise have held.
+    let mutable private catalogCache: (string * obj * MessageCatalog) option = None
+
     let private resolveCatalog
         (config: ClientConfig)
         (localeOverride: string option)
@@ -730,7 +739,16 @@ module Client =
                         (MessageCatalog.teamLocaleOf platformConfig)
                         (MessageCatalogProvider.browserLocale ())
 
-        MessageCatalog.resolve locale config.MessageCatalogOverride
+        match catalogCache with
+        | Some(cachedLocale, cachedOverride, catalog) when
+            cachedLocale = locale
+            && obj.ReferenceEquals(cachedOverride, box config.MessageCatalogOverride)
+            ->
+            catalog
+        | _ ->
+            let catalog = MessageCatalog.resolve locale config.MessageCatalogOverride
+            catalogCache <- Some(locale, box config.MessageCatalogOverride, catalog)
+            catalog
 
     /// Sources the shell can re-run on demand. The auth bridge retries
     /// itself on its refresh interval, so its banner row carries no
@@ -2439,11 +2457,25 @@ module Client =
                     let finalModel, cmds = subscribers |> List.fold folder (model, [])
                     finalModel, Cmd.batch cmds
 
-        let finalModel = {
-            newModel with
-                ProcessedData =
-                    resolveProcessedData _config modules newModel.ModuleStates newModel.PrefetchedProcessedData
-        }
+        // Phase 852 — return the same list when nothing changed. The
+        // aggregation re-runs on every message and always allocates, so
+        // storing its result unconditionally handed every render a NEW
+        // `ProcessedData` — which re-rendered every `ProcessedDataContext`
+        // consumer, and would re-render the shell chrome on every module
+        // message under the sliced store (the chrome reads this field).
+        // Entries are small records (names, a timestamp, a JSON summary),
+        // so the structural compare is cheap next to the render it saves.
+        let finalModel =
+            let processed =
+                resolveProcessedData _config modules newModel.ModuleStates newModel.PrefetchedProcessedData
+
+            if processed = newModel.ProcessedData then
+                newModel
+            else
+                {
+                    newModel with
+                        ProcessedData = processed
+                }
 
         // Detect ProcessedData entries that disappeared (file deleted,
         // data store reset, ingestion result invalidated) and reset
@@ -2730,7 +2762,153 @@ module Client =
             moduleDispatchCache <- Some(dispatch, forModules)
             forModules
 
-    let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
+    /// The active module's error boundary around its view — one
+    /// construction site for both render paths (the whole-tree `view` and
+    /// the Phase 852 store-subscribed host below).
+    let private moduleBoundary
+        (config: ClientConfig)
+        (shellMsgs: ShellMessages)
+        (boundaryMsgs: ModuleBoundaryMessages)
+        (moduleImpl: ErasedModule)
+        (moduleId: string)
+        (pageRoute: string option)
+        (resetKey: string)
+        (dispatch: Msg -> unit)
+        (currentState: obj)
+        : ReactElement =
+        // Phase 851.D — referentially stable across renders
+        // (see `moduleDispatchFor`).
+        let dispatchMsg = moduleDispatchFor dispatch
+
+        let renderInner () : PageContent =
+            match moduleImpl.PageViews, pageRoute with
+            | Some map, Some route when map.ContainsKey route ->
+                let pageView = map[route]
+                pageView currentState dispatchMsg
+            | _ ->
+                match moduleImpl.View with
+                | Some v ->
+                    let left, right = v currentState dispatchMsg
+                    SplitPanel(left, right)
+                | None ->
+                    // `register` rejects modules with neither View nor PageViews,
+                    // so this branch only fires when a multi-page module's
+                    // ActivePageRoute doesn't match any registered PageViews entry.
+                    SplitPanel(Html.div (shellMsgs.NoViewForRoute(defaultArg pageRoute "")), Html.div "")
+
+        Components.ModuleBoundary.wrapWith
+            boundaryMsgs
+            moduleId
+            resetKey
+            config.OnError
+            (fun () -> dispatch (ResetModule moduleId))
+            config.InputsPaneWidth
+            renderInner
+
+    // ─── Phase 852 — the sliced shell (store-bound `Client.run` only) ────
+    //
+    // Under the store binding (`Program.withReactStore`), the shell's chrome
+    // and the active module are two separate React boundaries that each
+    // read their own slice of the model:
+    //
+    //   * the CHROME (`shellChrome`) is a memo boundary over the whole model
+    //     with `ModuleStates` masked out — it re-renders when any OTHER
+    //     field changes identity, and never on a message that changed only
+    //     a module's state. Masking one named field (rather than listing the
+    //     fields the chrome reads) is deliberate: a field added to `Model`
+    //     later is read by the chrome's comparison automatically, so the
+    //     failure mode of forgetting is an extra render, never a stale one.
+    //   * the ACTIVE MODULE (`activeModuleHost`) is a memo boundary over its
+    //     identity props that reads `ModuleStates[moduleId]` through
+    //     `ModelStore.useSelector` by reference — so it re-renders when its
+    //     own state object changes, and on nothing else. The selector runs
+    //     on every publish; the view runs only when the state moved.
+    //
+    // Reference comparison is the whole mechanism, and it is sound because
+    // the model is immutable: `Map.add` for one key leaves every other value
+    // the same object, and an update that returns its input state unchanged
+    // returns the same object — the "return the same state when nothing
+    // changed" rule `docs/platform/modules.md` states for module authors.
+
+    [<Fable.Core.Import("memo", "react")>]
+    let private reactMemo (render: obj, areEqual: obj) : obj = Fable.Core.Util.jsNative
+
+    /// The props of the active-module host. Every member is stable across
+    /// renders unless the chrome's own slice changed (the config and module
+    /// are fixed for the program run; `dispatch` is the loop's own since
+    /// 851; the store is created once per run), so the host's default
+    /// shallow memo holds whenever the chrome re-renders for a reason of
+    /// its own.
+    type internal ModuleHostProps = {
+        Store: ModelStore<Model, Msg>
+        Config: ClientConfig
+        // The two catalog sections the host reads, not the catalog: the
+        // resolved catalog is a fresh record per chrome render
+        // (`MessageCatalog.forLocale` stamps the locale), while its
+        // sections are shared with the built-in catalog, so passing the
+        // sections keeps the host's memo holding across chrome renders.
+        ShellMessages: ShellMessages
+        BoundaryMessages: ModuleBoundaryMessages
+        Module: ErasedModule
+        ModuleId: string
+        PageRoute: string option
+        ResetKey: string
+        Dispatch: Msg -> unit
+    }
+
+    let private renderModuleHost (props: obj) : ReactElement =
+        let p = unbox<ModuleHostProps> props
+
+        let state =
+            ModelStore.useSelector
+                p.Store
+                (fun (m: Model) ->
+                    match m.ModuleStates |> Map.tryFind p.ModuleId with
+                    | Some s -> s
+                    | None -> null)
+                ModelStore.refEquals
+
+        // Permitted but not yet in `ModuleStates`: the route guard refused
+        // this module while one of its inputs was still loading and
+        // `ensureActiveInitialised` has not yet run the deferred `Init`.
+        // Decided HERE, not by the chrome, because the entry's arrival is a
+        // `ModuleStates` change — which is exactly what the chrome's
+        // comparison does not see.
+        if isNull state then
+            Toolup.UIToolkit.Layout.loadingIndicator p.Config.LoadingIndicator
+        else
+            moduleBoundary
+                p.Config
+                p.ShellMessages
+                p.BoundaryMessages
+                p.Module
+                p.ModuleId
+                p.PageRoute
+                p.ResetKey
+                p.Dispatch
+                state
+
+    /// The active module's store-subscribed memo boundary (React's default
+    /// shallow prop compare).
+    let private activeModuleHost: obj = reactMemo (box renderModuleHost, null)
+
+    /// How `view` produces the active module's content.
+    [<RequireQualifiedAccess>]
+    type private ModuleSlot =
+        /// Read the state from the model `view` was handed — the whole-tree
+        /// path every `Client.view` / `Client.viewWithSignIn` caller gets.
+        | Inline
+        /// Emit the store-subscribed host.
+        | Subscribed of ModelStore<Model, Msg>
+
+    let private viewWith
+        (slot: ModuleSlot)
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (chrome: ExtraChrome)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        =
         // Phase 444 — the catalog every string in this render comes from.
         // Resolved once at the top of `view` because chrome is built at
         // several depths below (the page-route placeholder, the area
@@ -2822,50 +3000,48 @@ module Client =
                     // both happen in the same update — but `Map.find`
                     // here would crash the shell, so hold the loading
                     // indicator rather than assume the entry exists.
-                    match model.ModuleStates |> Map.tryFind model.ActiveModuleId with
-                    | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
-                    | Some currentState ->
-                        // Phase 851.D — referentially stable across renders
-                        // (see `moduleDispatchFor`).
-                        let dispatchMsg = moduleDispatchFor dispatch
-
-                        let renderInner () : PageContent =
-                            match moduleImpl.PageViews, model.ActivePageRoute with
-                            | Some map, Some route when map.ContainsKey route ->
-                                let pageView = map[route]
-                                pageView currentState dispatchMsg
-                            | _ ->
-                                match moduleImpl.View with
-                                | Some v ->
-                                    let left, right = v currentState dispatchMsg
-                                    SplitPanel(left, right)
-                                | None ->
-                                    // `register` rejects modules with neither View nor PageViews,
-                                    // so this branch only fires when a multi-page module's
-                                    // ActivePageRoute doesn't match any registered PageViews entry.
-                                    SplitPanel(
-                                        Html.div (shellMsgs.NoViewForRoute(defaultArg model.ActivePageRoute "")),
-                                        Html.div ""
-                                    )
-
+                    let resetKey =
                         let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
 
                         let counter =
                             model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
 
-                        let resetKey = sprintf "%s-%d" teamPart counter
+                        sprintf "%s-%d" teamPart counter
 
-                        let boundaryEl =
-                            Components.ModuleBoundary.wrapWith
-                                resolvedCatalog.ModuleBoundary
-                                model.ActiveModuleId
-                                resetKey
-                                config.OnError
-                                (fun () -> dispatch (ResetModule model.ActiveModuleId))
-                                config.InputsPaneWidth
-                                renderInner
+                    match slot with
+                    | ModuleSlot.Subscribed store ->
+                        // Phase 852 — the host reads the module's state
+                        // from the store itself (and holds the loading
+                        // indicator while the entry is absent).
+                        let props: ModuleHostProps = {
+                            Store = store
+                            Config = config
+                            ShellMessages = resolvedCatalog.Shell
+                            BoundaryMessages = resolvedCatalog.ModuleBoundary
+                            Module = moduleImpl
+                            ModuleId = model.ActiveModuleId
+                            PageRoute = model.ActivePageRoute
+                            ResetKey = resetKey
+                            Dispatch = dispatch
+                        }
 
-                        Custom boundaryEl
+                        Custom(ReactLegacy.createElement (unbox<ReactElement> activeModuleHost, box props))
+                    | ModuleSlot.Inline ->
+                        match model.ModuleStates |> Map.tryFind model.ActiveModuleId with
+                        | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
+                        | Some currentState ->
+                            Custom(
+                                moduleBoundary
+                                    config
+                                    resolvedCatalog.Shell
+                                    resolvedCatalog.ModuleBoundary
+                                    moduleImpl
+                                    model.ActiveModuleId
+                                    model.ActivePageRoute
+                                    resetKey
+                                    dispatch
+                                    currentState
+                            )
                 | None -> SplitPanel(Html.div shellMsgs.ModuleNotFound, Html.div "")
 
         // Composite sidebar Id for the active-border highlight so that
@@ -3214,9 +3390,9 @@ module Client =
         // repopulates it, re-running this resolve.
         //
         // Under the default `FixedLocale "en"` with no override, this is
-        // a `match` returning a constant plus a `None` branch, and
-        // `MessageCatalog.english` is returned by reference — no map read,
-        // no browser call, no allocation (GP 11 / GP 13).
+        // a `match` returning a constant plus a `None` branch — no map read
+        // and no browser call (GP 11 / GP 13) — and the same catalog object
+        // while nothing it depends on moved (Phase 852, `resolveCatalog`).
         let resolvedBranding =
             Branding.resolve
                 {
@@ -3453,6 +3629,30 @@ module Client =
         // modes, one map read.
         MessageCatalogProvider.provider resolvedCatalog withBranding
 
+    /// The shell's view: chrome, sidebar and the active module, built from
+    /// the model it is handed.
+    let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
+        viewWith ModuleSlot.Inline config modules chrome model dispatch
+
+    let private viewWithSignInWith (slot: ModuleSlot) (config: ClientConfig) modules chrome (model: Model) dispatch =
+        let resolvedSubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
+
+        viewWith slot config modules chrome model dispatch
+        |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
+        // Phase 751 — the catalog provider is mounted OUTSIDE the auth
+        // gate as well as inside `view`, because the gate WRAPS the
+        // shell: a signed-out visitor sees the companion's sign-in
+        // screen and nothing of `view` at all. Mounted only here, the
+        // provider would be the one surface a deployment's
+        // `MessageCatalogOverride` could not reach — its sign-in screen
+        // would stay English while every page behind it translated.
+        //
+        // The inner mount stays: `view` is public and outer composers
+        // call it directly (see the note on `viewWithSignIn`), so removing
+        // it would strand them. Two nested providers carrying the same
+        // resolved value cost one context read.
+        |> MessageCatalogProvider.provider (resolveCatalog config model.LocaleOverride model.PlatformConfig)
+
     /// Wrap the rendered shell with the auth UI handler registered
     /// for the configured `AuthUIMode`. `AnonymousKind` / `ClaimBearerKind`
     /// / `NoAuthUI` pass through unchanged; other subject kinds
@@ -3466,23 +3666,79 @@ module Client =
     /// the gate entirely — the OIDC sign-in screen never renders and the
     /// shell drops into a 401 storm for any unauthenticated visit.
     let viewWithSignIn (config: ClientConfig) modules chrome (model: Model) dispatch =
-        let resolvedSubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
+        viewWithSignInWith ModuleSlot.Inline config modules chrome model dispatch
 
-        view config modules chrome model dispatch
-        |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
-        // Phase 751 — the catalog provider is mounted OUTSIDE the auth
-        // gate as well as inside `view`, because the gate WRAPS the
-        // shell: a signed-out visitor sees the companion's sign-in
-        // screen and nothing of `view` at all. Mounted only here, the
-        // provider would be the one surface a deployment's
-        // `MessageCatalogOverride` could not reach — its sign-in screen
-        // would stay English while every page behind it translated.
-        //
-        // The inner mount stays: `view` is public and outer composers
-        // call it directly (see the note on this function), so removing
-        // it would strand them. Two nested providers carrying the same
-        // resolved value cost one context read.
-        |> MessageCatalogProvider.provider (resolveCatalog config model.LocaleOverride model.PlatformConfig)
+    /// The props of the chrome memo boundary: the model plus what the
+    /// program run fixes (config, module list, chrome, the loop's dispatch,
+    /// the store).
+    type internal ShellChromeProps = {
+        Store: ModelStore<Model, Msg>
+        Config: ClientConfig
+        Modules: ErasedModule list
+        Chrome: ExtraChrome
+        Model: Model
+        Dispatch: Msg -> unit
+    }
+
+    /// The model field the chrome does not read — the active module reads
+    /// it, through the store, below the chrome's boundary.
+    let private moduleStatesField = nameof Unchecked.defaultof<Model>.ModuleStates
+
+    /// Equal when every model field except `ModuleStates` is the same
+    /// object. Walks the record's own fields, so a field added to `Model`
+    /// participates without an edit here.
+    [<Fable.Core.Emit("(function (a, b, skip) { if (a === b) return true; var ka = Object.keys(a); if (ka.length !== Object.keys(b).length) return false; for (var i = 0; i < ka.length; i++) { var k = ka[i]; if (k !== skip && a[k] !== b[k]) return false; } return true; })($0, $1, $2)")>]
+    let private sameFieldsExcept (a: Model) (b: Model) (skip: string) : bool = Fable.Core.Util.jsNative
+
+    /// Internal so the Fable pack can pin the comparison the chrome's memo
+    /// boundary runs.
+    let internal chromeSliceEqual (a: Model) (b: Model) : bool = sameFieldsExcept a b moduleStatesField
+
+    let private shellChromeEqual (prev: obj) (next: obj) : bool =
+        let p = unbox<ShellChromeProps> prev
+        let n = unbox<ShellChromeProps> next
+
+        obj.ReferenceEquals(p.Store, n.Store)
+        && obj.ReferenceEquals(p.Config, n.Config)
+        && obj.ReferenceEquals(p.Modules, n.Modules)
+        && obj.ReferenceEquals(p.Chrome, n.Chrome)
+        && obj.ReferenceEquals(p.Dispatch, n.Dispatch)
+        && chromeSliceEqual p.Model n.Model
+
+    let private renderShellChrome (props: obj) : ReactElement =
+        let p = unbox<ShellChromeProps> props
+        viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatch
+
+    let private shellChrome: obj =
+        // The comparer goes to React as a two-argument JS function: a boxed
+        // curried F# function may reach it curried, and React would read the
+        // returned closure as "equal".
+        reactMemo (box renderShellChrome, box (System.Func<obj, obj, bool>(shellChromeEqual)))
+
+    /// Phase 852 — the store-bound shell view (`Client.run`): the same tree
+    /// `viewWithSignIn` builds, behind two boundaries — the chrome, which
+    /// re-renders only when a model field other than `ModuleStates`
+    /// changes, and the active module, which reads its own state from
+    /// `store`. Mount it with `Program.withReactStore store`: the host reads
+    /// the store, so the store and the binding must be the same one.
+    let internal viewSliced
+        (store: ModelStore<Model, Msg>)
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (chrome: ExtraChrome)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : ReactElement =
+        let props: ShellChromeProps = {
+            Store = store
+            Config = config
+            Modules = modules
+            Chrome = chrome
+            Model = model
+            Dispatch = dispatch
+        }
+
+        ReactLegacy.createElement (unbox<ReactElement> shellChrome, box props)
 
     // ─── Phase 580 — client-shell module identity gate ────────────────
     //
@@ -4805,10 +5061,12 @@ module Client =
         (prog, programLifetimeEffects config)
         ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
 
-    /// Build the shell Elmish Program without running it. Outer composition
-    /// (e.g. AIClientConfig.withAIAssistant) consumes this to layer
-    /// additional state, messages, subscriptions, and view chrome on top.
-    let program (config: ClientConfig) (modules: ErasedModule list) : Program<unit, Model, Msg, ReactElement> =
+    /// The shell Program over a given shell view (whole-tree or sliced).
+    let private programWith
+        (shellView: ClientConfig -> ErasedModule list -> ExtraChrome -> Model -> Dispatch<Msg> -> ReactElement)
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        : Program<unit, Model, Msg, ReactElement> =
         boot config modules
 
         let allModules = prepareModules config modules
@@ -4854,11 +5112,19 @@ module Client =
                      traceUpdate
                  else
                      update config queryBus allModules)
-                (fun model dispatch -> viewWithSignIn config allModules emptyChrome model dispatch)
+                (fun model dispatch -> shellView config allModules emptyChrome model dispatch)
 
         prog
         |> Program.withErrorReporter elmishReporter
         |> withShellLifetimeEffects config id
+
+    /// Build the shell Elmish Program without running it. Outer composition
+    /// (e.g. AIClientConfig.withAIAssistant) consumes this to layer
+    /// additional state, messages, subscriptions, and view chrome on top.
+    /// Its view is the whole-tree `viewWithSignIn`, which any React binding
+    /// renders; `run` mounts the store-bound sliced shell instead.
+    let program (config: ClientConfig) (modules: ErasedModule list) : Program<unit, Model, Msg, ReactElement> =
+        programWith viewWithSignIn config modules
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own program).
@@ -4898,7 +5164,14 @@ module Client =
         if tryDispatchPublicEntry config then
             ()
         else
-            program config modules
+            // Phase 852 — the sliced shell: the chrome and the active
+            // module are separate boundaries over one model store, so a
+            // message that changes only the active module's state
+            // re-renders that module and no chrome. One store per run; the
+            // view's module host and the binding read the same one.
+            let store = ModelStore.create<Model, Msg> ()
+
+            programWith (viewSliced store) config modules
             |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
-            |> Program.withReactSynchronous "elmish-app"
+            |> Program.withReactStore store "elmish-app"
             |> Program.run
