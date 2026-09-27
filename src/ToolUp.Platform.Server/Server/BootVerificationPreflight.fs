@@ -455,6 +455,15 @@ type CompositionProfileRefusal =
     /// graph. `records` names each one, because "some record" is not a
     /// finding an operator can act on.
     | RemotingDecodersUnregistered of records: string list
+    /// Phase 842 — the verified profile was declared and one or more
+    /// registered API records take an argument type with no registered
+    /// JSON decoder, so that record decodes some of its arguments by
+    /// reflection at the Phase 783 seam instead of through the closed
+    /// JSON algebra. Each entry pairs the record with the argument
+    /// type(s) it carries that have no decoder — an operator reading
+    /// "IPresenceApi" alone would still have to go find what is
+    /// missing; the pair names what to register.
+    | RemotingArgumentDecodersUnregistered of records: (string * string list) list
     /// Phase 793 — the verified profile was declared and one or more
     /// registered AI tools declare no effects, so their bodies are bound to
     /// no envelope. `tools` names each one.
@@ -476,6 +485,13 @@ module CompositionProfileRefusal =
             let named = String.concat "; " records
 
             $"the verified composition profile requires every registered API record to decode through the closed remoting decoder algebra, and these decode by reflection: {named}. Register a decoder for each wire type they carry (RemotingDecoders.register, see docs/platform/remoting-decoder-algebra.md), or run CompositionProfile.Standard."
+        | RemotingArgumentDecodersUnregistered records ->
+            let named =
+                records
+                |> List.map (fun (record, uncovered) -> sprintf "%s (%s)" record (String.concat ", " uncovered))
+                |> String.concat "; "
+
+            $"the verified composition profile requires every registered API record to decode its arguments through the closed JSON decoder algebra, and these carry an argument type with none: {named}. Register a JSON decoder for each type named (JsonDecoders.register), or generate one — Phase 804 packages the generator for a consumer's own records too, see docs/platform/remoting-decoder-algebra.md — or run CompositionProfile.Standard."
         | ToolEffectsUndeclared tools ->
             let named = String.concat "; " tools
 
@@ -1495,15 +1511,22 @@ module RemotingDecoderFacet =
     // is that facet: the same served set, the same classifier, the same
     // binding shape, over argument types against the JSON registry.
     //
-    // It is ADVISORY under every profile for now (`FacetRequired = false`
-    // whatever the profile says), and deliberately: the JSON algebra's
-    // first set is hand-written and narrow, and a `Verified` deployment
-    // that refused on a served record with no JSON decoder would refuse
-    // nearly every deployment on the day the facet shipped. It becomes
-    // mandatory under `Verified` when the generator emits argument
-    // decoders (69k.B) and the platform's own records are covered by
-    // construction — the same road the response facet travelled between
-    // Phases 785 and 801.
+    // Phase 799 shipped it ADVISORY under every profile
+    // (`FacetRequired = false` whatever the profile said), and
+    // deliberately: the JSON algebra's first set was hand-written and
+    // narrow, and a `Verified` deployment that refused on a served
+    // record with no JSON decoder would have refused nearly every
+    // deployment on the day the facet shipped.
+    //
+    // Phase 842 — it follows the profile now, the same predicate the
+    // response facet has used since Phase 801
+    // (`RemotingDecoderFacet.requiresAlgebraDecoders`). Phase 841 gave
+    // the generator an argument leg (`Emit.jsonCompilationUnit` /
+    // `Plan.forJsonTypes`), so every platform record's arguments are
+    // covered by construction and the road this facet travels between
+    // Phases 785 and 801 for the response side is now travelled here
+    // too. This comment replaces the one that explained why it was
+    // advisory — the record of when that stopped being true.
 
     /// The wire types an API record's methods TAKE, by the registry key:
     /// each field's curried function chain walked to its `Async<_>`,
@@ -1571,7 +1594,7 @@ module RemotingDecoderFacet =
 
         {
             FacetProfile = profile
-            FacetRequired = false
+            FacetRequired = requiresAlgebraDecoders profile
             FacetBindings = bindings
         }
 
@@ -1580,10 +1603,11 @@ module RemotingDecoderFacet =
         let algebra, total = coverage facet
 
         sprintf
-            "remoting argument decoders: %d of %d served API record(s) take every argument through the JSON algebra (profile %s, advisory)"
+            "remoting argument decoders: %d of %d served API record(s) take every argument through the JSON algebra (profile %s, argument decoders %s)"
             algebra
             total
             (CompositionProfile.label facet.FacetProfile)
+            (if facet.FacetRequired then "mandatory" else "advisory")
 
     /// The records this facet classifies as `Reflection`, in declaration
     /// order.
@@ -1607,6 +1631,30 @@ module RemotingDecoderFacet =
             match reflectionRecords facet with
             | [] -> Ok()
             | records -> Error(RemotingDecodersUnregistered records)
+
+    /// Phase 842 — the boot check for the ARGUMENT facet.
+    ///
+    /// A cousin of `verify` rather than a reuse of it: `verify`'s
+    /// `RemotingDecodersUnregistered` names records only, matching the
+    /// response facet's shipped refusal, which this leaves unchanged.
+    /// The argument side's refusal names each record's UNCOVERED
+    /// argument TYPES beside its name (842.B) — an operator reading
+    /// "IPresenceApi" alone has nothing to act on; the pair does. Same
+    /// shape otherwise: not required is `Ok`, required with nothing on
+    /// the reflection path is `Ok`, and a `Verified` deployment that
+    /// declared no records also returns `Ok` (GP 13 — an unmandated
+    /// facet gates nothing, and neither does an empty one).
+    let verifyArguments (facet: RemotingDecoderFacet) : Result<unit, CompositionProfileRefusal> =
+        if not facet.FacetRequired then
+            Ok()
+        else
+            match
+                facet.FacetBindings
+                |> List.filter (fun binding -> binding.DecoderClass = RemotingDecoderClass.Reflection)
+                |> List.map (fun binding -> binding.DecoderApiRecord, binding.DecoderUncovered)
+            with
+            | [] -> Ok()
+            | records -> Error(RemotingArgumentDecodersUnregistered records)
 
     /// Mirror the facet into the tier-neutral shape the Phase 686 report
     /// carries.

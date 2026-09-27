@@ -59,9 +59,16 @@ Every refusal is a `validation`-category 400 with a path, before the handler run
 handler would have had to guard against; it now hears about it by name.
 
 **The `{high, low, unsigned}` form of `int64`** that raw `JSON.stringify` of a Fable `Long` produces
-is not admitted by `asInt64` (the SDK's client never emits it — `Fable.SimpleJson` writes a number or
-the signed string). None of the four records takes an `int64` argument, so no traffic changes; a
-consumer registering a decoder for a record that does should know.
+**is admitted by `asInt64` and `asUInt64` (decided Phase 845)**. Neither wire writer emits it on the
+happy path — `Fable.SimpleJson` writes a number or the signed string, same as `Int64Converter.Write`
+— but the server's pre-existing STJ `Int64Converter` / `UInt64Converter` already reconstructed a
+value from it, for a consumer that serialises an `int64` argument by hand (`JSON.stringify` over a
+plain object holding a `Long`) rather than through the SDK's own writer. Phase 845 admits the shape
+in the algebra too, rather than narrowing what a working client could rely on: refusing a shape the
+converter set already accepted would be a regression the algebra opts a consumer into, not one it
+asked for. `unsigned` is read by neither reconstruction — the low/high bit pattern is the same 64
+bits regardless of the tag. None of the four records above takes an `int64` argument, so no traffic
+changes for them; a consumer registering a decoder for a record that does may rely on this shape.
 
 ## Registering your own
 

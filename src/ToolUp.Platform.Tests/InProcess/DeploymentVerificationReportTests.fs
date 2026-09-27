@@ -162,7 +162,17 @@ let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgeme
 /// Phase 772 joins this list by the same route again: the egress facet
 /// arrives through a sibling interface `healthyEvidence` does not supply,
 /// so it reads `not-composed` here and `EgressPolicyTests` drives it.
-let private chainSectionIds = [ EvidenceChainSection; RemotingDecoderSection; EgressSection ]
+/// Phase 842 joins this list for the same reason again: the argument-side
+/// remoting-decoder facet arrives through its own sibling interface
+/// (`IRemotingArgumentDecoderEvidence`), so it too reads `not-composed`
+/// for every arrangement in this pack; `JsonDecoderAlgebraTests` drives
+/// it directly against the gatherer.
+let private chainSectionIds = [
+    EvidenceChainSection
+    RemotingDecoderSection
+    EgressSection
+    RemotingArgumentDecoderSection
+]
 
 let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds
 

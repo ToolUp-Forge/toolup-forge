@@ -1120,10 +1120,18 @@ let reportSectionTests =
             // this assertion is the tripwire that says so. Its subject is
             // that the eight sections ABOVE keep their position and their
             // verdict, which they do; the tail grows by exactly the
-            // sections that have been appended since.
+            // sections that have been appended since. Phase 842 appended
+            // a twelfth (the argument-side remoting-decoder twin), so the
+            // tail grows by one more.
             Expect.equal
                 (report.Sections |> List.map _.Id)
-                (priorIds @ [ EvidenceChainSection; RemotingDecoderSection; EgressSection ])
+                (priorIds
+                 @ [
+                     EvidenceChainSection
+                     RemotingDecoderSection
+                     EgressSection
+                     RemotingArgumentDecoderSection
+                 ])
                 "the section is APPENDED — inserting it would move every later section's canonical line"
         }
 
