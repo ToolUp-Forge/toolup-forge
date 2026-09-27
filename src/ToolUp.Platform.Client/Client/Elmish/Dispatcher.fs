@@ -99,6 +99,12 @@ type internal DispatcherCore<'msg>() =
 
             member _.DispatchAsync block =
                 if active then
+                    // Phase 851.C — the same start as `Cmd.OfAsync`: under
+                    // Fable `Async.StartImmediate`, no timer hop (see
+                    // `AsyncHelpers.start` for the `reentrant_no_loss`
+                    // argument). A block that completes synchronously
+                    // dispatches from inside whatever drain called this,
+                    // and the latch queues it in order.
                     async {
                         try
                             let! msg = block

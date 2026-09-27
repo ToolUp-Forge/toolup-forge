@@ -206,6 +206,9 @@
         <Compile Include="ElmishProofOracleTests.fs" />
         <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
         <Compile Include="ModuleInspectStateTests.fs" />
+        <!-- Phase 851.D - the module view's dispatch prop is referentially stable
+             across renders (Client.moduleDispatchFor), pinned on the transpiled code. -->
+        <Compile Include="ModuleDispatchStabilityTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
         <!-- Phase 849 — the browser runtime, measured. MinimalClient's entry
