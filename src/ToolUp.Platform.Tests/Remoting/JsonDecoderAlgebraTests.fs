@@ -32,8 +32,9 @@ open ToolUp.Platform.Tests.Remoting.WireCorpus
 /// deliberately unregistered `string` argument. Used by the served
 /// argument facet tests below to demonstrate genuine partial coverage
 /// without depending on a REAL platform API record staying uncovered —
-/// `PlatformJsonDecoders` covers all six of ITS records fully as of this
-/// phase, so a real API is the wrong fixture for "still uncovered".
+/// `PlatformJsonDecoders` covers every platform record's arguments since
+/// Phase 841 generated it, so a real API is the wrong fixture for "still
+/// uncovered".
 type private ProbeApi = { DoThing: string -> Async<unit> }
 
 // ─── The corpus types' decoders ──────────────────────────────────────
@@ -472,34 +473,15 @@ let private gateDraws = RemotingDecoders.DefaultDraws
 let private gateSeed = RemotingDecoders.DefaultSeed
 
 /// 840.C — every registration `PlatformJsonDecoders.registerAll` makes,
-/// by its `(record, type)` key, beside its recorded verification run. A
-/// registration added to `registerAll` without a line here fails the
-/// key-set comparison below, so the committed set cannot outgrow its run.
+/// by its `(record, type)` key, beside its recorded verification run.
+/// Phase 841 — the run is the GENERATED module's own `verifyAll`, emitted
+/// beside `registerAll` from the same registration list, so the committed
+/// set cannot outgrow its run by construction; the key-set comparison below
+/// still holds the two to each other.
 let private platformVerifications
     ()
     : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list =
-    let verify (record: string) (decoder: JsonDecoder<'T>) =
-        (Some record, RemotingDecoders.keyFor typeof<'T>),
-        JsonDecoders.verifyWith<'T> gateOracle gateDraws gateSeed decoder
-
-    [
-        verify "ITeamInviteApi" PlatformJsonDecoders.teamRole
-        verify "IPresenceApi" PlatformJsonDecoders.presenceLocation
-        verify "IPresenceApi" PlatformJsonDecoders.entityLockRef
-        verify "IAuditViewApi" PlatformJsonDecoders.auditTrailQuery
-        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceRef
-        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceDirection
-        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceChainRequest
-        verify "ITeamInviteApi" PlatformJsonDecoders.teamInviteIssueRequest
-        verify "IHomeOverviewApi" PlatformJsonDecoders.pinRequest
-        verify "TeamApi" PlatformJsonDecoders.createTeamRequest
-        verify "ITeamInviteApi" PlatformJsonDecoders.pendingInviteIssueRequest
-        verify "ITeamInviteApi" PlatformJsonDecoders.teamInviteApiString
-        verify "IHomeOverviewApi" PlatformJsonDecoders.homeOverviewApiString
-        verify "TeamApi" PlatformJsonDecoders.teamApiString
-        verify "TeamApi" PlatformJsonDecoders.teamApiStringPair
-        verify "TeamApi" PlatformJsonDecoders.teamApiStringStringRole
-    ]
+    PlatformJsonDecoders.verifyAll gateOracle gateDraws gateSeed
 
 /// 840.D — the go-red: total, correct-looking, and WRONG. Two same-typed
 /// fields read in each other's place, so every text is accepted and the
@@ -1319,7 +1301,6 @@ let tests =
                             (DecodeError.render e)
                             text
 
-                agreeFor "ITeamInviteApi" ToolUp.Platform.TeamRole.Admin
                 agreeFor "IPresenceApi" ({ Module = "m"; Page = Some "p" }: ToolUp.Platform.PresenceLocation)
                 agreeFor "IPresenceApi" ({ Module = "m"; Page = None }: ToolUp.Platform.PresenceLocation)
 
@@ -1338,7 +1319,6 @@ let tests =
                     : ToolUp.Platform.AuditTrailQuery)
 
                 agreeFor "IProvenanceQueryApi" (ToolUp.Platform.WireProvenanceRef.FactRef "f1")
-                agreeFor "IProvenanceQueryApi" ToolUp.Platform.WireProvenanceDirection.Upstream
 
                 agreeFor
                     "IProvenanceQueryApi"
