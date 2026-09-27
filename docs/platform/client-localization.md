@@ -272,9 +272,9 @@ Some strings the SDK renders are deliberately outside it:
 - **Built-in modules' default display names** ("Teams", "Health Monitor", …)
   and their administration-landing tile blurbs. These are authored at compose
   time, outside any React tree, so no resolved catalog exists at that point.
-  Every one of them is already overridable through the module's own config
-  record (`TeamManagerConfig.Name` and friends), which is where a deployment
-  should set them.
+  Every one of them is already overridable through the module's shell slot
+  (`Slots.TeamManager = SlotFill.Configured { Name = …; Icon = … }` and
+  friends — a `ModuleLabel`), which is where a deployment should set them.
 - **Values echoed from the server** — health-probe status strings, error
   messages a handler returned, a team's own name. These are data, not chrome.
   The server-side `ApiError` / `Translations` substrate is where a localised

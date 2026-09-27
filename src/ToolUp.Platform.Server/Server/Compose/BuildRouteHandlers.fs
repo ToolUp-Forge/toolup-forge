@@ -415,7 +415,7 @@ let buildRouteHandlers
     // Usage admin route. Auto-injected unconditionally so the client
     // dashboard's `IUsageQueryApi` proxy never 404s in mode-mismatched
     // deployments. The default `ClientConfig.UsageDashboard =
-    // DefaultUsageDashboard` renders the sidebar entry in any
+    // SlotFill.Default` renders the sidebar entry in any
     // non-Anonymous mode; the default `ServerConfig.UsageMetering =
     // NoUsageMetering` resolves `IUsageLog` to `NoOpUsageLog` so the
     // handler returns empty results — admin UI shows the "no usage
@@ -449,7 +449,7 @@ let buildRouteHandlers
     // Phase 171 — Home / Overview landing route. Auto-injected
     // unconditionally so the client Home module's `IHomeOverviewApi`
     // proxy never 404s; the module itself is opt-in client-side
-    // (`ClientConfig.HomeModule = EnabledHomeModule`), so a deployment
+    // (`ClientConfig.Slots.HomeModule = SlotFill.Default`), so a deployment
     // that doesn't enable it simply never calls this route (GP 13).
     // Scope + `RequiresClaim "scope"` gating is enforced by the
     // dispatcher + handler. Route shape: `/api/_platform/home/*` via

@@ -38,7 +38,7 @@ type AIAssistantClientBranding = {
 }
 
 /// Controls whether/how the AI assistant appears in the platform.
-/// Mirrors the DataManagerMode pattern. Client-only — server-side
+/// The same four-case shape as the shell's `SlotFill`. Client-only — server-side
 /// AI configuration goes through `AIAssistantServerConfig` directly.
 type AIAssistantMode =
     /// No AI assistant — modules provide their own AI or none is needed.

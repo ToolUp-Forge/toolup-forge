@@ -8,7 +8,7 @@ Templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
 | `platformsdk-application` | Adds a second / Nth Server+Client pair to an existing `platformsdk-solution`. For multi-Application projects (e.g. seller / buyer testbed). |
 | `platformsdk-module` | Four-file analysis module (`SharedTypes` / `Server` / `ClientModel` / `ClientView`) plus `.fsproj` + `.Client.props`. Compiles against `ToolUp.Platform.Core` only — proves the minimum-viable-module dependency floor. **In-tree shape**: the module lives inside the deployment. |
 | `platformsdk-module-packaged` | The same module seam, as **its own repository shipped as a NuGet package**: packable project + `fable/` shadow project carrying the client tier as source, `Pack` into a configurable folder feed, `run.ps1`, CPM, tool manifest, README, licence placeholder — and **both conformance layers pre-wired**, so the discipline is the default rather than a retrofit. |
-| `platformsdk-datamanager` | External data manager module: same shape as `platformsdk-module` but registers via `ExternalDataManager` mode and ships an `IDataSource` skeleton. |
+| `platformsdk-datamanager` | External data manager module: same shape as `platformsdk-module` but fills the data-manager shell slot (`Slots.DataManager = SlotFill.External …`) and ships an `IDataSource` skeleton. |
 
 ### Not a `dotnet new` template
 

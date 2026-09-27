@@ -44,7 +44,7 @@ let serverConfig = {
 
 let clientConfig = {
     ClientConfig.create handlers with
-        ExternalContactManager = DefaultExternalContactManager
+        Slots.ExternalContactManager = SlotFill.Default
 }
 ```
 

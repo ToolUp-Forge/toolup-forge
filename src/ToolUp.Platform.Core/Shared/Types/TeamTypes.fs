@@ -85,7 +85,7 @@ type PlatformInfo = { RequiresAuth: bool }
 /// remains the gate `CreateTeam` honours for deployments that either
 /// (a) configure a non-default policy (e.g. a self-service deployment
 /// setting `AnyAuthenticatedUser`), or (b) ship their own team UI via
-/// `ClientConfig.TeamManager = ExternalTeamManager …` that calls
+/// `ClientConfig.Slots.TeamManager = SlotFill.External …` that calls
 /// `TeamApi.CreateTeam` directly and relies on the server-side gate. A
 /// 2026-06-27 consumer audit found at least one downstream consumer
 /// app configuring a self-service policy (`AnyAuthenticatedUser`), so
@@ -321,7 +321,7 @@ type TeamApi = {
     ///
     /// No SDK-shipped UI calls this post the 2026-06-04 Platform-Management
     /// refactor (that module uses `CreateTeamWithOwner`); retained for
-    /// `ExternalTeamManager` consumers that render their own team-create
+    /// Team-manager replacements (`SlotFill.External`) that render their own team-create
     /// affordance — see the `TeamCreationPolicy` DU docstring.
     [<AllowAnonymous>]
     GetTeamCreationPolicy: unit -> Async<TeamCreationPolicy>
