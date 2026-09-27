@@ -1197,4 +1197,219 @@ let tests =
             Expect.equal (occurrences ReporterRaised written) 2 "the guard said so, once per failure"
             Expect.isFalse handle.Value.IsActive "…and the program terminated"
         }
+
+        // ─── Termination is total (Phase 871) ────────────────────────────
+        //
+        // Both routes to termination — a message the predicate takes, and
+        // `IDispatcher.Terminate` — run ONE teardown: the loop's flag first,
+        // then the subscriptions stopped, the effects disposed and the handler
+        // called, each under its own guard, and `MarkTerminated` in a
+        // `finally`. And the boot starts nothing once the program is
+        // terminated: it checks before every effect's registration, before the
+        // subscription start and before `init`'s command, and a start that
+        // terminated the program has what it returned released at once.
+        // `terminated_holds_nothing` and `terminated_starts_nothing` are those
+        // rules on the model; these are the production arms, each shown red on
+        // the tree before the phase.
+
+        test "a terminating message whose handler raises still terminates - teardown is total, run" {
+            let seen = ResizeArray<int>()
+            let reported = ResizeArray<ErrorContext>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            let update (msg: int) (model: int list) =
+                seen.Add msg
+                model @ [ msg ], Cmd.none
+
+            Program.mkProgram (fun () -> [], Cmd.none) update (fun _ _ -> ())
+            |> Program.withTermination ((=) 9) (fun _ -> failwith "the terminate handler raised")
+            |> Program.withSubscription (fun _ -> [ [ "sub" ], (fun _ -> disposable "sub") ])
+            |> Program.withErrorReporter reported.Add
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.withEffect (EffectHandle.programLifetime "effect" (fun _ -> disposable "effect"))
+            |> Program.runWithDispatch id ()
+
+            handle.Value.Dispatch 1
+            handle.Value.Dispatch 9
+            Expect.isFalse handle.Value.IsActive "the handler raised, and the program terminated anyway"
+            handle.Value.Dispatch 2
+            Expect.equal (List.ofSeq seen) [ 1 ] "a dispatch after the terminating message reached `update` zero times"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "sub"; "effect" ]
+                "the subscription and the effect were disposed, in the teardown's order"
+
+            Expect.equal reported.Count 1 "the handler's exception was reported, once"
+            handle.Value.Terminate()
+            Expect.equal (List.ofSeq disposed) [ "sub"; "effect" ] "a second Terminate tore nothing down twice"
+        }
+
+        test "a sink that terminates at boot starts no effect, no subscription and no command - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let renders = ResizeArray<int list>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSetState (fun m _ -> renders.Add m)
+            |> Program.withSubscription (fun _ -> [
+                [ "sub" ],
+                (fun _ ->
+                    started.Add "sub"
+                    disposable "sub")
+            ])
+            |> Program.withDispatcherHandle (fun d ->
+                handle <- Some d
+                d.Terminate())
+            |> Program.withEffect (
+                EffectHandle.programLifetime "effect" (fun _ ->
+                    started.Add "effect"
+                    disposable "effect")
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.isEmpty started "nothing was started once a sink had terminated the program"
+            Expect.isEmpty disposed "…so nothing was left to dispose"
+            Expect.equal (List.ofSeq renders) [ [] ] "the boot paint is unconditional: the init model, once"
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "an effect that terminates from its own start function has its handle disposed - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            // Effects start in the reverse of the order they were attached,
+            // so `terminates` (attached last) starts first and `after` would
+            // start second.
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSubscription (fun _ -> [
+                [ "sub" ],
+                (fun _ ->
+                    started.Add "sub"
+                    disposable "sub")
+            ])
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.withEffect (
+                EffectHandle.programLifetime "after" (fun _ ->
+                    started.Add "after"
+                    disposable "after")
+            )
+            |> Program.withEffect (
+                EffectHandle.programLifetime "terminates" (fun _ ->
+                    started.Add "terminates"
+                    handle.Value.Terminate()
+                    disposable "terminates")
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.equal
+                (List.ofSeq started)
+                [ "terminates" ]
+                "the effect that terminated ran; no effect, subscription or command started after it"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "terminates" ]
+                "the handle it returned after the teardown had run was disposed at once, not registered"
+
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "a subscription that terminates from its own start function is stopped - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSubscription (fun _ -> [
+                [ "terminates" ],
+                (fun _ ->
+                    started.Add "terminates"
+                    handle.Value.Terminate()
+                    disposable "terminates")
+            ])
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.runWithDispatch id ()
+
+            Expect.equal (List.ofSeq started) [ "terminates" ] "the subscription ran; init's command did not"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "terminates" ]
+                "the subscription the teardown could not yet see was stopped once its start returned"
+
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "a handler that calls Terminate tears down once, on either route - teardown is not re-entered" {
+            // Bounded, so the tree before the phase shows red rather than
+            // overflowing the stack: there the handler's `Terminate` found
+            // the flag still clear and ran the whole teardown again.
+            for viaMessage in [ true; false ] do
+                let mutable calls = 0
+                let disposed = ResizeArray<string>()
+                let mutable handle: IDispatcher<int> option = None
+
+                Program.mkProgram (fun () -> [], Cmd.none) (fun msg model -> model @ [ msg ], Cmd.none) (fun _ _ -> ())
+                |> Program.withTermination ((=) 9) (fun _ ->
+                    calls <- calls + 1
+
+                    if calls < 5 then
+                        handle.Value.Terminate())
+                |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+                |> Program.withEffect (
+                    EffectHandle.programLifetime "effect" (fun _ ->
+                        { new System.IDisposable with
+                            member _.Dispose() = disposed.Add "effect"
+                        })
+                )
+                |> Program.runWithDispatch id ()
+
+                if viaMessage then
+                    handle.Value.Dispatch 9
+                else
+                    handle.Value.Terminate()
+
+                let route =
+                    if viaMessage then
+                        "the message route"
+                    else
+                        "the callback route"
+
+                Expect.equal calls 1 $"the handler ran once ({route})"
+                Expect.equal (List.ofSeq disposed) [ "effect" ] $"the effect was disposed once ({route})"
+                Expect.isFalse handle.Value.IsActive $"terminated ({route})"
+        }
     ]
