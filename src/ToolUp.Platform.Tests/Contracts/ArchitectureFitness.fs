@@ -769,6 +769,12 @@ type FableGuardPin = {
 /// emitted `verifyAll` call, so none of it moves until the verify gate takes
 /// its reflective writer as an argument (as the JSON wire's `verifyWith`
 /// already takes its oracle) and the generator emits against that.
+///
+/// The two JSON pins were raised when Phases 880 and 885 met: 885 made the
+/// JSON gate verify against the browser's writer, which grew the .NET-only
+/// verify arm of `JsonDecoderRegistry` from 229 lines to 430 and the emitted
+/// one in `PlatformJsonDecoders` from 127 to 129. Both are server-only code
+/// of the `deferred` kind, and Phase 902 carries their move with the rest.
 let coreFableGuardPins: FableGuardPin list = [
     {
         File = "Shared/Remoting/MsgPack/TypeShape.fs"
@@ -797,8 +803,8 @@ let coreFableGuardPins: FableGuardPin list = [
     }
     {
         File = "Shared/Remoting/Json/JsonDecoderRegistry.fs"
-        LargestArm = 229
-        Reason = "deferred: the Phase 840 verify arm"
+        LargestArm = 430
+        Reason = "deferred: the Phase 840 verify arm and the Phase 885 browser-writer oracle it checks against"
     }
     {
         File = "Shared/Remoting/PlatformDecoders.fs"
@@ -807,7 +813,7 @@ let coreFableGuardPins: FableGuardPin list = [
     }
     {
         File = "Shared/Remoting/Json/PlatformJsonDecoders.fs"
-        LargestArm = 127
+        LargestArm = 129
         Reason = "deferred: the generator's emitted verifyAll / registerAllVerified"
     }
 ]
