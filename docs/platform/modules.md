@@ -359,7 +359,11 @@ let view (model: Model) (dispatch: Msg -> unit) =
     ]
 ```
 
-This isn't a style preference — Elmish dispatches synchronously, and per-keystroke dispatch on a heavyweight `update` is what causes input lag.
+This isn't a style preference, and it is worth knowing exactly what the runtime does with a dispatch so the rule is applied where it earns its keep rather than everywhere.
+
+**How the shell schedules a dispatch (since Phase 851).** A dispatch that arrives while the loop is idle opens a *drain* synchronously: the message runs through `update`, any messages its command dispatches synchronously (`Cmd.ofMsg`, a `Cmd.OfAsync` whose body completes before its first real await, a subscription start) are queued behind it and processed in the same drain, and the render hook is called **once, when the ring is empty, with the model the drain ended on** — however many messages the drain processed. The React adapter then constructs the view **once per task**: two drains in one browser task (a keyboard handler that dispatches twice, a socket message whose subscription dispatches again) build the F# view once, on the microtask queue, never a frame late. An async command starts immediately — there is no timer hop before a remote call begins — and the loop's re-entrancy latch is what makes that safe (`proofs/ElmishLoop.fst`, `reentrant_no_loss`). The module view's `dispatch` argument is the **same function on every render** for the life of the loop, so a `React.memo` or `[<ReactComponent>]` boundary around a module view that keys on its props is not defeated by the shell.
+
+So the cost of a dispatch is `update` plus one view construction per task — not one per message. What that does **not** change is why free-typing inputs stay in local state: every keystroke is its own browser task, so per-keystroke dispatch still costs one `update` and one whole-module view build per character, on the input's critical path, where `React.useState` costs a re-render of the input alone. Reach for the model when the value is *meaning* the rest of the module reacts to (a committed filter, a submitted query); keep it local while it is *typing*. Where a module genuinely wants to dispatch per keystroke — a live search that must round-trip through `update` — the shell's scheduling means it pays one drain and one paint per keystroke, which is the floor, and the cost that remains is the module's own `update` and `view`.
 
 ## Module independence
 

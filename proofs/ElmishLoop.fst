@@ -16,61 +16,72 @@
 
 /// Phase 789 — the Elmish dispatch loop, modelled in F* as a step
 /// machine and proved to process every message exactly once, in
-/// dispatch order, with termination absorbing.
+/// dispatch order, with termination absorbing. Phase 851 moved the
+/// render hook to the END of the drain and re-proved the machine.
 ///
 /// # What this module is
 ///
 /// A hand-written model of `Program.runWithDispatch`
 /// (`src/ToolUp.Platform.Client/Client/Elmish/Program.fs`), clause for
 /// clause: `dispatch`, `processMsgs`, the terminate callback, and the
-/// boot drain after `init`. The loop is a scheduling skeleton over four
+/// boot drain after `init`. The loop is a scheduling skeleton over five
 /// mutable cells — the ring, the `reentered` latch, the `terminated`
-/// latch and the model — and its transitions depend on the impure
-/// callees (`update`, `setState`, `Subs.Fx.change`, `Cmd.exec`) only
-/// through WHICH MESSAGES THEY SYNCHRONOUSLY RE-DISPATCH and whether
-/// they call `Terminate`. Those callees are therefore abstracted as ONE
-/// oracle, `update : msg -> model -> pair model (list ev)`: the new
-/// model and, in order, the events the callees raise before control
-/// returns to the loop. Under that abstraction the loop is a total,
-/// deterministic step function over the four cells, and this module is
-/// that function together with the laws the runtime relies on and
-/// nothing tests.
+/// latch, the model and (since Phase 851) the `dirty` flag — and its
+/// transitions depend on the impure callees (`update`, `setState`,
+/// `Subs.Fx.change`, `Cmd.exec`) only through WHICH MESSAGES THEY
+/// SYNCHRONOUSLY RE-DISPATCH and whether they call `Terminate`. The
+/// per-message callees are therefore abstracted as ONE oracle,
+/// `update : msg -> model -> pair model (list ev)`: the new model and, in
+/// order, the events `update`, `subscribe`, `Subs.Fx.change` and
+/// `Cmd.exec` raise before control returns to the loop. The render hook
+/// is a SECOND oracle, `render : model -> list ev` — the events
+/// `setState` raises — because since Phase 851 it runs at a different
+/// point: once, when the ring is empty, with the model the drain ended
+/// on, and not after every `update`. Under those abstractions the loop
+/// is a total, deterministic step function over the cells, and this
+/// module is that function together with the laws the runtime relies on
+/// and nothing tests.
 ///
 /// Phase 788 proved the ring a FIFO queue (`ElmishRing.fst`); this
 /// module IMPORTS it — `ring`, `push`, `pop`, `wf`, `unread`,
 /// `push_spec`, `pop_spec`, `create_wf` — and adds nothing about the
-/// ring. The proof here is about the two latches.
+/// ring. The proof here is about the two latches and the paint.
 ///
 /// Every definition names its F# counterpart in the comment above it.
 /// The differential host (`ElmishLoopProofOracleTests.fs` on .NET) runs
 /// the EXTRACTION of this module beside the production loop with a
-/// scripted `update` that re-dispatches chosen messages at chosen
-/// points — from `update`'s command, from the boot drain, after
-/// `Terminate` — and requires the two to hand `update` the same messages
-/// in the same order, and to end on the same model. That host is the
-/// only thing that says this model is about the code that ships.
+/// scripted `update` and a scripted `render` that re-dispatch chosen
+/// messages at chosen points — from `update`'s command, from the boot
+/// drain, from the post-drain `setState`, after `Terminate` — and
+/// requires the two to hand `update` the same messages in the same
+/// order, to end on the same model, to have painted the same model, and
+/// to have painted the same number of times. That host is the only thing
+/// that says this model is about the code that ships.
 ///
 /// # The representation
 ///
-/// The state is the four cells plus two observables the differential
-/// compares: `trace`, the messages `update` has been handed, in order;
-/// and `log`, the messages `dispatch` ACCEPTED (pushed onto the ring),
-/// in order — external and reentrant alike. `active` is
+/// The state is the five cells plus the dispatcher's flag and four
+/// observables the differential compares: `trace`, the messages `update`
+/// has been handed, in order; `log`, the messages `dispatch` ACCEPTED
+/// (pushed onto the ring), in order — external and reentrant alike;
+/// `painted`, the model most recently handed to the render hook; and
+/// `renders`, how many times it was handed one. `active` is
 /// `DispatcherCore.active`, carried so the two-flag encoding is a
 /// theorem over the model rather than a comment.
 ///
-/// `processMsgs` is a `while` loop whose exit depends on the oracle
+/// `processMsgs` is a `while` loop whose exit depends on the oracles
 /// eventually re-dispatching nothing — which nothing guarantees, and
 /// which production does not guarantee either (an `update` that always
-/// re-dispatches never returns). The model bounds it with `fuel`, one
-/// unit per processed message, and REPORTS exhaustion rather than
-/// hiding it: the latch is left set when the drain did not finish, so a
-/// stalled machine looks exactly like production mid-drain, and `run`
-/// stops feeding it external events, because a single-threaded host
-/// cannot deliver any while a synchronous drain has not returned. Every
-/// theorem below is partial correctness: what holds of every state the
-/// machine reaches, whether or not the drain finished. Liveness of the
-/// drain is not claimed.
+/// re-dispatches never returns; so does a `setState` that does). The
+/// model bounds it with `fuel`, one unit per processed message and one
+/// per paint, and REPORTS exhaustion rather than hiding it: the latch is
+/// left set when the drain did not finish, so a stalled machine looks
+/// exactly like production mid-drain, and `run` stops feeding it
+/// external events, because a single-threaded host cannot deliver any
+/// while a synchronous drain has not returned. Every theorem below is
+/// partial correctness: what holds of every state the machine reaches,
+/// whether or not the drain finished. Liveness of the drain is not
+/// claimed.
 ///
 /// # The theorems
 ///
@@ -80,26 +91,49 @@
 /// in EVERY reachable state, `trace` is a prefix of `log` — termination
 /// can truncate, never permute. `reentrant_no_loss`: a `dispatch` made
 /// while the latch is set queues its message at the back and processes
-/// nothing, so the message is neither lost nor moved ahead of what was
-/// already waiting. `terminated_absorbing`: once `terminated`, no
-/// operation changes `trace`, `log` or the model, and nothing clears
-/// the flag. `boot_drain_equiv`: the boot drain, which duplicates the
-/// steady-state critical section by hand, IS that critical section over
-/// the events `init`'s effects raise — and for a single message is
-/// literally `dispatch`. `active_iff_not_terminated`: in every reachable
-/// state `active = not terminated`; `fallback_breaks_encoding` computes
-/// the one production arm that drives them apart.
+/// nothing — and paints nothing — so the message is neither lost nor
+/// moved ahead of what was already waiting. `terminated_absorbing`: once
+/// `terminated`, no operation changes `trace`, `log`, the model or what
+/// was painted, and nothing clears the flag. `boot_drain_equiv`: the
+/// boot drain, which duplicates the steady-state critical section by
+/// hand, IS that critical section over the initial paint and the events
+/// `init`'s effects raise — and for a single message is the initial
+/// paint followed by `dispatch`. `active_iff_not_terminated`: in every
+/// reachable state `active = not terminated`; `fallback_breaks_encoding`
+/// computes the one production arm that drives them apart.
+///
+/// Phase 851 adds two about the paint. `painted_is_model`: in every
+/// idle, non-terminated state a program reaches, the model on screen IS
+/// the model — nothing is left unpainted when a drain returns.
+/// `render_once_per_drain`: a `dispatch` from an idle state paints
+/// exactly once when it finishes, and not at all when it terminates —
+/// CONDITIONAL on the render oracle being quiet (a `setState` that
+/// dispatches nothing synchronously, which is what the React adapter
+/// is; a `setState` that dispatches re-opens the drain and paints again,
+/// and the differential scripts exactly that case).
 ///
 /// # What is abstracted, and stated as such
 ///
-/// An exception from a callee is an oracle reply whose model is the old
-/// one (production leaves `state` unassigned) carrying whatever was
-/// dispatched before the throw. The teardown callbacks on the
-/// terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to
-/// dispatch; a dispatch they made would land in the ring and never be
-/// processed, which is what `terminated_absorbing` says of any message
-/// after the flag. The `DispatchAsync` post-await recheck is an
-/// interleaving and is NOT modelled — this is the synchronous machine.
+/// Every parameter of the model is an assumption. `update` is the
+/// composite of `update`, `subscribe`, `Subs.Fx.change` and `Cmd.exec`:
+/// a pure function of the message and the model to the new model and the
+/// events those four raise synchronously, in order — an exception from
+/// any of them is an oracle reply whose model is the old one (production
+/// leaves `state` unassigned) carrying whatever was dispatched before
+/// the throw. `render` is `setState`: a pure function of the model
+/// handed to it, to the events it raises synchronously; the React
+/// adapter raises none. `to_terminate` is `Program.withTermination`'s
+/// predicate, a pure function of the message. `fuel` is a bound the
+/// model imposes on itself, never a claim about production. `capacity`
+/// is any integer — `create_wf` says the ring is well-formed whatever was
+/// asked for. `init_evs` are the events `Subs.Fx.change` and `init`'s
+/// `Cmd.exec` raise at boot, after the boot paint; the boot paint's own
+/// events come from `render`. The teardown callbacks on the terminating
+/// path (`Subs.Fx.stop`, `terminate`) are assumed not to dispatch; a
+/// dispatch they made would land in the ring and never be processed,
+/// which is what `terminated_absorbing` says of any message after the
+/// flag. The `DispatchAsync` post-await recheck is an interleaving and is
+/// NOT modelled — this is the synchronous machine.
 
 module ElmishLoop
 
@@ -111,8 +145,9 @@ open ElmishRing
    ─────────────────────────────────────────────────────────────────── *)
 
 /// A synchronous event raised from INSIDE the loop, while one message is
-/// being processed: `dispatch' msg` from `setState`, a subscription's
-/// start, or a command; or `IDispatcher.Terminate ()` from any of them.
+/// being processed or the model is being painted: `dispatch' msg` from
+/// `setState`, a subscription's start, or a command; or
+/// `IDispatcher.Terminate ()` from any of them.
 type ev (m: Type0) =
   | Msg : msg: m -> ev m
   | Term : ev m
@@ -124,32 +159,41 @@ type ext (m: Type0) =
   | XTerminate : ext m
 
 (* ───────────────────────────────────────────────────────────────────
-   The state — the four cells, the dispatcher's flag, two observables.
+   The state — the five cells, the dispatcher's flag, four observables.
    ─────────────────────────────────────────────────────────────────── *)
 
-/// F#: `rb`, `reentered`, `terminated`, `dispatcherCore.active`, `state`;
-/// `trace` and `log` are the differential's observables (see the header).
+/// F#: `rb`, `reentered`, `terminated`, `dispatcherCore.active`, `state`,
+/// `dirty`; `trace`, `log`, `painted` and `renders` are the differential's
+/// observables (see the header). `dirty` is production's cell of the same
+/// name: the model has moved since the render hook last saw it.
 noeq type st (m: Type0) (md: Type0) = {
   ring: ring m;
   reentered: bool;
   terminated: bool;
   active: bool;
   model: md;
+  dirty: bool;
   trace: list m;
   log: list m;
+  painted: opt md;
+  renders: nat;
 }
 
 /// The state after `init` returned and `dispatcherCore.Wire dispatch'`
-/// ran — the first moment anything can dispatch. `Wire` is what sets
-/// `active`; before it nothing holds a reference to `dispatch`.
+/// ran — the first moment anything can dispatch, and BEFORE the boot
+/// paint: the init model is unpainted, so `dirty` is set. `Wire` is what
+/// sets `active`; before it nothing holds a reference to `dispatch`.
 let initial (#m #md: Type0) (capacity: int) (model: md) : st m md = {
   ring = create capacity;
   reentered = false;
   terminated = false;
   active = true;
   model = model;
+  dirty = true;
   trace = [];
   log = [];
+  painted = ONone;
+  renders = 0;
 }
 
 (* ───────────────────────────────────────────────────────────────────
@@ -183,13 +227,24 @@ let rec apply_evs (#m #md: Type0) (s: st m md) (evs: list (ev m)) : Tot (st m md
   | [] -> s
   | e :: rest -> apply_evs (apply_ev s e) rest
 
-/// F#: the body of `processMsgs`'s `while` — one popped message.
-/// `toTerminate msg` takes the teardown branch; otherwise `update`,
-/// `setState`, `Subs.Fx.change` and `Cmd.exec` run (the oracle: the
-/// message is handed to `update` — that is the `trace` append — and the
-/// events they raise are applied in order), and only THEN is
-/// `state <- model'` assigned, which is why a `Terminate` raised from a
-/// command still leaves the new model in place.
+/// F#: `dirty <- false; program.setState state dispatch'` — the paint.
+/// The hook is handed the CURRENT model, the flag is cleared before it
+/// runs (so a dispatch it makes re-dirties the model rather than being
+/// painted twice), and the events it raises are applied under the latch,
+/// exactly as a command's are. Phase 851: this is the one place the hook
+/// is called from inside the drain.
+let paint (#m #md: Type0) (render: md -> list (ev m)) (s: st m md) : st m md =
+  let s1 = { s with dirty = false; painted = OSome s.model; renders = s.renders + 1 } in
+  apply_evs s1 (render s.model)
+
+/// F#: the `Some msg` arm of `processMsgs`'s `while` — one popped
+/// message. `toTerminate msg` takes the teardown branch; otherwise
+/// `update`, `subscribe`, `Subs.Fx.change` and `Cmd.exec` run (the
+/// oracle: the message is handed to `update` — that is the `trace`
+/// append — and the events they raise are applied in order), and only
+/// THEN is `state <- model'; dirty <- true` assigned, which is why a
+/// `Terminate` raised from a command still leaves the new model in place.
+/// Since Phase 851 `setState` is NOT among the callees here.
 let step (#m #md: Type0)
          (update: m -> md -> pair md (list (ev m)))
          (to_terminate: m -> bool)
@@ -199,19 +254,22 @@ let step (#m #md: Type0)
     let Pair model' evs = update msg s.model in
     let s1 = { s with trace = append s.trace [msg] } in
     let s2 = apply_evs s1 evs in
-    { s2 with model = model' }
+    { s2 with model = model'; dirty = true }
 
 (* ───────────────────────────────────────────────────────────────────
    The drain.
    ─────────────────────────────────────────────────────────────────── *)
 
-/// F#: `while not terminated && Option.isSome nextMsg do … nextMsg <- rb.Pop()`.
+/// F#: `while not terminated && (Option.isSome nextMsg || dirty) do …`.
 /// `next` is `nextMsg`, popped BEFORE the flag is examined — so a
 /// message popped in the same iteration that terminates is dropped,
-/// exactly as production drops it. The second component is whether the
-/// loop EXITED (on the flag or on an empty ring) rather than ran out of
-/// fuel; the fuel is spent after a message is processed and before the
-/// next pop, so a stalled machine has processed everything it popped.
+/// exactly as production drops it. An empty ring with the model dirty is
+/// the `None` arm: the paint, then one more pop, because the hook may
+/// have dispatched. An empty ring with nothing dirty is the exit. The
+/// second component is whether the loop EXITED (on the flag or on a
+/// clean empty ring) rather than ran out of fuel; the fuel is spent
+/// after a message is processed or a paint is made, and before the next
+/// pop, so a stalled machine has processed everything it popped.
 /// `OSome Placeholder` is `nextMsg.Value` being `Unchecked.defaultof`,
 /// which `placeholder_unobserved` proves a well-formed ring never pops;
 /// the arm exists because the function is total.
@@ -219,28 +277,36 @@ let rec loop (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
+             (render: md -> list (ev m))
              (s: st m md) (next: opt (slot m))
   : Tot (pair (st m md) bool) (decreases fuel) =
   if s.terminated then Pair s true
   else
     match next with
-    | ONone -> Pair s true
+    | ONone ->
+        if not s.dirty then Pair s true
+        else if fuel = 0 then Pair s false
+        else
+          let s' = paint render s in
+          let Pair r' next' = pop s'.ring in
+          loop (fuel - 1) update to_terminate render { s' with ring = r' } next'
     | OSome Placeholder -> Pair s true
     | OSome (Written msg) ->
         let s' = step update to_terminate msg s in
         if fuel = 0 then Pair s' false
         else
           let Pair r' next' = pop s'.ring in
-          loop (fuel - 1) update to_terminate { s' with ring = r' } next'
+          loop (fuel - 1) update to_terminate render { s' with ring = r' } next'
 
 /// F#: `processMsgs ()` — `let mutable nextMsg = rb.Pop()` then the loop.
 let process_msgs (#m #md: Type0)
                  (fuel: nat)
                  (update: m -> md -> pair md (list (ev m)))
                  (to_terminate: m -> bool)
+                 (render: md -> list (ev m))
                  (s: st m md) : pair (st m md) bool =
   let Pair r next = pop s.ring in
-  loop fuel update to_terminate { s with ring = r } next
+  loop fuel update to_terminate render { s with ring = r } next
 
 /// F#: `reentered <- true; processMsgs (); reentered <- false` — the
 /// critical section `dispatch` runs when the latch was clear. The latch
@@ -250,8 +316,9 @@ let critical (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
+             (render: md -> list (ev m))
              (s: st m md) : st m md =
-  let Pair s' finished = process_msgs fuel update to_terminate { s with reentered = true } in
+  let Pair s' finished = process_msgs fuel update to_terminate render { s with reentered = true } in
   if finished then { s' with reentered = false } else s'
 
 /// F#: `dispatch msg`.
@@ -259,12 +326,13 @@ let dispatch (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
+             (render: md -> list (ev m))
              (s: st m md) (msg: m) : st m md =
   if s.terminated then s
   else
     let s1 = { s with ring = push msg s.ring; log = append s.log [msg] } in
     if s1.reentered then s1
-    else critical fuel update to_terminate s1
+    else critical fuel update to_terminate render s1
 
 (* ───────────────────────────────────────────────────────────────────
    The boot drain — transcribed, not derived. The equivalence is the
@@ -278,32 +346,37 @@ let boot_ev (#m #md: Type0)
             (fuel: nat)
             (update: m -> md -> pair md (list (ev m)))
             (to_terminate: m -> bool)
+            (render: md -> list (ev m))
             (s: st m md) (e: ev m) : st m md =
   match e with
-  | Msg msg -> dispatch fuel update to_terminate s msg
+  | Msg msg -> dispatch fuel update to_terminate render s msg
   | Term -> terminate s
 
 let rec boot_evs (#m #md: Type0)
                  (fuel: nat)
                  (update: m -> md -> pair md (list (ev m)))
                  (to_terminate: m -> bool)
+                 (render: md -> list (ev m))
                  (s: st m md) (evs: list (ev m)) : Tot (st m md) (decreases evs) =
   match evs with
   | [] -> s
-  | e :: rest -> boot_evs fuel update to_terminate (boot_ev fuel update to_terminate s e) rest
+  | e :: rest -> boot_evs fuel update to_terminate render (boot_ev fuel update to_terminate render s e) rest
 
-/// F#: the tail of `runWithDispatch` — `reentered <- true`, then
-/// `setState model dispatch'`, `Subs.Fx.change … dispatch'` and
+/// F#: the tail of `runWithDispatch` — `reentered <- true`, then the
+/// boot paint `dirty <- false; setState model dispatch'` (unconditional,
+/// and BEFORE `init`'s command runs: a hydrating renderer must see the
+/// model the server rendered), then `Subs.Fx.change … dispatch'` and
 /// `Cmd.exec … dispatch' cmd` (the events `init`'s effects raise, each
 /// through `dispatch'`), then `processMsgs ()`, then `reentered <- false`.
 let boot (#m #md: Type0)
          (fuel: nat)
          (update: m -> md -> pair md (list (ev m)))
          (to_terminate: m -> bool)
+         (render: md -> list (ev m))
          (s: st m md) (evs: list (ev m)) : st m md =
-  let s1 = { s with reentered = true } in
-  let s2 = boot_evs fuel update to_terminate s1 evs in
-  let Pair s3 finished = process_msgs fuel update to_terminate s2 in
+  let s1 = paint render { s with reentered = true } in
+  let s2 = boot_evs fuel update to_terminate render s1 evs in
+  let Pair s3 finished = process_msgs fuel update to_terminate render s2 in
   if finished then { s3 with reentered = false } else s3
 
 (* ───────────────────────────────────────────────────────────────────
@@ -318,13 +391,14 @@ let rec run (#m #md: Type0)
             (fuel: nat)
             (update: m -> md -> pair md (list (ev m)))
             (to_terminate: m -> bool)
+            (render: md -> list (ev m))
             (s: st m md) (exts: list (ext m)) : Tot (st m md) (decreases exts) =
   if s.reentered then s
   else
     match exts with
     | [] -> s
-    | XDispatch msg :: rest -> run fuel update to_terminate (dispatch fuel update to_terminate s msg) rest
-    | XTerminate :: rest -> run fuel update to_terminate (terminate s) rest
+    | XDispatch msg :: rest -> run fuel update to_terminate render (dispatch fuel update to_terminate render s msg) rest
+    | XTerminate :: rest -> run fuel update to_terminate render (terminate s) rest
 
 /// A whole program: `init` (its model and the events its effects raise),
 /// the boot drain, then the outside world.
@@ -332,8 +406,9 @@ let program (#m #md: Type0)
             (fuel: nat)
             (update: m -> md -> pair md (list (ev m)))
             (to_terminate: m -> bool)
+            (render: md -> list (ev m))
             (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m)) : st m md =
-  run fuel update to_terminate (boot fuel update to_terminate (initial capacity model) init_evs) exts
+  run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) init_evs) exts
 
 /// F#: `Dispatcher.fs`'s fallback arm — `IDispatcher.Terminate` with no
 /// callback wired: `active <- false` and nothing else. Not a transition
@@ -370,23 +445,46 @@ let opt_msgs (#m: Type0) (next: opt (slot m)) : list m =
   | OSome (Written v) -> [v]
   | _ -> []
 
+/// A render oracle that dispatches nothing synchronously — the React
+/// adapter's `setState`, which hands the view to React and returns.
+[@@ noextract_to "FSharp"]
+let quiet (#m #md: Type0) (render: md -> list (ev m)) : prop = forall (x: md). render x == []
+
+/// The popped `nextMsg` is a message `update` will be handed — written,
+/// and not one the termination predicate takes.
+[@@ noextract_to "FSharp"]
+let processes (#m: Type0) (to_terminate: m -> bool) (next: opt (slot m)) : bool =
+  match next with
+  | OSome (Written msg) -> not (to_terminate msg)
+  | _ -> false
+
+/// The popped `nextMsg` is a message the termination predicate takes.
+[@@ noextract_to "FSharp"]
+let terminates (#m: Type0) (to_terminate: m -> bool) (next: opt (slot m)) : bool =
+  match next with
+  | OSome (Written msg) -> to_terminate msg
+  | _ -> false
+
 /// The core invariant — true of every state the machine passes through,
 /// latched or idle. The ring is well-formed; the dispatcher's flag is
 /// the loop's flag negated; while not terminated the log is exactly the
 /// trace followed by what is pending, and once terminated the trace is
-/// a prefix of the log and both are frozen.
+/// a prefix of the log and both are frozen; and a model that is not
+/// dirty is the model on screen.
 [@@ noextract_to "FSharp"]
 let inv_core (#m #md: Type0) (s: st m md) : prop =
   wf s.ring
   /\ s.active = not s.terminated
   /\ (not s.terminated ==> s.log == append s.trace (pending s))
   /\ (s.terminated ==> is_prefix s.trace s.log)
+  /\ (not s.dirty ==> s.painted == OSome s.model)
 
 /// The invariant at the boundary of every operation: the core, and an
-/// idle non-terminated machine has drained its ring.
+/// idle non-terminated machine has drained its ring and painted its
+/// model.
 [@@ noextract_to "FSharp"]
 let inv (#m #md: Type0) (s: st m md) : prop =
-  inv_core s /\ (not s.reentered /\ not s.terminated ==> unread s.ring == [])
+  inv_core s /\ (not s.reentered /\ not s.terminated ==> unread s.ring == [] /\ not s.dirty)
 
 (* ───────────────────────────────────────────────────────────────────
    List lemmas.
@@ -412,13 +510,15 @@ let prefix_refl (#m: Type0) (xs: list m)
    ─────────────────────────────────────────────────────────────────── *)
 
 /// **`enqueue_spec`.** A reentrant push queues the message at the back
-/// of what is pending, logs it, and touches nothing else.
+/// of what is pending, logs it, and touches nothing else — not the
+/// model, not the paint.
 let enqueue_spec (#m #md: Type0) (s: st m md) (msg: m)
   : Lemma (requires inv_core s)
           (ensures (let s' = enqueue s msg in
                     inv_core s'
                     /\ s'.reentered == s.reentered /\ s'.terminated == s.terminated
                     /\ s'.active == s.active /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
                     /\ (not s.terminated ==>
                           s'.log == append s.log [msg] /\ pending s' == append (pending s) [msg]))) =
   if s.terminated then ()
@@ -428,15 +528,16 @@ let enqueue_spec (#m #md: Type0) (s: st m md) (msg: m)
     append_assoc s.trace (pending s) [msg]
   end
 
-/// **`terminate_spec`.** Termination sets both flags, freezes trace and
-/// log, and is idempotent.
+/// **`terminate_spec`.** Termination sets both flags, freezes trace, log
+/// and the paint, and is idempotent.
 let terminate_spec (#m #md: Type0) (s: st m md)
   : Lemma (requires inv_core s)
           (ensures (let s' = terminate s in
                     inv_core s'
                     /\ s'.terminated /\ not s'.active
                     /\ s'.reentered == s.reentered /\ s'.trace == s.trace
-                    /\ s'.log == s.log /\ s'.model == s.model /\ s'.ring == s.ring)) =
+                    /\ s'.log == s.log /\ s'.model == s.model /\ s'.ring == s.ring
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders)) =
   if s.terminated then ()
   else prefix_append s.trace (pending s)
 
@@ -445,6 +546,7 @@ let rec apply_evs_spec (#m #md: Type0) (s: st m md) (evs: list (ev m))
           (ensures (let s' = apply_evs s evs in
                     inv_core s'
                     /\ s'.reentered == s.reentered /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
                     /\ (s.terminated ==> s'.terminated)))
           (decreases evs) =
   match evs with
@@ -458,16 +560,21 @@ let rec apply_evs_spec (#m #md: Type0) (s: st m md) (evs: list (ev m))
 
 /// **`step_spec`.** Processing a popped message — one the log holds at
 /// the head of what is pending — restores the core invariant: the
-/// message moves from pending to trace, and every event the callees
-/// raised extends both log and pending in lockstep.
+/// message moves from pending to trace, every event the callees raised
+/// extends both log and pending in lockstep, and the model is dirty (or
+/// the machine terminated). The paint is untouched.
 let step_spec (#m #md: Type0)
               (update: m -> md -> pair md (list (ev m)))
               (to_terminate: m -> bool)
               (msg: m) (s: st m md)
   : Lemma (requires wf s.ring /\ s.active = not s.terminated /\ not s.terminated
-                    /\ s.log == append s.trace (msg :: pending s))
+                    /\ s.log == append s.trace (msg :: pending s)
+                    /\ (not s.dirty ==> s.painted == OSome s.model))
           (ensures (let s' = step update to_terminate msg s in
-                    inv_core s' /\ s'.reentered == s.reentered)) =
+                    inv_core s' /\ s'.reentered == s.reentered
+                    /\ s'.renders == s.renders /\ s'.painted == s.painted
+                    /\ (to_terminate msg ==> s'.terminated)
+                    /\ (not (to_terminate msg) ==> s'.dirty))) =
   if to_terminate msg then prefix_append s.trace (msg :: pending s)
   else begin
     let Pair _ evs = update msg s.model in
@@ -475,6 +582,31 @@ let step_spec (#m #md: Type0)
     append_assoc s.trace [msg] (pending s);
     apply_evs_spec s1 evs
   end
+
+/// **`paint_spec`.** The paint hands the hook the current model, counts
+/// it, clears the flag, and applies the hook's events under the latch:
+/// the trace and the model are untouched, and the painted model IS the
+/// model.
+let paint_spec (#m #md: Type0) (render: md -> list (ev m)) (s: st m md)
+  : Lemma (requires inv_core s)
+          (ensures (let s' = paint render s in
+                    inv_core s'
+                    /\ s'.reentered == s.reentered /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ not s'.dirty /\ s'.painted == OSome s.model /\ s'.renders == s.renders + 1
+                    /\ (s.terminated ==> s'.terminated))) =
+  let s1 = { s with dirty = false; painted = OSome s.model; renders = s.renders + 1 } in
+  apply_evs_spec s1 (render s.model)
+
+/// The paint never touches the latch — with or without the invariant.
+let rec apply_evs_reentered (#m #md: Type0) (s: st m md) (evs: list (ev m))
+  : Lemma (ensures (apply_evs s evs).reentered == s.reentered) (decreases evs) =
+  match evs with
+  | [] -> ()
+  | e :: rest -> apply_evs_reentered (apply_ev s e) rest
+
+let paint_reentered (#m #md: Type0) (render: md -> list (ev m)) (s: st m md)
+  : Lemma (ensures (paint render s).reentered == s.reentered) =
+  apply_evs_reentered { s with dirty = false; painted = OSome s.model; renders = s.renders + 1 } (render s.model)
 
 /// The loop's invariant, with the popped `nextMsg` accounted for.
 [@@ noextract_to "FSharp"]
@@ -486,6 +618,7 @@ let loop_inv (#m #md: Type0) (s: st m md) (next: opt (slot m)) : prop =
   /\ (ONone? next ==> unread s.ring == [])
   /\ (not s.terminated ==> s.log == append s.trace (append (opt_msgs next) (pending s)))
   /\ (s.terminated ==> is_prefix s.trace s.log)
+  /\ (not s.dirty ==> s.painted == OSome s.model)
 
 /// A pop on a well-formed ring re-establishes the loop invariant.
 let pop_loop_inv (#m #md: Type0) (s: st m md)
@@ -501,16 +634,26 @@ let rec loop_spec (#m #md: Type0)
                   (fuel: nat)
                   (update: m -> md -> pair md (list (ev m)))
                   (to_terminate: m -> bool)
+                  (render: md -> list (ev m))
                   (s: st m md) (next: opt (slot m))
   : Lemma (requires loop_inv s next)
-          (ensures (let Pair s' finished = loop fuel update to_terminate s next in
+          (ensures (let Pair s' finished = loop fuel update to_terminate render s next in
                     inv_core s' /\ s'.reentered
-                    /\ (finished /\ not s'.terminated ==> unread s'.ring == [])))
+                    /\ (finished /\ not s'.terminated ==> unread s'.ring == [] /\ not s'.dirty)))
           (decreases fuel) =
   if s.terminated then ()
   else
     match next with
-    | ONone -> ()
+    | ONone ->
+        if not s.dirty then ()
+        else if fuel = 0 then ()
+        else begin
+          paint_spec render s;
+          let s' = paint render s in
+          pop_loop_inv s';
+          let Pair r' next' = pop s'.ring in
+          loop_spec (fuel - 1) update to_terminate render { s' with ring = r' } next'
+        end
     | OSome Placeholder -> ()
     | OSome (Written msg) ->
         step_spec update to_terminate msg s;
@@ -519,30 +662,32 @@ let rec loop_spec (#m #md: Type0)
         else begin
           pop_loop_inv s';
           let Pair r' next' = pop s'.ring in
-          loop_spec (fuel - 1) update to_terminate { s' with ring = r' } next'
+          loop_spec (fuel - 1) update to_terminate render { s' with ring = r' } next'
         end
 
 let process_msgs_spec (#m #md: Type0)
                       (fuel: nat)
                       (update: m -> md -> pair md (list (ev m)))
                       (to_terminate: m -> bool)
+                      (render: md -> list (ev m))
                       (s: st m md)
   : Lemma (requires inv_core s /\ s.reentered)
-          (ensures (let Pair s' finished = process_msgs fuel update to_terminate s in
+          (ensures (let Pair s' finished = process_msgs fuel update to_terminate render s in
                     inv_core s' /\ s'.reentered
-                    /\ (finished /\ not s'.terminated ==> unread s'.ring == []))) =
+                    /\ (finished /\ not s'.terminated ==> unread s'.ring == [] /\ not s'.dirty))) =
   pop_loop_inv s;
   let Pair r next = pop s.ring in
-  loop_spec fuel update to_terminate { s with ring = r } next
+  loop_spec fuel update to_terminate render { s with ring = r } next
 
 let critical_spec (#m #md: Type0)
                   (fuel: nat)
                   (update: m -> md -> pair md (list (ev m)))
                   (to_terminate: m -> bool)
+                  (render: md -> list (ev m))
                   (s: st m md)
   : Lemma (requires inv_core s)
-          (ensures inv (critical fuel update to_terminate s)) =
-  process_msgs_spec fuel update to_terminate { s with reentered = true }
+          (ensures inv (critical fuel update to_terminate render s)) =
+  process_msgs_spec fuel update to_terminate render { s with reentered = true }
 
 /// **`dispatch_inv`.** `dispatch` preserves the invariant from any
 /// state that satisfies it — idle or latched, terminated or not.
@@ -550,15 +695,16 @@ let dispatch_inv (#m #md: Type0)
                  (fuel: nat)
                  (update: m -> md -> pair md (list (ev m)))
                  (to_terminate: m -> bool)
+                 (render: md -> list (ev m))
                  (s: st m md) (msg: m)
   : Lemma (requires inv s)
-          (ensures inv (dispatch fuel update to_terminate s msg)) =
+          (ensures inv (dispatch fuel update to_terminate render s msg)) =
   if s.terminated then ()
   else begin
     enqueue_spec s msg;
     let s1 = enqueue s msg in
     if s1.reentered then ()
-    else critical_spec fuel update to_terminate s1
+    else critical_spec fuel update to_terminate render s1
   end
 
 let terminate_inv (#m #md: Type0) (s: st m md)
@@ -571,63 +717,72 @@ let dispatch_latched (#m #md: Type0)
                      (fuel: nat)
                      (update: m -> md -> pair md (list (ev m)))
                      (to_terminate: m -> bool)
+                     (render: md -> list (ev m))
                      (s: st m md) (msg: m)
   : Lemma (requires s.reentered)
-          (ensures dispatch fuel update to_terminate s msg == enqueue s msg) = ()
+          (ensures dispatch fuel update to_terminate render s msg == enqueue s msg) = ()
 
 let rec boot_evs_are_apply_evs (#m #md: Type0)
                                (fuel: nat)
                                (update: m -> md -> pair md (list (ev m)))
                                (to_terminate: m -> bool)
+                               (render: md -> list (ev m))
                                (s: st m md) (evs: list (ev m))
   : Lemma (requires s.reentered)
-          (ensures boot_evs fuel update to_terminate s evs == apply_evs s evs)
+          (ensures boot_evs fuel update to_terminate render s evs == apply_evs s evs)
           (decreases evs) =
   match evs with
   | [] -> ()
   | Msg msg :: rest ->
-      dispatch_latched fuel update to_terminate s msg;
-      boot_evs_are_apply_evs fuel update to_terminate (enqueue s msg) rest
+      dispatch_latched fuel update to_terminate render s msg;
+      boot_evs_are_apply_evs fuel update to_terminate render (enqueue s msg) rest
   | Term :: rest ->
-      boot_evs_are_apply_evs fuel update to_terminate (terminate s) rest
+      boot_evs_are_apply_evs fuel update to_terminate render (terminate s) rest
 
-/// **`boot_inv`.** The boot drain preserves the invariant.
+/// **`boot_inv`.** The boot drain establishes the invariant from a state
+/// with the core — the unpainted state `initial` builds is one.
 let boot_inv (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
+             (render: md -> list (ev m))
              (s: st m md) (evs: list (ev m))
   : Lemma (requires inv_core s)
-          (ensures inv (boot fuel update to_terminate s evs)) =
-  let s1 = { s with reentered = true } in
-  boot_evs_are_apply_evs fuel update to_terminate s1 evs;
+          (ensures inv (boot fuel update to_terminate render s evs)) =
+  let s0 = { s with reentered = true } in
+  paint_spec render s0;
+  let s1 = paint render s0 in
+  boot_evs_are_apply_evs fuel update to_terminate render s1 evs;
   apply_evs_spec s1 evs;
-  process_msgs_spec fuel update to_terminate (apply_evs s1 evs)
+  process_msgs_spec fuel update to_terminate render (apply_evs s1 evs)
 
 /// **`run_inv`.** The outside world preserves the invariant.
 let rec run_inv (#m #md: Type0)
                 (fuel: nat)
                 (update: m -> md -> pair md (list (ev m)))
                 (to_terminate: m -> bool)
+                (render: md -> list (ev m))
                 (s: st m md) (exts: list (ext m))
   : Lemma (requires inv s)
-          (ensures inv (run fuel update to_terminate s exts))
+          (ensures inv (run fuel update to_terminate render s exts))
           (decreases exts) =
   if s.reentered then ()
   else
     match exts with
     | [] -> ()
     | XDispatch msg :: rest ->
-        dispatch_inv fuel update to_terminate s msg;
-        run_inv fuel update to_terminate (dispatch fuel update to_terminate s msg) rest
+        dispatch_inv fuel update to_terminate render s msg;
+        run_inv fuel update to_terminate render (dispatch fuel update to_terminate render s msg) rest
     | XTerminate :: rest ->
         terminate_inv s;
-        run_inv fuel update to_terminate (terminate s) rest
+        run_inv fuel update to_terminate render (terminate s) rest
 
-/// **`initial_inv`.** The state after `Wire` satisfies the invariant,
-/// whatever capacity was asked for.
+/// **`initial_inv`.** The state after `Wire` satisfies the core
+/// invariant, whatever capacity was asked for. Not `inv`: the init model
+/// is unpainted until the boot paints it, and `boot_inv` is what turns
+/// the core into the full invariant.
 let initial_inv (#m #md: Type0) (capacity: int) (model: md)
-  : Lemma (ensures inv (initial #m capacity model)) =
+  : Lemma (ensures inv_core (initial #m capacity model)) =
   create_wf #m capacity
 
 /// **`program_inv`.** Every state a program reaches satisfies the
@@ -636,29 +791,33 @@ let program_inv (#m #md: Type0)
                 (fuel: nat)
                 (update: m -> md -> pair md (list (ev m)))
                 (to_terminate: m -> bool)
+                (render: md -> list (ev m))
                 (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures inv (program fuel update to_terminate capacity model init_evs exts)) =
+  : Lemma (ensures inv (program fuel update to_terminate render capacity model init_evs exts)) =
   initial_inv #m capacity model;
-  boot_inv fuel update to_terminate (initial capacity model) init_evs;
-  run_inv fuel update to_terminate (boot fuel update to_terminate (initial capacity model) init_evs) exts
+  boot_inv fuel update to_terminate render (initial capacity model) init_evs;
+  run_inv fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) init_evs) exts
 
 (* ───────────────────────────────────────────────────────────────────
-   The theorems — the phase's six, as named corollaries.
+   The theorems — the phase's six, as named corollaries, and Phase
+   851's two about the paint.
    ─────────────────────────────────────────────────────────────────── *)
 
 /// **`exactly_once`.** In every idle, non-terminated state a program
 /// reaches, the log IS the trace: every message `dispatch` accepted —
-/// from outside or re-dispatched from inside — was handed to `update`
-/// exactly once, and in the order it was accepted.
+/// from outside or re-dispatched from inside, including from the
+/// post-drain paint — was handed to `update` exactly once, and in the
+/// order it was accepted.
 let exactly_once (#m #md: Type0)
                  (fuel: nat)
                  (update: m -> md -> pair md (list (ev m)))
                  (to_terminate: m -> bool)
+                 (render: md -> list (ev m))
                  (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate capacity model init_evs exts in
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
                     not s.reentered /\ not s.terminated ==> s.log == s.trace)) =
-  program_inv fuel update to_terminate capacity model init_evs exts;
-  let s = program fuel update to_terminate capacity model init_evs exts in
+  program_inv fuel update to_terminate render capacity model init_evs exts;
+  let s = program fuel update to_terminate render capacity model init_evs exts in
   if not s.reentered && not s.terminated then append_nil s.trace
 
 /// **`in_order`.** In EVERY state a program reaches — mid-drain,
@@ -669,33 +828,41 @@ let in_order (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
+             (render: md -> list (ev m))
              (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate capacity model init_evs exts in
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
                     is_prefix s.trace s.log)) =
-  program_inv fuel update to_terminate capacity model init_evs exts;
-  let s = program fuel update to_terminate capacity model init_evs exts in
+  program_inv fuel update to_terminate render capacity model init_evs exts;
+  let s = program fuel update to_terminate render capacity model init_evs exts in
   if s.terminated then () else prefix_append s.trace (pending s)
 
 /// **`reentrant_no_loss`.** A `dispatch` made while the latch is set —
-/// from `update`'s command, from `setState`, from a subscription's
-/// start — queues its message at the BACK of what is pending, logs it,
-/// and processes nothing: the trace, the model and everything already
-/// waiting are untouched. With `exactly_once`, the message is handed to
-/// `update` once the drain reaches it; with `in_order`, after everything
-/// accepted before it. It can be neither lost nor moved ahead.
+/// from `update`'s command, from the post-drain `setState`, from a
+/// subscription's start, from an async command that completed
+/// synchronously — queues its message at the BACK of what is pending,
+/// logs it, and processes nothing: the trace, the model, the paint and
+/// everything already waiting are untouched. With `exactly_once`, the
+/// message is handed to `update` once the drain reaches it; with
+/// `in_order`, after everything accepted before it. It can be neither
+/// lost nor moved ahead. This is the lemma that makes
+/// `Async.StartImmediate` safe as the async-command start (Phase 851.C):
+/// a command whose body runs to a dispatch before yielding dispatches
+/// under the latch, and this is what the latch does with it.
 let reentrant_no_loss (#m #md: Type0)
                       (fuel: nat)
                       (update: m -> md -> pair md (list (ev m)))
                       (to_terminate: m -> bool)
+                      (render: md -> list (ev m))
                       (s: st m md) (msg: m)
   : Lemma (requires inv_core s /\ s.reentered /\ not s.terminated)
-          (ensures (let s' = dispatch fuel update to_terminate s msg in
+          (ensures (let s' = dispatch fuel update to_terminate render s msg in
                     inv_core s'
                     /\ s'.log == append s.log [msg]
                     /\ pending s' == append (pending s) [msg]
                     /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
                     /\ s'.reentered /\ not s'.terminated)) =
-  dispatch_latched fuel update to_terminate s msg;
+  dispatch_latched fuel update to_terminate render s msg;
   enqueue_spec s msg
 
 /// Termination freezes the callee events: nothing they raise changes a
@@ -708,87 +875,107 @@ let rec terminated_stays_terminated (#m #md: Type0) (s: st m md) (evs: list (ev 
   | [] -> ()
   | _ :: rest -> terminated_stays_terminated s rest
 
-/// The callee events never touch the latch.
-let rec apply_evs_reentered (#m #md: Type0) (s: st m md) (evs: list (ev m))
-  : Lemma (ensures (apply_evs s evs).reentered == s.reentered) (decreases evs) =
-  match evs with
-  | [] -> ()
-  | e :: rest -> apply_evs_reentered (apply_ev s e) rest
-
 /// **`terminated_absorbing`.** Once `terminated`, no event from inside
-/// or outside changes what `update` saw, what was accepted, or the
-/// model — and nothing clears the flag. The two guards at the head of
-/// `dispatch` and `processMsgs`'s `while` are this lemma.
+/// or outside changes what `update` saw, what was accepted, the model,
+/// or what was painted — and nothing clears the flag. The two guards at
+/// the head of `dispatch` and `processMsgs`'s `while` are this lemma.
 let rec terminated_absorbing (#m #md: Type0)
                              (fuel: nat)
                              (update: m -> md -> pair md (list (ev m)))
                              (to_terminate: m -> bool)
+                             (render: md -> list (ev m))
                              (s: st m md) (exts: list (ext m))
   : Lemma (requires s.terminated)
-          (ensures (let s' = run fuel update to_terminate s exts in
+          (ensures (let s' = run fuel update to_terminate render s exts in
                     s'.terminated /\ s'.trace == s.trace /\ s'.log == s.log
-                    /\ s'.model == s.model /\ s'.active == s.active))
+                    /\ s'.model == s.model /\ s'.active == s.active
+                    /\ s'.painted == s.painted /\ s'.renders == s.renders))
           (decreases exts) =
   if s.reentered then ()
   else
     match exts with
     | [] -> ()
-    | XDispatch msg :: rest -> terminated_absorbing fuel update to_terminate s rest
-    | XTerminate :: rest -> terminated_absorbing fuel update to_terminate s rest
+    | XDispatch msg :: rest -> terminated_absorbing fuel update to_terminate render s rest
+    | XTerminate :: rest -> terminated_absorbing fuel update to_terminate render s rest
 
 /// …and the boot drain on a machine terminated before it ran (a
-/// dispatcher-handle sink that called `Terminate`): the drain pops at
-/// most one slot and processes nothing.
+/// dispatcher-handle sink that called `Terminate`): the boot paint still
+/// hands the hook the init model — production paints unconditionally at
+/// boot — but the drain pops at most one slot and processes nothing.
 let terminated_absorbing_boot (#m #md: Type0)
                               (fuel: nat)
                               (update: m -> md -> pair md (list (ev m)))
                               (to_terminate: m -> bool)
+                              (render: md -> list (ev m))
                               (s: st m md) (evs: list (ev m))
   : Lemma (requires s.terminated)
-          (ensures (let s' = boot fuel update to_terminate s evs in
+          (ensures (let s' = boot fuel update to_terminate render s evs in
                     s'.terminated /\ s'.trace == s.trace /\ s'.log == s.log
-                    /\ s'.model == s.model /\ s'.active == s.active)) =
-  let s1 = { s with reentered = true } in
-  boot_evs_are_apply_evs fuel update to_terminate s1 evs;
-  terminated_stays_terminated s1 evs
+                    /\ s'.model == s.model /\ s'.active == s.active
+                    /\ s'.painted == OSome s.model /\ s'.renders == s.renders + 1)) =
+  let s0 = { s with reentered = true } in
+  let p = { s0 with dirty = false; painted = OSome s0.model; renders = s0.renders + 1 } in
+  terminated_stays_terminated p (render s0.model);
+  boot_evs_are_apply_evs fuel update to_terminate render p evs;
+  terminated_stays_terminated p evs
 
 /// **`terminate_then_nothing`.** From ANY idle state, a `Terminate` from
-/// outside means nothing after it is ever processed.
+/// outside means nothing after it is ever processed or painted.
 let terminate_then_nothing (#m #md: Type0)
                            (fuel: nat)
                            (update: m -> md -> pair md (list (ev m)))
                            (to_terminate: m -> bool)
+                           (render: md -> list (ev m))
                            (s: st m md) (exts: list (ext m))
   : Lemma (requires not s.reentered)
-          (ensures (let s' = run fuel update to_terminate s (XTerminate :: exts) in
-                    s'.terminated /\ s'.trace == s.trace /\ s'.log == s.log /\ s'.model == s.model)) =
-  terminated_absorbing fuel update to_terminate (terminate s) exts
+          (ensures (let s' = run fuel update to_terminate render s (XTerminate :: exts) in
+                    s'.terminated /\ s'.trace == s.trace /\ s'.log == s.log /\ s'.model == s.model
+                    /\ s'.painted == s.painted /\ s'.renders == s.renders)) =
+  terminated_absorbing fuel update to_terminate render (terminate s) exts
 
 /// **`boot_drain_equiv`.** The boot drain IS the steady-state critical
-/// section, run over the events `init`'s effects raised under the
-/// latch — the hand-duplicated `reentered <- true; …; processMsgs ();
-/// reentered <- false` and `dispatch`'s are one function.
+/// section, run over the boot paint and then the events `init`'s
+/// effects raised under the latch — the hand-duplicated
+/// `reentered <- true; paint; …; processMsgs (); reentered <- false` and
+/// `dispatch`'s are one function.
 let boot_drain_equiv (#m #md: Type0)
                      (fuel: nat)
                      (update: m -> md -> pair md (list (ev m)))
                      (to_terminate: m -> bool)
+                     (render: md -> list (ev m))
                      (s: st m md) (evs: list (ev m))
-  : Lemma (ensures boot fuel update to_terminate s evs
-                   == critical fuel update to_terminate (apply_evs { s with reentered = true } evs)) =
-  let s1 = { s with reentered = true } in
-  boot_evs_are_apply_evs fuel update to_terminate s1 evs;
+  : Lemma (ensures boot fuel update to_terminate render s evs
+                   == critical fuel update to_terminate render
+                        (apply_evs (paint render { s with reentered = true }) evs)) =
+  let s0 = { s with reentered = true } in
+  paint_reentered render s0;
+  let s1 = paint render s0 in
+  boot_evs_are_apply_evs fuel update to_terminate render s1 evs;
   apply_evs_reentered s1 evs
 
-/// **`boot_single_is_dispatch`.** For one message, the boot drain is
-/// `dispatch` itself, from any idle non-terminated state.
+/// The state after the boot paint alone, with the latch released — what
+/// a program that dispatched nothing from `init` looks like the moment
+/// `runWithDispatch` returns.
+[@@ noextract_to "FSharp"]
+let booted (#m #md: Type0) (render: md -> list (ev m)) (s: st m md) : st m md =
+  { paint render { s with reentered = true } with reentered = false }
+
+/// **`boot_single_is_dispatch`.** For one message, the boot drain is the
+/// boot paint followed by `dispatch` itself, from any idle non-terminated
+/// state the paint does not terminate.
 let boot_single_is_dispatch (#m #md: Type0)
                             (fuel: nat)
                             (update: m -> md -> pair md (list (ev m)))
                             (to_terminate: m -> bool)
+                            (render: md -> list (ev m))
                             (s: st m md) (msg: m)
-  : Lemma (requires not s.reentered /\ not s.terminated)
-          (ensures boot fuel update to_terminate s [Msg msg] == dispatch fuel update to_terminate s msg) =
-  boot_drain_equiv fuel update to_terminate s [Msg msg]
+  : Lemma (requires not s.reentered /\ not s.terminated /\ not (booted render s).terminated)
+          (ensures boot fuel update to_terminate render s [Msg msg]
+                   == dispatch fuel update to_terminate render (booted render s) msg) =
+  let s0 = { s with reentered = true } in
+  paint_reentered render s0;
+  let s1 = paint render s0 in
+  boot_evs_are_apply_evs fuel update to_terminate render s1 [Msg msg]
 
 /// **`active_iff_not_terminated`.** In every state a program reaches,
 /// `DispatcherCore.active` is the loop's `terminated` negated. Both
@@ -800,10 +987,11 @@ let active_iff_not_terminated (#m #md: Type0)
                               (fuel: nat)
                               (update: m -> md -> pair md (list (ev m)))
                               (to_terminate: m -> bool)
+                              (render: md -> list (ev m))
                               (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate capacity model init_evs exts in
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
                     s.active = not s.terminated)) =
-  program_inv fuel update to_terminate capacity model init_evs exts
+  program_inv fuel update to_terminate render capacity model init_evs exts
 
 /// **`fallback_breaks_encoding`.** The one arm that drives the two
 /// flags apart, computed: `Dispatcher.fs`'s fallback for an unwired
@@ -815,3 +1003,99 @@ let active_iff_not_terminated (#m #md: Type0)
 let fallback_breaks_encoding (#m #md: Type0) (s: st m md)
   : Lemma (requires not s.terminated)
           (ensures (let s' = fallback_terminate s in not s'.active /\ not s'.terminated)) = ()
+
+/// **`painted_is_model`.** In every idle, non-terminated state a program
+/// reaches, nothing is left unpainted and the model on screen IS the
+/// model. This is what rendering once at the END of the drain has to
+/// establish that rendering after every `update` got for free: the last
+/// paint saw the last model.
+let painted_is_model (#m #md: Type0)
+                     (fuel: nat)
+                     (update: m -> md -> pair md (list (ev m)))
+                     (to_terminate: m -> bool)
+                     (render: md -> list (ev m))
+                     (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
+                    not s.reentered /\ not s.terminated ==> not s.dirty /\ s.painted == OSome s.model)) =
+  program_inv fuel update to_terminate render capacity model init_evs exts
+
+/// Under a quiet render the loop paints at most once, as its last act:
+/// a paint is made only on an empty ring, a quiet hook leaves it empty,
+/// and the next pop exits. So a loop that exits non-terminated painted
+/// exactly once if it had anything to paint — the model was dirty on
+/// entry, or its first message was processed — and a loop that
+/// terminated painted nothing.
+let rec loop_quiet (#m #md: Type0)
+                   (fuel: nat)
+                   (update: m -> md -> pair md (list (ev m)))
+                   (to_terminate: m -> bool)
+                   (render: md -> list (ev m))
+                   (s: st m md) (next: opt (slot m))
+  : Lemma (requires loop_inv s next /\ quiet render)
+          (ensures (let Pair s' finished = loop fuel update to_terminate render s next in
+                    (s.terminated ==> s'.terminated)
+                    /\ (terminates to_terminate next ==> s'.terminated)
+                    /\ (s'.terminated ==> s'.renders == s.renders)
+                    /\ (finished /\ not s'.terminated ==>
+                          s'.renders == s.renders + (if s.dirty || processes to_terminate next then 1 else 0))))
+          (decreases fuel) =
+  if s.terminated then ()
+  else
+    match next with
+    | ONone ->
+        if not s.dirty then ()
+        else if fuel = 0 then ()
+        else begin
+          paint_spec render s;
+          let s' = paint render s in
+          pop_loop_inv s';
+          let Pair r' next' = pop s'.ring in
+          loop_quiet (fuel - 1) update to_terminate render { s' with ring = r' } next'
+        end
+    | OSome Placeholder -> ()
+    | OSome (Written msg) ->
+        step_spec update to_terminate msg s;
+        let s' = step update to_terminate msg s in
+        if fuel = 0 then ()
+        else begin
+          pop_loop_inv s';
+          let Pair r' next' = pop s'.ring in
+          loop_quiet (fuel - 1) update to_terminate render { s' with ring = r' } next'
+        end
+
+/// **`render_once_per_drain`.** From an idle, non-terminated state, a
+/// `dispatch` that finishes without terminating hands the render hook
+/// the model EXACTLY ONCE — however many messages the drain processed,
+/// however many the commands re-dispatched — and a `dispatch` that
+/// terminates hands it nothing. CONDITIONAL on `quiet render`: the
+/// React adapter's `setState` dispatches nothing synchronously, and
+/// that is the hook this theorem is about. A hook that dispatches
+/// re-dirties the model, and the drain paints again once the ring is
+/// empty; `painted_is_model` and `exactly_once` hold of that machine
+/// too, and the differential scripts it.
+let render_once_per_drain (#m #md: Type0)
+                          (fuel: nat)
+                          (update: m -> md -> pair md (list (ev m)))
+                          (to_terminate: m -> bool)
+                          (render: md -> list (ev m))
+                          (s: st m md) (msg: m)
+  : Lemma (requires inv s /\ not s.reentered /\ not s.terminated /\ quiet render)
+          (ensures (let s' = dispatch fuel update to_terminate render s msg in
+                    (not s'.reentered /\ not s'.terminated ==> s'.renders == s.renders + 1)
+                    /\ (s'.terminated ==> s'.renders == s.renders))) =
+  enqueue_spec s msg;
+  push_spec msg s.ring;
+  let s1 = { enqueue s msg with reentered = true } in
+  // Idle and not terminated: the ring was empty, so the push made it
+  // exactly [msg] and the pop hands the loop that message.
+  assert (unread s.ring == []);
+  assert (unread s1.ring == [Written msg]);
+  pop_loop_inv s1;
+  pop_spec s1.ring;
+  let Pair r next = pop s1.ring in
+  assert (next == OSome (Written msg));
+  assert (not s.dirty);
+  // `loop_spec` for the latch (a drain that ran out of fuel leaves it
+  // set, so the result is not idle); `loop_quiet` for the count.
+  loop_spec fuel update to_terminate render { s1 with ring = r } next;
+  loop_quiet fuel update to_terminate render { s1 with ring = r } next

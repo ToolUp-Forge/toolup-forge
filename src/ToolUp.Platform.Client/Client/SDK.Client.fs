@@ -2701,6 +2701,35 @@ module Client =
             ]
         ]
 
+    // ─── Phase 851.D — one module dispatcher per loop ───────────────────
+    //
+    // The module view receives `dispatch` wrapped in `ModuleMsg`. Built
+    // inline in `view` — `ModuleMsg >> dispatch` — that wrapper was a FRESH
+    // closure on every render, so the one prop every module view receives
+    // changed identity every time the shell re-rendered, and any memo
+    // boundary a module put around its view (`React.memo`, a
+    // `[<ReactComponent>]` keyed on props) re-rendered regardless. The
+    // loop's own `dispatch'` is created once per `Program.runWithDispatch`
+    // and handed to every render unchanged, so the wrapper can be too: one
+    // per loop, cached against the `dispatch` it wraps by reference, and
+    // rebuilt only when a different loop is rendering (HMR re-runs the
+    // program; the cache follows). The key is REFERENCE identity because
+    // that is the property the module's memo boundary keys on.
+    let mutable private moduleDispatchCache: ((Msg -> unit) * (obj -> unit)) option =
+        None
+
+    /// The module-facing dispatcher for the shell's `dispatch`: the same
+    /// function every render, for as long as the same loop is running.
+    /// Internal so the Fable pack can pin the identity
+    /// (`ModuleDispatchStabilityTests`).
+    let internal moduleDispatchFor (dispatch: Msg -> unit) : obj -> unit =
+        match moduleDispatchCache with
+        | Some(cached, forModules) when obj.ReferenceEquals(cached, dispatch) -> forModules
+        | _ ->
+            let forModules: obj -> unit = ModuleMsg >> dispatch
+            moduleDispatchCache <- Some(dispatch, forModules)
+            forModules
+
     let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
         // Phase 444 — the catalog every string in this render comes from.
         // Resolved once at the top of `view` because chrome is built at
@@ -2796,7 +2825,9 @@ module Client =
                     match model.ModuleStates |> Map.tryFind model.ActiveModuleId with
                     | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
                     | Some currentState ->
-                        let dispatchMsg = ModuleMsg >> dispatch
+                        // Phase 851.D — referentially stable across renders
+                        // (see `moduleDispatchFor`).
+                        let dispatchMsg = moduleDispatchFor dispatch
 
                         let renderInner () : PageContent =
                             match moduleImpl.PageViews, model.ActivePageRoute with

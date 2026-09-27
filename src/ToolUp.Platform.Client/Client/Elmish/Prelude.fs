@@ -21,27 +21,32 @@ module internal Log =
     let toConsole (text: string, o: #obj) = printfn "%s: %A" text o
 #endif
 
-#if FABLE_COMPILER
-/// Fable-only timer shim used to schedule the next async tick. Not part of
-/// the consumer-facing surface.
-module internal Timer =
-    open System.Timers
-
-    let delay interval callback =
-        let t = new Timer(float interval, AutoReset = false)
-        t.Elapsed.Add callback
-        t.Enabled <- true
-        t.Start()
-#endif
-
-/// Default `Async.Start` shape used by `Cmd.OfAsync`. The upstream
-/// Cmd.OfAsyncWith family parameterised this; ToolUp consumers always use
-/// the default, so the parameterised family is dropped and this stays
-/// internal.
+/// Default `Async.Start` shape used by `Cmd.OfAsync`, `Cmd.OfRemoting` and
+/// `IDispatcher.DispatchAsync`. The upstream Cmd.OfAsyncWith family
+/// parameterised this; ToolUp consumers always use the default, so the
+/// parameterised family is dropped and this stays internal.
+///
+/// Phase 851.C — under Fable the async is started IMMEDIATELY. Until 851
+/// it was started one `setTimeout 1` macrotask later (upstream's
+/// `Timer.delay 1`, inherited so that a command could not dispatch back
+/// into a loop that was still processing the message that issued it).
+/// That hop cost every remote call a macrotask before the request even
+/// began — Phase 849 measured it at 1.1 ms minimum and ~15 ms median on
+/// Windows' default timer granularity — and it protects nothing here: the
+/// loop's re-entrancy latch already makes a synchronous dispatch from a
+/// command safe. `proofs/ElmishLoop.fst`'s **`reentrant_no_loss`** is the
+/// theorem: a `dispatch` made while the latch is set queues its message
+/// at the back of what is pending, logs it, and processes and paints
+/// nothing, so a command whose body reaches a dispatch before its first
+/// real await — `Cmd.OfAsync.perform` over an already-resolved value, a
+/// remoting call answered from Phase 854's in-flight table — has its
+/// message handed to `update` once, in order, by the drain that is
+/// already running. `Async.StartImmediate` runs the body synchronously to
+/// its first bind on a pending promise and continues on that promise's
+/// resolution (a microtask), so nothing waits on a timer.
 module internal AsyncHelpers =
 #if FABLE_COMPILER
-    let start x =
-        Timer.delay 1 (fun _ -> Async.StartImmediate x)
+    let start x = Async.StartImmediate x
 #else
     let inline start x = Async.Start x
 #endif

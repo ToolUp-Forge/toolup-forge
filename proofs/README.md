@@ -941,16 +941,30 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
 
 The same four rungs, for `ElmishLoop.fst` — the model of `Program.runWithDispatch`
 (`src/ToolUp.Platform.Client/Client/Elmish/Program.fs`) that Phase 788's Rung 4 named as the
-missing one. The loop is a scheduling skeleton over four mutable cells; its transitions depend on the
-impure callees (`update`, `setState`, `Subs.Fx.change`, `Cmd.exec`) only through **which messages
-they synchronously re-dispatch and whether they call `Terminate`**, so those callees are abstracted
-as one oracle, `update : msg -> model -> model * ev list`, and the loop becomes a total, deterministic
-step function. The ring is *imported* from `ElmishRing.fst` — `push`, `pop`, `wf`, `unread` and the
-788 lemmas — and nothing about it is restated; this proof is about the two latches.
+missing one. The loop is a scheduling skeleton over five mutable cells — the ring, the two latches,
+the model and (since Phase 851) the `dirty` flag; its transitions depend on the impure callees
+(`update`, `setState`, `Subs.Fx.change`, `Cmd.exec`) only through **which messages they synchronously
+re-dispatch and whether they call `Terminate`**, so those callees are abstracted as oracles and the
+loop becomes a total, deterministic step function. Two oracles since 851: `update : msg -> model ->
+model * ev list` (update, subscribe, the subscription diff and the command, per message) and
+`render : model -> ev list` (the render hook, once per drain). The ring is *imported* from
+`ElmishRing.fst` — `push`, `pop`, `wf`, `unread` and the 788 lemmas — and nothing about it is
+restated; this proof is about the two latches and the paint.
 
-The model carries two observables beside the cells: `trace`, the messages `update` was handed, and
-`log`, the messages `dispatch` accepted (pushed) — external and reentrant alike, in order. Every
-theorem is a statement about those two lists, and the differential compares exactly them.
+The model carries four observables beside the cells: `trace`, the messages `update` was handed;
+`log`, the messages `dispatch` accepted (pushed) — external and reentrant alike, in order; `painted`,
+the model the render hook was last handed; and `renders`, how many times it was handed one. Every
+theorem is a statement about those, and the differential compares exactly them.
+
+**Phase 851 moved the render hook.** Until 851 `setState` ran after every `update`, so a drain of N
+messages built the view N times; 851 calls it once when the ring is empty, with the model the drain
+ended on, and the loop model was amended and re-proved rather than assumed to survive. The `dirty`
+cell is set by every `update` and cleared by the paint; the drain exits only when the ring is empty
+AND nothing is dirty, and a paint is followed by one more pop because the hook may have dispatched
+(the events `setState` re-dispatches now arrive after the drain rather than mid-drain — the case the
+differential gained). The boot paint stays explicit and unconditional, BEFORE `init`'s command, so a
+hydrating renderer is handed the model the server rendered. The six theorems below hold on the
+amended machine and two are added; the operator accepted the re-proof in advance (2026-09-26).
 
 ### Rung 1 — Proved
 
@@ -968,22 +982,30 @@ families alone:**
   prefix of `log`. Nothing is ever handed to `update` out of the order in which it was accepted;
   termination can only truncate the trace, never permute it.
 * **`reentrant_no_loss`.** A `dispatch` made while the latch is set — from `update`'s command, from
-  `setState`, from a subscription's start — queues its message at the *back* of what is pending,
-  logs it, and processes nothing: the trace, the model and everything already waiting are untouched.
+  the post-drain `setState`, from a subscription's start, from an async command that completed
+  synchronously — queues its message at the *back* of what is pending, logs it, and processes and
+  paints nothing: the trace, the model, the paint and everything already waiting are untouched.
   With `exactly_once` the message is handed to `update` once the drain reaches it; with `in_order`,
   after everything accepted before it. `dispatch_latched` is the clause-for-clause fact underneath:
-  under the latch, `dispatch` *is* `enqueue`.
+  under the latch, `dispatch` *is* `enqueue`. Since Phase 851 this lemma is also what justifies
+  `Async.StartImmediate` as the Fable async-command start (`Prelude.fs`): the `setTimeout 1` hop
+  upstream inherited protected the loop from a command dispatching back into it mid-message, and
+  the latch already does that.
 * **`terminated_absorbing`**, with `terminated_absorbing_boot` and `terminate_then_nothing`. Once
-  `terminated`, no event from inside or outside changes what `update` saw, what was accepted, or the
-  model, and nothing clears the flag — the two guards at the head of `dispatch` and of
+  `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the
+  model, or what was painted (`painted` and `renders` are frozen too: a terminated loop paints
+  nothing further), and nothing clears the flag — the two guards at the head of `dispatch` and of
   `processMsgs`'s `while`, as a theorem. From any idle state, a `Terminate` from outside means
-  nothing after it is ever processed.
+  nothing after it is ever processed or painted. The boot on a machine terminated before it ran
+  still makes its unconditional boot paint, and processes nothing.
 * **`boot_drain_equiv`**, with `boot_single_is_dispatch`. The tail of `runWithDispatch` —
-  `reentered <- true`, the init effects through `dispatch'`, `processMsgs ()`, `reentered <- false` —
-  is transcribed literally and then shown *equal* to the steady-state critical section run over the
-  events those effects raised under the latch; for a single message it is `dispatch` itself. The
-  hand-duplicated section and the one `dispatch` runs are one function. The source is not unified:
-  the equivalence is proved, and the two copies stay (GP 11 — no behaviour change to the loop).
+  `reentered <- true`, the boot paint, the init effects through `dispatch'`, `processMsgs ()`,
+  `reentered <- false` — is transcribed literally and then shown *equal* to the steady-state
+  critical section run over the boot paint and then the events those effects raised under the
+  latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s` — the
+  paint with the latch released — is the state `dispatch` starts from, and the lemma asks that the
+  paint did not terminate the machine). The hand-duplicated section and the one `dispatch` runs are
+  one function. The source is not unified: the equivalence is proved, and the two copies stay.
 * **`active_iff_not_terminated`**, with `fallback_breaks_encoding`. In every reachable state
   `DispatcherCore.active = not terminated`. Both sites that set `terminated` call `MarkTerminated`
   and `Wire` set `active` before anything could dispatch; the model carries the two cells in
@@ -991,26 +1013,48 @@ families alone:**
   apart — `Dispatcher.fs`'s fallback for a `Terminate` with no callback wired, which clears `active`
   alone — is modelled as `fallback_terminate` and its result *computed*: `active` false, `terminated`
   false, a state in which `IDispatcher.Dispatch` refuses while the loop would still process.
+* **`painted_is_model`** (Phase 851). In every idle, non-terminated state a program reaches,
+  nothing is left unpainted and the model the render hook was last handed *is* the model —
+  `not dirty /\ painted == OSome model`. This is what rendering once at the end of the drain has to
+  establish that rendering after every `update` got for free: the last paint saw the last model. It
+  falls out of the invariant (`inv_core` gains `not dirty ==> painted == OSome model`; `inv` gains
+  `idle /\ not terminated ==> not dirty`) and is unconditional on the render oracle: a hook that
+  dispatches re-dirties the model, and the drain paints again before it returns.
+* **`render_once_per_drain`** (Phase 851). From an idle, non-terminated state, a `dispatch` that
+  finishes without terminating hands the render hook the model **exactly once** — however many
+  messages the drain processed, however many the commands re-dispatched — and a `dispatch` that
+  terminates hands it nothing. **Conditional on `quiet render`**: the hook dispatches nothing
+  synchronously, which is the React adapter's `setState`. Stated as a hypothesis rather than
+  assumed of every hook, because a consumer's own `withSetState` may dispatch; under such a hook
+  the drain re-opens and paints again, and the two unconditional theorems still hold. `loop_quiet`
+  is the induction underneath: a paint is made only on an empty ring, a quiet hook leaves it empty,
+  and the next pop exits — so a paint is the loop's last act.
 * **The model is total, and the drain's non-termination is reported rather than hidden.**
-  `processMsgs` is a `while` loop whose exit depends on the oracle eventually re-dispatching
-  nothing, which nothing guarantees and production does not guarantee either. The model bounds it
-  with fuel, spent after a message is processed and before the next pop, and a drain that ran out
-  leaves the latch *set* — exactly where production would be, mid-drain — so `run` feeds it no
-  further external events. Every theorem above is partial correctness over every state the machine
-  reaches, finished or not.
+  `processMsgs` is a `while` loop whose exit depends on the oracles eventually re-dispatching
+  nothing, which nothing guarantees and production does not guarantee either (a `setState` that
+  always dispatches never lets the drain return, as an `update` that does never did). The model
+  bounds it with fuel, spent after a message is processed or a paint is made and before the next
+  pop, and a drain that ran out leaves the latch *set* — exactly where production would be,
+  mid-drain — so `run` feeds it no further external events. Every theorem above is partial
+  correctness over every state the machine reaches, finished or not.
 
 ### Rung 2 — Differentially tested
 
 Not proved. *Measured*, on every run of the gate.
 
 * **The model agrees with production, on .NET.** `ElmishLoopProofOracleTests` in the platform pack
-  runs the real `Program.runWithDispatch` with a **scripted `update`**: a generated script says which
-  messages `init`'s command raises during the boot drain, which each message's command raises
-  (including `Terminate`), which messages satisfy the termination predicate, and what the outside
-  world dispatches afterwards through `IDispatcher` — and the same script is the extracted machine's
-  oracle. The two must agree on the messages `update` saw in order, on the messages `dispatch`
-  accepted, on the final model, and on `IsActive`. Four hundred scripts over ids `0..8`, replies
-  pointing forward only so every drain finishes.
+  runs the real `Program.runWithDispatch` with a **scripted `update` and a scripted `setState`**: a
+  generated script says which messages `init`'s command raises during the boot drain, which each
+  message's command raises (including `Terminate`), which messages the render hook raises when
+  handed a model whose last message is a given id (the post-drain `setState` dispatch — Phase 851's
+  case; about a third of the campaign has one fire, and some raise `Terminate` from the hook), which
+  messages satisfy the termination predicate, and what the outside world dispatches afterwards
+  through `IDispatcher` — and the same script is the extracted machine's two oracles. The two must
+  agree on the messages `update` saw in order, on the messages `dispatch` accepted, on the final
+  model (read off `update`'s output — the value `state` takes — since a hook that runs once per
+  drain no longer sees every model), on `IsActive`, on how many times the hook was called, and on
+  the model it was last handed. Four hundred scripts over ids `0..8`, replies and paints pointing
+  forward only so every drain finishes.
 * **The `log` comparison is what holds the two-flag encoding.** Production's log is recorded through
   `IDispatcher.IsActive` at the moment of each dispatch; the model's through its `terminated` cell.
   A state in which the two disagreed would log differently on the next dispatch, so
@@ -1020,18 +1064,27 @@ Not proved. *Measured*, on every run of the gate.
   more messages from the boot drain, dispatch after a `Terminate` raised from *inside* a command,
   dispatch from outside after a `Terminate`, reach the termination predicate, and end still active —
   and that no drain stalled, so the fuel bound never decided an agreement.
-* **Two of the theorems are also run on production directly.** `boot_single_is_dispatch`: one
+* **Five of the theorems are also run on production directly.** `boot_single_is_dispatch`: one
   message raised from `init`'s command versus the same message dispatched from outside produce the
-  same trace, log and model. `terminated_absorbing`: after a `Terminate`, further dispatches and
-  `Terminate`s change nothing and `IsActive` is false.
-* **Two committed loop skeletons, one go-red.** The loop's scheduling skeleton is transcribed by
+  same trace, log, model, render count and painted model (with the boot paint quiet, which is the
+  lemma's premise). `terminated_absorbing`: after a `Terminate`, further dispatches and `Terminate`s
+  change nothing — paint included — and `IsActive` is false. `render_once_per_drain`: one external
+  dispatch whose command fans out into a seventeen-message chain calls the hook once, with the
+  model the drain ended on; and a terminating dispatch calls it not at all. `painted_is_model`: over
+  the whole campaign, whenever production returns to the host still active, the model the hook was
+  last handed is the model `update` last produced.
+* **One faithful loop skeleton, three go-reds.** The loop's scheduling skeleton is transcribed by
   hand over the production ring with the callees replaced by the script — the same abstraction the
   model makes, in F#. Faithful, it is asserted to *agree* with the model over the campaign. With one
-  line moved — the latch released *before* the drain instead of after it, so a dispatch from inside
-  `update` recurses into a nested drain, processing a child before its waiting siblings and letting
-  the outer `state <- model'` overwrite the model the nested drain built — it is asserted *caught*.
-  The difference the go-red measures is that one line. A differential that has never been shown to
-  fail agrees with whatever it is shown.
+  line moved each, it is asserted *caught*: the latch released *before* the drain instead of after
+  it, so a dispatch from inside `update` recurses into a nested drain, processing a child before its
+  waiting siblings and letting the outer `state <- model'` overwrite the model the nested drain
+  built; the paint made after every `update`, which is the pre-851 loop (caught on the render count
+  on every multi-message drain, and on the trace wherever the hook dispatches); and one paint after
+  the `while` with no pop after it, so a hook that dispatches leaves its message in the ring until
+  some later external dispatch happens to drain it (caught on the trace). The difference each go-red
+  measures is its one line. A differential that has never been shown to fail agrees with whatever
+  it is shown.
 * **The fallback arm, on production.** A `DispatcherCore` exposed without its terminate callback is
   driven through `Terminate`: `IsActive` goes false, the wiring defect is reported, the interface
   refuses a dispatch — the state `fallback_breaks_encoding` computes, reached on the shipped code.
@@ -1044,13 +1097,24 @@ Not proved. *Measured*, on every run of the gate.
   site added to either cell without the other would leave the theorem true of the model and false of
   the code. Mitigation: the `log` comparison above measures the encoding on production on every
   script; a divergence surfaces as a mismatch on the next dispatch after it.
-* **The oracle abstracts the callees, including their exceptions.** `update`, `setState`,
+* **The oracles abstract the callees, including their exceptions.** `update`, `subscribe`,
   `Subs.Fx.change` and `Cmd.exec` are one function returning a model and the events raised before
-  control returns. An exception from any of them is an oracle reply whose model is the old one
-  (production leaves `state` unassigned) carrying whatever was dispatched before the throw — the
-  abstraction admits it, and the differential does not script it. The teardown callbacks on the
-  terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to dispatch; a dispatch they made
-  would land in the ring and never be processed, which `terminated_absorbing` covers.
+  control returns; since Phase 851 `setState` is a second, a pure function of the model it is handed
+  to the events it raises synchronously. An exception from any of them is an oracle reply whose model
+  is the old one (production leaves `state` unassigned) carrying whatever was dispatched before the
+  throw — the abstraction admits it, and the differential does not script it. Production marks the
+  model dirty *before* the callees run for exactly this reason: a message that threw is still, to
+  the model, a processed message, and its (unchanged) model is painted once at the end of the drain.
+  The teardown callbacks on the terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to
+  dispatch; a dispatch they made would land in the ring and never be processed, which
+  `terminated_absorbing` covers.
+* **The render hook is quiet — for `render_once_per_drain` only.** The theorem is stated under the
+  hypothesis that the hook dispatches nothing synchronously; the shipped React adapter (`React.fs`)
+  hands the view to React and returns, and React 18 commits asynchronously. Every other theorem
+  holds of a hook that dispatches, and the differential scripts one on about a third of its
+  campaign so the unconditional theorems are measured on exactly the case the conditional one
+  excludes. A consumer's `withSetState` that dispatches synchronously paints more than once per
+  drain and is otherwise held by the same laws.
 * **The bridges are hand-written.** A script's events cross as the model's `Msg` / `Term` cases and
   `XDispatch` / `XTerminate`; production's log is recorded by the driver, not by the loop. A defect
   in either would make the comparison compare the wrong thing. Mitigation: short and case-for-case,

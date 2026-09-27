@@ -360,9 +360,14 @@ module Program =
             live.Clear()
 
     /// Start the program loop with a custom `syncDispatch` shape.
-    /// Preserved verbatim from upstream; the new primitives plumb through
-    /// the existing dispatch path and are invoked alongside the upstream
-    /// happy path so the runtime shape is unchanged for migrators.
+    /// The upstream skeleton — ring, re-entrancy latch, termination
+    /// predicate — with one scheduling change since Phase 851: the
+    /// render hook (`setState`) runs once at the END of each drain with
+    /// the model the drain ended on, not after every `update`, so a
+    /// drain of N messages builds the view once. `withTrace` still sees
+    /// every message (it wraps `update`). The loop is the step machine
+    /// `proofs/ElmishLoop.fst` models clause for clause, held to it by
+    /// `ElmishLoopProofOracleTests`.
     let runWithDispatch
         (syncDispatch: Dispatch<'msg> -> Dispatch<'msg>)
         (arg: 'arg)
@@ -397,6 +402,17 @@ module Program =
         let mutable state = model
         let mutable activeSubs = Subs.empty
         let mutable terminated = false
+        // Phase 851 — the render hook runs once per DRAIN, not once per
+        // message. `dirty` is the fifth cell of the loop's step machine
+        // (`proofs/ElmishLoop.fst`, `st.dirty`): the model has moved since
+        // the hook last saw it. It is set by every `update` and cleared by
+        // the paint, and the drain exits only when the ring is empty AND
+        // nothing is dirty — so `painted_is_model` (the model on screen
+        // is the model whenever the loop is idle) is a theorem of the
+        // model, and `render_once_per_drain` says a dispatch from idle
+        // paints exactly once when the hook itself dispatches nothing.
+        // The init model is unpainted until the boot paints it below.
+        let mutable dirty = true
 
         let rec dispatch msg =
             if not terminated then
@@ -409,43 +425,70 @@ module Program =
 
         and dispatch' = syncDispatch dispatch
 
+        // F*: `paint`. The flag is cleared BEFORE the hook runs, so a
+        // dispatch the hook makes re-dirties the model (and the drain
+        // paints again once the ring is empty) rather than being lost or
+        // painted twice. The hook's synchronous dispatches land under the
+        // latch exactly as a command's do — `reentrant_no_loss`.
+        and paint () =
+            dirty <- false
+
+            try
+                program.setState state dispatch'
+            with ex ->
+                reportException ErrorPhase.View "Error rendering the model" ex
+
+        // F*: `process_msgs` / `loop`. The `while` runs while there is a
+        // message to process OR a model to paint; the `None` arm is the
+        // paint on an empty ring, followed by one more pop because the
+        // hook may have dispatched. A terminating message exits without
+        // painting: a torn-down program paints nothing further
+        // (`terminated_absorbing` covers `painted` and `renders` too).
         and processMsgs () =
             let mutable nextMsg = rb.Pop()
 
-            while not terminated && Option.isSome nextMsg do
-                let msg = nextMsg.Value
+            while not terminated && (Option.isSome nextMsg || dirty) do
+                match nextMsg with
+                | None ->
+                    paint ()
+                    nextMsg <- rb.Pop()
+                | Some msg ->
+                    try
+                        if toTerminate msg then
+                            Subs.Fx.stop program.onError activeSubs
+                            effectRegistry.DisposeAll reportRaw
+                            terminate state
+                            terminated <- true
+                            dispatcherCore.MarkTerminated()
+                        else
+                            // Dirty BEFORE the callees run: the model's `step`
+                            // marks every message it hands `update`, and an
+                            // exception from a callee is, to the model, a reply
+                            // carrying the old model — which is then painted
+                            // once at the end of the drain, as here.
+                            dirty <- true
+                            let model', cmd' = program.update msg state
+                            let sub' = program.subscribe model'
 
-                try
-                    if toTerminate msg then
-                        Subs.Fx.stop program.onError activeSubs
-                        effectRegistry.DisposeAll reportRaw
-                        terminate state
-                        terminated <- true
-                        dispatcherCore.MarkTerminated()
-                    else
-                        let model', cmd' = program.update msg state
-                        let sub' = program.subscribe model'
-                        program.setState model' dispatch'
+                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change program.onError dispatch'
 
-                        activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change program.onError dispatch'
+                            cmd'
+                            |> Cmd.exec
+                                (fun ex ->
+                                    reportException
+                                        (ErrorPhase.Update(box msg))
+                                        ("Error handling the message: " + safeMsgRepr msg)
+                                        ex)
+                                dispatch'
 
-                        cmd'
-                        |> Cmd.exec
-                            (fun ex ->
-                                reportException
-                                    (ErrorPhase.Update(box msg))
-                                    ("Error handling the message: " + safeMsgRepr msg)
-                                    ex)
-                            dispatch'
+                            state <- model'
+                    with ex ->
+                        reportException
+                            (ErrorPhase.Update(box msg))
+                            ("Unable to process the message: " + safeMsgRepr msg)
+                            ex
 
-                        state <- model'
-                with ex ->
-                    reportException
-                        (ErrorPhase.Update(box msg))
-                        ("Unable to process the message: " + safeMsgRepr msg)
-                        ex
-
-                nextMsg <- rb.Pop()
+                    nextMsg <- rb.Pop()
 
         // Wire the dispatcher core BEFORE init's cmds run so background
         // callbacks captured during init can dispatch safely.
@@ -502,8 +545,13 @@ module Program =
         for effect in program.effects do
             effectRegistry.Register effect dispatch' reportRaw
 
+        // F*: `boot`. The boot paint is unconditional and runs BEFORE
+        // `init`'s command: a hydrating renderer (`withReactHydrate`) must
+        // be handed the model the server rendered, not one that init's
+        // synchronous dispatches have already moved on. Those dispatches
+        // are drained — and painted once — by `processMsgs` below.
         reentered <- true
-        program.setState model dispatch'
+        paint ()
 
         activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change program.onError dispatch'
 
