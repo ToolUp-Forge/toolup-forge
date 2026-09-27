@@ -432,6 +432,16 @@ let score (expected: ExpectedVerdict) (plan: TriagePlan) : string =
             ScoreCorrectResolve
         else
             ScoreWrongResolve
+    // Phase 664 — the case vocabulary names only `set_field` and
+    // `needs_full_agent`, so a list or navigation resolution can never be
+    // the single field the case expects: it is a wrong resolve against a
+    // `set_field` expectation and a false fire against a decline.
+    | TriageSetFields _
+    | TriageNavigate _ ->
+        if expected.Decision = DecisionSetField then
+            ScoreWrongResolve
+        else
+            ScoreFalseFire
     | TriageFallThrough _ ->
         if expected.Decision = DecisionSetField then
             ScoreMissed
@@ -462,6 +472,20 @@ let rescore
             Outcome = OutcomeHit
             FieldId = Some field.FieldId
             Value = value
+            Score = score expected plan
+          }
+        | TriageSetFields(clauses, _) -> {
+            Floor = floor
+            Outcome = OutcomeHit
+            FieldId = Some(clauses |> List.map (fun (f, _) -> f.FieldId) |> String.concat ",")
+            Value = None
+            Score = score expected plan
+          }
+        | TriageNavigate(_, target, _) -> {
+            Floor = floor
+            Outcome = OutcomeHit
+            FieldId = Some NavigationFieldId
+            Value = Some target
             Score = score expected plan
           }
         | TriageFallThrough outcome -> {
@@ -810,6 +834,20 @@ let private encodeDecision (d: TriageModelDecision) =
         "value", optStr d.Value
         "confidence", num d.Confidence
         "reason", str d.Reason
+        // Phase 664 — added members (the result schema only ever adds
+        // under `/1`), so a cached list or navigation answer re-scores
+        // faithfully rather than losing its clauses.
+        "target", optStr d.Target
+        "fields",
+        (if List.isEmpty d.Fields then
+             null
+         else
+             let a = JsonArray()
+
+             for c in d.Fields do
+                 a.Add(obj [ "fieldId", str c.FieldId; "value", optStr c.Value ])
+
+             a :> JsonNode)
     ]
 
 let private encodeCall (c: ModelCall) =
@@ -953,6 +991,16 @@ let private getArr o n : JsonNode list =
     | :? JsonArray as a -> List.ofSeq a
     | _ -> raise (DecodeError $"'{n}' is not an array")
 
+/// A member that may be ABSENT — written by a later tool version than the
+/// file (Phase 664's `target` / `fields`). Absent and `null` both read as
+/// `null`; every other accessor above refuses a missing member.
+let private tryMember (o: JsonNode) (name: string) : JsonNode =
+    match o with
+    | :? JsonObject as jo ->
+        let mutable v: JsonNode = null
+        if jo.TryGetPropertyValue(name, &v) then v else null
+    | _ -> null
+
 let private decodeExpected o : ExpectedVerdict = {
     Decision = getStr o "decision"
     FieldId = getOptStr o "fieldId"
@@ -965,6 +1013,22 @@ let private decodeDecision o : TriageModelDecision = {
     Value = getOptStr o "value"
     Confidence = getNum o "confidence"
     Reason = getStr o "reason"
+    Target =
+        match tryMember o "target" with
+        | null -> None
+        | v -> Some(v.GetValue<string>())
+    Fields =
+        match tryMember o "fields" with
+        | :? JsonArray as a ->
+            a
+            |> Seq.map (fun n ->
+                ({
+                    FieldId = getStr n "fieldId"
+                    Value = getOptStr n "value"
+                }
+                : TriageFieldClause))
+            |> List.ofSeq
+        | _ -> []
 }
 
 let private decodeCall o : ModelCall = {
