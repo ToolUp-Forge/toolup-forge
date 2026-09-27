@@ -2537,6 +2537,9 @@ ToolUp.Platform.BundleIntegrityModule (class)
 ToolUp.Platform.BundleIntegrityModule.describe(ToolUp.Platform.BundleIntegrity) : System.String
 ToolUp.Platform.BundleIntegrityModule.isIntact(ToolUp.Platform.BundleIntegrity) : System.Boolean
 ToolUp.Platform.BundleIntegrityModule.label(ToolUp.Platform.BundleIntegrity) : System.String
+ToolUp.Platform.CacheableAttribute (class)
+ToolUp.Platform.CacheableAttribute..ctor(System.Int32)
+ToolUp.Platform.CacheableAttribute.MaxAgeSeconds : System.Int32 { get }
 ToolUp.Platform.CapabilityId (class)
 ToolUp.Platform.CapabilityId.Item : System.String { get }
 ToolUp.Platform.CapabilityId.Tag : System.Int32 { get }
@@ -7552,6 +7555,9 @@ ToolUp.Platform.InspectorPanel+Tags.SurfacesPanel : System.Int32 (literal)
 ToolUp.Platform.InspectorPanelModule (class)
 ToolUp.Platform.InspectorPanelModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectorPanel] { get }
 ToolUp.Platform.InspectorPanelModule.slug(ToolUp.Platform.InspectorPanel) : System.String
+ToolUp.Platform.InvalidatesAttribute (class)
+ToolUp.Platform.InvalidatesAttribute..ctor(System.String[])
+ToolUp.Platform.InvalidatesAttribute.MethodNames : System.String[] { get }
 ToolUp.Platform.InvitationNotification (class)
 ToolUp.Platform.InvitationNotification..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, ToolUp.Platform.TeamRole)
 ToolUp.Platform.InvitationNotification.AppName : System.String { get }

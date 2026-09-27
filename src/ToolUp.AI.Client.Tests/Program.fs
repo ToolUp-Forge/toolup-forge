@@ -25,6 +25,10 @@ let allTests =
         // the pinned payload read in the browser, the proxy through the
         // registry, and the 785.F losses closed on the client.
         JsonClientDecodeTests.tests
+        // Phase 854 - declared reads: identical in-flight calls share one
+        // request, Cacheable reads are served stale-while-revalidate, and
+        // the interceptor chain counts one request once.
+        ReadPolicyTests.tests
         // Phase 217 — module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.

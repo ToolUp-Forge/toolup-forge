@@ -40,6 +40,41 @@ type RemoteBuilderOptions = {
     IsMultipartEnabled: bool
 }
 
+/// Phase 854 — one method's client read policy: the data form of the
+/// `[<Cacheable>]` / `[<Invalidates>]` attributes (`ToolUp.Platform`),
+/// which a Fable proxy cannot read off the record at runtime. Registered
+/// per API record with `ReadPolicies.register`.
+type ReadPolicy = {
+    /// `Some seconds`: a READ. Identical calls in flight at once share one
+    /// request, and a result is served for this many seconds without
+    /// waiting on the network, each such hit starting a background
+    /// refresh. `Some 0` shares in-flight calls and caches nothing.
+    /// `None`: not a read — never shared, never cached.
+    MaxAgeSeconds: int option
+    /// READ methods of the same API record whose cached results a
+    /// successful call of this method clears.
+    Invalidates: string list
+}
+
+/// Phase 854 — constructors for `ReadPolicy`.
+[<RequireQualifiedAccess>]
+module ReadPolicy =
+    /// A read served for `maxAgeSeconds` (`0`: in-flight sharing only).
+    let cacheable (maxAgeSeconds: int) : ReadPolicy =
+        if maxAgeSeconds < 0 then
+            invalidArg (nameof maxAgeSeconds) "A Cacheable max age cannot be negative."
+
+        {
+            MaxAgeSeconds = Some maxAgeSeconds
+            Invalidates = []
+        }
+
+    /// A method whose success clears the named reads' cached results.
+    let invalidates (methodNames: string list) : ReadPolicy = {
+        MaxAgeSeconds = None
+        Invalidates = methodNames
+    }
+
 type ProxyRequestException
     (response: HttpResponse, errorMsg, reponseText: string, decodeError: ToolUp.Remoting.DecodeError option) =
     inherit System.Exception(errorMsg)

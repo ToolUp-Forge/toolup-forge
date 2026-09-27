@@ -280,6 +280,63 @@ module Cmd =
             Bag = System.Collections.Generic.Dictionary<string, obj>()
         }
 
+        // ─── Phase 854 — declared reads ─────────────────────────────────
+        //
+        // A proxy method with a registered read policy
+        // (`ToolUp.Remoting.Client.ReadPolicies`) shares one request among
+        // identical calls in flight, and may be served from a cache while a
+        // refresh runs. The interceptor chain observes REQUESTS, not call
+        // sites: the first `OfRemoting` call to reach a shared request owns
+        // its chain (`OnCalling` once, then `OnSuccess` / `OnError` once, as
+        // the request settles), and every call waiting on it receives that
+        // chain's outcome — a replaced exception included. A cache hit sends
+        // no request of its own, so it fires nothing; the refresh it starts
+        // is a request, and fires the chain like any other.
+
+        /// Install this call's interceptor chain on `request` unless another
+        /// call already owns it.
+        let private claimChain (methodName: string) (request: ToolUp.Remoting.Client.ReadPolicies.SharedRequest) =
+            let info = makeInfo methodName
+
+            let intercept (raw: Result<obj, exn>) =
+                match raw with
+                | Ok value ->
+                    Interceptors.fireOnSuccess info value
+                    raw
+                | Error ex -> Error(Interceptors.fireOnError info ex)
+
+            if request.TryClaimChain intercept then
+                Interceptors.fireOnCalling info
+
+        /// A declared read's leg. `Served` dispatches the cached value, then
+        /// the refreshed one as a second ordinary `ofSuccess` message; a
+        /// failed refresh dispatches nothing (the served value stands, the
+        /// chain's `OnError` observed the failure, and the stale entry is
+        /// gone, so the next call goes to the server).
+        let private awaitDeclaredRead
+            (methodName: string)
+            (leg: ToolUp.Remoting.Client.ReadPolicies.ReadLeg)
+            (ofSuccess: 'result -> 'msg)
+            (ofError: exn -> 'msg)
+            (dispatch: Dispatch<'msg>)
+            : Async<unit> =
+            async {
+                match leg with
+                | ToolUp.Remoting.Client.ReadPolicies.Awaiting request ->
+                    claimChain methodName request
+
+                    match! request.AwaitFinal() with
+                    | Ok value -> dispatch (ofSuccess (unbox<'result> value))
+                    | Error ex -> dispatch (ofError ex)
+                | ToolUp.Remoting.Client.ReadPolicies.Served(cached, refresh) ->
+                    dispatch (ofSuccess (unbox<'result> cached))
+                    claimChain methodName refresh
+
+                    match! refresh.AwaitFinal() with
+                    | Ok fresh -> dispatch (ofSuccess (unbox<'result> fresh))
+                    | Error _ -> ()
+            }
+
         /// Internal — the common interceptor-aware happy-path used by
         /// every `OfRemoting.call*` variant.
         let private invokeWithInterceptors
@@ -289,18 +346,29 @@ module Cmd =
             (ofSuccess: 'result -> 'msg)
             (ofError: exn -> 'msg)
             : Cmd<'msg> =
-            let bind dispatch = async {
+            let plain (invoke: unit -> Async<'result>) dispatch = async {
                 let info = makeInfo methodName
                 Interceptors.fireOnCalling info
 
                 try
-                    let! r = proxyCall arg
+                    let! r = invoke ()
                     Interceptors.fireOnSuccess info (box r)
                     dispatch (ofSuccess r)
                 with ex ->
                     let final = Interceptors.fireOnError info ex
                     dispatch (ofError final)
             }
+
+            // Phase 854 — with no read policy registered anywhere,
+            // `tryObserve` invokes nothing and answers `None`: the call runs
+            // exactly as it did before (the proxy invoked inside the `try`,
+            // after `OnCalling`).
+            let bind dispatch =
+                match ToolUp.Remoting.Client.ReadPolicies.tryObserve (fun () -> proxyCall arg) with
+                | None -> plain (fun () -> proxyCall arg) dispatch
+                | Some(ToolUp.Remoting.Client.ReadPolicies.Plain call) -> plain (fun () -> call) dispatch
+                | Some(ToolUp.Remoting.Client.ReadPolicies.Shared leg) ->
+                    awaitDeclaredRead methodName leg ofSuccess ofError dispatch
 
             [ bind >> AsyncHelpers.start ]
 

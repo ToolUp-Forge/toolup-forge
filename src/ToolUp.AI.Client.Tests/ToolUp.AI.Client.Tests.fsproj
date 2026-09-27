@@ -185,6 +185,11 @@
              and the proxy to the same model and value. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonClientDecodeFixture.fs" />
         <Compile Include="Remoting\JsonClientDecodeTests.fs" />
+        <!-- Phase 854 - declared reads through the real proxy and Cmd.OfRemoting:
+             in-flight sharing, stale-while-revalidate, invalidation, and the
+             interceptor chain counting one request once. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyFixture.fs" />
+        <Compile Include="Remoting\ReadPolicyTests.fs" />
         <!-- Phase 69c.D — the streaming proxy: cold RemoteStream for an
              IAsyncEnumerable field, SSE decoding across chunk boundaries,
              every non-happy ending as OnError. fetch is stubbed. -->

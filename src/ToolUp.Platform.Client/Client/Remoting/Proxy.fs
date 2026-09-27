@@ -176,6 +176,448 @@ module private DecodeErrorWire =
 
             List.ofSeq items
 
+/// Phase 854 — the client read policies: identical in-flight reads share
+/// one request, and a `Cacheable` read may be served stale-while-
+/// revalidate.
+///
+/// **Declared, never inferred (GP 11).** A method is shared or cached only
+/// when its API record's policy says so. The declaration is the
+/// `[<Cacheable>]` / `[<Invalidates>]` attributes on the record
+/// (`ToolUp.Platform`); because Fable's reflection metadata carries no
+/// custom attributes, a browser proxy receives it as data through
+/// `register`, and on .NET `ofAttributes` reads the attributes into the
+/// same data so a test can pin the two equal. With nothing registered every
+/// proxy call — and every `Cmd.OfRemoting` call — takes the pre-854 path
+/// unchanged.
+///
+/// **One table per page, not per proxy.** The shell builds several proxies
+/// of one API record (four of `TeamApi`), so a per-proxy table would not
+/// see the second caller it exists for. A request is identified by what
+/// goes on the wire — HTTP method, URL, the proxy's own headers and the
+/// exact request body — so two proxies that would send the same bytes
+/// share, and two that would not, do not. The key is the text itself, not
+/// a hash of it: a hash would need a collision story, the text does not.
+///
+/// **Identity.** The request guard adds the caller's identity at send
+/// time, below this table, so a cached result belongs to the identity that
+/// fetched it; `clear` drops everything and is called by `UserSession`
+/// whenever the signed-in identity changes.
+module ReadPolicies =
+
+    open System
+    open System.Collections.Generic
+
+    /// One request shared by every caller that reached it while it was in
+    /// flight. It is sent at most once, by the first caller that awaits it,
+    /// and settles once: every raw awaiter receives the raw outcome, and
+    /// every `AwaitFinal` awaiter receives it after the interceptor chain
+    /// that `TryClaimChain` installed (when one did).
+    [<AllowNullLiteral>]
+    type SharedRequest
+        internal
+        (
+            key: string,
+            methodId: string,
+            cacheFor: TimeSpan option,
+            send: unit -> Async<obj>,
+            onSettled: SharedRequest -> Result<obj, exn> -> unit
+        ) =
+        let rawWaiters = List<Result<obj, exn> -> unit>()
+        let finalWaiters = List<Result<obj, exn> -> unit>()
+        let mutable started = false
+        let mutable outcome: (Result<obj, exn> * Result<obj, exn>) option = None
+        let mutable chain: (Result<obj, exn> -> Result<obj, exn>) option = None
+
+        member internal _.Key = key
+        member internal _.MethodId = methodId
+        member internal _.CacheFor = cacheFor
+
+        /// Set when an invalidation or `clear` detached the request from
+        /// the shared table: its waiters still receive its result, but the
+        /// result is not cached.
+        member val internal Detached = false with get, set
+
+        /// Whether the request has completed.
+        member _.IsSettled = outcome.IsSome
+
+        /// Install the interceptor chain this request's outcome passes
+        /// through, once. `false` when another caller installed one first,
+        /// or the request already settled — either way the caller is a
+        /// waiter, not the chain's owner.
+        member _.TryClaimChain(intercept: Result<obj, exn> -> Result<obj, exn>) : bool =
+            if outcome.IsSome || chain.IsSome then
+                false
+            else
+                chain <- Some intercept
+                true
+
+        member internal this.Start() =
+            if not started then
+                started <- true
+
+                let work =
+                    try
+                        send ()
+                    with ex -> async { return raise ex }
+
+                Async.StartWithContinuations(
+                    work,
+                    (fun value -> this.Settle(Ok value)),
+                    (fun ex -> this.Settle(Error ex)),
+                    (fun cancelled -> this.Settle(Error(cancelled :> exn)))
+                )
+
+        member private this.Settle(raw: Result<obj, exn>) =
+            if outcome.IsNone then
+                let final =
+                    match chain with
+                    | Some intercept ->
+                        try
+                            intercept raw
+                        with _ ->
+                            raw
+                    | None -> raw
+
+                outcome <- Some(raw, final)
+                // The table is brought up to date BEFORE any waiter runs, so
+                // a continuation that calls again sees the settled state.
+                onSettled this raw
+                let raws = rawWaiters.ToArray()
+                let finals = finalWaiters.ToArray()
+                rawWaiters.Clear()
+                finalWaiters.Clear()
+
+                for resolve in raws do
+                    resolve raw
+
+                for resolve in finals do
+                    resolve final
+
+        member private this.Await
+            (pick: Result<obj, exn> * Result<obj, exn> -> Result<obj, exn>, waiters: List<Result<obj, exn> -> unit>)
+            : Async<Result<obj, exn>> =
+            Async.FromContinuations(fun (resolve, _, _) ->
+                match outcome with
+                | Some settled -> resolve (pick settled)
+                | None ->
+                    waiters.Add resolve
+                    this.Start())
+
+        /// Await the outcome after the interceptor chain (sending the
+        /// request if nothing has yet). What `Cmd.OfRemoting` awaits.
+        member this.AwaitFinal() : Async<Result<obj, exn>> = this.Await(snd, finalWaiters)
+
+        member internal this.AwaitRaw() : Async<obj> = async {
+            let! raw = this.Await(fst, rawWaiters)
+
+            match raw with
+            | Ok value -> return value
+            | Error ex -> return raise ex
+        }
+
+    /// What invoking a declared read found. Read by `Cmd.OfRemoting`.
+    type ReadLeg =
+        /// No result within its max age: the caller awaits this request —
+        /// one already in flight, or a new one it will send.
+        | Awaiting of request: SharedRequest
+        /// A result within its max age, and the request that refreshes it.
+        | Served of cached: obj * refresh: SharedRequest
+
+    /// What `tryObserve` saw of one call.
+    type Observation<'r> =
+        /// An undeclared call (or not a proxy call at all): run it as is.
+        | Plain of call: Async<'r>
+        /// A declared read's leg.
+        | Shared of leg: ReadLeg
+
+    type private Cached = {
+        Value: obj
+        StoredAt: DateTime
+        MaxAge: TimeSpan
+        MethodId: string
+    }
+
+    /// A bound on the cached results one page holds; past it the expired
+    /// ones go, then the oldest.
+    [<Literal>]
+    let private MaxCachedResults = 256
+
+    let private registry = Dictionary<string, Dictionary<string, ReadPolicy>>()
+    let private inFlight = Dictionary<string, SharedRequest>()
+    let private cache = Dictionary<string, Cached>()
+
+    /// The declared read an invocation produced, with the call it
+    /// returned — read back by `tryObserve`, synchronously.
+    let mutable private lastInvocation: (obj * ReadLeg) option = None
+
+    let private methodIdOf (apiFullName: string) (methodName: string) = apiFullName + "." + methodName
+
+    /// Declare the read policies of one API record, by the record type's
+    /// `FullName` and each method's field name. Additive: a later
+    /// declaration of the same method replaces the earlier one. Proxies
+    /// read the table per call, so registration need not precede the
+    /// proxy's construction.
+    let register (apiFullName: string) (declarations: (string * ReadPolicy) list) : unit =
+        let table =
+            match registry.TryGetValue apiFullName with
+            | true, table -> table
+            | _ ->
+                let table = Dictionary<string, ReadPolicy>()
+                registry.[apiFullName] <- table
+                table
+
+        for methodName, policy in declarations do
+            table.[methodName] <- policy
+
+    /// `register` for the API record `'TApi`.
+    let inline registerFor<'TApi> (declarations: (string * ReadPolicy) list) : unit =
+        register typeof<'TApi>.FullName declarations
+
+    /// Whether any read policy is registered. `false` keeps every call on
+    /// the pre-854 path.
+    let anyDeclared () : bool = registry.Count > 0
+
+    /// The policy declared for one method, if any.
+    let tryFind (apiFullName: string) (methodName: string) : ReadPolicy option =
+        if registry.Count = 0 then
+            None
+        else
+            match registry.TryGetValue apiFullName with
+            | true, table ->
+                match table.TryGetValue methodName with
+                | true, policy -> Some policy
+                | _ -> None
+            | _ -> None
+
+    let private detach (request: SharedRequest) =
+        request.Detached <- true
+
+        match inFlight.TryGetValue request.Key with
+        | true, current when obj.ReferenceEquals(current, request) -> inFlight.Remove request.Key |> ignore
+        | _ -> ()
+
+    /// Make the named reads of one API record stale: drop their cached
+    /// results and detach their in-flight requests, so the next call goes
+    /// to the server. What a successful `Invalidates` method does; callable
+    /// directly for a change the client learns of another way.
+    let invalidate (apiFullName: string) (methodNames: string list) : unit =
+        let ids = methodNames |> List.map (methodIdOf apiFullName) |> Set.ofList
+
+        let staleKeys = [
+            for KeyValue(key, cached) in cache do
+                if ids.Contains cached.MethodId then
+                    key
+        ]
+
+        for key in staleKeys do
+            cache.Remove key |> ignore
+
+        let detached = [
+            for KeyValue(_, request) in inFlight do
+                if ids.Contains request.MethodId then
+                    request
+        ]
+
+        for request in detached do
+            detach request
+
+    /// Drop every cached result and detach every in-flight request. Called
+    /// when the signed-in identity changes, since a cached result belongs to
+    /// the identity that fetched it.
+    let clear () : unit =
+        cache.Clear()
+
+        for request in List.ofSeq inFlight.Values do
+            request.Detached <- true
+
+        inFlight.Clear()
+
+    let private store (request: SharedRequest) (value: obj) (maxAge: TimeSpan) =
+        let now = DateTime.UtcNow
+
+        cache.[request.Key] <- {
+            Value = value
+            StoredAt = now
+            MaxAge = maxAge
+            MethodId = request.MethodId
+        }
+
+        if cache.Count > MaxCachedResults then
+            let expired = [
+                for KeyValue(key, cached) in cache do
+                    if now - cached.StoredAt >= cached.MaxAge then
+                        key
+            ]
+
+            for key in expired do
+                cache.Remove key |> ignore
+
+            if cache.Count > MaxCachedResults then
+                let oldest = cache |> Seq.minBy (fun entry -> entry.Value.StoredAt)
+                cache.Remove oldest.Key |> ignore
+
+    let private settled
+        (apiFullName: string)
+        (invalidates: string list)
+        (request: SharedRequest)
+        (raw: Result<obj, exn>)
+        =
+        let wasDetached = request.Detached
+        detach request
+
+        match raw with
+        | Ok value ->
+            match request.CacheFor with
+            | Some maxAge when not wasDetached -> store request value maxAge
+            | _ -> ()
+
+            if not invalidates.IsEmpty then
+                invalidate apiFullName invalidates
+        | Error _ ->
+            // A failed refresh must not leave its stale predecessor being
+            // served: the next call goes to the server.
+            if not wasDetached then
+                cache.Remove request.Key |> ignore
+
+    let private legFor
+        (apiFullName: string)
+        (methodName: string)
+        (policy: ReadPolicy)
+        (maxAgeSeconds: int)
+        (key: string)
+        (send: unit -> Async<obj>)
+        : ReadLeg =
+        let request =
+            match inFlight.TryGetValue key with
+            | true, request -> request
+            | _ ->
+                let cacheFor =
+                    if maxAgeSeconds > 0 then
+                        Some(TimeSpan.FromSeconds(float maxAgeSeconds))
+                    else
+                        None
+
+                let request =
+                    SharedRequest(
+                        key,
+                        methodIdOf apiFullName methodName,
+                        cacheFor,
+                        send,
+                        settled apiFullName policy.Invalidates
+                    )
+
+                inFlight.[key] <- request
+                request
+
+        match cache.TryGetValue key with
+        | true, cached when DateTime.UtcNow - cached.StoredAt < cached.MaxAge -> Served(cached.Value, request)
+        | true, _ ->
+            cache.Remove key |> ignore
+            Awaiting request
+        | _ -> Awaiting request
+
+    /// The proxy's half: `send` is the undeclared request, `key` the
+    /// request's wire identity (`None` for a body that cannot be compared,
+    /// a multipart upload). A read decides its leg HERE, at invocation, so
+    /// `Cmd.OfRemoting` can read it synchronously; the returned call uses
+    /// that leg on its first run and decides afresh on any later run, so a
+    /// re-run `Async` is a new call, as an undeclared one is.
+    let internal invoke
+        (apiFullName: string)
+        (methodName: string)
+        (policy: ReadPolicy)
+        (key: string option)
+        (send: unit -> Async<obj>)
+        : Async<obj> =
+        match policy.MaxAgeSeconds, key with
+        | Some maxAgeSeconds, Some key ->
+            let decide () =
+                legFor apiFullName methodName policy maxAgeSeconds key send
+
+            let leg = decide ()
+            let first = ref (Some leg)
+
+            let call = async {
+                let leg =
+                    match first.Value with
+                    | Some leg ->
+                        first.Value <- None
+                        leg
+                    | None -> decide ()
+
+                match leg with
+                | Served(value, refresh) ->
+                    refresh.Start()
+                    return value
+                | Awaiting request -> return! request.AwaitRaw()
+            }
+
+            lastInvocation <- Some(box call, leg)
+            call
+        | _ when not policy.Invalidates.IsEmpty -> async {
+            let! value = send ()
+            invalidate apiFullName policy.Invalidates
+            return value
+          }
+        | _ -> send ()
+
+    /// `Cmd.OfRemoting`'s half: invoke a proxy call and report whether it
+    /// was a declared read. `None` — without invoking — when nothing is
+    /// registered, so the caller runs its pre-854 path exactly. A call
+    /// that throws while being invoked is reported as a `Plain` call that
+    /// raises the same exception when run.
+    let tryObserve (invoke: unit -> Async<'r>) : Observation<'r> option =
+        if registry.Count = 0 then
+            None
+        else
+            let saved = lastInvocation
+            lastInvocation <- None
+
+            let observation =
+                try
+                    let call = invoke ()
+
+                    match lastInvocation with
+                    | Some(recorded, leg) when obj.ReferenceEquals(recorded, box call) -> Shared leg
+                    | _ -> Plain call
+                with ex ->
+                    Plain(async { return raise ex })
+
+            lastInvocation <- saved
+            Some observation
+
+#if !FABLE_COMPILER
+    /// The .NET host's reading of an API record's `[<Cacheable>]` /
+    /// `[<Invalidates>]` attributes, as the declarations `register` takes.
+    /// A Fable client cannot run this (its reflection carries no
+    /// attributes); a .NET test asserting it equal to the list the client
+    /// registers is what keeps the two declarations from drifting.
+    let ofAttributes (apiType: Type) : (string * ReadPolicy) list = [
+        for field in
+            Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(
+                apiType,
+                System.Reflection.BindingFlags.Public
+                ||| System.Reflection.BindingFlags.NonPublic
+            ) do
+            let maxAge =
+                field.GetCustomAttributes(typeof<ToolUp.Platform.CacheableAttribute>, true)
+                |> Array.tryHead
+                |> Option.map (fun attribute -> (attribute :?> ToolUp.Platform.CacheableAttribute).MaxAgeSeconds)
+
+            let invalidates =
+                field.GetCustomAttributes(typeof<ToolUp.Platform.InvalidatesAttribute>, true)
+                |> Array.collect (fun attribute -> (attribute :?> ToolUp.Platform.InvalidatesAttribute).MethodNames)
+                |> List.ofArray
+
+            if maxAge.IsSome || not invalidates.IsEmpty then
+                field.Name,
+                {
+                    MaxAgeSeconds = maxAge
+                    Invalidates = invalidates
+                }
+    ]
+#endif
+
 module Proxy =
     /// Phase 783 — recover the server's decode refusal from an error
     /// response body, so `ProxyRequestException.DecodeError` is populated
@@ -269,7 +711,13 @@ module Proxy =
         | None -> ()
     ]
 
-    let proxyFetch options typeName (func: RecordField) fieldType =
+    /// Phase 854 — `proxyFetch` with the method's read policy applied:
+    /// `apiFullName` is the API record's `FullName`, the key
+    /// `ReadPolicies` declarations are registered under (`None` never
+    /// consults them). The policy is looked up per CALL, so a policy
+    /// registered after the proxy was built still applies, and with
+    /// nothing registered the lookup is one count check.
+    let internal proxyFetchWithPolicies (apiFullName: string option) options typeName (func: RecordField) fieldType =
         let funcArgs: (TypeInfo[]) =
             match func.FieldType with
             | TypeInfo.Async inner -> [| func.FieldType |]
@@ -298,6 +746,17 @@ module Proxy =
         let inputArgumentTypes = Array.take argumentCount funcArgs
 
         let headers = requestHeaders options isMultipart
+
+        // Phase 854 — the wire identity of a call, less its body: two calls
+        // of this method whose bodies are also equal send identical bytes.
+        let readKeyPrefix =
+            (if funcNeedParameters then "POST " else "GET ")
+            + url
+            + "\n"
+            + (headers
+               |> List.map (fun (name, value) -> name + ": " + value)
+               |> String.concat "\n")
+            + "\n\n"
 
         let executeRequest =
             if options.CustomResponseSerialization.IsSome || isAsyncOfByteArray returnTypeAsync then
@@ -535,7 +994,22 @@ module Proxy =
                         let requestBodyJson = Convert.serialize inputArguments typeInfo
                         RequestBody.Json requestBodyJson
 
-            executeRequest requestBody
+            match apiFullName |> Option.bind (fun api -> ReadPolicies.tryFind api func.FieldName) with
+            | None -> executeRequest requestBody
+            | Some policy ->
+                let key =
+                    match requestBody with
+                    | RequestBody.Json body -> Some(readKeyPrefix + body)
+                    | RequestBody.Empty -> Some readKeyPrefix
+                    | RequestBody.Multipart _ -> None
+
+                ReadPolicies.invoke apiFullName.Value func.FieldName policy key (fun () -> executeRequest requestBody)
+
+    /// Build the request/response proxy function for one API method. Reads
+    /// no Phase 854 read policy; `Remoting.buildProxy` uses
+    /// `proxyFetchWithPolicies`.
+    let proxyFetch options typeName (func: RecordField) fieldType =
+        proxyFetchWithPolicies None options typeName func fieldType
 
     /// Phase 69c.D — `Some elementType` when `fieldType` is a streaming
     /// field (`'arg -> IAsyncEnumerable<'T>`), recognised at proxy-build time

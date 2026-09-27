@@ -336,6 +336,10 @@
              agreement cases. The fixture is compiled into the Fable pack too. -->
         <Compile Include="Remoting\JsonClientDecodeFixture.fs" />
         <Compile Include="Remoting\JsonTextTests.fs" />
+        <!-- Phase 854 - the client read-policy attributes, read on .NET and pinned
+             equal to the declaration the Fable pack registers (shared fixture). -->
+        <Compile Include="Remoting\ReadPolicyFixture.fs" />
+        <Compile Include="Remoting\ReadPolicyAttributeTests.fs" />
         <!-- Phase 69k — the source generator's contract pack. AFTER
              DecoderAlgebraTests.fs, because its fidelity claim is a link in
              that pack's chain rather than a claim of its own: 785 proved the
