@@ -1923,6 +1923,7 @@ ToolUp.Platform.CompositionProfileRefusal (class)
 ToolUp.Platform.CompositionProfileRefusal.CapabilityGateUndeclared : ToolUp.Platform.CompositionProfileRefusal { get }
 ToolUp.Platform.CompositionProfileRefusal.IsCapabilityGateUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsIsolationPostureShortfall : System.Boolean { get }
+ToolUp.Platform.CompositionProfileRefusal.IsRemotingArgumentDecodersUnregistered : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsRemotingDecodersUnregistered : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsSeamGrantsUndeclared : System.Boolean { get }
 ToolUp.Platform.CompositionProfileRefusal.IsToolEffectsUndeclared : System.Boolean { get }
@@ -1930,6 +1931,8 @@ ToolUp.Platform.CompositionProfileRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall (class)
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.backend : System.String { get }
 ToolUp.Platform.CompositionProfileRefusal+IsolationPostureShortfall.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CompositionProfileRefusal+RemotingArgumentDecodersUnregistered (class)
+ToolUp.Platform.CompositionProfileRefusal+RemotingArgumentDecodersUnregistered.records : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Platform.CompositionProfileRefusal+RemotingDecodersUnregistered (class)
 ToolUp.Platform.CompositionProfileRefusal+RemotingDecodersUnregistered.records : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared (class)
@@ -1937,6 +1940,7 @@ ToolUp.Platform.CompositionProfileRefusal+SeamGrantsUndeclared.components : Micr
 ToolUp.Platform.CompositionProfileRefusal+Tags (class)
 ToolUp.Platform.CompositionProfileRefusal+Tags.CapabilityGateUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.IsolationPostureShortfall : System.Int32 (literal)
+ToolUp.Platform.CompositionProfileRefusal+Tags.RemotingArgumentDecodersUnregistered : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.RemotingDecodersUnregistered : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.SeamGrantsUndeclared : System.Int32 (literal)
 ToolUp.Platform.CompositionProfileRefusal+Tags.ToolEffectsUndeclared : System.Int32 (literal)
@@ -3005,11 +3009,13 @@ ToolUp.Platform.DeploymentVerificationEvidence.create(Microsoft.FSharp.Core.FSha
 ToolUp.Platform.DeploymentVerificationEvidence.egressOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.evidenceChainOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]]
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
+ToolUp.Platform.DeploymentVerificationEvidence.remotingArgumentDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.remotingDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.withEgress(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.withRemotingArgumentDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
@@ -3032,6 +3038,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherEgress(ToolUp.Platform.IDeplo
 ToolUp.Platform.DeploymentVerificationReport.gatherEvidenceChain(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
 ToolUp.Platform.DeploymentVerificationReport.gatherGroundingContinuity(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+ReportSection]
+ToolUp.Platform.DeploymentVerificationReport.gatherRemotingArgumentDecoders(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
@@ -5882,6 +5889,8 @@ ToolUp.Platform.IRateLimitStore (interface)
 ToolUp.Platform.IRateLimitStore.GetRecentDecisions(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InboundRateLimitKey], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDecisionEvent]]
 ToolUp.Platform.IRateLimitWriter (interface)
 ToolUp.Platform.IRateLimitWriter.IncrementAndCheck(ToolUp.Platform.InboundRateLimitKey, ToolUp.Platform.RateLimitWindow, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.InboundRateLimitDecision, ToolUp.Platform.RateLimitStoreError]]
+ToolUp.Platform.IRemotingArgumentDecoderEvidence (interface)
+ToolUp.Platform.IRemotingArgumentDecoderEvidence.RemotingArgumentDecoders : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity] { get }
 ToolUp.Platform.IRemotingDecoderEvidence (interface)
 ToolUp.Platform.IRemotingDecoderEvidence.RemotingDecoders : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity] { get }
 ToolUp.Platform.IReranker (class)
@@ -8723,6 +8732,7 @@ ToolUp.Platform.RemotingDecoderFacetModule.reflectionRecords(ToolUp.Platform.Rem
 ToolUp.Platform.RemotingDecoderFacetModule.requiresAlgebraDecoders(ToolUp.Platform.CompositionProfile) : System.Boolean
 ToolUp.Platform.RemotingDecoderFacetModule.toIntegrity(ToolUp.Platform.RemotingDecoderFacet) : ToolUp.Platform.RemotingDecoderIntegrity
 ToolUp.Platform.RemotingDecoderFacetModule.verify(ToolUp.Platform.RemotingDecoderFacet) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CompositionProfileRefusal]
+ToolUp.Platform.RemotingDecoderFacetModule.verifyArguments(ToolUp.Platform.RemotingDecoderFacet) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.CompositionProfileRefusal]
 ToolUp.Platform.RemotingDecoderIntegrity (class)
 ToolUp.Platform.RemotingDecoderIntegrity..ctor(System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RemotingDecoderRecord])
 ToolUp.Platform.RemotingDecoderIntegrity.DecoderMandatory : System.Boolean { get }

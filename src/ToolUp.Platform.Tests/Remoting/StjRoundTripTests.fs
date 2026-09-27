@@ -396,6 +396,59 @@ let private refusals =
                 "the two wires now agree on every mutation. Either both decoders converged — in which case say so here — or one of the two mutation populations has stopped being exercised."
     ]
 
+// ─── Generated shape mutations (Phase 844) ───────────────────────────
+
+/// The same per-shape GENERATED population the JSON algebra suite runs
+/// (`WireCorpus.generatedMutations`), measured here against the STJ
+/// converter set instead of the algebra — so the converter set is held to
+/// the same shapes the algebra is, not only to the hand-written rows
+/// above. Over `pinnedCases` rather than the algebra's own `coveredCases`:
+/// STJ is the oracle every corpus type already has a JSON encoding for,
+/// so nothing here needs the algebra's narrower "has a decoder in that
+/// file" filter.
+///
+/// Where STJ THROWS rather than refusing by name, that is Phase 783's own
+/// declared boundary (a `ThrewUnnamed` class, not a `Refused` one) and is
+/// recorded as exactly that — never treated as a failure in its own
+/// right. `sameOutcomeClass` is what makes that true: a generated
+/// mutation whose `ExpectedJson` is declared `ThrewUnnamed` passes when
+/// STJ throws and FAILS if STJ starts refusing it by name instead, which
+/// is the class boundary moving in the direction that would need the
+/// declaration updated, same as every other row in this file.
+let private generatedShapeMutations =
+    testList "generated shape mutations" [
+        yield! [
+            for m in generatedMutations pinnedCases do
+                match m.Json with
+                | None -> ()
+                | Some payload ->
+                    testCase (m.Name + " (" + string m.Kind + ")")
+                    <| fun () ->
+                        let actual, detail = classifyJson m.Target payload
+                        printfn "json refusal (generated) — %s: %s | %s" m.Name (describeOutcome actual) detail
+
+                        if not (sameOutcomeClass actual m.ExpectedJson) then
+                            failtestf
+                                "the STJ decoder's behaviour on generated mutation `%s` has changed class.\n  declared: %s\n  measured: %s (%s)\nIf the decoder was IMPROVED, update the declaration in `WireCorpus.generatedMutationsFor`; if it was not, a refusal has been lost."
+                                m.Name
+                                (describeOutcome m.ExpectedJson)
+                                (describeOutcome actual)
+                                detail
+        ]
+
+        testCase "the generated set is not vacuous, and covers every mutation kind"
+        <| fun () ->
+            let withJson =
+                generatedMutations pinnedCases |> List.filter (fun m -> m.Json.IsSome)
+
+            Expect.isGreaterThan (List.length withJson) 80 "the generated mutation set is thin"
+
+            let kinds = withJson |> List.map (fun m -> m.Kind) |> List.distinct
+
+            for kind in allMutationKinds do
+                Expect.contains kinds kind (sprintf "no generated JSON mutation of kind %A" kind)
+    ]
+
 /// The differential claim itself, stated as a test rather than left
 /// implicit in the existence of two suites: both wires are exercised over
 /// the SAME case list, so neither can quietly cover a different
@@ -420,5 +473,6 @@ let tests =
         fixturePin
         refusals
         timeSpanTickLoss
+        generatedShapeMutations
         differentialShape
     ]

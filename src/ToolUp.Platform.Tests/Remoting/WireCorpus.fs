@@ -89,6 +89,7 @@ open System
 open System.IO
 open System.Text
 open System.Text.Json
+open System.Text.Json.Nodes
 // Phase 783's named refusal — the right answer the refuse-path arm holds
 // both decoders to (784.D).
 open ToolUp.Remoting
@@ -1443,6 +1444,186 @@ let mutations () : WireMutation list =
                     "an unmatched property is ignored by default, which is what keeps an additive wire change non-breaking"
         }
     ]
+
+// ─── The generated population, per shape (Phase 844) ─────────────────
+//
+// The hand-written rows above are the CURATED corpus — worth the prose
+// that explains each one. This arm is the other half: derived from every
+// pinned case's own wire encodings rather than written out, so a shape
+// added to `pinnedCases` gets refuse-path coverage for free instead of
+// waiting for someone to hand-write a row for it. Phase 799 first wrote
+// this as a JSON-only, single-outcome generator local to the JSON algebra
+// suite; promoting it here — with a declared outcome PER WIRE, exactly
+// like the hand-written rows above — is what lets a MsgPack suite draw
+// from the same declaration instead of growing its own copy.
+
+/// The JSON half of the "wrong kind at the root" mutation: a value whose
+/// JSON shape is structurally incompatible with the one the case writes
+/// — an object where an array (or scalar) was written, and vice versa.
+///
+/// NEVER the empty container (`"[]"` / `"{}"`) in either direction:
+/// measured 2026-09-27, `Map`/`Set` decode an empty JSON ARRAY to an
+/// empty collection without ever checking it was an object — the
+/// converter's "nothing to read" shortcut runs before its shape check,
+/// so an empty substitution passes VACUOUSLY and the mutation asserts
+/// nothing. A non-empty substitute forces the shape check to actually
+/// run.
+let private wrongKindJson (text: string) =
+    let trimmed = text.TrimStart()
+
+    if trimmed.StartsWith "{" then "[1,2,3]"
+    elif trimmed.StartsWith "[" then "{\"unexpected\":1}"
+    else "{\"unexpected\":1}"
+
+/// The mutations the generator derives for one pinned case, on BOTH
+/// wires where a wire-generic corruption exists:
+///
+///   - **WrongTag, every case, both wires.** MsgPack: the whole payload
+///     replaced by a bare `nil` byte — individually valid, structurally
+///     wrong for anything but `option`, and the reader hands back
+///     `box null` at ANY target type (`Read.fs`'s `Format.Nil -> box
+///     null`), so this is Accepted universally, generalising the
+///     hand-written `wrong-tag-nil-for-record` row above to the whole
+///     population. JSON: a value of the wrong root kind, which the
+///     algebra/STJ path refuses structurally.
+///   - **Truncated, containers and strings, both wires.** Phase 786 made
+///     both readers check every length prefix against the bytes actually
+///     remaining before reading them (`Reader.RequireAvailable` on the
+///     MsgPack side, the length-checked substring read on the JSON
+///     side), so a container or string cut short is refused BY NAME on
+///     both wires — the boundary the hand-written `truncated-record-body`
+///     / `truncated-string-header` rows above pin for two specific
+///     shapes, generalised here. Each wire's payload is included only
+///     when truncating it is a REAL cut (at least half its length
+///     remains, not the whole thing) — the two wires encode the same
+///     case at very different byte counts, so one can meet that bar
+///     while the other does not.
+///   - **WrongWidth / MissingField / ExtraField — JSON only.** These are
+///     genuinely wire-specific: "a non-integral token where an integer
+///     was declared" has no MsgPack analogue (MsgPack widths are typed
+///     bytes, not text), and a generic MsgPack field splice would need a
+///     per-shape rewrite of the array/map length header this generator
+///     does not attempt — the two hand-written MsgPack rows for that
+///     class above (`missing-field-record` / `extra-field-record`) stay
+///     the authoritative coverage on that wire.
+let private generatedMutationsFor (c: WireCase) : WireMutation list =
+    let json = c.WriteJson()
+    let trimmedJson = json.TrimStart()
+    let isContainer = trimmedJson.StartsWith "{" || trimmedJson.StartsWith "["
+    let isString = trimmedJson.StartsWith "\""
+
+    let isNumber =
+        trimmedJson.Length > 0
+        && (Char.IsDigit trimmedJson.[0] || trimmedJson.[0] = '-')
+
+    let msgpack = c.WriteMsgPack()
+
+    [
+        {
+            Name = c.Name + "/wrong-kind"
+            Kind = MutationKind.WrongTag
+            Target = c.ClrType
+            MsgPack = Some [| 0xC0uy |]
+            Json = Some(wrongKindJson json)
+            ExpectedMsgPack = Accepted "nil decodes to a null obj at any target type"
+            ExpectedJson = Refused
+        }
+
+        if isContainer || isString then
+            let truncatedJson =
+                if json.Length >= 4 then
+                    Some(json.Substring(0, json.Length / 2))
+                else
+                    None
+
+            let truncatedMsgPack =
+                if msgpack.Length >= 4 then
+                    Some(msgpack[.. msgpack.Length / 2])
+                else
+                    None
+
+            if truncatedJson.IsSome || truncatedMsgPack.IsSome then
+                {
+                    Name = c.Name + "/truncated"
+                    Kind = MutationKind.Truncated
+                    Target = c.ClrType
+                    MsgPack = truncatedMsgPack
+                    Json = truncatedJson
+                    ExpectedMsgPack = Refused
+                    // Cutting a container or string text in half almost
+                    // always leaves an unterminated string, array or
+                    // object — malformed JSON, not merely a wrong VALUE
+                    // — so `JsonDocument.Parse` throws before the
+                    // converter seam is ever reached, same as the
+                    // hand-written `truncated-record-body` row above.
+                    ExpectedJson =
+                        ThrewUnnamed "JsonDocument.Parse refuses malformed JSON before the converter seam is reached"
+                }
+
+        if c.Class = WireClass.NumericWidth && isNumber then
+            {
+                Name = c.Name + "/fractional"
+                Kind = MutationKind.WrongWidth
+                Target = c.ClrType
+                MsgPack = None
+                Json = Some "1.5"
+                ExpectedMsgPack = Refused
+                ExpectedJson = Refused
+            }
+
+        if c.Class = WireClass.NumericWidth && isString then
+            {
+                Name = c.Name + "/fractional-string"
+                Kind = MutationKind.WrongWidth
+                Target = c.ClrType
+                MsgPack = None
+                Json = Some "\"1.5\""
+                ExpectedMsgPack = Refused
+                ExpectedJson = Refused
+            }
+
+        if c.Class = WireClass.Record || c.Class = WireClass.NestedRecord then
+            let node = JsonNode.Parse(json).AsObject()
+            let first = node |> Seq.head
+            node.Remove first.Key |> ignore
+
+            {
+                Name = c.Name + "/missing-field"
+                Kind = MutationKind.MissingField
+                Target = c.ClrType
+                MsgPack = None
+                Json = Some(node.ToJsonString())
+                ExpectedMsgPack = Refused
+                // The property bag is tolerant, same as the hand-written
+                // `missing-field-record` row above: an absent
+                // reference-type field reads back as null rather than
+                // refusing — the additive read path this SDK documents.
+                ExpectedJson =
+                    Accepted
+                        "an absent reference-type field reads back as null rather than refusing — the additive read path this SDK documents"
+            }
+
+            let surplus = JsonNode.Parse(json).AsObject()
+            surplus.Add("Surplus", JsonValue.Create "x")
+
+            {
+                Name = c.Name + "/extra-field"
+                Kind = MutationKind.ExtraField
+                Target = c.ClrType
+                MsgPack = None
+                Json = Some(surplus.ToJsonString())
+                ExpectedMsgPack = Refused
+                ExpectedJson = Accepted "a surplus member is ignored"
+            }
+    ]
+
+/// The generated population over a set of cases — every JSON suite and
+/// (per-wire) every MsgPack suite draws from this one declaration rather
+/// than deriving its own. Callers filter `cases` to whatever population
+/// they cover (e.g. the JSON algebra's `coveredCases`, or `pinnedCases`
+/// for a suite that covers everything STJ does).
+let generatedMutations (cases: WireCase list) : WireMutation list =
+    cases |> List.collect generatedMutationsFor
 
 /// Every mutation kind, for this arm's own adequacy check.
 let allMutationKinds: MutationKind list =

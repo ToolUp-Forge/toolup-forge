@@ -409,7 +409,8 @@ Claim:       no client bytes can drive the decode edge to divergence, unbounded
 Not claimed: authorisation, tenancy or session integrity of a decoded value;
              the bytes-to-value pass (bounded, not proved); semantic validity
              (Phase 69e's domain); the STJ path for any argument type not
-             registered (799); the reflection fallback for any record not
+             registered (799 — under `Verified`, no platform record is left
+             in that set: 842); the reflection fallback for any record not
              opted in
 ```
 
@@ -507,10 +508,13 @@ are all named refusals routed to the `validation` envelope before the handler ru
 accepted the first four (the null and the absent field as `null` references, the quoted number
 under `AllowReadingFromString`, the empty array as an empty map) and threw on the last.
 
-**The platform's own first set — `PlatformJsonDecoders`.** Hand-written, in the shape the generator
-will emit once it learns this wire (69k.B), registered by `ServerApp.run` beside the MessagePack
-set, and chosen so four platform records take every argument through the algebra: `IPresenceApi`,
-`IAuditViewApi`, `IProvenanceQueryApi`, `ITeamInviteApi`. Deliberately NOT in it: `string`,
+**The platform's own first set — `PlatformJsonDecoders`.** Phase 799 shipped it hand-written, in the
+shape the generator would eventually emit; **Phase 841 made it generated** —
+`Emit.jsonCompilationUnit` / `Plan.forJsonTypes` walk each API record's argument chain the same way
+the response-side emitter walks its return chain, and the committed file is byte-pinned against that
+emission (regenerate with `TOOLUP_REGEN_PLATFORM_JSON_DECODERS`, never hand-edit it). Registered by
+`ServerApp.run` beside the MessagePack set, and — since Phase 841 — covering every one of the
+platform's scoped records, not the four Phase 799 hand-wrote. Deliberately NOT in it: `string`,
 `Guid` and the primitive tuples, which are shared with every consumer's own records — a `string`
 decoder registered here would change how a consumer's string arguments read on upgrade (a `null`
 would refuse rather than arrive), and a platform-set registration is a statement about the
@@ -523,22 +527,39 @@ ARGUMENT types against `JsonDecoders`, the same binding shape and the same class
 `ServerApp.run` logs a second line:
 
 ```
-remoting argument decoders: 4 of 38 served API record(s) take every argument through the JSON algebra (profile standard, advisory)
+remoting argument decoders: 4 of 38 served API record(s) take every argument through the JSON algebra (profile standard, argument decoders advisory)
 ```
 
-It is **advisory under every profile** for now, deliberately: the first set is narrow, and a
-`Verified` deployment that refused on a served record with no JSON decoder would refuse nearly
-every deployment on the day it shipped. It becomes mandatory under `Verified` when the generator
-emits argument decoders and the platform's records are covered by construction — the road the
-response facet travelled between Phases 785 and 801.
+Phase 799 shipped it **advisory under every profile**, deliberately: the first set was narrow, and
+a `Verified` deployment that refused on a served record with no JSON decoder would have refused
+nearly every deployment on the day it shipped.
+
+**Phase 842 — it follows the profile now**, exactly as the response facet has since Phase 801:
+`FacetRequired = RemotingDecoderFacet.requiresAlgebraDecoders profile`. Phase 841 gave the
+generator an argument leg (`Emit.jsonCompilationUnit` / `Plan.forJsonTypes`), so every platform
+record's arguments are covered by construction, and the road this facet travels between Phases 785
+and 801 for the response side is now travelled here too. Under `Verified`,
+`RemotingDecoderFacet.verifyArguments` refuses a served record with an uncovered argument type,
+naming the record AND its uncovered types (`RemotingArgumentDecodersUnregistered`) — unlike the
+response facet's refusal, which names records only, this one is deliberately more specific: an
+operator reading "IPresenceApi" alone still has to go find what to register, and the pair does not.
+
+**A consumer's own records are the remaining honest gap.** The mandate covers every SERVED record,
+platform and consumer alike (`ServedApiRecords`, not a declared subset), so a deployment that mounts
+its own API records under `Verified` must register JSON decoders for them too — or run `Standard`,
+where the facet stays advisory and the boot line reports the ratio. The generator that emits them is not yet exposed to a consumer's own build (Phase 804 packages
+that); until then, `JsonDecoders.register<'T>` (hand-written, the same shape `PlatformJsonDecoders`
+uses) is the direct route.
 
 ### What moved in the trust-boundary statement
 
-The §7 "Not claimed" list read "the STJ path until 785.F". It now reads "the STJ path for any
-argument type not registered" — the same opt-in boundary the reflection fallback has always had,
-stated for the second wire. A registered argument type is inside the claim: its bytes become a
-value of the declared type or a named refusal, with bounded depth and width, before any handler
-runs.
+The §7 "Not claimed" list read "the STJ path until 785.F". Phase 799 moved it to "the STJ path for
+any argument type not registered" — the same opt-in boundary the reflection fallback has always
+had, stated for the second wire. Phase 842 narrows it again: under a `Verified` deployment, the
+platform's own records are no longer in that set — they decode every argument through the closed
+algebra by construction — so the residual gap is exactly a consumer's own unregistered records. A
+registered argument type is inside the claim regardless of profile: its bytes become a value of the
+declared type or a named refusal, with bounded depth and width, before any handler runs.
 
 ---
 
