@@ -9477,6 +9477,7 @@ ToolUp.Platform.ServerAppModule.withProviderProfile(ToolUp.Platform.Providers+IP
 ToolUp.Platform.ServerAppModule.withQuotaPolicy(ToolUp.Platform.Usage.ITeamQuotaPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withRegisteredPurposes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RegisteredPurpose], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withRemotingBatching(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withSecretResilience(ToolUp.Platform.TransientFault+TransientFaultPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withSecurityHardening(ToolUp.Platform.SecurityHardeningMode, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -10746,6 +10747,20 @@ ToolUp.Remoting.AspNetCore.RemotingMiddleware`1..ctor(Microsoft.AspNetCore.Http.
 ToolUp.Remoting.AspNetCore.RemotingMiddleware`1.Invoke(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Giraffe.Remoting (class)
 ToolUp.Remoting.Giraffe.Remoting.buildHttpHandler`1(ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Remoting.Giraffe.RemotingBatch (class)
+ToolUp.Remoting.Giraffe.RemotingBatch.DefaultMaxElements : System.Int32 (literal)
+ToolUp.Remoting.Giraffe.RemotingBatch.DefaultRoute : System.String (literal)
+ToolUp.Remoting.Giraffe.RemotingBatch.ElementItemsKey : System.String (literal)
+ToolUp.Remoting.Giraffe.RemotingBatch.RefusalCode : System.String (literal)
+ToolUp.Remoting.Giraffe.RemotingBatch.defaults : ToolUp.Remoting.Giraffe.RemotingBatchOptions { get }
+ToolUp.Remoting.Giraffe.RemotingBatch.isBatchable(System.String) : System.Boolean
+ToolUp.Remoting.Giraffe.RemotingBatch.middleware(ToolUp.Remoting.Giraffe.RemotingBatchOptions, Microsoft.AspNetCore.Http.RequestDelegate) : Microsoft.AspNetCore.Http.RequestDelegate
+ToolUp.Remoting.Giraffe.RemotingBatch.useBatching(ToolUp.Remoting.Giraffe.RemotingBatchOptions, Microsoft.AspNetCore.Builder.IApplicationBuilder) : Microsoft.AspNetCore.Builder.IApplicationBuilder
+ToolUp.Remoting.Giraffe.RemotingBatchOptions (class)
+ToolUp.Remoting.Giraffe.RemotingBatchOptions..ctor(System.String, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.RequestDelegate, Microsoft.AspNetCore.Http.RequestDelegate])
+ToolUp.Remoting.Giraffe.RemotingBatchOptions.ElementPipeline : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.RequestDelegate, Microsoft.AspNetCore.Http.RequestDelegate] { get }
+ToolUp.Remoting.Giraffe.RemotingBatchOptions.MaxElements : System.Int32 { get }
+ToolUp.Remoting.Giraffe.RemotingBatchOptions.Route : System.String { get }
 ToolUp.Remoting.Json.JsonRead (class)
 ToolUp.Remoting.Json.JsonRead.DefaultMaxDepth : System.Int32 (literal)
 ToolUp.Remoting.Json.JsonRead.DefaultMaxMembers : System.Int32 (literal)

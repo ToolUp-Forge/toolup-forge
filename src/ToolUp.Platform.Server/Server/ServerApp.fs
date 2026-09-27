@@ -1824,6 +1824,35 @@ module ServerApp =
             Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ f ]
     }
 
+    /// Phase 855 — serve the remoting batch route (`POST /api/_batch`), so
+    /// a client that calls `RemoteBatching.enable RemoteBatching.DefaultRoute`
+    /// sends same-tick calls as one request. Composed at the pre-middleware
+    /// seam: every element then runs through scope resolution, surface
+    /// enforcement, the rate limiters and the remoting dispatcher on a
+    /// request of its own, and through the CSRF middleware too (it sits
+    /// ahead of the seam, so it is re-applied per element here — an
+    /// element is never admitted on the envelope's CSRF exemption). Not
+    /// calling it serves nothing (GP 13). See `RemotingBatch`.
+    let withRemotingBatching (app: ServerApp) : ServerApp =
+        app
+        |> withPreMiddleware (fun builder ->
+            let services = builder.ApplicationServices
+            let config = services.GetRequiredService<ServerConfig>()
+
+            let registry =
+                services.GetRequiredService<ToolUp.Platform.SurfaceEnforcement.SurfaceRequirementRegistry>()
+
+            let csrfPerElement (next: RequestDelegate) : RequestDelegate =
+                let csrf = CsrfMiddleware(next, config, registry)
+                RequestDelegate(fun ctx -> csrf.InvokeAsync ctx :> System.Threading.Tasks.Task)
+
+            ToolUp.Remoting.Giraffe.RemotingBatch.useBatching
+                {
+                    ToolUp.Remoting.Giraffe.RemotingBatch.defaults with
+                        ElementPipeline = csrfPerElement
+                }
+                builder)
+
     /// Phase 1f composition seam. Accumulates an `IApplicationBuilder`
     /// thunk that `compose` applies at the **post** position — AFTER
     /// `app.UseGiraffe router`, so consumers can register fallback

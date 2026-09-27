@@ -2385,6 +2385,8 @@ let private registeredTests =
         // Phase 854 - client read-policy attributes read on .NET, pinned to
         // the declaration the Fable pack registers.
         ReadPolicyAttributeTests.tests
+        // Phase 855 - the remoting batch route, per-element pipeline.
+        RemotingBatchTests.tests
         // Phase 69k — the source generator, held to the decoders Phase 785
         // hand-wrote: the covered set, the per-field decode of the shapes a
         // generator could plausibly get wrong, the union tags, and a

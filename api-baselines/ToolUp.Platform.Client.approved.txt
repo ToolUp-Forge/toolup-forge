@@ -6449,14 +6449,25 @@ ToolUp.Remoting.Client.ByteArrayExtensions.AsDataUrl(System.Byte[], System.Strin
 ToolUp.Remoting.Client.ByteArrayExtensions.SaveFileAs(System.Byte[], System.String) : System.Void
 ToolUp.Remoting.Client.ByteArrayExtensions.SaveFileAs(System.Byte[], System.String, System.String) : System.Void
 ToolUp.Remoting.Client.Http (class)
+ToolUp.Remoting.Client.Http.currentTransport() : ToolUp.Remoting.Client.Http+Transport
 ToolUp.Remoting.Client.Http.get(System.String) : ToolUp.Remoting.Client.HttpRequest
 ToolUp.Remoting.Client.Http.post(System.String) : ToolUp.Remoting.Client.HttpRequest
 ToolUp.Remoting.Client.Http.request(ToolUp.Remoting.Client.HttpMethod, System.String) : ToolUp.Remoting.Client.HttpRequest
 ToolUp.Remoting.Client.Http.send : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.HttpRequest, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Client.HttpResponse]] { get }
 ToolUp.Remoting.Client.Http.sendAndReadBinary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.HttpRequest, Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.Byte[], System.Int32]]] { get }
+ToolUp.Remoting.Client.Http.useTransport(ToolUp.Remoting.Client.Http+Transport) : System.Void
 ToolUp.Remoting.Client.Http.withBody(ToolUp.Remoting.Client.RequestBody, ToolUp.Remoting.Client.HttpRequest) : ToolUp.Remoting.Client.HttpRequest
 ToolUp.Remoting.Client.Http.withCredentials(System.Boolean, ToolUp.Remoting.Client.HttpRequest) : ToolUp.Remoting.Client.HttpRequest
 ToolUp.Remoting.Client.Http.withHeaders(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Remoting.Client.HttpRequest) : ToolUp.Remoting.Client.HttpRequest
+ToolUp.Remoting.Client.Http+Transport (class)
+ToolUp.Remoting.Client.Http+Transport.Fetch : ToolUp.Remoting.Client.Http+Transport { get }
+ToolUp.Remoting.Client.Http+Transport.IsFetch : System.Boolean { get }
+ToolUp.Remoting.Client.Http+Transport.IsXhr : System.Boolean { get }
+ToolUp.Remoting.Client.Http+Transport.Tag : System.Int32 { get }
+ToolUp.Remoting.Client.Http+Transport.Xhr : ToolUp.Remoting.Client.Http+Transport { get }
+ToolUp.Remoting.Client.Http+Transport+Tags (class)
+ToolUp.Remoting.Client.Http+Transport+Tags.Fetch : System.Int32 (literal)
+ToolUp.Remoting.Client.Http+Transport+Tags.Xhr : System.Int32 (literal)
 ToolUp.Remoting.Client.HttpMethod (class)
 ToolUp.Remoting.Client.HttpMethod.GET : ToolUp.Remoting.Client.HttpMethod { get }
 ToolUp.Remoting.Client.HttpMethod.IsGET : System.Boolean { get }
@@ -6536,6 +6547,14 @@ ToolUp.Remoting.Client.ReadPolicy.MaxAgeSeconds : Microsoft.FSharp.Core.FSharpOp
 ToolUp.Remoting.Client.ReadPolicyModule (class)
 ToolUp.Remoting.Client.ReadPolicyModule.cacheable(System.Int32) : ToolUp.Remoting.Client.ReadPolicy
 ToolUp.Remoting.Client.ReadPolicyModule.invalidates(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Remoting.Client.ReadPolicy
+ToolUp.Remoting.Client.RemoteBatching (class)
+ToolUp.Remoting.Client.RemoteBatching.DefaultMaxElements : System.Int32 (literal)
+ToolUp.Remoting.Client.RemoteBatching.DefaultRoute : System.String (literal)
+ToolUp.Remoting.Client.RemoteBatching.RefusalCode : System.String (literal)
+ToolUp.Remoting.Client.RemoteBatching.disable() : System.Void
+ToolUp.Remoting.Client.RemoteBatching.enable(System.String) : System.Void
+ToolUp.Remoting.Client.RemoteBatching.enableWith(System.String, System.Int32) : System.Void
+ToolUp.Remoting.Client.RemoteBatching.isEnabled() : System.Boolean
 ToolUp.Remoting.Client.RemoteBuilderOptions (class)
 ToolUp.Remoting.Client.RemoteBuilderOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpFunc`2[System.Type, System.Object]]], System.Boolean)
 ToolUp.Remoting.Client.RemoteBuilderOptions.Authorization : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

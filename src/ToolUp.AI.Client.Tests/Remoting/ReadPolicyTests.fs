@@ -51,7 +51,13 @@ open ToolUp.AI.Client.Tests.NodeTest
         }
     };
 })()""")>]
-let private installXhrStub () : unit = jsNative
+let private installXhrStubJs () : unit = jsNative
+
+// Phase 855 - these cases script XMLHttpRequest, so they select the XHR
+// transport (`fetch` is the default).
+let private installXhrStub () : unit =
+    Http.useTransport Http.Transport.Xhr
+    installXhrStubJs ()
 
 [<Emit("(globalThis.__xhrStub.status = $0, globalThis.__xhrStub.body = $1, undefined)")>]
 let private scriptResponse (status: int) (body: string) : unit = jsNative
