@@ -22,7 +22,6 @@ module ToolUp.Platform.Tests.Remoting.JsonDecoderAlgebraTests
 open System
 open System.IO
 open System.Text.Json
-open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Remoting
 open ToolUp.Remoting.Json
@@ -300,99 +299,26 @@ let private algebraOutcomes: (string * RefusalOutcome) list = [
 
 // ─── Generated JSON mutations, per shape ─────────────────────────────
 
-/// A mutation derived from a pinned case's own JSON text, by class of
-/// damage. Each carries what the algebra MUST do with it.
-type private ShapeMutation = {
-    Name: string
-    Kind: MutationKind
-    Target: Type
-    Text: string
-    Expected: RefusalOutcome
-}
-
-let private wrongKind (text: string) =
-    let trimmed = text.TrimStart()
-
-    if trimmed.StartsWith "{" then "[]"
-    elif trimmed.StartsWith "[" then "{}"
-    else "{\"unexpected\":1}"
-
-/// The mutations the generator derives for a case: a value of the wrong
-/// kind at the root (every case), a truncated container or string
-/// (containers and strings), a non-integral token where an integer was
-/// declared (the width classes), and a missing / surplus member (the
-/// record classes). Each is a text the STJ path is also shown, so the
-/// differential arm can report where the two disagree.
-let private shapeMutations (c: WireCase) : ShapeMutation list =
-    let text = c.WriteJson()
-    let trimmed = text.TrimStart()
-    let isContainer = trimmed.StartsWith "{" || trimmed.StartsWith "["
-    let isString = trimmed.StartsWith "\""
-    let isNumber = trimmed.Length > 0 && (Char.IsDigit trimmed.[0] || trimmed.[0] = '-')
-
-    [
-        {
-            Name = c.Name + "/wrong-kind"
-            Kind = MutationKind.WrongTag
-            Target = c.ClrType
-            Text = wrongKind text
-            Expected = Refused
-        }
-
-        if (isContainer || isString) && text.Length >= 4 then
-            {
-                Name = c.Name + "/truncated"
-                Kind = MutationKind.Truncated
-                Target = c.ClrType
-                Text = text.Substring(0, text.Length / 2)
-                Expected = Refused
-            }
-
-        if c.Class = WireClass.NumericWidth && isNumber then
-            {
-                Name = c.Name + "/fractional"
-                Kind = MutationKind.WrongWidth
-                Target = c.ClrType
-                Text = "1.5"
-                Expected = Refused
-            }
-
-        if c.Class = WireClass.NumericWidth && isString then
-            {
-                Name = c.Name + "/fractional-string"
-                Kind = MutationKind.WrongWidth
-                Target = c.ClrType
-                Text = "\"1.5\""
-                Expected = Refused
-            }
-
-        if c.Class = WireClass.Record || c.Class = WireClass.NestedRecord then
-            let node = JsonNode.Parse(text).AsObject()
-            let first = node |> Seq.head
-            node.Remove first.Key |> ignore
-
-            {
-                Name = c.Name + "/missing-field"
-                Kind = MutationKind.MissingField
-                Target = c.ClrType
-                Text = node.ToJsonString()
-                Expected = Refused
-            }
-
-            let surplus = JsonNode.Parse(text).AsObject()
-            surplus.Add("Surplus", System.Text.Json.Nodes.JsonValue.Create "x")
-
-            {
-                Name = c.Name + "/extra-field"
-                Kind = MutationKind.ExtraField
-                Target = c.ClrType
-                Text = surplus.ToJsonString()
-                Expected = Accepted "a surplus member is ignored"
-            }
-    ]
-
+/// Phase 844 promoted the shape-by-shape generator itself into
+/// `WireCorpus` (`generatedMutations`), declared over BOTH wires exactly
+/// like the hand-written `mutations()` rows — so this arm now draws the
+/// population rather than deriving it, restricted to the cases this
+/// file's algebra actually covers.
 let private generatedMutations () =
-    coveredCases |> List.collect shapeMutations
+    WireCorpus.generatedMutations coveredCases
+
+/// What the ALGEBRA (as opposed to the STJ oracle `WireCorpus` declares
+/// `ExpectedJson` against) must do with a generated mutation, by class of
+/// damage — every kind this generator produces is a refuse-path shape
+/// except a surplus member, which every JSON decoder in this pack (STJ
+/// and algebra alike) is deliberately tolerant of.
+let private algebraExpectedFor (kind: MutationKind) =
+    match kind with
+    | MutationKind.ExtraField -> Accepted "a surplus member is ignored"
+    | MutationKind.WrongTag
+    | MutationKind.Truncated
+    | MutationKind.WrongWidth
+    | MutationKind.MissingField -> Refused
 
 // ─── The IL pin ──────────────────────────────────────────────────────
 
@@ -761,21 +687,25 @@ let tests =
                 let disagreements = ResizeArray()
 
                 for m in generated do
-                    let measured, detail = classifyAlgebra m.Target m.Text
-                    let viaStj, _ = classifyJson m.Target m.Text
+                    match m.Json with
+                    | None -> ()
+                    | Some text ->
+                        let measured, detail = classifyAlgebra m.Target text
+                        let viaStj, _ = classifyJson m.Target text
+                        let expected = algebraExpectedFor m.Kind
 
-                    if not (sameOutcomeClass measured m.Expected) then
-                        failtestf
-                            "generated mutation `%s` (%A): declared %s, measured %s (%s)\n  json: %s"
-                            m.Name
-                            m.Kind
-                            (describeOutcome m.Expected)
-                            (describeOutcome measured)
-                            detail
-                            m.Text
+                        if not (sameOutcomeClass measured expected) then
+                            failtestf
+                                "generated mutation `%s` (%A): declared %s, measured %s (%s)\n  json: %s"
+                                m.Name
+                                m.Kind
+                                (describeOutcome expected)
+                                (describeOutcome measured)
+                                detail
+                                text
 
-                    if not (sameOutcomeClass measured viaStj) then
-                        disagreements.Add(sprintf "%s: algebra %A, STJ %A" m.Name measured viaStj)
+                        if not (sameOutcomeClass measured viaStj) then
+                            disagreements.Add(sprintf "%s: algebra %A, STJ %A" m.Name measured viaStj)
 
                 printfn
                     "generated JSON mutations: %d; the two paths disagree on %d:\n  %s"
