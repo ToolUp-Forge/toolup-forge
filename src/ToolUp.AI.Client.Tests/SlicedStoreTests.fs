@@ -63,7 +63,7 @@ let private storeBindingTests =
 
             JS.setTimeout
                 (fun () ->
-                    afterMount <- (document?getElementById ("store-a-out")?textContent, views)
+                    afterMount <- ((document?getElementById "store-a-out")?textContent, views)
                     // Two dispatches in one task: two drains, one publish.
                     dispatch.Value Bump
                     dispatch.Value Bump)
@@ -76,13 +76,74 @@ let private storeBindingTests =
                 Expect.equal viewsAtMount 1 "the view ran once to mount"
 
                 Expect.equal
-                    (document?getElementById ("store-a-out")?textContent: string)
+                    ((document?getElementById "store-a-out")?textContent: string)
                     "count 2"
                     "both messages reached the screen"
 
                 Expect.equal views 2 "two drains in one task published once: one more view"
                 Expect.isTrue store.Snapshot.IsSome "the store holds the last model"
                 Expect.equal store.Snapshot.Value.Model 2 "and it is the model the loop ended on"
+
+        testCaseDeferred
+            "a view that throws keeps the last good tree and reports the error, as the push binding did"
+            300
+        <| fun () ->
+            let document = installDom "store-t"
+            let reported = ResizeArray<string>()
+            // Capture what the binding reports as uncaught.
+            document?defaultView?reportError <- (fun (e: exn) -> reported.Add e.Message)
+            let store = ModelStore.create<int, CounterMsg> ()
+            let mutable dispatch: (CounterMsg -> unit) option = None
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun model d ->
+                dispatch <- Some d
+
+                if model = 1 then
+                    failwith "view broke at 1"
+
+                Html.p [ prop.id "store-t-out"; prop.text (sprintf "count %d" model) ])
+            |> Program.withReactStore store "store-t"
+            |> Program.run
+
+            JS.setTimeout (fun () -> dispatch.Value Bump) 80 |> ignore
+
+            fun () ->
+                Expect.equal
+                    ((document?getElementById "store-t-out")?textContent: string)
+                    "count 0"
+                    "the last good tree is still mounted"
+
+                Expect.equal (List.ofSeq reported) [ "view broke at 1" ] "the error was reported once, as uncaught"
+
+        testCaseDeferred "withReactStoreHydrate adopts the server-rendered DOM and then renders from the store" 300
+        <| fun () ->
+            let document = installDom "store-h"
+            let host = document?getElementById "store-h"
+            // What a server would have rendered for `init`'s model.
+            host?innerHTML <- "<p id=\"store-h-out\">count 0</p>"
+            let serverNode = document?getElementById "store-h-out"
+            let store = ModelStore.create<int, CounterMsg> ()
+            let mutable dispatch: (CounterMsg -> unit) option = None
+            let mutable adopted = false
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun model d ->
+                dispatch <- Some d
+                Html.p [ prop.id "store-h-out"; prop.text (sprintf "count %d" model) ])
+            |> Program.withReactStoreHydrate store "store-h"
+            |> Program.run
+
+            JS.setTimeout
+                (fun () ->
+                    adopted <- obj.ReferenceEquals(document?getElementById "store-h-out", serverNode)
+                    dispatch.Value Bump)
+                80
+            |> ignore
+
+            fun () ->
+                Expect.isTrue adopted "hydration kept the server's node (a mismatch would have replaced it)"
+                let now = document?getElementById "store-h-out"
+                Expect.isTrue (obj.ReferenceEquals(now, serverNode)) "and the update patched that same node"
+                Expect.equal (now?textContent: string) "count 1" "with the new model"
 
         testCaseDeferred "useSelector re-renders a reader only when its slice changes" 300
         <| fun () ->

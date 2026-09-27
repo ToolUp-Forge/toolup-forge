@@ -3707,7 +3707,13 @@ module Client =
 
     let private renderShellChrome (props: obj) : ReactElement =
         let p = unbox<ShellChromeProps> props
-        viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatch
+        // A chrome that throws keeps the last good shell on screen and
+        // reports the error as uncaught — what the whole-tree binding,
+        // which builds the view outside React, always did.
+        let lastGood = useRef null
+
+        buildHoldingLastGood lastGood (fun () ->
+            viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatch)
 
     let private shellChrome: obj =
         // The comparer goes to React as a two-argument JS function: a boxed

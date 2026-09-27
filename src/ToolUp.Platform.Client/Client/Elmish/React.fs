@@ -176,6 +176,34 @@ module internal StoreBindings =
     [<Import("createElement", "react")>]
     let createElement (elementType: obj, props: obj) : ReactElement = jsNative
 
+    /// Report an error the way an uncaught one is reported — to the
+    /// window's `error` listeners and the console — without throwing into
+    /// the caller: `reportError` where the host has it (every current
+    /// browser), else a rethrow on the microtask queue.
+    [<Emit("(typeof window !== 'undefined' && window && typeof window.reportError === 'function') ? window.reportError($0) : queueMicrotask(function () { throw $0; })")>]
+    let reportUncaught (error: exn) : unit = jsNative
+
+    /// Build a view inside a component render, keeping the push binding's
+    /// behaviour when the view THROWS. The push binding constructs the
+    /// view outside React (on the microtask queue), so a throwing view
+    /// raised an uncaught error and left the last good tree on screen. A
+    /// view built inside a component would instead make React unmount the
+    /// whole root. So: remember the last element that built (`lastGood` is
+    /// a `useRef` cell), and on a throw report the error as uncaught and
+    /// render that element again. A throw on the FIRST build has nothing to
+    /// hold and propagates, as a failing first render always did.
+    let buildHoldingLastGood (lastGood: obj) (build: unit -> ReactElement) : ReactElement =
+        try
+            let element = build ()
+            lastGood?current <- element
+            element
+        with error ->
+            if isNull lastGood?current then
+                reraise ()
+            else
+                reportUncaught error
+                unbox<ReactElement> lastGood?current
+
     /// The store-bound root: reads the whole snapshot and renders
     /// `Program.view` on it (`render` closes over the program). Passing
     /// `getSnapshot` as the server snapshot too is what lets a hydrating
@@ -184,7 +212,8 @@ module internal StoreBindings =
         let snapshot =
             useSyncExternalStore (props?subscribe, props?getSnapshot, props?getSnapshot)
 
-        (unbox<obj -> ReactElement> props?render) snapshot
+        let lastGood = useRef null
+        buildHoldingLastGood lastGood (fun () -> (unbox<obj -> ReactElement> props?render) snapshot)
 
 /// Phase 852 — reading a store.
 [<RequireQualifiedAccess>]
