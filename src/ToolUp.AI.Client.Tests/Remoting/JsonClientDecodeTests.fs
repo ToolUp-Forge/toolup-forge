@@ -32,6 +32,7 @@ open Fable.SimpleJson
 open ToolUp.Remoting
 open ToolUp.Remoting.Json
 open ToolUp.Remoting.Client
+open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.Remoting.JsonClientDecodeFixture
 open ToolUp.AI.Client.Tests.NodeTest
 
@@ -72,6 +73,9 @@ let private callCount () : int = jsNative
 [<Emit("globalThis.__xhrStub.calls[$0].url")>]
 let private callUrl (i: int) : string = jsNative
 
+[<Emit("globalThis.__xhrStub.calls[$0].body")>]
+let private callBody (i: int) : string = jsNative
+
 // ─── The API under test ─────────────────────────────────────────────
 
 /// `LedgerLine`'s twin, never registered — the reflection path's subject.
@@ -91,6 +95,11 @@ type LedgerApi = {
 }
 
 let private api: LedgerApi = Remoting.createApi () |> Remoting.buildProxy<LedgerApi>
+
+/// Phase 885 — the consumer API of the acceptance case, through the
+/// REFLECTIVE proxy (its arguments written by `Fable.SimpleJson`).
+let private bookingApi: BrowserWriterFixture.BookingApi =
+    Remoting.createApi () |> Remoting.buildProxy<BrowserWriterFixture.BookingApi>
 
 /// What the reflection path makes of `text` at `'T` — the pre-843
 /// response decode, called directly.
@@ -344,5 +353,128 @@ let tests =
                 printfn
                     "785.F on the client — TimeSpan: host resolution is whole milliseconds; algebra and reflection both %d ticks (.NET: 512112158396)"
                     reflected.Ticks
+        ]
+
+        // ─── Phase 885 — the browser's writer, and what the client reads ──
+        //
+        // 885.A: the transpiled `Convert.serialize` — the writer every
+        // reflective proxy sends arguments with — held to the texts in
+        // `BrowserWriterFixture`, which the .NET pack holds the gate's
+        // mirror (`BrowserJsonWriter`) to. 885.C: the three decisions, on
+        // the client. The acceptance case: a consumer argument carrying a
+        // decimal, a TimeSpan and a DateTime, captured off the wire from
+        // both proxy kinds, which the .NET pack decodes on the server.
+        testList "Phase 885 — the browser's writer, pinned; the forms and kinds the client reads" [
+            testCase "885.A — Fable.SimpleJson writes every pinned case exactly as the fixture says"
+            <| fun () ->
+                Expect.isTrue (List.length BrowserWriterFixture.cases > 40) "the fixture is close to empty"
+
+                let mismatches =
+                    BrowserWriterFixture.cases
+                    |> List.choose (fun c ->
+                        let written =
+                            try
+                                Convert.serialize c.Value (createTypeInfo c.ValueType)
+                            with ex ->
+                                "THREW " + ex.Message
+
+                        if written = c.Browser then
+                            None
+                        else
+                            Some(sprintf "%s\n    pinned:  %s\n    written: %s" c.Name c.Browser written))
+
+                Expect.isTrue (List.isEmpty mismatches) (String.Join("\n", mismatches))
+
+            testCaseDeferred
+                "885 acceptance — the reflective proxy sends the pinned body for a decimal, TimeSpan and DateTime argument"
+                30
+                (fun () ->
+                    installXhrStub ()
+                    scriptResponse 200 "null"
+                    let before = callCount ()
+                    let outcome = start (bookingApi.Book BrowserWriterFixture.booking)
+
+                    fun () ->
+                        same (callCount ()) (before + 1) "one request"
+                        same (callBody before) BrowserWriterFixture.ReflectiveBody "the body the server decodes"
+
+                        match outcome () with
+                        | Returned() -> ()
+                        | Raised ex -> failwithf "the call raised: %s" ex.Message
+                        | Pending -> failwith "the call never completed")
+
+            testCase "885 acceptance — the transpiled JsonEncode writes the pinned generated-proxy body"
+            <| fun () ->
+                same
+                    (JsonEncode.arguments [ BrowserWriterFixture.bookingEncoder BrowserWriterFixture.booking ])
+                    BrowserWriterFixture.EncodedBody
+                    "the generated proxy's body in the browser"
+
+            testCase "885.C decimal — the client reads a quoted decimal exactly, as the server now does"
+            <| fun () ->
+                same
+                    (JsonText.tryParse "\"1234.5\"" |> Result.bind JsonDecode.asDecimal)
+                    (Ok 1234.5M)
+                    "the browser's quoted form"
+
+                same
+                    (JsonText.tryParse "\"79228162514264337593543950335\""
+                     |> Result.bind JsonDecode.asDecimal)
+                    (Ok 79228162514264337593543950335M)
+                    "every digit"
+
+                Expect.isTrue
+                    (JsonText.tryParse "\"abc\""
+                     |> Result.bind JsonDecode.asDecimal
+                     |> Result.isError)
+                    "a string that is not a number is refused"
+
+            testCase
+                "885.C DateTime — the client keeps the text's kind: `Z` is UTC, an offset is Local, none is Unspecified"
+            <| fun () ->
+                match
+                    JsonText.tryParse "\"2026-09-27T10:30:00.0000000Z\""
+                    |> Result.bind JsonDecode.asDateTime
+                with
+                | Ok d ->
+                    same d.Kind DateTimeKind.Utc "the server writer's `Z` text is UTC"
+                    same d.Hour 10 "so its fields are the UTC fields"
+                    same d (DateTime(2026, 9, 27, 10, 30, 0, DateTimeKind.Utc)) "the instant"
+                | Error e -> failwithf "refused: %s" (DecodeError.render e)
+
+                match
+                    JsonText.tryParse "\"2026-09-27T10:30:00.123Z\""
+                    |> Result.bind JsonDecode.asDateTime
+                with
+                | Ok d ->
+                    same d.Kind DateTimeKind.Utc "the browser's toISOString text is UTC too"
+                    same d.Millisecond 123 "to the millisecond"
+                | Error e -> failwithf "refused: %s" (DecodeError.render e)
+
+                match
+                    JsonText.tryParse "\"2026-09-27T10:30:00.123+02:00\""
+                    |> Result.bind JsonDecode.asDateTime
+                with
+                | Ok d ->
+                    same d.Kind DateTimeKind.Local "an explicit offset is Local, as RoundtripKind reads it"
+                    same (d.ToUniversalTime().Hour) 8 "the same instant"
+                | Error e -> failwithf "refused: %s" (DecodeError.render e)
+
+                match
+                    JsonText.tryParse "\"2026-01-15T08:05:09.007\""
+                    |> Result.bind JsonDecode.asDateTime
+                with
+                | Ok d ->
+                    same d.Kind DateTimeKind.Unspecified "no offset is Unspecified"
+                    same d.Hour 8 "its clock fields as written"
+                | Error e -> failwithf "refused: %s" (DecodeError.render e)
+
+            testCase "885.C TimeSpan — one representation: every writer's spelling reads to the same host value"
+            <| fun () ->
+                let read text =
+                    JsonText.tryParse text |> Result.bind JsonDecode.asTimeSpan
+
+                for text in [ "90000"; "90000.0"; "9e4" ] do
+                    same (read text) (Ok(TimeSpan.FromSeconds 90.0)) text
         ]
     ]

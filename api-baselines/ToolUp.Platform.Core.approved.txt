@@ -13967,6 +13967,8 @@ ToolUp.Remoting.DecoderVerification.Divergence : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Remoting.DecoderVerification.Draws : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.Seed : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.WireType : System.String { get }
+ToolUp.Remoting.Json.BrowserJsonWriter (class)
+ToolUp.Remoting.Json.BrowserJsonWriter.serialize(System.Type, System.Object) : System.String
 ToolUp.Remoting.Json.JsonDeclaredDifference (class)
 ToolUp.Remoting.Json.JsonDeclaredDifference..ctor(System.Int32, ToolUp.Remoting.Json.JsonOracleLoss, System.String, System.String)
 ToolUp.Remoting.Json.JsonDeclaredDifference.Candidate : System.String { get }
@@ -14039,6 +14041,8 @@ ToolUp.Remoting.Json.JsonDecoderVerification..ctor(ToolUp.Remoting.DecoderVerifi
 ToolUp.Remoting.Json.JsonDecoderVerification.DeclaredDifferences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonDeclaredDifference] { get }
 ToolUp.Remoting.Json.JsonDecoderVerification.Verification : ToolUp.Remoting.DecoderVerification { get }
 ToolUp.Remoting.Json.JsonDecoders (class)
+ToolUp.Remoting.Json.JsonDecoders.BrowserLossPrefix : System.String (literal)
+ToolUp.Remoting.Json.JsonDecoders.browserOracle(ToolUp.Remoting.Json.JsonDecoderOracle) : ToolUp.Remoting.Json.JsonDecoderOracle
 ToolUp.Remoting.Json.JsonDecoders.count() : System.Int32
 ToolUp.Remoting.Json.JsonDecoders.describeRefusal(ToolUp.Remoting.DecoderRefusal) : System.String
 ToolUp.Remoting.Json.JsonDecoders.isRegistered(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Type) : System.Boolean
@@ -14050,6 +14054,8 @@ ToolUp.Remoting.Json.JsonDecoders.register`1(Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Remoting.Json.JsonDecoders.registered() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
 ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
 ToolUp.Remoting.Json.JsonDecoders.tryGet(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Json.JsonDecoders.verifyBothByTypeWith(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.verifyBothWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonDecoders.verifyByTypeWith(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonDecoders.verifyWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonEncode (class)

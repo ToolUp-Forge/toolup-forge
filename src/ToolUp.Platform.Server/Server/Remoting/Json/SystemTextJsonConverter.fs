@@ -1690,13 +1690,17 @@ module FableConverters =
 
     /// Phase 840 — `JsonDecoders.verifyWith` against the shipped converter
     /// set: draw `draws` values of `'T` from `seed` and refuse on the first
-    /// draw the candidate decodes differently from STJ.
+    /// draw the candidate decodes differently from STJ. Phase 885 — over
+    /// BOTH writers (`JsonDecoders.verifyBothWith`): each draw written by
+    /// the converter set AND by the browser's writer
+    /// (`JsonDecoders.browserOracle decoderOracle`), since the text a server
+    /// decodes from a browser is the latter's.
     let verifyDecoder<'T>
         (draws: int)
         (seed: int)
         (decoder: ToolUp.Remoting.Json.JsonDecoder<'T>)
         : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
-        ToolUp.Remoting.Json.JsonDecoders.verifyWith<'T> decoderOracle draws seed decoder
+        ToolUp.Remoting.Json.JsonDecoders.verifyBothWith<'T> decoderOracle draws seed decoder
 
     /// Phase 840 — register `decoder` UNSCOPED only if it agrees with the
     /// shipped converter set (`JsonDecoders.registerVerifiedWith`); a

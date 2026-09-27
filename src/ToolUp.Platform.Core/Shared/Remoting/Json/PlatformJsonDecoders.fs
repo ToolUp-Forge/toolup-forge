@@ -1194,102 +1194,104 @@ module PlatformJsonDecoders =
 #if !FABLE_COMPILER
     /// Phase 840's gate over every registration above: each decoder beside
     /// `oracle` (the shipped one is `FableConverters.decoderOracle`) over
-    /// `draws` draws of its own type from `seed`, keyed as `covered` is.
+    /// `draws` draws of its own type from `seed`, keyed as `covered` is —
+    /// every draw written by the server's writer AND the browser's
+    /// (Phase 885, `JsonDecoders.verifyBothWith`).
     let verifyAll
         (oracle: JsonDecoderOracle)
         (draws: int)
         (seed: int)
         : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list =
         [
-            (Some "IConversionApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IConversionApi", typeof<ColumnMappingTypes.Conversion>.FullName), JsonDecoders.verifyWith<ColumnMappingTypes.Conversion> oracle draws seed conversion
-            (Some "IConversionApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
-            (Some "IConversionApi", typeof<ColumnMappingTypes.ConversionRecord>.FullName), JsonDecoders.verifyWith<ColumnMappingTypes.ConversionRecord> oracle draws seed conversionRecord
-            (Some "IConversionApi", typeof<ColumnMappingTypes.DryRunValidationRequest>.FullName), JsonDecoders.verifyWith<ColumnMappingTypes.DryRunValidationRequest> oracle draws seed dryRunValidationRequest
-            (Some "FileManagementApi", typeof<DataManagementTypes.FileUploadRequest>.FullName), JsonDecoders.verifyWith<DataManagementTypes.FileUploadRequest> oracle draws seed fileUploadRequest
-            (Some "FileManagementApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "BudgetAccount", typeof<BudgetDenial>.FullName), JsonDecoders.verifyWith<BudgetDenial> oracle draws seed budgetDenial
-            (Some "BudgetAccount", typeof<BudgetWarning>.FullName), JsonDecoders.verifyWith<BudgetWarning> oracle draws seed budgetWarning
-            (Some "IDataSubjectRequestApi", typeof<DataSubjectRequestApi.ExportRequestInput>.FullName), JsonDecoders.verifyWith<DataSubjectRequestApi.ExportRequestInput> oracle draws seed exportRequestInput
-            (Some "IDataSubjectRequestApi", typeof<DataSubjectRequestApi.ErasureRequestInput>.FullName), JsonDecoders.verifyWith<DataSubjectRequestApi.ErasureRequestInput> oracle draws seed erasureRequestInput
-            (Some "IDataSubjectRequestApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IAuditViewApi", typeof<AuditTrailQuery>.FullName), JsonDecoders.verifyWith<AuditTrailQuery> oracle draws seed auditTrailQuery
-            (Some "ICompositionInspectorApi", typeof<InspectorPanel>.FullName), JsonDecoders.verifyWith<InspectorPanel> oracle draws seed inspectorPanel
-            (Some "IConfigApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IConfigApi", typeof<Tuple<string, Map<string, string>>>.FullName), JsonDecoders.verifyWith<Tuple<string, Map<string, string>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
-            (Some "IDataIngestionApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IDataIngestionApi", typeof<DataSourceConfig>.FullName), JsonDecoders.verifyWith<DataSourceConfig> oracle draws seed dataSourceConfig
-            (Some "IDataIngestionApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
-            (Some "IDataIngestionApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
-            (Some "IDataMigrationApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IExternalContactApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IExternalContactApi", typeof<CreateExternalContactRequest>.FullName), JsonDecoders.verifyWith<CreateExternalContactRequest> oracle draws seed createExternalContactRequest
-            (Some "IExternalContactApi", typeof<UpdateExternalContactRequest>.FullName), JsonDecoders.verifyWith<UpdateExternalContactRequest> oracle draws seed updateExternalContactRequest
-            (Some "IExternalContactApi", typeof<RecordOptInRequest>.FullName), JsonDecoders.verifyWith<RecordOptInRequest> oracle draws seed recordOptInRequest
-            (Some "IExternalContactApi", typeof<WithdrawOptInRequest>.FullName), JsonDecoders.verifyWith<WithdrawOptInRequest> oracle draws seed withdrawOptInRequest
-            (Some "IFeatureFlagApi", typeof<Tuple<string, FlagValue>>.FullName), JsonDecoders.verifyWith<Tuple<string, FlagValue>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString flagValue)
-            (Some "IFeatureFlagApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IHomeOverviewApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IHomeOverviewApi", typeof<PinRequest>.FullName), JsonDecoders.verifyWith<PinRequest> oracle draws seed pinRequest
-            (Some "IModuleQueryBusApi", typeof<ModuleQueryRequest>.FullName), JsonDecoders.verifyWith<ModuleQueryRequest> oracle draws seed moduleQueryRequest
-            (Some "IModuleVisibilityApi", typeof<ModuleVisibilityProfileInput>.FullName), JsonDecoders.verifyWith<ModuleVisibilityProfileInput> oracle draws seed moduleVisibilityProfileInput
-            (Some "INotificationPreferenceApi", typeof<UserNotificationPreferences>.FullName), JsonDecoders.verifyWith<UserNotificationPreferences> oracle draws seed userNotificationPreferences
-            (Some "IPlatformTenantApi", typeof<Tuple<string, string, ProvisioningRequest>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, ProvisioningRequest>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString provisioningRequest)
-            (Some "IPlatformTenantApi", typeof<Tuple<string, string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, string>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString JsonDecode.asString)
-            (Some "IPlatformTenantApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IPlatformTenantApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
-            (Some "IPlatformTenantApi", typeof<Tuple<string, string, string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, string, string>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asString JsonDecode.asString)
-            (Some "IPlatformTenantApi", typeof<Tuple<string, string, int, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, int, string>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asInt32 JsonDecode.asString)
-            (Some "IPresenceApi", typeof<PresenceLocation>.FullName), JsonDecoders.verifyWith<PresenceLocation> oracle draws seed presenceLocation
-            (Some "IPresenceApi", typeof<EntityLockRef>.FullName), JsonDecoders.verifyWith<EntityLockRef> oracle draws seed entityLockRef
-            (Some "IProvenanceQueryApi", typeof<WireProvenanceRef>.FullName), JsonDecoders.verifyWith<WireProvenanceRef> oracle draws seed wireProvenanceRef
-            (Some "IProvenanceQueryApi", typeof<WireProvenanceChainRequest>.FullName), JsonDecoders.verifyWith<WireProvenanceChainRequest> oracle draws seed wireProvenanceChainRequest
-            (Some "IProviderProfileApi", typeof<ProviderEntryInput>.FullName), JsonDecoders.verifyWith<ProviderEntryInput> oracle draws seed providerEntryInput
-            (Some "IProviderProfileApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IProviderProfileApi", typeof<RoutingRule>.FullName), JsonDecoders.verifyWith<RoutingRule> oracle draws seed routingRule
-            (Some "IProviderProfileApi", typeof<Tuple<string, string option>>.FullName), JsonDecoders.verifyWith<Tuple<string, string option>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.option JsonDecode.asString))
-            (Some "IProviderProfileApi", typeof<string list>.FullName), JsonDecoders.verifyWith<string list> oracle draws seed (JsonDecode.list JsonDecode.asString)
-            (Some "IProviderProfileApi", typeof<Tuple<string, ProviderVerificationOutcome>>.FullName), JsonDecoders.verifyWith<Tuple<string, ProviderVerificationOutcome>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString providerVerificationOutcome)
-            (Some "IServiceAccountApi", typeof<CreateServiceAccountRequest>.FullName), JsonDecoders.verifyWith<CreateServiceAccountRequest> oracle draws seed createServiceAccountRequest
-            (Some "IServiceAccountApi", typeof<Tuple<string, ServiceAccountStatus>>.FullName), JsonDecoders.verifyWith<Tuple<string, ServiceAccountStatus>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString serviceAccountStatus)
-            (Some "IServiceAccountApi", typeof<Tuple<string, Map<string, ModulePermission list>>>.FullName), JsonDecoders.verifyWith<Tuple<string, Map<string, ModulePermission list>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
-            (Some "IServiceAccountApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IServiceAccountApi", typeof<MintServiceAccountTokenRequest>.FullName), JsonDecoders.verifyWith<MintServiceAccountTokenRequest> oracle draws seed mintServiceAccountTokenRequest
-            (Some "ISessionApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "ITeamInviteApi", typeof<TeamInviteIssueRequest>.FullName), JsonDecoders.verifyWith<TeamInviteIssueRequest> oracle draws seed teamInviteIssueRequest
-            (Some "ITeamInviteApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "ITeamInviteApi", typeof<PendingInviteIssueRequest>.FullName), JsonDecoders.verifyWith<PendingInviteIssueRequest> oracle draws seed pendingInviteIssueRequest
-            (Some "IUserDirectoryApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
-            (Some "IUserDirectoryApi", typeof<string list>.FullName), JsonDecoders.verifyWith<string list> oracle draws seed (JsonDecode.list JsonDecode.asString)
-            (Some "IUserSchemaApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "IUserSchemaApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
-            (Some "IUserSchemaApi", typeof<UserAuthoredSchema>.FullName), JsonDecoders.verifyWith<UserAuthoredSchema> oracle draws seed userAuthoredSchema
-            (Some "IUserSchemaApi", typeof<Tuple<string, SchemaMigration list>>.FullName), JsonDecoders.verifyWith<Tuple<string, SchemaMigration list>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.list schemaMigration))
-            (Some "IWebhookApi", typeof<CreateWebhookRequest>.FullName), JsonDecoders.verifyWith<CreateWebhookRequest> oracle draws seed createWebhookRequest
-            (Some "IWebhookApi", typeof<Guid>.FullName), JsonDecoders.verifyWith<Guid> oracle draws seed JsonDecode.asGuid
-            (Some "IWebhookApi", typeof<Tuple<Guid, WebhookStatus>>.FullName), JsonDecoders.verifyWith<Tuple<Guid, WebhookStatus>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asGuid webhookStatus)
-            (Some "JobApi", typeof<Guid>.FullName), JsonDecoders.verifyWith<Guid> oracle draws seed JsonDecode.asGuid
-            (Some "JobApi", typeof<Tuple<Guid, int>>.FullName), JsonDecoders.verifyWith<Tuple<Guid, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asGuid JsonDecode.asInt32)
-            (Some "JobApi", typeof<JobRegistration>.FullName), JsonDecoders.verifyWith<JobRegistration> oracle draws seed jobRegistration
-            (Some "ModelExecutionApi", typeof<ModelExecutionFitSubmission>.FullName), JsonDecoders.verifyWith<ModelExecutionFitSubmission> oracle draws seed modelExecutionFitSubmission
-            (Some "ModelExecutionApi", typeof<ModelExecutionBatchSubmission>.FullName), JsonDecoders.verifyWith<ModelExecutionBatchSubmission> oracle draws seed modelExecutionBatchSubmission
-            (Some "ModelExecutionApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "ModelExecutionApi", typeof<Tuple<ModelExecutionOutcomeQuery, string option, int>>.FullName), JsonDecoders.verifyWith<Tuple<ModelExecutionOutcomeQuery, string option, int>> oracle draws seed (JsonDecode.tuple3 modelExecutionOutcomeQuery (JsonDecode.option JsonDecode.asString) JsonDecode.asInt32)
-            (Some "ModelExecutionApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
-            (Some "ModelExecutionApi", typeof<ModelExecutionScoreRequest>.FullName), JsonDecoders.verifyWith<ModelExecutionScoreRequest> oracle draws seed modelExecutionScoreRequest
-            (Some "PermissionApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "PermissionApi", typeof<Tuple<string, string, string, ModulePermission list>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, string, ModulePermission list>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asString (JsonDecode.list modulePermission))
-            (Some "PermissionApi", typeof<Tuple<string, Map<string, ModulePermission list>>>.FullName), JsonDecoders.verifyWith<Tuple<string, Map<string, ModulePermission list>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
-            (Some "PermissionApi", typeof<Tuple<string, string, ModuleExposure>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, ModuleExposure>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString moduleExposure)
-            (Some "PlatformAdminApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "PlatformAdminApi", typeof<PlatformKnowledgeBaseMode>.FullName), JsonDecoders.verifyWith<PlatformKnowledgeBaseMode> oracle draws seed platformKnowledgeBaseMode
-            (Some "TeamApi", typeof<string>.FullName), JsonDecoders.verifyWith<string> oracle draws seed JsonDecode.asString
-            (Some "TeamApi", typeof<CreateTeamRequest>.FullName), JsonDecoders.verifyWith<CreateTeamRequest> oracle draws seed createTeamRequest
-            (Some "TeamApi", typeof<Tuple<string, string, TeamRole>>.FullName), JsonDecoders.verifyWith<Tuple<string, string, TeamRole>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)
-            (Some "TeamApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
-            (Some "IUsageQueryApi", typeof<Tuple<string option, UsageDateRange option>>.FullName), JsonDecoders.verifyWith<Tuple<string option, UsageDateRange option>> oracle draws seed (JsonDecode.tuple2 (JsonDecode.option JsonDecode.asString) (JsonDecode.option usageDateRange))
-            (Some "IUsageQueryApi", typeof<UsageGrouping>.FullName), JsonDecoders.verifyWith<UsageGrouping> oracle draws seed usageGrouping
-            (Some "IUsageQueryApi", typeof<UsageDateRange option>.FullName), JsonDecoders.verifyWith<UsageDateRange option> oracle draws seed (JsonDecode.option usageDateRange)
+            (Some "IConversionApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IConversionApi", typeof<ColumnMappingTypes.Conversion>.FullName), JsonDecoders.verifyBothWith<ColumnMappingTypes.Conversion> oracle draws seed conversion
+            (Some "IConversionApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+            (Some "IConversionApi", typeof<ColumnMappingTypes.ConversionRecord>.FullName), JsonDecoders.verifyBothWith<ColumnMappingTypes.ConversionRecord> oracle draws seed conversionRecord
+            (Some "IConversionApi", typeof<ColumnMappingTypes.DryRunValidationRequest>.FullName), JsonDecoders.verifyBothWith<ColumnMappingTypes.DryRunValidationRequest> oracle draws seed dryRunValidationRequest
+            (Some "FileManagementApi", typeof<DataManagementTypes.FileUploadRequest>.FullName), JsonDecoders.verifyBothWith<DataManagementTypes.FileUploadRequest> oracle draws seed fileUploadRequest
+            (Some "FileManagementApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "BudgetAccount", typeof<BudgetDenial>.FullName), JsonDecoders.verifyBothWith<BudgetDenial> oracle draws seed budgetDenial
+            (Some "BudgetAccount", typeof<BudgetWarning>.FullName), JsonDecoders.verifyBothWith<BudgetWarning> oracle draws seed budgetWarning
+            (Some "IDataSubjectRequestApi", typeof<DataSubjectRequestApi.ExportRequestInput>.FullName), JsonDecoders.verifyBothWith<DataSubjectRequestApi.ExportRequestInput> oracle draws seed exportRequestInput
+            (Some "IDataSubjectRequestApi", typeof<DataSubjectRequestApi.ErasureRequestInput>.FullName), JsonDecoders.verifyBothWith<DataSubjectRequestApi.ErasureRequestInput> oracle draws seed erasureRequestInput
+            (Some "IDataSubjectRequestApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IAuditViewApi", typeof<AuditTrailQuery>.FullName), JsonDecoders.verifyBothWith<AuditTrailQuery> oracle draws seed auditTrailQuery
+            (Some "ICompositionInspectorApi", typeof<InspectorPanel>.FullName), JsonDecoders.verifyBothWith<InspectorPanel> oracle draws seed inspectorPanel
+            (Some "IConfigApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IConfigApi", typeof<Tuple<string, Map<string, string>>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, Map<string, string>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
+            (Some "IDataIngestionApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IDataIngestionApi", typeof<DataSourceConfig>.FullName), JsonDecoders.verifyBothWith<DataSourceConfig> oracle draws seed dataSourceConfig
+            (Some "IDataIngestionApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+            (Some "IDataIngestionApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
+            (Some "IDataMigrationApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IExternalContactApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IExternalContactApi", typeof<CreateExternalContactRequest>.FullName), JsonDecoders.verifyBothWith<CreateExternalContactRequest> oracle draws seed createExternalContactRequest
+            (Some "IExternalContactApi", typeof<UpdateExternalContactRequest>.FullName), JsonDecoders.verifyBothWith<UpdateExternalContactRequest> oracle draws seed updateExternalContactRequest
+            (Some "IExternalContactApi", typeof<RecordOptInRequest>.FullName), JsonDecoders.verifyBothWith<RecordOptInRequest> oracle draws seed recordOptInRequest
+            (Some "IExternalContactApi", typeof<WithdrawOptInRequest>.FullName), JsonDecoders.verifyBothWith<WithdrawOptInRequest> oracle draws seed withdrawOptInRequest
+            (Some "IFeatureFlagApi", typeof<Tuple<string, FlagValue>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, FlagValue>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString flagValue)
+            (Some "IFeatureFlagApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IHomeOverviewApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IHomeOverviewApi", typeof<PinRequest>.FullName), JsonDecoders.verifyBothWith<PinRequest> oracle draws seed pinRequest
+            (Some "IModuleQueryBusApi", typeof<ModuleQueryRequest>.FullName), JsonDecoders.verifyBothWith<ModuleQueryRequest> oracle draws seed moduleQueryRequest
+            (Some "IModuleVisibilityApi", typeof<ModuleVisibilityProfileInput>.FullName), JsonDecoders.verifyBothWith<ModuleVisibilityProfileInput> oracle draws seed moduleVisibilityProfileInput
+            (Some "INotificationPreferenceApi", typeof<UserNotificationPreferences>.FullName), JsonDecoders.verifyBothWith<UserNotificationPreferences> oracle draws seed userNotificationPreferences
+            (Some "IPlatformTenantApi", typeof<Tuple<string, string, ProvisioningRequest>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, ProvisioningRequest>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString provisioningRequest)
+            (Some "IPlatformTenantApi", typeof<Tuple<string, string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, string>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString JsonDecode.asString)
+            (Some "IPlatformTenantApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IPlatformTenantApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+            (Some "IPlatformTenantApi", typeof<Tuple<string, string, string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, string, string>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asString JsonDecode.asString)
+            (Some "IPlatformTenantApi", typeof<Tuple<string, string, int, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, int, string>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asInt32 JsonDecode.asString)
+            (Some "IPresenceApi", typeof<PresenceLocation>.FullName), JsonDecoders.verifyBothWith<PresenceLocation> oracle draws seed presenceLocation
+            (Some "IPresenceApi", typeof<EntityLockRef>.FullName), JsonDecoders.verifyBothWith<EntityLockRef> oracle draws seed entityLockRef
+            (Some "IProvenanceQueryApi", typeof<WireProvenanceRef>.FullName), JsonDecoders.verifyBothWith<WireProvenanceRef> oracle draws seed wireProvenanceRef
+            (Some "IProvenanceQueryApi", typeof<WireProvenanceChainRequest>.FullName), JsonDecoders.verifyBothWith<WireProvenanceChainRequest> oracle draws seed wireProvenanceChainRequest
+            (Some "IProviderProfileApi", typeof<ProviderEntryInput>.FullName), JsonDecoders.verifyBothWith<ProviderEntryInput> oracle draws seed providerEntryInput
+            (Some "IProviderProfileApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IProviderProfileApi", typeof<RoutingRule>.FullName), JsonDecoders.verifyBothWith<RoutingRule> oracle draws seed routingRule
+            (Some "IProviderProfileApi", typeof<Tuple<string, string option>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string option>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.option JsonDecode.asString))
+            (Some "IProviderProfileApi", typeof<string list>.FullName), JsonDecoders.verifyBothWith<string list> oracle draws seed (JsonDecode.list JsonDecode.asString)
+            (Some "IProviderProfileApi", typeof<Tuple<string, ProviderVerificationOutcome>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, ProviderVerificationOutcome>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString providerVerificationOutcome)
+            (Some "IServiceAccountApi", typeof<CreateServiceAccountRequest>.FullName), JsonDecoders.verifyBothWith<CreateServiceAccountRequest> oracle draws seed createServiceAccountRequest
+            (Some "IServiceAccountApi", typeof<Tuple<string, ServiceAccountStatus>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, ServiceAccountStatus>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString serviceAccountStatus)
+            (Some "IServiceAccountApi", typeof<Tuple<string, Map<string, ModulePermission list>>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, Map<string, ModulePermission list>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
+            (Some "IServiceAccountApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IServiceAccountApi", typeof<MintServiceAccountTokenRequest>.FullName), JsonDecoders.verifyBothWith<MintServiceAccountTokenRequest> oracle draws seed mintServiceAccountTokenRequest
+            (Some "ISessionApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "ITeamInviteApi", typeof<TeamInviteIssueRequest>.FullName), JsonDecoders.verifyBothWith<TeamInviteIssueRequest> oracle draws seed teamInviteIssueRequest
+            (Some "ITeamInviteApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "ITeamInviteApi", typeof<PendingInviteIssueRequest>.FullName), JsonDecoders.verifyBothWith<PendingInviteIssueRequest> oracle draws seed pendingInviteIssueRequest
+            (Some "IUserDirectoryApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
+            (Some "IUserDirectoryApi", typeof<string list>.FullName), JsonDecoders.verifyBothWith<string list> oracle draws seed (JsonDecode.list JsonDecode.asString)
+            (Some "IUserSchemaApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "IUserSchemaApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
+            (Some "IUserSchemaApi", typeof<UserAuthoredSchema>.FullName), JsonDecoders.verifyBothWith<UserAuthoredSchema> oracle draws seed userAuthoredSchema
+            (Some "IUserSchemaApi", typeof<Tuple<string, SchemaMigration list>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, SchemaMigration list>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.list schemaMigration))
+            (Some "IWebhookApi", typeof<CreateWebhookRequest>.FullName), JsonDecoders.verifyBothWith<CreateWebhookRequest> oracle draws seed createWebhookRequest
+            (Some "IWebhookApi", typeof<Guid>.FullName), JsonDecoders.verifyBothWith<Guid> oracle draws seed JsonDecode.asGuid
+            (Some "IWebhookApi", typeof<Tuple<Guid, WebhookStatus>>.FullName), JsonDecoders.verifyBothWith<Tuple<Guid, WebhookStatus>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asGuid webhookStatus)
+            (Some "JobApi", typeof<Guid>.FullName), JsonDecoders.verifyBothWith<Guid> oracle draws seed JsonDecode.asGuid
+            (Some "JobApi", typeof<Tuple<Guid, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<Guid, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asGuid JsonDecode.asInt32)
+            (Some "JobApi", typeof<JobRegistration>.FullName), JsonDecoders.verifyBothWith<JobRegistration> oracle draws seed jobRegistration
+            (Some "ModelExecutionApi", typeof<ModelExecutionFitSubmission>.FullName), JsonDecoders.verifyBothWith<ModelExecutionFitSubmission> oracle draws seed modelExecutionFitSubmission
+            (Some "ModelExecutionApi", typeof<ModelExecutionBatchSubmission>.FullName), JsonDecoders.verifyBothWith<ModelExecutionBatchSubmission> oracle draws seed modelExecutionBatchSubmission
+            (Some "ModelExecutionApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "ModelExecutionApi", typeof<Tuple<ModelExecutionOutcomeQuery, string option, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<ModelExecutionOutcomeQuery, string option, int>> oracle draws seed (JsonDecode.tuple3 modelExecutionOutcomeQuery (JsonDecode.option JsonDecode.asString) JsonDecode.asInt32)
+            (Some "ModelExecutionApi", typeof<Tuple<string, int>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, int>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asInt32)
+            (Some "ModelExecutionApi", typeof<ModelExecutionScoreRequest>.FullName), JsonDecoders.verifyBothWith<ModelExecutionScoreRequest> oracle draws seed modelExecutionScoreRequest
+            (Some "PermissionApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "PermissionApi", typeof<Tuple<string, string, string, ModulePermission list>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, string, ModulePermission list>> oracle draws seed (JsonDecode.tuple4 JsonDecode.asString JsonDecode.asString JsonDecode.asString (JsonDecode.list modulePermission))
+            (Some "PermissionApi", typeof<Tuple<string, Map<string, ModulePermission list>>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, Map<string, ModulePermission list>>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
+            (Some "PermissionApi", typeof<Tuple<string, string, ModuleExposure>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, ModuleExposure>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString moduleExposure)
+            (Some "PlatformAdminApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "PlatformAdminApi", typeof<PlatformKnowledgeBaseMode>.FullName), JsonDecoders.verifyBothWith<PlatformKnowledgeBaseMode> oracle draws seed platformKnowledgeBaseMode
+            (Some "TeamApi", typeof<string>.FullName), JsonDecoders.verifyBothWith<string> oracle draws seed JsonDecode.asString
+            (Some "TeamApi", typeof<CreateTeamRequest>.FullName), JsonDecoders.verifyBothWith<CreateTeamRequest> oracle draws seed createTeamRequest
+            (Some "TeamApi", typeof<Tuple<string, string, TeamRole>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string, TeamRole>> oracle draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)
+            (Some "TeamApi", typeof<Tuple<string, string>>.FullName), JsonDecoders.verifyBothWith<Tuple<string, string>> oracle draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+            (Some "IUsageQueryApi", typeof<Tuple<string option, UsageDateRange option>>.FullName), JsonDecoders.verifyBothWith<Tuple<string option, UsageDateRange option>> oracle draws seed (JsonDecode.tuple2 (JsonDecode.option JsonDecode.asString) (JsonDecode.option usageDateRange))
+            (Some "IUsageQueryApi", typeof<UsageGrouping>.FullName), JsonDecoders.verifyBothWith<UsageGrouping> oracle draws seed usageGrouping
+            (Some "IUsageQueryApi", typeof<UsageDateRange option>.FullName), JsonDecoders.verifyBothWith<UsageDateRange option> oracle draws seed (JsonDecode.option usageDateRange)
         ]
 
     /// `registerAll`, gated: registers every decoder above only when every

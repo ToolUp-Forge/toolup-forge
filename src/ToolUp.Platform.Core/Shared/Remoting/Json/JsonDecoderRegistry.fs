@@ -77,6 +77,369 @@ type JsonDecoderVerification = {
     /// The draws the oracle's declared losses account for, in draw order.
     DeclaredDifferences: JsonDeclaredDifference list
 }
+
+/// Phase 885 — the BROWSER's writer, as a .NET mirror.
+///
+/// The bytes a server decodes from a browser are not written by the
+/// server's System.Text.Json converter set. A reflective client proxy
+/// writes its arguments with `Fable.SimpleJson`'s `Convert.serialize`
+/// (3.24, as Fable 5 transpiles it), which differs from the converter
+/// set exactly where a registered decoder can be wrong without the 840
+/// gate seeing it: a `decimal` is a QUOTED string, an `int64` a quoted
+/// string with no `+`, a `TimeSpan` the host's millisecond double in
+/// JavaScript's number spelling (`90000`, not `90000.0`), a `DateTime`
+/// the browser's `toISOString` (millisecond precision), a `byte[]` an
+/// array of numbers, a record's members separated by `", "`.
+///
+/// The gate cannot run under Fable, so this is the writer ported: a
+/// byte-exact mirror of `Convert.serialize` over the shapes a decoder can
+/// be for, pinned against the TRANSPILED writer's own output by a fixture
+/// both test packs compile (`BrowserWriterFixture`, Phase 885.A) — the
+/// Fable pack holds `Convert.serialize` to each pinned text, the .NET pack
+/// holds this mirror to the same text, so the mirror cannot drift from the
+/// writer it stands in for without one of the two going red.
+///
+/// A value the browser cannot hold at the precision .NET does is written
+/// as the browser WOULD hold it: a `DateTime` truncated to the millisecond
+/// (a JavaScript `Date`), a `TimeOnly` likewise. `Local` and
+/// `Unspecified` `DateTime`s are written in THIS machine's time zone,
+/// which stands in for the browser's — the one part of the mirror no
+/// literal can pin, so the fixture pins `Utc` and `Unspecified` only.
+[<RequireQualifiedAccess>]
+module BrowserJsonWriter =
+
+    open System.Globalization
+    open System.Text
+    open Microsoft.FSharp.Reflection
+
+    let private invariant = CultureInfo.InvariantCulture
+
+    let private isGenericOf (definition: Type) (t: Type) =
+        t.IsGenericType && t.GetGenericTypeDefinition() = definition
+
+    /// `quote.js` — the escape set `Convert.serialize` applies to a
+    /// string: the quote, the backslash, the C0 and C1 controls, and the
+    /// invisible/format code units its regex names; the five with a short
+    /// form get it, every other one is `\u` + four LOWERCASE hex digits.
+    /// Code units, not code points: a surrogate pair passes through.
+    let private quote (text: string) : string =
+        let escapable (c: char) =
+            let n = int c
+
+            c = '\\'
+            || c = '"'
+            || n <= 0x1f
+            || (n >= 0x7f && n <= 0x9f)
+            || n = 0xad
+            || (n >= 0x600 && n <= 0x604)
+            || n = 0x70f
+            || n = 0x17b4
+            || n = 0x17b5
+            || (n >= 0x200c && n <= 0x200f)
+            || (n >= 0x2028 && n <= 0x202f)
+            || (n >= 0x2060 && n <= 0x206f)
+            || n = 0xfeff
+            || n >= 0xfff0
+
+        let sb = StringBuilder(text.Length + 2)
+        sb.Append '"' |> ignore
+
+        for c in text do
+            if escapable c then
+                match c with
+                | '\b' -> sb.Append "\\b" |> ignore
+                | '\t' -> sb.Append "\\t" |> ignore
+                | '\n' -> sb.Append "\\n" |> ignore
+                | '\012' -> sb.Append "\\f" |> ignore
+                | '\r' -> sb.Append "\\r" |> ignore
+                | '"' -> sb.Append "\\\"" |> ignore
+                | '\\' -> sb.Append "\\\\" |> ignore
+                | c -> sb.Append("\\u").Append((int c).ToString("x4", invariant)) |> ignore
+            else
+                sb.Append c |> ignore
+
+        sb.Append '"' |> ignore
+        sb.ToString()
+
+    let private betweenQuotes (text: string) = "\"" + text + "\""
+
+    /// JavaScript's `Number.prototype.toString()` (ECMA-262
+    /// Number::toString, radix 10): the shortest digits that round-trip
+    /// — the same digits .NET's `"R"` finds — laid out by JavaScript's
+    /// rules: plain notation from 1e-6 up to 1e21, exponent form (`1e+21`,
+    /// `1.5e-7`) outside it, no `.0` on an integral value, `-0` as `0`.
+    let private jsNumber (value: float) : string =
+        if Double.IsNaN value then
+            "NaN"
+        elif Double.IsPositiveInfinity value then
+            "Infinity"
+        elif Double.IsNegativeInfinity value then
+            "-Infinity"
+        elif value = 0.0 then
+            "0"
+        else
+            let sign = if value < 0.0 then "-" else ""
+            let r = (abs value).ToString("R", invariant)
+
+            let mantissa, exponent =
+                match r.IndexOfAny [| 'E'; 'e' |] with
+                | -1 -> r, 0
+                | i -> r.Substring(0, i), int (r.Substring(i + 1))
+
+            let whole, fraction =
+                match mantissa.IndexOf '.' with
+                | -1 -> mantissa, ""
+                | i -> mantissa.Substring(0, i), mantissa.Substring(i + 1)
+
+            // value = 0.d1d2…dk × 10^n, with d1 ≠ 0 and dk ≠ 0.
+            let allDigits = whole + fraction
+            let leading = allDigits.Length - allDigits.TrimStart('0').Length
+            let digits = allDigits.TrimStart('0').TrimEnd('0')
+            let n = whole.Length + exponent - leading
+            let k = digits.Length
+
+            let body =
+                if k <= n && n <= 21 then
+                    digits + String('0', n - k)
+                elif 0 < n && n <= 21 then
+                    digits.Substring(0, n) + "." + digits.Substring n
+                elif -6 < n && n <= 0 then
+                    "0." + String('0', -n) + digits
+                else
+                    let e = n - 1
+                    let expText = (if e < 0 then "-" else "+") + string (abs e)
+
+                    if k = 1 then
+                        digits + "e" + expText
+                    else
+                        digits.Substring(0, 1) + "." + digits.Substring 1 + "e" + expText
+
+            sign + body
+
+    /// A `decimal` as Fable's decimal prints it: its digits and its scale,
+    /// exactly as .NET's invariant `ToString` does (`1234.50`, `0.00`) —
+    /// measured on the transpiled writer (`BrowserWriterFixture`), not
+    /// assumed: Fable's decimal keeps the scale big.js alone would drop.
+    let private decimalText (value: decimal) : string = value.ToString(invariant)
+
+    let private pad (width: int) (n: int) =
+        n.ToString(String('0', width), invariant)
+
+    let private fields (d: DateTime) =
+        sprintf
+            "%s-%s-%sT%s:%s:%s.%s"
+            (pad 4 d.Year)
+            (pad 2 d.Month)
+            (pad 2 d.Day)
+            (pad 2 d.Hour)
+            (pad 2 d.Minute)
+            (pad 2 d.Second)
+            (pad 3 d.Millisecond)
+
+    let private offsetText (offset: TimeSpan) =
+        let ms = offset.TotalMilliseconds
+        let magnitude = abs ms
+        let hours = int (magnitude / 3600000.0)
+        let minutes = int ((magnitude % 3600000.0) / 60000.0)
+        (if ms < 0.0 then "-" else "+") + pad 2 hours + ":" + pad 2 minutes
+
+    let private toMillisecond (d: DateTime) =
+        DateTime(d.Ticks - d.Ticks % TimeSpan.TicksPerMillisecond, d.Kind)
+
+    /// `DateTime.ToString("O")` as Fable's `Date.js` prints it: a `Utc`
+    /// value through `toISOString` (`…T10:30:00.123Z`), a `Local` one as
+    /// its local fields plus the zone's offset, an `Unspecified` one as its
+    /// fields alone — each at the millisecond a JavaScript `Date` holds.
+    let private dateTimeText (value: DateTime) : string =
+        let d = toMillisecond value
+
+        match d.Kind with
+        | DateTimeKind.Utc -> fields d + "Z"
+        | DateTimeKind.Local -> fields d + offsetText (TimeZoneInfo.Local.GetUtcOffset d)
+        | _ -> fields d
+
+    /// `DateTimeOffset.ToString("O")` as Fable prints it: the clock time
+    /// at the offset, to the millisecond, then the offset.
+    let private dateTimeOffsetText (value: DateTimeOffset) : string =
+        fields (toMillisecond value.DateTime) + offsetText value.Offset
+
+    /// Fable.SimpleJson's `isPrimitive`: the key types whose `Map` is
+    /// written as an OBJECT (every other key type makes it an array of
+    /// `[key, value]` pairs).
+    let private isPrimitive (t: Type) =
+        t = typeof<unit>
+        || t = typeof<string>
+        || t = typeof<uint16>
+        || t = typeof<uint32>
+        || t = typeof<uint64>
+        || t = typeof<int>
+        || t = typeof<bool>
+        || t = typeof<float32>
+        || t = typeof<float>
+        || t = typeof<decimal>
+        || t = typeof<int16>
+        || t = typeof<int64>
+        || t = typeof<byte>
+        || t = typeof<DateTime>
+        || t = typeof<DateTimeOffset>
+        || t = typeof<DateOnly>
+        || t = typeof<TimeOnly>
+        || t = typeof<Numerics.BigInteger>
+        || t = typeof<Guid>
+        || isGenericOf typedefof<option<_>> t
+
+    let private flags =
+        Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic
+
+    /// A union whose cases all carry no fields (`enumUnion`).
+    let private isEnumUnion (t: Type) =
+        FSharpType.IsUnion(t, flags)
+        && not (isGenericOf typedefof<option<_>> t)
+        && not (isGenericOf typedefof<list<_>> t)
+        && FSharpType.GetUnionCases(t, flags)
+           |> Array.forall (fun case -> Array.isEmpty (case.GetFields()))
+
+    let private items (value: obj) : obj list = [ for item in (value :?> Collections.IEnumerable) -> item ]
+
+    /// `Convert.serialize value typeInfo` for the `TypeInfo` Fable builds
+    /// from `target`. Throws on a shape it does not mirror (the gate
+    /// turns a throw into `DecoderUndrawable`, never a pass).
+    let rec serialize (target: Type) (value: obj) : string =
+        let t = target
+
+        if t = typeof<string> then
+            if isNull value then "null" else quote (unbox<string> value)
+        elif t = typeof<unit> then
+            "null"
+        elif t = typeof<float> || t = typeof<float32> then
+            let v =
+                if t = typeof<float> then
+                    unbox<float> value
+                else
+                    float (unbox<float32> value)
+
+            if Double.IsNaN v then quote "NaN" else jsNumber v
+        elif t = typeof<char> then
+            quote (string (unbox<char> value))
+        elif t = typeof<byte> then
+            string (unbox<byte> value)
+        elif t = typeof<sbyte> then
+            string (unbox<sbyte> value)
+        elif t = typeof<uint16> then
+            string (unbox<uint16> value)
+        elif t = typeof<uint32> then
+            string (unbox<uint32> value)
+        elif t = typeof<int16> then
+            string (unbox<int16> value)
+        elif t = typeof<int> then
+            string (unbox<int> value)
+        elif t.IsEnum then
+            Convert.ToInt64(value, invariant).ToString(invariant)
+        elif t = typeof<TimeSpan> then
+            // Fable's TimeSpan IS a millisecond double.
+            jsNumber (float (unbox<TimeSpan> value).Ticks / 10000.0)
+        elif t = typeof<int64> then
+            betweenQuotes ((unbox<int64> value).ToString(invariant))
+        elif t = typeof<uint64> then
+            betweenQuotes ((unbox<uint64> value).ToString(invariant))
+        elif t = typeof<Numerics.BigInteger> then
+            betweenQuotes ((unbox<Numerics.BigInteger> value).ToString(invariant))
+        elif t = typeof<decimal> then
+            betweenQuotes (decimalText (unbox<decimal> value))
+        elif t = typeof<bool> then
+            if unbox<bool> value then "true" else "false"
+        elif t = typeof<Guid> then
+            betweenQuotes ((unbox<Guid> value).ToString())
+        elif t = typeof<Uri> then
+            betweenQuotes ((unbox<Uri> value).ToString())
+        elif t = typeof<DateTime> then
+            betweenQuotes (dateTimeText (unbox<DateTime> value))
+        elif t = typeof<DateTimeOffset> then
+            betweenQuotes (dateTimeOffsetText (unbox<DateTimeOffset> value))
+        elif t = typeof<DateOnly> then
+            string (unbox<DateOnly> value).DayNumber
+        elif t = typeof<TimeOnly> then
+            let ticks = (unbox<TimeOnly> value).Ticks
+            betweenQuotes (string (ticks - ticks % TimeSpan.TicksPerMillisecond))
+        elif isGenericOf typedefof<option<_>> t then
+            if isNull value then
+                "null"
+            else
+                let _, fields = FSharpValue.GetUnionFields(value, t, flags)
+                serialize (t.GetGenericArguments().[0]) fields.[0]
+        elif t.IsArray then
+            let element = t.GetElementType()
+            "[" + (items value |> List.map (serialize element) |> String.concat ", ") + "]"
+        elif
+            isGenericOf typedefof<list<_>> t
+            || isGenericOf typedefof<Set<_>> t
+            || isGenericOf typedefof<ResizeArray<_>> t
+            || isGenericOf typedefof<Collections.Generic.HashSet<_>> t
+            || isGenericOf typedefof<seq<_>> t
+        then
+            let element = t.GetGenericArguments().[0]
+            "[" + (items value |> List.map (serialize element) |> String.concat ", ") + "]"
+        elif isGenericOf typedefof<Map<_, _>> t then
+            let args = t.GetGenericArguments()
+            let keyType, valueType = args.[0], args.[1]
+            let asObject = isPrimitive keyType || isEnumUnion keyType
+
+            let pairType =
+                typedefof<Collections.Generic.KeyValuePair<_, _>>.MakeGenericType args
+
+            let keyProp = pairType.GetProperty "Key"
+            let valueProp = pairType.GetProperty "Value"
+
+            let entries =
+                items value
+                |> List.map (fun pair ->
+                    let key = serialize keyType (keyProp.GetValue pair)
+                    let entry = serialize valueType (valueProp.GetValue pair)
+
+                    if asObject then
+                        let key =
+                            if key.StartsWith "\"" && key.EndsWith "\"" then
+                                key
+                            else
+                                quote key
+
+                        key + ": " + entry
+                    else
+                        "[" + key + ", " + entry + "]")
+                |> String.concat ", "
+
+            if asObject then
+                "{" + entries + "}"
+            else
+                "[" + entries + "]"
+        elif FSharpType.IsTuple t then
+            let elements = FSharpType.GetTupleElements t
+            let values = FSharpValue.GetTupleFields value
+
+            "[" + (Array.map2 serialize elements values |> String.concat ", ") + "]"
+        elif FSharpType.IsRecord(t, flags) then
+            let members =
+                FSharpType.GetRecordFields(t, flags)
+                |> Array.map (fun field ->
+                    sprintf "\"%s\": %s" field.Name (serialize field.PropertyType (field.GetValue value)))
+
+            "{" + String.concat ", " members + "}"
+        elif FSharpType.IsUnion(t, flags) then
+            let case, values = FSharpValue.GetUnionFields(value, t, flags)
+            let caseTypes = case.GetFields() |> Array.map _.PropertyType
+
+            if isEnumUnion t || Array.isEmpty caseTypes then
+                betweenQuotes case.Name
+            elif caseTypes.Length = 1 then
+                "{" + betweenQuotes case.Name + ": " + serialize caseTypes.[0] values.[0] + "}"
+            else
+                "{"
+                + betweenQuotes case.Name
+                + ": ["
+                + (Array.map2 serialize caseTypes values |> String.concat ", ")
+                + "] }"
+        else
+            failwithf "the browser writer mirror does not model %s" t.FullName
 #endif
 
 /// Phase 799 — the JSON twin of `RemotingDecoders`: the process-wide
@@ -342,6 +705,75 @@ module JsonDecoders =
         : Result<JsonDecoderVerification, DecoderRefusal> =
         verifyByTypeWith oracle draws seed typeof<'T> (fun value -> decoder value |> Result.map box)
 
+    // ─── Phase 885 — the browser's writer as a second reference ──────
+    //
+    // 840's oracle writes every draw with the SERVER's writer, but the
+    // text a server decodes from a browser is the browser's. So the gate
+    // runs twice: once over the oracle as given, once over its browser
+    // twin — the same reader and the same reference decode, the draw
+    // written by `BrowserJsonWriter` instead. A candidate that disagrees
+    // with the reference on EITHER writer's text is refused; a difference
+    // either run attributes to a declared loss is said, exactly as 840
+    // says it, and the browser run's losses name their writer.
+
+    /// The prefix a declared loss carries on the browser twin, so a
+    /// `JsonDeclaredDifference` says which writer's text it was drawn on.
+    [<Literal>]
+    let BrowserLossPrefix = "on the browser's writer (Fable.SimpleJson): "
+
+    /// Phase 885 — `server`'s browser twin: the draw written as a
+    /// reflective Fable client writes it (`BrowserJsonWriter.serialize`),
+    /// then read and referenced exactly as `server` reads and references
+    /// it. `server`'s declared losses are properties of its reference
+    /// decode, so the twin declares the same ones, each relabelled with
+    /// `BrowserLossPrefix`.
+    let browserOracle (server: JsonDecoderOracle) : JsonDecoderOracle = {
+        Write = BrowserJsonWriter.serialize
+        Read = server.Read
+        Decode = server.Decode
+        Losses =
+            server.Losses
+            |> List.map (fun loss -> {
+                loss with
+                    Reason = BrowserLossPrefix + loss.Reason
+            })
+    }
+
+    /// Phase 885 — `verifyByTypeWith` over BOTH writers: `oracle` as
+    /// given, then `browserOracle oracle`. The first refusal wins (the
+    /// server writer's run is taken first, so a decoder wrong on both is
+    /// refused exactly where 840 refused it); on agreement the record is
+    /// the server run's, with the browser run's declared differences
+    /// appended after its own (each naming its writer through its loss's
+    /// `Reason`).
+    let verifyBothByTypeWith
+        (oracle: JsonDecoderOracle)
+        (draws: int)
+        (seed: int)
+        (target: Type)
+        (decoder: RegisteredJsonDecoder)
+        : Result<JsonDecoderVerification, DecoderRefusal> =
+        match verifyByTypeWith oracle draws seed target decoder with
+        | Error refusal -> Error refusal
+        | Ok server ->
+            match verifyByTypeWith (browserOracle oracle) draws seed target decoder with
+            | Error refusal -> Error refusal
+            | Ok browser ->
+                Ok {
+                    server with
+                        DeclaredDifferences = server.DeclaredDifferences @ browser.DeclaredDifferences
+                }
+
+    /// Phase 885 — `verifyBothByTypeWith` for `'T`: what the registration
+    /// gate and the generated `verifyAll` run.
+    let verifyBothWith<'T>
+        (oracle: JsonDecoderOracle)
+        (draws: int)
+        (seed: int)
+        (decoder: JsonDecoder<'T>)
+        : Result<JsonDecoderVerification, DecoderRefusal> =
+        verifyBothByTypeWith oracle draws seed typeof<'T> (fun value -> decoder value |> Result.map box)
+
     /// Phase 840 — a refusal rendered for a boot log or a test failure,
     /// naming the ORACLE this wire compares against (the shared
     /// `DecoderRefusal.describe` names the MessagePack wire's reflection
@@ -371,24 +803,27 @@ module JsonDecoders =
     /// converter-set path it had. Plain `register` stays unverified, as it
     /// does on the MessagePack wire: the Fable client has no oracle and
     /// registers what a build gate verified.
+    ///
+    /// Phase 885 — agreement is over BOTH writers (`verifyBothWith`): the
+    /// server's, and the browser's that `oracle`'s twin writes with.
     let registerVerifiedWith<'T>
         (oracle: JsonDecoderOracle)
         (decoder: JsonDecoder<'T>)
         : Result<JsonDecoderVerification, DecoderRefusal> =
-        verifyWith<'T> oracle RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed decoder
+        verifyBothWith<'T> oracle RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed decoder
         |> Result.map (fun verification ->
             registerByKey None (RemotingDecoders.keyFor typeof<'T>) (fun value -> decoder value |> Result.map box)
             verification)
 
     /// Phase 840 — the record-scoped form of `registerVerifiedWith`: the
     /// verified twin of `registerFor`, registering for `recordName`'s
-    /// arguments only, and only on agreement.
+    /// arguments only, and only on agreement (over both writers, Phase 885).
     let registerVerifiedForWith<'T>
         (oracle: JsonDecoderOracle)
         (recordName: string)
         (decoder: JsonDecoder<'T>)
         : Result<JsonDecoderVerification, DecoderRefusal> =
-        verifyWith<'T> oracle RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed decoder
+        verifyBothWith<'T> oracle RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed decoder
         |> Result.map (fun verification ->
             registerByKey (Some recordName) (RemotingDecoders.keyFor typeof<'T>) (fun value ->
                 decoder value |> Result.map box)

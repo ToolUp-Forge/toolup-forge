@@ -470,7 +470,8 @@ The §3 surface, transposed to what this wire is:
   `None` is `null`, and an older client's omission reads the same way.
 * **Width is read from the text.** The integer arms require an integral token (`1`, not `1.0` or
   `1e0` — the writer never emits an integer that way) and a range fit; `asDecimal` reads the
-  digits as written; `asInt64` / `asUInt64` also accept the STRING form the writer emits
+  digits as written — as a number token, or (Phase 885) as the same token QUOTED, which is how the
+  browser writes one; `asInt64` / `asUInt64` also accept the STRING form the writer emits
   (`"+42"`, signed so a JavaScript reader cannot take it for a float).
 * **`asTimeSpan` is exact.** The writer emits total milliseconds as a double; the STJ reader
   multiplies back and TRUNCATES, which is the tick Phase 784 saw lost. The combinator parses the
@@ -550,6 +551,67 @@ its own API records under `Verified` must register JSON decoders for them too �
 where the facet stays advisory and the boot line reports the ratio. The generator that emits them is not yet exposed to a consumer's own build (Phase 804 packages
 that); until then, `JsonDecoders.register<'T>` (hand-written, the same shape `PlatformJsonDecoders`
 uses) is the direct route.
+
+### The gate verifies against the browser's writer (Phase 885)
+
+Phase 840's gate draws values, writes each with the SERVER's writer and compares the candidate
+decoder with the converter set on that text. But the text a server decodes from a browser is
+written by the Fable client: `Fable.SimpleJson`'s `Convert.serialize` behind every reflective
+proxy, `JsonEncode` behind a generated one. The campaign that shipped 840–853 found three places
+the browser's text differs, and a decoder the one-writer gate admitted could refuse a real browser
+call. So the gate now runs **two references**:
+
+* **`JsonDecoders.browserOracle server`** — the second `JsonDecoderOracle`: the same reader and the
+  same reference decode as `server`, each draw written by **`BrowserJsonWriter.serialize`**, a
+  byte-exact .NET mirror of the transpiled `Convert.serialize`. The mirror cannot run the writer it
+  stands in for, so it is held to it by a fixture both test packs compile
+  (`BrowserWriterFixture`): the Fable pack holds `Convert.serialize` to each pinned text, the .NET
+  pack holds the mirror to the same text — fifty-six cases over every shape a decoder can be for,
+  including every spelling below.
+* **`JsonDecoders.verifyBothWith` / `verifyBothByTypeWith`** run the server writer's pass, then the
+  browser's; the first refusal wins, and a difference either pass attributes to a declared loss is
+  said exactly as 840 says it — the browser twin relabels each of the server oracle's losses with
+  `BrowserLossPrefix`, so a `JsonDeclaredDifference` names the writer whose text it was. The
+  registration gate (`registerVerifiedWith` / `registerVerifiedForWith`, and so the server's
+  `FableConverters.registerVerified` / `registerVerifiedFor` / `verifyDecoder`) and the generated
+  `verifyAll` / `registerAllVerified` (the emitter calls `verifyBothWith`) all run both, so every
+  platform and generated decoder is verified against both writers. `verifyWith` /
+  `verifyByTypeWith` stay the one-reference primitive.
+
+**The three decisions.**
+
+1. **Decimals — the quoted form is ADMITTED.** The browser writes a `decimal` as a quoted string
+   with its scale (`"1234.50"`); the converter set already reads it (`AllowReadingFromString`);
+   `asDecimal` refused it, so any consumer API taking a `decimal` argument failed from a reflective
+   client. `asDecimal` now reads a string holding a JSON number token — nothing else: no whitespace,
+   no `+`, no hex — exactly as it reads the number. *Rejected:* make both writers emit a number. The
+   browser's writer is a third-party package whose quoting the SDK cannot change, and quoting on the
+   server side instead would move every number-reading client.
+2. **`TimeSpan` — one representation: total milliseconds as a JSON number token.** Every writer
+   already emits it — the converter set and `JsonEncode` as `90000.0`, the browser as JavaScript
+   spells the host's millisecond double (`90000`, `1.5`, `0.0001`); `asTimeSpan` reads every
+   spelling to the same tick. What the server's converter set loses (a tick, reading through a
+   double) stays a DECLARED reference loss, now declared on the browser twin too. *Rejected:* ticks
+   as an integer string — exact in principle, but Fable's `TimeSpan` is itself a millisecond double
+   (so the browser holds no tick to send), and the reflective writer and reader are fixed to
+   milliseconds; it would be a breaking wire change that buys nothing in the browser. The Fable
+   client's own resolution is unchanged: `asTimeSpan` there goes through `TimeSpan.FromTicks`, which
+   Fable truncates to whole milliseconds (pinned since Phase 843).
+3. **`DateTime` — the kind is preserved on Fable.** `asDateTime`'s Fable arm read a `…Z` timestamp
+   as the right instant in `Unspecified` kind, so `.Hour` was the browser's LOCAL hour. It now
+   restores the kind `DateTimeStyles.RoundtripKind` gives on .NET — `Z` is `Utc`, an explicit offset
+   is `Local`, no offset is `Unspecified` — setting only the kind, never moving the instant.
+   *Rejected:* normalising every read to UTC (it would change the .NET reading the converter set
+   pins), or leaving the kind and comparing instants (the Phase 853 fixture's workaround, which left
+   every field accessor wrong in the browser).
+
+**What the gate found and did NOT close.** A `Map` whose key is neither primitive nor an enum-like
+union is written by the browser as an ARRAY of `[key, value]` pairs, which the converter set reads
+and `asMap` (an object, keys through a member-name `KeyDecoder`) refuses — even when empty. The gate
+now REFUSES such a decoder against the browser's writer, which is the correct verdict; closing it
+needs a JSON-value key decoder on `asMap` and in the generator, and is a successor phase. A browser
+`NaN` (`"NaN"`) is refused on both server paths alike, as it was before. Both are declared, and
+asserted still true, in `JsonDecoderAlgebraTests`.
 
 ### What moved in the trust-boundary statement
 

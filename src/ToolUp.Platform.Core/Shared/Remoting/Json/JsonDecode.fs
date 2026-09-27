@@ -34,6 +34,8 @@ open ToolUp.Remoting
 // from the digits written. `asInt64` and `asUInt64` accept the STRING
 // form too, because that is how the writer emits them (`"+42"` — a
 // leading sign, so a JavaScript reader cannot mistake it for a float).
+// `asDecimal` accepts a QUOTED number token too (Phase 885), because that
+// is how the BROWSER's writer emits a decimal.
 //
 // **`TimeSpan` is exact by construction.** The writer emits total
 // milliseconds as a double, and the STJ reader multiplies that double
@@ -266,6 +268,16 @@ module JsonDecode =
 
     /// `decimal` — the digits as written, exactly. The whole point of the
     /// lexical carrier: `79228162514264337593543950335` arrives as itself.
+    ///
+    /// Phase 885 — or the same digits QUOTED, which is how the browser
+    /// writes a decimal (`Fable.SimpleJson`'s `Convert.serialize`, every
+    /// reflective client proxy) and what the converter set already reads
+    /// (`AllowReadingFromString`). The string must hold a JSON number token
+    /// and nothing else — no whitespace, no sign `+`, no hex — so the arm
+    /// admits exactly the browser's spelling, read exactly as the number
+    /// form is. Decided over the alternative (both writers emit a number)
+    /// because the browser's writer is a third-party package whose quoting
+    /// this SDK cannot change; see `docs/platform/remoting-decoder-algebra.md`.
     let asDecimal: JsonDecoder<decimal> =
         function
         | JsonValue.Number text as value ->
@@ -274,6 +286,12 @@ module JsonDecode =
             | None when JsonValue.isNumberToken text ->
                 refuseWith "Decimal" (sprintf "number %s, which does not fit Decimal" text)
             | None -> refuse "Decimal" value
+        | JsonValue.String text ->
+            match JsonValue.tryDecimal text with
+            | Some d -> Ok d
+            | None when JsonValue.isNumberToken text ->
+                refuseWith "Decimal" (sprintf "string `%s`, which does not fit Decimal" text)
+            | None -> refuseWith "Decimal" (sprintf "string `%s`, which is not a decimal number" text)
         | value -> refuse "Decimal" value
 
     /// A GUID in any form `Guid.TryParse` reads.
@@ -314,12 +332,33 @@ module JsonDecode =
 
     /// `DateTime` — the ISO-8601 round-trip string the writer emits, read
     /// with its kind preserved (`DateTimeConverter.Read`'s rule).
+    ///
+    /// Phase 885 — on BOTH hosts. Fable's `DateTime.TryParse` reads the
+    /// right instant but not the text's kind (a `…Z` timestamp came back
+    /// Unspecified/Local, so its `Hour` was the browser's local hour), so
+    /// the Fable arm restores the kind `DateTimeStyles.RoundtripKind` gives
+    /// on .NET: a `Z` suffix is `Utc`, an explicit offset is `Local` (the
+    /// same instant), no offset is `Unspecified` (the clock fields as
+    /// written). Same instant throughout — only the kind is set.
     let asDateTime: JsonDecoder<DateTime> =
         function
         | JsonValue.String text ->
 #if FABLE_COMPILER
             match DateTime.TryParse text with
-            | true, d -> Ok d
+            | true, d ->
+                let trimmed = text.Trim()
+                let time = trimmed.LastIndexOf 'T'
+
+                let offset =
+                    time >= 0
+                    && (trimmed.IndexOf('+', time) >= 0 || trimmed.IndexOf('-', time) >= 0)
+
+                if trimmed.EndsWith "Z" || trimmed.EndsWith "z" then
+                    Ok(d.ToUniversalTime())
+                elif offset then
+                    Ok(d.ToLocalTime())
+                else
+                    Ok d
             | _ -> refuseWith "DateTime" (sprintf "string `%s`, which is not an ISO-8601 date-time" text)
 #else
             match

@@ -184,6 +184,10 @@
              System.Text.Json to the pinned text and model); this pack holds JsonText
              and the proxy to the same model and value. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonClientDecodeFixture.fs" />
+        <!-- Phase 885 - the browser's writer pinned as data: this pack holds the
+             transpiled Fable.SimpleJson to each pinned text, the .NET pack holds
+             its mirror (BrowserJsonWriter) to the same text. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\BrowserWriterFixture.fs" />
         <Compile Include="Remoting\JsonClientDecodeTests.fs" />
         <!-- Phase 854 - declared reads through the real proxy and Cmd.OfRemoting:
              in-flight sharing, stale-while-revalidate, invalidation, and the

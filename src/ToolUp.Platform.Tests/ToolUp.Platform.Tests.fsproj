@@ -330,6 +330,9 @@
              and on a generated per-shape refuse path, plus the argument
              seam. AFTER DecoderAlgebraTests.fs for the same reason it sits
              after WireCorpus.fs. -->
+        <!-- Phase 885 - the browser's writer pinned as data (compiled into the Fable
+             pack too): the mirror the JSON gate's second reference writes with. -->
+        <Compile Include="Remoting\BrowserWriterFixture.fs" />
         <Compile Include="Remoting\JsonDecoderAlgebraTests.fs" />
         <!-- Phase 843 - the client's JSON reader (JsonText) held to the
              server's (JsonRead) over the corpus, its prefixes and the pinned
