@@ -533,6 +533,41 @@ let private pureTests =
                 (isEligibleInstruction max (String.replicate 40 "long instruction "))
                 "and prose is over the length ceiling"
 
+        testCase "Phase 666 — a question-shaped instruction produces the read-shaped reason"
+        <| fun _ ->
+            // `ineligibilityReason` must agree with `isEligibleInstruction` on
+            // every verdict — it only adds a name for the ones that refuse.
+            let max = FastPathTriageConfig.DefaultMaxInstructionChars
+
+            Expect.equal
+                (ineligibilityReason max "what is the country filter set to?")
+                (Some IneligibleReadShaped)
+                "a literal '?' is read-shaped"
+
+            Expect.equal
+                (ineligibilityReason max "why did revenue drop")
+                (Some IneligibleReadShaped)
+                "a leading question-opener is read-shaped too — same reason, no '?' needed"
+
+            Expect.equal
+                (ineligibilityReason max "explain the period column")
+                (Some IneligibleReadShaped)
+                "every question-opener class in the pre-filter reads as the one token"
+
+        testCase "Phase 666 — the other ineligibility reasons are unchanged"
+        <| fun _ ->
+            let max = FastPathTriageConfig.DefaultMaxInstructionChars
+
+            Expect.equal (ineligibilityReason max "") (Some IneligibleEmpty) "empty is still empty"
+            Expect.equal (ineligibilityReason max "   ") (Some IneligibleEmpty) "whitespace-only is still empty"
+
+            Expect.equal
+                (ineligibilityReason max (String.replicate 40 "long instruction "))
+                (Some IneligibleTooLong)
+                "over the length ceiling is still too-long"
+
+            Expect.equal (ineligibilityReason max "set country to UK") None "a plain command is still eligible"
+
         testCase "only a plain trailing user turn is a triage candidate"
         <| fun _ ->
             Expect.equal

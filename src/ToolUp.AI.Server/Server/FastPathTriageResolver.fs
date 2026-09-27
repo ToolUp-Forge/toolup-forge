@@ -362,6 +362,60 @@ let isEligibleInstruction (maxChars: int) (instruction: string) : bool =
             |> List.exists (fun (opener: string) -> lowered.StartsWith opener)
             |> not
 
+// ─── Pre-filter (eligibility) reasons — Phase 666 ─────────────────
+//
+// `isEligibleInstruction` is a bare bool by design and stays that way:
+// Phase 663's `ToolUp.TriageCalibration` tool and every other caller
+// already depend on that exact signature, and this phase does not
+// widen it. What follows is a SIBLING that names *why* a refused
+// instruction was refused, in the same stratified-token style as the
+// outcome vocabulary above, so a caller that wants the reason can read
+// it directly instead of re-deriving it by elimination the way the
+// calibration tool's own `eligibilityReason` still does (see
+// `docs/migrations/6j-B-fastpath-triage.md`, "Read-path triage
+// stance").
+
+[<Literal>]
+let IneligibleEmpty = "empty"
+
+[<Literal>]
+let IneligibleTooLong = "too-long"
+
+/// The instruction is a QUESTION about the surface rather than a
+/// command to change it — the read-path class this tier deliberately
+/// never serves (see the migration doc). One token covers both shapes
+/// `isEligibleInstruction` tests for — a literal `?` and a leading
+/// question-opener word — because they are the same refusal for the
+/// same reason: a caller reading this token has no use for which of
+/// the two surface signals fired.
+[<Literal>]
+let IneligibleReadShaped = "read-shaped"
+
+/// `None` when the instruction is eligible; otherwise the reason
+/// `isEligibleInstruction` refused it. Mirrors that function's checks,
+/// in the same order, so the two can never disagree about the
+/// VERDICT — only this one also names it.
+let ineligibilityReason (maxChars: int) (instruction: string) : string option =
+    if String.IsNullOrWhiteSpace instruction then
+        Some IneligibleEmpty
+    else
+        let trimmed = instruction.Trim()
+
+        if trimmed.Length > maxChars then
+            Some IneligibleTooLong
+        elif trimmed.Contains "?" then
+            Some IneligibleReadShaped
+        else
+            let lowered = trimmed.ToLowerInvariant()
+
+            if
+                questionOpeners
+                |> List.exists (fun (opener: string) -> lowered.StartsWith opener)
+            then
+                Some IneligibleReadShaped
+            else
+                None
+
 /// The last user instruction in the replayed history — the text this
 /// turn is about. `None` when the tail is not a plain user turn (a
 /// tool-result carrier, an assistant turn, an empty history), which is

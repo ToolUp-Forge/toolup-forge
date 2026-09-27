@@ -758,6 +758,9 @@ ToolUp.AI.FastPathTelemetryHandler.computeTriageRollup(Microsoft.FSharp.Collecti
 ToolUp.AI.FastPathTelemetryHandler.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.AI.FastPathTriageResolver (class)
 ToolUp.AI.FastPathTriageResolver.FastPathSourceModule : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.IneligibleEmpty : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.IneligibleReadShaped : System.String (literal)
+ToolUp.AI.FastPathTriageResolver.IneligibleTooLong : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.OutcomeClearUnsupported : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.OutcomeHit : System.String (literal)
 ToolUp.AI.FastPathTriageResolver.OutcomeLowConfidence : System.String (literal)
@@ -777,6 +780,7 @@ ToolUp.AI.FastPathTriageResolver.TriageRouteTurnProvider : System.String (litera
 ToolUp.AI.FastPathTriageResolver.actionPayloadJson(ToolUp.AI.AIFieldDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
 ToolUp.AI.FastPathTriageResolver.buildTriagePrompt(ToolUp.AI.AIFieldSnapshot) : System.String
 ToolUp.AI.FastPathTriageResolver.fallThroughOutcomes : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.AI.FastPathTriageResolver.ineligibilityReason(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.FastPathTriageResolver.isEligibleInstruction(System.Int32, System.String) : System.Boolean
 ToolUp.AI.FastPathTriageResolver.lastUserInstruction(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.FastPathTriageResolver.outcomes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

@@ -69,6 +69,21 @@ Read the breakdown, not just the hit rate. A healthy tier's misses are mostly `n
 
 The same observations ride `IMetricsSink` as `toolup.ai.triage.attempts`, `toolup.ai.triage.outcomes` (tagged `outcome`) and `toolup.ai.triage.duration.ms`; the series are registered by `AIServerApp.create` whether or not you opt in, so turning the tier on mid-life needs no metrics re-wiring.
 
+## Read-path triage stance (Phase 666)
+
+**Reads are out of tier scope by design — this tier never grows a read path.** Tier 3 answers exactly one question: does this instruction map onto a single declared field to *set*? An instruction that instead asks about the surface — "what is the country filter set to?", "why did revenue drop", "explain the period column" — needs live module state and real reasoning, which is precisely the `inspect_active_module` class of risk the fast-path ladder is designed to keep away from a one-shot structured call (see "The three properties that make this safe" at the top of `FastPathTriageResolver.fs`). `isEligibleInstruction` refuses these before any model call, at zero cost, and this phase does not change that: it marks the refusal, it does not extend triage to cover it.
+
+The tier ladder already has two places that serve a read, and Tier 3 is deliberately neither:
+
+- **Tier 1** — the client-side declarative pattern tier — can serve a read if a module author declares an explicit read-shaped instruction pattern for it (the same `InstructionPatterns` mechanism a set-field declaration uses).
+- **Tier 4** — the full agent loop — serves every read that Tier 1 does not declare, with the reasoning and live-state access the question actually needs.
+
+So a read-shaped instruction that reaches Tier 3 always falls through to Tier 4 (or was already served by Tier 1 before Tier 3 ever saw it); it is never a Tier-3 defect for that instruction not to resolve.
+
+**Naming the refusal, without widening the attempt denominator.** `isEligibleInstruction` stays a bare bool — Phase 663's `ToolUp.TriageCalibration` tool and every other caller depend on that exact signature. A new sibling, `ineligibilityReason (maxChars: int) (instruction: string) : string option`, mirrors its checks in the same order and returns the reason a refusal fired: `IneligibleEmpty` ("empty"), `IneligibleTooLong` ("too-long"), or `IneligibleReadShaped` ("read-shaped") — one token for both question-mark and question-opener shapes, because a caller reading it has no use for which of the two surface signals fired. `None` means eligible, exactly when `isEligibleInstruction` returns `true`.
+
+This reason is a **local, pure classification** — it is not written to the `_platform.ai.fastpath` event stream and does not add a row to `TriageAttempts` or any outcome breakdown. That is deliberate, not an oversight: "Nothing is emitted and no attempt row is written [for an ineligible instruction] — a turn that was never a triage candidate must not appear in the tier's denominator" is a standing invariant of this resolver (see `tryTriage`'s doc comment), and a pre-filter refusal is chosen *before* triage would have started, so counting it as an "attempt" would understate the tier's real hit rate. The sibling exists so a caller with its own reason to classify a refusal — today, the calibration tool's `eligibilityReason`, which currently re-derives the same answer by elimination over a private copy of the pre-filter's rules — can read the resolver's own verdict directly instead of maintaining a second, driftable copy of it. Wiring that caller over to it is a separate change; this phase only makes the token available.
+
 ## Verification
 
 - Your provider (or double) compiles against the widened record.
